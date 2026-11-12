@@ -4,3 +4,6 @@ packages:
 onlyBuiltDependencies:
   - esbuild
   - msgpackr-extract
+# New package versions wait 3 days (in minutes) before install, so a hijacked
+# release is usually caught and pulled before it reaches us. See ADR 0004.
+minimumReleaseAge: 4320
