@@ -4,3 +4,4 @@ dist
 .turbo
 coverage
 packages/db/migrations/meta
+**/next-env.d.ts

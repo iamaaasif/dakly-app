@@ -31,9 +31,9 @@ jobs:
       DATABASE_ADMIN_URL: postgres://dakly:dakly@localhost:5432/dakly
       DATABASE_URL: postgres://dakly_app:dakly_app@localhost:5432/dakly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: pnpm
