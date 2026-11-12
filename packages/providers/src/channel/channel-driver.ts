@@ -1,0 +1,36 @@
+// One interface per capability, one driver per vendor (messenger/, instagram/, whatsapp/).
+// Drivers turn vendor payloads into these types; vendor shapes never reach core.
+// See docs/rules/providers.md.
+
+export type ChannelKind = 'messenger' | 'instagram' | 'whatsapp';
+
+export type InboundMessage = {
+  channel: ChannelKind;
+  externalConversationId: string;
+  externalMessageId: string;
+  senderExternalId: string;
+  text: string | null;
+  attachmentUrls: string[];
+  sentAt: Date;
+};
+
+export type OutboundMessage = {
+  externalConversationId: string;
+  text: string;
+};
+
+export type SendResult = {
+  externalMessageId: string;
+};
+
+export type ChannelDriver = {
+  readonly kind: ChannelKind;
+  verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;
+  parseWebhook(payload: unknown): InboundMessage[];
+  send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
+};
+
+export type ChannelCredentials = {
+  accessToken: string;
+  accountExternalId: string;
+};

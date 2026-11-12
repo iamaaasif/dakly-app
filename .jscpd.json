@@ -1,0 +1,9 @@
+{
+  "threshold": 2,
+  "minLines": 12,
+  "minTokens": 80,
+  "reporters": ["console"],
+  "path": ["apps", "packages"],
+  "ignore": ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/migrations/**", "**/*.spec.ts"],
+  "gitignore": true
+}
