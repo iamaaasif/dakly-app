@@ -98,7 +98,7 @@ Plan change: upgrades apply now and charge the prorated difference for the rest 
 | ACC-R3  | "Keep me signed in" lasts 30 days on that device; otherwise the session ends after 12 hours idle.                                                                                                                                                               |
 | ACC-R4  | Google sign-in links to an existing account only by verified email; a new Google sign-up must still verify a mobile number.                                                                                                                                     |
 | ACC-R5  | Extensions turned on at sign-up: Sales and Chats if "Facebook or social media" is picked; Sales if "Online store" is picked; Social Auto Post if "Facebook or social media" is picked; Physical Shop if a shop answer is picked (release 2). Core is always on. |
-| ACC-R6  | Only the Owner can change billing, close the business, or remove another Owner. Every store has at least one Owner.                                                                                                                                             |
+| ACC-R6  | Only the Owner can change billing or close the business. Every store has exactly one Owner; ownership changes only by transfer (D35).                                                                                                                           |
 | ACC-R7  | Close business requires typing the store name, offers an export of customers, orders and sales first, cancels billing at once and deletes data 30 days later. Can be undone within those 30 days by support.                                                    |
 | ACC-R8  | Plan limits: when customers reach the plan limit, new customers are still saved but marked "over limit" and excluded from campaigns until the owner upgrades. Never lose incoming orders or chats because of a limit.                                           |
 | ACC-R9  | Trial ending: remind 3 days and 1 day before by SMS, email (when verified) and in-app. With no payment method at the end, move to Free.                                                                                                                         |
@@ -301,9 +301,9 @@ Release 1 has five ways in (D20). All of them end at step 5 below.
 
 1. Phones are normalised to `01XXXXXXXXX` with `bdMobileSchema` from `packages/contracts/src/phone.ts`. Emails are trimmed and lower-cased.
 2. Codes are stored hashed, live 10 minutes and allow 5 tries. Sends are limited to 5 per phone or email and 20 per IP per hour (Valkey counters).
-3. Passwords are hashed with Argon2id. Wrong passwords are limited to 10 per account per hour, then a code is required. "Forgot password" sends a code to the phone or email on the account.
+3. Passwords are hashed with Argon2id. Wrong passwords and codes share the ACC-R2 lockout (D35). "Forgot password" sends a code to the phone or email on the account.
 4. On sign-up, Dakly creates the user, store, Owner membership, trial subscription and default settings in one transaction. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
-5. The API issues an opaque session token (32 random bytes) in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored, with the user, active store, IP, user agent and expiry (30 days sliding; 12 hours idle for members with the refund flag).
+5. The API issues an opaque session token (32 random bytes) in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored, with the user, active store, IP, user agent and expiry (30 days sliding with "Keep me signed in", otherwise 12 hours idle; D35).
 6. Each request loads the session (Valkey cache, then Postgres), checks the membership is active, and sets `request.storeId`, `request.userId` and `request.permissions`. `StoreGuard` and `@RequirePermission('orders.edit')` read them.
 
 Switching store: the session's active store changes through `POST /session/store`. The store id never comes from the client any other way.
@@ -314,7 +314,7 @@ Roles: five built-in roles live in code (`team/built-in-roles.ts`, pending revie
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
 
-Password and 2-step: a password is optional (Argon2id). TOTP is optional for everyone and required for Owners before connecting a payment gateway.
+Password and 2-step: a password is optional (Argon2id). TOTP is optional for everyone in release 1 (D35). Requiring it for Owners before connecting a payment gateway is built with PAY-2.
 
 ### Rules
 
