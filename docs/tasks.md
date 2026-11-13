@@ -22,7 +22,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | FND-2 | Fastify adapter and Express ban                                                      | Done      | FND-1   | #1  |                                                            |
 | FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | Done      | FND-1   | #2  | Merged                                                     |
 | FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security      | In review | FND-3   | #3  | This PR                                                    |
-| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | In review | FND-4   |     |                                                            |
+| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | In review | FND-4   | #4  | This PR                                                    |
 | DB-1  | UUID v7 ids generated in the app; switch existing tables                             | Todo      |         |     |                                                            |
 | DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-1    |     |                                                            |
 | DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-1    |     |                                                            |
