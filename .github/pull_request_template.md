@@ -1,6 +1,6 @@
 ## What and why
 
-<!-- One or two sentences. Link the PRD section or issue. -->
+<!-- One or two sentences. Name the task id from docs/tasks.md and link the feature doc. -->
 
 ## How to test
 
@@ -16,3 +16,4 @@
 - [ ] Input is parsed with a zod schema from `packages/contracts`.
 - [ ] Errors use `AppError` codes; no secrets, tokens, phone numbers or message text in logs.
 - [ ] Under about 500 changed lines, one purpose.
+- [ ] The feature doc matches the code, and the task row in `docs/tasks.md` has the new status and this PR's number.

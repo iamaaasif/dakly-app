@@ -45,6 +45,7 @@ jobs:
       - run: pnpm test
       - run: pnpm lint:unused
       - run: pnpm lint:duplicates
+      - run: pnpm lint:docs
       - name: Prepare database
         run: |
           psql "$DATABASE_ADMIN_URL" -f packages/db/local-init.sql

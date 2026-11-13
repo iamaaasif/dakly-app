@@ -53,6 +53,23 @@ module.exports = {
       to: { path: '^packages/db/|node_modules/drizzle-orm' },
     },
     {
+      name: 'web-shared-code-does-not-know-features',
+      comment:
+        'apps/web/src/components and lib are shared by every feature, so they never import one. ' +
+        'See docs/rules/frontend.md.',
+      severity: 'error',
+      from: { path: '^apps/web/src/(components|lib)/' },
+      to: { path: '^apps/web/src/(features|app)/' },
+    },
+    {
+      name: 'providers-do-not-know-core',
+      comment:
+        'Drivers translate vendor payloads only; business rules stay in core. See docs/rules/providers.md.',
+      severity: 'error',
+      from: { path: '^packages/providers/' },
+      to: { path: '^packages/(core|db)/|^apps/' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       from: {},

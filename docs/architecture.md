@@ -1,18 +1,20 @@
 # Architecture
 
-The full design is in the [Dakly architecture doc](https://claude.ai/artifact/7fyrptKfhe9WNvH4pQTsQJ) and the [PRD](https://claude.ai/artifact/B24GPU5sw3LtFFwgsbXZzD). This page is the short version for working in the code.
+This page is the short version for working in the code. What each feature does is in [features/](features/); how to build one is in [development/](development/). The original long-form [architecture doc](https://claude.ai/artifact/7fyrptKfhe9WNvH4pQTsQJ) is kept for history.
 
 ```text
 apps/
   api/        NestJS HTTP API on Fastify, webhook intake. Imports feature modules from core.
   worker/     NestJS without HTTP. Same modules; runs BullMQ jobs and schedules.
   web/        Next.js shop app.
+  admin/      Next.js staff app at admin.dakly.app (not built yet).
 packages/
+  ui/         Generic UI components and theme tokens for web and admin (not built yet).
   core/       Features (customers/, later chats/, orders/, products/, social/, ai/, billing/)
               and platform/ (config, errors, tenancy, database, queue).
   contracts/  zod schemas and response types shared by api and web.
   db/         Drizzle schema, migrations, RLS policies.
-  providers/  Driver interfaces and vendor drivers (Meta, WhatsApp BSP, bKash, couriers, Claude).
+  providers/  Driver interfaces and vendor drivers (Meta, WhatsApp BSP, bKash, Nagad, City Bank, SMS, email, OpenAI).
 ```
 
 Dependencies point one way: `apps → core → (db, contracts, providers)`. `platform/` is the base inside core; features depend on it, never the reverse.

@@ -4,6 +4,7 @@
 - Branch names: `feat/chats-assign`, `fix/order-total-rounding`. Commit messages: conventional (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
 - `pnpm check` passes locally before you push.
 - The author has read every line of the diff, including AI-written lines.
+- The PR names its task id from [tasks.md](../tasks.md), updates that row, and updates the feature doc when behaviour changes.
 - Fix small issues in the same PR. "Follow-up PR" for a rename usually never happens.
 
 Reviewers reject a PR that:
@@ -15,5 +16,7 @@ Reviewers reject a PR that:
 - Logs secrets, tokens, phone numbers or message text.
 - Adds an abstraction, option or dependency the task does not need.
 - Changes an applied migration.
+- Changes behaviour without updating the feature doc.
+- Has filler, emoji or tool banners in docs, comments or copy ([writing.md](writing.md)).
 
 Reviews are direct. "This could be clearer, but fine" is how a codebase decays; ask for the change.
