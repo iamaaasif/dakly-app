@@ -19,6 +19,8 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - Q13: Shopify and WooCommerce sync is not built until Asif confirms it is in release 1.
 - Schema review (pending review): contacts are merged automatically only on a verified phone number. Name or email matches only suggest a merge.
 - D20: email addresses are stored and verified, but email marketing consent is not offered until email campaigns ship.
+- D26: another person's delivery details belong to the order. They do not replace the buyer profile, merge contacts or move purchase history. No OTP is required.
+- D27: self-delivery also saves the buyer's own phone on their profile, subject to the rules below. Saving a phone is separate from verification, merging and marketing consent.
 
 ## Product requirements
 
@@ -52,10 +54,18 @@ One clean list of every person who buys from the shop, wherever they bought, wit
 
 **Identity and merging**
 
-1. Every incoming person (chat, store sync, POS, import, manual, voice, khata) is normalised to an 11-digit phone. If a customer with that phone exists in the store, the new data merges into it; otherwise a new contact is created.
+1. Normalise a person's own phone to 11 digits when supplied, and apply the identity-matching rules below before linking an existing contact. A chat contact may have no phone. Another recipient's phone belongs only to the order and is excluded from buyer matching (D26). For self-delivery, also save the supplied own phone on the buyer profile under D27; the order keeps its snapshot.
 2. Merge rule for conflicting fields: keep the existing value unless it's empty; names from a store sync or the owner's own edits win over names from a chat profile; addresses keep the most recent; tags and consents are combined (a consent "no" from any source wins over "yes").
-3. Chat contacts without a phone are kept as chat-only contacts linked to their Messenger PSID or Instagram ID. When they share a phone, Dakly links them to the matching customer and says "Dakly matched Sadia Islam to an existing customer".
+3. Chat contacts without a phone remain linked to their Messenger PSID or Instagram ID. An own-phone match follows the identity rules below; a typed phone alone suggests a match for staff. Sharing another person's delivery details never links or merges that person with the chat buyer (D26).
 4. Possible duplicates (same name and district, phone differs by 1 digit, or same email) are listed in a "Possible duplicates" view for manual Merge or Keep separate. Merging keeps the older record's ID and moves all orders, chats and notes.
+
+**Saving the buyer's own phone (D27)**
+
+Self-delivery is the default. Save a valid own phone on the current buyer contact when it is supplied in chat or the order form, even before an order is created. The buyer must be identified separately as described below. Fill an empty profile phone, or retain it when the normalised value already matches. Replacing a different profile phone needs an explicit profile edit; changing delivery fields alone does not replace it.
+
+If another contact in the same store already has the normalised phone, leave both profiles and the buyer link unchanged. Keep the supplied phone in the draft or order snapshot and show a possible match to staff. Apply this rule even if the conflict appears during a concurrent save. Staff may resolve the suggestion through the existing merge workflow; the conflict does not block ordering, confirmation or delivery and gives the buyer no access to the other contact's history.
+
+A saved own phone is self-reported, not proof of ownership. It does not trigger a merge or add marketing consent. A chat contact with that phone and zero orders qualifies as a Lead under the glossary; a conflicting phone kept only on a draft does not qualify that contact. Existing identity-matching rules remain separate. For delivery to someone else, save the recipient's phone only on the draft or order.
 
 **Consent**
 
@@ -117,11 +127,14 @@ View Customers: list, profile, segments, insights. Edit Customers: add, edit, im
 
 ### Events
 
-customer.created, customer.updated, customer.merged, customer.consent\_changed, customer.stage\_changed (used by automations and notifications), segment.entered, segment.exited, import.completed.
+customer.created, customer.updated, customer.merged, customer.consent_changed, customer.stage_changed (used by automations and notifications), segment.entered, segment.exited, import.completed.
 
 ### Acceptance criteria
 
-- Given a Shopify customer with phone 01712-458903 exists, when the same person messages on Messenger and shares "01712458903", then no new customer is created and the chat links to that customer.
+- Given an existing customer has phone 01712-458903, when a Messenger buyer enters that phone as a delivery recipient, then the order stays with the Messenger buyer and the existing customer is not merged or assigned the purchase (D26).
+- Given a Messenger contact with no phone and zero orders supplies an unused phone for self-delivery, then save it on that contact and the draft, show Lead before order creation, and leave verification and marketing consent unchanged.
+- Given a self-delivery phone already belongs to another contact, then retain it only on the draft or order, show a possible match to staff, preserve both profiles and purchase histories, and allow the order to proceed without merging.
+- Given the buyer profile already has a different phone, then saving or editing delivery details preserves that profile phone until an explicit profile edit.
 - Given the owner types "customers who bought more than twice but haven't ordered in 45 days", then the builder shows Number of orders is more than 2 AND Days since last order is more than 45, with a live count.
 - Given a customer replies STOP to an SMS campaign, then their SMS consent becomes no within 1 minute and they are excluded from the next SMS send.
 - Given an import of 1,248 rows with 12 invalid phones, then results show 12 skipped and the error report lists each row and reason.
@@ -250,10 +263,12 @@ The customer counts on these pages disagree with the dashboard and Shopify in th
 Identity
 
 1. A contact is a person in one store. It may start with no phone, known only by a channel identity (Messenger PSID, Instagram scoped id, WhatsApp id) in `contact_identities`.
-2. When a phone arrives (typed in chat, on an order, from WhatsApp), `CustomersService` looks for a contact with that phone.
-3. Merge rule (pending review must-fix): merge automatically only when the phone is verified, which means it came from WhatsApp itself or a confirmed order. A phone typed in a chat creates a "possible match" for staff to confirm. This stops someone typing another customer's number and then asking the AI about that person's orders.
+2. Resolve the buyer from the chat contact or the buyer selected or recorded when creating the order. A buyer can have a channel identity without a phone. Another recipient's delivery phone is not a buyer lookup key. Self-delivery saves the buyer's supplied own phone under D27 after resolving the buyer.
+3. A phone supplied as the buyer's own phone follows the existing identity-matching policy: WhatsApp sender identity may support a match; a typed phone alone is a possible match for staff. Do not treat an order confirmation or delivery as identity evidence.
+4. Store the delivery recipient's name, phone and address on the order, even when the recipient is another existing customer. No recipient contact or second order is required. Do not merge the recipient with the buyer or overwrite either profile from another person's details (D26). The self-delivery own-phone save follows D27.
+5. Staff may confirm the order and mark it delivered without an OTP. These status changes, and confirmation replies or links from the recipient, do not change the buyer, customer identity or access to unrelated purchase history.
 
-Kind is derived by the stats job: `lead` (has a phone, no delivered order), `customer` (at least one delivered order). Only `not_customer` is set by hand.
+Kind follows the glossary: a chat, comment or order-link contact with an own phone and zero orders is a `lead`; a contact with at least one non-cancelled order, or intentionally added as a customer, is a `customer`. A phone is not required for the order-based customer definition. Recompute after an own-phone save and order changes; `not_customer` remains an explicit staff choice.
 
 Consent
 
@@ -294,7 +309,7 @@ Emits `contact.created`, `contact.merged`, `consent.changed`, `segment.saved`. L
 
 - Two contacts with the same phone created at the same moment.
 - Phone with Bangla digits or `+880`.
-- A typed, unverified phone that matches an existing customer does not merge.
+- A typed buyer phone alone does not merge contacts; a delivery phone never changes the buyer, including after staff confirmation or delivery (D26).
 - Segment counts with 50,000 contacts return in under 2 seconds.
 
 ### Acceptance

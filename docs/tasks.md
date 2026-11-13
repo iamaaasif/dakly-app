@@ -63,18 +63,18 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M3. Channels and customers
 
-| ID    | Task                                                                   | Status  | Depends      | PR  | Notes        |
-| ----- | ---------------------------------------------------------------------- | ------- | ------------ | --- | ------------ |
-| CUS-1 | Rename customers to contacts; add channel identities and contact kinds | Todo    | ACC-3        |     | Q10          |
-| CUS-2 | Consent: append-only rows, current-consent view, STOP keywords         | Todo    | CUS-1        |     |              |
-| CUS-3 | Contact stats table and refresh jobs                                   | Todo    | CUS-1        |     |              |
-| CUS-4 | Phone matching and merge (verified phones only)                        | Todo    | CUS-1        |     | Q10 must-fix |
-| CHN-1 | Meta webhook intake: signature, `webhook_events`, enqueue              | Todo    | DB-1         |     |              |
-| CHN-2 | Messenger and Instagram connect (Facebook Login for Business)          | Todo    | DB-4, ACC-4  |     |              |
-| CHN-3 | WhatsApp connect (Embedded Signup)                                     | Blocked | CHN-2        |     | Q2 BSP       |
-| CHN-4 | Store lookup function for webhooks; token health job                   | Todo    | CHN-1        |     |              |
-| CHN-5 | Web: Integrations page                                                 | Todo    | CHN-2, WEB-3 |     |              |
-| CUS-5 | Web: All customers list and profile                                    | Todo    | CUS-3, WEB-2 |     |              |
+| ID    | Task                                                                   | Status  | Depends      | PR  | Notes                                                |
+| ----- | ---------------------------------------------------------------------- | ------- | ------------ | --- | ---------------------------------------------------- |
+| CUS-1 | Rename customers to contacts; add channel identities and contact kinds | Todo    | ACC-3        |     | Q10                                                  |
+| CUS-2 | Consent: append-only rows, current-consent view, STOP keywords         | Todo    | CUS-1        |     |                                                      |
+| CUS-3 | Contact stats table and refresh jobs                                   | Todo    | CUS-1        |     |                                                      |
+| CUS-4 | Own-phone capture, possible matches and identity merge                 | Todo    | CUS-1        |     | Q10 must-fix; D27 own-phone save is not verification |
+| CHN-1 | Meta webhook intake: signature, `webhook_events`, enqueue              | Todo    | DB-1         |     |                                                      |
+| CHN-2 | Messenger and Instagram connect (Facebook Login for Business)          | Todo    | DB-4, ACC-4  |     |                                                      |
+| CHN-3 | WhatsApp connect (Embedded Signup)                                     | Blocked | CHN-2        |     | Q2 BSP                                               |
+| CHN-4 | Store lookup function for webhooks; token health job                   | Todo    | CHN-1        |     |                                                      |
+| CHN-5 | Web: Integrations page                                                 | Todo    | CHN-2, WEB-3 |     |                                                      |
+| CUS-5 | Web: All customers list and profile                                    | Todo    | CUS-3, WEB-2 |     |                                                      |
 
 ## M4. Chats inbox (people only)
 
@@ -98,14 +98,15 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M6. Orders
 
-| ID    | Task                                                    | Status | Depends       | PR  | Notes         |
-| ----- | ------------------------------------------------------- | ------ | ------------- | --- | ------------- |
-| ORD-1 | Orders, items, stage table, stage events, order numbers | Todo   | PROD-2, CUS-1 |     | Q7            |
-| ORD-2 | Delivery zones, areas and charges                       | Todo   | ACC-3         |     |               |
-| ORD-3 | Create order from chat and from staff                   | Todo   | ORD-1, ORD-2  |     |               |
-| ORD-4 | Order confirmation by WhatsApp or SMS reply             | Todo   | ORD-3, CHAT-2 |     |               |
-| ORD-5 | Web: orders pipeline and order detail                   | Todo   | ORD-3, WEB-2  |     |               |
-| ORD-6 | Public order link page and endpoint (Turnstile, limits) | Todo   | ORD-3         |     | Design needed |
+| ID    | Task                                                                         | Status | Depends       | PR  | Notes                                                                         |
+| ----- | ---------------------------------------------------------------------------- | ------ | ------------- | --- | ----------------------------------------------------------------------------- |
+| ORD-1 | Orders, items, stage table, stage events, order numbers                      | Todo   | PROD-2, CUS-1 |     | Q7                                                                            |
+| ORD-2 | Delivery zones, areas and charges                                            | Todo   | ACC-3         |     |                                                                               |
+| ORD-3 | Create order from chat and from staff                                        | Todo   | ORD-1, ORD-2  |     | D26/D27: buyer and recipient snapshot; self phone save; conflicts allow order |
+| ORD-4 | Order confirmation with channel-supported response handling                  | Todo   | ORD-3, CHAT-2 |     |                                                                               |
+| ORD-5 | Web: orders pipeline and order detail                                        | Todo   | ORD-3, WEB-2  |     |                                                                               |
+| ORD-6 | Public order link page and endpoint (Turnstile, limits)                      | Todo   | ORD-3         |     | Design needed                                                                 |
+| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording | Todo   | ORD-3         |     | D21; item quantities and money checks required                                |
 
 ## M7. AI layer
 
@@ -178,3 +179,44 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | ADM-3 | Shops list and detail through report functions                                | Todo   | ADM-2        |     |       |
 | ADM-4 | Plans catalogue, refunds, credits, reconciliation queue                       | Todo   | ADM-2, PAY-7 |     |       |
 | ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo   | ADM-2, AI-2  |     |       |
+
+## Readiness review follow-up
+
+Evidence and acceptance criteria: [development readiness review](reviews/development-readiness.md). These rows identify work missing from the original tracker or changes required before copying its examples. Existing feature tasks still own their implementation; resolve the linked specification findings before starting the affected slice. Proposed resolutions in the review are not approved product decisions.
+
+| ID     | Task                                                                                         | Status    | Depends              | PR  | Notes                                                                                              |
+| ------ | -------------------------------------------------------------------------------------------- | --------- | -------------------- | --- | -------------------------------------------------------------------------------------------------- |
+| REV-1  | Review all feature specifications, source patterns and checks; publish coverage and findings | In review | FND-5                | #5  | Review documents linked above; D27 own-phone capture clarified; no business implementation changed |
+| REV-2  | Reconcile account, identity, consent, stock, payment and AI safety contradictions            | Todo      | REV-1                |     | Feature reviews include decisions and failure cases; F01 closed by D26                             |
+| REV-3  | Correct foundation error logging, origins, phone formats and validation error fields         | Todo      | REV-1                |     | Code foundation review; regression tests required                                                  |
+| REV-4  | Establish atomic feature actions and shared queue name dispatch                              | Todo      | REV-1                |     | Prove stock/order/outbox rollback and mixed job routing                                            |
+| REV-5  | Align lint promises with enforced rules and verify CI/local check parity                     | Todo      | REV-1                |     | Include negative lint fixtures and independent RLS fixtures                                        |
+| REV-6  | Correct prototype findings and captures; complete mobile, error, empty and limit designs     | Todo      | REV-1                |     | Correct theme contrast before WEB-1; preserve legitimate AI product labels                         |
+| REV-7  | Define event names, final send gates, real-time recovery and AI latency measurements         | Todo      | REV-1                |     | Required before messaging, workflows and analytics integration                                     |
+| CUS-8  | Customer CSV/XLSX import with mapping, consent evidence, row errors and undo                 | Todo      | CUS-1, CUS-2         |     | Review duplicate-phone policy before implementation                                                |
+| CUS-9  | POS sales CSV import and reconciliation                                                      | Todo      | CUS-8, ORD-1         |     | D6; separate from release 2 POS connectors                                                         |
+| CUS-10 | Voice customer entry with review, confidence and usage accounting                            | Todo      | CUS-1, PAY-1         |     | Define speech provider contract and confirmation before save                                       |
+| CUS-11 | Customer export, erasure and derived-data cleanup                                            | Todo      | CUS-1, ACC-4         |     | Permissions, formula escaping, retention and audit acceptance                                      |
+| CUS-12 | Follow-up tasks, assignment, snooze and reminders                                            | Todo      | CUS-1, HOME-1        |     | Task lifecycle and list/bulk actions need designs                                                  |
+| CUS-13 | Customer insights, address book and AI segment suggestions                                   | Todo      | CUS-3, CUS-6, AI-2   |     | Split into vertical slices; explicit permissions and definitions                                   |
+| CUS-14 | Reversible merge with existing matching rules and consent chronology                         | Todo      | CUS-4                |     | Q10 storage decision; seven-day undo; D26/D27 self phone save and staff match conflicts            |
+| PROD-5 | Product import with row validation and stock reconciliation                                  | Todo      | PROD-2               |     | Preserve variants, stock ledger and order snapshots                                                |
+| PROD-6 | Restock waiting list and approved notifications                                              | Blocked   | PROD-2, CHAT-2       |     | Q10 defers storage while R1 still promises behaviour                                               |
+| ACC-12 | Store export, closure, recovery and purge lifecycle                                          | Todo      | ACC-6, DB-3          |     | Retention exceptions and pending jobs/payments must be defined                                     |
+| ACC-13 | Setup checklist, extensions and owner audit screen                                           | Todo      | ACC-6, DB-3, WEB-3   |     | Scope-aware steps; stop queued work when disabled                                                  |
+| CHN-6  | SMS sender identity request, approval, test and status screens                               | Todo      | ACC-1, CHN-5         |     | Provider capability and document retention review                                                  |
+| ORD-10 | Order printing, bulk labels and exports                                                      | Todo      | ORD-3, ACC-4         |     | Export locks, snapshot totals and permissions                                                      |
+| OPS-1  | Reproducible local and staging services, deployments and rollback                            | Todo      | REV-1                |     | Mailpit, object storage, images and migrations                                                     |
+| OPS-2  | Dependency/container scanning and release gates                                              | Todo      | OPS-1                |     | CI must reject a known failing scan fixture                                                        |
+| OPS-3  | Backup restore, incident plan and retention jobs                                             | Todo      | OPS-1, ACC-12        |     | Record restore evidence; decide recovery and deletion periods                                      |
+| OPS-4  | Upload scanning, image re-encoding and export safety                                         | Todo      | PROD-3               |     | Shared file pipeline for chat, knowledge and imports too                                           |
+| OPS-5  | Load, browser, accessibility and provider sandbox release checks                             | Todo      | WEB-5, OPS-1         |     | Separate launch targets from later scale targets                                                   |
+| SOC-6  | Weekly content plans, festival suggestions, photo tools and shared ideas                     | Todo      | SOC-4                |     | Settle private/shared drafts, usage and approval revisions                                         |
+| CAMP-8 | Release 1 workflow catalogue and typed action contracts                                      | Todo      | REV-2, REV-7         |     | Assign each template a trigger, prerequisites, actions and exit; split CAMP-5 before build         |
+| HOME-5 | Notification preferences, push, digests and recipient lifecycle                              | Todo      | HOME-1, ACC-9        |     | Per-user dedupe, escalation policy and retry charging                                              |
+| HOME-6 | Ask Dakly private conversation history and action review                                     | Todo      | HOME-4               |     | User/store scope, retention, revoked permissions and charging                                      |
+| ANA-4  | Profit, AI agent reports and company metric definitions                                      | Todo      | ANA-1                |     | Cost basis, delayed attribution and denominator acceptance                                         |
+| ADM-6  | Durable two-person approvals and emergency action policy                                     | Blocked   | ADM-2                |     | Q10 storage conflict; D16 requires this behavior                                                   |
+| ADM-7  | Abuse review, shop suspension and appeals                                                    | Todo      | ADM-2, ADM-5         |     | Current permissions and queued-work revocation                                                     |
+| ADM-8  | Announcements, company reports and staff account lifecycle                                   | Todo      | ADM-1, ANA-4         |     | Split into vertical slices; last-admin protection and audit                                        |
+| ADM-9  | Staff handling of owner data export and deletion requests                                    | Todo      | ADM-2, ADM-6, ACC-12 |     | Identity evidence, approval, retention exceptions and completion proof                             |
