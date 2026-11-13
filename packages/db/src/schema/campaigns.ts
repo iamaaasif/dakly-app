@@ -284,10 +284,8 @@ export const trackedLinks = pgTable(
   ],
 );
 
-// One row per redirect tap, kept 90 days in monthly partitions, then only the daily rollup below
-// remains (ADR 0008, D31). No IP address or user agent is stored: visitor_hash is an HMAC of them
-// under a key that rotates daily, so it can spot repeat taps and bots within a day and links
-// nobody across days.
+// Exact tap times survive the 372-day attribution horizon in 13 months of raw partitions.
+// visitor_hash is a daily-rotating HMAC for daily visitor counts; raw IPs and agents are not kept.
 export const trackedLinkVisits = pgTable(
   'tracked_link_visits',
   {
@@ -320,8 +318,8 @@ export const trackedLinkVisits = pgTable(
   ],
 );
 
-// Taps per link per store-local day, built nightly and kept as long as the link. Attribution
-// rebuilds older than the 90 raw days read first_at and last_at from here (ADR 0008).
+// Daily link counts serve reports older than the 13 raw months and stay while the link exists.
+// Attribution uses exact raw visits throughout its rebuild horizon, never these summaries.
 export const trackedLinkVisitDays = pgTable(
   'tracked_link_visit_days',
   {

@@ -59,3 +59,7 @@ The schema starts empty, so no step converts old rows. The constraints added in 
 Before merging, run the full schema integration suite, contracts/unit tests, `pnpm check`, build, repeated seed and schema no-drift generation, and inspect the populated upgrade results. Report the actual results in the PR. Do not mark the future service criteria above implemented because these checks pass.
 
 PostgreSQL's [definer-function guidance](https://www.postgresql.org/docs/16/sql-createfunction.html#SQL-CREATEFUNCTION-SECURITY), [foreign-key constraints](https://www.postgresql.org/docs/16/ddl-constraints.html) and [partition limitations](https://www.postgresql.org/docs/16/ddl-partitioning.html#DDL-PARTITIONING-DECLARATIVE-LIMITATIONS) explain the database guarantees used here.
+
+## Retention scan correction
+
+Migration `0015_maintenance_store_scan.sql` adds `maintenance_store_ids(after, limit)`, a bounded scan of every retained store, including suspended and closing stores. It returns only IDs; each rollup still runs inside `forStore`. The daily maintenance contract advances its global watermark only after the entire scan succeeds and retries an unfinished day from the start. This corrects the active-only fan-out that could omit retained history. The integration regression checks status coverage and pagination; the DB-7 worker and its failure/retry tests remain planned.

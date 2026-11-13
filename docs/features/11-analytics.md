@@ -225,6 +225,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 - Given the headline says 277 orders from marketing, then the funnel's last step also says 277.
 - Given an attribution window changes after 90 days, then a 365-day rebuild still finds eligible historic automation sends, and the exact link taps from up to 372 days back.
 - Given a late return or correction, then all affected summaries restate the original reporting dates within five minutes and nightly reconciliation produces the same totals.
+- Given suspended or closing stores have retained source rows, then maintenance includes them before advancing the global watermark. A failed store or unfinished page prevents advancement and raw partition deletion; retries restart the day without double counting.
 
 ## Open questions
 

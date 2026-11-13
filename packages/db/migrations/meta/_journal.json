@@ -106,6 +106,13 @@
       "when": 1794557324744,
       "tag": "0014_partitions_and_maintenance",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794557752588,
+      "tag": "0015_maintenance_store_scan",
+      "breakpoints": true
     }
   ]
 }

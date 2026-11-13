@@ -49,6 +49,7 @@ Release 1 is split into one migration per feature area, in dependency order. Eac
 | `0012_campaigns_and_automations`  | `campaigns`, `automations`                                                                |
 | `0013_analytics`                  | `analytics`                                                                               |
 | `0014_partitions_and_maintenance` | Monthly partitions for `audit_log`, `ai_runs`, `tracked_link_visits`; partition functions |
+| `0015_maintenance_store_scan`     | Paginated IDs for all retained stores before retention rollups advance                    |
 
 `packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
 
