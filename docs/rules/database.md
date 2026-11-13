@@ -23,7 +23,7 @@ PostgreSQL 16 with Drizzle ORM ([ADR 0002](../adr/0002-drizzle-orm.md)) and row 
 
 1. Change the schema in `packages/db/src/schema/<feature>.ts`, then run `pnpm --filter @dakly/db db:generate`. Review the SQL it wrote.
 2. RLS policies, grants, functions and triggers go in the same migration as their table, written by hand below the generated SQL.
-3. Never edit a migration that has been merged. Write a new one.
+3. Never edit a migration that has been merged. Write a new one. One migration has one purpose, usually one feature's tables; name it with `--name` (`pnpm --filter @dakly/db db:generate --name orders_returns`), never the random name drizzle-kit picks.
 4. Migrations must be safe on a live database:
    - Add a column as nullable or with a constant default; backfill in a job; add `NOT NULL` later.
    - Create indexes on big tables with `CREATE INDEX CONCURRENTLY` in their own migration.

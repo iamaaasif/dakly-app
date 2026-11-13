@@ -26,8 +26,85 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1794553702543,
-      "tag": "0003_release_1_schema",
+      "when": 1794557314266,
+      "tag": "0003_stores_and_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794557314892,
+      "tag": "0004_platform_and_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794557315675,
+      "tag": "0005_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794557316387,
+      "tag": "0006_channels_and_contacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794557317488,
+      "tag": "0007_social",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794557318344,
+      "tag": "0008_chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794557319326,
+      "tag": "0009_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794557320217,
+      "tag": "0010_products",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794557321162,
+      "tag": "0011_orders_and_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794557322266,
+      "tag": "0012_campaigns_and_automations",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794557323570,
+      "tag": "0013_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794557324744,
+      "tag": "0014_partitions_and_maintenance",
       "breakpoints": true
     }
   ]

@@ -1,8 +1,8 @@
 # PR #6 review corrections
 
-Migration 0003 snapshot contains 75 tables, 1,011 columns, 295 explicit indexes and 241 foreign keys, including the transitional example table. The ER file is generated from that snapshot.
+The schema after migration 0014 has 75 tables, 1,011 columns, 295 explicit indexes and 241 foreign keys, including the transitional example table. The ER file is generated from the latest snapshot.
 
-The database review examined commit `c82332157dcdd36167b952a39e301dfca173efef`, every changed schema/contract file, all tables and the drawn ER relationships. The corrections preserve D26–D30. They were first written as migration 0004 and then folded into 0003, because no database outside development had applied 0003; there is no data to convert. This page distinguishes database guarantees from contracts for services that have not been implemented.
+The database review examined commit `c82332157dcdd36167b952a39e301dfca173efef`, every changed schema/contract file, all tables and the drawn ER relationships. The corrections preserve D26–D30. They were first written as a separate migration and then folded into the release 1 migrations (now split by feature, 0003 to 0014), because no database outside development had applied them; there is no data to convert. This page distinguishes database guarantees from contracts for services that have not been implemented.
 
 ## Findings
 

@@ -31,7 +31,26 @@ These follow [rules/database.md](../rules/database.md); the column helpers are i
 
 ## Tables
 
-Migration 0003 contains 75 tables: 74 planned tables (60 shop-scoped and 14 global), plus the `customers` example. Column, index and FK counts are taken from its snapshot in [er-diagram.md](er-diagram.md). G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
+After migration 0014 the schema has 75 tables: 74 planned tables (60 shop-scoped and 14 global), plus the `customers` example. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
+
+Release 1 is split into one migration per feature area, in dependency order. Each holds its generated tables, then by hand the RLS policies, grants and functions for those tables. A later change is a new migration; a merged one is never edited.
+
+| Migration                         | Schema files                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------- |
+| `0003_stores_and_accounts`        | `stores`, `auth`, `team`, `areas` (with BD areas)                                         |
+| `0004_platform_and_admin`         | `admin`, `platform`                                                                       |
+| `0005_billing`                    | `billing`                                                                                 |
+| `0006_channels_and_contacts`      | `channels`, `contacts`, `contact-memory`                                                  |
+| `0007_social`                     | `social`                                                                                  |
+| `0008_chats`                      | `chats`                                                                                   |
+| `0009_ai`                         | `ai`                                                                                      |
+| `0010_products`                   | `products`                                                                                |
+| `0011_orders_and_payments`        | `orders`, `payments`, `tasks`                                                             |
+| `0012_campaigns_and_automations`  | `campaigns`, `automations`                                                                |
+| `0013_analytics`                  | `analytics`                                                                               |
+| `0014_partitions_and_maintenance` | Monthly partitions for `audit_log`, `ai_runs`, `tracked_link_visits`; partition functions |
+
+`packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
 
 | Schema file                        | Tables                                                                                                                                                                                     | Owner feature (`packages/core/src/`) |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |

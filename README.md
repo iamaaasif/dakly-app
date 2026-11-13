@@ -34,7 +34,7 @@ The API runs on http://localhost:4000 (`GET /health`), the web app on http://loc
 
 ### Resetting the local database
 
-Until release 1 ships, migration 0003 may still be rewritten in place, and the review fixes once in 0004 are now part of it. A database migrated from an older revision of 0003 or 0004 fails with `relation "platform_settings" already exists`. Local data is disposable, so drop the volume and migrate again:
+Until PR #6 merges, the release 1 migrations (0003 to 0014) may still be rewritten. A database migrated from an earlier revision of that PR fails with errors such as `relation "platform_settings" already exists`. Local data is disposable, so drop the volume and migrate again:
 
 ```bash
 docker compose down -v
