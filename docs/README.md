@@ -1,0 +1,32 @@
+# Dakly docs
+
+This folder is the single source of truth for building Dakly. If a doc here and an older doc outside the repo disagree, this folder wins, and the older doc should be fixed or marked out of date.
+
+| Folder                             | What it holds                                                    | Read it when                                  |
+| ---------------------------------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| [product/](product/)               | What Dakly is, who it is for, release scope, glossary, decisions | You are new, or a product question comes up   |
+| [features/](features/)             | One file per feature: behaviour, rules, screens, status          | Before you build or change a feature          |
+| [design/](design/)                 | Screenshots of the design prototype, theme tokens                | Before you build a screen                     |
+| [development/](development/)       | How to build a feature, step by step, and the release 1 order    | Before you start a task                       |
+| [rules/](rules/)                   | Coding rules, one file per topic, each with wrong and right code | Before you write code in an area              |
+| [adr/](adr/)                       | Architecture decisions already made                              | Before you propose a change to the foundation |
+| [architecture.md](architecture.md) | How the pieces fit and what runs where                           | First day                                     |
+| [tasks.md](tasks.md)               | Every release 1 task with its status                             | Picking up work, and when a PR merges         |
+
+## Keeping the docs right
+
+- A PR that changes behaviour updates the feature doc in the same PR. A reviewer rejects a behaviour change with a stale doc.
+- A PR that finishes or starts a task updates its row in [tasks.md](tasks.md).
+- Open questions are listed in [product/open-questions.md](product/open-questions.md). When Asif answers one, move the answer to [product/decisions.md](product/decisions.md) and update the affected feature docs in the same PR.
+- Docs follow [rules/writing.md](rules/writing.md): plain words, short sentences, no filler. `pnpm lint:docs` checks the common slips.
+
+## Source documents outside the repo
+
+These were the working drafts. Their content has been moved here; use them only for history.
+
+- PRD: https://claude.ai/artifact/B24GPU5sw3LtFFwgsbXZzD
+- Architecture: https://claude.ai/artifact/7fyrptKfhe9WNvH4pQTsQJ
+- Code conventions: https://claude.ai/artifact/HVw1Ud4qcAbrXwKvZ8EiEz
+- Release 1 engineering spec: https://claude.ai/artifact/9uVwnWsphUvroZpzWoiMNv
+- Schema review (not yet accepted): https://claude.ai/artifact/QVk9UfT8o7vV8bnpjnVRGS
+- Design prototype: https://claude.ai/artifact/Bi4AA8D5DFq1ifsUbgt1Su
