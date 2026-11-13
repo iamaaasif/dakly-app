@@ -117,6 +117,45 @@ export const contacts = pgTable(
   ],
 );
 
+// One staff merge, kept so it can be undone for 7 days (D29). The merged contact is soft-deleted,
+// not removed; moved_rows lists the ids moved from it per table and replaced_fields the kept
+// contact's values before the merge, so undo puts both back exactly.
+export const contactMerges = pgTable(
+  'contact_merges',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    keptContactId: uuid('kept_contact_id')
+      .notNull()
+      .references(() => contacts.id),
+    mergedContactId: uuid('merged_contact_id')
+      .notNull()
+      .references(() => contacts.id),
+    movedRows: jsonb('moved_rows').notNull(),
+    replacedFields: jsonb('replaced_fields').notNull(),
+    mergedByUserId: uuid('merged_by_user_id')
+      .notNull()
+      .references(() => users.id),
+    undoUntil: timestamptz('undo_until').notNull(),
+    undoneAt: timestamptz('undone_at'),
+    undoneByUserId: uuid('undone_by_user_id').references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // A contact can be merged away once at a time; undoing frees it again.
+    uniqueIndex('contact_merges_merged_contact_id_key')
+      .on(table.mergedContactId)
+      .where(sql`${table.undoneAt} is null`),
+    index('contact_merges_store_id_kept_contact_id_idx').on(table.storeId, table.keptContactId),
+    index('contact_merges_store_id_created_at_idx').on(table.storeId, table.createdAt),
+    index('contact_merges_merged_by_user_id_idx').on(table.mergedByUserId),
+    index('contact_merges_undone_by_user_id_idx').on(table.undoneByUserId),
+    check('contact_merges_two_contacts', sql`${table.keptContactId} <> ${table.mergedContactId}`),
+  ],
+);
+
 // Two contacts that may be one person, for staff to merge or dismiss. A self-delivery phone that
 // already belongs to another contact lands here and stays only on the order (D27). order_id and
 // conversation_id say where it came from; they have no foreign key so contacts does not depend

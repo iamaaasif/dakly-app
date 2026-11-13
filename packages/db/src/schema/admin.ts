@@ -11,7 +11,6 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import {
-  staffApprovalStatuses,
   staffRoles,
   staffStatuses,
   supportGrantAccess,
@@ -66,6 +65,8 @@ export const staffSessions = pgTable(
 );
 
 // Append-only: the app role may insert and read, never update or delete (grants in the migration).
+// Every risky action writes its row before it runs (D28). If two-person approval is added later,
+// the action records the approval's id in data; nothing here changes.
 export const staffAuditLog = pgTable(
   'staff_audit_log',
   {
@@ -119,40 +120,6 @@ export const supportGrants = pgTable(
     index('support_grants_approved_by_user_id_idx').on(table.approvedByUserId),
     check('support_grants_access', isOneOf(table.access, supportGrantAccess)),
     check('support_grants_status', isOneOf(table.status, supportGrantStatuses)),
-  ],
-);
-
-// Two-person approval (D16). The payload is frozen at request time; the hash proves it was
-// not changed between approval and execution.
-export const staffApprovals = pgTable(
-  'staff_approvals',
-  {
-    id: id(),
-    action: text('action').notNull(),
-    storeId: uuid('store_id'),
-    payload: jsonb('payload').notNull(),
-    payloadHash: bytea('payload_hash').notNull(),
-    reason: text('reason').notNull(),
-    status: text('status', { enum: staffApprovalStatuses }).notNull().default('pending'),
-    requestedByStaffId: uuid('requested_by_staff_id')
-      .notNull()
-      .references(() => staffUsers.id),
-    decidedByStaffId: uuid('decided_by_staff_id').references(() => staffUsers.id),
-    expiresAt: timestamptz('expires_at').notNull(),
-    decidedAt: timestamptz('decided_at'),
-    executedAt: timestamptz('executed_at'),
-    result: jsonb('result'),
-    createdAt: createdAt(),
-  },
-  (table) => [
-    index('staff_approvals_status_expires_at_idx').on(table.status, table.expiresAt),
-    index('staff_approvals_requested_by_staff_id_idx').on(table.requestedByStaffId),
-    index('staff_approvals_decided_by_staff_id_idx').on(table.decidedByStaffId),
-    check('staff_approvals_status', isOneOf(table.status, staffApprovalStatuses)),
-    check(
-      'staff_approvals_second_person',
-      sql`${table.decidedByStaffId} is null or ${table.decidedByStaffId} <> ${table.requestedByStaffId}`,
-    ),
   ],
 );
 

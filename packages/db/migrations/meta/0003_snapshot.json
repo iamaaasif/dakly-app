@@ -52,185 +52,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.staff_approvals": {
-      "name": "staff_approvals",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "store_id": {
-          "name": "store_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload_hash": {
-          "name": "payload_hash",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "requested_by_staff_id": {
-          "name": "requested_by_staff_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decided_by_staff_id": {
-          "name": "decided_by_staff_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "executed_at": {
-          "name": "executed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "result": {
-          "name": "result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "staff_approvals_status_expires_at_idx": {
-          "name": "staff_approvals_status_expires_at_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "staff_approvals_requested_by_staff_id_idx": {
-          "name": "staff_approvals_requested_by_staff_id_idx",
-          "columns": [
-            {
-              "expression": "requested_by_staff_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "staff_approvals_decided_by_staff_id_idx": {
-          "name": "staff_approvals_decided_by_staff_id_idx",
-          "columns": [
-            {
-              "expression": "decided_by_staff_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "staff_approvals_requested_by_staff_id_staff_users_id_fk": {
-          "name": "staff_approvals_requested_by_staff_id_staff_users_id_fk",
-          "tableFrom": "staff_approvals",
-          "tableTo": "staff_users",
-          "columnsFrom": ["requested_by_staff_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "staff_approvals_decided_by_staff_id_staff_users_id_fk": {
-          "name": "staff_approvals_decided_by_staff_id_staff_users_id_fk",
-          "tableFrom": "staff_approvals",
-          "tableTo": "staff_users",
-          "columnsFrom": ["decided_by_staff_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "staff_approvals_status": {
-          "name": "staff_approvals_status",
-          "value": "\"staff_approvals\".\"status\" in ('pending', 'approved', 'rejected', 'expired', 'executed')"
-        },
-        "staff_approvals_second_person": {
-          "name": "staff_approvals_second_person",
-          "value": "\"staff_approvals\".\"decided_by_staff_id\" is null or \"staff_approvals\".\"decided_by_staff_id\" <> \"staff_approvals\".\"requested_by_staff_id\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.staff_audit_log": {
       "name": "staff_audit_log",
       "schema": "",
@@ -7400,6 +7221,226 @@
         "contact_match_suggestions_phone_format": {
           "name": "contact_match_suggestions_phone_format",
           "value": "\"contact_match_suggestions\".\"phone\" ~ '^01[3-9][0-9]{8}$'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.contact_merges": {
+      "name": "contact_merges",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kept_contact_id": {
+          "name": "kept_contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merged_contact_id": {
+          "name": "merged_contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "moved_rows": {
+          "name": "moved_rows",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "replaced_fields": {
+          "name": "replaced_fields",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merged_by_user_id": {
+          "name": "merged_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "undo_until": {
+          "name": "undo_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "undone_at": {
+          "name": "undone_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "undone_by_user_id": {
+          "name": "undone_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "contact_merges_merged_contact_id_key": {
+          "name": "contact_merges_merged_contact_id_key",
+          "columns": [
+            {
+              "expression": "merged_contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"contact_merges\".\"undone_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "contact_merges_store_id_kept_contact_id_idx": {
+          "name": "contact_merges_store_id_kept_contact_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kept_contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "contact_merges_store_id_created_at_idx": {
+          "name": "contact_merges_store_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "contact_merges_merged_by_user_id_idx": {
+          "name": "contact_merges_merged_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "merged_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "contact_merges_undone_by_user_id_idx": {
+          "name": "contact_merges_undone_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "undone_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "contact_merges_store_id_stores_id_fk": {
+          "name": "contact_merges_store_id_stores_id_fk",
+          "tableFrom": "contact_merges",
+          "tableTo": "stores",
+          "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "contact_merges_kept_contact_id_contacts_id_fk": {
+          "name": "contact_merges_kept_contact_id_contacts_id_fk",
+          "tableFrom": "contact_merges",
+          "tableTo": "contacts",
+          "columnsFrom": ["kept_contact_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "contact_merges_merged_contact_id_contacts_id_fk": {
+          "name": "contact_merges_merged_contact_id_contacts_id_fk",
+          "tableFrom": "contact_merges",
+          "tableTo": "contacts",
+          "columnsFrom": ["merged_contact_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "contact_merges_merged_by_user_id_users_id_fk": {
+          "name": "contact_merges_merged_by_user_id_users_id_fk",
+          "tableFrom": "contact_merges",
+          "tableTo": "users",
+          "columnsFrom": ["merged_by_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "contact_merges_undone_by_user_id_users_id_fk": {
+          "name": "contact_merges_undone_by_user_id_users_id_fk",
+          "tableFrom": "contact_merges",
+          "tableTo": "users",
+          "columnsFrom": ["undone_by_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "contact_merges_two_contacts": {
+          "name": "contact_merges_two_contacts",
+          "value": "\"contact_merges\".\"kept_contact_id\" <> \"contact_merges\".\"merged_contact_id\""
         }
       },
       "isRLSEnabled": false

@@ -5,25 +5,6 @@ CREATE TABLE "platform_settings" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "staff_approvals" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"action" text NOT NULL,
-	"store_id" uuid,
-	"payload" jsonb NOT NULL,
-	"payload_hash" "bytea" NOT NULL,
-	"reason" text NOT NULL,
-	"status" text DEFAULT 'pending' NOT NULL,
-	"requested_by_staff_id" uuid NOT NULL,
-	"decided_by_staff_id" uuid,
-	"expires_at" timestamp with time zone NOT NULL,
-	"decided_at" timestamp with time zone,
-	"executed_at" timestamp with time zone,
-	"result" jsonb,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "staff_approvals_status" CHECK ("staff_approvals"."status" in ('pending', 'approved', 'rejected', 'expired', 'executed')),
-	CONSTRAINT "staff_approvals_second_person" CHECK ("staff_approvals"."decided_by_staff_id" is null or "staff_approvals"."decided_by_staff_id" <> "staff_approvals"."requested_by_staff_id")
-);
---> statement-breakpoint
 CREATE TABLE "staff_audit_log" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"staff_user_id" uuid NOT NULL,
@@ -713,6 +694,21 @@ CREATE TABLE "contact_stats" (
 	CONSTRAINT "contact_stats_counts" CHECK ("contact_stats"."orders_count" >= 0 and "contact_stats"."delivered_count" >= 0)
 );
 --> statement-breakpoint
+CREATE TABLE "contact_merges" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"kept_contact_id" uuid NOT NULL,
+	"merged_contact_id" uuid NOT NULL,
+	"moved_rows" jsonb NOT NULL,
+	"replaced_fields" jsonb NOT NULL,
+	"merged_by_user_id" uuid NOT NULL,
+	"undo_until" timestamp with time zone NOT NULL,
+	"undone_at" timestamp with time zone,
+	"undone_by_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "contact_merges_two_contacts" CHECK ("contact_merges"."kept_contact_id" <> "contact_merges"."merged_contact_id")
+);
+--> statement-breakpoint
 CREATE TABLE "contact_match_suggestions" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"store_id" uuid NOT NULL,
@@ -1299,8 +1295,6 @@ ALTER TABLE "stores" ADD COLUMN "suspended_reason" text;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "delete_after" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "updated_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
 ALTER TABLE "platform_settings" ADD CONSTRAINT "platform_settings_updated_by_staff_id_staff_users_id_fk" FOREIGN KEY ("updated_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "staff_approvals" ADD CONSTRAINT "staff_approvals_requested_by_staff_id_staff_users_id_fk" FOREIGN KEY ("requested_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "staff_approvals" ADD CONSTRAINT "staff_approvals_decided_by_staff_id_staff_users_id_fk" FOREIGN KEY ("decided_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_audit_log" ADD CONSTRAINT "staff_audit_log_staff_user_id_staff_users_id_fk" FOREIGN KEY ("staff_user_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_sessions" ADD CONSTRAINT "staff_sessions_staff_user_id_staff_users_id_fk" FOREIGN KEY ("staff_user_id") REFERENCES "public"."staff_users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "support_grants" ADD CONSTRAINT "support_grants_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -1458,9 +1452,6 @@ ALTER TABLE "memberships" ADD CONSTRAINT "memberships_user_id_users_id_fk" FOREI
 ALTER TABLE "memberships" ADD CONSTRAINT "memberships_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "memberships" ADD CONSTRAINT "memberships_invited_by_user_id_users_id_fk" FOREIGN KEY ("invited_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "roles" ADD CONSTRAINT "roles_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "staff_approvals_status_expires_at_idx" ON "staff_approvals" USING btree ("status","expires_at");--> statement-breakpoint
-CREATE INDEX "staff_approvals_requested_by_staff_id_idx" ON "staff_approvals" USING btree ("requested_by_staff_id");--> statement-breakpoint
-CREATE INDEX "staff_approvals_decided_by_staff_id_idx" ON "staff_approvals" USING btree ("decided_by_staff_id");--> statement-breakpoint
 CREATE INDEX "staff_audit_log_staff_user_id_created_at_idx" ON "staff_audit_log" USING btree ("staff_user_id","created_at");--> statement-breakpoint
 CREATE INDEX "staff_audit_log_store_id_created_at_idx" ON "staff_audit_log" USING btree ("store_id","created_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "staff_sessions_token_hash_key" ON "staff_sessions" USING btree ("token_hash");--> statement-breakpoint
@@ -1721,6 +1712,16 @@ CREATE INDEX "contact_match_suggestions_contact_id_idx" ON "contact_match_sugges
 CREATE INDEX "contact_match_suggestions_matched_contact_id_idx" ON "contact_match_suggestions" USING btree ("matched_contact_id");--> statement-breakpoint
 CREATE INDEX "contact_match_suggestions_store_id_order_id_idx" ON "contact_match_suggestions" USING btree ("store_id","order_id") WHERE "contact_match_suggestions"."order_id" is not null;--> statement-breakpoint
 CREATE INDEX "contact_match_suggestions_decided_by_user_id_idx" ON "contact_match_suggestions" USING btree ("decided_by_user_id");--> statement-breakpoint
+ALTER TABLE "contact_merges" ADD CONSTRAINT "contact_merges_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_merges" ADD CONSTRAINT "contact_merges_kept_contact_id_contacts_id_fk" FOREIGN KEY ("kept_contact_id") REFERENCES "public"."contacts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_merges" ADD CONSTRAINT "contact_merges_merged_contact_id_contacts_id_fk" FOREIGN KEY ("merged_contact_id") REFERENCES "public"."contacts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_merges" ADD CONSTRAINT "contact_merges_merged_by_user_id_users_id_fk" FOREIGN KEY ("merged_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_merges" ADD CONSTRAINT "contact_merges_undone_by_user_id_users_id_fk" FOREIGN KEY ("undone_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "contact_merges_merged_contact_id_key" ON "contact_merges" USING btree ("merged_contact_id") WHERE "contact_merges"."undone_at" is null;--> statement-breakpoint
+CREATE INDEX "contact_merges_store_id_kept_contact_id_idx" ON "contact_merges" USING btree ("store_id","kept_contact_id");--> statement-breakpoint
+CREATE INDEX "contact_merges_store_id_created_at_idx" ON "contact_merges" USING btree ("store_id","created_at");--> statement-breakpoint
+CREATE INDEX "contact_merges_merged_by_user_id_idx" ON "contact_merges" USING btree ("merged_by_user_id");--> statement-breakpoint
+CREATE INDEX "contact_merges_undone_by_user_id_idx" ON "contact_merges" USING btree ("undone_by_user_id");
 
 -- Everything below is written by hand (docs/rules/database.md, Migrations step 2).
 -- See docs/data/isolation-and-access.md for why each piece exists.
@@ -1786,6 +1787,10 @@ CREATE POLICY "contact_identities_isolation" ON "contact_identities"
   WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "contact_stats" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "contact_stats_isolation" ON "contact_stats"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
+ALTER TABLE "contact_merges" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "contact_merges_isolation" ON "contact_merges"
   USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
   WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "contact_match_suggestions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint

@@ -13,7 +13,7 @@ No table uses `FORCE ROW LEVEL SECURITY` (schema review must-fix 3). With FORCE,
 
 ## Shop tables
 
-Each of the 54 shop tables has `store_id` and one policy, `<table>_isolation`:
+Each of the 55 shop tables has `store_id` and one policy, `<table>_isolation`:
 
 ```sql
 USING (store_id = NULLIF(current_setting('app.store_id', true), '')::uuid)
@@ -26,7 +26,7 @@ Foreign keys skip RLS: Postgres checks a reference as the table owner. A child r
 
 ## Global tables
 
-14 tables have no `store_id`: `users`, `sessions`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_audit_log`, `staff_approvals`, `platform_settings`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only the auth, admin, billing and platform modules read them, by primary or unique key.
+13 tables have no `store_id`: `users`, `sessions`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_audit_log`, `platform_settings`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only the auth, admin, billing and platform modules read them, by primary or unique key.
 
 `support_grants` holds a `store_id` and has a policy like any shop table: a store can list the grants on itself, and the admin app reads a grant inside `forStore` for that store.
 
@@ -84,7 +84,7 @@ The admin app connects as `dakly_app` like the shop app. It never bypasses RLS.
 
 - Platform screens (stores list, plans, coupons, settings) read global tables and `admin_store_overview`, which returns metadata and counts, no customer or order content.
 - Opening one store's data needs a `support_grants` row: requested by staff, approved by the shop owner from inside the shop app, read or write, with an expiry. The admin service checks the grant, then reads inside `forStore` for that store. Every read and write is written to `staff_audit_log` with a reason.
-- Risky actions (D16) go through `staff_approvals`: the payload is frozen with a hash at request time, and a CHECK refuses a decision by the requester. Which actions count as risky is listed in [feature-check.md](feature-check.md) as a gap.
+- Risky actions (store deletion, large refunds or credits, bulk price changes, global AI pause, break-glass) need one staff member with the right role, a reason and a confirmation; no second approver (D28). They all run through one admin service method that writes `staff_audit_log` before the change and fails if that write fails. Two-person approval, if wanted later, is a table and a check in that one method; the audit record stays as it is.
 
 ## Customer identity (D26, D27)
 

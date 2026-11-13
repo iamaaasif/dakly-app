@@ -15,10 +15,3 @@ export const supportGrantStatuses = [
   'expired',
 ] as const;
 export const supportGrantAccess = ['read', 'write'] as const;
-export const staffApprovalStatuses = [
-  'pending',
-  'approved',
-  'rejected',
-  'expired',
-  'executed',
-] as const;

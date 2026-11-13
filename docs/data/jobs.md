@@ -76,13 +76,14 @@ Per-store cap: one running campaign batch per store.
 
 ## bulk
 
-| Job                     | Started by                 | Payload                                      | Makes a rerun harmless                                                            |
-| ----------------------- | -------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
-| `run-contact-import`    | Import confirmed           | `storeId`, `importId`                        | Phone and `external_ref` are unique per store, so a rerun updates, not duplicates |
-| `export-contacts`       | Export asked for           | `storeId`, `fileId`                          | Writes to the same object key                                                     |
-| `rebuild-segment-count` | Segment saved, and nightly | `storeId`, `segmentId`                       | Overwrites the count                                                              |
-| `merge-contacts`        | Staff confirms a merge     | `storeId`, `keepContactId`, `mergeContactId` | Merged contact is soft-deleted first; moves are by id                             |
-| `purge-contact`         | Sweep `due_contact_purges` | `storeId`, `contactId`                       | Deletes are by id                                                                 |
+| Job                     | Started by                       | Payload                                       | Makes a rerun harmless                                                                                         |
+| ----------------------- | -------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `run-contact-import`    | Import confirmed                 | `storeId`, `importId`                         | Phone and `external_ref` are unique per store, so a rerun updates, not duplicates                              |
+| `export-contacts`       | Export asked for                 | `storeId`, `fileId`                           | Writes to the same object key                                                                                  |
+| `rebuild-segment-count` | Segment saved, and nightly       | `storeId`, `segmentId`                        | Overwrites the count                                                                                           |
+| `merge-contacts`        | Staff confirms a merge           | `storeId`, `keptContactId`, `mergedContactId` | Partial unique `contact_merges (merged_contact_id)` while not undone; merged contact soft-deleted, moves by id |
+| `undo-contact-merge`    | Staff undoes within 7 days (D29) | `storeId`, `contactMergeId`                   | `undone_at` set in the same transaction as the moves back                                                      |
+| `purge-contact`         | Sweep `due_contact_purges`       | `storeId`, `contactId`                        | Deletes are by id                                                                                              |
 
 ## payments
 

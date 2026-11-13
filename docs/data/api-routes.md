@@ -55,6 +55,7 @@ Permission areas (No access / View / Edit, feature 01): `customers`, `chats`, `o
 | `POST /contacts` (idem), `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                                     | `customers`                                                 |
 | `GET /contacts/:contactId/timeline`                                                                                      | `customers`                                                 |
 | `POST /contacts/:contactId/merge` (closes the suggestion)                                                                | `customers`                                                 |
+| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                  | `customers`                                                 |
 | `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                | `customers`                                                 |
 | `POST /contacts/:contactId/consents`                                                                                     | `customers`                                                 |
 | `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`                   | `customers`                                                 |
@@ -158,19 +159,18 @@ Permission areas (No access / View / Edit, feature 01): `customers`, `chats`, `o
 
 ## Admin app (12)
 
-On the admin hostname, staff session, passkey or TOTP required. Each route names the staff roles that may call it.
+On the admin hostname, staff session, passkey or TOTP required. Each route names the staff roles that may call it. Every write takes a reason and writes `staff_audit_log` first; none needs a second approver (D28).
 
-| Route                                                                                                           | Staff roles                             |
-| --------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| `POST /admin/auth/sign-in`, `POST /admin/auth/verify`, `POST /admin/auth/sign-out`                              | all                                     |
-| `GET /admin/stores` (`admin_store_overview`)                                                                    | all                                     |
-| `GET /admin/stores/:storeId/*` (store data)                                                                     | support, with an approved support grant |
-| `POST /admin/stores/:storeId/support-grants`                                                                    | support                                 |
-| `POST /admin/stores/:storeId/suspend`, `POST /admin/stores/:storeId/restore`                                    | ops, with approval                      |
-| `GET /admin/plans`, `PUT /admin/plans/:planCode`                                                                | finance, with approval to change        |
-| `GET /admin/coupons`, `POST /admin/coupons`, `PATCH /admin/coupons/:couponId`                                   | finance                                 |
-| `GET /admin/approvals`, `POST /admin/approvals/:approvalId/approve`, `POST /admin/approvals/:approvalId/reject` | super_admin, finance, ops               |
-| `GET /admin/settings`, `PUT /admin/settings/:key`                                                               | super_admin, with approval              |
-| `GET /admin/staff`, `POST /admin/staff`, `PATCH /admin/staff/:staffUserId`                                      | super_admin                             |
-| `GET /admin/audit-log`                                                                                          | super_admin                             |
-| `GET /admin/queues` (Bull Board)                                                                                | super_admin, ops                        |
+| Route                                                                              | Staff roles                             |
+| ---------------------------------------------------------------------------------- | --------------------------------------- |
+| `POST /admin/auth/sign-in`, `POST /admin/auth/verify`, `POST /admin/auth/sign-out` | all                                     |
+| `GET /admin/stores` (`admin_store_overview`)                                       | all                                     |
+| `GET /admin/stores/:storeId/*` (store data)                                        | support, with an approved support grant |
+| `POST /admin/stores/:storeId/support-grants`                                       | support                                 |
+| `POST /admin/stores/:storeId/suspend`, `POST /admin/stores/:storeId/restore`       | ops                                     |
+| `GET /admin/plans`, `PUT /admin/plans/:planCode`                                   | finance                                 |
+| `GET /admin/coupons`, `POST /admin/coupons`, `PATCH /admin/coupons/:couponId`      | finance                                 |
+| `GET /admin/settings`, `PUT /admin/settings/:key`                                  | super_admin                             |
+| `GET /admin/staff`, `POST /admin/staff`, `PATCH /admin/staff/:staffUserId`         | super_admin                             |
+| `GET /admin/audit-log`                                                             | super_admin                             |
+| `GET /admin/queues` (Bull Board)                                                   | super_admin, ops                        |

@@ -49,8 +49,6 @@ Tables from `stores.ts`, `auth.ts`, `team.ts`, `admin.ts`.
 ```mermaid
 erDiagram
     staff_users |o--o{ platform_settings : "updated_by_staff_id"
-    staff_users ||--o{ staff_approvals : "requested_by_staff_id"
-    staff_users |o--o{ staff_approvals : "decided_by_staff_id"
     staff_users ||--o{ staff_audit_log : "staff_user_id"
     staff_users ||--o{ staff_sessions : "staff_user_id"
     stores ||--o{ support_grants : "store_id"
@@ -68,12 +66,6 @@ erDiagram
     platform_settings {
         text key PK
         uuid updated_by_staff_id FK
-    }
-    staff_approvals {
-        uuid id PK
-        text status
-        uuid requested_by_staff_id FK
-        uuid decided_by_staff_id FK
     }
     staff_audit_log {
         uuid id PK
@@ -206,6 +198,8 @@ erDiagram
     channel_connections ||--o{ contact_identities : "channel_connection_id"
     contacts ||--o{ contact_match_suggestions : "contact_id"
     contacts ||--o{ contact_match_suggestions : "matched_contact_id"
+    contacts ||--o{ contact_merges : "kept_contact_id"
+    contacts ||--o{ contact_merges : "merged_contact_id"
     contacts ||--o| contact_stats : "contact_id"
     channel_connections {
         uuid id PK
@@ -278,6 +272,14 @@ erDiagram
         uuid matched_contact_id FK
         text status
         uuid decided_by_user_id FK
+    }
+    contact_merges {
+        uuid id PK
+        uuid store_id FK
+        uuid kept_contact_id FK
+        uuid merged_contact_id FK
+        uuid merged_by_user_id FK
+        uuid undone_by_user_id FK
     }
     contact_stats {
         uuid contact_id PK,FK
