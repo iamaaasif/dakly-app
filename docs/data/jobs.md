@@ -16,13 +16,14 @@ A job that loses its Valkey entry is found again by a sweep: each sweep calls a 
 
 AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption). A job that cannot get it is delayed, not failed.
 
-| Job                      | Started by                                 | Payload                                  | Makes a rerun harmless                                                    |
-| ------------------------ | ------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------- |
-| `reply-to-customer`      | New inbound message while `responder = ai` | `storeId`, `conversationId`, `messageId` | Version check before insert; reply carries `idempotency_key` = message id |
-| `reply-to-comment`       | New comment with auto-reply on             | `storeId`, `socialCommentId`             | Comment status checked                                                    |
-| `summarise-conversation` | Chat moved to done                         | `storeId`, `conversationId`              | Overwrites `ai_summary`                                                   |
-| `learn-knowledge-item`   | File or link added to knowledge            | `storeId`, `knowledgeItemId`             | Deletes the item's chunks before writing new ones                         |
-| `embed-product`          | Product created or renamed                 | `storeId`, `productId`                   | Overwrites `search_embedding`                                             |
+| Job                          | Started by                                                          | Payload                                  | Makes a rerun harmless                                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reply-to-customer`          | New inbound message while `responder = ai`                          | `storeId`, `conversationId`, `messageId` | Version check before insert; reply carries `idempotency_key` = message id                                                                                                  |
+| `reply-to-comment`           | New comment with auto-reply on                                      | `storeId`, `socialCommentId`             | Comment status checked                                                                                                                                                     |
+| `update-conversation-memory` | Chat quiet for 2 hours or moved to done                             | `storeId`, `conversationId`              | One fast-tier call writes `conversations.ai_summary` and merges new facts into `contact_memories` (D30); skips when `built_through_message_id` is already the last message |
+| `learn-knowledge-item`       | File or link added to knowledge                                     | `storeId`, `knowledgeItemId`             | Deletes the item's chunks before writing new ones                                                                                                                          |
+| `reembed-store`              | Configured embed model changed                                      | `storeId`                                | Re-queues items and products whose `embedding_model` differs                                                                                                               |
+| `embed-product`              | Product created, renamed or main photo changed; embed model changed | `storeId`, `productId`                   | Overwrites `search_embedding`, `image_embedding` and `embedding_model`                                                                                                     |
 
 ## transactional
 

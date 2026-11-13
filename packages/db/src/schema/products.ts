@@ -52,6 +52,11 @@ export const products = pgTable(
     status: text('status', { enum: productStatuses }).notNull().default('active'),
     askCount: integer('ask_count').notNull().default(0),
     searchEmbedding: vector('search_embedding', { dimensions: 1536 }),
+    // The main photo, described by the vision tier and embedded with the same model as the text,
+    // so a customer's photo is matched in the same space (products have no image model of their own).
+    imageEmbedding: vector('image_embedding', { dimensions: 1536 }),
+    // Both embeddings are rebuilt when this differs from the configured embed model.
+    embeddingModel: text('embedding_model'),
     // Hash of the text the embedding was built from; a change queues a rebuild.
     searchTextHash: text('search_text_hash'),
     externalRef: text('external_ref'),

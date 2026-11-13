@@ -62,3 +62,18 @@ export const matchSuggestionReasons = [
   'similar_name_and_area',
 ] as const;
 export const matchSuggestionStatuses = ['open', 'merged', 'dismissed'] as const;
+// Customer memory (CHAT-R11). Only what the customer said, what their own orders show, or what staff
+// typed; never another person's delivery details (D26).
+export const memoryFactKinds = [
+  'size',
+  'colour',
+  'style',
+  'budget',
+  'product_interest',
+  'language',
+  'tone',
+  'past_issue',
+  'delivery_area',
+  'other',
+] as const;
+export const memoryFactSources = ['customer', 'order', 'staff'] as const;

@@ -70,15 +70,16 @@ Do not partition before a trigger is hit; plain tables are simpler. When one is 
 
 ## Retention
 
-| Data                                                | Kept                                                | How it is removed                                                    |
-| --------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
-| `webhook_events`                                    | 7 days; payload cleared once processed              | `purge_webhook_events` (daily)                                       |
-| `outbox_events` (published)                         | 7 days                                              | `purge_published_outbox_events` (daily)                              |
-| `sessions`                                          | Until `expires_at`                                  | Maintenance job                                                      |
-| `assistant_messages`                                | 90 days (AI-R6)                                     | Maintenance job, by `created_at`                                     |
-| `automation_run_steps`                              | 90 days after the run ends                          | Maintenance job, by `created_at`                                     |
-| Deleted contacts                                    | 30 days, then purged with their chats               | `due_contact_purges`, then a purge job per contact inside `forStore` |
-| `files` with `expires_at` (exports, import uploads) | Until `expires_at`                                  | Maintenance job deletes the object, then the row                     |
-| `audit_log`                                         | 2 years                                             | Maintenance job as the owner role                                    |
-| `staff_audit_log`                                   | 7 years                                             | Maintenance job as the owner role                                    |
-| Orders, payments, invoices, ledger                  | Life of the store, then the closure rules in ACC-12 | Store purge                                                          |
+| Data                                                | Kept                                                                                                                               | How it is removed                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `webhook_events`                                    | 7 days; payload cleared once processed                                                                                             | `purge_webhook_events` (daily)                                       |
+| `outbox_events` (published)                         | 7 days                                                                                                                             | `purge_published_outbox_events` (daily)                              |
+| `sessions`                                          | Until `expires_at`                                                                                                                 | Maintenance job                                                      |
+| `assistant_messages`                                | 90 days (AI-R6)                                                                                                                    | Maintenance job, by `created_at`                                     |
+| `automation_run_steps`                              | 90 days after the run ends                                                                                                         | Maintenance job, by `created_at`                                     |
+| Deleted contacts                                    | 30 days, then purged with their chats                                                                                              | `due_contact_purges`, then a purge job per contact inside `forStore` |
+| `contact_memories`                                  | While the contact exists; cleared at once on a deletion request (including Meta data deletion callbacks), deleted with the contact | Service on request; cascade on purge                                 |
+| `files` with `expires_at` (exports, import uploads) | Until `expires_at`                                                                                                                 | Maintenance job deletes the object, then the row                     |
+| `audit_log`                                         | 2 years                                                                                                                            | Maintenance job as the owner role                                    |
+| `staff_audit_log`                                   | 7 years                                                                                                                            | Maintenance job as the owner role                                    |
+| Orders, payments, invoices, ledger                  | Life of the store, then the closure rules in ACC-12                                                                                | Store purge                                                          |

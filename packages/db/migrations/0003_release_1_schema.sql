@@ -102,7 +102,7 @@ CREATE TABLE "ai_runs" (
 	"error_code" text,
 	"latency_ms" integer,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "ai_runs_purpose" CHECK ("ai_runs"."purpose" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding')),
+	CONSTRAINT "ai_runs_purpose" CHECK ("ai_runs"."purpose" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory')),
 	CONSTRAINT "ai_runs_tier" CHECK ("ai_runs"."tier" in ('reply', 'fast', 'vision', 'writer', 'embed', 'transcribe')),
 	CONSTRAINT "ai_runs_outcome" CHECK ("ai_runs"."outcome" in ('completed', 'sent', 'handed_over', 'failed_check', 'failed', 'timeout'))
 );
@@ -126,6 +126,7 @@ CREATE TABLE "knowledge_chunks" (
 	"knowledge_item_id" uuid NOT NULL,
 	"content" text NOT NULL,
 	"embedding" vector(1536) NOT NULL,
+	"embedding_model" text NOT NULL,
 	"token_count" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -709,6 +710,40 @@ CREATE TABLE "contact_merges" (
 	CONSTRAINT "contact_merges_two_contacts" CHECK ("contact_merges"."kept_contact_id" <> "contact_merges"."merged_contact_id")
 );
 --> statement-breakpoint
+CREATE TABLE "ai_rule_changes" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"source" text NOT NULL,
+	"target" text NOT NULL,
+	"target_id" uuid,
+	"before" jsonb NOT NULL,
+	"after" jsonb NOT NULL,
+	"summary" text NOT NULL,
+	"undoes_change_id" uuid,
+	"changed_by_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "ai_rule_changes_source" CHECK ("ai_rule_changes"."source" in ('teach', 'settings_edit', 'undo')),
+	CONSTRAINT "ai_rule_changes_target" CHECK ("ai_rule_changes"."target" in ('ai_agent_settings', 'store_settings', 'delivery_zone', 'knowledge_item')),
+	CONSTRAINT "ai_rule_changes_undo_link" CHECK (("ai_rule_changes"."source" = 'undo') = ("ai_rule_changes"."undoes_change_id" is not null))
+);
+--> statement-breakpoint
+CREATE TABLE "contact_memories" (
+	"contact_id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"summary" text DEFAULT '' NOT NULL,
+	"facts" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"built_through_message_id" uuid,
+	"built_at" timestamp with time zone,
+	"edited_by_user_id" uuid,
+	"edited_at" timestamp with time zone,
+	"version" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "contact_memories_summary_length" CHECK (char_length("contact_memories"."summary") <= 600),
+	CONSTRAINT "contact_memories_facts_array" CHECK (jsonb_typeof("contact_memories"."facts") = 'array'),
+	CONSTRAINT "contact_memories_facts_count" CHECK (jsonb_array_length("contact_memories"."facts") <= 40)
+);
+--> statement-breakpoint
 CREATE TABLE "contact_match_suggestions" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"store_id" uuid NOT NULL,
@@ -750,7 +785,6 @@ CREATE TABLE "contacts" (
 	"is_over_plan_limit" boolean DEFAULT false NOT NULL,
 	"tags" text[] DEFAULT '{}'::text[] NOT NULL,
 	"notes" text,
-	"ai_summary" text,
 	"external_ref" text,
 	"deleted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1115,6 +1149,8 @@ CREATE TABLE "products" (
 	"status" text DEFAULT 'active' NOT NULL,
 	"ask_count" integer DEFAULT 0 NOT NULL,
 	"search_embedding" vector(1536),
+	"image_embedding" vector(1536),
+	"embedding_model" text,
 	"search_text_hash" text,
 	"external_ref" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -1722,6 +1758,17 @@ CREATE INDEX "contact_merges_store_id_kept_contact_id_idx" ON "contact_merges" U
 CREATE INDEX "contact_merges_store_id_created_at_idx" ON "contact_merges" USING btree ("store_id","created_at");--> statement-breakpoint
 CREATE INDEX "contact_merges_merged_by_user_id_idx" ON "contact_merges" USING btree ("merged_by_user_id");--> statement-breakpoint
 CREATE INDEX "contact_merges_undone_by_user_id_idx" ON "contact_merges" USING btree ("undone_by_user_id");
+ALTER TABLE "ai_rule_changes" ADD CONSTRAINT "ai_rule_changes_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_rule_changes" ADD CONSTRAINT "ai_rule_changes_undoes_change_id_ai_rule_changes_id_fk" FOREIGN KEY ("undoes_change_id") REFERENCES "public"."ai_rule_changes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_rule_changes" ADD CONSTRAINT "ai_rule_changes_changed_by_user_id_users_id_fk" FOREIGN KEY ("changed_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_memories" ADD CONSTRAINT "contact_memories_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_memories" ADD CONSTRAINT "contact_memories_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "contact_memories" ADD CONSTRAINT "contact_memories_edited_by_user_id_users_id_fk" FOREIGN KEY ("edited_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "ai_rule_changes_store_id_created_at_idx" ON "ai_rule_changes" USING btree ("store_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "ai_rule_changes_undoes_change_id_key" ON "ai_rule_changes" USING btree ("undoes_change_id");--> statement-breakpoint
+CREATE INDEX "ai_rule_changes_changed_by_user_id_idx" ON "ai_rule_changes" USING btree ("changed_by_user_id");--> statement-breakpoint
+CREATE INDEX "contact_memories_store_id_idx" ON "contact_memories" USING btree ("store_id");--> statement-breakpoint
+CREATE INDEX "contact_memories_edited_by_user_id_idx" ON "contact_memories" USING btree ("edited_by_user_id");--> statement-breakpoint
 
 -- Everything below is written by hand (docs/rules/database.md, Migrations step 2).
 -- See docs/data/isolation-and-access.md for why each piece exists.
@@ -1787,6 +1834,14 @@ CREATE POLICY "contact_identities_isolation" ON "contact_identities"
   WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "contact_stats" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "contact_stats_isolation" ON "contact_stats"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
+ALTER TABLE "ai_rule_changes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "ai_rule_changes_isolation" ON "ai_rule_changes"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
+ALTER TABLE "contact_memories" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "contact_memories_isolation" ON "contact_memories"
   USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
   WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "contact_merges" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint

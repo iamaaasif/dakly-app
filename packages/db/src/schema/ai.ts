@@ -9,8 +9,10 @@ import {
   pgTable,
   smallint,
   text,
+  uniqueIndex,
   uuid,
   vector,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import {
   aiRunOutcomes,
@@ -20,6 +22,8 @@ import {
   knowledgeKinds,
   knowledgeStatuses,
   replyLanguages,
+  aiRuleChangeSources,
+  aiRuleTargets,
 } from '@dakly/contracts/ai';
 import { users } from './auth';
 import { createdAt, id, isOneOf, poisha, updatedAt } from './columns';
@@ -27,7 +31,7 @@ import { files } from './platform';
 import { stores } from './stores';
 
 // One row per store. Switches, hand-over rules, testers and test questions are jsonb validated
-// by the contracts schema; the version lets the owner undo a taught rule.
+// by the contracts schema. version guards concurrent saves; undo history is ai_rule_changes.
 export const aiAgentSettings = pgTable(
   'ai_agent_settings',
   {
@@ -105,12 +109,49 @@ export const knowledgeChunks = pgTable(
       .references(() => knowledgeItems.id, { onDelete: 'cascade' }),
     content: text('content').notNull(),
     embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+    // Search compares only chunks built by the configured model; a model change re-embeds.
+    embeddingModel: text('embedding_model').notNull(),
     tokenCount: integer('token_count').notNull(),
     createdAt: createdAt(),
   },
   (table) => [
     index('knowledge_chunks_store_id_idx').on(table.storeId),
     index('knowledge_chunks_knowledge_item_id_idx').on(table.knowledgeItemId),
+  ],
+);
+
+// Every change a taught rule or a settings save makes to what the AI knows, with the values
+// before and after, so the owner can undo one. Undo writes a new row (source 'undo') and is
+// refused if the target changed again since, rather than overwriting a newer edit.
+export const aiRuleChanges = pgTable(
+  'ai_rule_changes',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    source: text('source', { enum: aiRuleChangeSources }).notNull(),
+    target: text('target', { enum: aiRuleTargets }).notNull(),
+    // Row id for a delivery zone or knowledge item; null for the store-wide settings rows.
+    targetId: uuid('target_id'),
+    // Only the fields this change touched.
+    before: jsonb('before').notNull(),
+    after: jsonb('after').notNull(),
+    summary: text('summary').notNull(),
+    undoesChangeId: uuid('undoes_change_id').references((): AnyPgColumn => aiRuleChanges.id),
+    changedByUserId: uuid('changed_by_user_id').references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('ai_rule_changes_store_id_created_at_idx').on(table.storeId, table.createdAt),
+    uniqueIndex('ai_rule_changes_undoes_change_id_key').on(table.undoesChangeId),
+    index('ai_rule_changes_changed_by_user_id_idx').on(table.changedByUserId),
+    check('ai_rule_changes_source', isOneOf(table.source, aiRuleChangeSources)),
+    check('ai_rule_changes_target', isOneOf(table.target, aiRuleTargets)),
+    check(
+      'ai_rule_changes_undo_link',
+      sql`(${table.source} = 'undo') = (${table.undoesChangeId} is not null)`,
+    ),
   ],
 );
 

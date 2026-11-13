@@ -49,19 +49,20 @@ Permission areas (No access / View / Edit, feature 01): `customers`, `chats`, `o
 
 ## Customers and segments (03)
 
-| Route                                                                                                                    | Permission                                                  |
-| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `GET /contacts`, `GET /contacts/:contactId`                                                                              | `customers` (phones masked unless "See full phone numbers") |
-| `POST /contacts` (idem), `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                                     | `customers`                                                 |
-| `GET /contacts/:contactId/timeline`                                                                                      | `customers`                                                 |
-| `POST /contacts/:contactId/merge` (closes the suggestion)                                                                | `customers`                                                 |
-| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                  | `customers`                                                 |
-| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                | `customers`                                                 |
-| `POST /contacts/:contactId/consents`                                                                                     | `customers`                                                 |
-| `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`                   | `customers`                                                 |
-| `POST /contacts/exports`                                                                                                 | `customers` + "Download customer lists"                     |
-| `GET /segments`, `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`, `POST /segments/preview` | `customers`                                                 |
-| `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                                      | `customers`                                                 |
+| Route                                                                                                                    | Permission                                                       |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `GET /contacts`, `GET /contacts/:contactId`                                                                              | `customers` (phones masked unless "See full phone numbers")      |
+| `POST /contacts` (idem), `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                                     | `customers`                                                      |
+| `GET /contacts/:contactId/timeline`                                                                                      | `customers`                                                      |
+| `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory`               | View with `customers.view`; edit and clear with `customers.edit` |
+| `POST /contacts/:contactId/merge` (closes the suggestion)                                                                | `customers`                                                      |
+| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                  | `customers`                                                      |
+| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                | `customers`                                                      |
+| `POST /contacts/:contactId/consents`                                                                                     | `customers`                                                      |
+| `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`                   | `customers`                                                      |
+| `POST /contacts/exports`                                                                                                 | `customers` + "Download customer lists"                          |
+| `GET /segments`, `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`, `POST /segments/preview` | `customers`                                                      |
+| `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                                      | `customers`                                                      |
 
 ## Chats and AI agent (04)
 
@@ -75,6 +76,7 @@ Permission areas (No access / View / Edit, feature 01): `customers`, `chats`, `o
 | `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                                       | `chats`                                                           |
 | `GET /saved-replies`, `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId`               | `chats`                                                           |
 | `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live`                      | `chats`                                                           |
+| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                                                 | Owner or Admin                                                    |
 | `GET /knowledge-items`, `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId` | `chats`                                                           |
 | `GET /events/stream`                                                                                                                   | any member; Server-Sent Events for new messages and notifications |
 

@@ -303,7 +303,7 @@ Emits `contact.created`, `contact.merged`, `consent.changed`, `segment.saved`. L
 
 ### Data
 
-`contacts` (own phone saved under D27, unique per store; tags as a text array), `contact_match_suggestions` (possible matches for staff, including a D27 phone conflict), `contact_identities`, `consents` (append-only; read through the view `contact_consent_current`), `contact_stats` (no return risk; D26 reads it from orders by delivery phone), `segments`, `imports`, `tasks`. `contact_merges` keeps each staff merge for a 7-day undo (D29); the merged contact is soft-deleted until then. Full design: [docs/data](../data/README.md).
+`contacts` (own phone saved under D27, unique per store; tags as a text array), `contact_match_suggestions` (possible matches for staff, including a D27 phone conflict), `contact_identities`, `consents` (append-only; read through the view `contact_consent_current`), `contact_stats` (no return risk; D26 reads it from orders by delivery phone), `segments`, `imports`, `tasks`. `contact_memories` holds the AI customer memory (D30, CHAT-R11). `contact_merges` keeps each staff merge for a 7-day undo (D29); the merged contact is soft-deleted until then. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

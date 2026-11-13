@@ -13,7 +13,7 @@ No table uses `FORCE ROW LEVEL SECURITY` (schema review must-fix 3). With FORCE,
 
 ## Shop tables
 
-Each of the 55 shop tables has `store_id` and one policy, `<table>_isolation`:
+Each of the 57 shop tables has `store_id` and one policy, `<table>_isolation`:
 
 ```sql
 USING (store_id = NULLIF(current_setting('app.store_id', true), '')::uuid)
@@ -97,4 +97,5 @@ The schema keeps the buyer and the delivery recipient apart, and nothing merges 
 - A phone for another recipient (`is_self_delivery = false`) stays only on the order and never touches a contact.
 - Return risk is read from `orders` by `recipient_phone` (index `orders_store_id_recipient_phone_outcome_idx`), so it follows the delivery phone, not the contact.
 - AI order tools read only orders of this conversation or of a WhatsApp-verified identity (must-fix 1). A saved but unverified phone gives no access to other orders.
+- Customer memory (`contact_memories`, D30) is keyed by contact and store and sits under RLS like any shop table. It holds only what this customer said or their own orders show; a self-delivery order's area may be used, another recipient's never (D26). It never links contacts, and a merge rebuilds the kept contact's memory rather than copying facts across blindly.
 - A contact's `kind` is `customer` while it has at least one order that is not cancelled (D27). The orders service asks the customers service to update it when an order is created or cancelled.

@@ -13,7 +13,7 @@ The final database design for release 1, written before feature code starts. The
 | [api-routes.md](api-routes.md)                     | Every release 1 HTTP route by feature, with its permission                          |
 | [feature-check.md](feature-check.md)               | The check of each feature against this design, and the gaps still open              |
 
-Sources: the 13 feature docs, [decisions](../product/decisions.md) D1 to D29, the [schema review](https://claude.ai/artifact/QVk9UfT8o7vV8bnpjnVRGS) (Q10) and its five must-fix items, the development readiness review (PR #5), and D26 to D29.
+Sources: the 13 feature docs, [decisions](../product/decisions.md) D1 to D30, the [schema review](https://claude.ai/artifact/QVk9UfT8o7vV8bnpjnVRGS) (Q10) and its five must-fix items, the development readiness review (PR #5), and D26 to D30.
 
 ## Conventions
 
@@ -29,35 +29,35 @@ These follow [rules/database.md](../rules/database.md); the column helpers are i
 
 ## Tables
 
-68 tables: 55 hold shop data under RLS, 13 are global. G marks a global table. The legacy `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
+70 tables: 57 hold shop data under RLS, 13 are global. G marks a global table. The legacy `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
 
-| Schema file      | Tables                                                                                                                                                                 | Owner feature (`packages/core/src/`) |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `stores.ts`      | `stores`, `store_counters`                                                                                                                                             | stores                               |
-| `auth.ts`        | `users` G, `sessions` G, `push_subscriptions` G                                                                                                                        | auth                                 |
-| `team.ts`        | `memberships`, `roles` (custom only)                                                                                                                                   | team                                 |
-| `platform.ts`    | `audit_log`, `outbox_events` G, `webhook_events` G, `notifications`, `files`                                                                                           | platform, notifications, files       |
-| `channels.ts`    | `channel_connections`, `sms_sender_ids`                                                                                                                                | channels                             |
-| `contacts.ts`    | `contacts`, `contact_identities`, `consents` (+ view `contact_consent_current`), `contact_stats`, `contact_match_suggestions`, `contact_merges`, `segments`, `imports` | customers, segments                  |
-| `chats.ts`       | `conversations`, `messages`, `social_comments`, `saved_replies`                                                                                                        | chats                                |
-| `ai.ts`          | `ai_agent_settings`, `knowledge_items`, `knowledge_chunks`, `ai_runs`, `assistant_messages`                                                                            | ai-agent, ai, assistant              |
-| `products.ts`    | `products`, `product_variants`, `stock_movements`, `restock_requests`                                                                                                  | products                             |
-| `areas.ts`       | `bd_areas` G                                                                                                                                                           | delivery                             |
-| `orders.ts`      | `delivery_zones`, `orders`, `order_items`                                                                                                                              | orders, delivery                     |
-| `payments.ts`    | `payment_gateway_credentials`, `payment_intents`, `payment_events`, `refunds`                                                                                          | payments                             |
-| `billing.ts`     | `plans` G, `coupons` G, `subscriptions`, `invoices`, `invoice_counters` G, `wallet_ledger`, `usage_events`                                                             | billing, usage                       |
-| `social.ts`      | `brand_profiles`, `posts`, `post_targets`                                                                                                                              | social                               |
-| `campaigns.ts`   | `whatsapp_templates`, `campaigns`, `campaign_recipients`, `tracked_links`                                                                                              | campaigns                            |
-| `automations.ts` | `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`                                                                                        | automations                          |
-| `tasks.ts`       | `tasks`                                                                                                                                                                | tasks                                |
-| `analytics.ts`   | `store_daily_metrics`                                                                                                                                                  | analytics                            |
-| `admin.ts`       | `staff_users` G, `staff_sessions` G, `staff_audit_log` G, `support_grants`, `platform_settings` G                                                                      | admin                                |
+| Schema file      | Tables                                                                                                                                                                                     | Owner feature (`packages/core/src/`) |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| `stores.ts`      | `stores`, `store_counters`                                                                                                                                                                 | stores                               |
+| `auth.ts`        | `users` G, `sessions` G, `push_subscriptions` G                                                                                                                                            | auth                                 |
+| `team.ts`        | `memberships`, `roles` (custom only)                                                                                                                                                       | team                                 |
+| `platform.ts`    | `audit_log`, `outbox_events` G, `webhook_events` G, `notifications`, `files`                                                                                                               | platform, notifications, files       |
+| `channels.ts`    | `channel_connections`, `sms_sender_ids`                                                                                                                                                    | channels                             |
+| `contacts.ts`    | `contacts`, `contact_identities`, `consents` (+ view `contact_consent_current`), `contact_stats`, `contact_match_suggestions`, `contact_merges`, `contact_memories`, `segments`, `imports` | customers, segments                  |
+| `chats.ts`       | `conversations`, `messages`, `social_comments`, `saved_replies`                                                                                                                            | chats                                |
+| `ai.ts`          | `ai_agent_settings`, `ai_rule_changes`, `knowledge_items`, `knowledge_chunks`, `ai_runs`, `assistant_messages`                                                                             | ai-agent, ai, assistant              |
+| `products.ts`    | `products`, `product_variants`, `stock_movements`, `restock_requests`                                                                                                                      | products                             |
+| `areas.ts`       | `bd_areas` G                                                                                                                                                                               | delivery                             |
+| `orders.ts`      | `delivery_zones`, `orders`, `order_items`                                                                                                                                                  | orders, delivery                     |
+| `payments.ts`    | `payment_gateway_credentials`, `payment_intents`, `payment_events`, `refunds`                                                                                                              | payments                             |
+| `billing.ts`     | `plans` G, `coupons` G, `subscriptions`, `invoices`, `invoice_counters` G, `wallet_ledger`, `usage_events`                                                                                 | billing, usage                       |
+| `social.ts`      | `brand_profiles`, `posts`, `post_targets`                                                                                                                                                  | social                               |
+| `campaigns.ts`   | `whatsapp_templates`, `campaigns`, `campaign_recipients`, `tracked_links`                                                                                                                  | campaigns                            |
+| `automations.ts` | `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`                                                                                                            | automations                          |
+| `tasks.ts`       | `tasks`                                                                                                                                                                                    | tasks                                |
+| `analytics.ts`   | `store_daily_metrics`                                                                                                                                                                      | analytics                            |
+| `admin.ts`       | `staff_users` G, `staff_sessions` G, `staff_audit_log` G, `support_grants`, `platform_settings` G                                                                                          | admin                                |
 
 A feature reads another feature's tables only through that feature's service ([rules/module-boundaries.md](../rules/module-boundaries.md)). Foreign keys across features are fine; queries across features are not.
 
 ## Changes from the schema review
 
-The review proposed 54 tables, and D23 added 2 (56). This design has 68. Everything the review cut or merged stays cut or merged; its five must-fix items are built in (see [isolation-and-access.md](isolation-and-access.md)). The 12 additions each answer a release 1 requirement the review's list had no home for:
+The review proposed 54 tables, and D23 added 2 (56). This design has 70. Everything the review cut or merged stays cut or merged; its five must-fix items are built in (see [isolation-and-access.md](isolation-and-access.md)). The 14 additions each answer a release 1 requirement the review's list had no home for:
 
 | Added                       | Why release 1 needs it                                                                                                                                                                                                            |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -72,6 +72,8 @@ The review proposed 54 tables, and D23 added 2 (56). This design has 68. Everyth
 | `coupons`                   | Admin release 1 scope lists coupons; redemptions need an atomic counter.                                                                                                                                                          |
 | `invoice_counters`          | Invoice numbers run per financial year across all stores (PAY-R17).                                                                                                                                                               |
 | `contact_merges`            | D29 keeps the 7-day undo for a staff merge. The review cut this table; undo needs the moved ids and the replaced field values.                                                                                                    |
+| `contact_memories`          | D30: a short memory per customer per store, so replies can use their sizes, language and past issues.                                                                                                                             |
+| `ai_rule_changes`           | Feature 04 promises undo for a taught rule; a version counter alone cannot restore the old values.                                                                                                                                |
 | `store_daily_metrics`       | Analytics reads summary tables, never raw events (feature 11). One long table; ANA-1 fixes the metric list.                                                                                                                       |
 
 Other changes from the review, each small:

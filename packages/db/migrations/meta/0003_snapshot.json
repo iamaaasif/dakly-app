@@ -743,6 +743,179 @@
       },
       "isRLSEnabled": false
     },
+    "public.ai_rule_changes": {
+      "name": "ai_rule_changes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "before": {
+          "name": "before",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "after": {
+          "name": "after",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "undoes_change_id": {
+          "name": "undoes_change_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changed_by_user_id": {
+          "name": "changed_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ai_rule_changes_store_id_created_at_idx": {
+          "name": "ai_rule_changes_store_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ai_rule_changes_undoes_change_id_key": {
+          "name": "ai_rule_changes_undoes_change_id_key",
+          "columns": [
+            {
+              "expression": "undoes_change_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ai_rule_changes_changed_by_user_id_idx": {
+          "name": "ai_rule_changes_changed_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "changed_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ai_rule_changes_store_id_stores_id_fk": {
+          "name": "ai_rule_changes_store_id_stores_id_fk",
+          "tableFrom": "ai_rule_changes",
+          "tableTo": "stores",
+          "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ai_rule_changes_undoes_change_id_ai_rule_changes_id_fk": {
+          "name": "ai_rule_changes_undoes_change_id_ai_rule_changes_id_fk",
+          "tableFrom": "ai_rule_changes",
+          "tableTo": "ai_rule_changes",
+          "columnsFrom": ["undoes_change_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ai_rule_changes_changed_by_user_id_users_id_fk": {
+          "name": "ai_rule_changes_changed_by_user_id_users_id_fk",
+          "tableFrom": "ai_rule_changes",
+          "tableTo": "users",
+          "columnsFrom": ["changed_by_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ai_rule_changes_source": {
+          "name": "ai_rule_changes_source",
+          "value": "\"ai_rule_changes\".\"source\" in ('teach', 'settings_edit', 'undo')"
+        },
+        "ai_rule_changes_target": {
+          "name": "ai_rule_changes_target",
+          "value": "\"ai_rule_changes\".\"target\" in ('ai_agent_settings', 'store_settings', 'delivery_zone', 'knowledge_item')"
+        },
+        "ai_rule_changes_undo_link": {
+          "name": "ai_rule_changes_undo_link",
+          "value": "(\"ai_rule_changes\".\"source\" = 'undo') = (\"ai_rule_changes\".\"undoes_change_id\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.ai_runs": {
       "name": "ai_runs",
       "schema": "",
@@ -922,7 +1095,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -1146,6 +1319,12 @@
         "embedding": {
           "name": "embedding",
           "type": "vector(1536)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "embedding_model": {
+          "name": "embedding_model",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -7225,6 +7404,162 @@
       },
       "isRLSEnabled": false
     },
+    "public.contact_memories": {
+      "name": "contact_memories",
+      "schema": "",
+      "columns": {
+        "contact_id": {
+          "name": "contact_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "facts": {
+          "name": "facts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "built_through_message_id": {
+          "name": "built_through_message_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "built_at": {
+          "name": "built_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edited_by_user_id": {
+          "name": "edited_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edited_at": {
+          "name": "edited_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "contact_memories_store_id_idx": {
+          "name": "contact_memories_store_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "contact_memories_edited_by_user_id_idx": {
+          "name": "contact_memories_edited_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "edited_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "contact_memories_contact_id_contacts_id_fk": {
+          "name": "contact_memories_contact_id_contacts_id_fk",
+          "tableFrom": "contact_memories",
+          "tableTo": "contacts",
+          "columnsFrom": ["contact_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "contact_memories_store_id_stores_id_fk": {
+          "name": "contact_memories_store_id_stores_id_fk",
+          "tableFrom": "contact_memories",
+          "tableTo": "stores",
+          "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "contact_memories_edited_by_user_id_users_id_fk": {
+          "name": "contact_memories_edited_by_user_id_users_id_fk",
+          "tableFrom": "contact_memories",
+          "tableTo": "users",
+          "columnsFrom": ["edited_by_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "contact_memories_summary_length": {
+          "name": "contact_memories_summary_length",
+          "value": "char_length(\"contact_memories\".\"summary\") <= 600"
+        },
+        "contact_memories_facts_array": {
+          "name": "contact_memories_facts_array",
+          "value": "jsonb_typeof(\"contact_memories\".\"facts\") = 'array'"
+        },
+        "contact_memories_facts_count": {
+          "name": "contact_memories_facts_count",
+          "value": "jsonb_array_length(\"contact_memories\".\"facts\") <= 40"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.contact_merges": {
       "name": "contact_merges",
       "schema": "",
@@ -7750,12 +8085,6 @@
         },
         "notes": {
           "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ai_summary": {
-          "name": "ai_summary",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -11780,6 +12109,18 @@
         "search_embedding": {
           "name": "search_embedding",
           "type": "vector(1536)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image_embedding": {
+          "name": "image_embedding",
+          "type": "vector(1536)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "embedding_model": {
+          "name": "embedding_model",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

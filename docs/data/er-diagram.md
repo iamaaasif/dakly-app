@@ -198,6 +198,7 @@ erDiagram
     channel_connections ||--o{ contact_identities : "channel_connection_id"
     contacts ||--o{ contact_match_suggestions : "contact_id"
     contacts ||--o{ contact_match_suggestions : "matched_contact_id"
+    contacts ||--o| contact_memories : "contact_id"
     contacts ||--o{ contact_merges : "kept_contact_id"
     contacts ||--o{ contact_merges : "merged_contact_id"
     contacts ||--o| contact_stats : "contact_id"
@@ -273,6 +274,11 @@ erDiagram
         text status
         uuid decided_by_user_id FK
     }
+    contact_memories {
+        uuid contact_id PK,FK
+        uuid store_id FK
+        uuid edited_by_user_id FK
+    }
     contact_merges {
         uuid id PK
         uuid store_id FK
@@ -315,11 +321,19 @@ Tables from `ai.ts`.
 
 ```mermaid
 erDiagram
+    ai_rule_changes |o--o| ai_rule_changes : "undoes_change_id"
     ai_runs |o--o{ assistant_messages : "ai_run_id"
     knowledge_items ||--o{ knowledge_chunks : "knowledge_item_id"
     ai_agent_settings {
         uuid store_id PK,FK
         uuid updated_by_user_id FK
+    }
+    ai_rule_changes {
+        uuid id PK
+        uuid store_id FK
+        text source
+        uuid undoes_change_id FK,UK
+        uuid changed_by_user_id FK
     }
     ai_runs {
         uuid id PK

@@ -74,7 +74,6 @@ export const contacts = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     notes: text('notes'),
-    aiSummary: text('ai_summary'),
     externalRef: text('external_ref'),
     deletedAt: timestamptz('deleted_at'),
     createdAt: createdAt(),
@@ -269,6 +268,41 @@ export const consents = pgTable(
     check('consents_channel', isOneOf(table.channel, consentChannels)),
     check('consents_status', isOneOf(table.status, consentStatuses)),
     check('consents_source', isOneOf(table.source, consentSources)),
+  ],
+);
+
+// What the AI remembers about one customer in one store (CHAT-R11): a short summary and facts, each
+// with its source. Built by the fast tier after a conversation from what the customer said and
+// their own orders; staff can edit or clear it. Read as context only: prices and stock always
+// come from tools. Deleted with the contact, and cleared at once on a deletion request.
+export const contactMemories = pgTable(
+  'contact_memories',
+  {
+    contactId: uuid('contact_id')
+      .primaryKey()
+      .references(() => contacts.id, { onDelete: 'cascade' }),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    summary: text('summary').notNull().default(''),
+    // [{ kind, value, source, sourceId, at }] validated by the contracts schema. A staff fact is
+    // never overwritten by the model.
+    facts: jsonb('facts').notNull().default([]),
+    // The last message read into the memory, so a rerun skips work already done.
+    builtThroughMessageId: uuid('built_through_message_id'),
+    builtAt: timestamptz('built_at'),
+    editedByUserId: uuid('edited_by_user_id').references(() => users.id),
+    editedAt: timestamptz('edited_at'),
+    version: integer('version').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index('contact_memories_store_id_idx').on(table.storeId),
+    index('contact_memories_edited_by_user_id_idx').on(table.editedByUserId),
+    check('contact_memories_summary_length', sql`char_length(${table.summary}) <= 600`),
+    check('contact_memories_facts_array', sql`jsonb_typeof(${table.facts}) = 'array'`),
+    check('contact_memories_facts_count', sql`jsonb_array_length(${table.facts}) <= 40`),
   ],
 );
 

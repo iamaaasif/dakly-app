@@ -146,7 +146,7 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
 ### Data
 
-`products` (options as JSON, search embedding), `product_variants` (on hand and reserved), `stock_movements` (append-only), `restock_requests`, `files` for photos. Full design: [docs/data](../data/README.md).
+`products` (options as JSON; text and photo embeddings with the model that built them), `product_variants` (on hand and reserved), `stock_movements` (append-only), `restock_requests`, `files` for photos. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 
