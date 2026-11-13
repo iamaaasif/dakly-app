@@ -30,4 +30,6 @@ findById(storeId: string, id: string) {
 }
 ```
 
+Jobs that work across many stores (renewals, token checks, nightly stats) get the list of stores with work due from a `SECURITY DEFINER` function, then do each store's work inside `forStore`. They never turn RLS off (see [database.md](database.md#work-across-stores)).
+
 Staff support access goes through an approved, time-limited support grant (see the architecture doc), never by switching off RLS.
