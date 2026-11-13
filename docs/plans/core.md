@@ -4,11 +4,11 @@ The order to build milestone M0 (only the parts the core needs) and M1 ([feature
 
 Read with: [CLAUDE.md](../../CLAUDE.md), [workflow.md](../development/workflow.md), [auth-and-permissions.md](../rules/auth-and-permissions.md), [multi-tenancy.md](../rules/multi-tenancy.md), [isolation-and-access.md](../data/isolation-and-access.md), [code-foundation review](../reviews/code-foundation.md).
 
-## Decisions this plan assumes
+## Decisions for the core
 
-The feature doc contradicts itself in a few places ([review](../reviews/features-01-07.md) F08 to F11). The plan builds the default below. When Asif confirms or changes one, it moves to [decisions.md](../product/decisions.md).
+The feature doc contradicted itself in a few places ([review](../reviews/features-01-07.md) F08 to F11). Asif confirmed these on 13 November 2026: C5 as [D34](../product/decisions.md), the rest as [D35](../product/decisions.md).
 
-| #   | Question                              | Default the plan builds                                                                                                                                                              |
+| #   | Question                              | Decision                                                                                                                                                                             |
 | --- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | C1  | Lockout (F08)                         | ACC-R2: 5 wrong codes or passwords in a row for one phone or email locks sign-in for that account for 15 minutes, and tells the person by SMS or email. Per IP: 30 failures an hour. |
 | C2  | Session lifetime (F09)                | ACC-R3: "Keep me signed in" lasts 30 days, sliding. Otherwise the session ends after 12 hours without a request.                                                                     |
