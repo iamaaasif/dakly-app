@@ -51,13 +51,13 @@ Track every order from first question to money in hand, the way Bangladeshi COD 
 
 ### How it works
 
-**Buyer and delivery recipient (D26)**
+**Buyer and delivery recipient (D26, D27)**
 
-The buyer is the contact who places the order. The delivery recipient may be the buyer or another person. Keep `orders.contact_id` linked to the buyer and store `recipientName`, `recipientPhone`, `recipientAddress` and `recipientArea` as an order snapshot. When the buyer receives the parcel, copy their chosen delivery details into the same snapshot.
+The buyer is the contact who places the order. The delivery recipient may be the buyer or another person. Keep `orders.contact_id` linked to the buyer and store `recipientName`, `recipientPhone`, `recipientAddress` and `recipientArea` as an order snapshot. For self-delivery (the default), copy the chosen delivery details into that snapshot and save the supplied own phone on the buyer profile under D27 and the customer rules. This save happens during capture, before order creation or confirmation; it does not verify ownership, merge contacts or add marketing consent.
 
-For a chat order, keep the originating buyer contact. For staff and public orders, identify or record the buyer separately from the delivery fields; do not use a recipient phone to resolve the buyer. If the buyer has no phone, do not fill their profile with the recipient's number. Selecting delivery to someone else exposes the separate recipient fields.
+For a chat order, keep the originating buyer contact. For staff and public orders, identify or record the buyer separately from the delivery fields; do not use a recipient phone to resolve the buyer. If delivery is to someone else, do not fill the buyer profile with that recipient's number. If a self-delivery phone belongs to another contact, keep it on the draft or order and show staff a possible match. Leave both profiles and the buyer link unchanged and allow ordering, confirmation and delivery. An existing different buyer profile phone changes only through an explicit profile edit. Selecting delivery to someone else exposes the separate recipient fields.
 
-Staff confirmation, confirmation replies or links, and marking delivery change the order status only. They do not merge contacts, reassign the order or overwrite profile details. No OTP is required. Editing the delivery snapshot also leaves the buyer unchanged. Later profile edits do not rewrite past delivery details.
+Staff confirmation, confirmation replies or links, and marking delivery change the order status only. They do not merge contacts, reassign the order or overwrite profile details. No OTP is required. Later edits to the delivery snapshot leave the buyer link and profile unchanged. Later profile edits do not rewrite past delivery details.
 
 Buyer purchase history, order counts, spend and marketing attribution use the buyer contact and count the order once. A recipient who is already a customer does not gain a purchase from receiving someone else's order. Existing parcel return-risk calculations remain scoped to the delivery phone and must be labeled separately from buyer history.
 
@@ -99,7 +99,7 @@ No booking; the order gets a rider name and moves to With courier; the rider or 
 
 **Order link**
 
-Each product with "Order link" on gets a URL. A buyer picks size and quantity, enters buyer details, and uses the same delivery details or enters a separate recipient. It arrives in To confirm with source Order link, records the buyer independently of the recipient phone, and reserves stock. Order-specific SMS or WhatsApp uses the chosen order contact details without linking that recipient to the buyer profile or granting access to unrelated orders. Rate limit 5 orders per delivery phone per day to stop spam.
+Each product with "Order link" on gets a URL. A buyer picks size and quantity, enters buyer details, and uses the same delivery details or enters a separate recipient. It arrives in To confirm with source Order link, records the buyer independently of the recipient phone, and reserves stock. Order-specific SMS or WhatsApp uses the chosen order contact details without granting access to unrelated orders. Self-delivery saves the buyer's own phone under D27; another recipient's phone remains only on the order. Rate limit 5 orders per delivery phone per day to stop spam.
 
 ### Business rules
 
@@ -261,7 +261,7 @@ The transition table is data in `orders/order-stage.ts`. `OrdersService.changeSt
 
 Create order (`OrdersService.createOrder`, one transaction)
 
-1. Validate with the contracts schema. Resolve the buyer contact from the chat or explicit buyer fields/selection. Normalise and snapshot the recipient phone and delivery details separately; never resolve or merge the buyer using the recipient phone (D26).
+1. Validate with the contracts schema. Resolve the buyer contact from the chat or explicit buyer fields/selection. Normalise and snapshot the recipient phone and delivery details separately; never resolve or merge the buyer using another recipient's phone (D26). For self-delivery, save the supplied own phone on the resolved buyer under D27; a uniqueness conflict becomes a staff suggestion, not an order failure or reassignment.
 2. Take the next order number from the store counter (starts at 1001).
 3. Resolve the delivery charge: area → zone → charge. Staff may override; the AI may not.
 4. Copy prices from the variants, compute COD = items − discount + delivery − advance (never below 0), reserve stock, warn on a likely duplicate (same phone and variant within 24 hours), emit `order.created`.
@@ -306,7 +306,9 @@ Emits `order.created`, `order.stage_changed`, `order.confirmed`, `order.cod_coll
 - Given Rahim orders for Karim, then the order stays under Rahim and stores Karim's delivery details. Staff may confirm and mark it delivered without an OTP; neither action merges contacts or changes either profile.
 - Given Karim orders for Rahim, then the order stays under Karim and stores Rahim's delivery details. Count that purchase once under Karim.
 - Given the recipient already has a customer record, then receiving the parcel does not add this purchase, spend or attribution to that record or expose its unrelated orders to the buyer.
-- Given a buyer has no phone, then a valid recipient phone permits delivery without being copied to the buyer profile. Changing the recipient later leaves the buyer and purchase history unchanged.
+- Given a buyer has no phone and orders for someone else, then a valid recipient phone permits delivery without being copied to the buyer profile. Changing the recipient later leaves the buyer and purchase history unchanged.
+- Given a buyer with no profile phone supplies an unused own phone for self-delivery, then save it on the buyer profile and order snapshot without verification or marketing consent. Later profile edits do not change the snapshot.
+- Given a self-delivery phone conflicts with another contact, including a concurrent phone save, then preserve both profiles, keep the phone on the order, show staff a possible match, and allow order creation, confirmation and delivery without merging or moving purchase history.
 - Given an order for ৳1,250 with ৳60 delivery and a ৳200 advance paid, then COD is ৳1,110.
 - Given an order in `to_pack`, when staff mark it sent with Pathao and tracking code DP123, then it moves to `with_courier`, stock is deducted and the customer gets the tracking code.
 

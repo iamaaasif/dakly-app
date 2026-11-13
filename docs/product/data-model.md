@@ -7,7 +7,7 @@ This tab is the shared vocabulary for engineering. It lists the main records, th
 ## Principles
 
 - **Multi-tenant by store.** Every record except User belongs to exactly one Store (`store_id`). Every query is scoped by store; no API returns data across stores.
-- **Customer phones and delivery phones are separate.** Buyer phone identities are normalised as `01XXXXXXXXX` and unique per store when present. A contact may start with only a channel identity. Delivery phones are order snapshots, may recur across orders from different buyers, and do not create or merge customer identities (D26).
+- **Customer phones and delivery phones are separate.** Buyer phone identities are normalised as `01XXXXXXXXX` and unique per store when present. A contact may start with only a channel identity. Delivery phones are order snapshots and may recur across orders from different buyers. For self-delivery, also save the supplied own phone on the resolved buyer under D27; that save is not verification, a merge or marketing consent. A conflict with another contact leaves the phone only on the draft or order and produces a staff match suggestion without blocking the order. Another recipient's phone never populates the buyer profile (D26).
 - **Money in paisa.** Amounts are integers in paisa (৳1 = 100) to avoid rounding errors; shown rounded to whole ৳.
 - **Soft delete, then purge.** Deleted customers are hidden at once and purged after 30 days, with their messages anonymised.
 - **Events first.** Each change emits an event to an internal bus; metrics, automations, notifications and attribution listen to events instead of reading each other's tables.
