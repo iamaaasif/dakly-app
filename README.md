@@ -32,6 +32,19 @@ pnpm dev
 
 The API runs on http://localhost:4000 (`GET /health`), the web app on http://localhost:3000.
 
+### Resetting the local database
+
+Until PR #6 merges, the release 1 migrations (0003 to 0014) may still be rewritten. A database migrated from an earlier revision of that PR fails with errors such as `relation "platform_settings" already exists`. Local data is disposable, so drop the volume and migrate again:
+
+```bash
+docker compose down -v
+docker compose up -d
+pnpm --filter @dakly/db db:migrate
+pnpm --filter @dakly/db db:seed
+```
+
+Once any shared or production database has applied a migration, it is never edited again; changes go in a new migration.
+
 ## Checks
 
 ```bash

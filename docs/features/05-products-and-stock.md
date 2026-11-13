@@ -146,13 +146,19 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
 ### Data
 
-`products`, `product_options`, `variants`, `stock_movements`, `product_media`. `restock_requests` is deferred by the schema review (pending review).
+`products` (options as JSON; 512-dimension text and photo embeddings with the model that built them), `product_variants` (on hand and reserved; `price_override_poisha` is empty when the size sells at the product price, so a size's price is its override or else the product's `price_poisha`, and 0 means Needs a price), `stock_movements` (append-only), `restock_requests`, `files` for photos. Full design: [docs/data](../data/README.md).
+
+Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
+
+Variant external identity is `(store_id, external_source, external_account_id, external_ref)`. Source names the provider; account is its stable shop/account ID, never a display name. All three external fields are supplied together or all are null. Provider synchronization remains planned work.
 
 ### Edge cases to test
 
 - Two orders for the last unit at the same moment: one gets `STOCK_NOT_AVAILABLE`.
 - Adjusting stock below reserved is rejected.
 - A product with no options gets exactly one variant.
+- Duplicate variant external IDs are rejected within one source/account, but accepted across distinct accounts.
+- A product import retry preserves row counts and never repeats a stock adjustment.
 
 ### Acceptance
 

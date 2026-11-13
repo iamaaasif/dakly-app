@@ -1,6 +1,6 @@
 # Data model and events (product view)
 
-The PRD's entity and event list of 12 November 2026. It says what the product stores and which events exist, in product words. The tables each feature owns, and the changes from the schema review (pending review, Q10), are in each feature doc under Engineering › Data. Where they differ, the feature doc wins.
+The PRD's entity and event list of 12 November 2026. It says what the product stores and which events exist, in product words. The final release 1 tables are in [docs/data](../data/README.md) and the schema code. Where this page differs, those win.
 
 This tab is the shared vocabulary for engineering. It lists the main records, their key fields and how they connect, the events every module emits, and the background jobs. Field lists are the minimum; engineers may add technical fields (created\_at, updated\_at, deleted\_at and so on are on every record and not repeated).
 

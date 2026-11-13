@@ -16,26 +16,29 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M0. Foundation
 
-| ID    | Task                                                                                 | Status    | Depends | PR  | Notes                                                      |
-| ----- | ------------------------------------------------------------------------------------ | --------- | ------- | --- | ---------------------------------------------------------- |
-| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                            | Done      |         | -   |                                                            |
-| FND-2 | Fastify adapter and Express ban                                                      | Done      | FND-1   | #1  |                                                            |
-| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | Done      | FND-1   | #2  | Merged                                                     |
-| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security      | In review | FND-3   | #3  | This PR                                                    |
-| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | In review | FND-4   | #4  | This PR                                                    |
-| DB-1  | UUID v7 ids generated in the app; switch existing tables                             | Todo      |         |     |                                                            |
-| DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-1    |     |                                                            |
-| DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-1    |     |                                                            |
-| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                         | Todo      |         |     |                                                            |
-| API-1 | Logging (nestjs-pino), request ids, Sentry                                           | Todo      |         |     |                                                            |
-| API-2 | Rate limiting with Valkey storage                                                    | Todo      |         |     |                                                            |
-| API-3 | Route test that fails when a store route has no permission decorator                 | Todo      | ACC-3   |     |                                                            |
-| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton   | Todo      |         |     | [design/theme.md](design/theme.md)                         |
-| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields | Todo      | WEB-1   |     |                                                            |
-| WEB-3 | App shell: sidebar, header, store switcher, phone layout                             | Todo      | WEB-1   |     |                                                            |
-| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests        | Todo      |         |     |                                                            |
-| WEB-5 | Testing Library and Playwright set up with one end-to-end test                       | Todo      | WEB-3   |     |                                                            |
-| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                              | Todo      |         |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov |
+| ID    | Task                                                                                 | Status    | Depends | PR  | Notes                                                         |
+| ----- | ------------------------------------------------------------------------------------ | --------- | ------- | --- | ------------------------------------------------------------- |
+| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                            | Done      |         | -   |                                                               |
+| FND-2 | Fastify adapter and Express ban                                                      | Done      | FND-1   | #1  |                                                               |
+| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | Done      | FND-1   | #2  | Merged                                                        |
+| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security      | In review | FND-3   | #3  | This PR                                                       |
+| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | In review | FND-4   | #4  | This PR                                                       |
+| DB-1  | UUID v7 ids generated in the app; switch existing tables                             | In review |         | #6  | Done in DB-5; `customers` goes with CUS-1                     |
+| DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-5    |     | Table in DB-5; relay and helper left                          |
+| DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-5    |     | Table in DB-5; `AuditService` left                            |
+| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                         | Todo      |         |     |                                                               |
+| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs               | In review |         | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md) |
+| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                 | Todo      | DB-5    |     |                                                               |
+| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges         | Todo      | DB-5    |     | [growth.md](data/growth.md); all-store rollups                |
+| API-1 | Logging (nestjs-pino), request ids, Sentry                                           | Todo      |         |     |                                                               |
+| API-2 | Rate limiting with Valkey storage                                                    | Todo      |         |     |                                                               |
+| API-3 | Route test that fails when a store route has no permission decorator                 | Todo      | ACC-3   |     |                                                               |
+| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton   | Todo      |         |     | [design/theme.md](design/theme.md)                            |
+| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields | Todo      | WEB-1   |     |                                                               |
+| WEB-3 | App shell: sidebar, header, store switcher, phone layout                             | Todo      | WEB-1   |     |                                                               |
+| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests        | Todo      |         |     |                                                               |
+| WEB-5 | Testing Library and Playwright set up with one end-to-end test                       | Todo      | WEB-3   |     |                                                               |
+| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                              | Todo      |         |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov    |
 
 ## M1. Account, stores and team
 
@@ -201,7 +204,7 @@ Evidence and acceptance criteria: [development readiness review](reviews/develop
 | CUS-13 | Customer insights, address book and AI segment suggestions                                   | Todo      | CUS-3, CUS-6, AI-2   |     | Split into vertical slices; explicit permissions and definitions                                   |
 | CUS-14 | Reversible merge with existing matching rules and consent chronology                         | Todo      | CUS-4                |     | Q10 storage decision; seven-day undo; D26/D27 self phone save and staff match conflicts            |
 | PROD-5 | Product import with row validation and stock reconciliation                                  | Todo      | PROD-2               |     | Preserve variants, stock ledger and order snapshots                                                |
-| PROD-6 | Restock waiting list and approved notifications                                              | Blocked   | PROD-2, CHAT-2       |     | Q10 defers storage while R1 still promises behaviour                                               |
+| PROD-6 | Restock waiting list and approved notifications                                              | Todo      | PROD-2, CHAT-2       |     | `restock_requests` is in the release 1 schema (DB-5)                                               |
 | ACC-12 | Store export, closure, recovery and purge lifecycle                                          | Todo      | ACC-6, DB-3          |     | Retention exceptions and pending jobs/payments must be defined                                     |
 | ACC-13 | Setup checklist, extensions and owner audit screen                                           | Todo      | ACC-6, DB-3, WEB-3   |     | Scope-aware steps; stop queued work when disabled                                                  |
 | CHN-6  | SMS sender identity request, approval, test and status screens                               | Todo      | ACC-1, CHN-5         |     | Provider capability and document retention review                                                  |
@@ -216,7 +219,7 @@ Evidence and acceptance criteria: [development readiness review](reviews/develop
 | HOME-5 | Notification preferences, push, digests and recipient lifecycle                              | Todo      | HOME-1, ACC-9        |     | Per-user dedupe, escalation policy and retry charging                                              |
 | HOME-6 | Ask Dakly private conversation history and action review                                     | Todo      | HOME-4               |     | User/store scope, retention, revoked permissions and charging                                      |
 | ANA-4  | Profit, AI agent reports and company metric definitions                                      | Todo      | ANA-1                |     | Cost basis, delayed attribution and denominator acceptance                                         |
-| ADM-6  | Durable two-person approvals and emergency action policy                                     | Blocked   | ADM-2                |     | Q10 storage conflict; D16 requires this behavior                                                   |
+| ADM-6  | Risky admin actions: reason, confirmation and audit row before the change (D28)              | Todo      | ADM-2                |     | Two-person approval dropped by D28                                                                 |
 | ADM-7  | Abuse review, shop suspension and appeals                                                    | Todo      | ADM-2, ADM-5         |     | Current permissions and queued-work revocation                                                     |
 | ADM-8  | Announcements, company reports and staff account lifecycle                                   | Todo      | ADM-1, ANA-4         |     | Split into vertical slices; last-admin protection and audit                                        |
 | ADM-9  | Staff handling of owner data export and deletion requests                                    | Todo      | ADM-2, ADM-6, ACC-12 |     | Identity evidence, approval, retention exceptions and completion proof                             |

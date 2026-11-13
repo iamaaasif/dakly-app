@@ -249,15 +249,16 @@ Notifications
 Ask Dakly AI
 
 1. Answers questions about the store's own data. It never writes SQL.
-2. It calls read-only report tools (sales by period, top products, orders by stage, customers by segment, AI performance) that return glossary numbers.
+2. It calls read-only report tools (sales by period, top products, orders by stage, customers by segment, AI performance) that return glossary numbers. Each tool carries a description, the words owners use for it in Bangla, Banglish and English, the unit of each number and the allowed values of each argument ([ai-and-llm.md](../rules/ai-and-llm.md) rule 15).
 3. Each answer shows the numbers it used. With too little data it says so (design needed).
 4. Drafts (a post, a campaign) open in their editor and need approval like any other AI-written content (D7).
 5. Counts against `ai_ask`.
 
 ### Rules
 
-1. A number shown on the dashboard is computed by the same function as on Analytics.
+1. A number shown on the dashboard is computed by the same function as on Analytics. Committed source changes reach its summary within five minutes through incremental outbox processing; nightly reconciliation repairs drift. Late returns and corrections restate the original reporting days.
 2. Ask Dakly AI cannot change data.
+3. Ask Dakly AI never writes SQL; a question no tool covers gets "I can't answer that yet" and the question is logged for a new tool.
 
 ### Permissions
 
@@ -269,12 +270,14 @@ Listens to most events to create notifications: `conversation.handed_over`, `pay
 
 ### Data
 
-`notifications`, `notification_reads` or one row per user (pending review), `push_subscriptions`.
+`notifications` (one row per user, unique per store, user and dedupe key), `memberships.notification_preferences` (NOTIF-R2 timing and channels, digest daily or weekly), `push_subscriptions`, `assistant_messages`. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 
+- Given a delivered order, a late return or a corrected payment, when its event commits, then Dashboard and Analytics reflect the same corrected period within five minutes without waiting for the nightly job.
 - Given money from marketing is ৳3,42,800 on Analytics for the last 30 days, then the dashboard shows the same.
 - Given "who hasn't bought in 2 months?", then the answer lists the Stopped buying count and a link to the segment.
+- Given "গত মাসে কত বিক্রি হলো?" or "last month sales koto?", then the AI calls the sales report for last month and shows the same taka amount as Analytics.
 
 ## Open questions
 

@@ -68,13 +68,9 @@
         "customers_store_id_stores_id_fk": {
           "name": "customers_store_id_stores_id_fk",
           "tableFrom": "customers",
-          "columnsFrom": [
-            "store_id"
-          ],
+          "columnsFrom": ["store_id"],
           "tableTo": "stores",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }

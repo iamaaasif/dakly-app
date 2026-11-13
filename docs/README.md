@@ -9,6 +9,7 @@ This folder is the single source of truth for building Dakly. If a doc here and 
 | [design/](design/)                             | Prototype screenshots, prototype review, theme tokens                                  | Before you build a screen                       |
 | [development/](development/)                   | How to build a feature, step by step, and the release 1 order                          | Before you start a task                         |
 | [rules/](rules/)                               | Coding rules, one file per topic, each with wrong and right code                       | Before you write code in an area                |
+| [data/](data/README.md)                        | Release 1 tables, ER diagram, RLS, state machines, jobs, API routes                    | Before you write a repository, job or route     |
 | [adr/](adr/)                                   | Architecture decisions already made                                                    | Before you propose a change to the foundation   |
 | [architecture.md](architecture.md)             | How the pieces fit, queues, key flows, operations                                      | First day                                       |
 | [scale-and-security.md](scale-and-security.md) | Capacity targets, performance budgets, security standards                              | Before you design a table, a job or an endpoint |

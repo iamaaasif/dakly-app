@@ -85,7 +85,7 @@ Dakly takes money in two different ways, and they must never be mixed up.
 
 - Under Orders › Payments. Columns: time, order, customer, method, amount, status, TrxID, link. Filters: status, method, date, order. Export to CSV.
 - Detail: a timeline of every event (link created, sent, opened, gateway started, gateway callback, verified, refunded) with raw gateway reference IDs, and a Refund button.
-- **Refund dialog:** full or partial amount (max is captured minus already refunded), reason (required), confirmation with the owner's 2FA code when the amount is over the store's refund threshold.
+- **Refund dialog:** full or partial amount (max is captured minus already refunded and reserved refunds), reason (required), confirmation with the owner's 2FA code when the amount is over the store's refund threshold.
 
 #### Settings › Plan and billing (flow A)
 
@@ -360,13 +360,23 @@ The PRD's payment rules apply in full. The ones code must make impossible to bre
 
 Emits `payment.succeeded`, `payment.failed`, `payment.refunded`, `subscription.renewed`, `subscription.past_due`, `subscription.read_only`, `usage.threshold_reached`.
 
+Refund reservations serialize on the common payment intent, not on the individual refund request. In one short transaction, lock the intent, check the permanent refund idempotency key, then reserve the amount in `reserved_refund_poisha` and insert the refund. `requested` and `pending` refunds consume reserved capacity; `succeeded` and `recorded_manually` consume `refunded_poisha`. Their combined amount cannot exceed `verified_amount_poisha`; an unverified payment has no refundable capacity. A manually verified payment records that verified amount first. Commit before calling the gateway. Completion moves the amount from reserved to refunded exactly once under the same lock; a confirmed failure releases the reservation. An unknown gateway outcome stays reserved until reconciliation. A simple SUM-before-insert without this common lock is insufficient.
+
+Wallet writers take a transaction-scoped advisory lock for `(store_id, wallet)`, read the greatest `revision`, then insert the next revision and its resulting balance in the same transaction. Revision starts at 1 and is unique within the wallet; balance reads order by revision, never transaction-start `created_at`. A retried idempotency key returns its existing entry without allocating a revision or changing balance. Legacy rows receive a one-time deterministic revision in migration; this cannot recover historical lock order that was never recorded. These refund and wallet service protocols still need implementation and concurrency tests.
+
+Issued invoice document fields are immutable through application grants. Only `status` and `paid_at` can change; bill-to, lines, totals, tax, number and issue time require a separate credit note rather than an edit.
+
 ### Data
 
-`payment_intents`, `payment_events`, `payment_gateway_credentials`, `payment_links`, `refunds`, `subscriptions`, `invoices`, `wallet_ledger`, `usage_events`. `usage_period_totals` is cut by the schema review (pending review).
+`payment_gateway_credentials`, `payment_intents` (also the payment link, by `short_code`), `payment_events` (append-only), `refunds`, `plans` (plans and add-ons by `kind`), `coupons` (`discount_percent` or `discount_amount_poisha`), `subscriptions` (current period price, pending price and its start date, ADM-R10), `subscription_items` (add-ons such as Chats AI tiers), `invoices`, `invoice_counters`, `wallet_ledger` (append-only; `quantity_delta` is poisha for WhatsApp and a count for SMS and AI), `usage_events`, `gateway_settlement_lines` (nightly settlement import for Dakly's own accounts; a match sets `payment_intents.settled_at`). Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 
 - Callback arrives twice: one success.
+- Two different refund keys compete for the last refundable amount: at most one reservation succeeds; completed manual refunds consume capacity.
+- A gateway timeout retains the reservation; repeated success/failure callbacks settle it once.
+- Wallet transactions start A then B but lock B then A: the highest revision still gives the correct balance.
+- An app-role edit to issued invoice contents fails while settlement status and paid time remain editable.
 - Verified amount differs: `needs_review` and a shop alert.
 - Customer pays twice for one order: second marked Duplicate; Dakly never refunds by itself.
 - A gateway errors 3 times in 5 minutes: that method is hidden for 10 minutes.

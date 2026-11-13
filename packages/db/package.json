@@ -12,15 +12,19 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "node dist/migrate.js"
+    "db:migrate": "node dist/migrate.js",
+    "test": "vitest run",
+    "db:seed": "node dist/seed.js"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.0",
-    "pg": "^8.16.0"
+    "pg": "^8.16.0",
+    "@dakly/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "@types/pg": "^8.15.0",
-    "drizzle-kit": "^0.31.0"
+    "drizzle-kit": "^0.31.0",
+    "vitest": "^4.0.0"
   }
 }
