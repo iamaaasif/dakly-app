@@ -12,7 +12,304 @@
 
 Campaigns send one message to a group once. Automations send messages on their own when a customer does something. Both reach only people who agreed to hear from the shop, and nothing goes out until a person approves it. Channels in release 1: WhatsApp and SMS; Messenger is open (Q14). Instagram DM campaigns are release 2 (D4); email is later (D2).
 
-## Screens
+## Decisions that change the PRD
+
+The product requirements below are the PRD text from 12 November 2026. Where a later decision changed it, the decision wins:
+
+- D20: email campaigns are a later release. Hide the email channel in the builder, recipes and channel lists.
+- D4: Instagram DM campaigns are release 2.
+- D3: AI voice calls are hidden.
+- Q6: release 1 automations are the fixed recipes with editable timing and text, not the free workflow builder, until Asif answers.
+- Q14: Messenger campaigns wait for Q14; WhatsApp and SMS come first.
+- D21: the shipping update fires when staff move an order to With courier, with the tracking code they typed. There is no courier status feed.
+
+## Product requirements
+
+### What it is for
+
+Campaigns send one message to a group, once. Automations send messages on their own when a customer does something. Both only reach customers who agreed to hear from the shop, and nothing goes out until a person approves it. Release 1 with WhatsApp, SMS and Messenger. Instagram DM campaigns move to release 2, all email (campaigns, automation steps and transactional) moves to a later release, and AI voice calls are hidden (their builder cards are hidden).
+
+### User stories
+
+- As an owner, I want to pick a goal (win back, new collection, sale…) and get a ready Bangla message, the right audience and the best time, so a campaign takes 3 minutes.
+- As an owner, I want to see the cost and exactly who will get it before I approve.
+- As an owner, I want a results page per campaign showing who read, tapped and ordered, so I know what worked and can resend.
+- As an owner, I want ready-made workflows (welcome, order confirmation, shipping update, win back, birthday) that I switch on once.
+
+### Screens
+
+| Screen                      | Elements                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Campaign list               | Create campaign; search; filters status (Draft, Scheduled, Sending, Sent, Failed) and date; columns: name, channel(s), status, sent, tap rate, orders, revenue; row opens results (or the builder for drafts).                                                                                                                                                                                                                                                                                                                                                                                           |
+| Builder step 0 · Goal       | 9 goals: Win back customers; Increase repeat purchases; Promote new collection; VIP customer offer; Announce a discount; Clearance (sell remaining sizes and colours); Promote best sellers; Welcome new customers; Seasonal campaign (Winter, Eid ul-Fitr, Eid ul-Adha, Durga Puja, Pohela Boishakh, Victory Day); or Start from scratch.                                                                                                                                                                                                                                                               |
+| Step 1 · Channel            | Cards with reachable count: WhatsApp (rich message, Meta-approved template), SMS (sender shown), Facebook Messenger (people who opted in to Page updates). Each shows cost per message.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Step 2 · Content            | Template picked by goal and language (Bangla or English); Offer section (type: percentage, fixed ৳, free delivery, gift with purchase; value; coupon code; valid until); product or collection; WhatsApp: header image, body with variables ({first\_name}, {offer}, {code}, {validity}, {product}, {link}), up to 3 buttons (open link, call shop, quick reply); SMS: text with character and part counter (Bangla 70 per part, English 160), sender, auto-added opt-out; Messenger: image, text, buttons. Live phone preview "what Nusrat will see". Write with AI and Rewrite. Send test to my phone. |
+| Step 3 · Audience           | Recommended audience for the goal (for example Win back → Stopped buying), or any segment, lifecycle stage, tag, or hand-picked customers; exclusions (messaged in the last N days, default 3; ordered in the last N days; high return risk); counts: matching, without consent (removed), reachable, final.                                                                                                                                                                                                                                                                                             |
+| Step 4 · Schedule           | Send now; Pick date and time; Recommended time (from the store's best time insight, for example "Fri, Nov 6 at 7:30 pm (recommended)"). Shows effect of quiet hours and daily limit ("Goes out over 2 days: 1,000 today, 240 tomorrow").                                                                                                                                                                                                                                                                                                                                                                 |
+| Step 5 · Review and approve | Summary: goal, channel, audience count, schedule, estimated cost (and balance after), template approval status, preview; checkbox "I've checked the message and audience"; Approve and send / Approve and schedule. Save draft available on every step.                                                                                                                                                                                                                                                                                                                                                  |
+| Campaign results            | Header: status, channel, sent time, audience. KPI row: sent, delivered, read (not for SMS), tapped, orders, revenue, cost, return per ৳1. Funnel. Lists by outcome (Ordered, Tapped, Read, Delivered, Failed) with customer names. Failures grouped by reason with "Send by SMS to N with SMS consent". Actions: Resend to people who didn't read (after 48 h, new message), Duplicate, Create follow-up to tappers who didn't order.                                                                                                                                                                    |
+| Automations list            | Recommended next (3 cards); tabs All, Active, Disabled, Draft; workflow cards: name, status, trigger sentence, steps count, channels, people entered and revenue in 30 days, Enable/Disable, Edit, Duplicate, Delete.                                                                                                                                                                                                                                                                                                                                                                                    |
+| Workflow library            | 12 ready-made workflows filterable by type (Welcome, Abandoned cart, Browse abandonment, Transactional, Post-purchase, Special occasions), goal and channel; each shows trigger, timing, steps; Use workflow.                                                                                                                                                                                                                                                                                                                                                                                            |
+| Workflow editor             | Canvas with trigger box (event, filters, audience, frequency, exit rules), step boxes (SMS, WhatsApp, Delay, Tag contact, Condition split with yes/no branches), add-step menu, zoom, Show stats per step, built-in checks with one-click fix, Save draft, Publish changes.                                                                                                                                                                                                                                                                                                                              |
+
+### How it works
+
+**Sending engine**
+
+1. On approve, Dakly freezes the audience list (people who match at that moment) and the message.
+2. It removes anyone without consent for the channel, blocked, marked not a customer, or who got any marketing message from the store in the exclusion window.
+3. Sends are queued and paced: WhatsApp within Meta's messaging limit tier and the store's daily limit; SMS within the provider's rate and the daily limit; nothing during quiet hours (the rest waits for the next allowed time).
+4. Each message is personalised; missing {first\_name} falls back to "আপনি" (Bangla) or "there" (English).
+5. Links are wrapped as short tracked links (dkly.co/abc) per recipient, so taps are attributed.
+6. Provider callbacks update each recipient: queued, sent, delivered, read, failed (with reason), tapped. Orders are attributed by the rules in the Glossary.
+7. Cost is reserved from the balance at approval and settled per delivered message; undelivered messages are refunded.
+
+**WhatsApp templates**
+
+Every WhatsApp campaign uses a template. Ready-made templates are pre-approved per store; an edited or new template is submitted to Meta at Review and shows In review. The campaign stays Scheduled until Meta approves (typically minutes to 24 hours); if rejected, the owner sees Meta's reason in plain words and a Fix button. Variables are not allowed inside button links (Meta rule), which the editor blocks.
+
+**Automations**
+
+Triggers available: Subscribes to marketing; Places an order; Pays for an order; Has their order shipped; Has their order canceled; Abandons their cart; Abandons checkout; Views a product without buying; Hasn't ordered for N days; Has a birthday; Enters a segment; Gets a tag; Clicks a link in a message. Trigger filters: order total, product, collection, payment method, delivery city; cart value; signup source; channel. Exit rules: places an order, cancels an order, enters a segment, clicks a link in this workflow, gets a tag. Frequency: once per person ever, once per N days, every time.
+
+Steps run per person: a delay waits (minutes, hours, days, weeks, or until a time of day); a message step sends inside quiet hours rules; a condition split checks (clicked a link in a previous step, replied on WhatsApp, customer field, segment) and branches yes or no. Built-in checks warn, for example "Wait before checking opens or clicks: add a 2–24 hour delay before the split" or a message step with no consent channel.
+
+Triggers depend on connected sources, and workflows without a source are hidden:
+
+| Trigger                         | Needs                                       |
+| ------------------------------- | ------------------------------------------- |
+| Places, pays, shipped, canceled | Sales extension, Shopify or WooCommerce     |
+| Abandons cart or checkout       | Shopify or WooCommerce webhooks             |
+| Views a product                 | Dakly tracking script on the shop's website |
+| Birthday                        | Birthday on the customer                    |
+| Others                          | Dakly data only                             |
+
+**Ready-made workflows**
+
+| Workflow                    | Trigger                        | Steps (default)                                                                    |
+| --------------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
+| Welcome new subscribers     | Subscribes to marketing        | WhatsApp welcome now; 2 days later SMS with best sellers if no order               |
+| Order confirmation          | Places an order                | WhatsApp utility template with order summary (transactional)                       |
+| Shipping update             | Has their order shipped        | WhatsApp or SMS with courier and tracking link (transactional)                     |
+| Thank you after first order | Places first order             | Thank-you now; 7 days later "how was it?"; 14 days later small reason to come back |
+| Abandoned cart              | Abandons cart                  | 1 hour later WhatsApp; if no order, 1 day later SMS                                |
+| Abandoned checkout          | Abandons checkout              | 30 minutes later WhatsApp with checkout link                                       |
+| Browse abandonment          | Views a product without buying | 4 hours later WhatsApp with that product                                           |
+| Cancellation follow-up      | Has their order canceled       | Ask the reason, offer help                                                         |
+| Cross-sell                  | Delivered 10 days ago          | Matching category suggestion                                                       |
+| Review request              | Delivered 3 days ago           | Ask for a review                                                                   |
+| Win back 60-day inactive    | Hasn't ordered for 60 days     | WhatsApp offer; 5 days later SMS reminder                                          |
+| Birthday                    | Has a birthday                 | Greeting on the day at 10:00 with a small offer                                    |
+
+**Editing a live workflow**
+
+Publish changes applies to people who enter after publishing. People already in the workflow continue on their current step; if their step was deleted they move to the next existing step. The editor shows "N people are in this workflow now" before publishing.
+
+### Business rules
+
+| ID      | Rule                                                                                                                                                                                                                                                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CAMP-R1 | No campaign or automation sends without a person's approval (Approve, Enable or Publish).                                                                                                                                                                                                                                 |
+| CAMP-R2 | Marketing messages need channel consent; transactional workflow messages (order confirmation, shipping update) need only a phone and are labelled Transactional.                                                                                                                                                          |
+| CAMP-R3 | Frequency cap: a person gets at most 1 marketing message per store per channel per day and 3 per 7 days across campaigns and automations (editable).                                                                                                                                                                      |
+| CAMP-R4 | Every SMS marketing message ends with an opt-out ("STOP 1234" short form from the provider); WhatsApp marketing messages include a "Stop offers" quick-reply button.                                                                                                                                                      |
+| CAMP-R5 | Cost estimate uses the real per-category rate: WhatsApp marketing about ৳9 and utility about ৳0.45 per delivered message (Meta Bangladesh rates from Oct 1, 2026, to be confirmed with the BSP) plus Dakly's margin; SMS ৳0.35–0.40 per part; Messenger free. Approve is blocked if the balance can't cover the estimate. |
+| CAMP-R6 | Meta Messenger marketing goes only to people who opted in to the Page's marketing messages; otherwise only within 24 hours of their last message.                                                                                                                                                                         |
+| CAMP-R7 | A Scheduled campaign can be edited or cancelled until 5 minutes before send; a Sending campaign can be paused (remaining messages stop).                                                                                                                                                                                  |
+| AUTO-R1 | A workflow can't be enabled if any message step has no approved template or no consent channel.                                                                                                                                                                                                                           |
+| AUTO-R2 | A person in two workflows that both fire the same day gets only the higher-priority message (Transactional > Abandoned > Welcome > Others), per CAMP-R3.                                                                                                                                                                  |
+
+### States and edge cases
+
+- Balance too low at send time: pause, notify the owner, resume after top-up.
+- WhatsApp quality rating drops to low: pause marketing sends automatically and show why.
+- Template rejected after scheduling: campaign moves to Draft with the reason.
+- 0 reachable people: Approve disabled with "No one in this audience can receive WhatsApp. Try SMS (N reachable)."
+- SMS with Bangla characters over 70: shows parts and cost per part.
+
+### Permissions
+
+View Campaigns or Automations: see lists and results. Edit: create, edit, approve, enable. Approval can be restricted to Owner and Admin with a store setting "Only owners and admins can approve sends" (default on); a Marketer's campaign then shows "Needs your OK" on the Owner's Dashboard.
+
+### Events
+
+campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, workflow.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
+
+### Acceptance criteria
+
+- Given 128 people in Stopped buying, 109 with WhatsApp consent, 6 messaged in the last 3 days, when the owner picks Win back on WhatsApp, then the final audience is 103 and the estimate uses the WhatsApp marketing rate.
+- Given a campaign sent 2 days ago, when the owner opens it from the list, then the results page shows delivered, read, tapped, orders and revenue matching Analytics › Campaigns.
+- Given 34 WhatsApp failures of which 29 have SMS consent, when the owner taps Send by SMS, then 29 SMS are queued and the cost is shown first.
+- Given an active abandoned-cart workflow, when its first delay is changed from 1 hour to 2 hours, then people already waiting keep their original timer and new entrants wait 2 hours.
+
+### Beyond the prototype
+
+The prototype's campaign results, costs and templates are examples (its WhatsApp cost was about 10× too low). Klaviyo, Wati, Interakt and ManyChat show what makes campaigns earn money safely.
+
+| Addition                                                                                                                                                                  | Why                                                                        | Release |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------- |
+| Holdout group: optionally keep 5–10% of the audience unsent and report the extra orders versus the holdout                                                                | Shows true lift, not just orders that would have happened anyway (Klaviyo) | 2       |
+| A/B test of message text or offer on a sample, then send the winner to the rest automatically                                                                             | Standard in Klaviyo and Wati                                               | 2       |
+| Best time to send per customer from when they read past messages                                                                                                          | Raises read and tap rates                                                  | 2       |
+| Frequency cap per customer across all campaigns and automations (default: max 2 marketing messages a week)                                                                | Protects WhatsApp quality rating and stops opt-outs                        | 1       |
+| Cost shown before approval in ৳ from the real Meta rate table and SMS parts, with a spend cap per campaign                                                                | Owners must know the cost before sending                                   | 1       |
+| Ready-made automations for Bangladesh: COD order confirmation on WhatsApp, delivery feedback, review request, reorder reminder, birthday, Eid and Puja greetings, winback | Saves setup time; Nabik and Klaviyo ship recipes                           | 1       |
+| WhatsApp template manager with Meta approval status, category check, and quality rating per template                                                                      | Rejected or low-quality templates block sends                              | 1       |
+| Opt-out keywords in Bangla and English and an unsubscribe link in SMS                                                                                                     | Compliance                                                                 | 1       |
+
+**Do not copy from the prototype:** sample campaign results, the ৳0.85 WhatsApp cost, audience counts and the "WhatsApp + Email" sample (Email campaigns are hidden by D2).
+
+### Automation engine: lessons from Omnisend and Klaviyo
+
+Omnisend and Klaviyo are the reference products for e-commerce automation. Dakly's workflow engine adopts the parts below, adapted to WhatsApp, SMS and Messenger instead of email.
+
+#### Building blocks
+
+| Block              | Behaviour in Dakly                                                                                                                                                                                                                                                                                       | Reference                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Trigger            | One event starts the workflow: order placed, order delivered, order returned, first order, chat started, comment on a post, lead captured, consent given, product back in stock, price drop, due added, date property (birthday, last order + N days), joined a segment, tag added, custom event by API. | Omnisend real-time and custom-event triggers |
+| Trigger filter     | Conditions checked once at entry (for example "order total over ৳2,000" or "source is chats").                                                                                                                                                                                                           | Klaviyo trigger filters                      |
+| Workflow filter    | Conditions checked before every step (for example "has not ordered since entering"). If false, the person exits.                                                                                                                                                                                         | Klaviyo flow filters                         |
+| Delay              | Wait N minutes, hours or days; wait until a time of day; wait until a weekday. Delays respect quiet hours.                                                                                                                                                                                               | Omnisend delay and timing controls           |
+| Condition split    | Yes/No path on any customer field, event in a time window ("tapped the last message", "ordered in the last 3 days") or channel reachability.                                                                                                                                                             | Omnisend conditional split                   |
+| Channel branch     | Send on the best reachable channel in order the owner sets: for example WhatsApp if consented and on WhatsApp, else Messenger if inside the 24-hour window or opted in, else SMS.                                                                                                                        | Omnisend channel branching                   |
+| Random split (A/B) | Split people by percentage to test text, offer or timing; report each path; owner picks the winner or Dakly picks after a set number of days.                                                                                                                                                            | Omnisend and Klaviyo A/B in flows            |
+| Send message       | WhatsApp template, SMS, Messenger. Dynamic fields (name, last product, order number, due amount, tracking link) and a product recommender block (bought together, same category, back in stock).                                                                                                         | Omnisend product recommender                 |
+| Actions            | Add or remove tag, update a field, create a task for staff, notify the team, hand the chat to a person, add to Due reminder, give a coupon code.                                                                                                                                                         | Klaviyo and respond.io actions               |
+| Exit conditions    | Leave the workflow when a goal happens (for example ordered, replied, opted out, order cancelled). Each workflow has a goal; reaching it exits and counts as a conversion.                                                                                                                               | Omnisend exit conditions                     |
+
+#### Entry and frequency rules
+
+- **Re-entry:** per workflow, choose once ever, once every N days, or every time. Default once every 30 days.
+- **One active run:** a person can be in the same workflow only once at a time.
+- **Smart sending:** skip a marketing step if the person got any marketing message from the shop in the last N hours (default 24, the same default as Klaviyo), counted per channel and across campaigns and workflows.
+- **Frequency cap** across everything (default 2 marketing messages a week) and **quiet hours** (default 9 pm to 9 am, store time). Transactional steps (order confirmed, shipped, due added) ignore both.
+- **Consent check** at every send step, not only at entry.
+- **Editing a live workflow:** changes apply to new entrants; people already inside continue on the version they entered, unless the owner chooses "Stop the old version", which removes everyone still in the old version (Omnisend offers the same two choices). Changing a delay only affects steps not yet scheduled (Klaviyo rule).
+- **Pausing:** pausing holds everyone where they are; resuming continues delays from where they stopped, skipping sends whose moment passed by more than 24 hours.
+
+#### Pre-built workflows (release 1)
+
+| Workflow                     | Trigger                                                  | Steps (default)                                                                                                                           | Goal                 |
+| ---------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| COD order confirmation       | Order placed, COD                                        | WhatsApp utility template with Confirm and Cancel buttons; if no reply in 2 hours, SMS; if still none in 12 hours, task for staff to call | Order confirmed      |
+| Welcome new lead             | Lead captured in chat or comment, no order               | Wait 1 hour, message with bestsellers; wait 2 days, offer if no order                                                                     | First order          |
+| Order-link abandoned         | Opened order link, entered phone, didn't submit          | Wait 30 minutes, reminder with link; wait 1 day, second reminder                                                                          | Order placed         |
+| Shipped and tracking         | Order moved to With courier (by staff in release 1, D21) | Utility message with tracking link                                                                                                        | None (transactional) |
+| Delivery feedback and review | Order delivered                                          | Wait 2 days, ask for rating; 4–5 stars: ask for a Facebook review; 1–3: task for staff                                                    | Reply                |
+| Cross-sell                   | Order delivered                                          | Wait 7 days, product recommender message                                                                                                  | Second order         |
+| Reorder reminder             | Usual gap between orders minus 3 days                    | Reminder with last product                                                                                                                | Order placed         |
+| Back in stock                | Variant restocked, person on waiting list                | Message with order link                                                                                                                   | Order placed         |
+| Winback                      | Entered "Slipping away" stage                            | Message; wait 5 days; offer if no order; wait 10 days; exit                                                                               | Order placed         |
+| Birthday                     | Birthday date                                            | Greeting with offer at 10 am                                                                                                              | Order in 7 days      |
+| Due reminder (release 2)     | Baki older than 30 days                                  | Polite reminder; repeat every 7 days up to 3 times                                                                                        | Due paid             |
+
+#### Reporting per workflow and per step
+
+People entered, currently inside, exited by reason, messages sent, delivered, read, tapped, goal reached, orders, money (last-touch, Glossary), cost and return per ৳1. Each step shows its own numbers so owners can see where people drop. A/B paths show side-by-side results with a confidence note ("Too early to tell" until 100 people per path).
+
+#### Verified details from Klaviyo and Omnisend docs (12 Nov 2026)
+
+These rules are taken from the two products' help centres and are now part of the Dakly spec.
+
+| Rule                        | How Klaviyo and Omnisend do it                                                                                                                                                                                                                           | Dakly rule                                                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| When conditions are checked | Klaviyo checks trigger filters once at entry; profile (flow) filters are checked before every step and again at send time. Omnisend audience filters are checked once; exit conditions are checked continuously.                                         | Same: trigger filter once; workflow filter and exit conditions before every step and at send time.                                                               |
+| Exit conditions             | Omnisend allows up to 4 exit conditions, each up to 5 filters, combined with OR; they apply only to people who enter after they're set.                                                                                                                  | Up to 5 exit conditions combined with OR; new exit conditions also apply to people already inside (safer for consent), shown in a warning before publishing.     |
+| Splits                      | Klaviyo multi-branch split up to 20 paths using profile or trigger-event data, with an Else path.                                                                                                                                                        | Condition split up to 10 paths plus Else.                                                                                                                        |
+| Re-entry                    | Omnisend: "once ever" or "once every N days"; cart abandonment defaults to once per 24 hours. respond.io: a contact can't re-enter a workflow they are still in.                                                                                         | Same defaults as listed above (once every 30 days; cart and order-link reminders once per 24 hours).                                                             |
+| Channel without consent     | Omnisend: a contact not opted in for SMS exits at the SMS step unless "pass to next step" is ticked.                                                                                                                                                     | Each send step has "If not reachable: skip to next step" (default) or "exit".                                                                                    |
+| Quiet hours                 | Klaviyo SMS quiet hours default 8 pm to 11 am local time; checked at send time, before smart sending; transactional messages are exempt.                                                                                                                 | Default 9 pm to 9 am Bangladesh time (editable 8–10 pm to 8–10 am); checked at send time before smart sending; transactional exempt.                             |
+| Manual review               | Klaviyo can set a step to Manual: messages wait in "Needs review" for Send all, Cancel all or one by one.                                                                                                                                                | Any send step can be set to "Review before sending"; messages wait in a review list. Default on for steps with offers over 20% off.                              |
+| Trigger preview             | Omnisend shows the last 10 trigger events before you switch a workflow on.                                                                                                                                                                               | Builder shows the last 10 matching events and how many people would have entered in the last 7 days.                                                             |
+| Segment timing              | Omnisend warns that segments refresh every 1–2 minutes, so a segment filter right after a trigger can miss people; it suggests a short delay then a split.                                                                                               | Segment-joined triggers fire after the segment's incremental update; builder adds a 2-minute delay automatically when a segment filter follows an event trigger. |
+| Predictions                 | Klaviyo predicted CLV needs at least 500 customers with orders, 180 days of history, orders in the last 30 days and some customers with 3+ orders; retrained weekly; it warns countdown messages to the expected next order date can cause unsubscribes. | Predicted fields (release 2) appear only when a shop meets similar minimums; reorder reminders use the shop's known product cycle where set, before predictions. |
+
+Sources: [Klaviyo flows guide](https://help.klaviyo.com/hc/en-us/articles/115002774932), [Klaviyo predictive analytics](https://help.klaviyo.com/hc/en-us/articles/360020919731), [Klaviyo SMS quiet hours](https://help.klaviyo.com/hc/en-us/articles/4408737146651), [Omnisend exit conditions](https://support.omnisend.com/en/articles/3873110-exit-conditions-in-automations), [Omnisend trigger settings](https://support.omnisend.com/en/articles/3947985-automation-trigger-settings), [Omnisend workflow settings](https://support.omnisend.com/en/articles/3954813-omnisend-automation-workflow-settings), [respond.io workflows](https://respond.io/help/workflows/workflows-overview)
+
+## Prototype screens
+
+Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialog. Layout only: the numbers, names and some flows are sample data (see the next section).
+
+**New campaign: choose a channel**
+
+![New campaign: choose a channel](../design/screenshots/campaigns-and-automations/create-campaign.webp)
+
+**WhatsApp campaign: content step**
+
+![WhatsApp campaign: content step](../design/screenshots/campaigns-and-automations/nusrat-urban-trend.webp)
+
+**WhatsApp campaign: content filled**
+
+![WhatsApp campaign: content filled](../design/screenshots/campaigns-and-automations/continue.webp)
+
+**Pick a ready-made workflow**
+
+![Pick a ready-made workflow](../design/screenshots/campaigns-and-automations/create-workflow.webp)
+
+**Workflow builder**
+
+![Workflow builder](../design/screenshots/campaigns-and-automations/active-3.webp)
+
+**Edit a workflow**
+
+![Edit a workflow](../design/screenshots/campaigns-and-automations/edit.webp)
+
+## Where the prototype is wrong or missing
+
+The prototype is a concept with sample data. Build from this doc, not from the prototype, where they differ.
+
+### Design review: Campaigns and Automations
+
+The campaign builder and the visual workflow editor are the strongest screens in the design: Bangla-first templates, a live WhatsApp preview, cost and reach before sending, and "nothing is sent until you approve". The gaps are a campaign results page, the email channel, and the store events that several automations depend on.
+
+| Feature                             | What the design shows                                                                                                                                                                                                                          | Gaps and questions for build                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Campaign list                       | Name, channel, status (Sent, Scheduled), sent, clicked, orders, revenue                                                                                                                                                                        | Clicking a campaign does nothing, so there is no results or detail page. Needs one (delivery, reads, taps, orders, who ordered, resend to non-openers). No Draft or Failed status, no search or date filter.                                                                                 |
+| Choose channel                      | WhatsApp (2,138 reachable), SMS (1,840), Facebook Messenger (1,019), Instagram DM (597), AI voice call (needs approval and verified caller ID)                                                                                                 | No Email channel, yet past campaigns are "WhatsApp + Email". AI voice call does nothing yet, though "Call customers" is the product tagline. Decide if voice is in the first release.                                                                                                        |
+| Template step                       | 10 templates per channel by goal (win back, VIP, new collection, sale, clearance, festival incl. Eid, Puja, Pohela Boishakh, welcome, reorder) or blank; Bangla copy personalised with the customer's name                                     | Several templates repeat the same placeholder copy. WhatsApp marketing templates need Meta approval, which can take hours to days; the builder must show approval status.                                                                                                                    |
+| Content, Audience, Schedule, Review | 4 steps then "Review and approve" with live WhatsApp preview, audience count and estimated cost (e.g. 106 people, ৳90)                                                                                                                         | Good. The Coming-up card says that reminder goes to 94 customers, but its review says 106. Define how quiet hours and daily limits change the schedule shown.                                                                                                                                |
+| Save draft                          | Available on every step                                                                                                                                                                                                                        | Drafts need a place to live in the campaign list.                                                                                                                                                                                                                                            |
+| Automations list                    | 5 workflows with status (Active, Disabled, Draft), trigger, steps, channels, people entered and revenue in 30 days; Enable/Disable, Edit, Duplicate, Delete; 3 recommended workflows                                                           | Good.                                                                                                                                                                                                                                                                                        |
+| Workflow library                    | 12 ready-made workflows filterable by type, goal and channel: welcome, abandoned cart, abandoned checkout, browse abandonment, order confirmation, shipping, cancellation, order follow-up, cross-sell, review request, reactivation, birthday | Each needs a store event: checkout started, product viewed, shipped, cancelled, paid. Shopify gives most by webhook. Browse abandonment needs a tracking script on the shop's site. Shipping needs courier tracking links (Pathao, Steadfast, RedX), and no courier integration is designed. |
+| Workflow editor                     | Visual canvas: trigger with filters, audience, frequency and exit rule; steps for SMS, WhatsApp, delay, tag contact and conditional split (e.g. clicked a link); zoom; show stats; publish changes                                             | Solid. Only SMS and WhatsApp steps exist, but the abandoned-cart description says "then by email". Define what happens to people already mid-flow when a workflow is edited.                                                                                                                 |
+
+### Missing design: campaign results page and drafts
+
+**Why it's needed.** Clicking a campaign in the Campaigns list does nothing. Shop owners send a campaign and then want to know if it worked and who bought. The Dashboard, Analytics and notifications ("Kurti campaign earned ৳1,86,900 · Send it again") all point to a page that doesn't exist.
+
+**What to design.**
+
+- **Header**: name, channel, status, sent date and time, audience (segment name and count), cost, Duplicate, Send again, Delete.
+- **Result cards**: sent, delivered, read (WhatsApp and email only), tapped link, orders, money earned, return per ৳1.
+- **Funnel**: the same sent → delivered → read → tapped → ordered shape as Analytics, for this one campaign.
+- **Who ordered**: list of customers with order value and date, linking to their profile.
+- **Failures**: count of messages that failed, grouped by reason (not on WhatsApp, invalid number, opted out, daily limit reached), with "Send these by SMS" as the notifications panel already suggests.
+- **Follow-up actions**: Resend to people who didn't read, Message people who tapped but didn't buy.
+- **Message preview**: the exact message that was sent, with its template name.
+
+**Campaign list changes.** Add statuses Draft, Sending (with progress, since daily limits spread big sends over days), Paused, Failed. Add search, a channel filter and a date range. Drafts saved from the builder need to appear here.
+
+**States.** Scheduled but not sent yet (show countdown, Edit, Cancel); sending in progress across several days; results still coming in (orders count for 7 days, so show "results final on Nov 15").
+
+### Missing design: AI voice calls (hidden, D3)
+
+**Why it's needed.** The product tagline is "Call customers. Grow sales." Yet the only voice feature is an "AI voice call · Requires approval" card in the campaign builder that does nothing when clicked. If calling is the differentiator, it has no design at all. If it isn't in the first release, the tagline should change.
+
+**What to design.**
+
+- **Eligibility and approval**: what "requires approval" means (verified caller ID, BTRC rules, Dakly review of the script), how to apply, and the waiting state.
+- **Call script builder**: goal (win back, confirm a COD order, collect feedback), AI-written script in Bangla with editable branches ("if the customer says yes…", "if busy, call back"), voice choice (male or female, Dhaka accent), max call length, and a "Listen to a sample" button.
+- **Audience and schedule**: segment, calling hours (not at night, not during prayer times if the shop wants), retries for no answer.
+- **Cost**: per-minute price and estimated total before approving.
+- **Results**: answered, not answered, completed, outcome per customer (interested, ordered, call back, not interested), recordings and transcripts, and follow-up actions (send WhatsApp to everyone interested).
+- **Manual calls**: the customer profile already has a Call button. Decide whether it just opens the phone dialler, and whether to log the call and an outcome afterwards.
+
+**Smaller first step.** COD order confirmation by automated call is a common need in Bangladesh and has a clear script, so it may be a better first voice feature than marketing calls.
+
+## Engineering
+
+### Screens in release 1
 
 ![Campaigns](../design/screenshots/campaigns.webp)
 
@@ -20,7 +317,7 @@ Campaigns send one message to a group once. Automations send messages on their o
 
 Builder steps: Goal, Channel, Content, Audience, Schedule, Review and approve. The campaign results page is not designed. Remove from the prototype: the ৳0.85 WhatsApp cost, the "WhatsApp + Email" sample, the AI voice call card.
 
-## How it works
+### How it works
 
 Campaign states: `draft` → `waiting_approval` → `scheduled` → `sending` → `sent` | `cancelled`.
 
@@ -45,7 +342,7 @@ Automations (working assumption for Q6): fixed recipes with editable timing and 
 
 Each recipe is an `automations` row (recipe key, on or off, settings validated by a zod schema per recipe) and an `automation_runs` row per contact and trigger, unique on (automation, contact, trigger), so an event delivered twice runs once.
 
-## Rules
+### Rules
 
 From PRD tab 6:
 
@@ -60,26 +357,26 @@ From PRD tab 6:
 
 Also: quiet hours 9 pm to 9 am store time for marketing; consent is checked again at every send, not only at approval; WhatsApp quality dropping to low pauses marketing sends.
 
-## Permissions
+### Permissions
 
 `campaigns.view`, `campaigns.edit`, `automations.view`, `automations.edit`. "Only owners and admins can approve sends" is on by default.
 
-## Events
+### Events
 
 Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`, `message.failed`, `message.tapped`, `message.opted_out`, `order.attributed`, `automation.enabled`, `automation.run_sent`.
 
-## Data
+### Data
 
 `campaigns`, `campaign_recipients`, `whatsapp_templates`, `short_links`, `automations`, `automation_runs`. `touches` is cut by the schema review (pending review).
 
-## Edge cases to test
+### Edge cases to test
 
 - Balance runs out mid-send: pause, notify, resume after top-up.
 - 0 reachable people: Approve disabled with a reason and an SMS suggestion.
 - Bangla SMS over 70 characters shows parts and cost per part.
 - The same order event delivered twice sends one confirmation.
 
-## Acceptance
+### Acceptance
 
 - Given 128 people in Stopped buying, 109 with WhatsApp consent and 6 messaged in the last 3 days, when the owner picks Win back on WhatsApp, then the final audience is 103 and the estimate uses the marketing rate.
 - Given 34 WhatsApp failures of which 29 have SMS consent, when the owner taps Send by SMS, then the cost shows first and 29 SMS are queued.

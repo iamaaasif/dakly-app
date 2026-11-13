@@ -11,6 +11,8 @@ The prototype is a concept for layout and flow. Use it for where things sit on t
 
 ## Screens
 
+Each feature doc has a "Prototype screens" section with the dialogs, tabs and steps behind each button, captured by opening every button on every page (117 screens, in `screenshots/<feature>/`). The table below lists the first screen of each page.
+
 | Screen                 | File                                                                 | Feature doc                                                                     |
 | ---------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Sign in                | [sign-in.webp](screenshots/sign-in.webp)                             | [01-account-and-team](../features/01-account-and-team.md)                       |
@@ -37,8 +39,8 @@ The prototype is a concept for layout and flow. Use it for where things sit on t
 
 ## Missing designs
 
-Listed in [product/open-questions.md](../product/open-questions.md#designs-still-needed-before-the-screen-is-built). Build those screens from the feature doc and the components already in `packages/ui`; do not invent a new look.
+What the prototype lacks across pages is in [prototype-review.md](prototype-review.md); per-feature gaps are in each feature doc under "Where the prototype is wrong or missing". The short list is in [product/open-questions.md](../product/open-questions.md#designs-still-needed-before-the-screen-is-built). Build those screens from the feature doc and the components already in `packages/ui`; do not invent a new look.
 
 ## Updating screenshots
 
-When the design changes, capture again at 1440 × 900, device scale 2, convert to WebP at about 75% quality, and keep each file under 200 KB. Replace files in place so links keep working.
+When the design changes, capture again at 1440 × 900, device scale 2, convert to WebP at about 75% quality, and keep each file under 200 KB. Sub-screens are saved at 1080 × 675. Replace files in place so links keep working.

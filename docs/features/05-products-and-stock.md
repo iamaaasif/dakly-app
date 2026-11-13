@@ -12,13 +12,112 @@
 
 The shop's catalogue with sizes and colours, live stock, and the names customers use for each product, so the AI and the order form always quote the right price and stock.
 
-## Screens
+## Decisions that change the PRD
+
+The product requirements below are the PRD text from 12 November 2026. Where a later decision changed it, the decision wins:
+
+- D1: Shop sales (the physical counter) is release 2, so stock is only changed by orders, imports and edits in release 1.
+- D6: POS stock sync is release 2.
+
+## Product requirements
+
+### What it is for
+
+Products holds prices, sizes and stock so chats, the shop counter and the order link all quote the same numbers. Release 1, Sales extension.
+
+### User stories
+
+- As a seller, I want stock to update itself when I confirm, ship, cancel or get a return, and to message the people who asked when I restock.
+- As a seller, I want to see which products customers ask about but can't buy (no price, sold out), so I fix what loses sales.
+
+### Screens
+
+| Screen                  | Elements                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Products                | Header stats: product count, stock value at cost, running low (and people waiting), best seller this month; nudge cards (sold-out size with people waiting → Restock; asked about but no price → Add price; no description → Write with AI); filters category, status; sort (best selling, most asked in chats, lowest stock, highest price, name); table: product (name, category, SKU), price (and sale price, profit %), stock per size or Not tracked, waiting to confirm, sold, asked, status (Selling, Running low, Needs a price, Hidden), Restock. Import, Add product. |
+| Product detail and edit | Photos (up to 10), name, category, SKU, price, sale price, cost price, description (Write with AI), variants (size list with stock each), track stock on/off, where it appears (Chat replies, Shop sales, Order link), Hide product; sales by channel; times asked in chats; restock waiting list; share (Copy for chat, Copy order link, Post on Facebook).                                                                                                                                                                                                                    |
+
+### How it works
+
+#### Stock
+
+- Available = stock − reserved. Reserved = quantities in To confirm and To pack orders.
+- Creating an order reserves stock; shipping deducts it from stock and releases the reservation; cancelling releases it; a return adds the units back to stock.
+- Shop sales (tab 9) deduct immediately.
+- Untracked products never block an order.
+- When a sold-out size is restocked and people are on its waiting list, Dakly offers to message them (WhatsApp within window or template, else SMS) with the product card.
+
+### Business rules
+
+| ID      | Rule                                                                                                                                                         |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ORD-R3  | A tracked item's quantity can't exceed available stock unless a person ticks "Allow even though out of stock". The AI can never oversell.                    |
+| PROD-R1 | Prices must be greater than 0 to appear in chats, shop sales or the order link. Products without price are "Needs a price" and the AI hands over when asked. |
+| PROD-R2 | Profit % = (price − cost) ÷ price, shown only when cost is set. Stock value = sum of stock × cost.                                                           |
+| PROD-R3 | Running low = any tracked size with 3 or fewer available (threshold editable).                                                                               |
+| PROD-R4 | Hiding a product removes it from chats, shop and order link; past orders keep it.                                                                            |
+
+### States and edge cases
+
+- Product deleted while in an open order: deletion blocked; offer Hide instead.
+
+### Permissions
+
+Edit Products: change prices, stock and visibility (Owner, Admin; others View).
+
+### Events
+
+product.stock\_changed, product.restocked, product.price\_missing.
+
+### Acceptance criteria
+
+- Given Cotton Panjabi L has 2 available, when an order for 2 is created, then available shows 0 and the AI tells the next customer L is sold out.
+
+### Beyond the prototype
+
+| Addition                                                                        | Why                                               | Release                   |
+| ------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------- |
+| Stock movement ledger (sale, return, adjustment, import) and stock per location | Explains why stock changed; needed for 2+ outlets | 1 (ledger), 2 (locations) |
+
+### Verified details from Nabik and AiPraktor (12 Nov 2026)
+
+| Topic     | What they do                                                                                                                                                                                                                                                                      | Dakly rule                                                                                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Inventory | Nabik: one live stock count across channels, variants, SKUs, barcodes, a movement ledger, low-stock alerts, unlimited warehouses. AiPraktor: up to 5 option types per product, unoffered combinations marked "not made", product status labels (No price, Needs a photo, Hidden). | Add product readiness labels and "what the AI will say" preview on each product; variants up to 3 option types in release 1. |
+
+## Prototype screens
+
+Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialog. Layout only: the numbers, names and some flows are sample data (see the next section).
+
+**Add product**
+
+![Add product](../design/screenshots/products-and-stock/add-product.webp)
+
+**Import products**
+
+![Import products](../design/screenshots/products-and-stock/import.webp)
+
+**Product detail (needs a price)**
+
+![Product detail (needs a price)](../design/screenshots/products-and-stock/l-leather-sandal-found-in-chats-accessor.webp)
+
+**Restock**
+
+![Restock](../design/screenshots/products-and-stock/restock-xl.webp)
+
+**Running low filter**
+
+![Running low filter](../design/screenshots/products-and-stock/running-low-3.webp)
+
+## Engineering
+
+### Screens in release 1
 
 ![Products](../design/screenshots/products.webp)
 
 List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), stock per size, and "asked for in chats" counts. Fix the prototype's copy bug "1 people asked".
 
-## How it works
+### How it works
 
 1. A product has 0 to 3 option types (Size, Colour, Fabric) and one or more variants. A product with no options has one default variant, so an order always points at a variant.
 2. Stock lives on the variant: on hand and reserved. Available = on hand − reserved.
@@ -31,30 +130,34 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), 
 
 Photos upload straight to R2 with a presigned URL; the API never streams files.
 
-## Rules
+### Rules
 
 1. Price is an integer in poisha. A product with price 0 cannot be ordered or quoted by the AI.
 2. Every stock change has a movement row that says why.
 3. Hidden products are never offered by the AI.
 
-## Permissions
+### Permissions
 
 `products.view`, `products.edit`.
 
-## Events
+### Events
 
 Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
-## Data
+### Data
 
 `products`, `product_options`, `variants`, `stock_movements`, `product_media`. `restock_requests` is deferred by the schema review (pending review).
 
-## Edge cases to test
+### Edge cases to test
 
 - Two orders for the last unit at the same moment: one gets `STOCK_NOT_AVAILABLE`.
 - Adjusting stock below reserved is rejected.
 - A product with no options gets exactly one variant.
 
-## Acceptance
+### Acceptance
 
 - Given size M has 3 on hand and 1 reserved, when the owner opens the product, then M shows 2 available.
+
+## Open questions
+
+None.
