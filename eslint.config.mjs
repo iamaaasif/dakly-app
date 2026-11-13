@@ -3,6 +3,33 @@ import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const restrictedSyntax = [
+  {
+    selector: 'TSEnumDeclaration',
+    message: 'Use a string literal union or an `as const` object instead of a TypeScript enum.',
+  },
+];
+
+// Web rules from docs/rules/frontend-*.md that a parser can see.
+const webRestrictedSyntax = [
+  {
+    selector: 'Literal[value=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]',
+    message: 'Use a theme token, not a hex colour. See docs/rules/frontend-styling.md.',
+  },
+  {
+    selector: 'Literal[value=/\\[#[0-9a-fA-F]{3,8}\\]/]',
+    message: 'Use a theme token, not an arbitrary hex class. See docs/rules/frontend-styling.md.',
+  },
+  {
+    selector: "CallExpression[callee.property.name='toLocaleString']",
+    message: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
+  },
+  {
+    selector: "NewExpression[callee.object.name='Intl']",
+    message: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
+  },
+];
+
 // Limits that keep code small and readable. See docs/rules/simplicity.md.
 export default tseslint.config(
   {
@@ -33,14 +60,7 @@ export default tseslint.config(
       'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
       'sonarjs/cognitive-complexity': ['error', 15],
       'no-nested-ternary': 'error',
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'TSEnumDeclaration',
-          message:
-            'Use a string literal union or an `as const` object instead of a TypeScript enum.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...restrictedSyntax],
       'no-restricted-imports': [
         'error',
         {
@@ -84,6 +104,11 @@ export default tseslint.config(
     },
   },
   {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: { ...globals.node } },
+    rules: { 'no-console': 'off' },
+  },
+  {
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
@@ -91,6 +116,33 @@ export default tseslint.config(
     files: ['apps/web/**/*.{ts,tsx}'],
     languageOptions: {
       globals: { ...globals.browser },
+    },
+    rules: {
+      'max-params': ['error', 3],
+      'no-restricted-syntax': ['error', ...restrictedSyntax, ...webRestrictedSyntax],
+    },
+  },
+  {
+    // Next.js needs default exports only from route files.
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/app/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedSyntax,
+        ...webRestrictedSyntax,
+        {
+          selector: 'ExportDefaultDeclaration',
+          message: 'Use a named export. Default exports are only for Next.js route files.',
+        },
+      ],
+    },
+  },
+  {
+    // The formatters are the one place allowed to call Intl.
+    files: ['apps/web/src/lib/format-*.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...restrictedSyntax],
     },
   },
 );

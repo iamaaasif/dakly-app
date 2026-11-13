@@ -15,9 +15,10 @@
     "lint:boundaries": "depcruise apps/*/src packages/*/src --config .dependency-cruiser.cjs",
     "lint:unused": "knip",
     "lint:duplicates": "jscpd",
+    "lint:docs": "node scripts/check-docs.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm lint:unused && pnpm lint:duplicates"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm lint:unused && pnpm lint:duplicates && pnpm lint:docs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
