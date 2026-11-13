@@ -31,7 +31,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo      | DB-5        |     |                                                               |
 | DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo      | DB-5        |     | [growth.md](data/growth.md); all-store rollups                |
 | API-1 | Logging (nestjs-pino), request ids, Sentry                                               | In review |             | #9  | [plan](plans/core.md)                                         |
-| API-2 | Rate limiting with Valkey storage                                                        | Todo      |             |     | Valkey client and per-key limiter; [plan](plans/core.md)      |
+| API-2 | Rate limiting with Valkey storage                                                        | In progress |             |     | Valkey client and per-key limiter; [plan](plans/core.md)      |
 | API-3 | Route test that fails when a route has no access rule or a store route has no permission | Todo      | ACC-3       |     | [plan](plans/core.md)                                         |
 | WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Todo      |             |     | [design/theme.md](design/theme.md)                            |
 | WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | Todo      | WEB-1       |     |                                                               |
