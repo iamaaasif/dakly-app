@@ -16,29 +16,29 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M0. Foundation
 
-| ID    | Task                                                                                     | Status | Depends     | PR  | Notes                                                         |
-| ----- | ---------------------------------------------------------------------------------------- | ------ | ----------- | --- | ------------------------------------------------------------- |
-| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                                | Done   |             | -   |                                                               |
-| FND-2 | Fastify adapter and Express ban                                                          | Done   | FND-1       | #1  |                                                               |
-| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint                 | Done   | FND-1       | #2  | Merged                                                        |
-| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security          | Done   | FND-3       | #3  |                                                               |
-| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules         | Done   | FND-4       | #4  |                                                               |
-| DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done   |             | #6  | Done in DB-5; `customers` goes with CUS-1                     |
-| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Todo   | DB-5        |     | Table in DB-5; relay and helper left                          |
-| DB-3  | Audit log table and `AuditService.record`                                                | Todo   | DB-5, REV-4 |     | Table in DB-5; `AuditService` left; [plan](plans/core.md)     |
-| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Todo   |             |     | Needed by ACC-7; [plan](plans/core.md)                        |
-| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done   |             | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md) |
-| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo   | DB-5        |     |                                                               |
-| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo   | DB-5        |     | [growth.md](data/growth.md); all-store rollups                |
-| API-1 | Logging (nestjs-pino), request ids, Sentry                                               | Todo   |             |     | [plan](plans/core.md)                                         |
-| API-2 | Rate limiting with Valkey storage                                                        | Todo   |             |     | Valkey client and per-key limiter; [plan](plans/core.md)      |
-| API-3 | Route test that fails when a route has no access rule or a store route has no permission | Todo   | ACC-3       |     | [plan](plans/core.md)                                         |
-| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Todo   |             |     | [design/theme.md](design/theme.md)                            |
-| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | Todo   | WEB-1       |     |                                                               |
-| WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Todo   | WEB-1       |     |                                                               |
-| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Todo   |             |     |                                                               |
-| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Todo   | WEB-3       |     |                                                               |
-| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Todo   |             |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov    |
+| ID    | Task                                                                                     | Status      | Depends     | PR  | Notes                                                         |
+| ----- | ---------------------------------------------------------------------------------------- | ----------- | ----------- | --- | ------------------------------------------------------------- |
+| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                                | Done        |             | -   |                                                               |
+| FND-2 | Fastify adapter and Express ban                                                          | Done        | FND-1       | #1  |                                                               |
+| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint                 | Done        | FND-1       | #2  | Merged                                                        |
+| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security          | Done        | FND-3       | #3  |                                                               |
+| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules         | Done        | FND-4       | #4  |                                                               |
+| DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done        |             | #6  | Done in DB-5; `customers` goes with CUS-1                     |
+| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Todo        | DB-5        |     | Table in DB-5; relay and helper left                          |
+| DB-3  | Audit log table and `AuditService.record`                                                | Todo        | DB-5, REV-4 |     | Table in DB-5; `AuditService` left; [plan](plans/core.md)     |
+| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Todo        |             |     | Needed by ACC-7; [plan](plans/core.md)                        |
+| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done        |             | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md) |
+| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo        | DB-5        |     |                                                               |
+| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo        | DB-5        |     | [growth.md](data/growth.md); all-store rollups                |
+| API-1 | Logging (nestjs-pino), request ids, Sentry                                               | In progress |             |     | [plan](plans/core.md)                                         |
+| API-2 | Rate limiting with Valkey storage                                                        | Todo        |             |     | Valkey client and per-key limiter; [plan](plans/core.md)      |
+| API-3 | Route test that fails when a route has no access rule or a store route has no permission | Todo        | ACC-3       |     | [plan](plans/core.md)                                         |
+| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Todo        |             |     | [design/theme.md](design/theme.md)                            |
+| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | Todo        | WEB-1       |     |                                                               |
+| WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Todo        | WEB-1       |     |                                                               |
+| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Todo        |             |     |                                                               |
+| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Todo        | WEB-3       |     |                                                               |
+| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Todo        |             |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov    |
 
 ## M1. Account, stores and team
 
