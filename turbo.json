@@ -14,7 +14,7 @@
     "test:int": {
       "dependsOn": ["^build"],
       "cache": false,
-      "passThroughEnv": ["DATABASE_URL", "DATABASE_ADMIN_URL"]
+      "passThroughEnv": ["DATABASE_URL", "DATABASE_ADMIN_URL", "REDIS_URL"]
     },
     "dev": {
       "dependsOn": ["^build"],

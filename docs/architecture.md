@@ -127,6 +127,10 @@ Initial import runs as a `bulk` job in pages; after that, store webhooks (verifi
 
 On `order.created`, the analytics worker looks back over the store's window (1, 3 or 7 days) for the customer's latest eligible touch and records the attribution (pending review: on the order row instead of an `attributions` table); cancellations remove it and returns reduce its money. Roll-up tables are updated in the same job.
 
+## Valkey rate limiting
+
+`platform/cache/CacheModule` exports one `ValkeyClient` and the shared `RateLimiter`. The client uses `REDIS_URL` through the queue connection parser, including TLS and database selection, and closes on application shutdown. One Valkey script atomically counts attempts and sets the expiry for a fixed window. The limiter returns an allowed flag and retry-after in whole seconds; blocked attempts do not extend the window. Features choose namespaced keys and import the module when they need it. Auth-specific limits arrive with ACC-2.
+
 ## Environments
 
 | Environment | Purpose                                                                                                                       | Data                                         |

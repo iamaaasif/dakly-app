@@ -79,6 +79,8 @@ Branch: `feat/api-2-valkey-rate-limiter`
 - Scope: one `ValkeyClient` provider in `platform/cache/` (ioredis, from `REDIS_URL`), and `RateLimiter.consume(key, limit, windowSeconds)` returning allowed or retry-after, atomic in Valkey (one script or `INCR` with `EXPIRE NX`). Add a Redis service to `.github/workflows/ci.yml`. No `@nestjs/throttler` yet: auth needs per-account keys, not per-route.
 - Tests (integration): the 6th call in a window of 5 is refused with the right retry-after; 20 calls in parallel against a limit of 5 let exactly 5 through; two keys do not share a count; the window resets.
 
+Implemented in `platform/cache/`: `CacheModule` exports one `ValkeyClient` from `REDIS_URL` and `RateLimiter`. A Lua script starts a fixed window on the first call, counts each attempt and refuses calls beyond the limit without extending the window. `consume` returns `{ allowed, retryAfter }`; retry-after is zero when allowed and the remaining time rounded up to seconds when refused. Callers supply namespaced keys and positive integer limits and window lengths. Auth-specific keys and accounting belong to ACC-2. CI runs the integration tests against Redis.
+
 ### REV-4 · One transaction across features for one store
 
 Branch: `feat/rev-4-store-transaction`

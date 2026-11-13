@@ -23,7 +23,7 @@ Never log: tokens, keys, codes, passwords, full phone numbers, message text, add
 
 ## Rate limits
 
-`@nestjs/throttler` with Valkey storage. Defaults: sign-in codes 5 per phone and 20 per IP per hour; public order link 5 orders per phone per day and 30 per IP per hour; API 300 requests per minute per session. Webhooks are not rate limited but are queued.
+Use the atomic per-key Valkey limiter from `platform/cache/`. Auth uses per-account keys, so `@nestjs/throttler` is not installed yet. Auth-specific key selection and accounting belong to ACC-2. Planned limits: sign-in codes 5 per phone and 20 per IP per hour; public order link 5 orders per phone per day and 30 per IP per hour; API 300 requests per minute per session. Webhooks are not rate limited but are queued.
 
 ## Dependencies
 

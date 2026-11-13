@@ -21,6 +21,7 @@
     "@nestjs/core": "^11.1.0",
     "@sentry/core": "10.22.0",
     "drizzle-orm": "^0.45.0",
+    "ioredis": "5.11.1",
     "nestjs-pino": "4.6.1",
     "pino": "9.9.5",
     "pino-http": "10.5.0",
