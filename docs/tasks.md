@@ -20,7 +20,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | ----- | ------------------------------------------------------------------------------------ | --------- | ------- | --- | ---------------------------------------------------------- |
 | FND-1 | Monorepo, lint, boundaries, CI, customers example feature                            | Done      |         | -   |                                                            |
 | FND-2 | Fastify adapter and Express ban                                                      | Done      | FND-1   | #1  |                                                            |
-| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | In review | FND-1   |     | This PR                                                    |
+| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | In review | FND-1   | #2  | This PR                                                    |
 | DB-1  | UUID v7 ids generated in the app; switch existing tables                             | Todo      |         |     |                                                            |
 | DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-1    |     |                                                            |
 | DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-1    |     |                                                            |
