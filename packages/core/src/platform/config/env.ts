@@ -5,6 +5,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.url(),
   REDIS_URL: redisUrlSchema,
+  SENTRY_DSN: z.url().optional(),
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 

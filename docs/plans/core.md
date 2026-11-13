@@ -70,6 +70,8 @@ Branch: `feat/api-1-request-logging`
 - Rules: [logging.md](../rules/logging.md), [security.md](../rules/security.md).
 - Tests: a failed query with a synthetic phone, name and secret goes through the filter; the captured log and the Sentry event have none of them; the response is `500 INTERNAL_ERROR`.
 
+Implemented in `platform/logging/` and the global error filter; the API selects the pino-backed Nest logger at startup. [Architecture](../architecture.md#api-request-logging) describes the allowlisted logs and optional Sentry transport. Job logging and session-derived store context belong to their later tasks.
+
 ### API-2 · Valkey client and rate limiter
 
 Branch: `feat/api-2-valkey-rate-limiter`

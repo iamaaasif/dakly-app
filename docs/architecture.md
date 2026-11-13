@@ -167,3 +167,11 @@ Alerts go to an on-call channel with clear owners. First alerts: webhook intake 
 | Targets    | Lose at most 5 minutes of data; back online within 1 hour (stage 2 onward)                                                                                     |
 
 Scale targets, performance budgets and the security standards are in [scale-and-security.md](scale-and-security.md).
+
+## API request logging
+
+The API uses `nestjs-pino` through the Nest logger. Each request gets a generated UUID returned in `X-Request-Id`; incoming request ids are ignored. Automatic logs contain the request id, response status and duration. Request URLs, query strings, headers and bodies are omitted because they can contain personal data. Known sensitive field names are redacted as a backstop.
+
+Unknown errors are logged once by `AppErrorFilter`, with an allowlisted class, a safe `errorCode` and stack source positions. Error messages, query parameters, nested causes, function names and file paths are omitted. Expected business errors keep their existing response, including optional validation fields.
+
+Setting `SENTRY_DSN` enables error reporting using the same safe record and request id. Its private Sentry client has no automatic integrations and sends events without global user context or breadcrumbs. Sentry requests have a two-second transport timeout. With the variable unset, no Sentry transport is created.

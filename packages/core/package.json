@@ -18,13 +18,17 @@
     "@dakly/contracts": "workspace:*",
     "@dakly/db": "workspace:*",
     "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@sentry/core": "10.22.0",
     "drizzle-orm": "^0.45.0",
+    "nestjs-pino": "4.6.1",
+    "pino": "9.9.5",
+    "pino-http": "10.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
-    "@nestjs/core": "^11.1.0",
     "@nestjs/platform-fastify": "^11.2.9",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.15.0",
