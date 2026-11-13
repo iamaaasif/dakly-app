@@ -44,6 +44,20 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
+          // The API runs on Fastify (ADR 0004); these only work on Express.
+          paths: [
+            'express',
+            '@nestjs/platform-express',
+            'multer',
+            'helmet',
+            'cookie-parser',
+            'express-session',
+            'express-rate-limit',
+            'body-parser',
+          ].map((name) => ({
+            name,
+            message: 'Express-only. Use the Fastify equivalent; see docs/rules/http-fastify.md.',
+          })),
           patterns: [
             {
               group: ['**/index', '**/index.ts'],

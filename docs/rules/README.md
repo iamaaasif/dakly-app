@@ -8,6 +8,7 @@ One file per topic. Each rule is short, says why, and shows one wrong and one ri
 | [module-boundaries.md](module-boundaries.md)         | What a feature may import                    |
 | [multi-tenancy.md](multi-tenancy.md)                 | `storeId`, RLS, new tables                   |
 | [validation-and-errors.md](validation-and-errors.md) | zod at the edge, `AppError`                  |
+| [http-fastify.md](http-fastify.md)                   | Fastify do and don't, webhook raw body       |
 | [providers.md](providers.md)                         | Vendor drivers                               |
 | [jobs.md](jobs.md)                                   | BullMQ jobs and events                       |
 | [testing.md](testing.md)                             | Unit, integration, end to end                |

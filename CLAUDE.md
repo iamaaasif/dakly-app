@@ -17,6 +17,7 @@ Stack: NestJS modular monolith (`apps/api`, `apps/worker`), Next.js (`apps/web`)
 - A feature uses another feature only through its exported service. Never import another feature's repository, job or internal file. `pnpm lint:boundaries` enforces this.
 - Every repository method takes `storeId` first and runs inside `TenantDatabase.forStore`. Every new table with shop data gets `store_id` and an RLS policy in the same PR.
 - Never read a store id from the request body, query string or a header. It comes from the verified session only.
+- The API runs on Fastify, not Express. Never use Express types or packages (`express`, `multer`, `helmet`, `@nestjs/platform-express`); see `docs/rules/http-fastify.md`. Verify webhook signatures against `req.rawBody`, never a re-serialised body.
 - Validate input once, at the edge, with a zod schema from `packages/contracts`. Inside the code, trust the types.
 - Services throw `AppError` with a code from the feature's `*.errors.ts`. Never throw `HttpException` from a service. Catch an error only when you can handle it or add context.
 - Vendors (Meta, WhatsApp BSP, bKash, Nagad, City Bank, couriers, Claude) live behind a driver interface in `packages/providers`. Vendor payload shapes never reach `packages/core`.
