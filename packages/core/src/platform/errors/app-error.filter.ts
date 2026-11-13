@@ -9,7 +9,7 @@ import type { ErrorResponse } from '@dakly/contracts/errors';
 import { AppError, PLATFORM_ERRORS } from './app-error';
 
 type HttpResponse = {
-  status(code: number): { json(body: ErrorResponse): void };
+  status(code: number): { send(body: ErrorResponse): void };
 };
 
 @Catch()
@@ -19,7 +19,7 @@ export class AppErrorFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<HttpResponse>();
     const { status, body } = this.toResponse(exception);
-    response.status(status).json(body);
+    response.status(status).send(body);
   }
 
   private toResponse(exception: unknown): { status: number; body: ErrorResponse } {

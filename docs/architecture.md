@@ -4,7 +4,7 @@ The full design is in the [Dakly architecture doc](https://claude.ai/artifact/7f
 
 ```text
 apps/
-  api/        NestJS HTTP API, webhook intake. Imports feature modules from core.
+  api/        NestJS HTTP API on Fastify, webhook intake. Imports feature modules from core.
   worker/     NestJS without HTTP. Same modules; runs BullMQ jobs and schedules.
   web/        Next.js shop app.
 packages/
