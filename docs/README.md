@@ -8,6 +8,7 @@ This folder is the single source of truth for building Dakly. If a doc here and 
 | [features/](features/)                         | One file per feature: behaviour, rules, screens, status                                | Before you build or change a feature            |
 | [design/](design/)                             | Prototype screenshots, prototype review, theme tokens                                  | Before you build a screen                       |
 | [development/](development/)                   | How to build a feature, step by step, and the release 1 order                          | Before you start a task                         |
+| [plans/](plans/core.md)                        | Task-by-task build plans for the current milestones, with assumed decisions            | Before you pick up a task                       |
 | [rules/](rules/)                               | Coding rules, one file per topic, each with wrong and right code                       | Before you write code in an area                |
 | [data/](data/README.md)                        | Release 1 tables, ER diagram, RLS, state machines, jobs, API routes                    | Before you write a repository, job or route     |
 | [adr/](adr/)                                   | Architecture decisions already made                                                    | Before you propose a change to the foundation   |

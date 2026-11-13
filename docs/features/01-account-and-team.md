@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                           |
 | Extension | Core                                                                                                  |
 | Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,store-settings}/` |
-| Tasks     | ACC-1 to ACC-8                                                                                        |
+| Tasks     | ACC-1 to ACC-15; build order in [plans/core.md](../plans/core.md)                                     |
 
 ## Purpose
 
