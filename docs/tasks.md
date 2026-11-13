@@ -186,7 +186,7 @@ Evidence and acceptance criteria: [development readiness review](reviews/develop
 
 | ID     | Task                                                                                         | Status    | Depends              | PR  | Notes                                                                                      |
 | ------ | -------------------------------------------------------------------------------------------- | --------- | -------------------- | --- | ------------------------------------------------------------------------------------------ |
-| REV-1  | Review all feature specifications, source patterns and checks; publish coverage and findings | In review | FND-5                |     | Review documents linked above; no business implementation changed                          |
+| REV-1  | Review all feature specifications, source patterns and checks; publish coverage and findings | In review | FND-5                | #5  | Review documents linked above; no business implementation changed                          |
 | REV-2  | Reconcile account, identity, consent, stock, payment and AI safety contradictions            | Todo      | REV-1                |     | Feature reviews include decisions and failure cases; F01 withdrawn (D25)                   |
 | REV-3  | Correct foundation error logging, origins, phone formats and validation error fields         | Todo      | REV-1                |     | Code foundation review; regression tests required                                          |
 | REV-4  | Establish atomic feature actions and shared queue name dispatch                              | Todo      | REV-1                |     | Prove stock/order/outbox rollback and mixed job routing                                    |
