@@ -94,7 +94,7 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 
 #### Plans and pricing
 
-- Plans: name, monthly and yearly price, VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
+- Plans: name, monthly and yearly price, trial length in days (0 for no trial, D34), VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
 - Add-ons: Chats AI add-on tiers.
 - Unit prices: SMS per message, WhatsApp margin over Meta's rate per category, AI credit packs.
 - Coupons: code, percent or fixed, duration (once, N months, forever), limit of uses, expiry, which plans.
