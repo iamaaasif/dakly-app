@@ -117,7 +117,7 @@ View Customers: list, profile, segments, insights. Edit Customers: add, edit, im
 
 ### Events
 
-customer.created, customer.updated, customer.merged, customer.consent\_changed, customer.stage\_changed (used by automations and notifications), segment.entered, segment.exited, import.completed.
+customer.created, customer.updated, customer.merged, customer.consent_changed, customer.stage_changed (used by automations and notifications), segment.entered, segment.exited, import.completed.
 
 ### Acceptance criteria
 
@@ -251,7 +251,7 @@ Identity
 
 1. A contact is a person in one store. It may start with no phone, known only by a channel identity (Messenger PSID, Instagram scoped id, WhatsApp id) in `contact_identities`.
 2. When a phone arrives (typed in chat, on an order, from WhatsApp), `CustomersService` looks for a contact with that phone.
-3. Merge rule (pending review must-fix): merge automatically only when the phone is verified, which means it came from WhatsApp itself or a confirmed order. A phone typed in a chat creates a "possible match" for staff to confirm. No separate OTP or phone-possession challenge is required for confirmed-order matching (D25). The confirmed-order match is a business rule, not proof of phone ownership; customer-history access follows its own permissions.
+3. Merge rule (pending review must-fix): merge automatically only when the phone is verified (D25). Verified means it came from WhatsApp itself, or an order with that phone was confirmed by a WhatsApp reply from that number, by the SMS confirmation link sent to that number, by staff, or was delivered. A phone typed in a chat, and an order confirmed only by a yes in that chat, create a "possible match" for staff to confirm. This stops someone typing another customer's number, confirming an order in Messenger and then asking the AI about that person's orders. No OTP or separate phone check is added.
 
 Kind is derived by the stats job: `lead` (has a phone, no delivered order), `customer` (at least one delivered order). Only `not_customer` is set by hand.
 
