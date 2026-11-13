@@ -16,52 +16,53 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M0. Foundation
 
-| ID    | Task                                                                                 | Status | Depends     | PR  | Notes                                                         |
-| ----- | ------------------------------------------------------------------------------------ | ------ | ----------- | --- | ------------------------------------------------------------- |
-| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                            | Done   |             | -   |                                                               |
-| FND-2 | Fastify adapter and Express ban                                                      | Done   | FND-1       | #1  |                                                               |
-| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | Done   | FND-1       | #2  | Merged                                                        |
-| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security      | Done   | FND-3       | #3  |                                                               |
-| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | Done   | FND-4       | #4  |                                                               |
-| DB-1  | UUID v7 ids generated in the app; switch existing tables                             | Done   |             | #6  | Done in DB-5; `customers` goes with CUS-1                     |
-| DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo   | DB-5        |     | Table in DB-5; relay and helper left                          |
-| DB-3  | Audit log table and `AuditService.record`                                            | Todo   | DB-5, REV-4 |     | Table in DB-5; `AuditService` left; [plan](plans/core.md)     |
-| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                         | Todo   |             |     | Needed by ACC-7; [plan](plans/core.md)                        |
-| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs               | Done   |             | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md) |
-| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                 | Todo   | DB-5        |     |                                                               |
-| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges         | Todo   | DB-5        |     | [growth.md](data/growth.md); all-store rollups                |
-| API-1 | Logging (nestjs-pino), request ids, Sentry                                           | Todo   |             |     | [plan](plans/core.md)                                         |
-| API-2 | Rate limiting with Valkey storage                                                    | Todo   |             |     | Valkey client and per-key limiter; [plan](plans/core.md)      |
-| API-3 | Route test that fails when a store route has no permission decorator                 | Todo   | ACC-3       |     | [plan](plans/core.md)                                         |
-| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton   | Todo   |             |     | [design/theme.md](design/theme.md)                            |
-| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields | Todo   | WEB-1       |     |                                                               |
-| WEB-3 | App shell: sidebar, header, store switcher, phone layout                             | Todo   | WEB-1       |     |                                                               |
-| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests        | Todo   |             |     |                                                               |
-| WEB-5 | Testing Library and Playwright set up with one end-to-end test                       | Todo   | WEB-3       |     |                                                               |
-| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                              | Todo   |             |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov    |
+| ID    | Task                                                                                     | Status | Depends     | PR  | Notes                                                         |
+| ----- | ---------------------------------------------------------------------------------------- | ------ | ----------- | --- | ------------------------------------------------------------- |
+| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                                | Done   |             | -   |                                                               |
+| FND-2 | Fastify adapter and Express ban                                                          | Done   | FND-1       | #1  |                                                               |
+| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint                 | Done   | FND-1       | #2  | Merged                                                        |
+| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security          | Done   | FND-3       | #3  |                                                               |
+| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules         | Done   | FND-4       | #4  |                                                               |
+| DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done   |             | #6  | Done in DB-5; `customers` goes with CUS-1                     |
+| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Todo   | DB-5        |     | Table in DB-5; relay and helper left                          |
+| DB-3  | Audit log table and `AuditService.record`                                                | Todo   | DB-5, REV-4 |     | Table in DB-5; `AuditService` left; [plan](plans/core.md)     |
+| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Todo   |             |     | Needed by ACC-7; [plan](plans/core.md)                        |
+| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done   |             | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md) |
+| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo   | DB-5        |     |                                                               |
+| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo   | DB-5        |     | [growth.md](data/growth.md); all-store rollups                |
+| API-1 | Logging (nestjs-pino), request ids, Sentry                                               | Todo   |             |     | [plan](plans/core.md)                                         |
+| API-2 | Rate limiting with Valkey storage                                                        | Todo   |             |     | Valkey client and per-key limiter; [plan](plans/core.md)      |
+| API-3 | Route test that fails when a route has no access rule or a store route has no permission | Todo   | ACC-3       |     | [plan](plans/core.md)                                         |
+| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Todo   |             |     | [design/theme.md](design/theme.md)                            |
+| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | Todo   | WEB-1       |     |                                                               |
+| WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Todo   | WEB-1       |     |                                                               |
+| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Todo   |             |     |                                                               |
+| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Todo   | WEB-3       |     |                                                               |
+| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Todo   |             |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov    |
 
 ## M1. Account, stores and team
 
 Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
-| ID     | Task                                                                                                  | Status  | Depends                    | PR  | Notes                                            |
-| ------ | ----------------------------------------------------------------------------------------------------- | ------- | -------------------------- | --- | ------------------------------------------------ |
-| ACC-4  | Permissions function, built-in roles, `@RequirePermission`                                            | Todo    |                            |     |                                                  |
-| ACC-3  | Sessions: cookie, Valkey cache, session guard, origin check, store switching                          | Todo    | ACC-4, API-2, REV-3        |     |                                                  |
-| ACC-1  | SMS driver interface, Mailpit dev driver                                                              | Todo    |                            |     | Real provider is ACC-14                          |
-| ACC-2  | Sign-up and sign-in by SMS code                                                                       | Todo    | ACC-1, ACC-3               |     |                                                  |
-| PAY-10 | Plan trial length, coupon duration and the starting plan catalogue as data                            | Todo    |                            |     | D34; [plan](plans/core.md)                       |
-| ACC-16 | Create the store and start the Free plan or a trial                                                   | Todo    | ACC-2, REV-4, DB-3, PAY-10 |     | Plan prices wait for Q1                          |
-| ACC-9  | Email driver: SendGrid for production, SMTP to Mailpit for local dev and tests; sign-in by email code | Todo    | ACC-2                      |     | D20, D22                                         |
-| ACC-10 | Password sign-in for phone and email; forgot password                                                 | Todo    | ACC-2                      |     | D20                                              |
-| ACC-11 | Google sign-in (OpenID Connect)                                                                       | Todo    | ACC-2                      |     | D20; dev uses a fake driver                      |
-| ACC-5  | Invite, accept and remove members                                                                     | Todo    | ACC-16                     |     |                                                  |
-| ACC-17 | Custom roles                                                                                          | Todo    | ACC-5                      |     |                                                  |
-| ACC-6  | Store switcher and store settings                                                                     | Todo    | ACC-16                     |     | Q3 extra stores                                  |
-| ACC-7  | Devices list and remote sign-out; TOTP 2-step                                                         | Todo    | ACC-3, DB-4                |     |                                                  |
-| ACC-14 | SMS provider driver for production                                                                    | Blocked | ACC-1                      |     | Waits for the SMS provider account and sender id |
-| ACC-15 | Cross-store test for every store route                                                                | Todo    | ACC-5, ACC-6, API-3        |     | M1 exit check                                    |
-| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | Todo    | ACC-5, WEB-3               |     |                                                  |
+| ID     | Task                                                                                                  | Status  | Depends                                                           | PR  | Notes                                            |
+| ------ | ----------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------- | --- | ------------------------------------------------ |
+| ACC-4  | Permissions function, built-in roles, `@RequirePermission`                                            | Todo    |                                                                   |     |                                                  |
+| ACC-3  | Sessions: cookie, Valkey cache, session guard, origin check, store switching                          | Todo    | ACC-4, API-2, REV-3                                               |     |                                                  |
+| ACC-1  | SMS driver interface, Mailpit dev driver                                                              | Todo    |                                                                   |     | Real provider is ACC-14                          |
+| ACC-2  | Sign-up and sign-in by SMS code                                                                       | Todo    | ACC-1, ACC-3                                                      |     |                                                  |
+| PAY-10 | Plan trial length, coupon duration and the starting plan catalogue as data                            | Todo    |                                                                   |     | D34; [plan](plans/core.md)                       |
+| ACC-16 | Create the store and start the Free plan or a trial                                                   | Todo    | ACC-2, REV-4, DB-3, PAY-10                                        |     | Plan prices wait for Q1                          |
+| ACC-9  | Email driver: SendGrid for production, SMTP to Mailpit for local dev and tests; sign-in by email code | Todo    | ACC-2                                                             |     | D20, D22                                         |
+| ACC-10 | Password sign-in for phone and email; forgot password                                                 | Todo    | ACC-2                                                             |     | D20                                              |
+| ACC-11 | Google sign-in (OpenID Connect)                                                                       | Todo    | ACC-2                                                             |     | D20; dev uses a fake driver                      |
+| ACC-5  | Invite, accept and remove members                                                                     | Todo    | ACC-16                                                            |     |                                                  |
+| ACC-17 | Custom roles                                                                                          | Todo    | ACC-5                                                             |     |                                                  |
+| ACC-18 | Transfer ownership                                                                                    | Todo    | ACC-5                                                             |     | Feature 01 rule 1                                |
+| ACC-6  | Store switcher and store settings                                                                     | Todo    | ACC-16                                                            |     | Q3 extra stores                                  |
+| ACC-7  | Devices list and remote sign-out; TOTP 2-step                                                         | Todo    | ACC-2, ACC-3, DB-4                                                |     |                                                  |
+| ACC-14 | SMS provider driver for production                                                                    | Blocked | ACC-1                                                             |     | Waits for the SMS provider account and sender id |
+| ACC-15 | Cross-store test for every store route                                                                | Todo    | ACC-5, ACC-6, ACC-17, ACC-18, API-3                               |     | M1 exit check                                    |
+| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | Todo    | ACC-6, ACC-7, ACC-11, ACC-16, ACC-17, ACC-18, WEB-3, WEB-4, WEB-5 |     |                                                  |
 
 ## M2. Shared plumbing
 
