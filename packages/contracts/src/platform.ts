@@ -21,3 +21,5 @@ export const filePurposes = [
 export const fileStatuses = ['pending', 'ready', 'rejected'] as const;
 export const taskSources = ['manual', 'automation', 'ai'] as const;
 export const taskStatuses = ['open', 'done', 'cancelled'] as const;
+// Daily rollups the maintenance job builds; raw rows are dropped only behind their watermark.
+export const maintenanceRollups = ['tracked_link_visit_days', 'ai_run_daily_metrics'] as const;

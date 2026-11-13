@@ -26,7 +26,7 @@ Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore 
 
 ## Global tables
 
-13 tables are global (the audit/outbox tables may carry a nullable store reference without being tenant tables): `users`, `sessions`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_audit_log`, `platform_settings`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only the auth, admin, billing and platform modules read them, by primary or unique key.
+14 tables are global (the audit/outbox tables may carry a nullable store reference without being tenant tables): `users`, `sessions`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_audit_log`, `platform_settings`, `maintenance_watermarks`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only the auth, admin, billing and platform modules read them, by primary or unique key.
 
 `support_grants` holds a `store_id` and has a policy like any shop table: a store can list the grants on itself, and the admin app reads a grant inside `forStore` for that store.
 

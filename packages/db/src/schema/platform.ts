@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   check,
+  date,
   index,
   jsonb,
   pgTable,
@@ -15,6 +16,7 @@ import {
   actorTypes,
   filePurposes,
   fileStatuses,
+  maintenanceRollups,
   notificationCategories,
   notificationStatuses,
   webhookEventStatuses,
@@ -186,4 +188,17 @@ export const files = pgTable(
     check('files_status', isOneOf(table.status, fileStatuses)),
     check('files_size', sql`${table.sizeBytes} > 0 and ${table.sizeBytes} <= 26214400`),
   ],
+);
+
+// How far each daily rollup is complete for every store (Asia/Dhaka days). The job advances it
+// only after all stores finish a day, and drop_expired_partitions() refuses to drop a month the
+// watermark has not passed, so a missed night can never lose raw rows (D31).
+export const maintenanceWatermarks = pgTable(
+  'maintenance_watermarks',
+  {
+    rollup: text('rollup', { enum: maintenanceRollups }).primaryKey(),
+    completedThrough: date('completed_through').notNull(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [check('maintenance_watermarks_rollup', isOneOf(table.rollup, maintenanceRollups))],
 );

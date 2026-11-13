@@ -184,7 +184,7 @@ describe('release schema behavior (Postgres)', () => {
     });
   });
 
-  it('drops expired visit and AI run months but never an audit log month', async () => {
+  it('drops an expired month only after its rollup is done, and never an audit log month', async () => {
     await withFixture(async ({ client }) => {
       for (const parent of ['tracked_link_visits', 'ai_runs', 'audit_log']) {
         await client.query(
@@ -193,14 +193,40 @@ describe('release schema behavior (Postgres)', () => {
         );
       }
       await client.query('set local role dakly_app');
+      const dropExpired = async () =>
+        (await client.query('select drop_expired_partitions() as dropped')).rows[0].dropped;
+      const setWatermark = (rollup: string, day: string) =>
+        client.query(
+          `insert into maintenance_watermarks (rollup, completed_through) values ($1, $2)
+          on conflict (rollup) do update set completed_through = excluded.completed_through`,
+          [rollup, day],
+        );
+
+      expect(await dropExpired()).toBe(0);
+      // 31 January UTC ends on 1 February in Dhaka, so that day must be rolled up too.
+      await setWatermark('tracked_link_visit_days', '2020-01-31');
+      expect(await dropExpired()).toBe(0);
+      await setWatermark('tracked_link_visit_days', '2020-02-01');
+      expect(await dropExpired()).toBe(1);
+      await setWatermark('ai_run_daily_metrics', '2020-02-01');
+      expect(await dropExpired()).toBe(1);
+      await expect(client.query('delete from maintenance_watermarks')).rejects.toMatchObject({
+        code: '42501',
+      });
+    });
+    await withFixture(async ({ client }) => {
+      await client.query(
+        `create table audit_log_y2020m01 partition of audit_log
+        for values from ('2020-01-01 00:00:00+00') to ('2020-02-01 00:00:00+00')`,
+      );
+      await client.query('set local role dakly_app');
       expect((await client.query('select drop_expired_partitions() as dropped')).rows).toEqual([
-        { dropped: 2 },
+        { dropped: 0 },
       ]);
       await client.query('reset role');
-      const left = await client.query(
-        "select relname from pg_class where relname like '%_y2020m01' order by relname",
-      );
-      expect(left.rows).toEqual([{ relname: 'audit_log_y2020m01' }]);
+      expect(
+        (await client.query("select to_regclass('audit_log_y2020m01') as kept")).rows[0].kept,
+      ).not.toBeNull();
     });
   });
 

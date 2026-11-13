@@ -28,12 +28,12 @@ Numbers per active store per day, averaged across stores. The busiest 5% of shop
 
 | Table                     | Kept in Postgres                                                     | Partitioning                    | After that                                                            | Rollup kept                                                        |
 | ------------------------- | -------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `messages`                | 12 months after the conversation's last message                      | None yet; trigger below         | Archived to R2 per conversation, then deleted                         | `contact_memories` summary, `contact_stats`, `store_daily_metrics` |
+| `messages`                | 12 months from when each message was sent                            | None yet; trigger below         | Archived to R2 by conversation and month, then deleted                | `contact_memories` summary, `contact_stats`, `store_daily_metrics` |
 | `webhook_events`          | 7 days; payload cleared once processed                               | None; daily purge in batches    | Deleted                                                               | none needed                                                        |
 | `outbox_events`           | 7 days after publish                                                 | None; daily purge in batches    | Deleted                                                               | none needed                                                        |
 | `ai_runs`                 | 13 months                                                            | Monthly on `created_at`         | Partition dropped by `drop_expired_partitions()`                      | Daily cost, tokens and runs by purpose in `store_daily_metrics`    |
 | `audit_log`               | 24 months                                                            | Monthly on `created_at`         | Month exported to R2 as gzipped JSON lines, then dropped by the owner | none; the export is the record                                     |
-| `tracked_link_visits`     | At least 90 days (whole months, so up to about 120)                  | Monthly on `occurred_at`        | Partition dropped by `drop_expired_partitions()`                      | `tracked_link_visit_days`: visits, unique visitors, first and last |
+| `tracked_link_visits`     | 13 months (exact tap times for the 372-day attribution rebuild)      | Monthly on `occurred_at`        | Partition dropped by `drop_expired_partitions()`                      | `tracked_link_visit_days`: visits, unique visitors, first and last |
 | `tracked_link_visit_days` | While its link exists                                                | None (one row per link per day) | Deleted with the link                                                 | is the rollup                                                      |
 | `usage_events`            | 13 months                                                            | None; trigger below             | Deleted in batches after the invoice period closes                    | Invoice lines and `store_daily_metrics`                            |
 | `campaign_recipients`     | 372 days after the campaign finishes (attribution rebuild, ADR 0008) | None; trigger below             | Deleted in batches                                                    | Campaign counters and `store_daily_metrics`                        |
@@ -49,6 +49,7 @@ Rules that come with this plan:
 - A partitioned table's primary key and every unique index include the partition column. `tracked_link_visits` dedupes on `(store_id, event_key, occurred_at)`: a retried write carries the tap's original time, so the key still catches it.
 - The app reaches partitioned rows only through the parent, where the store policy applies. Each partition has RLS on and no grants for `dakly_app`.
 - `ensure_monthly_partitions(3)` runs daily and keeps this month plus three ahead. If it stops for three months, writes to these tables fail, so the maintenance job alerts when fewer than two future months exist.
+- Raw rows are dropped only behind a recorded rollup. `maintenance_watermarks` holds the last Asia/Dhaka day each rollup has finished for every store. The job rolls up every day after the watermark, not only yesterday, so a missed night is caught up on the next run, and it moves the watermark only after all stores finish that day. `drop_expired_partitions()` skips any month whose last day is past the watermark.
 - The app role can drop expired AI run and link visit months, never an audit month. Audit months are dropped by the archive step running as the owner, after the R2 object is written and its row count checked.
 - Purges of unpartitioned tables delete in batches of 5,000 rows by primary key, so no single statement holds locks for long or bloats the table at once.
 
@@ -56,7 +57,7 @@ Rules that come with this plan:
 
 ADR 0008 keeps each redirect tap so attribution can be rebuilt. In its lean form a visit stores the link, the time, an event key and `visitor_hash`, an HMAC of the IP address and user agent under a key that changes every day. The raw IP and user agent are never stored, and the hash cannot be joined across days. It exists only to count unique visitors for that day.
 
-Each night the maintenance job rolls the previous Asia/Dhaka day into `tracked_link_visit_days`: visits, unique visitors, and the first and last tap time. Links are created per contact, so the daily row still says who tapped and when. An attribution rebuild uses the raw visits for the last 90 days and the daily rows before that. Using `first_at` and `last_at`, it can still decide whether a tap fell inside any 1, 3 or 7 day window. The only thing lost is the order of two different links tapped on the same day as the order, which the rebuild resolves by the later `first_at`.
+Raw taps are kept 13 months, which covers the 365-day attribution rebuild plus its 7-day lookback with exact times, so a rebuild picks the same link a live attribution would. Each night the maintenance job also rolls each finished Asia/Dhaka day into `tracked_link_visit_days` (visits, unique visitors, first and last tap time per link). Reports older than 13 months read these rows; attribution never does.
 
 ## Size estimates
 
@@ -73,17 +74,17 @@ Postgres size with indexes, at the plan above. "Steady" is the size once each ta
 | `webhook_events` (7 days) | 180 million            | 5 GB            | 1.8 billion             | 53 GB            |
 | `outbox_events` (7 days)  | 220 million            | 2 GB            | 2.2 billion             | 17 GB            |
 | `notifications`           | 18 million             | 1.4 GB          | 180 million             | 14 GB            |
-| `tracked_link_visits`     | 15 million             | 0.7 GB          | 146 million             | 7 GB             |
+| `tracked_link_visits`     | 15 million             | 2.4 GB          | 146 million             | 24 GB            |
 | `knowledge_chunks`        | not by time            | 6.5 GB          | not by time             | 65 GB            |
 | Orders and order lines    | 11 million             | 13 GB a year    | 110 million             | 130 GB a year    |
 | Contacts                  | 7 million              | 6 GB a year     | 73 million              | 58 GB a year     |
 | Daily rollups             | 33 million             | 2.3 GB a year   | 330 million             | 23 GB a year     |
-| Total after one year      |                        | about 220 GB    |                         | about 2.2 TB     |
-| Total after three years   |                        | about 270 GB    |                         | about 2.7 TB     |
+| Total after one year      |                        | about 225 GB    |                         | about 2.25 TB    |
+| Total after three years   |                        | about 275 GB    |                         | about 2.75 TB    |
 
 What this means:
 
-- 1,000 stores fit one managed Postgres node with room to spare. Most of the size is message history, which the 12-month window caps.
+- 1,000 stores fit one managed Postgres node with room to spare. Most of the size is message history. The 12-month window applies to each message's age, not to how long a chat has been quiet, so a customer who writes every week still has only 12 months of messages in Postgres; older months of that chat load from R2 when staff scroll back. AI memory does not need them, because the summary in `contact_memories` already carries what matters.
 - At 10,000 stores `messages` alone is about 1 TB. That is the point to partition it (trigger below) and to move read-heavy screens to a replica.
 - Knowledge vectors use 512 dimensions instead of 1536. OpenAI's `text-embedding-3` models return shortened vectors at a small accuracy cost, and this cuts vector storage from about 15 GB to 6.5 GB at 1,000 stores. Product search and photo vectors use the same size.
 - Without the time limits in this plan, message, audit and AI run history alone would add about 130 GB a year at 1,000 stores and never stop growing.

@@ -1,3 +1,9 @@
+CREATE TABLE "maintenance_watermarks" (
+	"rollup" text PRIMARY KEY NOT NULL,
+	"completed_through" date NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "maintenance_watermarks_rollup" CHECK ("maintenance_watermarks"."rollup" in ('tracked_link_visit_days', 'ai_run_daily_metrics'))
+);--> statement-breakpoint
 CREATE TABLE "platform_settings" (
 	"key" text PRIMARY KEY NOT NULL,
 	"value" jsonb NOT NULL,
@@ -2010,10 +2016,11 @@ REVOKE EXECUTE ON FUNCTION ensure_monthly_partitions(integer) FROM PUBLIC;--> st
 GRANT EXECUTE ON FUNCTION ensure_monthly_partitions(integer) TO dakly_app;--> statement-breakpoint
 SELECT ensure_monthly_partitions(3);--> statement-breakpoint
 
--- Drops whole months past retention: AI runs after 13 months (their cost is already in
--- store_daily_metrics), link visits after 90 days (counts are in tracked_link_visit_days).
--- Audit log partitions are never dropped here: the archive job exports them to R2 first and
--- drops them as the owner, so the app role can never shorten the audit history.
+-- Drops whole months past retention: AI runs and link visits after 13 months, which covers the
+-- 372-day attribution rebuild with exact tap times (ADR 0008). A month is dropped only when the
+-- rollup watermark has passed its last Asia/Dhaka day, so a missed or failed night keeps the raw
+-- rows until the job catches up. Audit log months are never dropped here: the archive job exports
+-- them to R2 first and drops them as the owner, so the app role can never shorten audit history.
 CREATE FUNCTION drop_expired_partitions() RETURNS integer
   LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
@@ -2026,11 +2033,12 @@ BEGIN
     JOIN pg_catalog.pg_class parent ON parent.oid = h.inhparent
     JOIN pg_catalog.pg_class child ON child.oid = h.inhrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = parent.relnamespace AND n.nspname = 'public'
+    JOIN maintenance_watermarks w ON w.rollup = CASE parent.relname
+      WHEN 'ai_runs' THEN 'ai_run_daily_metrics' WHEN 'tracked_link_visits' THEN 'tracked_link_visit_days' END
     WHERE child.relname ~ '_y[0-9]{4}m[0-9]{2}$'
-      AND ((parent.relname = 'ai_runs'
-            AND to_date(right(child.relname, 7), 'YYYY"m"MM') + interval '1 month' <= now() AT TIME ZONE 'UTC' - interval '13 months')
-        OR (parent.relname = 'tracked_link_visits'
-            AND to_date(right(child.relname, 7), 'YYYY"m"MM') + interval '1 month' <= now() AT TIME ZONE 'UTC' - interval '90 days'))
+      AND to_date(right(child.relname, 7), 'YYYY"m"MM') + interval '1 month' <= now() AT TIME ZONE 'UTC' - interval '13 months'
+      -- The month's last instant falls on this Dhaka date (UTC+6), so the rollup must cover it.
+      AND w.completed_through >= (to_date(right(child.relname, 7), 'YYYY"m"MM') + interval '1 month')::date
   LOOP
     EXECUTE format('DROP TABLE public.%I', expired.relname);
     dropped := dropped + 1;
@@ -2307,6 +2315,8 @@ GRANT UPDATE ("status", "paid_at") ON "invoices" TO dakly_app;--> statement-brea
 REVOKE SELECT, UPDATE, DELETE ON "outbox_events" FROM dakly_app;--> statement-breakpoint
 
 REVOKE DELETE ON "webhook_events" FROM dakly_app;--> statement-breakpoint
+-- A watermark only moves forward; nothing deletes one.
+REVOKE DELETE ON "maintenance_watermarks" FROM dakly_app;--> statement-breakpoint
 
 
 -- Entry points that start without a store (webhooks, public pages, callbacks, sign-in) and

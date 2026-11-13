@@ -205,7 +205,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 2. Attribution: an order is attributed to the last message or post the contact tapped or read within the window (default 7 days). Cancelled and returned orders are removed.
 3. Reports read summary tables. Incremental outbox processing updates affected store/day/metric rows within five minutes of the source commit, deduplicates event ids and restates original reporting days for late returns and corrections. A nightly reconciliation repairs missed or divergent summaries. Loading a shop with 50,000 customers in under 2 seconds remains a performance acceptance target, not a measured result of this schema PR.
 4. All periods are in Asia/Dhaka days.
-5. A 365-day attribution rebuild needs 372 days of eligible touch evidence (including the maximum 7-day lookback). Keep workflow step evidence through 372 days after run completion. Link taps are kept one row per tap for 90 days and one row per link per day after that (D31); first/last tap counters on the link alone cannot rebuild attribution.
+5. A 365-day attribution rebuild needs 372 days of eligible touch evidence (including the maximum 7-day lookback). Keep workflow step evidence through 372 days after run completion. Link taps are kept one row per tap, with exact times, for 13 months (D31); first/last tap counters on the link alone cannot rebuild attribution.
 
 ### Rules
 
@@ -223,7 +223,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 ### Acceptance
 
 - Given the headline says 277 orders from marketing, then the funnel's last step also says 277.
-- Given an attribution window changes after 90 days, then a 365-day rebuild still finds eligible historic automation sends, and link taps older than 90 days from the daily rows.
+- Given an attribution window changes after 90 days, then a 365-day rebuild still finds eligible historic automation sends, and the exact link taps from up to 372 days back.
 - Given a late return or correction, then all affected summaries restate the original reporting dates within five minutes and nightly reconciliation produces the same totals.
 
 ## Open questions

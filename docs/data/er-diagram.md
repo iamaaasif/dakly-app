@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0003_snapshot.json`: **74 tables, 1008 columns, 295 explicit indexes and 241 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0003_snapshot.json`: **75 tables, 1011 columns, 295 explicit indexes and 241 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1436,6 +1436,11 @@ erDiagram
         uuid uploaded_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone expires_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    maintenance_watermarks {
+        text rollup PK "NOT NULL; text"
+        date completed_through "NOT NULL; date"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
     store_daily_metrics {
         uuid store_id PK,FK "NOT NULL; uuid"

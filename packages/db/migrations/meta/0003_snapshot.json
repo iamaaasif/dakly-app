@@ -13515,6 +13515,43 @@
       },
       "isRLSEnabled": false
     },
+    "public.maintenance_watermarks": {
+      "name": "maintenance_watermarks",
+      "schema": "",
+      "columns": {
+        "rollup": {
+          "name": "rollup",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "completed_through": {
+          "name": "completed_through",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "maintenance_watermarks_rollup": {
+          "name": "maintenance_watermarks_rollup",
+          "value": "\"maintenance_watermarks\".\"rollup\" in ('tracked_link_visit_days', 'ai_run_daily_metrics')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.notifications": {
       "name": "notifications",
       "schema": "",
