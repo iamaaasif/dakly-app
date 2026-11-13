@@ -31,6 +31,12 @@ pnpm dev
 ```
 
 The API runs on http://localhost:4000 (`GET /health`), the web app on http://localhost:3000.
+The web client calls `/api/*` on its own origin. Next.js forwards that prefix to
+the local API on port 4000; the production load balancer provides the same route.
+
+`REDIS_URL` accepts `redis://` or `rediss://` (TLS), including encoded credentials.
+An optional database path such as `/1` selects that logical database. Invalid
+schemes, negative database numbers and non-integer paths fail at startup.
 
 ### Resetting the local database
 

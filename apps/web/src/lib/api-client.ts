@@ -1,11 +1,10 @@
 import type { ErrorResponse } from '@dakly/contracts/errors';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
 class ApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly fields?: ErrorResponse['error']['fields'],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -13,7 +12,7 @@ class ApiError extends Error {
 }
 
 export async function apiPost<TResponse>(path: string, body: unknown): Promise<TResponse> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`/api${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -21,7 +20,7 @@ export async function apiPost<TResponse>(path: string, body: unknown): Promise<T
   });
   if (!response.ok) {
     const { error } = (await response.json()) as ErrorResponse;
-    throw new ApiError(error.code, error.message);
+    throw new ApiError(error.code, error.message, error.fields);
   }
   return (await response.json()) as TResponse;
 }

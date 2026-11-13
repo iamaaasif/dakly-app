@@ -24,6 +24,8 @@
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-fastify": "^11.2.9",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.15.0",
     "pg": "^8.16.0",

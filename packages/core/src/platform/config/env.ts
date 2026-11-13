@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { redisUrlSchema } from '../queue/redis-connection';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.url(),
-  REDIS_URL: z.url(),
+  REDIS_URL: redisUrlSchema,
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 

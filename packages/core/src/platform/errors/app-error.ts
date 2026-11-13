@@ -1,3 +1,5 @@
+import type { ValidationField } from '@dakly/contracts/errors';
+
 export type ErrorDefinition = {
   status: number;
   message: string;
@@ -6,16 +8,18 @@ export type ErrorDefinition = {
 export type ErrorCatalog = Record<string, ErrorDefinition>;
 
 // Services throw AppError, never HttpException. The global filter turns it into the
-// { error: { code, message } } response. See docs/rules/errors.md.
+// { error: { code, message } } response. See docs/rules/validation-and-errors.md.
 export class AppError extends Error {
   readonly code: string;
   readonly status: number;
+  readonly fields?: ValidationField[];
 
-  constructor(code: string, definition: ErrorDefinition) {
+  constructor(code: string, definition: ErrorDefinition, fields?: ValidationField[]) {
     super(definition.message);
     this.name = 'AppError';
     this.code = code;
     this.status = definition.status;
+    this.fields = fields;
   }
 }
 

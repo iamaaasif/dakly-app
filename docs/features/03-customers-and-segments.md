@@ -22,6 +22,23 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - D26: another person's delivery details belong to the order. They do not replace the buyer profile, merge contacts or move purchase history. No OTP is required.
 - D27: self-delivery also saves the buyer's own phone on their profile, subject to the rules below. Saving a phone is separate from verification, merging and marketing consent.
 
+## Existing customer example
+
+The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
+`8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
+`01XXXXXXXXX` format before API or form validation finishes.
+
+Validation failures return `VALIDATION_FAILED` with `error.fields`, a list of
+`{ path, message }` entries for every invalid field. Paths use dots for nested
+fields and array indexes. The response contains no submitted values. Other
+business errors keep their code and message without field details. The web
+client retains these details for forms.
+
+The web client sends credentials to `/api/customers` on the web origin. Next.js
+forwards `/api/*` to `http://localhost:4000/*` in local development; production
+routes that prefix to the API through the load balancer. No CORS is needed.
+The customer API still requires a verified store session.
+
 ## Product requirements
 
 ### What it is for

@@ -24,7 +24,16 @@ export class AppErrorFilter implements ExceptionFilter {
 
   private toResponse(exception: unknown): { status: number; body: ErrorResponse } {
     if (exception instanceof AppError) {
-      return { status: exception.status, body: errorBody(exception.code, exception.message) };
+      return {
+        status: exception.status,
+        body: {
+          error: {
+            code: exception.code,
+            message: exception.message,
+            ...(exception.fields && { fields: exception.fields }),
+          },
+        },
+      };
     }
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
