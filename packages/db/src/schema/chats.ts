@@ -27,7 +27,6 @@ import {
   messageSourceTypes,
   messageStatuses,
 } from '@dakly/contracts/chats';
-import { aiRuns } from './ai';
 import { users } from './auth';
 import { channelConnections } from './channels';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
@@ -153,7 +152,8 @@ export const messages = pgTable(
     errorCode: text('error_code'),
     sourceType: text('source_type', { enum: messageSourceTypes }).notNull().default('chat'),
     sourceId: uuid('source_id'),
-    aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
+    // Plain reference: ai_runs is partitioned by month and expires (docs/data/growth.md).
+    aiRunId: uuid('ai_run_id'),
     // CHAT-R8: the knowledge items, products and rules this AI reply used.
     aiSources: jsonb('ai_sources'),
     aiRating: text('ai_rating', { enum: aiRatings }),
@@ -171,11 +171,6 @@ export const messages = pgTable(
       columns: [table.storeId, table.conversationId],
       foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
     }),
-    foreignKey({
-      name: 'messages_ai_run_id_store_fk',
-      columns: [table.storeId, table.aiRunId],
-      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
-    }),
 
     uniqueIndex('messages_conversation_external_id_key')
       .on(table.conversationId, table.externalId)
@@ -192,7 +187,6 @@ export const messages = pgTable(
       .on(table.storeId, table.ratedAt)
       .where(sql`${table.aiRating} is not null`),
     index('messages_author_user_id_idx').on(table.authorUserId),
-    index('messages_ai_run_id_idx').on(table.aiRunId),
     index('messages_rated_by_user_id_idx').on(table.ratedByUserId),
     check('messages_direction', isOneOf(table.direction, messageDirections)),
     check('messages_author_type', isOneOf(table.authorType, messageAuthorTypes)),

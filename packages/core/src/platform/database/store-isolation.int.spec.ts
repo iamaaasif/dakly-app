@@ -61,7 +61,7 @@ describe('store isolation (Postgres)', () => {
         (select count(*)::int from pg_policies p where p.tablename = c.relname
           and p.qual like '%app.store_id%' and p.with_check like '%app.store_id%') as policies
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and c.relkind = 'r'
+      where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relispartition
         and exists (select 1 from information_schema.columns col
           where col.table_schema = 'public' and col.table_name = c.relname and col.column_name = 'store_id')`);
 
@@ -70,6 +70,22 @@ describe('store isolation (Postgres)', () => {
       .filter((row) => !row.has_rls || row.policies < 1)
       .map((row) => row.table_name);
     expect(unprotected).toEqual([]);
+  });
+
+  it('gives the app no direct access to a partition, so every read goes through the parent policy', async () => {
+    await admin.db.execute(sql`select ensure_monthly_partitions(3)`);
+    const result = await admin.db.execute<{
+      relname: string;
+      relrowsecurity: boolean;
+      readable: boolean;
+    }>(sql`
+      select c.relname, c.relrowsecurity,
+        has_table_privilege('dakly_app', c.oid, 'SELECT, INSERT, UPDATE, DELETE') as readable
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r' and c.relispartition`);
+
+    expect(result.rows.length).toBeGreaterThanOrEqual(12);
+    expect(result.rows.filter((row) => !row.relrowsecurity || row.readable)).toEqual([]);
   });
 
   it('never forces RLS on the table owner, so migrations and backfills keep working', async () => {

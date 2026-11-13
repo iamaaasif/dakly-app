@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0004_snapshot.json`: **73 tables, 1000 columns, 300 explicit indexes and 246 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0003_snapshot.json`: **74 tables, 1008 columns, 295 explicit indexes and 241 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -254,10 +254,8 @@ erDiagram
     stores ||..o{ messages : "store_id"
     conversations ||..o{ messages : "conversation_id"
     users |o..o{ messages : "author_user_id"
-    ai_runs |o..o{ messages : "ai_run_id"
     users |o..o{ messages : "rated_by_user_id"
     conversations ||..o{ messages : "store_id, conversation_id"
-    ai_runs |o..o{ messages : "store_id, ai_run_id"
     stores ||..o{ social_comments : "store_id"
     channel_connections ||..o{ social_comments : "channel_connection_id"
     post_targets |o..o{ social_comments : "post_target_id"
@@ -493,7 +491,7 @@ erDiagram
         text error_code "NULL; text"
         text source_type "NOT NULL; text"
         uuid source_id "NULL; uuid"
-        uuid ai_run_id FK "NULL; uuid"
+        uuid ai_run_id "NULL; uuid"
         jsonb ai_sources "NULL; jsonb"
         text ai_rating "NULL; text"
         text ai_rating_reason "NULL; text"
@@ -617,8 +615,8 @@ erDiagram
         boolean is_visible_in_order_link "NOT NULL; boolean"
         text status "NOT NULL; text"
         integer ask_count "NOT NULL; integer"
-        vector_1536_ search_embedding "NULL; vector(1536)"
-        vector_1536_ image_embedding "NULL; vector(1536)"
+        vector_512_ search_embedding "NULL; vector(512)"
+        vector_512_ image_embedding "NULL; vector(512)"
         text embedding_model "NULL; text"
         text search_text_hash "NULL; text"
         text external_ref "NULL; text"
@@ -847,8 +845,6 @@ erDiagram
     stores ||..o{ ai_runs : "store_id"
     stores ||..o{ assistant_messages : "store_id"
     users ||..o{ assistant_messages : "user_id"
-    ai_runs |o..o{ assistant_messages : "ai_run_id"
-    ai_runs |o..o{ assistant_messages : "store_id, ai_run_id"
     ai_agent_settings {
         uuid store_id PK,FK "NOT NULL; uuid"
         boolean is_auto_reply_on "NOT NULL; boolean"
@@ -887,7 +883,7 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         uuid knowledge_item_id FK "NOT NULL; uuid"
         text content "NOT NULL; text"
-        vector_1536_ embedding "NOT NULL; vector(1536)"
+        vector_512_ embedding "NOT NULL; vector(512)"
         text embedding_model "NOT NULL; text"
         integer token_count "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
@@ -922,7 +918,7 @@ erDiagram
         text outcome "NOT NULL; text"
         text error_code "NULL; text"
         integer latency_ms "NULL; integer"
-        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at PK "NOT NULL; timestamp with time zone"
     }
     assistant_messages {
         uuid id PK "NOT NULL; uuid"
@@ -932,7 +928,7 @@ erDiagram
         text role "NOT NULL; text"
         text content "NOT NULL; text"
         jsonb data_used "NULL; jsonb"
-        uuid ai_run_id FK "NULL; uuid"
+        uuid ai_run_id "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -947,13 +943,9 @@ erDiagram
     users |o..o{ brand_profiles : "updated_by_user_id"
     stores ||..o{ content_pieces : "store_id"
     users |o..o{ content_pieces : "created_by_user_id"
-    ai_runs |o..o{ content_pieces : "ai_run_id"
-    ai_runs |o..o{ content_pieces : "store_id, ai_run_id"
     stores ||..o{ posts : "store_id"
-    ai_runs |o..o{ posts : "ai_run_id"
     users |o..o{ posts : "created_by_user_id"
     users |o..o{ posts : "approved_by_user_id"
-    ai_runs |o..o{ posts : "store_id, ai_run_id"
     stores ||..o{ post_targets : "store_id"
     posts ||..o{ post_targets : "post_id"
     channel_connections ||..o{ post_targets : "channel_connection_id"
@@ -982,6 +974,9 @@ erDiagram
     stores ||..o{ tracked_link_visits : "store_id"
     tracked_links ||..o{ tracked_link_visits : "tracked_link_id"
     tracked_links ||..o{ tracked_link_visits : "store_id, tracked_link_id"
+    stores ||..o{ tracked_link_visit_days : "store_id"
+    tracked_links ||--o{ tracked_link_visit_days : "tracked_link_id"
+    tracked_links ||..o{ tracked_link_visit_days : "store_id, tracked_link_id"
     stores ||..o{ automations : "store_id"
     automation_versions |o..o{ automations : "published_version_id"
     users |o..o{ automations : "created_by_user_id"
@@ -1025,7 +1020,7 @@ erDiagram
         text body "NOT NULL; text"
         uuid created_by_user_id FK "NULL; uuid"
         boolean is_ai_written "NOT NULL; boolean"
-        uuid ai_run_id FK "NULL; uuid"
+        uuid ai_run_id "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -1038,7 +1033,7 @@ erDiagram
         text link_url "NULL; text"
         text first_comment "NULL; text"
         boolean is_ai_written "NOT NULL; boolean"
-        uuid ai_run_id FK "NULL; uuid"
+        uuid ai_run_id "NULL; uuid"
         uuid created_by_user_id FK "NULL; uuid"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
@@ -1158,7 +1153,17 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         uuid tracked_link_id FK "NOT NULL; uuid"
         text event_key "NOT NULL; text"
-        timestamp_with_time_zone occurred_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone occurred_at PK "NOT NULL; timestamp with time zone"
+        bytea visitor_hash "NULL; bytea"
+    }
+    tracked_link_visit_days {
+        uuid store_id FK "NOT NULL; uuid"
+        uuid tracked_link_id PK,FK "NOT NULL; uuid"
+        date day PK "NOT NULL; date"
+        integer visits "NOT NULL; integer"
+        integer unique_visitors "NOT NULL; integer"
+        timestamp_with_time_zone first_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone last_at "NOT NULL; timestamp with time zone"
     }
     automations {
         uuid id PK "NOT NULL; uuid"
@@ -1376,7 +1381,7 @@ erDiagram
         jsonb after "NULL; jsonb"
         text reason "NULL; text"
         inet ip "NULL; inet"
-        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at PK "NOT NULL; timestamp with time zone"
     }
     outbox_events {
         uuid id PK "NOT NULL; uuid"
@@ -1479,8 +1484,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `ai_runs_store_id_stores_id_fk`                                      | `ai_runs(store_id)`                                       | `stores(id)`                                | no action |
 | `assistant_messages_store_id_stores_id_fk`                           | `assistant_messages(store_id)`                            | `stores(id)`                                | no action |
 | `assistant_messages_user_id_users_id_fk`                             | `assistant_messages(user_id)`                             | `users(id)`                                 | cascade   |
-| `assistant_messages_ai_run_id_ai_runs_id_fk`                         | `assistant_messages(ai_run_id)`                           | `ai_runs(id)`                               | no action |
-| `assistant_messages_ai_run_id_store_fk`                              | `assistant_messages(store_id, ai_run_id)`                 | `ai_runs(store_id, id)`                     | no action |
 | `knowledge_chunks_store_id_stores_id_fk`                             | `knowledge_chunks(store_id)`                              | `stores(id)`                                | no action |
 | `knowledge_chunks_knowledge_item_id_knowledge_items_id_fk`           | `knowledge_chunks(knowledge_item_id)`                     | `knowledge_items(id)`                       | cascade   |
 | `knowledge_chunks_knowledge_item_id_store_fk`                        | `knowledge_chunks(store_id, knowledge_item_id)`           | `knowledge_items(store_id, id)`             | cascade   |
@@ -1539,6 +1542,9 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `campaigns_created_by_user_id_users_id_fk`                           | `campaigns(created_by_user_id)`                           | `users(id)`                                 | no action |
 | `campaigns_channel_connection_id_store_fk`                           | `campaigns(store_id, channel_connection_id)`              | `channel_connections(store_id, id)`         | no action |
 | `campaigns_whatsapp_template_id_store_fk`                            | `campaigns(store_id, whatsapp_template_id)`               | `whatsapp_templates(store_id, id)`          | no action |
+| `tracked_link_visit_days_store_id_stores_id_fk`                      | `tracked_link_visit_days(store_id)`                       | `stores(id)`                                | no action |
+| `tracked_link_visit_days_tracked_link_id_tracked_links_id_fk`        | `tracked_link_visit_days(tracked_link_id)`                | `tracked_links(id)`                         | cascade   |
+| `tracked_link_visit_days_tracked_link_id_store_fk`                   | `tracked_link_visit_days(store_id, tracked_link_id)`      | `tracked_links(store_id, id)`               | cascade   |
 | `tracked_link_visits_store_id_stores_id_fk`                          | `tracked_link_visits(store_id)`                           | `stores(id)`                                | no action |
 | `tracked_link_visits_tracked_link_id_tracked_links_id_fk`            | `tracked_link_visits(tracked_link_id)`                    | `tracked_links(id)`                         | cascade   |
 | `tracked_link_visits_tracked_link_id_store_fk`                       | `tracked_link_visits(store_id, tracked_link_id)`          | `tracked_links(store_id, id)`               | cascade   |
@@ -1565,10 +1571,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `messages_store_id_stores_id_fk`                                     | `messages(store_id)`                                      | `stores(id)`                                | no action |
 | `messages_conversation_id_conversations_id_fk`                       | `messages(conversation_id)`                               | `conversations(id)`                         | no action |
 | `messages_author_user_id_users_id_fk`                                | `messages(author_user_id)`                                | `users(id)`                                 | no action |
-| `messages_ai_run_id_ai_runs_id_fk`                                   | `messages(ai_run_id)`                                     | `ai_runs(id)`                               | no action |
 | `messages_rated_by_user_id_users_id_fk`                              | `messages(rated_by_user_id)`                              | `users(id)`                                 | no action |
 | `messages_conversation_id_store_fk`                                  | `messages(store_id, conversation_id)`                     | `conversations(store_id, id)`               | no action |
-| `messages_ai_run_id_store_fk`                                        | `messages(store_id, ai_run_id)`                           | `ai_runs(store_id, id)`                     | no action |
 | `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
 | `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
 | `social_comments_store_id_stores_id_fk`                              | `social_comments(store_id)`                               | `stores(id)`                                | no action |
@@ -1580,6 +1584,10 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `social_comments_post_target_id_store_fk`                            | `social_comments(store_id, post_target_id)`               | `post_targets(store_id, id)`                | no action |
 | `social_comments_contact_id_store_fk`                                | `social_comments(store_id, contact_id)`                   | `contacts(store_id, id)`                    | no action |
 | `social_comments_conversation_id_store_fk`                           | `social_comments(store_id, conversation_id)`              | `conversations(store_id, id)`               | no action |
+| `contact_memories_contact_id_contacts_id_fk`                         | `contact_memories(contact_id)`                            | `contacts(id)`                              | cascade   |
+| `contact_memories_store_id_stores_id_fk`                             | `contact_memories(store_id)`                              | `stores(id)`                                | no action |
+| `contact_memories_edited_by_user_id_users_id_fk`                     | `contact_memories(edited_by_user_id)`                     | `users(id)`                                 | no action |
+| `contact_memories_contact_id_store_fk`                               | `contact_memories(store_id, contact_id)`                  | `contacts(store_id, id)`                    | cascade   |
 | `consents_store_id_stores_id_fk`                                     | `consents(store_id)`                                      | `stores(id)`                                | no action |
 | `consents_contact_id_contacts_id_fk`                                 | `consents(contact_id)`                                    | `contacts(id)`                              | cascade   |
 | `consents_captured_by_user_id_users_id_fk`                           | `consents(captured_by_user_id)`                           | `users(id)`                                 | no action |
@@ -1595,10 +1603,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_match_suggestions_decided_by_user_id_users_id_fk`           | `contact_match_suggestions(decided_by_user_id)`           | `users(id)`                                 | no action |
 | `contact_match_suggestions_contact_id_store_fk`                      | `contact_match_suggestions(store_id, contact_id)`         | `contacts(store_id, id)`                    | cascade   |
 | `contact_match_suggestions_matched_contact_id_store_fk`              | `contact_match_suggestions(store_id, matched_contact_id)` | `contacts(store_id, id)`                    | cascade   |
-| `contact_memories_contact_id_contacts_id_fk`                         | `contact_memories(contact_id)`                            | `contacts(id)`                              | cascade   |
-| `contact_memories_store_id_stores_id_fk`                             | `contact_memories(store_id)`                              | `stores(id)`                                | no action |
-| `contact_memories_edited_by_user_id_users_id_fk`                     | `contact_memories(edited_by_user_id)`                     | `users(id)`                                 | no action |
-| `contact_memories_contact_id_store_fk`                               | `contact_memories(store_id, contact_id)`                  | `contacts(store_id, id)`                    | cascade   |
 | `contact_merges_store_id_stores_id_fk`                               | `contact_merges(store_id)`                                | `stores(id)`                                | no action |
 | `contact_merges_kept_contact_id_contacts_id_fk`                      | `contact_merges(kept_contact_id)`                         | `contacts(id)`                              | set null  |
 | `contact_merges_merged_contact_id_contacts_id_fk`                    | `contact_merges(merged_contact_id)`                       | `contacts(id)`                              | set null  |
@@ -1682,18 +1686,14 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `brand_profiles_updated_by_user_id_users_id_fk`                      | `brand_profiles(updated_by_user_id)`                      | `users(id)`                                 | no action |
 | `content_pieces_store_id_stores_id_fk`                               | `content_pieces(store_id)`                                | `stores(id)`                                | no action |
 | `content_pieces_created_by_user_id_users_id_fk`                      | `content_pieces(created_by_user_id)`                      | `users(id)`                                 | no action |
-| `content_pieces_ai_run_id_ai_runs_id_fk`                             | `content_pieces(ai_run_id)`                               | `ai_runs(id)`                               | no action |
-| `content_pieces_ai_run_id_store_fk`                                  | `content_pieces(store_id, ai_run_id)`                     | `ai_runs(store_id, id)`                     | no action |
 | `post_targets_store_id_stores_id_fk`                                 | `post_targets(store_id)`                                  | `stores(id)`                                | no action |
 | `post_targets_post_id_posts_id_fk`                                   | `post_targets(post_id)`                                   | `posts(id)`                                 | cascade   |
 | `post_targets_channel_connection_id_channel_connections_id_fk`       | `post_targets(channel_connection_id)`                     | `channel_connections(id)`                   | no action |
 | `post_targets_post_id_store_fk`                                      | `post_targets(store_id, post_id)`                         | `posts(store_id, id)`                       | cascade   |
 | `post_targets_channel_connection_id_store_fk`                        | `post_targets(store_id, channel_connection_id)`           | `channel_connections(store_id, id)`         | no action |
 | `posts_store_id_stores_id_fk`                                        | `posts(store_id)`                                         | `stores(id)`                                | no action |
-| `posts_ai_run_id_ai_runs_id_fk`                                      | `posts(ai_run_id)`                                        | `ai_runs(id)`                               | no action |
 | `posts_created_by_user_id_users_id_fk`                               | `posts(created_by_user_id)`                               | `users(id)`                                 | no action |
 | `posts_approved_by_user_id_users_id_fk`                              | `posts(approved_by_user_id)`                              | `users(id)`                                 | no action |
-| `posts_ai_run_id_store_fk`                                           | `posts(store_id, ai_run_id)`                              | `ai_runs(store_id, id)`                     | no action |
 | `store_counters_store_id_stores_id_fk`                               | `store_counters(store_id)`                                | `stores(id)`                                | no action |
 | `tasks_store_id_stores_id_fk`                                        | `tasks(store_id)`                                         | `stores(id)`                                | no action |
 | `tasks_contact_id_contacts_id_fk`                                    | `tasks(contact_id)`                                       | `contacts(id)`                              | cascade   |

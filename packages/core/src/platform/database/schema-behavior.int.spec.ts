@@ -184,6 +184,58 @@ describe('release schema behavior (Postgres)', () => {
     });
   });
 
+  it('drops expired visit and AI run months but never an audit log month', async () => {
+    await withFixture(async ({ client }) => {
+      for (const parent of ['tracked_link_visits', 'ai_runs', 'audit_log']) {
+        await client.query(
+          `create table ${parent}_y2020m01 partition of ${parent}
+          for values from ('2020-01-01 00:00:00+00') to ('2020-02-01 00:00:00+00')`,
+        );
+      }
+      await client.query('set local role dakly_app');
+      expect((await client.query('select drop_expired_partitions() as dropped')).rows).toEqual([
+        { dropped: 2 },
+      ]);
+      await client.query('reset role');
+      const left = await client.query(
+        "select relname from pg_class where relname like '%_y2020m01' order by relname",
+      );
+      expect(left.rows).toEqual([{ relname: 'audit_log_y2020m01' }]);
+    });
+  });
+
+  it('keeps daily link counts per store and refuses a count that cannot be true', async () => {
+    await withFixture(async ({ client, storeId }) => {
+      const linkId = await insertTrackedLink(client, storeId);
+      await asApp(client, storeId);
+      await client.query(
+        `insert into tracked_link_visit_days (store_id, tracked_link_id, day, visits, unique_visitors, first_at, last_at)
+        values ($1, $2, '2026-11-01', 5, 3, now(), now())`,
+        [storeId, linkId],
+      );
+      await expect(
+        client.query(
+          `insert into tracked_link_visit_days (store_id, tracked_link_id, day, visits, unique_visitors, first_at, last_at)
+          values ($1, $2, '2026-11-02', 2, 3, now(), now())`,
+          [storeId, linkId],
+        ),
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+    await withFixture(async ({ client, storeId }) => {
+      const otherStoreId = await insertStore(client);
+      const linkId = await insertTrackedLink(client, storeId);
+      await asApp(client, otherStoreId);
+      expect((await client.query('select day from tracked_link_visit_days')).rows).toEqual([]);
+      await expect(
+        client.query(
+          `insert into tracked_link_visit_days (store_id, tracked_link_id, day, visits, unique_visitors, first_at, last_at)
+          values ($1, $2, '2026-11-01', 1, 1, now(), now())`,
+          [storeId, linkId],
+        ),
+      ).rejects.toMatchObject({ code: '42501' });
+    });
+  });
+
   it('stores link visits while isolating another store', async () => {
     await withFixture(async ({ client, storeId }) => {
       const otherStoreId = await insertStore(client);

@@ -18,7 +18,6 @@ import {
   postKinds,
   postTargetStatuses,
 } from '@dakly/contracts/social';
-import { aiRuns } from './ai';
 import { users } from './auth';
 import { channelConnections } from './channels';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
@@ -72,17 +71,12 @@ export const contentPieces = pgTable(
     body: text('body').notNull(),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     isAiWritten: boolean('is_ai_written').notNull().default(false),
-    aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
+    // Plain reference: ai_runs is partitioned by month and expires (docs/data/growth.md).
+    aiRunId: uuid('ai_run_id'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
-    foreignKey({
-      name: 'content_pieces_ai_run_id_store_fk',
-      columns: [table.storeId, table.aiRunId],
-      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
-    }),
-
     index('content_pieces_store_created_idx').on(table.storeId, table.createdAt, table.id),
     index('content_pieces_store_kind_language_idx').on(
       table.storeId,
@@ -92,7 +86,6 @@ export const contentPieces = pgTable(
       table.id,
     ),
     index('content_pieces_created_by_user_id_idx').on(table.createdByUserId),
-    index('content_pieces_ai_run_id_idx').on(table.aiRunId),
     check('content_pieces_kind', isOneOf(table.kind, contentKinds)),
     check('content_pieces_language', isOneOf(table.language, contentLanguages)),
     check('content_pieces_body_length', sql`char_length(${table.body}) between 1 and 20000`),
@@ -118,7 +111,8 @@ export const posts = pgTable(
     firstComment: text('first_comment'),
     // D7: AI-written captions need a person's approval before they can be scheduled.
     isAiWritten: boolean('is_ai_written').notNull().default(false),
-    aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
+    // Plain reference: ai_runs is partitioned by month and expires (docs/data/growth.md).
+    aiRunId: uuid('ai_run_id'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     approvedAt: timestamptz('approved_at'),
@@ -128,14 +122,8 @@ export const posts = pgTable(
   },
   (table) => [
     uniqueIndex('posts_store_id_id_key').on(table.storeId, table.id),
-    foreignKey({
-      name: 'posts_ai_run_id_store_fk',
-      columns: [table.storeId, table.aiRunId],
-      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
-    }),
 
     index('posts_store_id_created_at_idx').on(table.storeId, table.createdAt),
-    index('posts_ai_run_id_idx').on(table.aiRunId),
     index('posts_created_by_user_id_idx').on(table.createdByUserId),
     index('posts_approved_by_user_id_idx').on(table.approvedByUserId),
     check('posts_kind', isOneOf(table.kind, postKinds)),

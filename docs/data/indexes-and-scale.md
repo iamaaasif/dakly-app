@@ -41,35 +41,11 @@ Which query each index serves, how big the tables get, when to partition, and ho
 
 Sweep indexes (all partial): `automation_runs (wake_at)` waiting, `automation_runs (claimed_at)` running, `campaigns (scheduled_for)` scheduled, `post_targets (scheduled_for)` scheduled, `post_targets (next_metrics_at)`, `payment_intents (next_check_at)`, `subscriptions (next_renewal_attempt_at)`, `subscriptions (trial_ends_at)` trialing, `channel_connections (token_expires_at)` active, `conversations (responder_returns_at)`, `contacts (deleted_at)`, `files (expires_at)`, `outbox_events (id)` unpublished.
 
-`knowledge_chunks.embedding` has no vector index. A store has a few hundred chunks, and the search filters by `store_id` first, so an exact scan is the initial implementation choice; measure the largest and most skewed stores before claiming latency. Add an HNSW index when the largest store passes about 20,000 chunks.
+`knowledge_chunks.embedding` has no vector index. Vectors have 512 dimensions (D31). A store has a few hundred chunks, and the search filters by `store_id` first, so an exact scan is the initial implementation choice; measure the largest and most skewed stores before claiming latency. Add an HNSW index when the largest store passes about 20,000 chunks.
 
-## Growth
+## Growth and partitions
 
-Rough sizes at 1,000 active shops, each with about 3,000 customers and 300 chats a day. Real numbers come from the beta.
-
-| Table                            | Rows a year | Note                                                |
-| -------------------------------- | ----------- | --------------------------------------------------- |
-| `messages`                       | 1 billion   | About 10 messages a chat. The largest table by far. |
-| `ai_runs`                        | 300 million | One or more a reply. No prompt text stored.         |
-| `campaign_recipients`            | 100 million | Depends on campaign use                             |
-| `automation_run_steps`           | 100 million | Depends on workflow use                             |
-| `audit_log`                      | 100 million | Every order and chat change                         |
-| `webhook_events`                 | short-lived | Kept 7 days                                         |
-| `contacts`, `contact_identities` | 3 million   | Grows with shops, not with time                     |
-| `orders`, `order_items`          | 10 million  |                                                     |
-
-These are sizing estimates, not measured capacity. Beta memory fit depends on payload size, history, tenant skew and concurrent writes. UUID v7 improves insertion locality but does not make time partitioning an additive change.
-
-## Partition triggers
-
-Do not partition before a trigger is hit; plain tables are simpler. When one is hit, measure the bottleneck and write an ADR before choosing a partition strategy. PostgreSQL unique and primary keys on a partitioned table must include the partition key ([partition limitations](https://www.postgresql.org/docs/16/ddl-partitioning.html#DDL-PARTITIONING-DECLARATIVE-LIMITATIONS)). Current ID-only keys and deduplication keys usually do not. A time-based design needs key and referencing-FK migration, a separate global identity/deduplication structure, or a different partition choice. `webhook_events` uses `received_at`, not `created_at`.
-
-| Table                                         | Trigger                                                                             |
-| --------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `messages`                                    | 200 million rows, or the purge of old messages takes longer than its window         |
-| `ai_runs`, `audit_log`                        | 200 million rows                                                                    |
-| `campaign_recipients`, `automation_run_steps` | 100 million rows                                                                    |
-| `webhook_events`                              | Daily purge deletes more than 5 million rows (switch to dropping a daily partition) |
+Sizes at 1,000 and 10,000 stores, which tables are partitioned by month, and the triggers for partitioning the rest are in [growth.md](growth.md) (D31). `audit_log`, `ai_runs` and `tracked_link_visits` are partitioned by month from the first migration; `messages`, `webhook_events`, `usage_events`, `campaign_recipients` and `automation_run_steps` are plain tables with written triggers.
 
 ## Retention
 
@@ -83,11 +59,16 @@ Do not partition before a trigger is hit; plain tables are simpler. When one is 
 | Deleted contacts                                    | 30 days, then purged with their chats                                                                                              | Due sweep, then authorized privileged erasure; ordinary app grants cannot delete all history |
 | `contact_memories`                                  | While the contact exists; cleared at once on a deletion request (including Meta data deletion callbacks), deleted with the contact | Service on request; cascade on purge                                                         |
 | `files` with `expires_at` (exports, import uploads) | Until `expires_at`                                                                                                                 | Maintenance job deletes the object, then the row                                             |
-| `audit_log`                                         | 2 years                                                                                                                            | Maintenance job as the owner role                                                            |
+| `audit_log`                                         | 2 years, then the month is exported to R2                                                                                          | Partition dropped by the archive step as the owner role                                      |
+| `ai_runs`                                           | 13 months; daily cost and token rollups kept                                                                                       | `drop_expired_partitions()`                                                                  |
+| `tracked_link_visits`                               | At least 90 days; daily rows in `tracked_link_visit_days` kept with the link                                                       | `drop_expired_partitions()`                                                                  |
+| `messages`                                          | 12 months after the conversation's last message, then archived to R2                                                               | Maintenance job, per conversation                                                            |
+| `notifications`                                     | 90 days                                                                                                                            | Maintenance job, in batches                                                                  |
+| `usage_events`                                      | 13 months                                                                                                                          | Maintenance job, in batches                                                                  |
 | `staff_audit_log`                                   | 7 years                                                                                                                            | Maintenance job as the owner role                                                            |
 | Orders, payments, invoices, ledger                  | Life of the store, then the closure rules in ACC-12                                                                                | Store purge                                                                                  |
 
-Retain campaign delivery/read eligibility and individual `tracked_link_visits` for at least the same 372-day attribution horizon. First/last tap counters are display summaries; they cannot reconstruct intermediate taps. Migration backfills only the known first/last distinct times with stable legacy keys. Preserve existing attribution where legacy evidence is incomplete; exact rebuild coverage grows as the new visit history is collected. Keep linked source/contact routing evidence until the newest relevant visit and source completion have both passed the horizon. Customer erasure takes precedence and removes personal attribution evidence; aggregate metrics may remain where they no longer identify the person. Merge before/after images last only through the seven-day undo window or earlier erasure; preserve the opaque operation key permanently for retry protection.
+Retain campaign delivery/read eligibility for the same 372-day attribution horizon. Link taps are kept as individual visits for 90 days and as daily rows after that; first/last tap counters on the link are display summaries. Keep linked source/contact routing evidence until the newest relevant visit and source completion have both passed the horizon. Customer erasure takes precedence and removes personal attribution evidence; aggregate metrics may remain where they no longer identify the person. Merge before/after images last only through the seven-day undo window or earlier erasure; preserve the opaque operation key permanently for retry protection.
 
 ## Query review and remaining measurements
 

@@ -15,6 +15,7 @@ import {
   uuid,
   vector,
   type AnyPgColumn,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import {
   aiRunOutcomes,
@@ -31,6 +32,7 @@ import { users } from './auth';
 import { createdAt, id, isOneOf, poisha, updatedAt } from './columns';
 import { files } from './platform';
 import { stores } from './stores';
+import { uuidv7 } from '../uuid-v7';
 
 // One row per store. Switches, hand-over rules, testers and test questions are jsonb validated
 // by the contracts schema. version guards concurrent saves; undo history is ai_rule_changes.
@@ -117,7 +119,7 @@ export const knowledgeChunks = pgTable(
       .notNull()
       .references(() => knowledgeItems.id, { onDelete: 'cascade' }),
     content: text('content').notNull(),
-    embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+    embedding: vector('embedding', { dimensions: 512 }).notNull(),
     // Search compares only chunks built by the configured model; a model change re-embeds.
     embeddingModel: text('embedding_model').notNull(),
     tokenCount: integer('token_count').notNull(),
@@ -183,7 +185,8 @@ export const aiRuleChanges = pgTable(
 export const aiRuns = pgTable(
   'ai_runs',
   {
-    id: id(),
+    // Partitioned by month on created_at, so the key includes it (docs/data/growth.md).
+    id: uuid('id').notNull().$defaultFn(uuidv7),
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id),
@@ -206,8 +209,7 @@ export const aiRuns = pgTable(
     createdAt: createdAt(),
   },
   (table): PgTableExtraConfigValue[] => [
-    uniqueIndex('ai_runs_store_id_id_key').on(table.storeId, table.id),
-
+    primaryKey({ name: 'ai_runs_pkey', columns: [table.id, table.createdAt] }),
     index('ai_runs_store_id_created_at_idx').on(table.storeId, table.createdAt),
     index('ai_runs_subject_idx').on(table.storeId, table.subjectType, table.subjectId),
     check('ai_runs_purpose', isOneOf(table.purpose, aiRunPurposes)),
@@ -231,16 +233,11 @@ export const assistantMessages = pgTable(
     role: text('role', { enum: assistantRoles }).notNull(),
     content: text('content').notNull(),
     dataUsed: jsonb('data_used'),
-    aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
+    // Plain reference: ai_runs is partitioned by month and expires (docs/data/growth.md).
+    aiRunId: uuid('ai_run_id'),
     createdAt: createdAt(),
   },
   (table): PgTableExtraConfigValue[] => [
-    foreignKey({
-      name: 'assistant_messages_ai_run_id_store_fk',
-      columns: [table.storeId, table.aiRunId],
-      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
-    }),
-
     index('assistant_messages_thread_idx').on(
       table.storeId,
       table.userId,
@@ -248,7 +245,6 @@ export const assistantMessages = pgTable(
       table.createdAt,
     ),
     index('assistant_messages_user_id_idx').on(table.userId),
-    index('assistant_messages_ai_run_id_idx').on(table.aiRunId),
     index('assistant_messages_created_at_idx').on(table.createdAt),
     check('assistant_messages_role', isOneOf(table.role, assistantRoles)),
   ],

@@ -11,6 +11,8 @@ import {
   text,
   uniqueIndex,
   uuid,
+  primaryKey,
+  date,
 } from 'drizzle-orm/pg-core';
 import {
   campaignChannels,
@@ -25,7 +27,8 @@ import {
 } from '@dakly/contracts/campaigns';
 import { users } from './auth';
 import { channelConnections } from './channels';
-import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
+import { uuidv7 } from '../uuid-v7';
+import { bytea, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contactIdentities, contacts } from './contacts';
 import { stores } from './stores';
 
@@ -281,11 +284,14 @@ export const trackedLinks = pgTable(
   ],
 );
 
-// Keep each eligible tap so attribution can be rebuilt for orders between repeated visits.
+// One row per redirect tap, kept 90 days in monthly partitions, then only the daily rollup below
+// remains (ADR 0008, D31). No IP address or user agent is stored: visitor_hash is an HMAC of them
+// under a key that rotates daily, so it can spot repeat taps and bots within a day and links
+// nobody across days.
 export const trackedLinkVisits = pgTable(
   'tracked_link_visits',
   {
-    id: id(),
+    id: uuid('id').notNull().$defaultFn(uuidv7),
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id),
@@ -294,6 +300,7 @@ export const trackedLinkVisits = pgTable(
       .references(() => trackedLinks.id, { onDelete: 'cascade' }),
     eventKey: text('event_key').notNull(),
     occurredAt: timestamptz('occurred_at').notNull(),
+    visitorHash: bytea('visitor_hash'),
   },
   (table) => [
     foreignKey({
@@ -302,8 +309,45 @@ export const trackedLinkVisits = pgTable(
       foreignColumns: [trackedLinks.storeId, trackedLinks.id] as [AnyPgColumn, AnyPgColumn],
     }).onDelete('cascade'),
 
-    uniqueIndex('tracked_link_visits_store_event_key').on(table.storeId, table.eventKey),
+    primaryKey({ name: 'tracked_link_visits_pkey', columns: [table.id, table.occurredAt] }),
+    // A retry carries the tap's original time, so the key still dedupes inside the partition.
+    uniqueIndex('tracked_link_visits_store_event_key').on(
+      table.storeId,
+      table.eventKey,
+      table.occurredAt,
+    ),
     index('tracked_link_visits_link_occurred_idx').on(table.trackedLinkId, table.occurredAt),
-    index('tracked_link_visits_occurred_at_idx').on(table.occurredAt),
+  ],
+);
+
+// Taps per link per store-local day, built nightly and kept as long as the link. Attribution
+// rebuilds older than the 90 raw days read first_at and last_at from here (ADR 0008).
+export const trackedLinkVisitDays = pgTable(
+  'tracked_link_visit_days',
+  {
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    trackedLinkId: uuid('tracked_link_id')
+      .notNull()
+      .references(() => trackedLinks.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    visits: integer('visits').notNull(),
+    uniqueVisitors: integer('unique_visitors').notNull(),
+    firstAt: timestamptz('first_at').notNull(),
+    lastAt: timestamptz('last_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ name: 'tracked_link_visit_days_pkey', columns: [table.trackedLinkId, table.day] }),
+    foreignKey({
+      name: 'tracked_link_visit_days_tracked_link_id_store_fk',
+      columns: [table.storeId, table.trackedLinkId],
+      foreignColumns: [trackedLinks.storeId, trackedLinks.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    index('tracked_link_visit_days_store_id_day_idx').on(table.storeId, table.day),
+    check(
+      'tracked_link_visit_days_counts',
+      sql`${table.visits} >= ${table.uniqueVisitors} and ${table.uniqueVisitors} >= 0`,
+    ),
   ],
 );

@@ -35,7 +35,7 @@ These are release requirements, not automatically harmless schema gaps. Their ow
 
 Closed since the first check: D27 (saving the buyer's own phone, see [isolation-and-access.md](isolation-and-access.md#customer-identity-d26-d27)), D28 (no two-person approval for admin actions) and D29 (keep the 7-day merge undo, table `contact_merges`). Feature 12 no longer mentions an admin database role. From the AI review: photo matching has `products.image_embedding`, every embedding records its model, taught rules can be undone through `ai_rule_changes`, and D30 adds customer memory.
 
-Questions that do not change the schema: Q1 (prices and limits are rows in `plans`), Q2 (WhatsApp BSP), Q7 (Inquiry stays a chat flag), Q8 (models are settings), Q11 (an organisation table is additive), Q13 (variant keys have source/account scope; synchronization and legacy reconciliation remain planned), Q15 (semaphore lives in Valkey).
+Questions that do not change the schema: Q1 (prices and limits are rows in `plans`), Q2 (WhatsApp BSP), Q7 (Inquiry stays a chat flag), Q8 (models are settings), Q11 (an organisation table is additive), Q13 (variant keys have source/account scope; synchronization remains planned), Q15 (semaphore lives in Valkey).
 
 ## Review status
 

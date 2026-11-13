@@ -29,6 +29,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                         | Todo      |         |     |                                                               |
 | DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs               | In review |         | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md) |
 | DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                 | Todo      | DB-5    |     |                                                               |
+| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges         | Todo      | DB-5    |     | [growth.md](data/growth.md) (D31)                             |
 | API-1 | Logging (nestjs-pino), request ids, Sentry                                           | Todo      |         |     |                                                               |
 | API-2 | Rate limiting with Valkey storage                                                    | Todo      |         |     |                                                               |
 | API-3 | Route test that fails when a store route has no permission decorator                 | Todo      | ACC-3   |     |                                                               |

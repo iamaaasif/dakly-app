@@ -26,15 +26,8 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1794546740272,
+      "when": 1794553702543,
       "tag": "0003_release_1_schema",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1794551678426,
-      "tag": "0004_database_review_fixes",
       "breakpoints": true
     }
   ]

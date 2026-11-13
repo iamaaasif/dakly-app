@@ -1,6 +1,6 @@
 # Isolation and access
 
-How the schema keeps one store's data away from another, and how the few paths that start without a store get in. The rules are in [multi-tenancy.md](../rules/multi-tenancy.md) and [database.md](../rules/database.md); this page records what the release 1 migration does. The base SQL is in migration 0003; forward migration 0004 corrects grants, protected lookup, recovery and tenant references.
+How the schema keeps one store's data away from another, and how the few paths that start without a store get in. The rules are in [multi-tenancy.md](../rules/multi-tenancy.md) and [database.md](../rules/database.md); this page records what the release 1 migration does. All of it is in migration 0003: the generated tables first, then the hand-written policies, grants and functions.
 
 ## Roles
 
@@ -22,7 +22,7 @@ WITH CHECK (store_id = NULLIF(current_setting('app.store_id', true), '')::uuid)
 
 `TenantDatabase.forStore(storeId, ...)` sets `app.store_id` for the transaction. Outside `forStore` the setting is empty, the comparison is null, and the query sees no rows. `store-isolation.int.spec.ts` checks tenant-table RLS policies while explicitly excluding global outbox/staff audit records, so a table added later without one fails CI.
 
-Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore have supplemental `(store_id, parent_id)` foreign keys against unique parent `(store_id, id)` keys. The original ID foreign key keeps its SET NULL or CASCADE behavior. A supplemental key paired with CASCADE also uses CASCADE, so ordinary cascading deletes work without deferral. A key paired with SET NULL instead uses NO ACTION to avoid clearing `store_id`; migration 0004 marks only these supplemental keys DEFERRABLE INITIALLY IMMEDIATE. This deferrability is SQL-only and is not represented by Drizzle. Normal inserts still reject cross-store links immediately. A purge/delete transaction that detaches SET NULL links sets `SET CONSTRAINTS ALL DEFERRED` before dependent cleanup/deletion and `SET CONSTRAINTS ALL IMMEDIATE` before commit, so validation sees the final state after delete actions and fails if any reference remains inconsistent. Nullable links may be null; non-null cross-store links are rejected by PostgreSQL. Global reference tables have their ordinary ID foreign keys. Services still load parents through the owning feature in a bounded batch to check permissions and business state; polymorphic IDs and JSON references need explicit ownership checks.
+Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore have supplemental `(store_id, parent_id)` foreign keys against unique parent `(store_id, id)` keys. The original ID foreign key keeps its SET NULL or CASCADE behavior. A supplemental key paired with CASCADE also uses CASCADE, so ordinary cascading deletes work without deferral. A key paired with SET NULL instead uses NO ACTION to avoid clearing `store_id`; the hand-written part of migration 0003 marks only these supplemental keys DEFERRABLE INITIALLY IMMEDIATE. This deferrability is SQL-only and is not represented by Drizzle. Normal inserts still reject cross-store links immediately. A purge/delete transaction that detaches SET NULL links sets `SET CONSTRAINTS ALL DEFERRED` before dependent cleanup/deletion and `SET CONSTRAINTS ALL IMMEDIATE` before commit, so validation sees the final state after delete actions and fails if any reference remains inconsistent. Nullable links may be null; non-null cross-store links are rejected by PostgreSQL. Global reference tables have their ordinary ID foreign keys. Services still load parents through the owning feature in a bounded batch to check permissions and business state; polymorphic IDs and JSON references need explicit ownership checks.
 
 ## Global tables
 
@@ -35,7 +35,7 @@ Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore 
 | Grant                           | Tables                                                                                                                                                     | Why                                                                                     |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | No UPDATE or DELETE             | `audit_log`, `staff_audit_log`, `payment_events`, `wallet_ledger`, `stock_movements`, `usage_events`, `consents`, `ai_rule_changes`, `tracked_link_visits` | Records of what happened. A correction is a new row.                                    |
-| No DELETE                       | `orders`, `invoices`, `payment_intents`, `refunds`, `automation_versions`                                                                                  | Money and published workflows. Cancel, void or archive instead.                         |
+| No DELETE                       | `orders`, `invoices`, `payment_intents`, `refunds`, `automation_versions`, `tracked_link_visit_days`                                                       | Money and published workflows. Cancel, void or archive instead.                         |
 | UPDATE only `is_stopped`        | `automation_versions`                                                                                                                                      | Graph and publication fields stay immutable; the owner may stop old runs.               |
 | UPDATE only `status`, `paid_at` | `invoices`                                                                                                                                                 | Settlement may change; document corrections use credit notes.                           |
 | DELETE allowed                  | `order_items`                                                                                                                                              | Editable-order removal must adjust stock, totals and audit atomically in OrdersService. |
@@ -43,6 +43,8 @@ Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore 
 | No DELETE                       | `webhook_events`                                                                                                                                           | Purged by `purge_webhook_events` after 7 days.                                          |
 
 Retention purges of append-only tables (audit log after 2 years, staff audit log after 7) run in the maintenance job as `dakly`, never through the app role.
+
+`audit_log`, `ai_runs` and `tracked_link_visits` are partitioned by month ([growth.md](growth.md)). The policy and grants are on the parent, and every query goes through it. Each monthly partition has RLS on and no grants for `dakly_app`, so the app cannot read a partition directly and skip the policy. `store-isolation.int.spec.ts` checks both.
 
 Sending reads consent only through the view `contact_consent_current` (latest row per contact and channel). It is `security_invoker`, so RLS applies to the caller.
 
@@ -77,6 +79,8 @@ Every definer function sets `search_path = pg_catalog, public, pg_temp`, so temp
 | `due_contact_purges(limit)`                   | contacts deleted more than 30 days ago             | Purge job                                     |
 | `active_store_ids()`                          | stores with status `active`                        | Metrics reconciliation and per-store fan-outs |
 | `admin_store_overview(search, limit)`         | store name, plan, status, member count             | Admin stores list (metadata only)             |
+| `ensure_monthly_partitions(months_ahead)`     | number of partitions created                       | Maintenance job                               |
+| `drop_expired_partitions()`                   | number of AI run and link visit months dropped     | Maintenance job; never drops audit months     |
 
 Prefer a job that carries its `storeId` (a delayed BullMQ job per item) over a sweep. Sweeps exist as the safety net for jobs lost in Valkey and for work that is due by time.
 

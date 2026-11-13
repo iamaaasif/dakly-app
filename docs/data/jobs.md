@@ -64,16 +64,16 @@ Per-store cap: one running campaign batch per store.
 
 ## sync
 
-| Job                         | Started by                                              | Payload                          | Makes a rerun harmless                                                     |
-| --------------------------- | ------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
-| `relay-outbox`              | Every second                                            | none (sweep)                     | `claim_outbox_events`, then mark published                                 |
-| `refresh-post-metrics`      | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                         |
-| `check-channel-token`       | Sweep `channel_connections_expiring_before`, daily      | `storeId`, `channelConnectionId` | Status only set, notification deduped                                      |
-| `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `responder_returns_at` in the same update                           |
-| `sync-whatsapp-templates`   | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                        |
-| `refresh-contact-stats`     | Order or message outbox event                           | `storeId`, `contactId`           | Recomputes the row                                                         |
-| `build-daily-metrics`       | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                             |
-| `run-maintenance`           | Daily                                                   | none (sweep)                     | Purges by time; see [indexes-and-scale.md](indexes-and-scale.md#retention) |
+| Job                         | Started by                                              | Payload                          | Makes a rerun harmless                                               |
+| --------------------------- | ------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------- |
+| `relay-outbox`              | Every second                                            | none (sweep)                     | `claim_outbox_events`, then mark published                           |
+| `refresh-post-metrics`      | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                   |
+| `check-channel-token`       | Sweep `channel_connections_expiring_before`, daily      | `storeId`, `channelConnectionId` | Status only set, notification deduped                                |
+| `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `responder_returns_at` in the same update                     |
+| `sync-whatsapp-templates`   | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                  |
+| `refresh-contact-stats`     | Order or message outbox event                           | `storeId`, `contactId`           | Recomputes the row                                                   |
+| `build-daily-metrics`       | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                       |
+| `run-maintenance`           | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance) |
 
 ## bulk
 
@@ -117,7 +117,17 @@ Clear empties memory, sets `cleared_at`, increments the contact-memory version a
 
 Order, payment, return and send/tap outbox events schedule bounded summary work that becomes visible within five minutes. Nightly reconciliation recomputes affected days from retained source evidence; it is a repair path, not the only refresh. Late returns and corrections restate the original store-local metric day as defined by ANA-1 and refresh affected totals. Each dashboard exposes summary age. The definitions and handlers remain planned.
 
-Attribution rebuilds cover 365 days plus the maximum seven-day lookback where complete evidence was collected. Legacy backfill preserves only known first/last distinct taps; intermediate old taps cannot be reconstructed. Preserve existing attribution for legacy periods with incomplete evidence instead of claiming an exact rebuild. Retain workflow steps for 372 days after their run finishes, never from step creation while the run is active. Campaign eligibility and `tracked_link_visits` retain equivalent evidence. A redirect creates one `event_key`; retrying its write reuses the key, while another actual visit gets a new key. First/last tap counters do not replace the individual visits. See [ADR 0008](../adr/0008-retain-attribution-evidence.md).
+Attribution rebuilds cover 365 days plus the maximum seven-day lookback. They read individual `tracked_link_visits` for the last 90 days and `tracked_link_visit_days` before that ([growth.md](growth.md#link-visits-without-personal-data)). Retain workflow steps for 372 days after their run finishes, never from step creation while the run is active. Campaign eligibility keeps equivalent evidence. A redirect creates one `event_key`; retrying its write reuses the key, while another actual visit gets a new key. First/last tap counters on the link do not replace the visits or the daily rows. See [ADR 0008](../adr/0008-retain-attribution-evidence.md).
+
+## run-maintenance
+
+One daily job, run in this order. Each step works in bounded batches and can be rerun after a crash. The retention for each table is in [growth.md](growth.md).
+
+1. `ensure_monthly_partitions(3)`: create this month and the next three for `audit_log`, `ai_runs` and `tracked_link_visits`. Alert if fewer than two future months exist afterwards.
+2. Roll up yesterday's Asia/Dhaka day for each active store inside `forStore`: link visits into `tracked_link_visit_days`, AI run cost, tokens and counts by purpose into `store_daily_metrics`. Both are upserts, so a rerun rewrites the same rows.
+3. `drop_expired_partitions()`: drop AI run months older than 13 months and link visit months older than 90 days. Step 2 must have succeeded for those days first.
+4. Archive: export each `audit_log` month older than 24 months to R2 as gzipped JSON lines, check the row count, then drop it as the owner role. Export conversations whose last message is older than 12 months the same way, then delete their messages in batches.
+5. Purge in batches of 5,000: published outbox events and webhook events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
 
 ## Send-time and financial gates
 

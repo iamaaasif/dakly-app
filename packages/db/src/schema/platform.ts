@@ -9,6 +9,7 @@ import {
   text,
   uniqueIndex,
   uuid,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import {
   actorTypes,
@@ -19,6 +20,7 @@ import {
   webhookEventStatuses,
   webhookProviders,
 } from '@dakly/contracts/platform';
+import { uuidv7 } from '../uuid-v7';
 import { bytea, createdAt, id, inet, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { staffUsers } from './admin';
 import { users } from './auth';
@@ -29,7 +31,8 @@ import { stores } from './stores';
 export const auditLog = pgTable(
   'audit_log',
   {
-    id: id(),
+    // Partitioned by month on created_at, so the key includes it (docs/data/growth.md).
+    id: uuid('id').notNull().$defaultFn(uuidv7),
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id),
@@ -46,6 +49,7 @@ export const auditLog = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    primaryKey({ name: 'audit_log_pkey', columns: [table.id, table.createdAt] }),
     index('audit_log_store_id_entity_idx').on(
       table.storeId,
       table.entityType,

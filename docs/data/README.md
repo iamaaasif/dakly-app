@@ -31,7 +31,7 @@ These follow [rules/database.md](../rules/database.md); the column helpers are i
 
 ## Tables
 
-Migration 0004 contains 73 tables: 72 planned tables (59 shop-scoped and 13 global), plus the legacy `customers` example. Column, index and FK counts are taken from its snapshot in [er-diagram.md](er-diagram.md). G marks a global table. The legacy `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
+Migration 0003 contains 74 tables: 73 planned tables (60 shop-scoped and 13 global), plus the `customers` example. Column, index and FK counts are taken from its snapshot in [er-diagram.md](er-diagram.md). G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
 
 | Schema file                        | Tables                                                                                                                                                                                     | Owner feature (`packages/core/src/`) |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
@@ -104,6 +104,6 @@ Other changes from the review, each small:
 
 ## Table and column review
 
-The reviewed tables each map to a named product responsibility; no additional legacy customer model is needed. CUS-1 must migrate the example `customers` rows into `contacts` and remove that transitional table. Do not remove buyer and recipient snapshots, order-line prices/costs, issued invoice contents, subscription prices or published workflow graphs merely because current values can be joined elsewhere: those records preserve historical facts.
+The reviewed tables each map to a named product responsibility; no second customer model is needed. CUS-1 must migrate the example `customers` rows into `contacts` and remove that transitional table. Do not remove buyer and recipient snapshots, order-line prices/costs, issued invoice contents, subscription prices or published workflow graphs merely because current values can be joined elsewhere: those records preserve historical facts.
 
 Derived contact stats, conversation previews and dashboard summaries are useful read models only with one owning writer and a rebuild path. External IDs identify provider records; operation keys identify our requests. They serve different purposes. Optional counters and integration placeholders need a named consumer before feature implementation; their presence is not evidence that synchronization, search latency or provider behavior is ready. JSON is reserved for bounded structures that are not independently filtered. The schema, contracts, migrations and [review resolution](review-fixes.md) must stay consistent.
