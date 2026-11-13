@@ -27,7 +27,7 @@ describe('SessionsService (Postgres)', () => {
   let context: INestApplicationContext;
   let repository: SessionsRepository;
   const clock = { now: () => new Date(time) };
-  let time = Date.parse('2026-11-13T10:00:00Z');
+  let time = Date.now();
   let events: AccountSecurityEventsService;
   let service: SessionsService;
   let userId: string;
@@ -85,11 +85,15 @@ describe('SessionsService (Postgres)', () => {
     await service.resolve(created.token);
     let [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.lastSeenAt.getTime()).toBe(time - 299999);
-    time += 1;
+    time = Date.now();
+    await admin.db
+      .update(sessions)
+      .set({ lastSeenAt: new Date(time - 300000) })
+      .where(eq(sessions.id, created.session.id));
     await service.resolve(created.token);
     [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
-    expect(row!.lastSeenAt.getTime()).toBe(time);
-    expect(row!.expiresAt.getTime()).toBe(time + 43200000);
+    expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(time);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
     await service.revoke(userId, created.session.id);
     expect(await service.resolve(created.token)).toBeUndefined();
     const expired = await service.create(userId, { isRemembered: false });
@@ -111,6 +115,163 @@ describe('SessionsService (Postgres)', () => {
     const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.expiresAt).toEqual(created.session.expiresAt);
   });
+
+  it('does not renew after expiry while account transaction acquisition is paused', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: false });
+    const deadline = new Date(time + 250);
+    await admin.db
+      .update(sessions)
+      .set({ lastSeenAt: new Date(time - 600000), expiresAt: deadline })
+      .where(eq(sessions.id, created.session.id));
+    const account = context.get(AccountDatabase);
+    const original = account.forUser.bind(account);
+    const entered = deferred();
+    const resume = deferred();
+    const pause = vi.spyOn(account, 'forUser').mockImplementationOnce(async (...args) => {
+      entered.resolve();
+      await resume.promise;
+      return original(...args);
+    });
+    const pending = service.resolve(created.token);
+    try {
+      await entered.promise;
+      await waitUntilExpired(deadline);
+    } finally {
+      resume.resolve();
+      await pending;
+      pause.mockRestore();
+    }
+    const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
+    expect(row!.expiresAt).toEqual(deadline);
+    time = Date.now();
+    expect(await service.resolve(created.token)).toBeUndefined();
+  });
+
+  it('uses a fresh renewal timestamp after transaction acquisition resumes', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: false });
+    await admin.db
+      .update(sessions)
+      .set({ lastSeenAt: new Date(time - 600000) })
+      .where(eq(sessions.id, created.session.id));
+    const account = context.get(AccountDatabase);
+    const original = account.forUser.bind(account);
+    const entered = deferred();
+    const resume = deferred();
+    const pause = vi.spyOn(account, 'forUser').mockImplementationOnce(async (...args) => {
+      entered.resolve();
+      await resume.promise;
+      return original(...args);
+    });
+    const pending = service.resolve(created.token);
+    let releasedAt: Date;
+    try {
+      await entered.promise;
+      await admin.db.execute(sql`select pg_sleep(0.05)`);
+      releasedAt = new Date();
+    } finally {
+      resume.resolve();
+      await pending;
+      pause.mockRestore();
+    }
+    const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
+    expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(releasedAt!.getTime());
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
+  });
+
+  it('does not renew after expiry while waiting for an unchanged row lock', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: false });
+    const deadline = new Date(time + 2000);
+    await admin.db
+      .update(sessions)
+      .set({ lastSeenAt: new Date(time - 600000), expiresAt: deadline })
+      .where(eq(sessions.id, created.session.id));
+    const blocker = await admin.pool.connect();
+    await blocker.query('begin');
+    const { rows } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+    await blocker.query('select id from sessions where id = $1 for update', [created.session.id]);
+    const pending = service.resolve(created.token);
+    try {
+      await vi.waitFor(
+        async () => {
+          const blocked = await admin.db.execute<{ count: number }>(
+            sql`select count(*)::int as count from pg_stat_activity where ${rows[0]!.pid} = any(pg_blocking_pids(pid))`,
+          );
+          expect(blocked.rows[0]!.count).toBeGreaterThan(0);
+        },
+        { timeout: 1500, interval: 10 },
+      );
+      await waitUntilExpired(deadline);
+    } finally {
+      await blocker.query('commit');
+      blocker.release();
+      await pending;
+    }
+    const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
+    expect(row!.expiresAt).toEqual(deadline);
+    time = Date.now();
+    expect(await service.resolve(created.token)).toBeUndefined();
+  });
+
+  it('keeps concurrent valid resolutions authorised when the second touch is throttled', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: false });
+    await admin.db
+      .update(sessions)
+      .set({ lastSeenAt: new Date(time - 600000) })
+      .where(eq(sessions.id, created.session.id));
+    const read = repository.findByTokenHash.bind(repository);
+    const bothRead = deferred();
+    let reads = 0;
+    const lookup = vi.spyOn(repository, 'findByTokenHash').mockImplementation(async (...args) => {
+      const result = await read(...args);
+      if (++reads === 2) bothRead.resolve();
+      await bothRead.promise;
+      return result;
+    });
+    const touch = repository.touch.bind(repository);
+    const firstTouched = deferred();
+    let firstVersion: string | undefined;
+    const renew = vi
+      .spyOn(repository, 'touch')
+      .mockImplementationOnce(async (...args) => {
+        await touch(...args);
+        const result = await admin.db.execute<{ version: string }>(
+          sql`select xmin::text as version from sessions where id = ${created.session.id}`,
+        );
+        firstVersion = result.rows[0]!.version;
+        firstTouched.resolve();
+      })
+      .mockImplementationOnce(async (...args) => {
+        await firstTouched.promise;
+        await touch(...args);
+      });
+    try {
+      const results = await Promise.all([
+        service.resolve(created.token),
+        service.resolve(created.token),
+      ]);
+      expect(results.map((session) => session?.id)).toEqual([
+        created.session.id,
+        created.session.id,
+      ]);
+      const result = await admin.db.execute<{ version: string }>(
+        sql`select xmin::text as version from sessions where id = ${created.session.id}`,
+      );
+      expect(result.rows[0]!.version).toBe(firstVersion);
+    } finally {
+      lookup.mockRestore();
+      renew.mockRestore();
+    }
+  });
+
+  async function waitUntilExpired(deadline: Date) {
+    await admin.db.execute(
+      sql`select pg_sleep(greatest(0, extract(epoch from (${deadline.toISOString()}::timestamptz - clock_timestamp()))) + 0.025)`,
+    );
+  }
 
   it('rolls back revocation when the account event cannot be written', async () => {
     const created = await service.create(userId, { isRemembered: false });
@@ -142,3 +303,11 @@ describe('SessionsService (Postgres)', () => {
     );
   });
 });
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}

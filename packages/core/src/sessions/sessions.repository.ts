@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, isNull, lte, ne } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
 import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
@@ -62,20 +62,33 @@ export class SessionsRepository {
     return rows[0]!;
   }
 
-  async touch(userId: string, id: string, now: Date, cutoff: Date, expiresAt: Date): Promise<void> {
+  async touch(
+    userId: string,
+    id: string,
+    lifetimeMilliseconds: number,
+    touchInterval: number,
+  ): Promise<void> {
+    // Materialization keeps the clock read after FOR UPDATE acquires the current row.
+    // A WHERE clock_timestamp() alone can run before a row-lock wait; now() is transaction time.
     await this.account.forUser(userId, (tx) =>
-      tx
-        .update(sessions)
-        .set({ lastSeenAt: now, expiresAt })
-        .where(
-          and(
-            eq(sessions.userId, userId),
-            eq(sessions.id, id),
-            isNull(sessions.revokedAt),
-            gt(sessions.expiresAt, now),
-            lte(sessions.lastSeenAt, cutoff),
-          ),
-        ),
+      tx.execute(sql`
+      with locked_session as materialized (
+        select id, expires_at, revoked_at, last_seen_at from ${sessions}
+        where id = ${id} and user_id = ${userId}
+        for update
+      ), renewal as materialized (
+        select id, expires_at, revoked_at, last_seen_at, clock_timestamp() as checked_at
+        from locked_session
+      )
+      update ${sessions}
+      set last_seen_at = renewal.checked_at,
+          expires_at = renewal.checked_at + ${lifetimeMilliseconds}::double precision * interval '1 millisecond'
+      from renewal
+      where sessions.id = renewal.id and sessions.user_id = ${userId}
+        and renewal.revoked_at is null
+        and renewal.expires_at > renewal.checked_at
+        and renewal.last_seen_at <= renewal.checked_at - ${touchInterval}::double precision * interval '1 millisecond'
+    `),
     );
   }
 

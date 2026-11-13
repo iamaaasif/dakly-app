@@ -32,7 +32,7 @@ export class SessionsService {
       hash(token),
       input,
       now,
-      expiry(now, input.isRemembered),
+      new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
     );
     return { token, session };
   }
@@ -45,9 +45,8 @@ export class SessionsService {
       await this.repository.touch(
         session.userId,
         session.id,
-        now,
-        new Date(now.getTime() - TOUCH_INTERVAL),
-        expiry(now, session.isRemembered),
+        lifetimeMilliseconds(session.isRemembered),
+        TOUCH_INTERVAL,
       );
     }
     return session;
@@ -83,6 +82,6 @@ export class SessionsService {
 function hash(token: string): Buffer {
   return createHash('sha256').update(token).digest();
 }
-function expiry(now: Date, isRemembered: boolean): Date {
-  return new Date(now.getTime() + (isRemembered ? 30 * 24 : 12) * 60 * 60 * 1000);
+function lifetimeMilliseconds(isRemembered: boolean): number {
+  return (isRemembered ? 30 * 24 : 12) * 60 * 60 * 1000;
 }
