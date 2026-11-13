@@ -17,6 +17,8 @@ Release 1 uses the OpenAI API (decision D17) behind the `LlmDriver` interface. T
 11. Usage is consumed through `UsageService.consume` with a reference that makes retries free.
 12. Model-written content shown to shops' customers or posted publicly passes moderation first.
 13. A gate that can be checked in code (AI off, window closed, saved reply matches, allowance used) runs before any model call.
+14. The model never writes SQL. It reads data only through tools, so store isolation and glossary numbers hold.
+15. Every tool is described for the model, not only for developers, in its contract file next to its zod schema: what it returns and when to use it instead of a similar tool; the words shop owners use for it in Bangla, Banglish and English; the unit of every number (taka, already converted from poisha; percent; count; Asia/Dhaka days); and the allowed values of every enum argument (order stages, channels). The model sees these words, so wrong ones pick the wrong report. This applies the annotation practice in Oracle's [AI enrichment guide](https://docs.oracle.com/en/database/oracle/oracle-database/26/aienb/best-practices-enriching-your-database-schema.html) to tools instead of tables.
 
 Wrong:
 
@@ -33,6 +35,16 @@ await this.chatsService.send(storeId, conversationId, response.choices[0].messag
 Right:
 
 ```ts
+export const salesByPeriodTool = {
+  name: 'sales_by_period',
+  description:
+    'Total sales and order count for a period. Use for revenue questions; for one product use top_products.',
+  aliases: ['বিক্রি', 'বিক্রয়', 'sale', 'sales koto', 'income', 'revenue', 'koto bikri'],
+  input: salesByPeriodInputSchema, // period: 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month'
+  output: salesByPeriodOutputSchema,
+  units: { salesTaka: 'taka, converted from poisha', orders: 'count of non-cancelled orders' },
+} satisfies AiToolDefinition;
+
 const draft = await this.aiService.run({
   storeId,
   tier: 'reply',
@@ -48,4 +60,5 @@ if (!checked.isSafe) return this.handOver(storeId, conversationId, 'out_of_scope
 ## Evaluation
 
 - The golden set (200 anonymised Bangla, Banglish and English chats) runs nightly and on every prompt or model change. Wrong prices must be 0; hand-overs at least 90% correct.
-- A PR that changes a prompt, a tool or the tier map attaches the eval result.
+- Ask Dakly AI has its own question set: at least 100 questions asked the way owners ask them, in Bangla, Banglish and English, each labelled with the tool and arguments it should pick. Correct tool choice must be at least 95%, and an answer whose numbers differ from the report must be 0.
+- A PR that changes a prompt, a tool, a tool description or the tier map attaches the eval result.

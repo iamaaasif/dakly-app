@@ -329,6 +329,7 @@ Comments: classified as question, positive, negative or spam. If "Answer post co
 8. Three provider errors in a minute pause AI replies for 2 minutes; waiting chats go to Needs you.
 9. Each store has a daily AI cost ceiling; passing it pauses AI for that store and alerts Dakly staff.
 10. Per-store fairness: at most 3 AI jobs run at once per store (Valkey semaphore, pending Q15).
+11. Sales agent tools (product search, stock, delivery charge, order draft) are described for the model with Bangla, Banglish and English words, units and allowed values ([ai-and-llm.md](../rules/ai-and-llm.md) rule 15).
 
 ### Permissions
 
