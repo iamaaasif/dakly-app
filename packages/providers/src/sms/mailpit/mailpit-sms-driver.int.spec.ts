@@ -19,7 +19,7 @@ describe('MailpitSmsDriver (SMTP and API)', () => {
       });
       expect(response.status).toBe(200);
       const message = (await response.json()) as { To: { Address: string }[]; Text: string };
-      expect(message.To).toEqual([{ Name: '', Address: '+8801700000000@sms.dakly.test' }]);
+      expect(message.To).toEqual([{ Name: '', Address: '+8801700000000@sms.test' }]);
       expect(message.Text.trimEnd()).toBe('আপনার কোড 123456\nশুধু পরীক্ষার জন্য।');
     } finally {
       const response = await fetch(`${apiUrl}/api/v1/messages`, {

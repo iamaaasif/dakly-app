@@ -22,7 +22,7 @@ export class MailpitSmsDriver implements SmsDriver {
     try {
       const result = await this.transport.sendMail({
         from: 'dakly@sms.dakly.test',
-        to: `${message.to}@sms.dakly.test`,
+        to: `${message.to}@sms.test`,
         subject: 'SMS',
         text: message.text,
       });

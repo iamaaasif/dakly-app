@@ -371,7 +371,7 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 
 ACC-1 provides `SmsDriver.send({ to, text })`, returning `{ providerMessageId }`.
 `MailpitSmsDriver` takes SMTP `{ host, port }` options and captures each SMS as an
-email to `<phone>@sms.dakly.test`. Its provider message id is Mailpit's queue id,
+email to `<phone>@sms.test`. Its provider message id is Mailpit's queue id,
 so the API and UI can retrieve the captured message. The adapter sets five-second
 SMTP timeouts and returns `SMS_SEND_FAILED` without the raw vendor error. It logs
 neither phone numbers nor message text. `FakeSmsDriver` keeps message copies in
