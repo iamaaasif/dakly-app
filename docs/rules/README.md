@@ -15,21 +15,22 @@ One file per topic. Each rule is short, says why, names the open-source projects
 
 ## Backend
 
-| File                                                 | Covers                                         |
-| ---------------------------------------------------- | ---------------------------------------------- |
-| [layers.md](layers.md)                               | Controller, service, repository                |
-| [api-design.md](api-design.md)                       | Routes, status codes, responses, controllers   |
-| [services.md](services.md)                           | Where business rules live and how they look    |
-| [database.md](database.md)                           | Tables, migrations, repositories, transactions |
-| [multi-tenancy.md](multi-tenancy.md)                 | `storeId`, RLS, new tables                     |
-| [auth-and-permissions.md](auth-and-permissions.md)   | Sessions, permissions, masking                 |
-| [validation-and-errors.md](validation-and-errors.md) | zod at the edge, `AppError`                    |
-| [module-boundaries.md](module-boundaries.md)         | What a feature may import                      |
-| [http-fastify.md](http-fastify.md)                   | Fastify do and don't, webhook raw body         |
-| [providers.md](providers.md)                         | Vendor drivers                                 |
-| [jobs.md](jobs.md)                                   | BullMQ jobs and events                         |
-| [ai-and-llm.md](ai-and-llm.md)                       | Model calls, tools, prompts, evals             |
-| [logging.md](logging.md)                             | Logs, errors, metrics                          |
+| File                                                 | Covers                                               |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| [layers.md](layers.md)                               | Controller, service, repository                      |
+| [api-design.md](api-design.md)                       | Routes, status codes, responses, controllers         |
+| [services.md](services.md)                           | Where business rules live and how they look          |
+| [database.md](database.md)                           | Tables, migrations, repositories, transactions       |
+| [multi-tenancy.md](multi-tenancy.md)                 | `storeId`, RLS, new tables                           |
+| [auth-and-permissions.md](auth-and-permissions.md)   | Sessions, permissions, masking                       |
+| [validation-and-errors.md](validation-and-errors.md) | zod at the edge, `AppError`                          |
+| [module-boundaries.md](module-boundaries.md)         | What a feature may import                            |
+| [http-fastify.md](http-fastify.md)                   | Fastify do and don't, webhook raw body               |
+| [providers.md](providers.md)                         | Vendor drivers                                       |
+| [jobs.md](jobs.md)                                   | BullMQ jobs and events                               |
+| [ai-and-llm.md](ai-and-llm.md)                       | Model calls, tools, prompts, evals                   |
+| [logging.md](logging.md)                             | Logs, errors, metrics                                |
+| [scale.md](scale.md)                                 | Pagination, bulk work, counters, performance budgets |
 
 ## Frontend
 

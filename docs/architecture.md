@@ -35,3 +35,135 @@ Beta runs on one DigitalOcean Droplet; managed PostgreSQL and managed Valkey (Re
 ## What is built
 
 Only the skeleton: platform pieces, the `customers` example feature, driver interfaces for channels and payments, and the web feature-folder example. Auth is the next piece; until it exists every store route returns `401 STORE_REQUIRED`.
+
+## API conventions
+
+- REST over HTTPS, JSON. No `/v1` prefix in release 1 because the web app ships with the API ([rules/api-design.md](rules/api-design.md)); add it when an outside client exists. Request and response types come from `packages/contracts` so the web app and API can't drift.
+- Auth by secure HttpOnly session cookie for the web app; API keys per store (release 2) for outside systems.
+- Every request resolves the store from the verified session. A store id is never read from the body, query string or a header (CLAUDE.md). Switching store changes the session.
+- Lists use cursor pagination (`?cursor=&limit=`, max 100).
+- Writes that can be retried accept an `Idempotency-Key` header.
+- Errors use one shape: `{ error: { code, message } }`, plus `fields` for validation errors, with stable codes the web app can translate to Bangla later.
+- Rate limits per user and per store, returned in headers.
+- Bulk actions return a job id; the client watches progress over Server-Sent Events or WebSocket.
+
+## Real time
+
+- Socket.IO (or plain WebSocket) gateway in the API, with the Valkey adapter so several API servers share events.
+- Rooms per store and per chat; the server checks permissions when a client joins a room.
+- Used for: new messages, typing, assignment changes, order stage changes, job progress, notifications.
+- Push notifications to phones through Web Push for the installed app.
+
+## Events (outbox)
+
+1. A module changes its tables and inserts an event row into `outbox_events` in the **same transaction** (`id`, `store_id`, `type`, `payload`, `occurred_at`).
+2. A relay worker reads new rows in order, publishes them to BullMQ queues for each subscribing module, and marks them sent.
+3. Consumers are idempotent: they record processed event ids and skip repeats.
+4. Moving to Kafka later only replaces the relay's publish step; modules don't change.
+
+Pending review: cross-store workers read due work through SECURITY DEFINER functions with a fixed `search_path`, and the outbox is a global table, so a worker never needs to bypass RLS.
+
+## Queues
+
+| Queue           | Examples                                                                | Priority |
+| --------------- | ----------------------------------------------------------------------- | -------- |
+| `inbound`       | Process Meta, WhatsApp, payment and store webhooks                      | Highest  |
+| `ai-reply`      | Generate and send AI chat replies                                       | High     |
+| `transactional` | Order confirmations, shipping updates, OTP, receipts                    | High     |
+| `outbound`      | Send one message through a provider                                     | Medium   |
+| `campaign`      | Expand an audience into recipients, then feed `outbound` in batches     | Low      |
+| `workflow`      | Run due workflow steps                                                  | Medium   |
+| `sync`          | Shopify and WooCommerce sync (Q13), Meta insights; courier status later | Low      |
+| `bulk`          | Imports, exports, segment rebuilds, attribution recalculation           | Lowest   |
+
+Per-store concurrency limits on `campaign`, `bulk` and `sync` stop one shop from filling a queue. Failed jobs retry with exponential backoff, then move to a dead-letter list with an alert.
+| `payments` | Payment intent checks, renewals, reconciliation | High |
+
+Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per store, Q15), not BullMQ Pro groups.
+
+## Files
+
+- Cloudflare R2 bucket per environment; object keys `stores/<store_id>/<kind>/<uuid>`.
+- Uploads go from the browser straight to R2 with a short-lived presigned URL; the API records the file after upload.
+- Downloads use signed URLs valid 15 minutes. Public order-link product images are served through Cloudflare with a public, cache-friendly path that contains no personal data.
+- Lifecycle rules: exports deleted after 7 days, khata photos after 30 days.
+
+## Key flows
+
+### 1. Inbound message and AI reply
+
+1. Meta (or the WhatsApp BSP) posts a webhook. The API checks the `X-Hub-Signature-256` signature, saves the raw payload to `webhook_events` (unique on the provider's event id, so repeats are dropped), queues an `inbound` job and returns 200. Target under 100 ms.
+2. The inbound worker resolves the store from the Page or phone id, finds or creates the contact and chat, saves the message, downloads media to R2, and pushes it to the inbox over WebSocket.
+3. If AI is on for this chat and no person holds it, the worker schedules an `ai-reply` job 8 seconds later (the store's wait setting). A new customer message resets the timer, so one reply answers the whole thought.
+4. The AI worker runs the agent (see AI section). It may answer, ask a question, create a draft order through tools, or hand over. Saved replies that match are sent without calling the model.
+5. The reply goes to the `outbound` queue, which sends it through the provider adapter with an idempotency key, then records the status callbacks (sent, delivered, read).
+6. If anything fails (model timeout, provider error) the chat is handed to the team with a reason; nothing is lost.
+
+### 2. Outbound sending (all channels)
+
+1. Every send, from any feature, becomes one `outbound` job with: store, contact, channel, message type (transactional or marketing), template or text, and a Dakly message id.
+2. Just before sending, the worker re-checks: consent (for marketing), quiet hours, frequency cap and smart sending, the 24-hour window for Messenger and Instagram, the WhatsApp template's approval, and the store's balance (SMS credits or WhatsApp ৳ balance).
+3. Cost is reserved from the balance before the call and settled after the provider's answer.
+4. The provider adapter applies that provider's rate limit, retries temporary errors with backoff and fails over to the backup SMS gateway.
+
+### 3. Campaign
+
+1. Owner approves. The campaign worker takes a snapshot of the audience (segment rules evaluated now) into `campaign_recipients`, marking skipped people with a reason.
+2. It feeds recipients into `outbound` in batches of 500, paced to the provider's limits and spread across the send window.
+3. Status callbacks update recipients; roll-ups update every minute; the campaign moves to Sent when all recipients reach a final status.
+4. Pause stops feeding new batches; cancel marks unsent recipients cancelled.
+
+### 4. Order
+
+1. An order is created (AI tool, order link, staff). Stock is reserved in the same transaction.
+2. Staff send it with a courier and record the courier and tracking code (D21). Courier booking, status webhooks and polling come with the courier release.
+3. Delivered and returned changes update customer stats, return risk and the order notification automations.
+
+### 5. Store sync (Shopify, WooCommerce; waits for Q13)
+
+Initial import runs as a `bulk` job in pages; after that, store webhooks (verified by HMAC or secret) bring new orders, customers and product changes; a nightly job reconciles anything missed.
+
+### 6. Attribution
+
+On `order.created`, the analytics worker looks back over the store's window (1, 3 or 7 days) for the customer's latest eligible touch and records the attribution (pending review: on the order row instead of an `attributions` table); cancellations remove it and returns reduce its money. Roll-up tables are updated in the same job.
+
+## Environments
+
+| Environment | Purpose                                                                                                                       | Data                                         |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Local       | Developer machines with Docker Compose (PostgreSQL, Valkey, MinIO for R2)                                                     | Seed data only                               |
+| Staging     | Same images as production on a small Droplet and a small managed database; connected to Meta test Pages and courier sandboxes | Synthetic data only, never production copies |
+| Production  | As in Deployment by stage                                                                                                     | Real shops                                   |
+
+## CI and deploys
+
+- GitHub Actions on every pull request: type check, lint, unit tests, cross-tenant tests, migration check, dependency and container scan.
+- Merge to `main` builds Docker images, pushes them to DigitalOcean Container Registry and deploys to staging automatically.
+- Production deploy is a manual approval in GitHub Actions; migrations run first, then a rolling or blue-green switch with health checks; one-click rollback to the previous image.
+- Feature flags (per store) let risky features ship dark and turn on for a few shops first.
+
+## Observability
+
+| Need               | Tool (launch)                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Errors             | Sentry for web, API and workers                                                                                                                                     |
+| Logs               | Structured JSON logs with request id and store id, shipped to Better Stack, Grafana Cloud Logs or similar                                                           |
+| Metrics and alerts | Grafana Cloud (free tier at first) or DigitalOcean monitoring: queue depth, job failures, webhook latency, provider error rates, AI latency and cost, database load |
+| Tracing            | OpenTelemetry in API and workers, sent to the same backend                                                                                                          |
+| Uptime             | External checks on the app, API health and webhook endpoint; public status page from stage 2                                                                        |
+| Queues             | Bull Board (admin only) to inspect and retry jobs                                                                                                                   |
+
+Alerts go to an on-call channel with clear owners. First alerts: webhook intake errors, `inbound` or `ai-reply` queue older than 1 minute, outbound failure rate over 5%, database CPU over 80%, AI spend spike.
+
+## Backups and recovery
+
+| Item       | Approach                                                                                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL | Managed daily backups and point-in-time restore (DigitalOcean keeps 7 days); a nightly logical dump encrypted and copied to R2 in another region, kept 30 days |
+| Valkey     | Holds only rebuildable data (queues are re-created from the outbox if lost)                                                                                    |
+| R2 files   | Object versioning on; lifecycle rules for expiry                                                                                                               |
+| Droplets   | Stateless; rebuilt from images; weekly snapshot in stage 1                                                                                                     |
+| Drill      | Restore to staging every quarter and record the time taken                                                                                                     |
+| Targets    | Lose at most 5 minutes of data; back online within 1 hour (stage 2 onward)                                                                                     |
+
+Scale targets, performance budgets and the security standards are in [scale-and-security.md](scale-and-security.md).

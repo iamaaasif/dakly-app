@@ -12,7 +12,164 @@
 
 Writes Facebook and Instagram posts in the shop's voice and publishes them on a schedule, so a small shop posts every day without a social media person.
 
-## Screens
+## Decisions that change the PRD
+
+The product requirements below are the PRD text from 12 November 2026. Where a later decision changed it, the decision wins:
+
+- D7: every AI-written post needs a person to approve it before it is published.
+- D4: Instagram stays in Social posting and Chats; Instagram DM campaigns are release 2.
+
+## Product requirements
+
+### What it is for
+
+Shop owners know they should post every few days and write good Bangla captions, but don't have time. Content Studio writes posts, messages and product descriptions in the shop's own voice; Social Auto Post schedules them to Facebook Pages and Instagram at the times followers are online. Release 1 (Content Studio in core; Social Auto Post is an extension). TikTok stays "Coming soon".
+
+### User stories
+
+- As an owner, I want 3 caption options in Bangla, Banglish or English in my shop's voice, so I just pick one.
+- As an owner, I want Dakly to post at the best time automatically, so I don't need to remember.
+- As an owner, I want one calendar of everything scheduled, published or failed, and to drag a post to another day.
+- As an owner, I want to see which posts got reach, comments and orders.
+
+### Screens
+
+| Screen            | Elements                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AI Content Studio | AI credits left and reset date; tabs Create, Library, Brand profile. Create: (1) What do you want to write? Facebook post, Instagram caption, WhatsApp message, SMS, Product description (Email subject lines hidden until Email ships); (2) What's it about? New arrival, Sale or offer, Festival greeting (Eid ul-Fitr, Eid ul-Adha, Durga Puja, Pohela Boishakh, Victory Day, Winter sale), Back in stock, Thank you, Behind the scenes; product (optional); anything else Dakly should know; (3) How should it sound? Language (Bangla, English, Banglish), length (Short, Medium, Long), tone (Friendly, Festive, Urgent, Premium, Playful), add my hashtags, end with how to order, use my Brand Profile; Write 3 options ("Uses 3 AI credits"). Results: 3 cards with Copy, Edit, Save to library, Use in post, Use in campaign. Idea chips to start. |
+| Brand profile     | Shop name, what you sell, who you sell to, voice (chips), words to use, words to avoid, default language, call to action in Bangla and English, hashtags, website or link.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Library           | Saved pieces with type, language, date; search; reuse.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Social hub        | Connected channels (Facebook Pages and Instagram accounts with followers and status Connected, Access expired with Reconnect; TikTok Coming soon with Notify me); Connect account; Drafts (private to creator until scheduled) with Edit, Duplicate, Delete; Posting schedule; Create post; banner when an account needs reconnecting.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Create post       | Post to (Facebook Pages and Instagram accounts as chips); type Post or Story; caption (one for all, or customise per network); AI caption panel (topic, tone, language → 3 options; tools Shorten, Friendlier, Translate to Bangla or English, Add hashtags); media (up to 10 photos from upload or from Products); Facebook link (optional); Instagram first comment (optional); live preview per network; When: Add to queue (next open slot, recommended), Pick date and time, Publish now; Save draft.                                                                                                                                                                                                                                                                                                                                                   |
+| Posting schedule  | Weekly time slots per day (default from follower activity, for example Sat 12:30 and 20:30, Fri 11:00 and 20:30); Use recommended times; add or remove slots; time zone note.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| My posts          | Tabs Calendar and Published. Calendar: Month, Week, List; filter by account; colour legend Scheduled, Needs attention, Published, Failed; drag a scheduled post to another day; click opens the post. Published: sort by newest, most reach, most reactions; each with reach, reactions, comments, link taps and orders.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+
+### How it works
+
+**Writing**
+
+The language model receives: the format and its limits, the topic, product facts (name, price, sizes, description) from Products, the brand profile, the language and tone, and rules (no emoji unless the brand allows, a clear call to action, 2–3 hashtags at the end, no invented prices or discounts). It returns exactly 3 options. Banglish means natural mixed Bangla script and English words as Bangladeshi shoppers write on Facebook. Each generation uses 3 AI credits; editing tools (shorten, friendlier, translate, hashtags) use 1.
+
+**Scheduling and publishing**
+
+1. Add to queue picks the next free slot in the posting schedule that is at least 15 minutes ahead.
+2. At publish time Dakly calls the Facebook Pages API or the Instagram content publishing API with media and caption (and first comment, link).
+3. On success the post becomes Published and stores the post ID; reach, reactions, comments and link taps are pulled every 6 hours for 7 days, then daily for 30 days.
+4. On failure (token expired, media rejected, rate limit) the post becomes Failed with the reason; Retry is offered, and the owner gets a Fix now notification.
+5. Needs attention = scheduled within 24 hours but something will block it (expired access, missing media for Instagram).
+
+**Recommended times**
+
+From Page insights (when followers are online, last 30 days) and the store's order times. New Pages with no data use a default schedule (12:30 and 20:30 daily, Dhaka time) until 30 days of data exist.
+
+**Orders from posts**
+
+A post's orders = orders from customers who tapped a Dakly-tracked link in it, or started a chat from a comment on it (private reply) and ordered within the attribution window.
+
+### Business rules
+
+| ID      | Rule                                                                                                                                        |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| SOC-R1  | Instagram posts need at least 1 photo, caption up to 2,200 characters and up to 30 hashtags. Stories need 1 photo.                          |
+| SOC-R2  | A scheduled time must be in the future (store time zone).                                                                                   |
+| SOC-R3  | Warn 7 days before Meta access expires and again on expiry; scheduled posts for that account show Needs attention.                          |
+| SOC-R4  | Drafts are visible only to their creator until scheduled; Owners and Admins can see all drafts in a "Team drafts" filter.                   |
+| SOC-R5  | Deleting a published post in Dakly does not delete it from Facebook or Instagram (stated in the confirm dialog).                            |
+| CONT-R1 | AI writing never invents prices, discounts, codes or claims ("best in Bangladesh", "guaranteed"); words in "words to avoid" are never used. |
+| CONT-R2 | When AI credits are 0, Write is disabled with the reset date and a top-up option.                                                           |
+
+### States and edge cases
+
+- No Page connected: Social hub shows Connect your Facebook Page as the only action.
+- Photo too large or wrong ratio for Instagram: auto-crop preview with "Adjust".
+- Two posts in the same slot: second moves to the next free slot with a toast.
+- AI service slow: after 20 seconds show the fallback "Try again"; never post an empty caption.
+
+### Permissions
+
+View Social posts: see calendar and results. Edit: create, schedule, publish, connect accounts (connecting needs Owner or Admin because it uses their Facebook login).
+
+### Events
+
+post.scheduled, post.published, post.failed, post.metrics\_updated, account.token\_expiring, content.generated.
+
+### Acceptance criteria
+
+- Given the schedule has Fri 20:30 free, when the owner adds a post to the queue on Friday at 18:00, then it is scheduled for Fri 20:30.
+- Given Instagram access expired, when a post for Facebook + Instagram is due, then Facebook publishes, Instagram is marked Failed with "Access expired", and a Fix now notification appears.
+- Given the brand profile avoids "cheap", when 3 options are generated, then none contains "cheap".
+- Given a published post, after 6 hours its reach and reactions appear in Published.
+
+### Beyond the prototype
+
+The prototype's posts, captions and best-time charts are samples. Nabik's Social Studio, Buffer and Later show the useful additions.
+
+| Addition                                                                                                                                 | Why                                                            | Release |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------- |
+| Weekly content plan: AI proposes 3–7 posts for the week from new products, stock, offers and festivals; the owner approves all in one go | Owners want a plan, not a blank editor (Nabik)                 | 1       |
+| Bangladesh festival and sale calendar (Pohela Boishakh, Eid, Puja, Victory Day, 11.11, winter season) feeding suggestions                | Most sales spikes are seasonal                                 | 1       |
+| Product photo tools: remove background, add price tag and logo, square and story sizes                                                   | Most sellers shoot on a phone                                  | 1       |
+| AI images only for backgrounds and banners, never to change how a product looks                                                          | Misleading product images cause returns and Meta policy issues | 1       |
+| Idea board and saved drafts shared by the team                                                                                           | Collaboration                                                  | 1       |
+| Post results from Meta (reach, reactions, comments, link taps, chats started, orders) per post                                           | Ties posts to sales                                            | 1       |
+| Meta catalog sync from Products, so posts and ads can tag products                                                                       | Shops tagging products sell more on Instagram                  | 2       |
+
+**Do not copy from the prototype:** sample captions, follower counts, best-time values and post results. Best times are computed from the Page's own insights.
+
+## Prototype screens
+
+Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialog. Layout only: the numbers, names and some flows are sample data (see the next section).
+
+**Create post**
+
+![Create post](../design/screenshots/content-and-social/create-post.webp)
+
+**Connect account**
+
+![Connect account](../design/screenshots/content-and-social/connect-account.webp)
+
+**Posting schedule**
+
+![Posting schedule](../design/screenshots/content-and-social/posting-schedule.webp)
+
+**Edit a post**
+
+![Edit a post](../design/screenshots/content-and-social/edit.webp)
+
+**My posts: create post**
+
+![My posts: create post](../design/screenshots/content-and-social/create-post.webp)
+
+**My posts: list view**
+
+![My posts: list view](../design/screenshots/content-and-social/list.webp)
+
+**My posts: week view**
+
+![My posts: week view](../design/screenshots/content-and-social/week.webp)
+
+## Where the prototype is wrong or missing
+
+The prototype is a concept with sample data. Build from this doc, not from the prototype, where they differ.
+
+### Design review: Social hub and My posts
+
+The post composer and scheduling are well thought out. But the design can't decide whether Instagram is supported: it shows a connected Instagram account with scheduled posts, while the connect and compose screens say Instagram is "Coming soon". The team needs to settle that before build.
+
+| Feature            | What the design shows                                                                                                                                                                                                                                                                                   | Gaps and questions for build                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Connected channels | 2 Facebook Pages and 1 Instagram account with follower counts; Instagram "Access expired" with Reconnect; TikTok "Coming soon" with Notify me                                                                                                                                                           | Meta tokens expire. Decide how early to warn (the design warns only after expiry).                                                                                                               |
+| Connect account    | Choose Facebook Page or Instagram business account (Instagram marked "Coming soon")                                                                                                                                                                                                                     | Contradicts the connected @urbantrend.bd account and the Instagram filter on the calendar.                                                                                                       |
+| Create post        | Post or Story, AI captions (topic, tone: Friendly/Festive/Urgent/Premium, language: English/Bangla/Banglish), caption tools (shorten, friendlier, translate to Bangla, hashtags), up to 10 photos from upload or from products, Facebook link, Instagram first comment, live Facebook/Instagram preview | "Post to" only offers Facebook, Instagram marked "Coming soon". "From products" needs the store product sync. Instagram Stories need the Instagram API, so Story may be Facebook-only at launch. |
+| When to post       | Auto-schedule at the next open slot (recommended), pick a time, or publish now                                                                                                                                                                                                                          | The suggested slots (Fri, Nov 6) are in the past compared with the prototype's own date (Sat, Nov 7).                                                                                            |
+| Posting schedule   | 9 weekly time slots, "Use recommended times" based on when followers were online in the last 30 days                                                                                                                                                                                                    | Needs Page insights permission from Meta. New Pages have no data, so define a default schedule.                                                                                                  |
+| Drafts             | 3 drafts, only visible to the creator until scheduled; Edit, Duplicate, Delete with confirm                                                                                                                                                                                                             | Should team members (Marketer role) see each other's drafts?                                                                                                                                     |
+| My posts calendar  | Month/Week/List views, filter by account, colour legend (Scheduled, Needs attention, Published, Failed), drag to reschedule, Bangla and English posts                                                                                                                                                   | Good. Failed and "needs attention" posts need a retry flow.                                                                                                                                      |
+| Published posts    | Tab with 4 published posts                                                                                                                                                                                                                                                                              | Post results (reach, clicks, orders) feed Analytics; define which Meta metrics are pulled and how often.                                                                                         |
+
+## Engineering
+
+### Screens in release 1
 
 ![Social hub](../design/screenshots/social-hub.webp)
 
@@ -20,7 +177,7 @@ Writes Facebook and Instagram posts in the shop's voice and publishes them on a 
 
 TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagram "Access expired" disagrees with the campaign builder; status comes from the real connection.
 
-## How it works
+### How it works
 
 1. A post has one row (caption, media, post or story) and one target per account it goes to. Each target has its own status (`draft`, `waiting_approval`, `scheduled`, `publishing`, `published`, `failed`), external post id and error, so Facebook can publish while Instagram fails.
 2. AI-written captions need approval (D7): saving one sets `waiting_approval` until an Owner, Admin or Marketer schedules it. Captions a person typed skip this.
@@ -30,30 +187,34 @@ TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagra
 6. Insights are fetched every 6 hours for 7 days, then daily to day 30.
 7. Content Studio generates 3 captions per request from the brand profile and counts against `ai_content` (3 per generation, 1 per edit).
 
-## Rules
+### Rules
 
 1. Nothing AI-written is published without a person's approval.
 2. Publishing uses the Page token from the channel connection; there is no separate login.
 3. Generated text passes moderation before it can be scheduled.
 
-## Permissions
+### Permissions
 
 `social.view`, `social.edit`.
 
-## Events
+### Events
 
 Emits `post.scheduled`, `post.published`, `post.failed`.
 
-## Data
+### Data
 
 `brand_profiles`, `posts`, `post_targets`, `posting_slots`, `post_metrics`, `media_assets`. `content_generations` is cut by the schema review; generations would live in `ai_runs` (pending review).
 
-## Edge cases to test
+### Edge cases to test
 
 - Facebook publishes and Instagram fails: two target statuses, one post.
 - Two posts race for one slot.
 - Token expires the day before a scheduled post.
 
-## Acceptance
+### Acceptance
 
 - Given a post to Facebook and Instagram, when Instagram rejects the image, then Facebook shows Published and Instagram shows Failed with the reason and Fix now.
+
+## Open questions
+
+None.

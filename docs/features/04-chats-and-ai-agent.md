@@ -12,13 +12,271 @@
 
 One inbox for Messenger, Instagram, WhatsApp and post comments. The AI answers price, size, stock and delivery questions in Bangla, Banglish or English, drafts orders, and hands the chat to a person when it should. The most used screen in Dakly.
 
-## Screens
+## Decisions that change the PRD
+
+The product requirements below are the PRD text from 12 November 2026. Where a later decision changed it, the decision wins:
+
+- D17: the AI model is OpenAI through `LlmDriver` and `AiService` tiers, not the Claude API.
+- D21: there is no courier API in release 1. When a customer asks where the parcel is, the AI answers from the courier name and tracking code staff recorded on the order, and hands over when there is none.
+- D7: chats AI replies and drafts orders without approval, within its settings.
+
+## Product requirements
+
+### What it is for
+
+Facebook sellers lose orders because nobody answers "price koto?" at 11 pm. Chats puts Messenger, Instagram DMs, WhatsApp and post comments in one inbox, and the Dakly AI sales agent answers from the shop's own products and rules, collects name, phone and address, creates the order and hands anything tricky to a person. Release 1, Chats extension. Decision taken: the AI may reply and draft orders on its own while auto-reply is on; campaigns and posts still need approval.
+
+### User stories
+
+- As a seller, I want every Messenger, Instagram, WhatsApp and comment message in one list, so I stop switching apps.
+- As a seller, I want Dakly to answer price, size, stock and delivery questions in Bangla or Banglish within seconds, day and night.
+- As a seller, I want Dakly to collect name, phone and address and turn the chat into an order, so I only pack and ship.
+- As a seller, I want Dakly to hand complaints, exchanges and unusual requests to me, so a bot never makes an angry customer angrier.
+- As a seller, I want to teach Dakly my rules by typing a sentence like "ঢাকার বাইরে ১৫০ টাকা", so I don't fill in forms.
+- As a support agent, I want to take over any chat, use saved replies, and send product cards and order links.
+
+### Screens
+
+| Screen                | Elements                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chats header          | Title and subtitle; "N need you"; AI auto-reply on/off pill; replies today; orders from chats today and their ৳ value; AI agent button.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Chat list             | Tabs with counts: All, Needs you, AI handling, Follow up, Done, Not customers. Channel filter (All, Messenger, WhatsApp, Instagram, Comments). Sort (Needs you first, Unread first, Waiting longest). Select for bulk (Mark done, Assign, Label). Each row: avatar, name, time, last message, unread count, intent tag (Asked price, Asked size, Sent a photo, Wants to order, Where's my order, Exchange, Complaint, Payment, Said yes, No reply, New chat, Comments, Done), who is replying (AI or Me), "Lead saved", "Dakly is typing…".    |
+| Conversation          | Header: name, channel, "Reply within N h" for Messenger and Instagram, assignee picker (You, team members, None), Label, Remind me, Done. Banner "Dakly AI is handling this chat" with Take over (or "You're replying. Hand back to AI"). Messages with AI badge on AI messages and system lines (order created, handed over, marked not a customer). Composer: Reply / Internal note toggle, attach, AI rewrite, saved replies, send product, write with AI, order link.                                                                      |
+| Side panel            | Lead status ("Not a lead yet" until a phone is shared, then Lead or Customer with Open profile), delivery history and return risk, tabs Order / Media / Ask Dakly. Order tab = Make an order form: product, size with live stock, quantity, name, phone, address, district (sets delivery charge), "Delivery charge paid in advance", totals (product, delivery, COD), Ask customer for missing details, Create order.                                                                                                                         |
+| Comments view         | Post thumbnail and caption, comment count, comments grouped by intent ("9 comments asking price"), reply under comment, send price by DM (private reply), hide comment.                                                                                                                                                                                                                                                                                                                                                                        |
+| AI agent drawer       | Tabs: Settings, Knowledge, Feedback, Test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Settings tab          | Master switch AI auto-reply; reply language (Match customer, Bangla, English); What Dakly does (switches): Answer questions; Send product cards; Take orders; Confirm orders; Courier updates; Ask for a review; Follow up hot leads (Off, Hot leads only, All interested); Answer post comments. Hand to me (switches): Damaged, wrong or fake product; Refunds and exchanges; Special requests. Return chat to AI: after 1 hour, after 24 hours, until I hand it back. "How Dakly talks" (tone from brand profile). Teach box with examples. |
+| Knowledge tab         | Products (synced from Products, count); Shop rules (delivery inside Dhaka, outside Dhaka, delivery days, bKash number for advance, opening hours, exchange days, tone, extra rules); Questions you taught Dakly (Q, A, keywords, times used, edit, delete); Files and links (upload PDF or image such as a size chart, or a website link; status Reading → Learned N facts).                                                                                                                                                                   |
+| Feedback tab          | Replies the team rated, with thumbs up or down, reason chips (Wrong information, Wrong price or stock, Too long, Not our tone, Missed the question, Should have handed to me), the fix, and "Fixed and learned". Satisfaction % at top.                                                                                                                                                                                                                                                                                                        |
+| Test tab              | Type a customer message (examples: "Kurti M size koto?", "Rangamati te COD hobe?", "Kapor ki cotton?") and see Dakly's answer, its source ("Answered from your answer: …" or "From Products") or "Dakly doesn't know this yet, so it calls your team"; Not right? Change the answer.                                                                                                                                                                                                                                                           |
+| Not a customer dialog | Reason (Supplier or business partner, Courier or delivery rider, Friend or family, Job seeker, Spam or scam, Other), optional Block; Dakly pre-selects a guess from the message text.                                                                                                                                                                                                                                                                                                                                                          |
+
+### How it works
+
+**Receiving messages**
+
+1. Meta webhooks (Messenger, Instagram, WhatsApp Cloud API) deliver each incoming message within seconds. Dakly stores it, finds or creates the contact (tab 3), and attaches the chat to the store.
+2. If the contact is marked Not a customer, the message is stored but the AI never replies.
+3. The AI pipeline runs if auto-reply is on, the chat is not in human mode, and the channel's reply window is open.
+
+**AI reply pipeline** (target: first reply within 10 seconds)
+
+1. **Batch:** wait 4 seconds for more messages from the same person, then treat them as one turn (customers often send 3 short messages).
+2. **Classify intent** into one of: greeting, price, size or stock, delivery, payment, order (sharing name, phone or address), yes or confirm, where's my order, exchange, complaint, photo, special request, other. Also detect language (Bangla script, Banglish, English).
+3. **Hand-over check:** complaint (damaged, wrong, fake, refund words) → hand over if "Damaged, wrong or fake" is on; exchange or return → hand over if "Refunds and exchanges" is on; custom or bulk order → hand over if "Special requests" is on; the customer asks for a person; or the AI's confidence is low. On hand-over Dakly sends a holding reply ("একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।"), moves the chat to Needs you, records the reason and notifies the assignee or Owner.
+4. **Retrieve facts:** the product the customer means (from text, a product card they tapped, the post they came from, or a photo matched against product images), its price, sale price, sizes and live stock; shop rules; taught answers; facts learned from files and links; the customer's orders and courier status.
+5. **Draft the reply** with the language model in the customer's language and the store's tone, using only the retrieved facts. If a needed fact is missing (for example no price), it does not guess: it hands over and creates a Products nudge ("Leather sandal has no price. Customers asked 3 times").
+6. **Act:** depending on intent and switches, the reply may include a product card (photo, price, sizes), an order summary asking for "হ্যাঁ", a courier status line, or a request for missing details.
+7. **Send** through the channel API, mark the message with AI, update the chat's intent tag and counters.
+
+**Taking an order in chat**
+
+1. When the customer shares any of name, phone, address or district, Dakly fills a draft order in the side panel and saves the person as a lead as soon as a valid phone appears (toast "Dakly saved Sadia Islam as a new lead from Messenger").
+2. Missing fields are asked for in one message ("অর্ডার করতে নাম, ফোন আর ঠিকানা দিন।").
+3. When complete, Dakly creates the order with status To confirm and sends the summary: items, size, total with delivery, COD, address, "ঠিক থাকলে 'হ্যাঁ' লিখুন।" (toast "Dakly AI took an order from Habib Rahman (#1063)").
+4. If "Confirm orders" is on and the customer says yes, the order moves to To pack ("confirmed by the customer"), stock is reserved, and Dakly replies that it will be packed and sent.
+5. If the customer has High return risk, Dakly asks for the delivery charge in advance by bKash (the shop's bKash number from Knowledge) instead of confirming; the order stays in To confirm until a person records the advance.
+6. A team member can always edit the draft in the side panel and press Create order themselves.
+
+**Comments**
+
+New comments on the store's Page and Instagram posts arrive by webhook. If "Answer post comments" is on, Dakly replies publicly with a short line ("ইনবক্সে দাম জানিয়ে দিয়েছি") and sends the price and product card as a private reply in Messenger or Instagram DM, which opens a normal chat. Negative or abusive comments are not answered and are shown in Needs you.
+
+**Teaching Dakly**
+
+The owner types a rule in plain words. Dakly parses it into a change (for example Delivery outside Dhaka: ৳120 → ৳150), shows old and new value and a sample answer, and saves only after the owner taps Save. Free-form rules that don't map to a field are saved as "extra rules" that Dakly follows in every chat. Rating a reply thumbs down asks why and for the right answer; saving it creates a taught answer.
+
+**Human mode**
+
+Take over (or any reply typed by a person) switches the chat to human mode: the AI stops replying in that chat until it is handed back or the "Return chat to AI" timer passes since the last human message. While in human mode the AI still suggests replies in the composer (Write with AI) but never sends.
+
+### Business rules
+
+| ID       | Rule                                                                                                                                                                                                                                                                 |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CHAT-R1  | The AI uses only: Products, shop rules, taught answers, learned facts, the customer's own orders. It never invents prices, discounts, stock, delivery times or policies.                                                                                             |
+| CHAT-R2  | Messenger and Instagram: free-form replies only within 24 hours of the customer's last message. A person (not the AI) may reply up to 7 days after using Meta's human agent tag. After that the composer is locked and offers WhatsApp if a phone is known.          |
+| CHAT-R3  | WhatsApp: free-form replies within the 24-hour customer service window; outside it only approved templates. From Oct 1, 2026 Meta charges service messages beyond 1,000 free per number per month, so WhatsApp AI replies count toward the store's WhatsApp balance. |
+| CHAT-R4  | The AI never sends marketing offers in chats unless the customer asked; follow-ups to interested leads respect the "Follow up hot leads" setting and are sent at most once, 20 to 24 hours after the last message, inside the window.                                |
+| CHAT-R5  | Hand-over always wins over answering when a hand-over rule matches.                                                                                                                                                                                                  |
+| CHAT-R6  | Stock shown or promised by the AI is the live available quantity (stock minus reserved). The last unit is reserved for 30 minutes when an order draft is sent to a customer.                                                                                         |
+| CHAT-R7  | Each AI conversation (Glossary) uses one unit of the Chats AI allowance. At 0, auto-reply pauses, every new chat goes to Needs you, and the owner is notified with a top-up option.                                                                                  |
+| CHAT-R8  | Every AI message is stored with the facts it used, so a thumbs-down can show what it was based on.                                                                                                                                                                   |
+| CHAT-R9  | Phone numbers in chat are masked for roles without "See full phone numbers", but the order can still be created.                                                                                                                                                     |
+| CHAT-R10 | Not a customer: the AI stops, the contact is excluded from leads, customers and campaigns; Block also blocks on the channel where the API allows.                                                                                                                    |
+
+### States and edge cases
+
+- Customer writes only a photo: match against product images; if confidence is high, answer as that product; otherwise ask "কোন প্রোডাক্টটি চাচ্ছেন?" with up to 3 product cards.
+- Out-of-stock size: say so, offer other sizes in stock, offer "নতুন স্টক এলে জানাবো?" and add them to the product's restock waiting list.
+- Two team members reply at once: second one sees "Rafiq is replying" and a warning before sending.
+- Meta token expired: all chats on that channel show a banner; incoming messages may be missed until reconnect.
+- AI provider down: auto-reply pauses, chats go to Needs you, banner "AI replies are paused. We're on it."
+- Customer in a different store's chat (two Pages): each Page belongs to one store; the chat appears only in that store.
+
+### Permissions
+
+View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Changing AI agent settings and knowledge: Owner and Admin only.
+
+### Events
+
+chat.message\_received, chat.ai\_replied, chat.handed\_over, chat.taken\_over, chat.lead\_saved, chat.order\_created, chat.marked\_not\_customer, agent.rule\_taught, agent.reply\_rated.
+
+### Acceptance criteria
+
+- Given auto-reply is on and Women's Kurti M has 3 in stock at ৳1,850, when a customer writes "Kurti ta M size ache? price koto?", then within 10 seconds Dakly replies in Banglish or Bangla with the price, that M is in stock, the delivery charge for Dhaka and how to order.
+- Given "Damaged, wrong or fake product" is on, when a customer writes "kapor chera ashche", then Dakly sends the holding reply, the chat moves to Needs you with reason "Complaint", and the AI sends nothing more.
+- Given a customer shares name, phone and address, when the order is complete, then an order appears in Orders › To confirm with source Messenger and the customer appears in Customers › Leads from chats.
+- Given the owner types "ঢাকার বাইরে ১৫০ টাকা" and saves, when a customer from Sylhet asks the delivery charge, then Dakly says ৳150.
+- Given a Messenger chat whose last customer message was 26 hours ago, then the AI does not reply and a person can still reply with the human agent tag.
+
+### Beyond the prototype
+
+The prototype's chats and AI replies are scripted. A production AI sales agent needs the controls that Intercom Fin, Gorgias, respond.io and Nabik have built.
+
+| Addition                                                                                                                                                                                      | Why                                                                             | Release |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------- |
+| Train the AI by chatting: owner sends a correction, photo, document or voice note; the AI proposes the knowledge change and saves it only after the owner confirms                            | Owners won't fill forms; Nabik trains this way                                  | 1       |
+| Test suite before going live: a list of sample customer questions with expected answers; the AI must pass them before auto-reply can be switched on, and re-runs after every knowledge change | Fin and Gorgias require testing before launch; prevents wrong prices going live | 1       |
+| Procedures for common jobs (take an order, exchange, delivery delay, "where is my parcel") written in plain language, each with allowed tools and hand-over rules                             | Gives owners control without code                                               | 1       |
+| Product search from a customer's photo or screenshot ("ei dress ta ase?") matched against product images                                                                                      | The most common F-commerce question                                             | 1       |
+| Bangla voice note transcription, so the AI and staff can answer voice messages                                                                                                                | Many buyers send voice notes                                                    | 1       |
+| Parcel tracking answers from the courier status                                                                                                                                               | Second most common question after price                                         | 1       |
+| Comment to DM: reply publicly ("Inbox e details dilam") and send the price privately, once per person per post                                                                                | ManyChat pattern; keeps prices off public comments                              | 1       |
+| Round-robin assignment, working hours, SLA timers and "waiting longer than 5 minutes" alerts                                                                                                  | respond.io basics for teams                                                     | 1       |
+| AI performance: resolution rate, hand-over reasons, conversion from chat to order, first reply time, cost per resolved chat                                                                   | Owners must see whether the AI earns its cost                                   | 1       |
+| Click-to-Messenger and Click-to-WhatsApp ad referral captured on the chat (which ad started it)                                                                                               | Lets Analytics credit ads later                                                 | 2       |
+
+**Do not copy from the prototype:** the sample conversations, AI reply wording and the "orders from chats" numbers. Hand-over and approval behaviour follow D7 and the security tab.
+
+**Also from AiPraktor (release 1):**
+
+- **Claim and return.** When the AI hands over, staff get a push notification and claim the chat in one tap. If nobody claims it within the store's timer (default 10 minutes, within working hours), the chat goes back to the AI with a holding reply. When a person finishes, the chat goes back to the AI after 30 minutes of no staff reply. Both times can be changed or switched off.
+- **AI summary** on every chat and customer profile: what they asked, what they ordered, and anything open.
+- **Lead temperature** (hot, warm, cold), set from intent signals: asked price or size, gave phone or address, or went quiet. Follow-ups are sent inside the 24-hour window.
+- **WhatsApp connects only through Meta's official Business API.** Dakly never uses QR-code linked-device sessions, because they risk the shop's number being banned and break Meta's terms.
+
+### Verified details from AI agent products (12 Nov 2026)
+
+From the help centres of AiPraktor, Nabik, Intercom Fin, Gorgias, respond.io and ManyChat. Each row is now a Dakly requirement unless marked otherwise.
+
+#### Going live safely
+
+- **Practice mode before going live.** AiPraktor's AI replies only to test messages (from the agent desk or a "test" code sent to the Page) until the owner presses Go live, which first runs 3 test questions. Fin offers simulations, batch tests from real conversations, answer rating and preview. **Dakly:** practice mode on every new channel; Go live requires the test suite to pass; batch test with the shop's last 50 real chats before switching AI on for an existing Page.
+- **Show why the AI said it.** Fin's answer inspection shows which sources and settings shaped an answer. **Dakly:** every AI reply has "Why this answer" listing the knowledge items, products and rules used.
+- **Draft, test, publish for instructions.** AiPraktor turns plain-language instructions ("we're closed Fridays") into a draft, tests it in a side chat and publishes with undo; the log shows who taught what. **Dakly:** same, with version history.
+- **Fixed platform rules the shop can't override:** never invent discounts or prices, never change an order after staff approved it, never ask for card numbers, OTPs or passwords, never promise outcomes (visa, cures). Fin always hands off jailbreak attempts and high-risk topics.
+
+#### Replying
+
+- **Wait before answering.** Customers split one question into several messages. AiPraktor waits 0–15 seconds per channel (default about 15 s on Messenger) before replying. **Dakly:** wait 8 seconds by default on Messenger, Instagram and WhatsApp (editable 0–20 s), resetting on each new customer message, so one reply answers the whole thought.
+- **Saved replies that answer automatically, free of AI cost.** AiPraktor matches customer phrasings and keyword pairs ("delivery + charge"), ignores punctuation, emojis and greetings ("bhai", "apu"), fills placeholders from records, and won't fire when several replies match, the message has several questions, or a person holds the chat. **Dakly:** same, and it suggests phrasings from the last 14 days of chats. Saved-reply answers don't count as AI conversations.
+- **Comments.** Reply publicly using the customer's name, never with phone, address or price details; send the details by private reply. Meta allows one private reply per comment, within 7 days of the comment. Delete clear spam or abuse automatically; hide uncertain ones for the team.
+- **Follow-ups and Messenger broadcasts inside the window.** AiPraktor sends one follow-up per hot or warm lead within 24 hours of the last message, and broadcasts only to people who messaged in the last 23 hours, skipping anyone broadcast to in the last 24 hours. **Dakly:** same limits for Messenger and Instagram; anything outside the window uses approved templates only.
+
+#### Orders and actions
+
+- **Actions with guardrails.** Gorgias's AI Agent runs actions like cancel order or edit address only when conditions pass (for example the order isn't fulfilled) and confirms the change with the shopper first. **Dakly:** the AI may change name, phone, address, items or delivery charge, or cancel, only before the order is approved; after approval it records the request and hands over. Refunds, complaints and exchanges always go to a person.
+- **Handover reasons** are recorded from a fixed list: asked for a person, complaint, refund, discount request, angry, out of scope, ready to buy, other.
+
+#### Hand-over and team
+
+- **Take over with a timer.** AiPraktor: take over for 30 min, 1 h, 6 h or permanently; the AI returns when the timer ends (default 1 h). Staff can also send "." from the Messenger or WhatsApp app to take over and "." again to return. **Dakly:** same timers; the shortcut is a configurable keyword that isn't sent to the customer where the channel allows.
+- **Pause AI** per chat, per channel or for the whole shop, for a set time or until switched on; messages keep arriving.
+- **Assignment strategies** (respond.io): round robin, round robin among online staff only, or fewest open chats; unassign when closed. **Dakly:** all three, per team.
+- **Inbox tabs:** Open, Later and Done; Done reopens when the customer writes again.
+
+#### Measuring and billing the AI
+
+- Fin bills $0.99 per outcome, at most once per conversation; an "assumed resolution" is counted when the customer stops for 24 hours after Fin's answer, and a greeting alone is not an answer. Gorgias counts an interaction as automated if no human is needed within 72 hours. AiPraktor charges more for photos, voice notes and big lookups, and nothing for team replies, saved replies or human-held chats. Nabik charges at cost plus a margin and sends chats to "Needs you" when credits run out.
+- **Dakly:** keep the Glossary unit (one AI conversation = one contact, one 24-hour window, at least one AI reply). Report resolution rate as "chats with no human reply within 24 hours after the AI's last answer". Saved replies and human-held chats are free. When AI conversations run out, chats go to the team as "Needs you" and nothing is lost.
+
+Sources: [AiPraktor help](https://www.aipraktor.com/help), [Nabik pricing](https://nabik.ai/pricing), [Fin explained](https://www.intercom.com/help/en/articles/7120684-fin-ai-agent-explained), [Fin outcomes](https://fin.ai/help/en/articles/13975800-fin-pricing-outcomes), [Gorgias AI Agent actions](https://docs.gorgias.com/en-US/create-an-action-for-ai-agent-567325), [respond.io assignment](https://respond.io/help/convert-leads/assignment-strategy-automatic-contact-distribution-load-balancing), [ManyChat comments tool](https://manychat.com/blog/comment-growth-tool/)
+
+## Prototype screens
+
+Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialog. Layout only: the numbers, names and some flows are sample data (see the next section).
+
+**AI agent: Settings tab**
+
+![AI agent: Settings tab](../design/screenshots/chats-and-ai-agent/ai-agent.webp)
+
+**AI agent: Knowledge tab**
+
+![AI agent: Knowledge tab](../design/screenshots/chats-and-ai-agent/knowledge.webp)
+
+**AI agent: Feedback tab**
+
+![AI agent: Feedback tab](../design/screenshots/chats-and-ai-agent/feedback.webp)
+
+**AI agent: Test the agent**
+
+![AI agent: Test the agent](../design/screenshots/chats-and-ai-agent/test-the-agent.webp)
+
+**AI handling tab**
+
+![AI handling tab](../design/screenshots/chats-and-ai-agent/ai-handling-9.webp)
+
+**Follow up tab**
+
+![Follow up tab](../design/screenshots/chats-and-ai-agent/follow-up-1.webp)
+
+**Filter**
+
+![Filter](../design/screenshots/chats-and-ai-agent/filter.webp)
+
+**Take over from the AI**
+
+![Take over from the AI](../design/screenshots/chats-and-ai-agent/take-over.webp)
+
+**Internal note**
+
+![Internal note](../design/screenshots/chats-and-ai-agent/internal-note.webp)
+
+**Ask Dakly about this chat**
+
+![Ask Dakly about this chat](../design/screenshots/chats-and-ai-agent/ask-dakly.webp)
+
+**Create order from the chat**
+
+![Create order from the chat](../design/screenshots/chats-and-ai-agent/create-order.webp)
+
+**Send product**
+
+![Send product](../design/screenshots/chats-and-ai-agent/send-product.webp)
+
+**Saved replies**
+
+![Saved replies](../design/screenshots/chats-and-ai-agent/saved-replies.webp)
+
+## Where the prototype is wrong or missing
+
+The prototype is a concept with sample data. Build from this doc, not from the prototype, where they differ.
+
+### Missing design: inbox and approvals queue
+
+**Why it's needed.** The design assumes an Inbox in three places: an "Inbox" permission in every role, a "Support agent" role that "replies to customers in Inbox", and a notification "3 customers are waiting for a reply · Reply now". When a campaign goes out on WhatsApp, customers reply ("price koto?"), and today those replies have nowhere to land. The Dashboard also shows a winback that "Needs your OK", with no place that lists everything waiting for approval.
+
+**Decision first.** Either build a shared inbox, or remove Inbox from roles and notifications and say that replies go to the WhatsApp Business app. A shared inbox is a large module, close to a product of its own.
+
+**If the Inbox is in scope, design:**
+
+- **Conversation list**: one row per customer across WhatsApp, Messenger, Instagram DM and SMS replies, with channel icon, last message, time, unread badge, assigned agent; filters Unassigned, Mine, Waiting, Closed.
+- **Conversation view**: message thread, customer card on the side (spend, last order, tags, segments, consent), quick replies, AI-suggested reply in Bangla or English, attach product or photo, assign, close.
+- **WhatsApp 24-hour rule**: after 24 hours without a customer message, only approved templates can be sent. Show a clear banner and a template picker.
+- **Notifications**: new message alerts, and an "unanswered for 1 hour" reminder.
+
+**Approvals queue (needed either way).** A To-do list, either a tab in Notifications or its own page, that shows every item waiting for the owner: campaigns that need an OK, AI-drafted automations, posts flagged "Needs attention", and Marketer drafts waiting for Owner approval. Each item gets Review, Approve and Reject with a note. Decide whether Marketers can send without approval.
+
+## Engineering
+
+### Screens in release 1
 
 ![Chats](../design/screenshots/chats.webp)
 
 Three columns: chat list with tabs (All, Needs you, AI handling, Follow up) and channel filters; the conversation with Reply and Internal note; a side panel with the customer card and a Make an order form. The header shows "need you", AI replies today and orders from chats today (glossary numbers). The AI agent settings, knowledge and test screens open from "AI agent".
 
-## How it works
+### How it works
 
 Conversation state is three separate fields:
 
@@ -56,7 +314,7 @@ Practice mode: each new channel starts with AI not live. The AI answers only the
 
 Comments: classified as question, positive, negative or spam. If "Answer post comments" is on, the AI posts a short public reply and one private reply with price. Spam is hidden; negative goes to Needs you. Nothing with a price, phone or address is posted publicly.
 
-## Rules
+### Rules
 
 1. The AI may reply and draft orders without approval while auto-reply is on (D7). Every AI message is labelled AI.
 2. The AI never invents prices, discounts, stock or delivery times, and never asks for card numbers, PINs or codes.
@@ -69,19 +327,19 @@ Comments: classified as question, positive, negative or spam. If "Answer post co
 9. Each store has a daily AI cost ceiling; passing it pauses AI for that store and alerts Dakly staff.
 10. Per-store fairness: at most 3 AI jobs run at once per store (Valkey semaphore, pending Q15).
 
-## Permissions
+### Permissions
 
 `chats.view`, `chats.edit` (reply, take over, assign). AI agent settings: Owner and Admin.
 
-## Events
+### Events
 
 Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_sent`. Listens to `order.created` to link the order to the chat.
 
-## Data
+### Data
 
 `conversations`, `messages`, `saved_replies`, `ai_settings`, `knowledge_items`, `knowledge_chunks` (pgvector, exact scan per store), `ai_runs`, `usage_events`. `ai_test_cases` is deferred by the schema review (pending review).
 
-## Edge cases to test
+### Edge cases to test
 
 - Three messages in 5 seconds produce one AI reply.
 - A staff reply during the debounce cancels the AI reply.
@@ -90,7 +348,7 @@ Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_
 - A draft with a price not in tool results is not sent.
 - A typed phone of another customer does not reveal their orders.
 
-## Acceptance
+### Acceptance
 
 - Given "price koto? Mirpur e delivery charge koto?" for a product in stock, when the AI replies, then the price and charge match the product and the Mirpur zone exactly.
 - Given a customer writes "ফেরত দিতে চাই", then the chat moves to Needs you with reason refund and no AI answer about the refund.
