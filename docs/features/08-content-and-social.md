@@ -179,13 +179,16 @@ TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagra
 
 ### How it works
 
-1. A post has one row (caption, media, post or story) and one target per account it goes to. Each target has its own status (`draft`, `waiting_approval`, `scheduled`, `publishing`, `published`, `failed`), external post id and error, so Facebook can publish while Instagram fails.
+1. A post has one row (caption, media, post or story) and one target per account it goes to. Each target has a nullable caption override and its own status (`draft`, `waiting_approval`, `scheduled`, `publishing`, `published`, `failed`), external post id and error, so Facebook can publish while Instagram fails.
 2. AI-written captions need approval (D7): saving one sets `waiting_approval` until an Owner, Admin or Marketer schedules it. Captions a person typed skip this.
 3. Add to queue picks the first free posting slot at least 15 minutes ahead in Asia/Dhaka. A unique index on account and time settles a race; the loser takes the next slot.
 4. Publishing is a delayed job per target. Instagram uses the container flow (create, wait for finished, publish). Three retries over 30 minutes, then `failed` with a Fix now notification.
 5. 24 hours ahead, a job flags targets whose token is expired or whose media is missing.
 6. Insights are fetched every 6 hours for 7 days, then daily to day 30.
 7. Content Studio generates 3 captions per request from the brand profile and counts against `ai_content` (3 per generation, 1 per edit).
+8. Save to library stores the edited text, format, language, creator and AI provenance in `content_pieces`. Formats are Facebook post, Instagram caption, WhatsApp, SMS and product description; languages are Bangla, English and Banglish. Copying or editing an AI piece keeps its AI-written approval provenance. Library filters use kind and language, ordered by `(created_at, id)`.
+9. Each `(post, connection)` has one target. A null caption override uses the post caption; an empty override intentionally has no caption. Resolve this effective text before validating each selected network's format and limits at save, approval and publish. The storage ceiling is not proof that a provider accepts the caption.
+10. Brand audience, preferred words and Bangla/English calls to action have dedicated fields. Brand voice remains the writing style; it does not carry unrelated values.
 
 ### Rules
 
@@ -203,17 +206,23 @@ Emits `post.scheduled`, `post.published`, `post.failed`.
 
 ### Data
 
-`brand_profiles`, `posts`, `post_targets` (metrics as columns, refreshed), `files` for media. The posting schedule lives in each connection's `settings`; AI captions are `ai_runs`. Full design: [docs/data](../data/README.md).
+`brand_profiles` (including `audience`, `preferred_words`, `call_to_action_bn`, `call_to_action_en`), `content_pieces` (saved body, kind, language, creator and provenance), `posts`, `post_targets` (caption override and metrics as columns), `files` for media. The posting schedule lives in each connection's `settings`; `ai_runs` retains generation telemetry, never the saved text. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 
 - Facebook publishes and Instagram fails: two target statuses, one post.
 - Two posts race for one slot.
 - Token expires the day before a scheduled post.
+- Save, reload, edit and copy an SMS, WhatsApp message and product description in each language: body, author and AI provenance survive.
+- Save separate Facebook and Instagram captions, reload and publish: each account receives its override; a null override receives the common caption and an empty override stays empty.
+- A second target for the same post and connection is rejected; separate posts still compete for the scheduled slot.
 
 ### Acceptance
 
 - Given a post to Facebook and Instagram, when Instagram rejects the image, then Facebook shows Published and Instagram shows Failed with the reason and Fix now.
+
+- Given an AI-generated Bangla SMS is edited and saved to the Library, when it is reloaded by type and language, then the exact edited text and creator are present and using it in a campaign still requires approval.
+- Given different captions for Facebook and Instagram, when a saved draft is reopened, then each caption is preserved and checked against its selected network before publishing.
 
 ## Open questions
 

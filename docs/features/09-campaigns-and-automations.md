@@ -331,6 +331,14 @@ WhatsApp templates: every WhatsApp campaign uses a template. Edited or new templ
 
 Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0.
 
+### Frozen destinations and final send checks
+
+At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each sendable recipient's `contact_identity_id` under that connection and freeze its address. A Messenger id is Page-scoped: a contact on two Pages must use the identity on the selected Page. Resolve or create a WhatsApp identity from the contact's own consented WhatsApp address under the selected business connection; this does not verify or merge a profile. The chosen template must belong to that connection. SMS stores a normalized phone and has no channel connection or channel identity. A skipped recipient with no address may have no identity.
+
+Before every actual send, verify the contact, identity, connection, channel and frozen address still agree in this store. Never silently switch a scheduled recipient to another Page, number or contact after a merge or edit; require a new approved audience or record an ineligible recipient. Connection binding is immutable after approval. These ownership and address checks are service requirements alongside database tenant constraints.
+
+Immediately before provider submission, repeat consent, window, block, plan and frequency checks. Both `queued` and pre-submission `sending` may become `skipped` with a skip reason. Record the skip and release its reserved cost atomically, with no provider send. A provider-accepted or uncertain submission must be reconciled; it cannot be relabelled as an unsent skip. A withdrawal after scheduling records `no_consent`; a closed Messenger window records `window_closed`.
+
 ### Channel rules
 
 Checked 13 Nov 2026; sources are in the market study. Confirm the SMS rules with the chosen aggregator.
@@ -357,9 +365,9 @@ Limits: 50 steps a workflow, 90 days of waiting in total, 5 exit conditions, 100
 
 Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.
 
-Versions: Publish writes an immutable `automation_versions` row. Runs keep the version they entered; the owner may choose "Stop the old version". Moving runs to a new version is allowed only where step keys match.
+Versions: Publish writes an `automation_versions` row whose graph and publication metadata are immutable. The app may update only `is_stopped` for owner stop control. Runs keep the version they entered; the owner may choose "Stop the old version". Moving runs to a new version is allowed only where step keys match.
 
-Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept 90 days, for per-step numbers and the per-person history.
+Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Running claims are leases: the sweep also reclaims expired `claimed_at` values, including a crash between claiming and queueing. A worker guards writes with its claim generation/time, and provider sends use a stable `(run, step)` operation key; an uncertain provider result must be reconciled before resending. A stale worker cannot advance a newly claimed run. No row lock spans a provider call. Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept until 372 days after the run finishes (365-day rebuild plus 7-day lookback), for per-step numbers, attribution and the per-person history. Active runs retain their evidence.
 
 ### Rules
 
@@ -398,11 +406,16 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 - WhatsApp returns 131049 for a recipient: no retry for 24 hours, SMS offered.
 - A Messenger recipient's window closes while the campaign is sending: skipped as `window_closed`, not sent.
 - A workflow version is published while 40 people wait on a deleted step: they finish on the old version.
+- Crash after a workflow claim and before enqueue: lease recovery queues the same step and provider idempotency prevents a second send.
+- A contact on two Messenger Pages uses the selected Page identity; SMS accepts null connection and identity.
+- Consent is withdrawn after approval while a recipient is queued or claimed but unsent: skip and release cost without calling the provider.
 
 ### Acceptance
 
 - Given 128 people in Stopped buying, 109 with WhatsApp consent and 6 messaged in the last 3 days, when the owner picks Win back on WhatsApp, then the final audience is 103 and the estimate uses the marketing rate.
 - Given 34 WhatsApp failures of which 29 have SMS consent, when the owner taps Send by SMS, then the cost shows first and 29 SMS are queued.
+
+- Given a queued recipient withdraws consent or their Messenger window closes, when the final send gate runs, then the recipient becomes Skipped with `no_consent` or `window_closed`, reserved cost is released once and nothing is sent.
 
 ## Open questions
 

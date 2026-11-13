@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -63,7 +65,8 @@ export const contacts = pgTable(
     birthdayMonth: smallint('birthday_month'),
     birthYear: smallint('birth_year'),
     source: text('source', { enum: contactSources }).notNull(),
-    // 'customer' while the contact has at least one order that is not cancelled (D27).
+    // Customer after a non-cancelled order or an intentional manual/import/sync add.
+    // Cancelling the last order does not undo an intentional customer classification.
     kind: text('kind', { enum: contactKinds }).notNull(),
     notCustomerReason: text('not_customer_reason', { enum: notCustomerReasons }),
     isBlocked: boolean('is_blocked').notNull().default(false),
@@ -80,6 +83,8 @@ export const contacts = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('contacts_store_id_id_key').on(table.storeId, table.id),
+
     uniqueIndex('contacts_store_id_phone_key')
       .on(table.storeId, table.phone)
       .where(sql`${table.phone} is not null and ${table.deletedAt} is null`),
@@ -116,9 +121,8 @@ export const contacts = pgTable(
   ],
 );
 
-// One staff merge, kept so it can be undone for 7 days (D29). The merged contact is soft-deleted,
-// not removed; moved_rows lists the ids moved from it per table and replaced_fields the kept
-// contact's values before the merge, so undo puts both back exactly.
+// Merge request identity survives undo and erasure, so a delayed retry cannot merge again.
+// Before/after evidence supports conflict-aware undo for 7 days (D29); purge redacts that evidence.
 export const contactMerges = pgTable(
   'contact_merges',
   {
@@ -126,14 +130,17 @@ export const contactMerges = pgTable(
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id),
-    keptContactId: uuid('kept_contact_id')
-      .notNull()
-      .references(() => contacts.id),
-    mergedContactId: uuid('merged_contact_id')
-      .notNull()
-      .references(() => contacts.id),
+    operationKey: text('operation_key').notNull(),
+    keptContactId: uuid('kept_contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    mergedContactId: uuid('merged_contact_id').references(() => contacts.id, {
+      onDelete: 'set null',
+    }),
     movedRows: jsonb('moved_rows').notNull(),
     replacedFields: jsonb('replaced_fields').notNull(),
+    // Field values and moved-row versions immediately after merge; later edits must survive undo.
+    afterState: jsonb('after_state').notNull(),
+    undoConflicts: jsonb('undo_conflicts').notNull().default([]),
+    evidenceRedactedAt: timestamptz('evidence_redacted_at'),
     mergedByUserId: uuid('merged_by_user_id')
       .notNull()
       .references(() => users.id),
@@ -143,10 +150,24 @@ export const contactMerges = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'contact_merges_kept_contact_id_store_fk',
+      columns: [table.storeId, table.keptContactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'contact_merges_merged_contact_id_store_fk',
+      columns: [table.storeId, table.mergedContactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
+    uniqueIndex('contact_merges_store_id_operation_key_key').on(table.storeId, table.operationKey),
     // A contact can be merged away once at a time; undoing frees it again.
     uniqueIndex('contact_merges_merged_contact_id_key')
       .on(table.mergedContactId)
       .where(sql`${table.undoneAt} is null`),
+    index('contact_merges_kept_contact_id_idx').on(table.keptContactId),
+    index('contact_merges_merged_contact_id_idx').on(table.mergedContactId),
     index('contact_merges_store_id_kept_contact_id_idx').on(table.storeId, table.keptContactId),
     index('contact_merges_store_id_created_at_idx').on(table.storeId, table.createdAt),
     index('contact_merges_merged_by_user_id_idx').on(table.mergedByUserId),
@@ -168,10 +189,10 @@ export const contactMatchSuggestions = pgTable(
       .references(() => stores.id),
     contactId: uuid('contact_id')
       .notNull()
-      .references(() => contacts.id),
+      .references(() => contacts.id, { onDelete: 'cascade' }),
     matchedContactId: uuid('matched_contact_id')
       .notNull()
-      .references(() => contacts.id),
+      .references(() => contacts.id, { onDelete: 'cascade' }),
     reason: text('reason', { enum: matchSuggestionReasons }).notNull(),
     phone: text('phone'),
     orderId: uuid('order_id'),
@@ -182,6 +203,17 @@ export const contactMatchSuggestions = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'contact_match_suggestions_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'contact_match_suggestions_matched_contact_id_store_fk',
+      columns: [table.storeId, table.matchedContactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     uniqueIndex('contact_match_suggestions_open_key')
       .on(table.storeId, table.contactId, table.matchedContactId, table.reason)
       .where(sql`${table.status} = 'open'`),
@@ -227,6 +259,21 @@ export const contactIdentities = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    uniqueIndex('contact_identities_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'contact_identities_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'contact_identities_channel_connection_id_store_fk',
+      columns: [table.storeId, table.channelConnectionId],
+      foreignColumns: [channelConnections.storeId, channelConnections.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     uniqueIndex('contact_identities_connection_external_id_key').on(
       table.channelConnectionId,
       table.externalId,
@@ -257,6 +304,12 @@ export const consents = pgTable(
     capturedAt: timestamptz('captured_at').notNull().defaultNow(),
   },
   (table) => [
+    foreignKey({
+      name: 'consents_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     index('consents_contact_channel_idx').on(
       table.storeId,
       table.contactId,
@@ -268,41 +321,6 @@ export const consents = pgTable(
     check('consents_channel', isOneOf(table.channel, consentChannels)),
     check('consents_status', isOneOf(table.status, consentStatuses)),
     check('consents_source', isOneOf(table.source, consentSources)),
-  ],
-);
-
-// What the AI remembers about one customer in one store (CHAT-R11): a short summary and facts, each
-// with its source. Built by the fast tier after a conversation from what the customer said and
-// their own orders; staff can edit or clear it. Read as context only: prices and stock always
-// come from tools. Deleted with the contact, and cleared at once on a deletion request.
-export const contactMemories = pgTable(
-  'contact_memories',
-  {
-    contactId: uuid('contact_id')
-      .primaryKey()
-      .references(() => contacts.id, { onDelete: 'cascade' }),
-    storeId: uuid('store_id')
-      .notNull()
-      .references(() => stores.id),
-    summary: text('summary').notNull().default(''),
-    // [{ kind, value, source, sourceId, at }] validated by the contracts schema. A staff fact is
-    // never overwritten by the model.
-    facts: jsonb('facts').notNull().default([]),
-    // The last message read into the memory, so a rerun skips work already done.
-    builtThroughMessageId: uuid('built_through_message_id'),
-    builtAt: timestamptz('built_at'),
-    editedByUserId: uuid('edited_by_user_id').references(() => users.id),
-    editedAt: timestamptz('edited_at'),
-    version: integer('version').notNull().default(0),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (table) => [
-    index('contact_memories_store_id_idx').on(table.storeId),
-    index('contact_memories_edited_by_user_id_idx').on(table.editedByUserId),
-    check('contact_memories_summary_length', sql`char_length(${table.summary}) <= 600`),
-    check('contact_memories_facts_array', sql`jsonb_typeof(${table.facts}) = 'array'`),
-    check('contact_memories_facts_count', sql`jsonb_array_length(${table.facts}) <= 40`),
   ],
 );
 
@@ -329,6 +347,12 @@ export const contactStats = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'contact_stats_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     index('contact_stats_store_id_stage_idx').on(table.storeId, table.lifecycleStage),
     index('contact_stats_store_id_last_order_at_idx').on(table.storeId, table.lastOrderAt),
     index('contact_stats_store_id_net_spend_idx').on(table.storeId, table.netSpendPoisha),
@@ -337,8 +361,7 @@ export const contactStats = pgTable(
   ],
 );
 
-// Saved segments. Ready-made segments are definitions in code; a row with ready_made_key holds
-// only a store's edits to one of them (SEG-R1 reset deletes the row).
+// Saved segments keep store edits separately so a ready-made segment can be reset (SEG-R1).
 export const segments = pgTable(
   'segments',
   {
@@ -364,7 +387,7 @@ export const segments = pgTable(
   ],
 );
 
-// A CSV import of customers or POS sales (D6), with mapping, counts and an error report.
+// A CSV import of customers, POS sales (D6), or products, with mapping, counts and an error report.
 export const imports = pgTable(
   'imports',
   {
@@ -396,6 +419,17 @@ export const imports = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'imports_file_id_store_fk',
+      columns: [table.storeId, table.fileId],
+      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'imports_report_file_id_store_fk',
+      columns: [table.storeId, table.reportFileId],
+      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('imports_store_id_created_at_idx').on(table.storeId, table.createdAt),
     index('imports_file_id_idx').on(table.fileId),
     index('imports_report_file_id_idx').on(table.reportFileId),

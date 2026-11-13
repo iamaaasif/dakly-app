@@ -1,4 +1,12 @@
-import { check, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import {
+  foreignKey,
+  type AnyPgColumn,
+  check,
+  index,
+  pgTable,
+  text,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { taskSources, taskStatuses } from '@dakly/contracts/platform';
 import { users } from './auth';
 import { conversations } from './chats';
@@ -30,6 +38,22 @@ export const tasks = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'tasks_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'tasks_conversation_id_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'tasks_order_id_store_fk',
+      columns: [table.storeId, table.orderId],
+      foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('tasks_store_id_status_due_idx').on(table.storeId, table.status, table.dueAt),
     index('tasks_store_id_assignee_idx').on(table.storeId, table.assigneeUserId, table.status),
     index('tasks_contact_id_idx').on(table.contactId),

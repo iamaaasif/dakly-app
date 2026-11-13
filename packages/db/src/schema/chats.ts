@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   check,
   index,
   integer,
@@ -67,11 +69,30 @@ export const conversations = pgTable(
     windowExpiresAt: timestamptz('window_expires_at'),
     unreadCount: integer('unread_count').notNull().default(0),
     aiSummary: text('ai_summary'),
+    // Logical cursor survives message retention; this conversation alone owns its progress.
+    memoryBuiltThroughMessageId: uuid('memory_built_through_message_id'),
+    memoryBuiltThroughMessageAt: timestamptz('memory_built_through_message_at'),
+    memoryVersion: integer('memory_version').notNull().default(0),
     version: integer('version').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('conversations_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'conversations_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'conversations_channel_connection_id_store_fk',
+      columns: [table.storeId, table.channelConnectionId],
+      foreignColumns: [channelConnections.storeId, channelConnections.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     uniqueIndex('conversations_connection_contact_key').on(
       table.channelConnectionId,
       table.contactId,
@@ -92,6 +113,10 @@ export const conversations = pgTable(
     index('conversations_responder_returns_at_idx')
       .on(table.responderReturnsAt)
       .where(sql`${table.responderReturnsAt} is not null`),
+    check(
+      'conversations_memory_checkpoint',
+      sql`(${table.memoryBuiltThroughMessageId} is null) = (${table.memoryBuiltThroughMessageAt} is null)`,
+    ),
     check('conversations_channel', isOneOf(table.channel, chatChannels)),
     check('conversations_status', isOneOf(table.status, conversationStatuses)),
     check('conversations_responder', isOneOf(table.responder, conversationResponders)),
@@ -141,6 +166,17 @@ export const messages = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'messages_conversation_id_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'messages_ai_run_id_store_fk',
+      columns: [table.storeId, table.aiRunId],
+      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('messages_conversation_external_id_key')
       .on(table.conversationId, table.externalId)
       .where(sql`${table.externalId} is not null`),
@@ -199,6 +235,30 @@ export const socialComments = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'social_comments_channel_connection_id_store_fk',
+      columns: [table.storeId, table.channelConnectionId],
+      foreignColumns: [channelConnections.storeId, channelConnections.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+    foreignKey({
+      name: 'social_comments_post_target_id_store_fk',
+      columns: [table.storeId, table.postTargetId],
+      foreignColumns: [postTargets.storeId, postTargets.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'social_comments_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'social_comments_conversation_id_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('social_comments_connection_comment_key').on(
       table.channelConnectionId,
       table.externalCommentId,

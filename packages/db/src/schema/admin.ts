@@ -125,9 +125,13 @@ export const supportGrants = pgTable(
 
 // Global key-value settings: AI tier to model map, WhatsApp rate card, VAT rate, feature flags,
 // kill switches and announcements. Values are validated by a zod schema per key.
-export const platformSettings = pgTable('platform_settings', {
-  key: text('key').primaryKey(),
-  value: jsonb('value').notNull(),
-  updatedByStaffId: uuid('updated_by_staff_id').references(() => staffUsers.id),
-  updatedAt: updatedAt(),
-});
+export const platformSettings = pgTable(
+  'platform_settings',
+  {
+    key: text('key').primaryKey(),
+    value: jsonb('value').notNull(),
+    updatedByStaffId: uuid('updated_by_staff_id').references(() => staffUsers.id),
+    updatedAt: updatedAt(),
+  },
+  (table) => [index('platform_settings_updated_by_staff_id_idx').on(table.updatedByStaffId)],
+);

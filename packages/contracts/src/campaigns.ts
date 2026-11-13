@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { bdMobileSchema } from './phone';
+
 export const campaignChannels = ['whatsapp', 'sms', 'messenger'] as const;
 export const messageCategories = ['marketing', 'utility', 'authentication'] as const;
 export const campaignStatuses = [
@@ -49,3 +52,25 @@ export const templateStatuses = [
 ] as const;
 export const trackedLinkKinds = ['redirect', 'sms_opt_out'] as const;
 export const trackedLinkSourceTypes = ['campaign', 'automation', 'post', 'chat', 'order'] as const;
+
+// Validate a sendable frozen destination; skipped no-address recipients have no route.
+export const campaignRecipientRouteSchema = z.discriminatedUnion('channel', [
+  z.strictObject({
+    channel: z.literal('sms'),
+    channelConnectionId: z.null(),
+    contactIdentityId: z.null(),
+    address: bdMobileSchema,
+  }),
+  z.strictObject({
+    channel: z.literal('messenger'),
+    channelConnectionId: z.uuid(),
+    contactIdentityId: z.uuid(),
+    address: z.string().min(1).max(256),
+  }),
+  z.strictObject({
+    channel: z.literal('whatsapp'),
+    channelConnectionId: z.uuid(),
+    contactIdentityId: z.uuid(),
+    address: z.string().min(1).max(256),
+  }),
+]);

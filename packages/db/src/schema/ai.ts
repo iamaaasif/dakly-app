@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type PgTableExtraConfigValue,
   bigint,
   boolean,
   check,
@@ -55,7 +57,7 @@ export const aiAgentSettings = pgTable(
     updatedByUserId: uuid('updated_by_user_id').references(() => users.id),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
     index('ai_agent_settings_updated_by_user_id_idx').on(table.updatedByUserId),
     check('ai_agent_settings_reply_language', isOneOf(table.replyLanguage, replyLanguages)),
     check('ai_agent_settings_debounce_seconds', sql`${table.debounceSeconds} between 0 and 20`),
@@ -86,7 +88,14 @@ export const knowledgeItems = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('knowledge_items_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'knowledge_items_file_id_store_fk',
+      columns: [table.storeId, table.fileId],
+      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('knowledge_items_store_id_status_idx').on(table.storeId, table.status),
     index('knowledge_items_file_id_idx').on(table.fileId),
     index('knowledge_items_created_by_user_id_idx').on(table.createdByUserId),
@@ -114,12 +123,19 @@ export const knowledgeChunks = pgTable(
     tokenCount: integer('token_count').notNull(),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'knowledge_chunks_knowledge_item_id_store_fk',
+      columns: [table.storeId, table.knowledgeItemId],
+      foreignColumns: [knowledgeItems.storeId, knowledgeItems.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     index('knowledge_chunks_store_id_idx').on(table.storeId),
     index('knowledge_chunks_knowledge_item_id_idx').on(table.knowledgeItemId),
   ],
 );
 
+// Append-only evidence for rule undo; the audit log holds the event timeline, not these snapshots.
 // Every change a taught rule or a settings save makes to what the AI knows, with the values
 // before and after, so the owner can undo one. Undo writes a new row (source 'undo') and is
 // refused if the target changed again since, rather than overwriting a newer edit.
@@ -142,7 +158,14 @@ export const aiRuleChanges = pgTable(
     changedByUserId: uuid('changed_by_user_id').references(() => users.id),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('ai_rule_changes_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'ai_rule_changes_undoes_change_id_store_fk',
+      columns: [table.storeId, table.undoesChangeId],
+      foreignColumns: [aiRuleChanges.storeId, aiRuleChanges.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('ai_rule_changes_store_id_created_at_idx').on(table.storeId, table.createdAt),
     uniqueIndex('ai_rule_changes_undoes_change_id_key').on(table.undoesChangeId),
     index('ai_rule_changes_changed_by_user_id_idx').on(table.changedByUserId),
@@ -182,7 +205,9 @@ export const aiRuns = pgTable(
     latencyMs: integer('latency_ms'),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('ai_runs_store_id_id_key').on(table.storeId, table.id),
+
     index('ai_runs_store_id_created_at_idx').on(table.storeId, table.createdAt),
     index('ai_runs_subject_idx').on(table.storeId, table.subjectType, table.subjectId),
     check('ai_runs_purpose', isOneOf(table.purpose, aiRunPurposes)),
@@ -209,7 +234,13 @@ export const assistantMessages = pgTable(
     aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'assistant_messages_ai_run_id_store_fk',
+      columns: [table.storeId, table.aiRunId],
+      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('assistant_messages_thread_idx').on(
       table.storeId,
       table.userId,

@@ -1,8 +1,10 @@
 # API routes
 
-Every release 1 HTTP route, by feature, with the permission it needs. The rules are in [api-design.md](../rules/api-design.md) and [auth-and-permissions.md](../rules/auth-and-permissions.md). The request and response shapes are zod schemas in `packages/contracts/src/<feature>.ts`, written in each feature's contract step; an OpenAPI file can be generated from them when an outside client needs one.
+Planned release 1 HTTP routes, by feature, with the permission each needs. This is an implementation contract, not a list of endpoints already served. The rules are in [api-design.md](../rules/api-design.md) and [auth-and-permissions.md](../rules/auth-and-permissions.md). The request and response shapes are zod schemas in `packages/contracts/src/<feature>.ts`, written in each feature's contract step; an OpenAPI file can be generated from them when an outside client needs one.
 
 Permission areas (No access / View / Edit, feature 01): `customers`, `chats`, `orders`, `products`, `campaigns`, `automations`, `socialPosts`, `analytics`, `storeSettings`, `billing`, `team`. A `GET` needs `<area>.view`, anything else `<area>.edit`, unless the table says otherwise. Lists take `cursor` and `limit` and return `{ items, nextCursor }`. Creates take an `Idempotency-Key` header where the table marks "idem".
+
+Merge requests carry a stable operation key through all retries, including retries after undo. The server records the key before queueing or uses an atomic outbox handoff; a repeated key returns the original operation outcome.
 
 ## Without a store session
 
@@ -55,7 +57,7 @@ Permission areas (No access / View / Edit, feature 01): `customers`, `chats`, `o
 | `POST /contacts` (idem), `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                                     | `customers`                                                      |
 | `GET /contacts/:contactId/timeline`                                                                                      | `customers`                                                      |
 | `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory`               | View with `customers.view`; edit and clear with `customers.edit` |
-| `POST /contacts/:contactId/merge` (closes the suggestion)                                                                | `customers`                                                      |
+| `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                                          | `customers`                                                      |
 | `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                  | `customers`                                                      |
 | `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                | `customers`                                                      |
 | `POST /contacts/:contactId/consents`                                                                                     | `customers`                                                      |

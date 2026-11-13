@@ -256,7 +256,7 @@ Ask Dakly AI
 
 ### Rules
 
-1. A number shown on the dashboard is computed by the same function as on Analytics.
+1. A number shown on the dashboard is computed by the same function as on Analytics. Committed source changes reach its summary within five minutes through incremental outbox processing; nightly reconciliation repairs drift. Late returns and corrections restate the original reporting days.
 2. Ask Dakly AI cannot change data.
 
 ### Permissions
@@ -273,6 +273,7 @@ Listens to most events to create notifications: `conversation.handed_over`, `pay
 
 ### Acceptance
 
+- Given a delivered order, a late return or a corrected payment, when its event commits, then Dashboard and Analytics reflect the same corrected period within five minutes without waiting for the nightly job.
 - Given money from marketing is ৳3,42,800 on Analytics for the last 30 days, then the dashboard shows the same.
 - Given "who hasn't bought in 2 months?", then the answer lists the Stopped buying count and a link to the segment.
 

@@ -170,6 +170,8 @@ export const files = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    uniqueIndex('files_store_id_id_key').on(table.storeId, table.id),
+
     uniqueIndex('files_object_key_key').on(table.objectKey),
     index('files_store_id_purpose_idx').on(table.storeId, table.purpose, table.createdAt),
     index('files_uploaded_by_user_id_idx').on(table.uploadedByUserId),

@@ -1,6 +1,6 @@
 # Isolation and access
 
-How the schema keeps one store's data away from another, and how the few paths that start without a store get in. The rules are in [multi-tenancy.md](../rules/multi-tenancy.md) and [database.md](../rules/database.md); this page records what the release 1 migration does. The SQL is the hand-written part of `packages/db/migrations/0003_release_1_schema.sql`.
+How the schema keeps one store's data away from another, and how the few paths that start without a store get in. The rules are in [multi-tenancy.md](../rules/multi-tenancy.md) and [database.md](../rules/database.md); this page records what the release 1 migration does. The base SQL is in migration 0003; forward migration 0004 corrects grants, protected lookup, recovery and tenant references.
 
 ## Roles
 
@@ -13,32 +13,34 @@ No table uses `FORCE ROW LEVEL SECURITY` (schema review must-fix 3). With FORCE,
 
 ## Shop tables
 
-Each of the 57 shop tables has `store_id` and one policy, `<table>_isolation`:
+Tenant child tables have `store_id` and one policy, `<table>_isolation`; `stores` itself uses its primary `id` as the tenant key:
 
 ```sql
 USING (store_id = NULLIF(current_setting('app.store_id', true), '')::uuid)
 WITH CHECK (store_id = NULLIF(current_setting('app.store_id', true), '')::uuid)
 ```
 
-`TenantDatabase.forStore(storeId, ...)` sets `app.store_id` for the transaction. Outside `forStore` the setting is empty, the comparison is null, and the query sees no rows. `store-isolation.int.spec.ts` checks that every table with a `store_id` column has RLS on and a policy that reads `app.store_id`, so a table added later without one fails CI.
+`TenantDatabase.forStore(storeId, ...)` sets `app.store_id` for the transaction. Outside `forStore` the setting is empty, the comparison is null, and the query sees no rows. `store-isolation.int.spec.ts` checks tenant-table RLS policies while explicitly excluding global outbox/staff audit records, so a table added later without one fails CI.
 
-Foreign keys skip RLS: Postgres checks a reference as the table owner. A child row in store A could point at a parent in store B if the code passed a foreign id. Rule: a service loads the parent inside `forStore` (which proves it belongs to the store) before writing a child that points at it. Ids from the client are never written into a foreign key unread.
+Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore have supplemental `(store_id, parent_id)` foreign keys against unique parent `(store_id, id)` keys. The original ID foreign key keeps its SET NULL or CASCADE behavior. A supplemental key paired with CASCADE also uses CASCADE, so ordinary cascading deletes work without deferral. A key paired with SET NULL instead uses NO ACTION to avoid clearing `store_id`; migration 0004 marks only these supplemental keys DEFERRABLE INITIALLY IMMEDIATE. This deferrability is SQL-only and is not represented by Drizzle. Normal inserts still reject cross-store links immediately. A purge/delete transaction that detaches SET NULL links sets `SET CONSTRAINTS ALL DEFERRED` before dependent cleanup/deletion and `SET CONSTRAINTS ALL IMMEDIATE` before commit, so validation sees the final state after delete actions and fails if any reference remains inconsistent. Nullable links may be null; non-null cross-store links are rejected by PostgreSQL. Global reference tables have their ordinary ID foreign keys. Services still load parents through the owning feature in a bounded batch to check permissions and business state; polymorphic IDs and JSON references need explicit ownership checks.
 
 ## Global tables
 
-13 tables have no `store_id`: `users`, `sessions`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_audit_log`, `platform_settings`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only the auth, admin, billing and platform modules read them, by primary or unique key.
+13 tables are global (the audit/outbox tables may carry a nullable store reference without being tenant tables): `users`, `sessions`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_audit_log`, `platform_settings`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only the auth, admin, billing and platform modules read them, by primary or unique key.
 
 `support_grants` holds a `store_id` and has a policy like any shop table: a store can list the grants on itself, and the admin app reads a grant inside `forStore` for that store.
 
 ## Grants
 
-| Grant               | Tables                                                                                                           | Why                                                                               |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| No UPDATE or DELETE | `audit_log`, `staff_audit_log`, `payment_events`, `wallet_ledger`, `stock_movements`, `usage_events`, `consents` | Records of what happened. A correction is a new row.                              |
-| No DELETE           | `orders`, `order_items`, `invoices`, `payment_intents`, `refunds`, `automation_versions`                         | Money and published workflows. Cancel, void or archive instead.                   |
-| No UPDATE           | `automation_versions`                                                                                            | A published version never changes; editing makes a new draft.                     |
-| INSERT only         | `outbox_events`                                                                                                  | Global table; the relay reads it only through `claim_outbox_events` (must-fix 4). |
-| No DELETE           | `webhook_events`                                                                                                 | Purged by `purge_webhook_events` after 7 days.                                    |
+| Grant                           | Tables                                                                                                                                                     | Why                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| No UPDATE or DELETE             | `audit_log`, `staff_audit_log`, `payment_events`, `wallet_ledger`, `stock_movements`, `usage_events`, `consents`, `ai_rule_changes`, `tracked_link_visits` | Records of what happened. A correction is a new row.                                    |
+| No DELETE                       | `orders`, `invoices`, `payment_intents`, `refunds`, `automation_versions`                                                                                  | Money and published workflows. Cancel, void or archive instead.                         |
+| UPDATE only `is_stopped`        | `automation_versions`                                                                                                                                      | Graph and publication fields stay immutable; the owner may stop old runs.               |
+| UPDATE only `status`, `paid_at` | `invoices`                                                                                                                                                 | Settlement may change; document corrections use credit notes.                           |
+| DELETE allowed                  | `order_items`                                                                                                                                              | Editable-order removal must adjust stock, totals and audit atomically in OrdersService. |
+| INSERT only                     | `outbox_events`                                                                                                                                            | Global table; the relay reads it only through `claim_outbox_events` (must-fix 4).       |
+| No DELETE                       | `webhook_events`                                                                                                                                           | Purged by `purge_webhook_events` after 7 days.                                          |
 
 Retention purges of append-only tables (audit log after 2 years, staff audit log after 7) run in the maintenance job as `dakly`, never through the app role.
 
@@ -46,35 +48,35 @@ Sending reads consent only through the view `contact_consent_current` (latest ro
 
 ## Ways in without a store
 
-Some work starts before the store is known: a webhook names a page id, a payment callback names a reference, a public order page names a slug, a sign-in names a user. Sweeps that find due work look across stores. Each of these goes through one small `SECURITY DEFINER` function that returns only ids. The caller then does the real work inside `forStore` for each returned store.
+Some work starts before the store is known: a webhook names a page id, a payment callback names a reference, a public order page names a slug, a sign-in names a user. Sweeps that find due work look across stores. Each of these goes through one small `SECURITY DEFINER` function that returns only the identifiers or narrow fields listed below. The caller then does the real work inside `forStore` for each returned store.
 
-Every function sets `search_path = pg_catalog, public`, has EXECUTE revoked from PUBLIC and granted to `dakly_app` only (must-fix 6). The integration test checks both for every definer function.
+Every definer function sets `search_path = pg_catalog, public, pg_temp`, so temporary relations cannot shadow trusted relations. New/revised function bodies qualify persistent relations with `public`. EXECUTE is revoked from PUBLIC and granted to `dakly_app`; the app cannot create objects in `public`. Regression tests use a conflicting temporary relation and check grants and path order. Merely setting a search path without explicitly placing `pg_temp` last is insufficient.
 
-| Function                                      | Returns                                      | Caller                                    |
-| --------------------------------------------- | -------------------------------------------- | ----------------------------------------- |
-| `store_id_for_channel_account(kind, account)` | store of a connected page, number or account | Webhook intake (Meta, WhatsApp)           |
-| `store_id_for_slug(slug)`                     | store for a public page                      | Order link page, opt-out page             |
-| `payment_intent_for_reference(reference)`     | store and payment intent                     | Payment callbacks and gateway webhooks    |
-| `tracked_link_for_code(code)`                 | store and tracked link                       | Link redirect, SMS opt-out link           |
-| `store_id_for_provider_message(id)`           | store of a sent campaign or workflow message | Delivery and read receipts                |
-| `stores_for_user(user)`                       | the user's stores and roles                  | Sign-in, store switcher                   |
-| `membership_for_invite(token hash)`           | store and membership                         | Accepting a team invite                   |
-| `claim_outbox_events(limit)`                  | claimed events (locks with SKIP LOCKED)      | Outbox relay                              |
-| `mark_outbox_events_published(ids)`           | count                                        | Outbox relay                              |
-| `purge_published_outbox_events(before)`       | count                                        | Maintenance job                           |
-| `purge_webhook_events(before)`                | count                                        | Maintenance job                           |
-| `due_automation_runs(limit)`                  | runs whose wait ended (claimed)              | Workflow sweeper                          |
-| `due_campaigns(as_of)`                        | scheduled campaigns now due                  | Campaign sweeper                          |
-| `due_post_targets(as_of)`                     | scheduled posts now due                      | Social sweeper                            |
-| `due_post_metrics(limit)`                     | published posts due a metrics refresh        | Social metrics job                        |
-| `due_payment_checks(limit)`                   | pending payments due a status check          | Payment reconciliation                    |
-| `due_subscription_renewals(as_of)`            | subscriptions due to renew                   | Billing renewal job                       |
-| `trials_ending_before(before)`                | trials ending soon                           | Trial reminder job                        |
-| `channel_connections_expiring_before(before)` | tokens close to expiry                       | Token check job                           |
-| `due_conversation_returns(limit)`             | chats whose "return to AI" time passed       | Chats sweeper                             |
-| `due_contact_purges(limit)`                   | contacts deleted more than 30 days ago       | Purge job                                 |
-| `active_store_ids()`                          | stores with status `active`                  | Nightly metrics, other per-store fan-outs |
-| `admin_store_overview(search, limit)`         | store name, plan, status, member count       | Admin stores list (metadata only)         |
+| Function                                      | Returns                                            | Caller                                        |
+| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
+| `store_id_for_channel_account(kind, account)` | store of a connected page, number or account       | Webhook intake (Meta, WhatsApp)               |
+| `store_id_for_slug(slug)`                     | store for a public page                            | Order link page, opt-out page                 |
+| `payment_intent_for_reference(reference)`     | store and payment intent                           | Payment callbacks and gateway webhooks        |
+| `tracked_link_for_code(code)`                 | store and tracked link                             | Link redirect, SMS opt-out link               |
+| `store_id_for_provider_message(id)`           | store of a sent campaign or workflow message       | Delivery and read receipts                    |
+| `stores_for_user(user)`                       | the user's stores and roles                        | Sign-in, store switcher                       |
+| `membership_for_invite(token hash)`           | store and membership                               | Accepting a team invite                       |
+| `claim_outbox_events(limit)`                  | claimed events (locks with SKIP LOCKED)            | Outbox relay                                  |
+| `mark_outbox_events_published(ids)`           | count                                              | Outbox relay                                  |
+| `purge_published_outbox_events(before)`       | count                                              | Maintenance job                               |
+| `purge_webhook_events(before)`                | count                                              | Maintenance job                               |
+| `due_automation_runs(limit)`                  | due waits or running claims stale for five minutes | Workflow sweeper                              |
+| `due_campaigns(as_of)`                        | scheduled campaigns now due                        | Campaign sweeper                              |
+| `due_post_targets(as_of)`                     | scheduled posts now due                            | Social sweeper                                |
+| `due_post_metrics(limit)`                     | published posts due a metrics refresh              | Social metrics job                            |
+| `due_payment_checks(limit)`                   | pending payments due a status check                | Payment reconciliation                        |
+| `due_subscription_renewals(as_of)`            | subscriptions due to renew                         | Billing renewal job                           |
+| `trials_ending_before(before)`                | trials ending soon                                 | Trial reminder job                            |
+| `channel_connections_expiring_before(before)` | tokens close to expiry                             | Token check job                               |
+| `due_conversation_returns(limit)`             | chats whose "return to AI" time passed             | Chats sweeper                                 |
+| `due_contact_purges(limit)`                   | contacts deleted more than 30 days ago             | Purge job                                     |
+| `active_store_ids()`                          | stores with status `active`                        | Metrics reconciliation and per-store fan-outs |
+| `admin_store_overview(search, limit)`         | store name, plan, status, member count             | Admin stores list (metadata only)             |
 
 Prefer a job that carries its `storeId` (a delayed BullMQ job per item) over a sweep. Sweeps exist as the safety net for jobs lost in Valkey and for work that is due by time.
 
@@ -90,12 +92,18 @@ The admin app connects as `dakly_app` like the shop app. It never bypasses RLS.
 
 The schema keeps the buyer and the delivery recipient apart, and nothing merges contacts on its own:
 
-- `orders.contact_id` is the buyer: the contact who chatted or placed the order.
+- `orders.contact_id` is the buyer while the profile exists. `buyer_name` snapshots that buyer independently of the recipient; unknown names remain null. Purge sets both the buyer and originating conversation links to null and keeps permitted order history.
 - `orders.recipient_name`, `recipient_phone`, `recipient_address`, `recipient_district`, `recipient_bd_area_id` are a snapshot of who receives it. `orders.is_self_delivery` says whether that is the buyer (the default).
 - `contacts.phone` is the person's own phone, one contact per phone per store (partial unique index `contacts_store_id_phone_key`). It is saved when the buyer gives it for an order to themselves, including during chat capture before the order exists (D27), from a WhatsApp sender identity (then `phone_verified_at` is set), from an import, or by a staff edit. Once set, only a direct profile edit changes it. Saving it is not verification, not a merge and not marketing consent.
 - If the phone already belongs to another contact, the unique index refuses the save (also when two saves race). The service keeps the phone on the order only and writes a `contact_match_suggestions` row (`reason = same_phone`, with `order_id` or `conversation_id`). Staff merge or dismiss it; the order is never blocked.
 - A phone for another recipient (`is_self_delivery = false`) stays only on the order and never touches a contact.
 - Return risk is read from `orders` by `recipient_phone` (index `orders_store_id_recipient_phone_outcome_idx`), so it follows the delivery phone, not the contact.
 - AI order tools read only orders of this conversation or of a WhatsApp-verified identity (must-fix 1). A saved but unverified phone gives no access to other orders.
-- Customer memory (`contact_memories`, D30) is keyed by contact and store and sits under RLS like any shop table. It holds only what this customer said or their own orders show; a self-delivery order's area may be used, another recipient's never (D26). It never links contacts, and a merge rebuilds the kept contact's memory rather than copying facts across blindly.
-- A contact's `kind` is `customer` while it has at least one order that is not cancelled (D27). The orders service asks the customers service to update it when an order is created or cancelled.
+- Customer memory (`contact_memories`, D30) is keyed by contact and store and sits under RLS like any shop table. It holds only what this customer said or their own orders show; a self-delivery order's area may be used, another recipient's never (D26). It never links contacts, and merge or undo invalidates both affected memories and conversation checkpoints. Clear cutoffs survive rebuilding; older model responses must fail version guards.
+- `kind = customer` includes both a non-cancelled order and an intentional manual/import/store-sync/POS/khata customer under the glossary. Cancelling the last order preserves intentional customers; other contacts become leads only with their own phone, otherwise `chat_only`. `not_customer` stays an explicit staff choice.
+
+## Merge history and erasure
+
+`contact_merges.operation_key` remains unique per store after undo or redaction. Before-images, moved IDs and `after_state` support field-level conflict checks, not blind restoration. Undo preserves later edits and withdrawals, records conflicts and rejects a merge with active dependent merges. Consent history is never reassigned: merge and undo append conservative decisions. `ai_rule_changes` is append-only authoritative undo evidence; `audit_log` records the event timeline rather than duplicating every rule image.
+
+Customer purge requires a privileged, narrowly authorized maintenance path because chat messages, consent and other history cannot be freely erased by the app. It defers the affected reference checks as described above, stops pending work, clears memory, deletes chat dependents and customer-linked records, redacts merge images/conflicts and personal payloads, and preserves the opaque operation key. `evidence_redacted_at` disables merge undo. Audit/outbox/job payloads and stored files need the same erasure treatment. The schema supports detachment and cascades; the purge service and tests for complete erasure remain planned. See the detailed [customer contract](../features/03-customers-and-segments.md).

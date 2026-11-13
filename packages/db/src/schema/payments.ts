@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -49,9 +51,12 @@ export const paymentGatewayCredentials = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('payment_gateway_credentials_store_id_id_key').on(table.storeId, table.id),
+
     uniqueIndex('payment_gateway_credentials_active_key')
       .on(table.storeId, table.gateway, table.mode)
       .where(sql`${table.status} <> 'disconnected'`),
+    index('payment_gateway_credentials_store_id_idx').on(table.storeId),
     index('payment_gateway_credentials_connected_by_user_id_idx').on(table.connectedByUserId),
     check('payment_gateway_credentials_gateway', isOneOf(table.gateway, gateways)),
     check('payment_gateway_credentials_mode', isOneOf(table.mode, gatewayModes)),
@@ -85,6 +90,7 @@ export const paymentIntents = pgTable(
     reviewReason: text('review_reason', { enum: paymentReviewReasons }),
     verifiedAmountPoisha: poisha('verified_amount_poisha'),
     refundedPoisha: poisha('refunded_poisha').notNull().default(0),
+    reservedRefundPoisha: poisha('reserved_refund_poisha').notNull().default(0),
     cardMasked: text('card_masked'),
     failureReason: text('failure_reason'),
     isSandbox: boolean('is_sandbox').notNull().default(false),
@@ -100,6 +106,26 @@ export const paymentIntents = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('payment_intents_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'payment_intents_credential_id_store_fk',
+      columns: [table.storeId, table.credentialId],
+      foreignColumns: [paymentGatewayCredentials.storeId, paymentGatewayCredentials.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+    foreignKey({
+      name: 'payment_intents_order_id_store_fk',
+      columns: [table.storeId, table.orderId],
+      foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'payment_intents_invoice_id_store_fk',
+      columns: [table.storeId, table.invoiceId],
+      foreignColumns: [invoices.storeId, invoices.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('payment_intents_merchant_reference_key').on(table.merchantReference),
     uniqueIndex('payment_intents_short_code_key').on(table.shortCode),
     // PAY-R3: one gateway transaction can be linked to only one intent.
@@ -126,7 +152,8 @@ export const paymentIntents = pgTable(
     check('payment_intents_amount', sql`${table.amountPoisha} > 0`),
     check(
       'payment_intents_refunded',
-      sql`${table.refundedPoisha} between 0 and coalesce(${table.verifiedAmountPoisha}, ${table.amountPoisha})`,
+      sql`${table.refundedPoisha} >= 0 and ${table.reservedRefundPoisha} >= 0
+        and ${table.refundedPoisha} + ${table.reservedRefundPoisha} <= coalesce(${table.verifiedAmountPoisha}, 0)`,
     ),
     // PAY-R5: shop payments only on the shop's own credentials; Dakly billing never on them.
     check(
@@ -160,14 +187,21 @@ export const paymentEvents = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'payment_events_payment_intent_id_store_fk',
+      columns: [table.storeId, table.paymentIntentId],
+      foreignColumns: [paymentIntents.storeId, paymentIntents.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('payment_events_intent_idx').on(table.storeId, table.paymentIntentId, table.createdAt),
     index('payment_events_payment_intent_id_idx').on(table.paymentIntentId),
     check('payment_events_kind', isOneOf(table.kind, paymentEventKinds)),
   ],
 );
 
-// The service sums requested, pending and succeeded refunds before inserting, in one guarded
-// statement, so two staff refunding at once cannot exceed the captured amount (PAY-R10).
+// Reserve on the common intent under a row lock before inserting; release the lock before
+// gateway calls. Succeeded and recorded_manually refunds consume captured funds; requested and
+// pending amounts stay reserved until a confirmed outcome (PAY-R10).
 export const refunds = pgTable(
   'refunds',
   {
@@ -189,6 +223,12 @@ export const refunds = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'refunds_payment_intent_id_store_fk',
+      columns: [table.storeId, table.paymentIntentId],
+      foreignColumns: [paymentIntents.storeId, paymentIntents.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('refunds_store_id_idempotency_key_key').on(table.storeId, table.idempotencyKey),
     index('refunds_payment_intent_id_idx').on(table.paymentIntentId),
     index('refunds_requested_by_user_id_idx').on(table.requestedByUserId),

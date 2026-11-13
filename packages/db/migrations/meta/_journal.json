@@ -29,6 +29,13 @@
       "when": 1794546740272,
       "tag": "0003_release_1_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794551678426,
+      "tag": "0004_database_review_fixes",
+      "breakpoints": true
     }
   ]
 }

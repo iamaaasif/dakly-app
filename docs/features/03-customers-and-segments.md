@@ -59,6 +59,16 @@ One clean list of every person who buys from the shop, wherever they bought, wit
 3. Chat contacts without a phone remain linked to their Messenger PSID or Instagram ID. An own-phone match follows the identity rules below; a typed phone alone suggests a match for staff. Sharing another person's delivery details never links or merges that person with the chat buyer (D26).
 4. Possible duplicates (same name and district, phone differs by 1 digit, or same email) are listed in a "Possible duplicates" view for manual Merge or Keep separate. Merging keeps the older record's ID and moves all orders, chats and notes.
 
+**Merge and undo contract (D29)**
+
+Each requested merge gets an opaque `operationKey`, carried unchanged by every job retry. The permanent `(store_id, operation_key)` key survives undo and customer erasure. Retrying an undone or redacted operation returns its recorded result without moving records again; an intentional new merge uses a new key.
+
+The merge transaction locks both contacts in ID order, validates that they still belong to the store, and records before-images in `replaced_fields`, moved row IDs in `moved_rows`, and corresponding after-values and row versions in `after_state`. Undo within seven days restores only fields and row ownership that still match that after-state. Preserve later edits, new relationships and a phone now owned elsewhere. Record conflicting field paths and row IDs in `undo_conflicts`, without copying personal values into the conflict log. Block the undo while a later active merge depends on either contact; undo dependent merges in reverse order. Legacy records without reliable after-state need staff review, never a blind restore.
+
+Consent rows keep their original contact and are never reassigned or rewritten. Merge appends the effective conservative consent decision to the kept contact, with the operation key and source evidence. Undo appends withdrawals to both restored contacts where either has withdrawn since merge, and never grants consent from a before-image. Later explicit opt-in is a separate recorded action. Merge and undo invalidate both customer memories and their conversation checkpoints; an older model response must fail its version guard.
+
+Customer erasure is a privileged transaction: stop pending work, clear memories, delete chats and their dependent messages, remove or redact comments and tasks that expose the person, and delete consent, identity, stats, match-suggestion, campaign-recipient, tracked-link and workflow data tied to that contact. Redact merge `moved_rows`, `replaced_fields`, `after_state` and `undo_conflicts`, set `evidence_redacted_at`, and detach the erased contact references. Keep the merge operation key to reject old retries; no undo is available after redaction. Redact personal data in audit/outbox/job payloads and stored files under the same erasure policy. Orders retain `buyer_name`, independent recipient snapshots and financial history; their contact and conversation links become null. Unknown buyer names stay null and are never inferred from the recipient. The purge service and its access checks are still planned work.
+
 **Saving the buyer's own phone (D27)**
 
 Self-delivery is the default. Save a valid own phone on the current buyer contact when it is supplied in chat or the order form, even before an order is created. The buyer must be identified separately as described below. Fill an empty profile phone, or retain it when the normalised value already matches. Replacing a different profile phone needs an explicit profile edit; changing delivery fields alone does not replace it.
@@ -268,7 +278,7 @@ Identity
 4. Store the delivery recipient's name, phone and address on the order, even when the recipient is another existing customer. No recipient contact or second order is required. Do not merge the recipient with the buyer or overwrite either profile from another person's details (D26). The self-delivery own-phone save follows D27.
 5. Staff may confirm the order and mark it delivered without an OTP. These status changes, and confirmation replies or links from the recipient, do not change the buyer, customer identity or access to unrelated purchase history.
 
-Kind follows the glossary: a chat, comment or order-link contact with an own phone and zero orders is a `lead`; a contact with at least one non-cancelled order, or intentionally added as a customer, is a `customer`. A phone is not required for the order-based customer definition. Recompute after an own-phone save and order changes; `not_customer` remains an explicit staff choice.
+Kind follows the glossary: a chat, comment or order-link contact with an own phone and zero orders is a `lead`; a contact with at least one non-cancelled order, or intentionally added as a customer, is a `customer`. A phone is not required for the order-based customer definition. Recompute after an own-phone save and order changes; `not_customer` remains an explicit staff choice. Cancelling the last order preserves a customer intentionally added by manual entry, import, store sync, POS or khata. Otherwise use `lead` only when the contact has their own phone; a phone-less chat contact returns to `chat_only`. Preserve the original intentional-add evidence when merging or undoing.
 
 Consent
 
@@ -291,7 +301,7 @@ Import: CSV of customers (and POS sales, D6) with a preview, column mapping and 
 1. Phone is unique per store.
 2. A Not a customer contact never gets AI replies, segments or campaigns.
 3. Masked phones for roles without `seeFullPhone`; export only with `exportLists`.
-4. A deleted contact is purged after 30 days; their messages are anonymised.
+4. A deleted contact is purged after 30 days under CUS-R2. The purge removes their profile and chats and clears customer memory immediately; retained orders keep the buyer-name snapshot and detached links.
 
 ### Permissions
 
@@ -308,6 +318,10 @@ Emits `contact.created`, `contact.merged`, `consent.changed`, `segment.saved`. L
 ### Edge cases to test
 
 - Two contacts with the same phone created at the same moment.
+- Merge, undo, retry the original operation: the contacts remain separate.
+- Undo preserves a later address edit, reused phone and marketing withdrawal; dependent merges must be undone first.
+- Purge a buyer whose recipient is a different person: retain the buyer snapshot, detach both links and redact merge evidence.
+- Cancel an intentional zero-order customer's final order without turning them into a lead.
 - Phone with Bangla digits or `+880`.
 - A typed buyer phone alone does not merge contacts; a delivery phone never changes the buyer, including after staff confirmation or delivery (D26).
 - Segment counts with 50,000 contacts return in under 2 seconds.

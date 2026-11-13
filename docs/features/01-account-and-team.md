@@ -308,7 +308,7 @@ Release 1 has five ways in (D20). All of them end at step 5 below.
 
 Switching store: the session's active store changes through `POST /session/store`. The store id never comes from the client any other way.
 
-Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member deletes all their sessions for that store at once.
+Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member deletes all their sessions for that store at once. Revoking an unaccepted invite sets `removed`, records `removed_at`, and clears the invite token hash and expiry in the same transaction; its user ID may remain null. Only `active` memberships require a user. The complete `(store_id, status)` index supports member counts, including removed invites.
 
 Roles: five built-in roles live in code (`team/built-in-roles.ts`, pending review; the original spec stored them as rows). Custom roles are rows per store. A role maps each area to `none`, `view` or `edit`, plus the flags `seeFullPhone`, `exportLists`, `refund`. One pure function, `team/permissions.ts`, answers "can this member do this", and is unit-tested against the role table.
 

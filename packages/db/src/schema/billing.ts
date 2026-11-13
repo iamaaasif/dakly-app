@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type PgTableExtraConfigValue,
   bigint,
   boolean,
   check,
@@ -48,7 +50,7 @@ export const plans = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
     uniqueIndex('plans_code_key').on(table.code),
     check(
       'plans_prices',
@@ -73,7 +75,7 @@ export const coupons = pgTable(
     createdByStaffId: uuid('created_by_staff_id').references(() => staffUsers.id),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
     uniqueIndex('coupons_code_key').on(table.code),
     index('coupons_created_by_staff_id_idx').on(table.createdByStaffId),
     check('coupons_kind', isOneOf(table.kind, couponKinds)),
@@ -119,7 +121,7 @@ export const subscriptions = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
     uniqueIndex('subscriptions_store_id_key').on(table.storeId),
     index('subscriptions_plan_id_idx').on(table.planId),
     index('subscriptions_pending_plan_id_idx').on(table.pendingPlanId),
@@ -161,7 +163,14 @@ export const invoices = pgTable(
     paidAt: timestamptz('paid_at'),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('invoices_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'invoices_credits_invoice_id_store_fk',
+      columns: [table.storeId, table.creditsInvoiceId],
+      foreignColumns: [invoices.storeId, invoices.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('invoices_number_key').on(table.number),
     index('invoices_store_id_issued_at_idx').on(table.storeId, table.issuedAt),
     index('invoices_credits_invoice_id_idx').on(table.creditsInvoiceId),
@@ -185,8 +194,8 @@ export const invoiceCounters = pgTable('invoice_counters', {
   nextNumber: integer('next_number').notNull().default(1),
 });
 
-// Append-only ledger of every prepaid balance. The balance is balance_after on the newest row;
-// writers take a transaction-scoped advisory lock on (store, wallet) so two writes cannot race.
+// Append-only prepaid ledger. Under an advisory lock on (store, wallet), writers read the
+// greatest revision and append its successor. Balance order follows revision, never created_at.
 export const walletLedger = pgTable(
   'wallet_ledger',
   {
@@ -195,6 +204,7 @@ export const walletLedger = pgTable(
       .notNull()
       .references(() => stores.id),
     wallet: text('wallet', { enum: wallets }).notNull(),
+    revision: integer('revision').notNull(),
     kind: text('kind', { enum: walletEntryKinds }).notNull(),
     amount: bigint('amount', { mode: 'number' }).notNull(),
     balanceAfter: bigint('balance_after', { mode: 'number' }).notNull(),
@@ -207,12 +217,16 @@ export const walletLedger = pgTable(
     note: text('note'),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
     uniqueIndex('wallet_ledger_store_id_idempotency_key_key').on(
       table.storeId,
       table.idempotencyKey,
     ),
-    index('wallet_ledger_store_id_wallet_idx').on(table.storeId, table.wallet, table.createdAt),
+    uniqueIndex('wallet_ledger_store_id_wallet_revision_key').on(
+      table.storeId,
+      table.wallet,
+      table.revision,
+    ),
     index('wallet_ledger_actor_user_id_idx').on(table.actorUserId),
     index('wallet_ledger_actor_staff_id_idx').on(table.actorStaffId),
     check('wallet_ledger_wallet', isOneOf(table.wallet, wallets)),
@@ -220,6 +234,7 @@ export const walletLedger = pgTable(
     check('wallet_ledger_actor_type', isOneOf(table.actorType, actorTypes)),
     check('wallet_ledger_amount', sql`${table.amount} <> 0`),
     check('wallet_ledger_balance', sql`${table.balanceAfter} >= 0`),
+    check('wallet_ledger_revision', sql`${table.revision} > 0`),
   ],
 );
 
@@ -239,7 +254,7 @@ export const usageEvents = pgTable(
     periodStart: date('period_start').notNull(),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
     uniqueIndex('usage_events_reference_key').on(table.storeId, table.unit, table.reference),
     index('usage_events_period_idx').on(table.storeId, table.unit, table.periodStart),
     check('usage_events_unit', isOneOf(table.unit, usageUnits)),

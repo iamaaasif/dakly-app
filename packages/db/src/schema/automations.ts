@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type PgTableExtraConfigValue,
   boolean,
   check,
   index,
@@ -46,7 +48,17 @@ export const automations = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('automations_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'automations_published_version_id_store_fk',
+      columns: [table.storeId, table.publishedVersionId],
+      foreignColumns: [automationVersions.storeId, automationVersions.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     index('automations_store_id_trigger_idx').on(table.storeId, table.triggerType, table.status),
     index('automations_published_version_id_idx').on(table.publishedVersionId),
     index('automations_created_by_user_id_idx').on(table.createdByUserId),
@@ -54,7 +66,7 @@ export const automations = pgTable(
   ],
 );
 
-// Immutable once written. Runs keep the version they entered.
+// Published graph and metadata are immutable; only is_stopped is mutable. Runs keep their version.
 export const automationVersions = pgTable(
   'automation_versions',
   {
@@ -72,7 +84,14 @@ export const automationVersions = pgTable(
     publishedByUserId: uuid('published_by_user_id').references(() => users.id),
     publishedAt: timestamptz('published_at').notNull().defaultNow(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('automation_versions_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'automation_versions_automation_id_store_fk',
+      columns: [table.storeId, table.automationId],
+      foreignColumns: [automations.storeId, automations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('automation_versions_automation_version_key').on(table.automationId, table.version),
     index('automation_versions_store_id_idx').on(table.storeId),
     index('automation_versions_published_by_user_id_idx').on(table.publishedByUserId),
@@ -110,7 +129,27 @@ export const automationRuns = pgTable(
     finishedAt: timestamptz('finished_at'),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('automation_runs_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'automation_runs_automation_id_store_fk',
+      columns: [table.storeId, table.automationId],
+      foreignColumns: [automations.storeId, automations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'automation_runs_version_id_store_fk',
+      columns: [table.storeId, table.versionId],
+      foreignColumns: [automationVersions.storeId, automationVersions.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+    foreignKey({
+      name: 'automation_runs_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     uniqueIndex('automation_runs_trigger_key').on(
       table.automationId,
       table.contactId,
@@ -119,6 +158,9 @@ export const automationRuns = pgTable(
     index('automation_runs_due_idx')
       .on(table.wakeAt)
       .where(sql`${table.status} = 'waiting'`),
+    index('automation_runs_stale_claim_idx')
+      .on(table.claimedAt)
+      .where(sql`${table.status} = 'running'`),
     index('automation_runs_store_automation_idx').on(
       table.storeId,
       table.automationId,
@@ -135,7 +177,7 @@ export const automationRuns = pgTable(
   ],
 );
 
-// One row per executed step, kept 90 days, for per-step numbers, the person's history and
+// One row per executed step, kept through 372 days after the run finishes, for history and
 // last-touch attribution of automation sends.
 export const automationRunSteps = pgTable(
   'automation_run_steps',
@@ -163,7 +205,18 @@ export const automationRunSteps = pgTable(
     tappedAt: timestamptz('tapped_at'),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'automation_run_steps_run_id_store_fk',
+      columns: [table.storeId, table.runId],
+      foreignColumns: [automationRuns.storeId, automationRuns.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'automation_run_steps_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     uniqueIndex('automation_run_steps_run_step_key').on(table.runId, table.stepKey),
     index('automation_run_steps_store_contact_idx').on(
       table.storeId,

@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -33,6 +35,8 @@ export const roles = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('roles_store_id_id_key').on(table.storeId, table.id),
+
     uniqueIndex('roles_store_id_name_key').on(table.storeId, table.name),
     check('roles_name_length', sql`char_length(${table.name}) between 1 and 60`),
   ],
@@ -63,6 +67,12 @@ export const memberships = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'memberships_role_id_store_fk',
+      columns: [table.storeId, table.roleId],
+      foreignColumns: [roles.storeId, roles.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('memberships_store_id_user_id_key')
       .on(table.storeId, table.userId)
       .where(sql`${table.userId} is not null`),
@@ -71,6 +81,7 @@ export const memberships = pgTable(
       .on(table.storeId)
       .where(sql`${table.builtInRole} = 'owner' and ${table.status} = 'active'`),
     uniqueIndex('memberships_invite_token_hash_key').on(table.inviteTokenHash),
+    index('memberships_store_id_status_idx').on(table.storeId, table.status),
     index('memberships_user_id_idx').on(table.userId),
     index('memberships_role_id_idx').on(table.roleId),
     index('memberships_invited_by_user_id_idx').on(table.invitedByUserId),
@@ -79,7 +90,7 @@ export const memberships = pgTable(
     check('memberships_one_role', sql`(${table.builtInRole} is null) <> (${table.roleId} is null)`),
     check(
       'memberships_active_has_user',
-      sql`${table.status} = 'invited' or ${table.userId} is not null`,
+      sql`${table.status} <> 'active' or ${table.userId} is not null`,
     ),
     check(
       'memberships_invite_has_address',

@@ -1,6 +1,6 @@
 # State machines
 
-Every status column in release 1, its values and the moves allowed between them. The values live in `packages/contracts/src/<feature>.ts` and a `CHECK` in Postgres. The moves are enforced in the owning service, from a transition table kept as data next to it (for example `orders/order-stage.ts`), and each refused move throws the feature's `*_NOT_ALLOWED` error. Postgres does not check moves.
+Every status column in release 1, its values and the moves allowed between them. The values live in `packages/contracts/src/<feature>.ts` and a `CHECK` in Postgres. The planned owning service must enforce moves, from a transition table kept as data next to it (for example `orders/order-stage.ts`), and each refused move throws the feature's `*_NOT_ALLOWED` error. Postgres checks allowed values and named invariants, not the complete transition graph. Schema tests are not evidence that these services are implemented.
 
 Each change that matters to a person is recorded: order and conversation changes in `audit_log`, payment changes in `payment_events`, stock changes in `stock_movements`.
 
@@ -71,7 +71,7 @@ stateDiagram-v2
 
 `review_reason` says why: `amount_mismatch`, `duplicate`, `late_success`, or `manual_unverified` (a payment staff typed in without a gateway check).
 
-Refunds (`refunds.status`): `requested` → `pending` → `succeeded` or `failed`; `recorded_manually` is a final state for a refund paid outside the gateway.
+Refunds (`refunds.status`): `requested` → `pending` → `succeeded` or `failed`; an authorized externally paid refund can finish as `recorded_manually`. Requested/pending amounts reserve capacity on the locked payment intent; succeeded/recorded-manually amounts count as refunded. An unknown provider outcome stays pending and reserved. Only a confirmed failure releases capacity, exactly once.
 
 ## Conversation
 
@@ -111,7 +111,7 @@ stateDiagram-v2
 
 `pause_reason`: `manual`, `balance`, `whatsapp_quality`, `template_rejected`, `provider_error`.
 
-Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` → `delivered` → `read`; `failed` from `sending` or `sent`; `cancelled` from `queued` when the campaign is cancelled; `skipped` is set at audience build time with a `skip_reason` and never moves.
+Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` → `delivered` → `read`; `failed` from `sending` or `sent`; `cancelled` from `queued` when the campaign is cancelled; `skipped` can be set at audience build or reached from `queued` or pre-provider `sending` when consent, blocking, window or another final gate fails. Record `skip_reason` and release the reserved cost atomically. Once handed to the provider, reconcile its outcome rather than changing to skipped. Skipped is terminal.
 
 ## Social post target
 
@@ -126,7 +126,7 @@ Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` →
 | `automations.status`     | `draft`, `active`, `paused`, `archived`          | `draft` → `active` on publish; `active` ↔ `paused`; any → `archived`                         |
 | `automation_runs.status` | `waiting`, `running`, `done`, `exited`, `failed` | `running` ↔ `waiting` (wait steps); `running` → `done`, `exited` (exit rule met) or `failed` |
 
-A run keeps the `automation_version_id` it started on; publishing a new version does not move running runs.
+A run keeps the `automation_version_id` it started on; publishing a new version does not move running runs. The app may update only `automation_versions.is_stopped`; a worker checks it before the next step. Running leases older than five minutes may be reclaimed with a new `claimed_at` token and incremented diagnostic `attempts` count. Only the worker holding the current claim may commit the step transition; durable send identity and provider reconciliation are separate requirements.
 
 ## Account, billing and team
 
@@ -143,18 +143,22 @@ A run keeps the `automation_version_id` it started on; publishing a new version 
 
 ## Other status columns
 
-| Column                              | Values                                                           | Moves                                                                                                                                                                    |
-| ----------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `contacts.kind`                     | `chat_only`, `lead`, `customer`, `not_customer`                  | `customer` while the contact has an order that is not cancelled, back to `lead` when its last such order is cancelled (D27); staff can mark `not_customer` with a reason |
-| `contact_match_suggestions.status`  | `open`, `merged`, `dismissed`                                    | `open` → `merged` or `dismissed`, by staff only                                                                                                                          |
-| `contact_merges` (no status column) | `undone_at` null or set                                          | Undo allowed while `undone_at` is null and `undo_until` (7 days, D29) has not passed; then final                                                                         |
-| `imports.status`                    | `uploaded`, `mapped`, `validated`, `importing`, `done`, `failed` | Forward only; `failed` from any step                                                                                                                                     |
-| `knowledge_items.status`            | `processing`, `active`, `failed`, `archived`                     | `processing` → `active` or `failed`; any → `archived`                                                                                                                    |
-| `products.status`                   | `active`, `hidden`, `archived`                                   | Any to any                                                                                                                                                               |
-| `restock_requests.status`           | `waiting`, `notified`, `cancelled`                               | `waiting` → `notified` or `cancelled`                                                                                                                                    |
-| `notifications.status`              | `new`, `seen`, `done`, `snoozed`                                 | Any to any, per user                                                                                                                                                     |
-| `tasks.status`                      | `open`, `done`, `cancelled`                                      | `open` → `done` or `cancelled`; `done` → `open`                                                                                                                          |
-| `files.status`                      | `pending`, `ready`, `rejected`                                   | `pending` → `ready` or `rejected` (size, type or scan)                                                                                                                   |
-| `webhook_events.status`             | `received`, `processed`, `ignored`, `failed`                     | `received` → any; `failed` → `processed` on replay                                                                                                                       |
-| `support_grants.status`             | `requested`, `approved`, `denied`, `ended`, `expired`            | `requested` → `approved` or `denied`; `approved` → `ended` or `expired`                                                                                                  |
-| `staff_users.status`                | `active`, `disabled`                                             | Any to any                                                                                                                                                               |
+| Column                              | Values                                                           | Moves                                                                                                                                                                                                                              |
+| ----------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contacts.kind`                     | `chat_only`, `lead`, `customer`, `not_customer`                  | `customer` for a non-cancelled order or an intentional customer add/import/sync; cancellation preserves intentional customers, otherwise use `lead` only with an own phone and `chat_only` without one; `not_customer` is explicit |
+| `contact_match_suggestions.status`  | `open`, `merged`, `dismissed`                                    | `open` → `merged` or `dismissed`, by staff only                                                                                                                                                                                    |
+| `contact_merges` (no status column) | `undone_at` null or set                                          | Undo within seven days only if not undone/redacted and no active dependent merge; compare after-state, preserve later edits/withdrawals; operation key never becomes reusable                                                      |
+| `imports.status`                    | `uploaded`, `mapped`, `validated`, `importing`, `done`, `failed` | Forward only; `failed` from any step                                                                                                                                                                                               |
+| `knowledge_items.status`            | `processing`, `active`, `failed`, `archived`                     | `processing` → `active` or `failed`; any → `archived`                                                                                                                                                                              |
+| `products.status`                   | `active`, `hidden`, `archived`                                   | Any to any                                                                                                                                                                                                                         |
+| `restock_requests.status`           | `waiting`, `notified`, `cancelled`                               | `waiting` → `notified` or `cancelled`                                                                                                                                                                                              |
+| `notifications.status`              | `new`, `seen`, `done`, `snoozed`                                 | Any to any, per user                                                                                                                                                                                                               |
+| `tasks.status`                      | `open`, `done`, `cancelled`                                      | `open` → `done` or `cancelled`; `done` → `open`                                                                                                                                                                                    |
+| `files.status`                      | `pending`, `ready`, `rejected`                                   | `pending` → `ready` or `rejected` (size, type or scan)                                                                                                                                                                             |
+| `webhook_events.status`             | `received`, `processed`, `ignored`, `failed`                     | `received` → any; `failed` → `processed` on replay                                                                                                                                                                                 |
+| `support_grants.status`             | `requested`, `approved`, `denied`, `ended`, `expired`            | `requested` → `approved` or `denied`; `approved` → `ended` or `expired`                                                                                                                                                            |
+| `staff_users.status`                | `active`, `disabled`                                             | Any to any                                                                                                                                                                                                                         |
+
+Revoking an unaccepted invitation sets `removed`, records `removed_at` and invalidates its token. A removed invite may have no `user_id`; only active memberships require one. Invoice settlement status and `paid_at` may change, but issued document fields are immutable and corrected by a credit note.
+
+The order-stage diagram is not a complete inventory or returns implementation: reservation expiry/reacquisition, partial or late returns and cancellation fees need their feature rules and acceptance tests before release.

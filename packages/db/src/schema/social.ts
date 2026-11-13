@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -10,7 +12,12 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { postKinds, postTargetStatuses } from '@dakly/contracts/social';
+import {
+  contentKinds,
+  contentLanguages,
+  postKinds,
+  postTargetStatuses,
+} from '@dakly/contracts/social';
 import { aiRuns } from './ai';
 import { users } from './auth';
 import { channelConnections } from './channels';
@@ -25,6 +32,13 @@ export const brandProfiles = pgTable(
       .primaryKey()
       .references(() => stores.id),
     voice: text('voice'),
+    audience: text('audience'),
+    preferredWords: text('preferred_words')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    callToActionBn: text('call_to_action_bn'),
+    callToActionEn: text('call_to_action_en'),
     tone: text('tone'),
     languages: text('languages')
       .array()
@@ -43,6 +57,47 @@ export const brandProfiles = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [index('brand_profiles_updated_by_user_id_idx').on(table.updatedByUserId)],
+);
+
+// Saved library text is user content, separate from model-call telemetry in ai_runs.
+export const contentPieces = pgTable(
+  'content_pieces',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    kind: text('kind', { enum: contentKinds }).notNull(),
+    language: text('language', { enum: contentLanguages }).notNull(),
+    body: text('body').notNull(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    isAiWritten: boolean('is_ai_written').notNull().default(false),
+    aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'content_pieces_ai_run_id_store_fk',
+      columns: [table.storeId, table.aiRunId],
+      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
+    index('content_pieces_store_created_idx').on(table.storeId, table.createdAt, table.id),
+    index('content_pieces_store_kind_language_idx').on(
+      table.storeId,
+      table.kind,
+      table.language,
+      table.createdAt,
+      table.id,
+    ),
+    index('content_pieces_created_by_user_id_idx').on(table.createdByUserId),
+    index('content_pieces_ai_run_id_idx').on(table.aiRunId),
+    check('content_pieces_kind', isOneOf(table.kind, contentKinds)),
+    check('content_pieces_language', isOneOf(table.language, contentLanguages)),
+    check('content_pieces_body_length', sql`char_length(${table.body}) between 1 and 20000`),
+    check('content_pieces_ai_provenance', sql`${table.aiRunId} is null or ${table.isAiWritten}`),
+  ],
 );
 
 // The content once; each account it goes to is a post_targets row with its own status.
@@ -72,12 +127,19 @@ export const posts = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('posts_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'posts_ai_run_id_store_fk',
+      columns: [table.storeId, table.aiRunId],
+      foreignColumns: [aiRuns.storeId, aiRuns.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('posts_store_id_created_at_idx').on(table.storeId, table.createdAt),
     index('posts_ai_run_id_idx').on(table.aiRunId),
     index('posts_created_by_user_id_idx').on(table.createdByUserId),
     index('posts_approved_by_user_id_idx').on(table.approvedByUserId),
     check('posts_kind', isOneOf(table.kind, postKinds)),
-    check('posts_caption_length', sql`char_length(${table.caption}) <= 2200`),
+    check('posts_caption_length', sql`char_length(${table.caption}) <= 20000`),
   ],
 );
 
@@ -94,6 +156,8 @@ export const postTargets = pgTable(
     channelConnectionId: uuid('channel_connection_id')
       .notNull()
       .references(() => channelConnections.id),
+    // Null falls back to posts.caption; an empty override deliberately sends no caption.
+    captionOverride: text('caption_override'),
     status: text('status', { enum: postTargetStatuses }).notNull().default('draft'),
     scheduledFor: timestamptz('scheduled_for'),
     // Instagram container id, saved before publish so a retry continues instead of posting twice.
@@ -114,6 +178,21 @@ export const postTargets = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('post_targets_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'post_targets_post_id_store_fk',
+      columns: [table.storeId, table.postId],
+      foreignColumns: [posts.storeId, posts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'post_targets_channel_connection_id_store_fk',
+      columns: [table.storeId, table.channelConnectionId],
+      foreignColumns: [channelConnections.storeId, channelConnections.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     // Settles the race for a posting slot: the second post moves to the next free slot.
     uniqueIndex('post_targets_slot_key')
       .on(table.channelConnectionId, table.scheduledFor)
@@ -121,7 +200,8 @@ export const postTargets = pgTable(
     uniqueIndex('post_targets_external_post_id_key')
       .on(table.channelConnectionId, table.externalPostId)
       .where(sql`${table.externalPostId} is not null`),
-    index('post_targets_post_id_idx').on(table.postId),
+    uniqueIndex('post_targets_post_connection_key').on(table.postId, table.channelConnectionId),
+    index('post_targets_channel_connection_id_idx').on(table.channelConnectionId),
     index('post_targets_store_id_scheduled_for_idx').on(table.storeId, table.scheduledFor),
     index('post_targets_due_idx')
       .on(table.scheduledFor)
@@ -129,6 +209,10 @@ export const postTargets = pgTable(
     index('post_targets_metrics_due_idx')
       .on(table.nextMetricsAt)
       .where(sql`${table.nextMetricsAt} is not null`),
+    check(
+      'post_targets_caption_override_length',
+      sql`char_length(${table.captionOverride}) <= 20000`,
+    ),
     check('post_targets_status', isOneOf(table.status, postTargetStatuses)),
     check(
       'post_targets_scheduled_has_time',

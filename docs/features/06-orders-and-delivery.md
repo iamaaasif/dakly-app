@@ -53,7 +53,7 @@ Track every order from first question to money in hand, the way Bangladeshi COD 
 
 **Buyer and delivery recipient (D26, D27)**
 
-The buyer is the contact who places the order. The delivery recipient may be the buyer or another person. Keep `orders.contact_id` linked to the buyer and store `recipientName`, `recipientPhone`, `recipientAddress` and `recipientArea` as an order snapshot. For self-delivery (the default), copy the chosen delivery details into that snapshot and save the supplied own phone on the buyer profile under D27 and the customer rules. This save happens during capture, before order creation or confirmation; it does not verify ownership, merge contacts or add marketing consent.
+The buyer is the contact who places the order. The delivery recipient may be the buyer or another person. Keep `orders.contact_id` linked to the buyer while the profile exists, snapshot their name in `buyer_name`, and store `recipientName`, `recipientPhone`, `recipientAddress` and `recipientArea` as an order snapshot. For self-delivery (the default), copy the chosen delivery details into that snapshot and save the supplied own phone on the buyer profile under D27 and the customer rules. This save happens during capture, before order creation or confirmation; it does not verify ownership, merge contacts or add marketing consent.
 
 For a chat order, keep the originating buyer contact. For staff and public orders, identify or record the buyer separately from the delivery fields; do not use a recipient phone to resolve the buyer. If delivery is to someone else, do not fill the buyer profile with that recipient's number. If a self-delivery phone belongs to another contact, keep it on the draft or order and show staff a possible match. Leave both profiles and the buyer link unchanged and allow ordering, confirmation and delivery. An existing different buyer profile phone changes only through an explicit profile edit. Selecting delivery to someone else exposes the separate recipient fields.
 
@@ -291,6 +291,8 @@ Order link: a public page per store and product (`dakly.shop/{store}/{product}`)
 ### Events
 
 Emits `order.created`, `order.stage_changed`, `order.confirmed`, `order.cod_collected`.
+
+Removing a line from an editable order deletes that `order_items` row, adjusts its stock reservation, recalculates totals and writes the audit event in one transaction. The database role permits deletion; order stage and payment checks belong to the planned OrdersService. A customer purge detaches `contact_id` and `conversation_id` while preserving `buyer_name` and order history. Unknown buyer names remain null; recipient names never fill that gap.
 
 ### Data
 

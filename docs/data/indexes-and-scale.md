@@ -4,9 +4,9 @@ Which query each index serves, how big the tables get, when to partition, and ho
 
 ## How indexes are chosen
 
-- Every foreign key has an index (Postgres does not make one). Most are `(store_id, <fk>)` or the plain FK column.
+- Unrestricted FK maintenance needs an unconditional index with the FK columns first. A partial index or `(store_id, foreign_id)` index does not fully cover lookup by `foreign_id` alone. Composite tenant keys need compatible parent uniqueness; retain useful ID-leading child indexes.
 - List screens sort by time inside one store, so their index starts with `store_id` and ends with the sort column.
-- Sweeps across stores use a partial index on the due column, limited to rows that can be due. These stay small however big the table gets.
+- Sweeps across stores use a partial index on the due column, limited to rows that can be due. Their size follows the due backlog; a stalled worker can still grow it.
 - Rules that must hold under races are unique indexes, often partial. The service catches the unique violation and returns the existing row.
 
 ## Hot queries
@@ -34,11 +34,14 @@ Which query each index serves, how big the tables get, when to partition, and ho
 | Order timeline                                       | `audit_log (store_id, entity_type, entity_id, created_at)`                                                    |
 | Frequency cap (messaged in the last N days)          | `campaign_recipients (store_id, contact_id, sent_at)`, `automation_run_steps (store_id, contact_id, sent_at)` |
 | Usage meter                                          | `usage_events (store_id, unit, period_start)`; unique `(store_id, unit, reference)` stops double counting     |
+| Wallet current balance                               | unique `wallet_ledger (store_id, wallet, revision)`; read greatest revision                                   |
+| Admin active member count                            | full `memberships (store_id, status)`                                                                         |
+| Frozen campaign batch                                | `campaign_recipients (campaign_id, status, id)`                                                               |
 | Notifications bell                                   | `notifications (store_id, user_id, status, created_at)`                                                       |
 
-Sweep indexes (all partial): `automation_runs (wake_at)` waiting, `campaigns (scheduled_for)` scheduled, `post_targets (scheduled_for)` scheduled, `post_targets (next_metrics_at)`, `payment_intents (next_check_at)`, `subscriptions (next_renewal_attempt_at)`, `subscriptions (trial_ends_at)` trialing, `channel_connections (token_expires_at)` active, `conversations (responder_returns_at)`, `contacts (deleted_at)`, `files (expires_at)`, `outbox_events (id)` unpublished.
+Sweep indexes (all partial): `automation_runs (wake_at)` waiting, `automation_runs (claimed_at)` running, `campaigns (scheduled_for)` scheduled, `post_targets (scheduled_for)` scheduled, `post_targets (next_metrics_at)`, `payment_intents (next_check_at)`, `subscriptions (next_renewal_attempt_at)`, `subscriptions (trial_ends_at)` trialing, `channel_connections (token_expires_at)` active, `conversations (responder_returns_at)`, `contacts (deleted_at)`, `files (expires_at)`, `outbox_events (id)` unpublished.
 
-`knowledge_chunks.embedding` has no vector index. A store has a few hundred chunks, and the search filters by `store_id` first, so an exact scan is fast and exact. Add an HNSW index when the largest store passes about 20,000 chunks.
+`knowledge_chunks.embedding` has no vector index. A store has a few hundred chunks, and the search filters by `store_id` first, so an exact scan is the initial implementation choice; measure the largest and most skewed stores before claiming latency. Add an HNSW index when the largest store passes about 20,000 chunks.
 
 ## Growth
 
@@ -55,11 +58,11 @@ Rough sizes at 1,000 active shops, each with about 3,000 customers and 300 chats
 | `contacts`, `contact_identities` | 3 million   | Grows with shops, not with time                     |
 | `orders`, `order_items`          | 10 million  |                                                     |
 
-At beta size (tens of shops) every table fits in memory and none of this matters yet. It matters for what is cheap to change later: UUID v7 ids sort by time, and every large table has `created_at`, so partitioning by month later needs no id change.
+These are sizing estimates, not measured capacity. Beta memory fit depends on payload size, history, tenant skew and concurrent writes. UUID v7 improves insertion locality but does not make time partitioning an additive change.
 
 ## Partition triggers
 
-Do not partition before a trigger is hit; plain tables are simpler. When one is hit, write an ADR and partition that table by month on `created_at`.
+Do not partition before a trigger is hit; plain tables are simpler. When one is hit, measure the bottleneck and write an ADR before choosing a partition strategy. PostgreSQL unique and primary keys on a partitioned table must include the partition key ([partition limitations](https://www.postgresql.org/docs/16/ddl-partitioning.html#DDL-PARTITIONING-DECLARATIVE-LIMITATIONS)). Current ID-only keys and deduplication keys usually do not. A time-based design needs key and referencing-FK migration, a separate global identity/deduplication structure, or a different partition choice. `webhook_events` uses `received_at`, not `created_at`.
 
 | Table                                         | Trigger                                                                             |
 | --------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -70,16 +73,24 @@ Do not partition before a trigger is hit; plain tables are simpler. When one is 
 
 ## Retention
 
-| Data                                                | Kept                                                                                                                               | How it is removed                                                    |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `webhook_events`                                    | 7 days; payload cleared once processed                                                                                             | `purge_webhook_events` (daily)                                       |
-| `outbox_events` (published)                         | 7 days                                                                                                                             | `purge_published_outbox_events` (daily)                              |
-| `sessions`                                          | Until `expires_at`                                                                                                                 | Maintenance job                                                      |
-| `assistant_messages`                                | 90 days (AI-R6)                                                                                                                    | Maintenance job, by `created_at`                                     |
-| `automation_run_steps`                              | 90 days after the run ends                                                                                                         | Maintenance job, by `created_at`                                     |
-| Deleted contacts                                    | 30 days, then purged with their chats                                                                                              | `due_contact_purges`, then a purge job per contact inside `forStore` |
-| `contact_memories`                                  | While the contact exists; cleared at once on a deletion request (including Meta data deletion callbacks), deleted with the contact | Service on request; cascade on purge                                 |
-| `files` with `expires_at` (exports, import uploads) | Until `expires_at`                                                                                                                 | Maintenance job deletes the object, then the row                     |
-| `audit_log`                                         | 2 years                                                                                                                            | Maintenance job as the owner role                                    |
-| `staff_audit_log`                                   | 7 years                                                                                                                            | Maintenance job as the owner role                                    |
-| Orders, payments, invoices, ledger                  | Life of the store, then the closure rules in ACC-12                                                                                | Store purge                                                          |
+| Data                                                | Kept                                                                                                                               | How it is removed                                                                            |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `webhook_events`                                    | 7 days; payload cleared once processed                                                                                             | `purge_webhook_events` (daily)                                                               |
+| `outbox_events` (published)                         | 7 days                                                                                                                             | `purge_published_outbox_events` (daily)                                                      |
+| `sessions`                                          | Until `expires_at`                                                                                                                 | Maintenance job                                                                              |
+| `assistant_messages`                                | 90 days (AI-R6)                                                                                                                    | Maintenance job, by `created_at`                                                             |
+| `automation_run_steps`                              | At least 372 days after the run finishes (365-day rebuild plus 7-day maximum lookback); never purge an active run                  | Maintenance joins the run and uses `finished_at`                                             |
+| Deleted contacts                                    | 30 days, then purged with their chats                                                                                              | Due sweep, then authorized privileged erasure; ordinary app grants cannot delete all history |
+| `contact_memories`                                  | While the contact exists; cleared at once on a deletion request (including Meta data deletion callbacks), deleted with the contact | Service on request; cascade on purge                                                         |
+| `files` with `expires_at` (exports, import uploads) | Until `expires_at`                                                                                                                 | Maintenance job deletes the object, then the row                                             |
+| `audit_log`                                         | 2 years                                                                                                                            | Maintenance job as the owner role                                                            |
+| `staff_audit_log`                                   | 7 years                                                                                                                            | Maintenance job as the owner role                                                            |
+| Orders, payments, invoices, ledger                  | Life of the store, then the closure rules in ACC-12                                                                                | Store purge                                                                                  |
+
+Retain campaign delivery/read eligibility and individual `tracked_link_visits` for at least the same 372-day attribution horizon. First/last tap counters are display summaries; they cannot reconstruct intermediate taps. Migration backfills only the known first/last distinct times with stable legacy keys. Preserve existing attribution where legacy evidence is incomplete; exact rebuild coverage grows as the new visit history is collected. Keep linked source/contact routing evidence until the newest relevant visit and source completion have both passed the horizon. Customer erasure takes precedence and removes personal attribution evidence; aggregate metrics may remain where they no longer identify the person. Merge before/after images last only through the seven-day undo window or earlier erasure; preserve the opaque operation key permanently for retry protection.
+
+## Query review and remaining measurements
+
+The review found repeated membership scans within one SQL statement, not an implemented application N+1 loop. On its synthetic fixture (30 selected stores, 20 active memberships each), a full `(store_id, status)` index changed the admin query to indexed lookups: 184 shared buffers and 1.266 ms. This is local evidence, not a production latency guarantee. The corrected schema also adds complete ID-leading indexes for both merge contact links, credential store links, restock variant links, target connections and the settings staff link. A small settings table alone would not justify an index on performance grounds.
+
+Before each feature ships, fetch contacts, variants, consent and stock through bounded batch service APIs. Use keyset cursors with a unique tie-breaker such as `(created_at, id)`; an existing timestamp-only index is not proof of stable paging. Check indexes against each filter and sort: `(store_id, status, time)` cannot directly order all statuses together. Measure consent-view latest-row ordering with long histories and tied times, global trigram/GIN selectivity under tenant skew, and store-filtered vector search. Bound sweeps, queue handoffs, batch sizes and provider work; LIMIT without recovery does not ensure durability. Full-payload load tests remain required.

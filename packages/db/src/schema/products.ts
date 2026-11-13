@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -64,6 +66,8 @@ export const products = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('products_store_id_id_key').on(table.storeId, table.id),
+
     index('products_store_id_status_idx').on(table.storeId, table.status, table.name),
     index('products_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
     index('products_aliases_idx').using('gin', table.aliases),
@@ -102,16 +106,33 @@ export const productVariants = pgTable(
     isDefault: boolean('is_default').notNull().default(false),
     position: smallint('position').notNull().default(0),
     status: text('status', { enum: productStatuses }).notNull().default('active'),
+    externalSource: text('external_source'),
+    externalAccount: text('external_account'),
     externalRef: text('external_ref'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('product_variants_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'product_variants_product_id_store_fk',
+      columns: [table.storeId, table.productId],
+      foreignColumns: [products.storeId, products.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('product_variants_product_id_idx').on(table.productId),
     index('product_variants_store_id_idx').on(table.storeId),
     uniqueIndex('product_variants_store_id_sku_key')
       .on(table.storeId, table.sku)
       .where(sql`${table.sku} is not null`),
+    uniqueIndex('product_variants_external_identity_key')
+      .on(table.storeId, table.externalSource, table.externalAccount, table.externalRef)
+      .where(sql`${table.externalRef} is not null`),
+    check(
+      'product_variants_external_identity',
+      sql`(${table.externalRef} is null and ${table.externalSource} is null and ${table.externalAccount} is null)
+        or (${table.externalRef} is not null and ${table.externalSource} is not null and ${table.externalAccount} is not null)`,
+    ),
     uniqueIndex('product_variants_one_default_key')
       .on(table.productId)
       .where(sql`${table.isDefault}`),
@@ -146,6 +167,12 @@ export const stockMovements = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'stock_movements_variant_id_store_fk',
+      columns: [table.storeId, table.variantId],
+      foreignColumns: [productVariants.storeId, productVariants.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('stock_movements_variant_idx').on(table.storeId, table.variantId, table.createdAt),
     index('stock_movements_variant_id_idx').on(table.variantId),
     index('stock_movements_store_id_order_id_idx')
@@ -172,16 +199,35 @@ export const restockRequests = pgTable(
     contactId: uuid('contact_id')
       .notNull()
       .references(() => contacts.id, { onDelete: 'cascade' }),
-    conversationId: uuid('conversation_id').references(() => conversations.id),
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'set null',
+    }),
     status: text('status', { enum: restockRequestStatuses }).notNull().default('waiting'),
     notifiedAt: timestamptz('notified_at'),
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'restock_requests_variant_id_store_fk',
+      columns: [table.storeId, table.variantId],
+      foreignColumns: [productVariants.storeId, productVariants.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'restock_requests_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'restock_requests_conversation_id_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('restock_requests_waiting_key')
       .on(table.variantId, table.contactId)
       .where(sql`${table.status} = 'waiting'`),
     index('restock_requests_store_id_variant_idx').on(table.storeId, table.variantId, table.status),
+    index('restock_requests_variant_id_idx').on(table.variantId),
     index('restock_requests_contact_id_idx').on(table.contactId),
     index('restock_requests_conversation_id_idx').on(table.conversationId),
     check('restock_requests_status', isOneOf(table.status, restockRequestStatuses)),

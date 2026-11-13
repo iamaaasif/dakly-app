@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -24,7 +26,7 @@ import {
 import { users } from './auth';
 import { channelConnections } from './channels';
 import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
-import { contacts } from './contacts';
+import { contactIdentities, contacts } from './contacts';
 import { stores } from './stores';
 
 // WhatsApp message templates, synced with Meta per WhatsApp Business account.
@@ -50,6 +52,16 @@ export const whatsappTemplates = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('whatsapp_templates_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'whatsapp_templates_channel_connection_id_store_fk',
+      columns: [table.storeId, table.channelConnectionId],
+      foreignColumns: [channelConnections.storeId, channelConnections.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     uniqueIndex('whatsapp_templates_name_key').on(
       table.channelConnectionId,
       table.name,
@@ -73,6 +85,8 @@ export const campaigns = pgTable(
     name: text('name').notNull(),
     goal: text('goal'),
     channel: text('channel', { enum: campaignChannels }).notNull(),
+    // Frozen at approval; SMS uses the platform sender and has no channel connection.
+    channelConnectionId: uuid('channel_connection_id').references(() => channelConnections.id),
     category: text('category', { enum: messageCategories }).notNull().default('marketing'),
     whatsappTemplateId: uuid('whatsapp_template_id').references(() => whatsappTemplates.id),
     content: jsonb('content').notNull(),
@@ -108,13 +122,36 @@ export const campaigns = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('campaigns_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'campaigns_channel_connection_id_store_fk',
+      columns: [table.storeId, table.channelConnectionId],
+      foreignColumns: [channelConnections.storeId, channelConnections.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+    foreignKey({
+      name: 'campaigns_whatsapp_template_id_store_fk',
+      columns: [table.storeId, table.whatsappTemplateId],
+      foreignColumns: [whatsappTemplates.storeId, whatsappTemplates.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     index('campaigns_store_id_status_idx').on(table.storeId, table.status, table.createdAt),
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
+    index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
     index('campaigns_created_by_user_id_idx').on(table.createdByUserId),
+    check(
+      'campaigns_connection',
+      sql`case when ${table.channel} = 'sms' then ${table.channelConnectionId} is null else ${table.status} = 'draft' or ${table.channelConnectionId} is not null end`,
+    ),
     check('campaigns_channel', isOneOf(table.channel, campaignChannels)),
     check('campaigns_category', isOneOf(table.category, messageCategories)),
     check('campaigns_status', isOneOf(table.status, campaignStatuses)),
@@ -144,6 +181,8 @@ export const campaignRecipients = pgTable(
     contactId: uuid('contact_id')
       .notNull()
       .references(() => contacts.id, { onDelete: 'cascade' }),
+    // Identity must belong to this contact and the campaign's frozen connection. SMS has none.
+    contactIdentityId: uuid('contact_identity_id').references(() => contactIdentities.id),
     // Phone or page-scoped id at freeze time.
     address: text('address'),
     status: text('status', { enum: recipientStatuses }).notNull(),
@@ -159,14 +198,34 @@ export const campaignRecipients = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'campaign_recipients_campaign_id_store_fk',
+      columns: [table.storeId, table.campaignId],
+      foreignColumns: [campaigns.storeId, campaigns.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'campaign_recipients_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'campaign_recipients_contact_identity_id_store_fk',
+      columns: [table.storeId, table.contactIdentityId],
+      foreignColumns: [contactIdentities.storeId, contactIdentities.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+
     uniqueIndex('campaign_recipients_campaign_contact_key').on(table.campaignId, table.contactId),
-    index('campaign_recipients_campaign_status_idx').on(table.campaignId, table.status),
+    index('campaign_recipients_campaign_status_idx').on(table.campaignId, table.status, table.id),
     // Frequency cap and last-touch attribution look up a contact's recent sends.
     index('campaign_recipients_store_contact_idx').on(table.storeId, table.contactId, table.sentAt),
     // Global, for SMS delivery reports that carry only the provider's message id.
     index('campaign_recipients_provider_message_idx')
       .on(table.providerMessageId)
       .where(sql`${table.providerMessageId} is not null`),
+    index('campaign_recipients_contact_identity_id_idx').on(table.contactIdentityId),
     index('campaign_recipients_contact_id_idx').on(table.contactId),
     check('campaign_recipients_status', isOneOf(table.status, recipientStatuses)),
     check(
@@ -198,6 +257,13 @@ export const trackedLinks = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    uniqueIndex('tracked_links_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'tracked_links_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
     uniqueIndex('tracked_links_code_key').on(table.code),
     index('tracked_links_source_idx').on(table.storeId, table.sourceType, table.sourceId),
     index('tracked_links_store_contact_idx').on(table.storeId, table.contactId, table.lastTappedAt),
@@ -212,5 +278,32 @@ export const trackedLinks = pgTable(
       'tracked_links_opt_out_contact',
       sql`${table.kind} <> 'sms_opt_out' or ${table.contactId} is not null`,
     ),
+  ],
+);
+
+// Keep each eligible tap so attribution can be rebuilt for orders between repeated visits.
+export const trackedLinkVisits = pgTable(
+  'tracked_link_visits',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    trackedLinkId: uuid('tracked_link_id')
+      .notNull()
+      .references(() => trackedLinks.id, { onDelete: 'cascade' }),
+    eventKey: text('event_key').notNull(),
+    occurredAt: timestamptz('occurred_at').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'tracked_link_visits_tracked_link_id_store_fk',
+      columns: [table.storeId, table.trackedLinkId],
+      foreignColumns: [trackedLinks.storeId, trackedLinks.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+
+    uniqueIndex('tracked_link_visits_store_event_key').on(table.storeId, table.eventKey),
+    index('tracked_link_visits_link_occurred_idx').on(table.trackedLinkId, table.occurredAt),
+    index('tracked_link_visits_occurred_at_idx').on(table.occurredAt),
   ],
 );

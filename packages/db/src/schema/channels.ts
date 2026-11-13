@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -48,6 +50,8 @@ export const channelConnections = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('channel_connections_store_id_id_key').on(table.storeId, table.id),
+
     // One external account belongs to one store at a time, across all stores.
     uniqueIndex('channel_connections_account_key')
       .on(table.kind, table.externalAccountId)
@@ -82,6 +86,17 @@ export const smsSenderIds = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    foreignKey({
+      name: 'sms_sender_ids_trade_licence_file_id_store_fk',
+      columns: [table.storeId, table.tradeLicenceFileId],
+      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'sms_sender_ids_nid_file_id_store_fk',
+      columns: [table.storeId, table.nidFileId],
+      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('sms_sender_ids_store_id_idx').on(table.storeId),
     index('sms_sender_ids_status_idx').on(table.status),
     index('sms_sender_ids_trade_licence_file_id_idx').on(table.tradeLicenceFileId),

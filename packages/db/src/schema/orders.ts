@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
+  foreignKey,
+  type PgTableExtraConfigValue,
   boolean,
   check,
   date,
@@ -51,7 +53,9 @@ export const deliveryZones = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('delivery_zones_store_id_id_key').on(table.storeId, table.id),
+
     index('delivery_zones_store_id_idx').on(table.storeId),
     index('delivery_zones_bd_area_ids_idx').using('gin', table.bdAreaIds),
     uniqueIndex('delivery_zones_one_default_key')
@@ -72,11 +76,12 @@ export const orders = pgTable(
       .notNull()
       .references(() => stores.id),
     number: integer('number').notNull(),
-    // The buyer. Purchase history, spend and attribution count the order once, here.
-    contactId: uuid('contact_id')
-      .notNull()
-      .references(() => contacts.id),
-    conversationId: uuid('conversation_id').references(() => conversations.id),
+    // Purge detaches the buyer but retains their permitted name snapshot, never the recipient's.
+    buyerName: text('buyer_name'),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    conversationId: uuid('conversation_id').references(() => conversations.id, {
+      onDelete: 'set null',
+    }),
     source: text('source', { enum: orderSources }).notNull(),
     createdByType: text('created_by_type', { enum: orderCreatorTypes }).notNull(),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
@@ -135,7 +140,29 @@ export const orders = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    uniqueIndex('orders_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'orders_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'orders_conversation_id_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'orders_delivery_zone_id_store_fk',
+      columns: [table.storeId, table.deliveryZoneId],
+      foreignColumns: [deliveryZones.storeId, deliveryZones.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'orders_possible_duplicate_of_order_id_store_fk',
+      columns: [table.storeId, table.possibleDuplicateOfOrderId],
+      foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     uniqueIndex('orders_store_id_number_key').on(table.storeId, table.number),
     uniqueIndex('orders_store_id_idempotency_key_key')
       .on(table.storeId, table.idempotencyKey)
@@ -169,33 +196,7 @@ export const orders = pgTable(
     index('orders_recipient_bd_area_id_idx').on(table.recipientBdAreaId),
     index('orders_delivery_zone_id_idx').on(table.deliveryZoneId),
     index('orders_possible_duplicate_idx').on(table.possibleDuplicateOfOrderId),
-    check('orders_source', isOneOf(table.source, orderSources)),
-    check('orders_created_by_type', isOneOf(table.createdByType, orderCreatorTypes)),
-    check('orders_stage', isOneOf(table.stage, orderStages)),
-    check('orders_payment_status', isOneOf(table.paymentStatus, orderPaymentStatuses)),
-    check(
-      'orders_on_hold_reason',
-      sql`(${table.stage} = 'on_hold') = (${table.onHoldReason} is not null)`,
-    ),
-    check(
-      'orders_cancel_reason',
-      sql`(${table.stage} = 'cancelled') = (${table.cancelReason} is not null)`,
-    ),
-    check('orders_courier', isOneOf(table.courier, couriers)),
-    check(
-      'orders_confirmation_method',
-      isOneOf(table.confirmationMethod, orderConfirmationMethods),
-    ),
-    check(
-      'orders_attributed_source_type',
-      isOneOf(table.attributedSourceType, attributionSourceTypes),
-    ),
-    check('orders_recipient_phone_format', sql`${table.recipientPhone} ~ '^01[3-9][0-9]{8}$'`),
-    check(
-      'orders_money',
-      sql`${table.itemsTotalPoisha} >= 0 and ${table.discountPoisha} >= 0 and ${table.deliveryChargePoisha} >= 0 and ${table.advancePaidPoisha} >= 0 and ${table.codAmountPoisha} >= 0`,
-    ),
-    check('orders_number', sql`${table.number} > 0`),
+    ...orderChecks(table),
   ],
 );
 
@@ -225,7 +226,18 @@ export const orderItems = pgTable(
     isOversellAllowed: boolean('is_oversell_allowed').notNull().default(false),
     createdAt: createdAt(),
   },
-  (table) => [
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'order_items_order_id_store_fk',
+      columns: [table.storeId, table.orderId],
+      foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'order_items_variant_id_store_fk',
+      columns: [table.storeId, table.variantId],
+      foreignColumns: [productVariants.storeId, productVariants.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+
     index('order_items_order_id_idx').on(table.orderId),
     index('order_items_store_id_variant_idx').on(table.storeId, table.variantId),
     index('order_items_variant_id_idx').on(table.variantId),
@@ -236,3 +248,37 @@ export const orderItems = pgTable(
     check('order_items_money', sql`${table.unitPricePoisha} > 0 and ${table.discountPoisha} >= 0`),
   ],
 );
+
+function orderChecks(
+  table: Record<keyof typeof orders.$inferSelect, AnyPgColumn>,
+): PgTableExtraConfigValue[] {
+  return [
+    check('orders_source', isOneOf(table.source, orderSources)),
+    check('orders_created_by_type', isOneOf(table.createdByType, orderCreatorTypes)),
+    check('orders_stage', isOneOf(table.stage, orderStages)),
+    check('orders_payment_status', isOneOf(table.paymentStatus, orderPaymentStatuses)),
+    check(
+      'orders_on_hold_reason',
+      sql`(${table.stage} = 'on_hold') = (${table.onHoldReason} is not null)`,
+    ),
+    check(
+      'orders_cancel_reason',
+      sql`(${table.stage} = 'cancelled') = (${table.cancelReason} is not null)`,
+    ),
+    check('orders_courier', isOneOf(table.courier, couriers)),
+    check(
+      'orders_confirmation_method',
+      isOneOf(table.confirmationMethod, orderConfirmationMethods),
+    ),
+    check(
+      'orders_attributed_source_type',
+      isOneOf(table.attributedSourceType, attributionSourceTypes),
+    ),
+    check('orders_recipient_phone_format', sql`${table.recipientPhone} ~ '^01[3-9][0-9]{8}$'`),
+    check(
+      'orders_money',
+      sql`${table.itemsTotalPoisha} >= 0 and ${table.discountPoisha} >= 0 and ${table.deliveryChargePoisha} >= 0 and ${table.advancePaidPoisha} >= 0 and ${table.codAmountPoisha} >= 0`,
+    ),
+    check('orders_number', sql`${table.number} > 0`),
+  ];
+}

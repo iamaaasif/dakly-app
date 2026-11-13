@@ -45,7 +45,7 @@ export const lifecycleStages = [
   'bought_once',
 ] as const;
 export const returnRiskLevels = ['new_customer', 'good', 'some_returns', 'high'] as const;
-export const importKinds = ['customers_csv', 'pos_csv'] as const;
+export const importKinds = ['customers_csv', 'pos_csv', 'products_csv'] as const;
 export const importStatuses = [
   'uploaded',
   'mapped',
