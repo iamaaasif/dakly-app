@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { serializeError } from './safe-error';
 
 describe('serializeError', () => {
+  it.each(['private otp:123456:12', '    at private otp:123456:12'])(
+    'removes the complete multiline message before parsing frames: %s',
+    (messageLine) => {
+      const error = new Error(`private message\n${messageLine}`);
+      error.stack = `Error: private message\n${messageLine}\n    at safe-frame (/application.ts:25:3)`;
+      expect(serializeError(error).stack).toBe('at <redacted>:25:3');
+    },
+  );
+
   it('keeps safe diagnostics while removing arbitrary class names, codes and frame paths', () => {
     const error = new Error('private-message');
     Object.defineProperty(error, 'constructor', { value: { name: 'private-class' } });

@@ -29,7 +29,11 @@ describe('AppErrorFilter', () => {
     Logger.overrideLogger(sink);
     const failure = new DrizzleQueryError(
       'insert into customers values ($1, $2, $3)',
-      ['01712345678', 'Synthetic Customer', 'private-secret-marker'],
+      [
+        '01712345678',
+        'Synthetic Customer',
+        'private-secret-marker\nprivate otp:123456:12\n    at private otp:654321:12',
+      ],
       new Error('private-secret-marker'),
     );
     let status = 0;
@@ -57,6 +61,8 @@ describe('AppErrorFilter', () => {
       'Synthetic Customer',
       'private-secret-marker',
       'insert into',
+      '123456',
+      '654321',
     ]) {
       expect(logs.join('\n')).not.toContain(marker);
       expect(JSON.stringify(envelopes)).not.toContain(marker);

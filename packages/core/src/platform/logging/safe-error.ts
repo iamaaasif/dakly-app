@@ -22,28 +22,28 @@ const databaseCodes = new Set([
 ]);
 
 export function serializeError(error: unknown) {
-  const errorClass =
-    error instanceof Error && errorClasses.has(error.constructor.name)
-      ? error.constructor.name
-      : 'UnknownError';
+  if (!(error instanceof Error)) {
+    return { errorClass: 'UnknownError', errorCode: 'INTERNAL_ERROR', stack: '' };
+  }
+  const errorClass = errorClasses.has(error.constructor.name)
+    ? error.constructor.name
+    : 'UnknownError';
   const code =
-    error instanceof Error &&
-    'code' in error &&
-    typeof error.code === 'string' &&
-    databaseCodes.has(error.code)
+    'code' in error && typeof error.code === 'string' && databaseCodes.has(error.code)
       ? error.code
       : 'INTERNAL_ERROR';
-  // Even frame names and file paths can contain input. Keep only bounded source positions.
-  const stack =
-    error instanceof Error
-      ? (error.stack ?? '')
-          .split('\n')
-          .slice(1, 21)
-          .flatMap((frame) => {
-            const position = /:(\d{1,6}):(\d{1,4})\)?$/.exec(frame);
-            return position ? [`at <redacted>:${position[1]}:${position[2]}`] : [];
-          })
-          .join('\n')
-      : '';
+  // Messages can contain newlines and forged frames. Parse only after the full error header.
+  const header = `${Error.prototype.toString.call(error)}\n`;
+  const stack = error.stack?.startsWith(header)
+    ? error.stack
+        .slice(header.length)
+        .split('\n')
+        .slice(0, 20)
+        .flatMap((frame) => {
+          const position = /^\s+at .+:(\d{1,6}):(\d{1,4})\)?$/.exec(frame);
+          return position ? [`at <redacted>:${position[1]}:${position[2]}`] : [];
+        })
+        .join('\n')
+    : '';
   return { errorClass, errorCode: code, stack };
 }
