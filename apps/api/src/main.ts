@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { registerSessionCookies } from '@dakly/core/sessions/session-cookie';
+import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { loadEnv } from '@dakly/core/platform/config/env';

@@ -20,7 +20,7 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { SessionsModule } from './sessions.module';
 import { SessionsService } from './sessions.service';
 import { SessionsRepository } from './sessions.repository';
-import { registerSessionCookies } from './session-cookie';
+import { registerSessionCookies } from '../platform/http/session-cookie';
 
 class PublicController {
   health() {

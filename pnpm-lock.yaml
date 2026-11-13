@@ -173,6 +173,9 @@ importers:
       '@dakly/db':
         specifier: workspace:*
         version: link:../db
+      '@dakly/providers':
+        specifier: workspace:*
+        version: link:../providers
       '@fastify/cookie':
         specifier: 11.0.2
         version: 11.0.2(fastify@5.12.8)

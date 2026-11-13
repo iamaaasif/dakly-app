@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { registerSessionCookies } from '@dakly/core/sessions/session-cookie';
+import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { assertRouteAccess } from './route-access';
@@ -28,6 +28,8 @@ describe('API route access rules', () => {
       expect.arrayContaining([
         'HealthController.check',
         'SessionsController.me',
+        'AuthController.requestCode',
+        'AuthController.verifyCode',
         'CustomersController.getById',
       ]),
     );

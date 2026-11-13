@@ -8,7 +8,7 @@ import { RequireUser } from '../platform/tenancy/access.decorators';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { SessionsService } from './sessions.service';
-import { clearSessionCookie } from './session-cookie';
+import { clearSessionCookie } from '../platform/http/session-cookie';
 
 @Controller()
 @RequireUser()

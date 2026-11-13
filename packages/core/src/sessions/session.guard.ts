@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { TeamService } from '../team/team.service';
 import { SessionsService } from './sessions.service';
-import { SESSION_COOKIE, setSessionCookie } from './session-cookie';
+import { SESSION_COOKIE, setSessionCookie } from '../platform/http/session-cookie';
 
 @Injectable()
 export class SessionGuard implements CanActivate {

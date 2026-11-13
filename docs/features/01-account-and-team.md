@@ -382,12 +382,60 @@ CI uses the same ports and checks readiness before tests. `MAILPIT_SMTP_HOST` an
 `MAILPIT_SMTP_PORT` configure the SMTP connection; `MAILPIT_API_URL` configures
 integration test read-back. The integration test removes only its own message.
 
-`SMS_DRIVER=mailpit` is the only supported selection and startup rejects it in
-production. Omission is allowed while there is no SMS consumer. ACC-2 must require
-a configured, usable driver when sign-in starts and must never default to Mailpit
-in production. Driver selection and auth wiring belong to ACC-2. Production SMS
-remains blocked on the provider account and sender id in ACC-14; captured messages
-do not prove live SMS delivery.
+`SMS_DRIVER=mailpit` is the only supported selection. ACC-2 selects Mailpit in
+development and tests, using the SMTP settings above. Auth startup fails in
+production even when `SMS_DRIVER` is omitted: no usable production driver exists
+until ACC-14 supplies the provider account, sender id and adapter. Pure environment
+parsing remains separate from the consumer factory so cookie settings do not
+instantiate an SMS driver. Captured messages do not prove live SMS delivery.
+
+## SMS sign-up and sign-in
+
+ACC-2 provides two public browser routes. Both require an allowed `Origin`.
+
+- `POST /auth/code`: `purpose: sign_up` takes name, normalized BD phone, optional
+  email and `termsVersion`. An existing phone returns `409 AUTH_ACCOUNT_EXISTS`.
+  `purpose: sign_in` takes a phone; an unknown account returns
+  `404 AUTH_ACCOUNT_NOT_FOUND` without sending a message.
+- `POST /auth/code/verify`: takes the same phone and purpose, a six-digit code and
+  optional `isRemembered` (default false). It returns 204 and sets the session
+  cookie; neither the code nor the session token appears in the response body.
+
+Codes use `crypto.randomInt`, are hashed with their target and purpose, expire in
+10 minutes, and allow five wrong tries. A Valkey script checks and deletes a code
+atomically. A hash-only consumed marker lasts for the original remaining code TTL;
+a correct-code replay is rejected without another failure and cannot extend that
+TTL or authorize a session. New codes avoid these still-retained values. Sign-in
+grants also retain their original user id. Reassigning a phone
+invalidates its old grant; the final account row lock rechecks the current phone,
+disabled flag and TOTP status before issuing a session. Resend waits 30 seconds;
+sends are limited to five per target and twenty per IP in an hour. Concurrent or
+failed delivery attempts can consume capacity without a delivered message. The
+code is saved before SMS delivery, outside any database transaction. An uncertain
+delivery failure retains the code and cooldown and returns `AUTH_SMS_UNAVAILABLE`.
+
+`AuthService.completeSignIn` is the sole production session issuer. It accepts an
+internal identity and plain request context, inserts a pending registration if
+needed, and commits the user and storeless session in one account transaction.
+Sign-up records phone verification and accepted terms; its optional email remains
+unverified. Database uniqueness also protects concurrent sign-ups and email
+collisions. A consumed code is never restored after database failure: the user
+must request another code. If the database committed but clearing failure state
+fails, the response fails closed; a new sign-in attempt is required.
+
+Phone, email and future password checks share `SignInFailures` by user id. Unknown
+accounts use a hashed target instead. Five consecutive wrong attempts lock the
+identity for 15 minutes; thirty failures from one IP block that IP for an hour.
+Resending does not clear failures. Only completed sign-in clears the identity
+counter, never the IP history. Unknown-target history expires after an hour when
+it has not reached a lock. The atomic transition into an account lock sends one
+SMS outside the database transaction. Notification failure leaves the lock intact
+and records a security event in logs without the phone or message text.
+
+TOTP-enabled accounts return `403 AUTH_SECOND_FACTOR_REQUIRED` and get no session.
+Their failure history is retained. ACC-7 must add its challenge inside the common
+completion path; no sign-in method may issue a session before that factor passes.
+Email/password and Google sign-in remain ACC-9, ACC-10 and ACC-11.
 
 ## Open questions
 

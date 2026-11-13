@@ -27,7 +27,7 @@ describe('SMS driver configuration', () => {
     });
   });
 
-  it('allows production without an SMS selection until there is an SMS consumer', () => {
+  it('parses production environment independently of consumer startup validation', () => {
     expect(loadEnv({ ...base, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
   });
 
