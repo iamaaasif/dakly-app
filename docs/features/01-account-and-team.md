@@ -334,7 +334,7 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 
 ### Data
 
-`users` (phone, email, verified times, password hash, Google subject id, accepted terms version and time), `sessions`, `push_subscriptions`, `stores` (settings in one JSON column), `store_counters`, `memberships` (invites are memberships with status `invited`; each member's notification preferences), `roles` (custom only; built-in roles are code), `support_grants`, `audit_log`. Sign-in codes live in Valkey ([ADR 0007](../adr/0007-sign-in-identifiers-on-users.md)). Full design: [docs/data](../data/README.md).
+`users` (phone, email, verified times, password hash, Google subject id, accepted terms version and time), `sessions`, `push_subscriptions`, `stores` (settings in one JSON column), `store_counters`, `memberships` (invites are memberships with status `invited`; each member's notification preferences), `roles` (custom only; built-in roles are code), `support_grants`, `audit_log`, `account_security_events`. Sign-in codes live in Valkey ([ADR 0007](../adr/0007-sign-in-identifiers-on-users.md)). Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 
@@ -354,3 +354,19 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 ## Open questions
 
 Q3 (extra stores), Q11 (organisation above stores).
+
+## Audit service contract
+
+DB-3 provides `AuditService.record(storeId, entry)` and `AccountSecurityEventsService.record(userId, entry)`. Callers await the record inside the same action as the mutation and let errors escape; both writes then commit or roll back together. Neither record method opens a separate transaction. The auth flows and Security screen remain their own tasks; these services do not enforce route permissions or add events to unwritten flows automatically.
+
+Store actions use `StoreTransaction.run(storeId, work)`. The audit entry has a user actor with `userId`, or a system actor; action, entity type, entity UUID and optional IP. Before and after hold only `ids` (UUID arrays) and `changedFields` (field names), never old or new personal values. Parse the shared audit contract at the boundary. A field named `phone` can be listed as changed, but its value is never recorded.
+
+Account actions use `AccountTransaction.run(userId, work)`; auth repositories join through `AccountDatabase.forUser(userId, ...)` and filter users by `id` and sessions by `user_id`. Account audit uses that same transaction. Account and store actions reject nesting in either direction. Await all work inside the action; inherited callbacks cannot reuse a finished transaction. One event describes one logical change, so signing out several sessions writes one `sessions.revoked` event. A flow with several independent changes writes one event for each.
+
+The account contract accepts `password.changed`, `totp.enabled`, `totp.disabled`, `recovery.started`, `recovery.cancelled`, `recovery.completed`, `email.changed`, `phone.changed`, `sessions.revoked` and `google.linked`. `actor.kind` is `user` (the subject user), `system` or `staff`. Staff events require `staffId` and `reasonType`: `lost_phone`, `lost_authenticator` or `lost_email`. These map to separate `actor_type`, `actor_staff_id` and `reason_type` columns. ADM-10 can write its staff audit through its own service inside the account action before mutating users or sessions, then write the account event. Its staff audit holds the required free-text reason and identity-check outcomes; account history never holds that text or an NID value.
+
+Account `details` accepts only optional `sessionId` and `recoveryId` UUIDs. IP and a user agent of at most 512 characters have dedicated columns. Contracts reject extra metadata keys and personal values; the table also checks allowed keys and UUID values. The caller never passes a credential, verification code, phone or email into either audit payload.
+
+`AccountSecurityEventsService.list(userId, { limit, before? })` reads only that user's events, newest UUID v7 first. `limit` is 1–100 and `before` is an exclusive UUID cursor; both come from the history query contract. A future route must derive `userId` from its verified session, never a query or body. No store or membership is required. Import each audit module to use its exported service; repositories remain private to their feature.
+
+Account events are kept for two years. Their user and staff foreign keys block deletion while history remains. The owner-only bounded purge function is implemented; DB-7 will schedule it daily, as described in [jobs](../data/jobs.md#run-maintenance). Account deletion and staff deletion must honor this retention rather than cascade away history.

@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
 import { DATABASE } from './database.tokens';
+import { transactionKind } from './transaction-kind';
 
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -21,6 +22,8 @@ export class TenantDatabase {
     storeId: string,
     work: (tx: Transaction) => Promise<TResult>,
   ): Promise<TResult> {
+    if (transactionKind.getStore() === 'account')
+      throw new Error('Cannot mix account and store transactions');
     const current = this.scope.getStore();
     if (current) {
       if (!current.isActive) throw new Error('Store transaction has already finished');
@@ -31,14 +34,24 @@ export class TenantDatabase {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('app.store_id', ${storeId}, true)`);
       const scope: StoreScope = { storeId, tx, isActive: true };
-      return this.scope.run(scope, async () => {
-        try {
-          return await work(tx);
-        } finally {
-          // Async descendants retain their context; they must not use a released connection.
-          scope.isActive = false;
-        }
-      });
+      return transactionKind.run('store', () =>
+        this.scope.run(scope, async () => {
+          try {
+            return await work(tx);
+          } finally {
+            // Async descendants retain their context; they must not use a released connection.
+            scope.isActive = false;
+          }
+        }),
+      );
     });
+  }
+
+  async inTransaction<TResult>(
+    storeId: string,
+    work: (tx: Transaction) => Promise<TResult>,
+  ): Promise<TResult> {
+    if (!this.scope.getStore()) throw new Error('Audit requires an active store transaction');
+    return this.forStore(storeId, work);
   }
 }

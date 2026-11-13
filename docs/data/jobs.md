@@ -128,6 +128,7 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 3. `drop_expired_partitions()`: drop AI run and link visit months older than 13 months. It skips any month past the watermark, so a failed step 2 delays deletion instead of losing data.
 4. Archive: export each `audit_log` month older than 24 months to R2 as gzipped JSON lines, check the row count, then drop it as the owner role. Export messages older than 12 months the same way, grouped by conversation and month, whether or not the chat is still active, then delete them in batches.
 5. Purge in batches of 5,000: published outbox events and webhook events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
+6. Account history: as the owner, call `SELECT public.purge_account_security_events(1000)` in separate short transactions until it returns zero. The SQL exists in migration 0016; the daily runner remains DB-7. It deletes rows strictly older than two years and rejects limits outside 1–1,000. Retrying cannot remove newer events; it needs no store scan. No R2 archive is required for account events.
 
 ## Send-time and financial gates
 

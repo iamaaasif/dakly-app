@@ -113,6 +113,20 @@
       "when": 1794559538397,
       "tag": "0015_maintenance_store_scan",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794573219225,
+      "tag": "0016_account_security_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794573637223,
+      "tag": "0017_account_security_event_details",
+      "breakpoints": true
     }
   ]
 }
