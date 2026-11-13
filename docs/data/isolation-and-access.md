@@ -97,11 +97,11 @@ The admin app connects as `dakly_app` like the shop app. It never bypasses RLS.
 
 The schema keeps the buyer and the delivery recipient apart, and nothing merges contacts on its own:
 
-- `orders.contact_id` is the buyer while the profile exists. `buyer_name` snapshots that buyer independently of the recipient; unknown names remain null. Purge sets both the buyer and originating conversation links to null and keeps permitted order history.
-- `orders.recipient_name`, `recipient_phone`, `recipient_address`, `recipient_district`, `recipient_bd_area_id` are a snapshot of who receives it. `orders.is_self_delivery` says whether that is the buyer (the default).
+- `orders.buyer_contact_id` is the buyer while the profile exists. `buyer_name` snapshots that buyer independently of the recipient; unknown names remain null. Purge sets both the buyer and originating conversation links to null and keeps permitted order history.
+- `orders.recipient_name`, `recipient_phone`, `recipient_address`, `recipient_district`, `recipient_bd_area_id` are a snapshot of who receives it. `orders.is_recipient_buyer` says whether that is the buyer (the default).
 - `contacts.phone` is the person's own phone, one contact per phone per store (partial unique index `contacts_store_id_phone_key`). It is saved when the buyer gives it for an order to themselves, including during chat capture before the order exists (D27), from a WhatsApp sender identity (then `phone_verified_at` is set), from an import, or by a staff edit. Once set, only a direct profile edit changes it. Saving it is not verification, not a merge and not marketing consent.
 - If the phone already belongs to another contact, the unique index refuses the save (also when two saves race). The service keeps the phone on the order only and writes a `contact_match_suggestions` row (`reason = same_phone`, with `order_id` or `conversation_id`). Staff merge or dismiss it; the order is never blocked.
-- A phone for another recipient (`is_self_delivery = false`) stays only on the order and never touches a contact.
+- A phone for another recipient (`is_recipient_buyer = false`) stays only on the order and never touches a contact.
 - Return risk is read from `orders` by `recipient_phone` (index `orders_store_id_recipient_phone_outcome_idx`), so it follows the delivery phone, not the contact.
 - AI order tools read only orders of this conversation or of a WhatsApp-verified identity (must-fix 1). A saved but unverified phone gives no access to other orders.
 - Customer memory (`contact_memories`, D30) is keyed by contact and store and sits under RLS like any shop table. It holds only what this customer said or their own orders show; a self-delivery order's area may be used, another recipient's never (D26). It never links contacts, and merge or undo invalidates both affected memories and conversation checkpoints. Clear cutoffs survive rebuilding; older model responses must fail version guards.

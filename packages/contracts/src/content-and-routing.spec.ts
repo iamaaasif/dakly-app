@@ -47,7 +47,7 @@ describe('campaign routing', () => {
       channel: 'messenger',
       channelConnectionId: connectionId,
       contactIdentityId: identityId,
-      address: 'page-scoped-address',
+      destinationAddress: 'page-scoped-address',
     };
     expect(campaigns.campaignRecipientRouteSchema.parse(input)).toEqual(input);
     expect(
@@ -66,7 +66,7 @@ describe('campaign routing', () => {
       channel: 'sms',
       channelConnectionId: null,
       contactIdentityId: null,
-      address: '01712345678',
+      destinationAddress: '01712345678',
     };
     expect(campaigns.campaignRecipientRouteSchema.parse(input)).toEqual(input);
     expect(

@@ -111,13 +111,15 @@ async function seedStore(tx: Transaction): Promise<string> {
     storeId,
     planId: growth!.id,
     status: 'trialing',
-    pricePoisha: 349_000,
+    currentPeriodPricePoisha: 349_000,
     trialEndsAt: new Date(now.getTime() + 14 * DAY),
     currentPeriodStart: now,
     currentPeriodEnd: new Date(now.getTime() + 14 * DAY),
   });
   await tx.insert(aiAgentSettings).values({ storeId });
-  await tx.insert(brandProfiles).values({ storeId, tone: 'friendly', languages: ['bn', 'en'] });
+  await tx
+    .insert(brandProfiles)
+    .values({ storeId, defaultTone: 'friendly', languages: ['bn', 'en'] });
   // Area ids from the bd_areas seed: 301 Dhaka, 303 Gazipur, 309 Narayanganj.
   await tx.insert(deliveryZones).values([
     { storeId, name: 'Inside Dhaka', chargePoisha: 6_000, bdAreaIds: [301], position: 0 },

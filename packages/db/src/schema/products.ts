@@ -40,6 +40,8 @@ export const products = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    // The effective price of every size whose variant has no override. 0 means "Needs a price"
+    // (PROD-R1): such a product is not offered in chats, shop sales or the order link.
     pricePoisha: poisha('price_poisha').notNull().default(0),
     compareAtPricePoisha: poisha('compare_at_price_poisha'),
     imageFileIds: uuid('image_file_ids')
@@ -98,7 +100,8 @@ export const productVariants = pgTable(
     title: text('title').notNull(),
     optionValues: jsonb('option_values').notNull().default({}),
     sku: text('sku'),
-    pricePoisha: poisha('price_poisha'),
+    // Null uses the product's price_poisha; a value replaces it for this size only.
+    priceOverridePoisha: poisha('price_override_poisha'),
     costPoisha: poisha('cost_poisha'),
     onHand: integer('on_hand').notNull().default(0),
     reserved: integer('reserved').notNull().default(0),
@@ -107,7 +110,7 @@ export const productVariants = pgTable(
     position: smallint('position').notNull().default(0),
     status: text('status', { enum: productStatuses }).notNull().default('active'),
     externalSource: text('external_source'),
-    externalAccount: text('external_account'),
+    externalAccountId: text('external_account_id'),
     externalRef: text('external_ref'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -126,12 +129,12 @@ export const productVariants = pgTable(
       .on(table.storeId, table.sku)
       .where(sql`${table.sku} is not null`),
     uniqueIndex('product_variants_external_identity_key')
-      .on(table.storeId, table.externalSource, table.externalAccount, table.externalRef)
+      .on(table.storeId, table.externalSource, table.externalAccountId, table.externalRef)
       .where(sql`${table.externalRef} is not null`),
     check(
       'product_variants_external_identity',
-      sql`(${table.externalRef} is null and ${table.externalSource} is null and ${table.externalAccount} is null)
-        or (${table.externalRef} is not null and ${table.externalSource} is not null and ${table.externalAccount} is not null)`,
+      sql`(${table.externalRef} is null and ${table.externalSource} is null and ${table.externalAccountId} is null)
+        or (${table.externalRef} is not null and ${table.externalSource} is not null and ${table.externalAccountId} is not null)`,
     ),
     uniqueIndex('product_variants_one_default_key')
       .on(table.productId)
@@ -140,7 +143,7 @@ export const productVariants = pgTable(
     check('product_variants_reserved', sql`${table.reserved} >= 0`),
     check(
       'product_variants_money',
-      sql`coalesce(${table.pricePoisha}, 0) >= 0 and coalesce(${table.costPoisha}, 0) >= 0`,
+      sql`coalesce(${table.priceOverridePoisha}, 1) > 0 and coalesce(${table.costPoisha}, 0) >= 0`,
     ),
   ],
 );

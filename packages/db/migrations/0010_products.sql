@@ -5,7 +5,7 @@ CREATE TABLE "product_variants" (
 	"title" text NOT NULL,
 	"option_values" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"sku" text,
-	"price_poisha" bigint,
+	"price_override_poisha" bigint,
 	"cost_poisha" bigint,
 	"on_hand" integer DEFAULT 0 NOT NULL,
 	"reserved" integer DEFAULT 0 NOT NULL,
@@ -14,15 +14,15 @@ CREATE TABLE "product_variants" (
 	"position" smallint DEFAULT 0 NOT NULL,
 	"status" text DEFAULT 'active' NOT NULL,
 	"external_source" text,
-	"external_account" text,
+	"external_account_id" text,
 	"external_ref" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "product_variants_external_identity" CHECK (("product_variants"."external_ref" is null and "product_variants"."external_source" is null and "product_variants"."external_account" is null)
-        or ("product_variants"."external_ref" is not null and "product_variants"."external_source" is not null and "product_variants"."external_account" is not null)),
+	CONSTRAINT "product_variants_external_identity" CHECK (("product_variants"."external_ref" is null and "product_variants"."external_source" is null and "product_variants"."external_account_id" is null)
+        or ("product_variants"."external_ref" is not null and "product_variants"."external_source" is not null and "product_variants"."external_account_id" is not null)),
 	CONSTRAINT "product_variants_status" CHECK ("product_variants"."status" in ('active', 'hidden', 'archived')),
 	CONSTRAINT "product_variants_reserved" CHECK ("product_variants"."reserved" >= 0),
-	CONSTRAINT "product_variants_money" CHECK (coalesce("product_variants"."price_poisha", 0) >= 0 and coalesce("product_variants"."cost_poisha", 0) >= 0)
+	CONSTRAINT "product_variants_money" CHECK (coalesce("product_variants"."price_override_poisha", 1) > 0 and coalesce("product_variants"."cost_poisha", 0) >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "products" (
@@ -83,7 +83,7 @@ CREATE TABLE "stock_movements" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX "product_variants_store_id_id_key" ON "product_variants" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "product_variants_store_id_sku_key" ON "product_variants" USING btree ("store_id","sku") WHERE "product_variants"."sku" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX "product_variants_external_identity_key" ON "product_variants" USING btree ("store_id","external_source","external_account","external_ref") WHERE "product_variants"."external_ref" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "product_variants_external_identity_key" ON "product_variants" USING btree ("store_id","external_source","external_account_id","external_ref") WHERE "product_variants"."external_ref" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "product_variants_one_default_key" ON "product_variants" USING btree ("product_id") WHERE "product_variants"."is_default";--> statement-breakpoint
 CREATE UNIQUE INDEX "products_store_id_id_key" ON "products" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "products_store_id_external_ref_key" ON "products" USING btree ("store_id","external_ref") WHERE "products"."external_ref" is not null;--> statement-breakpoint

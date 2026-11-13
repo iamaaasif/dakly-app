@@ -49,3 +49,10 @@ export const refundStatuses = [
   'failed',
   'recorded_manually',
 ] as const;
+export const settlementLineStatuses = [
+  'matched',
+  'unmatched',
+  'gateway_error',
+  'refunded',
+  'escalated',
+] as const;

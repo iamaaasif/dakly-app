@@ -126,7 +126,7 @@ export const notifications = pgTable(
     priority: smallint('priority').notNull().default(0),
     title: text('title').notNull(),
     body: text('body'),
-    data: jsonb('data'),
+    actionContext: jsonb('action_context'),
     actionUrl: text('action_url'),
     estimatedValuePoisha: poisha('estimated_value_poisha'),
     status: text('status', { enum: notificationStatuses }).notNull().default('new'),
@@ -161,9 +161,9 @@ export const files = pgTable(
   'files',
   {
     id: id(),
-    storeId: uuid('store_id')
-      .notNull()
-      .references(() => stores.id),
+    // Null only for staff exports and settlement reports, which belong to no store. The store
+    // policy hides those rows from the app role.
+    storeId: uuid('store_id').references(() => stores.id),
     purpose: text('purpose', { enum: filePurposes }).notNull(),
     objectKey: text('object_key').notNull(),
     contentType: text('content_type').notNull(),
@@ -172,6 +172,7 @@ export const files = pgTable(
     status: text('status', { enum: fileStatuses }).notNull().default('pending'),
     rejectReason: text('reject_reason'),
     uploadedByUserId: uuid('uploaded_by_user_id').references(() => users.id),
+    uploadedByStaffId: uuid('uploaded_by_staff_id').references(() => staffUsers.id),
     expiresAt: timestamptz('expires_at'),
     createdAt: createdAt(),
   },
@@ -181,10 +182,15 @@ export const files = pgTable(
     uniqueIndex('files_object_key_key').on(table.objectKey),
     index('files_store_id_purpose_idx').on(table.storeId, table.purpose, table.createdAt),
     index('files_uploaded_by_user_id_idx').on(table.uploadedByUserId),
+    index('files_uploaded_by_staff_id_idx').on(table.uploadedByStaffId),
     index('files_expires_at_idx')
       .on(table.expiresAt)
       .where(sql`${table.expiresAt} is not null`),
     check('files_purpose', isOneOf(table.purpose, filePurposes)),
+    check(
+      'files_store',
+      sql`(${table.storeId} is null) = (${table.purpose} in ('staff_export', 'settlement_report'))`,
+    ),
     check('files_status', isOneOf(table.status, fileStatuses)),
     check('files_size', sql`${table.sizeBytes} > 0 and ${table.sizeBytes} <= 26214400`),
   ],

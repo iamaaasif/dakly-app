@@ -4,6 +4,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  date,
   index,
   jsonb,
   pgTable,
@@ -23,11 +24,14 @@ import {
   paymentPurposes,
   paymentReviewReasons,
   refundStatuses,
+  settlementLineStatuses,
 } from '@dakly/contracts/payments';
 import { users } from './auth';
 import { invoices } from './billing';
 import { bytea, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
+import { staffUsers } from './admin';
 import { orders } from './orders';
+import { files } from './platform';
 import { stores } from './stores';
 
 // A shop's own merchant keys (D14), AES-256-GCM with the store id as associated data, so a
@@ -83,21 +87,23 @@ export const paymentIntents = pgTable(
     currency: text('currency').notNull().default('BDT'),
     merchantReference: text('merchant_reference').notNull(),
     shortCode: text('short_code'),
-    methods: text('methods').array(),
+    allowedPaymentMethods: text('allowed_payment_methods').array(),
     gatewayPaymentId: text('gateway_payment_id'),
-    gatewayTrxId: text('gateway_trx_id'),
+    gatewayTransactionId: text('gateway_transaction_id'),
     status: text('status', { enum: paymentIntentStatuses }).notNull().default('created'),
     reviewReason: text('review_reason', { enum: paymentReviewReasons }),
     verifiedAmountPoisha: poisha('verified_amount_poisha'),
     refundedPoisha: poisha('refunded_poisha').notNull().default(0),
     reservedRefundPoisha: poisha('reserved_refund_poisha').notNull().default(0),
-    cardMasked: text('card_masked'),
+    maskedCardLabel: text('masked_card_label'),
     failureReason: text('failure_reason'),
     isSandbox: boolean('is_sandbox').notNull().default(false),
     expiresAt: timestamptz('expires_at').notNull(),
     // A voided link cannot start a new attempt, but an attempt already started can still settle.
     voidedAt: timestamptz('voided_at'),
     succeededAt: timestamptz('succeeded_at'),
+    // Billing flow only: set when a gateway settlement line confirms the money arrived.
+    settledAt: timestamptz('settled_at'),
     verifiedByUserId: uuid('verified_by_user_id').references(() => users.id),
     nextCheckAt: timestamptz('next_check_at'),
     checkCount: smallint('check_count').notNull().default(0),
@@ -129,9 +135,9 @@ export const paymentIntents = pgTable(
     uniqueIndex('payment_intents_merchant_reference_key').on(table.merchantReference),
     uniqueIndex('payment_intents_short_code_key').on(table.shortCode),
     // PAY-R3: one gateway transaction can be linked to only one intent.
-    uniqueIndex('payment_intents_gateway_trx_id_key')
-      .on(table.gateway, table.gatewayTrxId)
-      .where(sql`${table.gatewayTrxId} is not null`),
+    uniqueIndex('payment_intents_gateway_transaction_id_key')
+      .on(table.gateway, table.gatewayTransactionId)
+      .where(sql`${table.gatewayTransactionId} is not null`),
     index('payment_intents_store_id_order_id_idx').on(table.storeId, table.orderId),
     index('payment_intents_store_id_created_at_idx').on(table.storeId, table.createdAt),
     index('payment_intents_store_id_status_idx').on(table.storeId, table.status),
@@ -183,7 +189,7 @@ export const paymentEvents = pgTable(
     fromStatus: text('from_status'),
     toStatus: text('to_status'),
     gatewayReference: text('gateway_reference'),
-    data: jsonb('data'),
+    eventPayload: jsonb('event_payload'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -234,5 +240,46 @@ export const refunds = pgTable(
     index('refunds_requested_by_user_id_idx').on(table.requestedByUserId),
     check('refunds_status', isOneOf(table.status, refundStatuses)),
     check('refunds_amount', sql`${table.amountPoisha} > 0`),
+  ],
+);
+
+// Lines from the nightly settlement report of Dakly's own merchant accounts (billing flow). Shops'
+// own money is never reconciled here (D14). Unmatched lines and payments no line confirmed after
+// 3 days form the admin reconciliation queue.
+export const gatewaySettlementLines = pgTable(
+  'gateway_settlement_lines',
+  {
+    id: id(),
+    gateway: text('gateway', { enum: gateways }).notNull(),
+    settlementDate: date('settlement_date').notNull(),
+    gatewayTransactionId: text('gateway_transaction_id').notNull(),
+    amountPoisha: poisha('amount_poisha').notNull(),
+    feePoisha: poisha('fee_poisha').notNull().default(0),
+    reportFileId: uuid('report_file_id').references(() => files.id),
+    paymentIntentId: uuid('payment_intent_id').references(() => paymentIntents.id),
+    status: text('status', { enum: settlementLineStatuses }).notNull().default('unmatched'),
+    matchedByStaffId: uuid('matched_by_staff_id').references(() => staffUsers.id),
+    note: text('note'),
+    matchedAt: timestamptz('matched_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('gateway_settlement_lines_transaction_key').on(
+      table.gateway,
+      table.gatewayTransactionId,
+    ),
+    index('gateway_settlement_lines_queue_idx')
+      .on(table.settlementDate)
+      .where(sql`${table.status} in ('unmatched', 'escalated')`),
+    index('gateway_settlement_lines_payment_intent_id_idx').on(table.paymentIntentId),
+    index('gateway_settlement_lines_report_file_id_idx').on(table.reportFileId),
+    index('gateway_settlement_lines_matched_by_staff_id_idx').on(table.matchedByStaffId),
+    check('gateway_settlement_lines_gateway', isOneOf(table.gateway, gateways)),
+    check('gateway_settlement_lines_status', isOneOf(table.status, settlementLineStatuses)),
+    check(
+      'gateway_settlement_lines_amounts',
+      sql`${table.amountPoisha} > 0 and ${table.feePoisha} >= 0`,
+    ),
   ],
 );

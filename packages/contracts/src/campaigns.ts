@@ -59,18 +59,19 @@ export const campaignRecipientRouteSchema = z.discriminatedUnion('channel', [
     channel: z.literal('sms'),
     channelConnectionId: z.null(),
     contactIdentityId: z.null(),
-    address: bdMobileSchema,
+    destinationAddress: bdMobileSchema,
   }),
   z.strictObject({
     channel: z.literal('messenger'),
     channelConnectionId: z.uuid(),
     contactIdentityId: z.uuid(),
-    address: z.string().min(1).max(256),
+    destinationAddress: z.string().min(1).max(256),
   }),
   z.strictObject({
     channel: z.literal('whatsapp'),
     channelConnectionId: z.uuid(),
     contactIdentityId: z.uuid(),
-    address: z.string().min(1).max(256),
+    destinationAddress: z.string().min(1).max(256),
   }),
 ]);
+export const whatsappQualityRatings = ['green', 'yellow', 'red', 'unknown'] as const;

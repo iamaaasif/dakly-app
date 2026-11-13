@@ -368,7 +368,7 @@ Issued invoice document fields are immutable through application grants. Only `s
 
 ### Data
 
-`payment_gateway_credentials`, `payment_intents` (also the payment link, by `short_code`), `payment_events` (append-only), `refunds`, `plans`, `coupons`, `subscriptions`, `invoices`, `invoice_counters`, `wallet_ledger` (append-only), `usage_events`. Full design: [docs/data](../data/README.md).
+`payment_gateway_credentials`, `payment_intents` (also the payment link, by `short_code`), `payment_events` (append-only), `refunds`, `plans` (plans and add-ons by `kind`), `coupons` (`discount_percent` or `discount_amount_poisha`), `subscriptions` (current period price, pending price and its start date, ADM-R10), `subscription_items` (add-ons such as Chats AI tiers), `invoices`, `invoice_counters`, `wallet_ledger` (append-only; `quantity_delta` is poisha for WhatsApp and a count for SMS and AI), `usage_events`, `gateway_settlement_lines` (nightly settlement import for Dakly's own accounts; a match sets `payment_intents.settled_at`). Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

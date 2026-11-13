@@ -5,11 +5,11 @@ CREATE TABLE "brand_profiles" (
 	"preferred_words" text[] DEFAULT '{}'::text[] NOT NULL,
 	"call_to_action_bn" text,
 	"call_to_action_en" text,
-	"tone" text,
+	"default_tone" text,
 	"languages" text[] DEFAULT '{}'::text[] NOT NULL,
 	"words_to_avoid" text[] DEFAULT '{}'::text[] NOT NULL,
 	"hashtags" text[] DEFAULT '{}'::text[] NOT NULL,
-	"allows_emoji" boolean DEFAULT false NOT NULL,
+	"is_emoji_allowed" boolean DEFAULT false NOT NULL,
 	"updated_by_user_id" uuid,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

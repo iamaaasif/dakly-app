@@ -9,7 +9,7 @@ CREATE TABLE "conversations" (
 	"assignee_user_id" uuid,
 	"handover_reason" text,
 	"handed_over_at" timestamp with time zone,
-	"responder_returns_at" timestamp with time zone,
+	"ai_resumes_at" timestamp with time zone,
 	"intent_tag" text,
 	"lead_temperature" text,
 	"has_buying_interest" boolean DEFAULT false NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE "messages" (
 	"kind" text NOT NULL,
 	"body" text,
 	"attachments" jsonb,
-	"transcript" text,
+	"media_text" text,
 	"external_id" text,
 	"idempotency_key" text,
 	"status" text NOT NULL,
@@ -76,10 +76,35 @@ CREATE TABLE "saved_replies" (
 	"title" text NOT NULL,
 	"body" text NOT NULL,
 	"shortcut" text,
-	"use_count" integer DEFAULT 0 NOT NULL,
 	"created_by_user_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "sms_messages" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"contact_id" uuid,
+	"phone" text NOT NULL,
+	"purpose" text NOT NULL,
+	"subject_type" text,
+	"subject_id" uuid,
+	"sender_id_id" uuid,
+	"body" text NOT NULL,
+	"parts" smallint NOT NULL,
+	"credits_used" integer DEFAULT 0 NOT NULL,
+	"status" text DEFAULT 'queued' NOT NULL,
+	"provider_message_id" text,
+	"error_code" text,
+	"idempotency_key" text NOT NULL,
+	"created_by_user_id" uuid,
+	"sent_at" timestamp with time zone,
+	"delivered_at" timestamp with time zone,
+	"failed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "sms_messages_purpose" CHECK ("sms_messages"."purpose" in ('order_confirmation', 'order_update', 'payment_receipt', 'manual')),
+	CONSTRAINT "sms_messages_status" CHECK ("sms_messages"."status" in ('queued', 'sent', 'delivered', 'failed')),
+	CONSTRAINT "sms_messages_parts" CHECK ("sms_messages"."parts" between 1 and 10 and "sms_messages"."credits_used" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "social_comments" (
@@ -110,6 +135,8 @@ CREATE UNIQUE INDEX "conversations_connection_contact_key" ON "conversations" US
 CREATE UNIQUE INDEX "messages_conversation_external_id_key" ON "messages" USING btree ("conversation_id","external_id") WHERE "messages"."external_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "messages_store_id_idempotency_key_key" ON "messages" USING btree ("store_id","idempotency_key") WHERE "messages"."idempotency_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "saved_replies_store_id_shortcut_key" ON "saved_replies" USING btree ("store_id","shortcut") WHERE "saved_replies"."shortcut" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "sms_messages_store_id_idempotency_key_key" ON "sms_messages" USING btree ("store_id","idempotency_key");--> statement-breakpoint
+CREATE UNIQUE INDEX "sms_messages_provider_message_id_key" ON "sms_messages" USING btree ("provider_message_id") WHERE "sms_messages"."provider_message_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "social_comments_connection_comment_key" ON "social_comments" USING btree ("channel_connection_id","external_comment_id");--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -124,6 +151,12 @@ ALTER TABLE "messages" ADD CONSTRAINT "messages_rated_by_user_id_users_id_fk" FO
 ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_store_fk" FOREIGN KEY ("store_id","conversation_id") REFERENCES "public"."conversations"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "saved_replies" ADD CONSTRAINT "saved_replies_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "saved_replies" ADD CONSTRAINT "saved_replies_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sms_messages" ADD CONSTRAINT "sms_messages_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sms_messages" ADD CONSTRAINT "sms_messages_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sms_messages" ADD CONSTRAINT "sms_messages_sender_id_id_sms_sender_ids_id_fk" FOREIGN KEY ("sender_id_id") REFERENCES "public"."sms_sender_ids"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sms_messages" ADD CONSTRAINT "sms_messages_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sms_messages" ADD CONSTRAINT "sms_messages_contact_id_store_fk" FOREIGN KEY ("store_id","contact_id") REFERENCES "public"."contacts"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sms_messages" ADD CONSTRAINT "sms_messages_sender_id_id_store_fk" FOREIGN KEY ("store_id","sender_id_id") REFERENCES "public"."sms_sender_ids"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "social_comments" ADD CONSTRAINT "social_comments_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "social_comments" ADD CONSTRAINT "social_comments_channel_connection_id_channel_connections_id_fk" FOREIGN KEY ("channel_connection_id") REFERENCES "public"."channel_connections"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "social_comments" ADD CONSTRAINT "social_comments_post_target_id_post_targets_id_fk" FOREIGN KEY ("post_target_id") REFERENCES "public"."post_targets"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -138,7 +171,7 @@ CREATE INDEX "conversations_store_id_assignee_idx" ON "conversations" USING btre
 CREATE INDEX "conversations_store_id_window_idx" ON "conversations" USING btree ("store_id","channel","last_inbound_at");--> statement-breakpoint
 CREATE INDEX "conversations_contact_id_idx" ON "conversations" USING btree ("contact_id");--> statement-breakpoint
 CREATE INDEX "conversations_assignee_user_id_idx" ON "conversations" USING btree ("assignee_user_id");--> statement-breakpoint
-CREATE INDEX "conversations_responder_returns_at_idx" ON "conversations" USING btree ("responder_returns_at") WHERE "conversations"."responder_returns_at" is not null;--> statement-breakpoint
+CREATE INDEX "conversations_ai_resumes_at_idx" ON "conversations" USING btree ("ai_resumes_at") WHERE "conversations"."ai_resumes_at" is not null;--> statement-breakpoint
 CREATE INDEX "messages_conversation_id_created_at_idx" ON "messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
 CREATE INDEX "messages_store_id_created_at_idx" ON "messages" USING btree ("store_id","created_at");--> statement-breakpoint
 CREATE INDEX "messages_store_id_external_id_idx" ON "messages" USING btree ("store_id","external_id") WHERE "messages"."direction" = 'out' and "messages"."external_id" is not null;--> statement-breakpoint
@@ -147,6 +180,11 @@ CREATE INDEX "messages_author_user_id_idx" ON "messages" USING btree ("author_us
 CREATE INDEX "messages_rated_by_user_id_idx" ON "messages" USING btree ("rated_by_user_id");--> statement-breakpoint
 CREATE INDEX "saved_replies_store_id_idx" ON "saved_replies" USING btree ("store_id");--> statement-breakpoint
 CREATE INDEX "saved_replies_created_by_user_id_idx" ON "saved_replies" USING btree ("created_by_user_id");--> statement-breakpoint
+CREATE INDEX "sms_messages_store_id_subject_idx" ON "sms_messages" USING btree ("store_id","subject_type","subject_id");--> statement-breakpoint
+CREATE INDEX "sms_messages_store_id_created_at_idx" ON "sms_messages" USING btree ("store_id","created_at");--> statement-breakpoint
+CREATE INDEX "sms_messages_contact_id_idx" ON "sms_messages" USING btree ("contact_id");--> statement-breakpoint
+CREATE INDEX "sms_messages_sender_id_id_idx" ON "sms_messages" USING btree ("sender_id_id");--> statement-breakpoint
+CREATE INDEX "sms_messages_created_by_user_id_idx" ON "sms_messages" USING btree ("created_by_user_id");--> statement-breakpoint
 CREATE INDEX "social_comments_store_id_post_idx" ON "social_comments" USING btree ("store_id","external_post_id","commented_at");--> statement-breakpoint
 CREATE INDEX "social_comments_store_id_status_idx" ON "social_comments" USING btree ("store_id","status");--> statement-breakpoint
 CREATE INDEX "social_comments_post_target_id_idx" ON "social_comments" USING btree ("post_target_id");--> statement-breakpoint
@@ -156,6 +194,10 @@ CREATE INDEX "social_comments_conversation_id_idx" ON "social_comments" USING bt
 -- Written by hand below this line (docs/rules/database.md, Migrations step 2). Row level
 -- security: a connection sees and writes only the rows of the store set by
 -- TenantDatabase.forStore. See docs/data/isolation-and-access.md.
+ALTER TABLE "sms_messages" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "sms_messages_isolation" ON "sms_messages"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "conversations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "conversations_isolation" ON "conversations"
   USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
@@ -176,7 +218,7 @@ CREATE POLICY "social_comments_isolation" ON "social_comments"
 CREATE FUNCTION due_conversation_returns(p_limit integer) RETURNS TABLE(store_id uuid, conversation_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
-  SELECT store_id, id FROM conversations WHERE responder_returns_at <= now() ORDER BY responder_returns_at LIMIT p_limit
+  SELECT store_id, id FROM conversations WHERE ai_resumes_at <= now() ORDER BY ai_resumes_at LIMIT p_limit
 $$;--> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION due_conversation_returns(integer) FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION due_conversation_returns(integer) TO dakly_app;--> statement-breakpoint

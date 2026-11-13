@@ -20,32 +20,35 @@ Numbers per active store per day, averaged across stores. The busiest 5% of shop
 | Workflow run steps                  | 100               | 200                        |
 | Link taps                           | 40                | 150                        |
 | Notifications                       | 50                | 300                        |
+| SMS outside chats and campaigns     | 10                | 400                        |
 | Orders with their lines             | 30                | 1,200                      |
 | New contacts                        | 20                | 800                        |
 | Knowledge chunks (total, not daily) | 2,000             | 3,250 (512-dim vector)     |
 
 ## Plan per table
 
-| Table                     | Kept in Postgres                                                     | Partitioning                    | After that                                                            | Rollup kept                                                        |
-| ------------------------- | -------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `messages`                | 12 months from when each message was sent                            | None yet; trigger below         | Archived to R2 by conversation and month, then deleted                | `contact_memories` summary, `contact_stats`, `store_daily_metrics` |
-| `webhook_events`          | 7 days; payload cleared once processed                               | None; daily purge in batches    | Deleted                                                               | none needed                                                        |
-| `outbox_events`           | 7 days after publish                                                 | None; daily purge in batches    | Deleted                                                               | none needed                                                        |
-| `ai_runs`                 | 13 months                                                            | Monthly on `created_at`         | Partition dropped by `drop_expired_partitions()`                      | Daily cost, tokens and runs by purpose in `store_daily_metrics`    |
-| `audit_log`               | 24 months                                                            | Monthly on `created_at`         | Month exported to R2 as gzipped JSON lines, then dropped by the owner | none; the export is the record                                     |
-| `tracked_link_visits`     | 13 months (exact tap times for the 372-day attribution rebuild)      | Monthly on `occurred_at`        | Partition dropped by `drop_expired_partitions()`                      | `tracked_link_visit_days`: visits, unique visitors, first and last |
-| `tracked_link_visit_days` | While its link exists                                                | None (one row per link per day) | Deleted with the link                                                 | is the rollup                                                      |
-| `usage_events`            | 13 months                                                            | None; trigger below             | Deleted in batches after the invoice period closes                    | Invoice lines and `store_daily_metrics`                            |
-| `campaign_recipients`     | 372 days after the campaign finishes (attribution rebuild, ADR 0008) | None; trigger below             | Deleted in batches                                                    | Campaign counters and `store_daily_metrics`                        |
-| `automation_run_steps`    | 372 days after the run finishes                                      | None; trigger below             | Deleted in batches                                                    | Workflow counters and `store_daily_metrics`                        |
-| `notifications`           | 90 days                                                              | None                            | Deleted in batches                                                    | none needed                                                        |
-| `assistant_messages`      | 90 days (AI-R6)                                                      | None                            | Deleted in batches                                                    | none needed                                                        |
-| `knowledge_chunks`        | While the knowledge item exists                                      | None                            | Cascade with the item                                                 | not applicable                                                     |
-| Orders, ledgers, invoices | Life of the store (ACC-12)                                           | None                            | Store purge                                                           | `store_daily_metrics`                                              |
+| Table                                              | Kept in Postgres                                                     | Partitioning                    | After that                                                            | Rollup kept                                                        |
+| -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `messages`                                         | 12 months from when each message was sent                            | None yet; trigger below         | Archived to R2 by conversation and month, then deleted                | `contact_memories` summary, `contact_stats`, `store_daily_metrics` |
+| `webhook_events`                                   | 7 days; payload cleared once processed                               | None; daily purge in batches    | Deleted                                                               | none needed                                                        |
+| `outbox_events`                                    | 7 days after publish                                                 | None; daily purge in batches    | Deleted                                                               | none needed                                                        |
+| `ai_runs`                                          | 13 months                                                            | Monthly on `created_at`         | Partition dropped by `drop_expired_partitions()`                      | Daily cost, tokens and runs by purpose in `store_daily_metrics`    |
+| `audit_log`                                        | 24 months                                                            | Monthly on `created_at`         | Month exported to R2 as gzipped JSON lines, then dropped by the owner | none; the export is the record                                     |
+| `tracked_link_visits`                              | 13 months (exact tap times for the 372-day attribution rebuild)      | Monthly on `occurred_at`        | Partition dropped by `drop_expired_partitions()`                      | `tracked_link_visit_days`: visits, unique visitors, first and last |
+| `tracked_link_visit_days`                          | While its link exists                                                | None (one row per link per day) | Deleted with the link                                                 | is the rollup                                                      |
+| `usage_events`                                     | 13 months                                                            | None; trigger below             | Deleted in batches after the invoice period closes                    | Invoice lines and `store_daily_metrics`                            |
+| `campaign_recipients`                              | 372 days after the campaign finishes (attribution rebuild, ADR 0008) | None; trigger below             | Deleted in batches                                                    | Campaign counters and `store_daily_metrics`                        |
+| `automation_run_steps`                             | 372 days after the run finishes                                      | None; trigger below             | Deleted in batches                                                    | Workflow counters and `store_daily_metrics`                        |
+| `notifications`                                    | 90 days                                                              | None                            | Deleted in batches                                                    | none needed                                                        |
+| `sms_messages`                                     | 13 months                                                            | None                            | Deleted in batches                                                    | Delivery and cost in `store_daily_metrics`                         |
+| `assistant_messages`                               | 90 days (AI-R6)                                                      | None                            | Deleted in batches                                                    | none needed                                                        |
+| `knowledge_chunks`                                 | While the knowledge item exists                                      | None                            | Cascade with the item                                                 | not applicable                                                     |
+| `staff_audit_log_days`, `gateway_settlement_lines` | 7 years (ADM-R11, financial records)                                 | None                            | Deleted by the owner after 7 years                                    | not applicable                                                     |
+| Orders, ledgers, invoices                          | Life of the store (ACC-12)                                           | None                            | Store purge                                                           | `store_daily_metrics`                                              |
 
 Rules that come with this plan:
 
-- No foreign key points into a partitioned table. `messages`, `posts`, `content_pieces` and `assistant_messages` keep `ai_run_id` as a plain id, because the run it names is deleted after 13 months while the message stays.
+- No foreign key points into a partitioned table. `messages`, `posts`, `content_pieces`, `assistant_messages` and `customer_insights` keep `ai_run_id` as a plain id, because the run it names is deleted after 13 months while the message stays.
 - A partitioned table's primary key and every unique index include the partition column. `tracked_link_visits` dedupes on `(store_id, event_key, occurred_at)`: a retried write carries the tap's original time, so the key still catches it.
 - The app reaches partitioned rows only through the parent, where the store policy applies. Each partition has RLS on and no grants for `dakly_app`.
 - `ensure_monthly_partitions(3)` runs daily and keeps this month plus three ahead. If it stops for three months, writes to these tables fail, so the maintenance job alerts when fewer than two future months exist.
@@ -63,24 +66,25 @@ Raw taps are kept 13 months, which covers the 365-day attribution rebuild plus i
 
 Postgres size with indexes, at the plan above. "Steady" is the size once each table has reached its retention; tables kept for the life of the store grow by the yearly figure shown.
 
-| Table                     | Rows a year, 1k stores | Size, 1k stores | Rows a year, 10k stores | Size, 10k stores |
-| ------------------------- | ---------------------- | --------------- | ----------------------- | ---------------- |
-| `messages` (12 months)    | 146 million            | 100 GB          | 1.5 billion             | 1,000 GB         |
-| `audit_log` (24 months)   | 36 million             | 29 GB           | 365 million             | 290 GB           |
-| `ai_runs` (13 months)     | 55 million             | 15 GB           | 550 million             | 150 GB           |
-| `campaign_recipients`     | 55 million             | 14 GB           | 550 million             | 140 GB           |
-| `usage_events`            | 55 million             | 12 GB           | 550 million             | 120 GB           |
-| `automation_run_steps`    | 36 million             | 8 GB            | 365 million             | 80 GB            |
-| `webhook_events` (7 days) | 180 million            | 5 GB            | 1.8 billion             | 53 GB            |
-| `outbox_events` (7 days)  | 220 million            | 2 GB            | 2.2 billion             | 17 GB            |
-| `notifications`           | 18 million             | 1.4 GB          | 180 million             | 14 GB            |
-| `tracked_link_visits`     | 15 million             | 2.4 GB          | 146 million             | 24 GB            |
-| `knowledge_chunks`        | not by time            | 6.5 GB          | not by time             | 65 GB            |
-| Orders and order lines    | 11 million             | 13 GB a year    | 110 million             | 130 GB a year    |
-| Contacts                  | 7 million              | 6 GB a year     | 73 million              | 58 GB a year     |
-| Daily rollups             | 33 million             | 2.3 GB a year   | 330 million             | 23 GB a year     |
-| Total after one year      |                        | about 225 GB    |                         | about 2.25 TB    |
-| Total after three years   |                        | about 275 GB    |                         | about 2.75 TB    |
+| Table                      | Rows a year, 1k stores | Size, 1k stores | Rows a year, 10k stores | Size, 10k stores |
+| -------------------------- | ---------------------- | --------------- | ----------------------- | ---------------- |
+| `messages` (12 months)     | 146 million            | 100 GB          | 1.5 billion             | 1,000 GB         |
+| `audit_log` (24 months)    | 36 million             | 29 GB           | 365 million             | 290 GB           |
+| `ai_runs` (13 months)      | 55 million             | 15 GB           | 550 million             | 150 GB           |
+| `campaign_recipients`      | 55 million             | 14 GB           | 550 million             | 140 GB           |
+| `usage_events`             | 55 million             | 12 GB           | 550 million             | 120 GB           |
+| `automation_run_steps`     | 36 million             | 8 GB            | 365 million             | 80 GB            |
+| `webhook_events` (7 days)  | 180 million            | 5 GB            | 1.8 billion             | 53 GB            |
+| `outbox_events` (7 days)   | 220 million            | 2 GB            | 2.2 billion             | 17 GB            |
+| `notifications`            | 18 million             | 1.4 GB          | 180 million             | 14 GB            |
+| `sms_messages` (13 months) | 3.7 million            | 1.5 GB          | 37 million              | 15 GB            |
+| `tracked_link_visits`      | 15 million             | 2.4 GB          | 146 million             | 24 GB            |
+| `knowledge_chunks`         | not by time            | 6.5 GB          | not by time             | 65 GB            |
+| Orders and order lines     | 11 million             | 13 GB a year    | 110 million             | 130 GB a year    |
+| Contacts                   | 7 million              | 6 GB a year     | 73 million              | 58 GB a year     |
+| Daily rollups              | 33 million             | 2.3 GB a year   | 330 million             | 23 GB a year     |
+| Total after one year       |                        | about 225 GB    |                         | about 2.25 TB    |
+| Total after three years    |                        | about 275 GB    |                         | about 2.75 TB    |
 
 What this means:
 

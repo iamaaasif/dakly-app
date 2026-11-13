@@ -4,7 +4,7 @@ CREATE TABLE "campaign_recipients" (
 	"campaign_id" uuid NOT NULL,
 	"contact_id" uuid NOT NULL,
 	"contact_identity_id" uuid,
-	"address" text,
+	"destination_address" text,
 	"status" text NOT NULL,
 	"skip_reason" text,
 	"provider_message_id" text,
@@ -115,11 +115,13 @@ CREATE TABLE "whatsapp_templates" (
 	"meta_template_id" text,
 	"status" text DEFAULT 'draft' NOT NULL,
 	"rejection_reason" text,
+	"quality_rating" text DEFAULT 'unknown' NOT NULL,
 	"is_ready_made" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "whatsapp_templates_category" CHECK ("whatsapp_templates"."category" in ('marketing', 'utility', 'authentication')),
-	CONSTRAINT "whatsapp_templates_status" CHECK ("whatsapp_templates"."status" in ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled'))
+	CONSTRAINT "whatsapp_templates_status" CHECK ("whatsapp_templates"."status" in ('draft', 'pending', 'approved', 'rejected', 'paused', 'disabled')),
+	CONSTRAINT "whatsapp_templates_quality_rating" CHECK ("whatsapp_templates"."quality_rating" in ('green', 'yellow', 'red', 'unknown'))
 );
 --> statement-breakpoint
 CREATE TABLE "automation_run_steps" (

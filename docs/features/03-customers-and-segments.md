@@ -286,7 +286,7 @@ Consent
 2. Sending reads only the current-consent view.
 3. "STOP" or "বন্ধ" on WhatsApp or Messenger, or the SMS opt-out link, writes a withdrawal at once.
 
-Stats: one `contact_stats` row per contact holds order count, net spend, first and last order, return count, return risk and lead temperature. It is recomputed for one contact on each order event and for all contacts nightly. Lists and segments read only this table.
+Stats: one `contact_stats` row per contact holds order count, delivered count, net spend, first and last order, usual gap and lifecycle stage. Return risk is read from orders by delivery phone (D26), and lead temperature lives on the conversation. It is recomputed for one contact on each order event and for all contacts nightly. Lists and segments read only this table.
 
 Segments
 
@@ -313,7 +313,7 @@ Emits `contact.created`, `contact.merged`, `consent.changed`, `segment.saved`. L
 
 ### Data
 
-`contacts` (own phone saved under D27, unique per store; tags as a text array), `contact_match_suggestions` (possible matches for staff, including a D27 phone conflict), `contact_identities`, `consents` (append-only; read through the view `contact_consent_current`), `contact_stats` (no return risk; D26 reads it from orders by delivery phone), `segments`, `imports`, `tasks`. `contact_memories` holds the AI customer memory (D30, CHAT-R11). `contact_merges` keeps each staff merge for a 7-day undo (D29); the merged contact is soft-deleted until then. Full design: [docs/data](../data/README.md).
+`contacts` (own phone saved under D27, unique per store; tags as a text array), `contact_match_suggestions` (possible matches for staff, including a D27 phone conflict), `contact_identities`, `consents` (append-only; read through the view `contact_consent_current`), `contact_stats` (no return risk; D26 reads it from orders by delivery phone), `segments`, `imports`, `tasks`, `customer_insights` (one row per insight and source filter, rebuilt nightly; "Not useful" sets `hidden_at`), `data_requests` (a customer's "delete my data" passed on by the shop). Exports are logged as `audit_log` rows (CUS-R3). `contact_memories` holds the AI customer memory (D30, CHAT-R11). `contact_merges` keeps each staff merge for a 7-day undo (D29); the merged contact is soft-deleted until then. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

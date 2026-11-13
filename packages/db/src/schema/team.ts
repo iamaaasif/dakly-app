@@ -63,6 +63,8 @@ export const memberships = pgTable(
     joinedAt: timestamptz('joined_at'),
     removedAt: timestamptz('removed_at'),
     lastActiveAt: timestamptz('last_active_at'),
+    // NOTIF-R2 alert timing and the digest; validated by notificationPreferencesSchema.
+    notificationPreferences: jsonb('notification_preferences').notNull().default({}),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

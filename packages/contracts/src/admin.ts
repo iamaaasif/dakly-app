@@ -15,3 +15,12 @@ export const supportGrantStatuses = [
   'expired',
 ] as const;
 export const supportGrantAccess = ['read', 'write'] as const;
+export const abuseReportSources = ['provider', 'customer', 'staff', 'system'] as const;
+export const abuseReportCategories = [
+  'spam',
+  'ignored_opt_out',
+  'fraud',
+  'prohibited_content',
+  'other',
+] as const;
+export const abuseReportStatuses = ['open', 'actioned', 'dismissed'] as const;

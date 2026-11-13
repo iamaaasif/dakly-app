@@ -1,6 +1,6 @@
 {
-  "id": "04e49e6d-5b78-4030-91fe-70e48478d646",
-  "prevId": "a55cfe59-d5cf-40d3-b976-9d6c06bf2f71",
+  "id": "9a0fde5f-dbb4-4900-8bb3-5bc2c2d9d5ee",
+  "prevId": "80e08342-1904-4025-9c2c-aaf755f775ef",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -194,8 +194,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trade_licence": {
-          "name": "trade_licence",
+        "trade_licence_number": {
+          "name": "trade_licence_number",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -220,8 +220,8 @@
           "notNull": true,
           "default": "'{}'::text[]"
         },
-        "customer_list_size": {
-          "name": "customer_list_size",
+        "onboarding_customer_count_range": {
+          "name": "onboarding_customer_count_range",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -233,8 +233,8 @@
           "notNull": true,
           "default": "'{}'::text[]"
         },
-        "inactivity_days": {
-          "name": "inactivity_days",
+        "customer_inactivity_days": {
+          "name": "customer_inactivity_days",
           "type": "smallint",
           "primaryKey": false,
           "notNull": true,
@@ -326,17 +326,17 @@
           "name": "stores_how_you_sell",
           "value": "\"stores\".\"how_you_sell\" <@ array['social_media', 'online_store', 'shop_with_pos', 'shop_without_pos']::text[]"
         },
-        "stores_customer_list_size": {
-          "name": "stores_customer_list_size",
-          "value": "\"stores\".\"customer_list_size\" in ('under_500', '500_to_2000', '2000_to_10000', 'over_10000')"
+        "stores_onboarding_customer_count_range": {
+          "name": "stores_onboarding_customer_count_range",
+          "value": "\"stores\".\"onboarding_customer_count_range\" in ('under_500', '500_to_2000', '2000_to_10000', 'over_10000')"
         },
         "stores_extensions": {
           "name": "stores_extensions",
           "value": "\"stores\".\"extensions\" <@ array['chats', 'sales', 'social_auto_post', 'physical_shop']::text[]"
         },
-        "stores_inactivity_days": {
-          "name": "stores_inactivity_days",
-          "value": "\"stores\".\"inactivity_days\" between 30 and 180"
+        "stores_customer_inactivity_days": {
+          "name": "stores_customer_inactivity_days",
+          "value": "\"stores\".\"customer_inactivity_days\" between 30 and 180"
         },
         "stores_attribution_window_days": {
           "name": "stores_attribution_window_days",
@@ -389,8 +389,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "last_used_at": {
-          "name": "last_used_at",
+        "last_successful_push_at": {
+          "name": "last_successful_push_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -722,6 +722,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "terms_version": {
+          "name": "terms_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "terms_accepted_at": {
+          "name": "terms_accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -800,6 +812,10 @@
         "users_language": {
           "name": "users_language",
           "value": "\"users\".\"language\" in ('en', 'bn')"
+        },
+        "users_terms": {
+          "name": "users_terms",
+          "value": "(\"users\".\"terms_version\" is null) = (\"users\".\"terms_accepted_at\" is null)"
         },
         "users_name_length": {
           "name": "users_name_length",
@@ -895,6 +911,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "notification_preferences": {
+          "name": "notification_preferences",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "created_at": {
           "name": "created_at",
@@ -1344,6 +1367,208 @@
       },
       "isRLSEnabled": false
     },
+    "public.abuse_reports": {
+      "name": "abuse_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence": {
+          "name": "evidence",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_by_staff_id": {
+          "name": "reported_by_staff_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handled_by_staff_id": {
+          "name": "handled_by_staff_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution": {
+          "name": "resolution",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "abuse_reports_open_idx": {
+          "name": "abuse_reports_open_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"abuse_reports\".\"status\" = 'open'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "abuse_reports_store_id_created_at_idx": {
+          "name": "abuse_reports_store_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "abuse_reports_reported_by_staff_id_idx": {
+          "name": "abuse_reports_reported_by_staff_id_idx",
+          "columns": [
+            {
+              "expression": "reported_by_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "abuse_reports_handled_by_staff_id_idx": {
+          "name": "abuse_reports_handled_by_staff_id_idx",
+          "columns": [
+            {
+              "expression": "handled_by_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "abuse_reports_reported_by_staff_id_staff_users_id_fk": {
+          "name": "abuse_reports_reported_by_staff_id_staff_users_id_fk",
+          "tableFrom": "abuse_reports",
+          "tableTo": "staff_users",
+          "columnsFrom": [
+            "reported_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "abuse_reports_handled_by_staff_id_staff_users_id_fk": {
+          "name": "abuse_reports_handled_by_staff_id_staff_users_id_fk",
+          "tableFrom": "abuse_reports",
+          "tableTo": "staff_users",
+          "columnsFrom": [
+            "handled_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "abuse_reports_source": {
+          "name": "abuse_reports_source",
+          "value": "\"abuse_reports\".\"source\" in ('provider', 'customer', 'staff', 'system')"
+        },
+        "abuse_reports_category": {
+          "name": "abuse_reports_category",
+          "value": "\"abuse_reports\".\"category\" in ('spam', 'ignored_opt_out', 'fraud', 'prohibited_content', 'other')"
+        },
+        "abuse_reports_status": {
+          "name": "abuse_reports_status",
+          "value": "\"abuse_reports\".\"status\" in ('open', 'actioned', 'dismissed')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.platform_settings": {
       "name": "platform_settings",
       "schema": "",
@@ -1458,8 +1683,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "data": {
-          "name": "data",
+        "action_details": {
+          "name": "action_details",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -1544,6 +1769,54 @@
         "staff_audit_log_reason_length": {
           "name": "staff_audit_log_reason_length",
           "value": "char_length(\"staff_audit_log\".\"reason\") >= 10"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.staff_audit_log_days": {
+      "name": "staff_audit_log_days",
+      "schema": "",
+      "columns": {
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "row_count": {
+          "name": "row_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_hash": {
+          "name": "previous_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hash": {
+          "name": "hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sealed_at": {
+          "name": "sealed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "staff_audit_log_days_row_count": {
+          "name": "staff_audit_log_days_row_count",
+          "value": "\"staff_audit_log_days\".\"row_count\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -2209,7 +2482,7 @@
           "name": "store_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "purpose": {
           "name": "purpose",
@@ -2256,6 +2529,12 @@
         },
         "uploaded_by_user_id": {
           "name": "uploaded_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "uploaded_by_staff_id": {
+          "name": "uploaded_by_staff_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -2353,6 +2632,21 @@
           "method": "btree",
           "with": {}
         },
+        "files_uploaded_by_staff_id_idx": {
+          "name": "files_uploaded_by_staff_id_idx",
+          "columns": [
+            {
+              "expression": "uploaded_by_staff_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "files_expires_at_idx": {
           "name": "files_expires_at_idx",
           "columns": [
@@ -2396,6 +2690,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "files_uploaded_by_staff_id_staff_users_id_fk": {
+          "name": "files_uploaded_by_staff_id_staff_users_id_fk",
+          "tableFrom": "files",
+          "tableTo": "staff_users",
+          "columnsFrom": [
+            "uploaded_by_staff_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2404,7 +2711,11 @@
       "checkConstraints": {
         "files_purpose": {
           "name": "files_purpose",
-          "value": "\"files\".\"purpose\" in ('product_image', 'post_media', 'knowledge_file', 'logo', 'import', 'export', 'sms_sender_document')"
+          "value": "\"files\".\"purpose\" in ('product_image', 'post_media', 'knowledge_file', 'logo', 'import', 'export', 'sms_sender_document', 'data_export', 'staff_export', 'settlement_report')"
+        },
+        "files_store": {
+          "name": "files_store",
+          "value": "(\"files\".\"store_id\" is null) = (\"files\".\"purpose\" in ('staff_export', 'settlement_report'))"
         },
         "files_status": {
           "name": "files_status",
@@ -2507,8 +2818,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "data": {
-          "name": "data",
+        "action_context": {
+          "name": "action_context",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

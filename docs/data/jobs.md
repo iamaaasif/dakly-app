@@ -69,7 +69,7 @@ Per-store cap: one running campaign batch per store.
 | `relay-outbox`              | Every second                                            | none (sweep)                     | `claim_outbox_events`, then mark published                           |
 | `refresh-post-metrics`      | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                   |
 | `check-channel-token`       | Sweep `channel_connections_expiring_before`, daily      | `storeId`, `channelConnectionId` | Status only set, notification deduped                                |
-| `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `responder_returns_at` in the same update                     |
+| `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                            |
 | `sync-whatsapp-templates`   | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                  |
 | `refresh-contact-stats`     | Order or message outbox event                           | `storeId`, `contactId`           | Recomputes the row                                                   |
 | `build-daily-metrics`       | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                       |
@@ -89,13 +89,13 @@ Per-store cap: one running campaign batch per store.
 
 ## payments
 
-| Job                    | Started by                                    | Payload                      | Makes a rerun harmless                                           |
-| ---------------------- | --------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- |
-| `verify-payment`       | Callback or gateway webhook                   | `storeId`, `paymentIntentId` | Status only moves forward; unique `(gateway, gateway_trx_id)`    |
-| `check-payment-status` | Sweep `due_payment_checks` (every 15 minutes) | `storeId`, `paymentIntentId` | Same as above; `next_check_at` moves on                          |
-| `send-refund`          | Refund requested                              | `storeId`, `refundId`        | Unique `refunds (store_id, idempotency_key)` sent to the gateway |
-| `renew-subscription`   | Sweep `due_subscription_renewals`, hourly     | `storeId`, `subscriptionId`  | Unique `wallet_ledger (store_id, idempotency_key)` per period    |
-| `remind-trial-ending`  | Sweep `trials_ending_before`, daily           | `storeId`, `subscriptionId`  | Notification dedupe key per trial                                |
+| Job                    | Started by                                    | Payload                      | Makes a rerun harmless                                                |
+| ---------------------- | --------------------------------------------- | ---------------------------- | --------------------------------------------------------------------- |
+| `verify-payment`       | Callback or gateway webhook                   | `storeId`, `paymentIntentId` | Status only moves forward; unique `(gateway, gateway_transaction_id)` |
+| `check-payment-status` | Sweep `due_payment_checks` (every 15 minutes) | `storeId`, `paymentIntentId` | Same as above; `next_check_at` moves on                               |
+| `send-refund`          | Refund requested                              | `storeId`, `refundId`        | Unique `refunds (store_id, idempotency_key)` sent to the gateway      |
+| `renew-subscription`   | Sweep `due_subscription_renewals`, hourly     | `storeId`, `subscriptionId`  | Unique `wallet_ledger (store_id, idempotency_key)` per period         |
+| `remind-trial-ending`  | Sweep `trials_ending_before`, daily           | `storeId`, `subscriptionId`  | Notification dedupe key per trial                                     |
 
 No job holds a database transaction while it calls the AI model or a vendor: read in one short transaction, call outside, write in a second.
 

@@ -18,7 +18,7 @@ import {
 import { allOneOf, citext, createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
 
 // The tenant. Settings the database never filters on (working hours, quiet hours, daily limits,
-// payment rules, AI testers) live in settings, validated by one zod schema per section.
+// payment rules) live in settings, validated by one zod schema per section.
 export const stores = pgTable(
   'stores',
   {
@@ -32,19 +32,21 @@ export const stores = pgTable(
     address: text('address'),
     district: text('district'),
     vatBin: text('vat_bin'),
-    tradeLicence: text('trade_licence'),
+    tradeLicenceNumber: text('trade_licence_number'),
     logoObjectKey: text('logo_object_key'),
     timeZone: text('time_zone').notNull().default('Asia/Dhaka'),
     howYouSell: text('how_you_sell')
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    customerListSize: text('customer_list_size'),
+    // Self-reported at sign-up for the plan suggestion, never the live customer count.
+    onboardingCustomerCountRange: text('onboarding_customer_count_range'),
     extensions: text('extensions')
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    inactivityDays: smallint('inactivity_days').notNull().default(60),
+    // Days without an order before a customer counts as inactive (glossary).
+    customerInactivityDays: smallint('customer_inactivity_days').notNull().default(60),
     attributionWindowDays: smallint('attribution_window_days').notNull().default(7),
     settings: jsonb('settings').notNull().default({}),
     status: text('status', { enum: storeStatuses }).notNull().default('active'),
@@ -59,9 +61,15 @@ export const stores = pgTable(
     check('stores_slug_format', sql`${table.slug} ~ '^[a-z0-9][a-z0-9-]{2,39}$'`),
     check('stores_vat_bin_format', sql`${table.vatBin} ~ '^[0-9]{13}$'`),
     check('stores_how_you_sell', allOneOf(table.howYouSell, howYouSellOptions)),
-    check('stores_customer_list_size', isOneOf(table.customerListSize, customerListSizes)),
+    check(
+      'stores_onboarding_customer_count_range',
+      isOneOf(table.onboardingCustomerCountRange, customerListSizes),
+    ),
     check('stores_extensions', allOneOf(table.extensions, extensions)),
-    check('stores_inactivity_days', sql`${table.inactivityDays} between 30 and 180`),
+    check(
+      'stores_customer_inactivity_days',
+      sql`${table.customerInactivityDays} between 30 and 180`,
+    ),
     check('stores_attribution_window_days', sql`${table.attributionWindowDays} in (1, 3, 7)`),
     check('stores_status', isOneOf(table.status, storeStatuses)),
   ],

@@ -251,7 +251,7 @@ Shops list and detail; support access with the owner's consent; plans, prices, c
 
 1. Separate app at `admin.dakly.app` behind Cloudflare Access, with its own staff sessions.
 2. Staff accounts are `staff_users`, never shop `users`. Passkey or TOTP is required.
-3. Staff roles: support, finance, engineering, owner. Refunds over a limit, plan overrides and data deletion need a reason and an audit row (no second approver, D28).
+3. Staff roles: super admin, support, finance, ops, trust and safety, analyst (`staffRoles` in `packages/contracts/src/admin.ts`). Refunds over a limit, plan overrides and data deletion need a reason and an audit row (no second approver, D28).
 4. Staff read shop data only through a support grant: the shop Owner approves a request in the app; the grant names the scope (chats, orders, billing) and expires (default 24 hours). The shop sees a banner while staff are inside.
 5. Admin queries for one shop run through `TenantDatabase.forStore` with the granted store id, so RLS still applies. The admin API never connects as a role that bypasses RLS.
 6. Cross-store screens (shops list, usage totals, reconciliation) read from `SECURITY DEFINER` report functions or read-only views built for them (pending review must-fix), never by switching RLS off.
@@ -265,7 +265,7 @@ Shops list and detail; support access with the owner's consent; plans, prices, c
 
 ### Data
 
-`staff_users`, `staff_sessions`, `staff_audit_log`, `platform_settings` (AI models, rates, announcements), all global; `support_grants` lives under the store's RLS so the owner approves it in the shop app. Plans and coupons are in feature 07's tables. Store lists read `admin_store_overview` ([ADR 0005](../adr/0005-cross-store-access-through-functions.md)). Full design: [docs/data](../data/README.md).
+`staff_users`, `staff_sessions`, `staff_audit_log`, `staff_audit_log_days` (ADM-R11 daily hash chain), `abuse_reports` (abuse and compliance queue), `platform_daily_metrics` (MRR, sign-ups, failed renewals, AI spend; owner functions only), `gateway_settlement_lines` (reconciliation queue, feature 07), `platform_settings` (AI models, rates, announcements), all global; `data_requests` is per store; staff exports and settlement reports are `files` rows with no store; `support_grants` lives under the store's RLS so the owner approves it in the shop app. Plans and coupons are in feature 07's tables. Store lists read `admin_store_overview` ([ADR 0005](../adr/0005-cross-store-access-through-functions.md)). Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

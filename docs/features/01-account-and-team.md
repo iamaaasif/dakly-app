@@ -334,7 +334,7 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 
 ### Data
 
-`users` (phone, email, verified times, password hash, Google subject id), `sessions`, `push_subscriptions`, `stores` (settings in one JSON column), `store_counters`, `memberships` (invites are memberships with status `invited`), `roles` (custom only; built-in roles are code), `support_grants`, `audit_log`. Sign-in codes live in Valkey ([ADR 0007](../adr/0007-sign-in-identifiers-on-users.md)). Full design: [docs/data](../data/README.md).
+`users` (phone, email, verified times, password hash, Google subject id, accepted terms version and time), `sessions`, `push_subscriptions`, `stores` (settings in one JSON column), `store_counters`, `memberships` (invites are memberships with status `invited`; each member's notification preferences), `roles` (custom only; built-in roles are code), `support_grants`, `audit_log`. Sign-in codes live in Valkey ([ADR 0007](../adr/0007-sign-in-identifiers-on-users.md)). Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

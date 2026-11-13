@@ -97,6 +97,7 @@ export const smsSenderIds = pgTable(
       foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
     }),
 
+    uniqueIndex('sms_sender_ids_store_id_id_key').on(table.storeId, table.id),
     index('sms_sender_ids_store_id_idx').on(table.storeId),
     index('sms_sender_ids_status_idx').on(table.status),
     index('sms_sender_ids_trade_licence_file_id_idx').on(table.tradeLicenceFileId),

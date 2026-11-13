@@ -38,7 +38,8 @@ export const brandProfiles = pgTable(
       .default(sql`'{}'::text[]`),
     callToActionBn: text('call_to_action_bn'),
     callToActionEn: text('call_to_action_en'),
-    tone: text('tone'),
+    // Default for generation; a tone picked on one request wins over it.
+    defaultTone: text('default_tone'),
     languages: text('languages')
       .array()
       .notNull()
@@ -51,7 +52,7 @@ export const brandProfiles = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
-    allowsEmoji: boolean('allows_emoji').notNull().default(false),
+    isEmojiAllowed: boolean('is_emoji_allowed').notNull().default(false),
     updatedByUserId: uuid('updated_by_user_id').references(() => users.id),
     updatedAt: updatedAt(),
   },

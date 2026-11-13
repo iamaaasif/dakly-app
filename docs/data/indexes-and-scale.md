@@ -11,35 +11,35 @@ Which query each index serves, how big the tables get, when to partition, and ho
 
 ## Hot queries
 
-| Query                                                | Index                                                                                                         |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Chats list by tab, newest first                      | `conversations (store_id, status, last_message_at)`                                                           |
-| My chats                                             | `conversations (store_id, assignee_user_id, status)`                                                          |
-| One conversation per contact per channel             | unique `conversations (channel_connection_id, contact_id)`                                                    |
-| Messages of a chat, scrolling back                   | `messages (conversation_id, created_at)`                                                                      |
-| Webhook dedupe                                       | unique `webhook_events (provider, external_id)`, unique `messages (conversation_id, external_id)`             |
-| Delivery receipt finds the message                   | `messages (store_id, external_id)` where outbound; global `provider_message_id` on recipients and run steps   |
-| Webhook finds the store                              | partial unique `channel_connections (kind, external_account_id)` where not disconnected                       |
-| Customer search by phone prefix or name              | `contacts (store_id, phone text_pattern_ops)`, trigram GIN on `contacts.name`                                 |
-| Segment filters                                      | `contact_stats (store_id, lifecycle_stage / last_order_at / net_spend_poisha)`, GIN on `contacts.tags`        |
-| Orders board by stage                                | `orders (store_id, stage, created_at)`                                                                        |
-| A customer's orders                                  | `orders (store_id, contact_id, created_at)`                                                                   |
-| Return risk for a delivery phone (D26)               | `orders (store_id, recipient_phone)` where stage is delivered, partially delivered or returned                |
-| Possible duplicate order                             | `orders (store_id, recipient_phone, created_at)`                                                              |
-| Possible matches for staff, and the flag on an order | `contact_match_suggestions (store_id, status, created_at)`, `(store_id, order_id)`                            |
-| Campaign and workflow revenue                        | `orders (store_id, attributed_source_type, attributed_source_id)` where attributed                            |
-| On-hold follow-ups due                               | `orders (store_id, follow_up_on)` where on hold                                                               |
-| Product search for the AI and order form             | trigram GIN on `products.name`, GIN on `products.aliases`                                                     |
-| Payment callback finds the intent                    | unique `payment_intents (merchant_reference)`, unique `(short_code)`, unique `(gateway, gateway_trx_id)`      |
-| Order timeline                                       | `audit_log (store_id, entity_type, entity_id, created_at)`                                                    |
-| Frequency cap (messaged in the last N days)          | `campaign_recipients (store_id, contact_id, sent_at)`, `automation_run_steps (store_id, contact_id, sent_at)` |
-| Usage meter                                          | `usage_events (store_id, unit, period_start)`; unique `(store_id, unit, reference)` stops double counting     |
-| Wallet current balance                               | unique `wallet_ledger (store_id, wallet, revision)`; read greatest revision                                   |
-| Admin active member count                            | full `memberships (store_id, status)`                                                                         |
-| Frozen campaign batch                                | `campaign_recipients (campaign_id, status, id)`                                                               |
-| Notifications bell                                   | `notifications (store_id, user_id, status, created_at)`                                                       |
+| Query                                                | Index                                                                                                            |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Chats list by tab, newest first                      | `conversations (store_id, status, last_message_at)`                                                              |
+| My chats                                             | `conversations (store_id, assignee_user_id, status)`                                                             |
+| One conversation per contact per channel             | unique `conversations (channel_connection_id, contact_id)`                                                       |
+| Messages of a chat, scrolling back                   | `messages (conversation_id, created_at)`                                                                         |
+| Webhook dedupe                                       | unique `webhook_events (provider, external_id)`, unique `messages (conversation_id, external_id)`                |
+| Delivery receipt finds the message                   | `messages (store_id, external_id)` where outbound; global `provider_message_id` on recipients and run steps      |
+| Webhook finds the store                              | partial unique `channel_connections (kind, external_account_id)` where not disconnected                          |
+| Customer search by phone prefix or name              | `contacts (store_id, phone text_pattern_ops)`, trigram GIN on `contacts.name`                                    |
+| Segment filters                                      | `contact_stats (store_id, lifecycle_stage / last_order_at / net_spend_poisha)`, GIN on `contacts.tags`           |
+| Orders board by stage                                | `orders (store_id, stage, created_at)`                                                                           |
+| A customer's orders                                  | `orders (store_id, contact_id, created_at)`                                                                      |
+| Return risk for a delivery phone (D26)               | `orders (store_id, recipient_phone)` where stage is delivered, partially delivered or returned                   |
+| Possible duplicate order                             | `orders (store_id, recipient_phone, created_at)`                                                                 |
+| Possible matches for staff, and the flag on an order | `contact_match_suggestions (store_id, status, created_at)`, `(store_id, order_id)`                               |
+| Campaign and workflow revenue                        | `orders (store_id, attributed_source_type, attributed_source_id)` where attributed                               |
+| On-hold follow-ups due                               | `orders (store_id, follow_up_on)` where on hold                                                                  |
+| Product search for the AI and order form             | trigram GIN on `products.name`, GIN on `products.aliases`                                                        |
+| Payment callback finds the intent                    | unique `payment_intents (merchant_reference)`, unique `(short_code)`, unique `(gateway, gateway_transaction_id)` |
+| Order timeline                                       | `audit_log (store_id, entity_type, entity_id, created_at)`                                                       |
+| Frequency cap (messaged in the last N days)          | `campaign_recipients (store_id, contact_id, sent_at)`, `automation_run_steps (store_id, contact_id, sent_at)`    |
+| Usage meter                                          | `usage_events (store_id, unit, period_start)`; unique `(store_id, unit, reference)` stops double counting        |
+| Wallet current balance                               | unique `wallet_ledger (store_id, wallet, revision)`; read greatest revision                                      |
+| Admin active member count                            | full `memberships (store_id, status)`                                                                            |
+| Frozen campaign batch                                | `campaign_recipients (campaign_id, status, id)`                                                                  |
+| Notifications bell                                   | `notifications (store_id, user_id, status, created_at)`                                                          |
 
-Sweep indexes (all partial): `automation_runs (wake_at)` waiting, `automation_runs (claimed_at)` running, `campaigns (scheduled_for)` scheduled, `post_targets (scheduled_for)` scheduled, `post_targets (next_metrics_at)`, `payment_intents (next_check_at)`, `subscriptions (next_renewal_attempt_at)`, `subscriptions (trial_ends_at)` trialing, `channel_connections (token_expires_at)` active, `conversations (responder_returns_at)`, `contacts (deleted_at)`, `files (expires_at)`, `outbox_events (id)` unpublished.
+Sweep indexes (all partial): `automation_runs (wake_at)` waiting, `automation_runs (claimed_at)` running, `campaigns (scheduled_for)` scheduled, `post_targets (scheduled_for)` scheduled, `post_targets (next_metrics_at)`, `payment_intents (next_check_at)`, `subscriptions (next_renewal_attempt_at)`, `subscriptions (trial_ends_at)` trialing, `channel_connections (token_expires_at)` active, `conversations (ai_resumes_at)`, `contacts (deleted_at)`, `files (expires_at)`, `outbox_events (id)` unpublished.
 
 `knowledge_chunks.embedding` has no vector index. Vectors have 512 dimensions (D31). A store has a few hundred chunks, and the search filters by `store_id` first, so an exact scan is the initial implementation choice; measure the largest and most skewed stores before claiming latency. Add an HNSW index when the largest store passes about 20,000 chunks.
 

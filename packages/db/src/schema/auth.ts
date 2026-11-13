@@ -34,6 +34,9 @@ export const users = pgTable(
     language: text('language', { enum: languages }).notNull().default('en'),
     isDisabled: boolean('is_disabled').notNull().default(false),
     lastSignInAt: timestamptz('last_sign_in_at'),
+    // The terms and privacy version the user accepted at sign-up or after a change.
+    termsVersion: text('terms_version'),
+    termsAcceptedAt: timestamptz('terms_accepted_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -44,6 +47,7 @@ export const users = pgTable(
     check('users_has_identifier', sql`${table.phone} is not null or ${table.email} is not null`),
     check('users_phone_format', sql`${table.phone} ~ '^01[3-9][0-9]{8}$'`),
     check('users_language', isOneOf(table.language, languages)),
+    check('users_terms', sql`(${table.termsVersion} is null) = (${table.termsAcceptedAt} is null)`),
     check('users_name_length', sql`char_length(${table.name}) between 1 and 120`),
   ],
 );
@@ -86,7 +90,8 @@ export const pushSubscriptions = pgTable(
     p256dh: text('p256dh').notNull(),
     auth: text('auth').notNull(),
     userAgent: text('user_agent'),
-    lastUsedAt: timestamptz('last_used_at'),
+    // Last push the browser accepted; subscriptions silent for 60 days are removed.
+    lastSuccessfulPushAt: timestamptz('last_successful_push_at'),
     createdAt: createdAt(),
   },
   (table) => [

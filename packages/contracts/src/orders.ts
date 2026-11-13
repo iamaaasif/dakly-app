@@ -58,3 +58,6 @@ export const couriers = ['steadfast', 'pathao', 'redx', 'own_delivery', 'other']
 export const orderCreatorTypes = ['ai', 'user', 'customer', 'sync'] as const;
 export const attributionSourceTypes = ['campaign', 'automation', 'post'] as const;
 export const bdAreaKinds = ['division', 'district', 'upazila'] as const;
+// A shop's own discount code, given in a campaign offer, a workflow step or by hand.
+export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const;
+export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;

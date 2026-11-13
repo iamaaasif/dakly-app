@@ -1,5 +1,5 @@
 {
-  "id": "a55cfe59-d5cf-40d3-b976-9d6c06bf2f71",
+  "id": "80e08342-1904-4025-9c2c-aaf755f775ef",
   "prevId": "0c3065ba-241a-4f15-a84c-1676fbad49be",
   "version": "7",
   "dialect": "postgresql",
@@ -194,8 +194,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trade_licence": {
-          "name": "trade_licence",
+        "trade_licence_number": {
+          "name": "trade_licence_number",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -220,8 +220,8 @@
           "notNull": true,
           "default": "'{}'::text[]"
         },
-        "customer_list_size": {
-          "name": "customer_list_size",
+        "onboarding_customer_count_range": {
+          "name": "onboarding_customer_count_range",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -233,8 +233,8 @@
           "notNull": true,
           "default": "'{}'::text[]"
         },
-        "inactivity_days": {
-          "name": "inactivity_days",
+        "customer_inactivity_days": {
+          "name": "customer_inactivity_days",
           "type": "smallint",
           "primaryKey": false,
           "notNull": true,
@@ -326,17 +326,17 @@
           "name": "stores_how_you_sell",
           "value": "\"stores\".\"how_you_sell\" <@ array['social_media', 'online_store', 'shop_with_pos', 'shop_without_pos']::text[]"
         },
-        "stores_customer_list_size": {
-          "name": "stores_customer_list_size",
-          "value": "\"stores\".\"customer_list_size\" in ('under_500', '500_to_2000', '2000_to_10000', 'over_10000')"
+        "stores_onboarding_customer_count_range": {
+          "name": "stores_onboarding_customer_count_range",
+          "value": "\"stores\".\"onboarding_customer_count_range\" in ('under_500', '500_to_2000', '2000_to_10000', 'over_10000')"
         },
         "stores_extensions": {
           "name": "stores_extensions",
           "value": "\"stores\".\"extensions\" <@ array['chats', 'sales', 'social_auto_post', 'physical_shop']::text[]"
         },
-        "stores_inactivity_days": {
-          "name": "stores_inactivity_days",
-          "value": "\"stores\".\"inactivity_days\" between 30 and 180"
+        "stores_customer_inactivity_days": {
+          "name": "stores_customer_inactivity_days",
+          "value": "\"stores\".\"customer_inactivity_days\" between 30 and 180"
         },
         "stores_attribution_window_days": {
           "name": "stores_attribution_window_days",
@@ -389,8 +389,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "last_used_at": {
-          "name": "last_used_at",
+        "last_successful_push_at": {
+          "name": "last_successful_push_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -722,6 +722,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "terms_version": {
+          "name": "terms_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "terms_accepted_at": {
+          "name": "terms_accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -800,6 +812,10 @@
         "users_language": {
           "name": "users_language",
           "value": "\"users\".\"language\" in ('en', 'bn')"
+        },
+        "users_terms": {
+          "name": "users_terms",
+          "value": "(\"users\".\"terms_version\" is null) = (\"users\".\"terms_accepted_at\" is null)"
         },
         "users_name_length": {
           "name": "users_name_length",
@@ -895,6 +911,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "notification_preferences": {
+          "name": "notification_preferences",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
         },
         "created_at": {
           "name": "created_at",

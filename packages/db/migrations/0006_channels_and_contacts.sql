@@ -154,6 +154,45 @@ CREATE TABLE "contacts" (
 	CONSTRAINT "contacts_birthday" CHECK ("contacts"."birthday_day" between 1 and 31 and "contacts"."birthday_month" between 1 and 12)
 );
 --> statement-breakpoint
+CREATE TABLE "customer_insights" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"kind" text NOT NULL,
+	"source" text DEFAULT 'all' NOT NULL,
+	"period_start" date NOT NULL,
+	"period_end" date NOT NULL,
+	"figures" jsonb NOT NULL,
+	"fact_text" text,
+	"tip_text" text,
+	"ai_run_id" uuid,
+	"hidden_at" timestamp with time zone,
+	"hidden_by_user_id" uuid,
+	"built_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "customer_insights_kind" CHECK ("customer_insights"."kind" in ('first_product_regulars', 'due_to_reorder', 'best_time', 'loyalty_steps', 'places')),
+	CONSTRAINT "customer_insights_source" CHECK ("customer_insights"."source" in ('all', 'shopify', 'facebook', 'store')),
+	CONSTRAINT "customer_insights_period" CHECK ("customer_insights"."period_start" <= "customer_insights"."period_end"),
+	CONSTRAINT "customer_insights_hidden" CHECK (("customer_insights"."hidden_at" is null) = ("customer_insights"."hidden_by_user_id" is null))
+);
+--> statement-breakpoint
+CREATE TABLE "data_requests" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"kind" text NOT NULL,
+	"status" text DEFAULT 'open' NOT NULL,
+	"contact_id" uuid,
+	"requested_by_user_id" uuid,
+	"due_at" timestamp with time zone NOT NULL,
+	"handled_by_staff_id" uuid,
+	"file_id" uuid,
+	"note" text,
+	"completed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "data_requests_kind" CHECK ("data_requests"."kind" in ('store_export', 'store_delete', 'contact_delete')),
+	CONSTRAINT "data_requests_status" CHECK ("data_requests"."status" in ('open', 'in_progress', 'done', 'rejected'))
+);
+--> statement-breakpoint
 CREATE TABLE "imports" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"store_id" uuid NOT NULL,
@@ -210,6 +249,7 @@ CREATE TABLE "contact_memories" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX "channel_connections_store_id_id_key" ON "channel_connections" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "channel_connections_account_key" ON "channel_connections" USING btree ("kind","external_account_id") WHERE "channel_connections"."status" <> 'disconnected';--> statement-breakpoint
+CREATE UNIQUE INDEX "sms_sender_ids_store_id_id_key" ON "sms_sender_ids" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "contact_identities_store_id_id_key" ON "contact_identities" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "contact_identities_connection_external_id_key" ON "contact_identities" USING btree ("channel_connection_id","external_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "contact_match_suggestions_open_key" ON "contact_match_suggestions" USING btree ("store_id","contact_id","matched_contact_id","reason") WHERE "contact_match_suggestions"."status" = 'open';--> statement-breakpoint
@@ -218,6 +258,7 @@ CREATE UNIQUE INDEX "contact_merges_merged_contact_id_key" ON "contact_merges" U
 CREATE UNIQUE INDEX "contacts_store_id_id_key" ON "contacts" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "contacts_store_id_phone_key" ON "contacts" USING btree ("store_id","phone") WHERE "contacts"."phone" is not null and "contacts"."deleted_at" is null;--> statement-breakpoint
 CREATE UNIQUE INDEX "contacts_store_id_external_ref_key" ON "contacts" USING btree ("store_id","external_ref") WHERE "contacts"."external_ref" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "customer_insights_store_id_kind_source_key" ON "customer_insights" USING btree ("store_id","kind","source");--> statement-breakpoint
 CREATE UNIQUE INDEX "segments_store_id_name_key" ON "segments" USING btree ("store_id","name");--> statement-breakpoint
 CREATE UNIQUE INDEX "segments_store_id_ready_made_key_key" ON "segments" USING btree ("store_id","ready_made_key") WHERE "segments"."ready_made_key" is not null;--> statement-breakpoint
 ALTER TABLE "channel_connections" ADD CONSTRAINT "channel_connections_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -255,6 +296,15 @@ ALTER TABLE "contact_stats" ADD CONSTRAINT "contact_stats_store_id_stores_id_fk"
 ALTER TABLE "contact_stats" ADD CONSTRAINT "contact_stats_contact_id_store_fk" FOREIGN KEY ("store_id","contact_id") REFERENCES "public"."contacts"("store_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contacts" ADD CONSTRAINT "contacts_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "contacts" ADD CONSTRAINT "contacts_bd_area_id_bd_areas_id_fk" FOREIGN KEY ("bd_area_id") REFERENCES "public"."bd_areas"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "customer_insights" ADD CONSTRAINT "customer_insights_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "customer_insights" ADD CONSTRAINT "customer_insights_hidden_by_user_id_users_id_fk" FOREIGN KEY ("hidden_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_requested_by_user_id_users_id_fk" FOREIGN KEY ("requested_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_handled_by_staff_id_staff_users_id_fk" FOREIGN KEY ("handled_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_file_id_files_id_fk" FOREIGN KEY ("file_id") REFERENCES "public"."files"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_contact_id_store_fk" FOREIGN KEY ("store_id","contact_id") REFERENCES "public"."contacts"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "data_requests" ADD CONSTRAINT "data_requests_file_id_store_fk" FOREIGN KEY ("store_id","file_id") REFERENCES "public"."files"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "imports" ADD CONSTRAINT "imports_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "imports" ADD CONSTRAINT "imports_file_id_files_id_fk" FOREIGN KEY ("file_id") REFERENCES "public"."files"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "imports" ADD CONSTRAINT "imports_report_file_id_files_id_fk" FOREIGN KEY ("report_file_id") REFERENCES "public"."files"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -302,6 +352,13 @@ CREATE INDEX "contacts_name_trgm_idx" ON "contacts" USING gin ("name" gin_trgm_o
 CREATE INDEX "contacts_phone_pattern_idx" ON "contacts" USING btree ("store_id","phone" text_pattern_ops);--> statement-breakpoint
 CREATE INDEX "contacts_bd_area_id_idx" ON "contacts" USING btree ("bd_area_id");--> statement-breakpoint
 CREATE INDEX "contacts_deleted_at_idx" ON "contacts" USING btree ("deleted_at") WHERE "contacts"."deleted_at" is not null;--> statement-breakpoint
+CREATE INDEX "customer_insights_hidden_by_user_id_idx" ON "customer_insights" USING btree ("hidden_by_user_id");--> statement-breakpoint
+CREATE INDEX "data_requests_store_id_created_at_idx" ON "data_requests" USING btree ("store_id","created_at");--> statement-breakpoint
+CREATE INDEX "data_requests_open_idx" ON "data_requests" USING btree ("due_at") WHERE "data_requests"."status" in ('open', 'in_progress');--> statement-breakpoint
+CREATE INDEX "data_requests_contact_id_idx" ON "data_requests" USING btree ("contact_id");--> statement-breakpoint
+CREATE INDEX "data_requests_requested_by_user_id_idx" ON "data_requests" USING btree ("requested_by_user_id");--> statement-breakpoint
+CREATE INDEX "data_requests_handled_by_staff_id_idx" ON "data_requests" USING btree ("handled_by_staff_id");--> statement-breakpoint
+CREATE INDEX "data_requests_file_id_idx" ON "data_requests" USING btree ("file_id");--> statement-breakpoint
 CREATE INDEX "imports_store_id_created_at_idx" ON "imports" USING btree ("store_id","created_at");--> statement-breakpoint
 CREATE INDEX "imports_file_id_idx" ON "imports" USING btree ("file_id");--> statement-breakpoint
 CREATE INDEX "imports_report_file_id_idx" ON "imports" USING btree ("report_file_id");--> statement-breakpoint
@@ -313,6 +370,14 @@ CREATE INDEX "contact_memories_edited_by_user_id_idx" ON "contact_memories" USIN
 -- Written by hand below this line (docs/rules/database.md, Migrations step 2). Row level
 -- security: a connection sees and writes only the rows of the store set by
 -- TenantDatabase.forStore. See docs/data/isolation-and-access.md.
+ALTER TABLE "customer_insights" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "customer_insights_isolation" ON "customer_insights"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
+ALTER TABLE "data_requests" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "data_requests_isolation" ON "data_requests"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "channel_connections" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "channel_connections_isolation" ON "channel_connections"
   USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)

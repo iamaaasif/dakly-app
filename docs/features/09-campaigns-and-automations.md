@@ -395,7 +395,7 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 
 ### Data
 
-`whatsapp_templates`, `campaigns` (roll-up counts, `paused` and `failed` states), `campaign_recipients`, `tracked_links`, `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`. `campaigns.channel` allows `messenger`; recipient skip reasons include `meta_user_limit`, `window_closed`, `do_not_call` and `daily_reach_limit`. Attribution is columns on `orders`. Full design: [docs/data](../data/README.md).
+`whatsapp_templates` (with Meta's quality rating), `discount_codes` (offer codes, in Orders), `campaigns` (roll-up counts, `paused` and `failed` states), `campaign_recipients`, `tracked_links`, `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`. `campaigns.channel` allows `messenger`; recipient skip reasons include `meta_user_limit`, `window_closed`, `do_not_call` and `daily_reach_limit`. Attribution is columns on `orders`. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

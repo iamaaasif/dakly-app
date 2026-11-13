@@ -130,10 +130,11 @@ describe('release schema behavior (Postgres)', () => {
       await asApp(client, storeId);
       await client.query('set constraints all deferred');
       await client.query('delete from contacts where id = $1', [contactId]);
-      const order = await client.query('select buyer_name, contact_id from orders where id = $1', [
-        orderId,
-      ]);
-      expect(order.rows).toEqual([{ buyer_name: 'রূপা আক্তার', contact_id: null }]);
+      const order = await client.query(
+        'select buyer_name, buyer_contact_id from orders where id = $1',
+        [orderId],
+      );
+      expect(order.rows).toEqual([{ buyer_name: 'রূপা আক্তার', buyer_contact_id: null }]);
       await client.query('set constraints all immediate');
     });
   });
@@ -418,6 +419,60 @@ describe('release schema behavior (Postgres)', () => {
       ).rejects.toMatchObject({ code: '23505' });
     });
   });
+
+  it('keeps a staff export out of every store and refuses a shop file without a store', async () => {
+    await withFixture(async ({ client, storeId }) => {
+      const insertFile = (fileStoreId: string | null, purpose: string) =>
+        client.query(
+          `insert into files (id, store_id, purpose, object_key, content_type, size_bytes)
+          values ($1, $2, $3, $4, 'text/csv', 10)`,
+          [randomUUID(), fileStoreId, purpose, randomUUID()],
+        );
+      await insertFile(null, 'staff_export');
+      await expect(rollsBack(client, () => insertFile(null, 'export'))).rejects.toMatchObject({
+        code: '23514',
+      });
+      await expect(
+        rollsBack(client, () => insertFile(storeId, 'staff_export')),
+      ).rejects.toMatchObject({ code: '23514' });
+      await asApp(client, storeId);
+      const visible = await client.query("select id from files where purpose = 'staff_export'");
+      expect(visible.rows).toEqual([]);
+    });
+  });
+
+  it('accepts a discount code only when its value matches its kind, once per store', async () => {
+    await withFixture(async ({ client, storeId }) => {
+      const insertCode = (
+        code: string,
+        kind: string,
+        percent: number | null,
+        amount: number | null,
+      ) =>
+        client.query(
+          `insert into discount_codes (id, store_id, code, kind, discount_percent, discount_amount_poisha,
+          source_type, valid_from) values ($1, $2, $3, $4, $5, $6, 'manual', now())`,
+          [randomUUID(), storeId, code, kind, percent, amount],
+        );
+      await insertCode('EID10', 'percent', 10, null);
+      await insertCode('FREESHIP', 'free_delivery', null, null);
+      await expect(
+        rollsBack(client, () => insertCode('BAD', 'percent', null, 5000)),
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        rollsBack(client, () => insertCode('eid10', 'amount', null, 5000)),
+      ).rejects.toMatchObject({ code: '23505' });
+    });
+  });
+
+  it('keeps company metrics away from the app role', async () => {
+    await withFixture(async ({ client, storeId }) => {
+      await asApp(client, storeId);
+      await expect(client.query('select * from platform_daily_metrics')).rejects.toMatchObject({
+        code: '42501',
+      });
+    });
+  });
 });
 
 async function withFixture(work: (fixture: Fixture) => Promise<void>) {
@@ -438,6 +493,16 @@ async function withFixture(work: (fixture: Fixture) => Promise<void>) {
   }
 }
 
+// Runs one statement that should fail without aborting the fixture's transaction.
+async function rollsBack(client: PoolClient, statement: () => Promise<unknown>) {
+  await client.query('savepoint expected_failure');
+  try {
+    await statement();
+  } finally {
+    await client.query('rollback to savepoint expected_failure');
+  }
+}
+
 async function asApp(client: PoolClient, storeId: string) {
   await client.query('set local role dakly_app');
   await client.query("select set_config('app.store_id', $1, true)", [storeId]);
@@ -453,8 +518,8 @@ async function insertContact(client: PoolClient, storeId: string, contactId: str
 async function insertOrder(client: PoolClient, storeId: string, contactId: string) {
   const orderId = randomUUID();
   await client.query(
-    `insert into orders (id, store_id, contact_id, number, source, created_by_type,
-    recipient_name, recipient_phone, recipient_address, recipient_district, items_total_poisha, cod_amount_poisha)
+    `insert into orders (id, store_id, buyer_contact_id, number, source, created_by_type,
+    recipient_name, recipient_phone, recipient_address, recipient_district, items_subtotal_poisha, cod_amount_poisha)
     values ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, 10000, 10000)`,
     [
       orderId,
@@ -603,7 +668,7 @@ async function insertVisit(client: PoolClient, storeId: string, linkId: string) 
 
 async function insertLedgerEntry(client: PoolClient, storeId: string, revision: number) {
   await client.query(
-    `insert into wallet_ledger (id, store_id, wallet, revision, kind, amount, balance_after, idempotency_key, actor_type)
+    `insert into wallet_ledger (id, store_id, wallet, revision, kind, quantity_delta, balance_quantity_after, idempotency_key, actor_type)
     values ($1, $2, $3, $4, $5, 100, $6, $7, $8)`,
     [
       randomUUID(),

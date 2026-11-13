@@ -22,6 +22,7 @@ const globalTables = [
   'staff_users',
   'staff_sessions',
   'staff_audit_log',
+  'abuse_reports',
   'platform_settings',
 ];
 

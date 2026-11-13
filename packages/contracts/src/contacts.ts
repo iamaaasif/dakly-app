@@ -77,3 +77,11 @@ export const memoryFactKinds = [
   'other',
 ] as const;
 export const memoryFactSources = ['customer', 'order', 'staff'] as const;
+export const customerInsightKinds = [
+  'first_product_regulars',
+  'due_to_reorder',
+  'best_time',
+  'loyalty_steps',
+  'places',
+] as const;
+export const customerInsightSources = ['all', 'shopify', 'facebook', 'store'] as const;

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0015_snapshot.json`: **75 tables, 1011 columns, 295 explicit indexes and 241 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0015_snapshot.json`: **84 tables, 1136 columns, 331 explicit indexes and 272 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -32,6 +32,8 @@ erDiagram
     staff_users ||..o{ support_grants : "staff_user_id"
     users |o..o{ support_grants : "approved_by_user_id"
     staff_users |o..o{ platform_settings : "updated_by_staff_id"
+    staff_users |o..o{ abuse_reports : "reported_by_staff_id"
+    staff_users |o..o{ abuse_reports : "handled_by_staff_id"
     stores {
         uuid id PK "NOT NULL; uuid"
         text name "NOT NULL; text"
@@ -43,13 +45,13 @@ erDiagram
         text address "NULL; text"
         text district "NULL; text"
         text vat_bin "NULL; text"
-        text trade_licence "NULL; text"
+        text trade_licence_number "NULL; text"
         text logo_object_key "NULL; text"
         text time_zone "NOT NULL; text"
         text__ how_you_sell "NOT NULL; text[]"
-        text customer_list_size "NULL; text"
+        text onboarding_customer_count_range "NULL; text"
         text__ extensions "NOT NULL; text[]"
-        smallint inactivity_days "NOT NULL; smallint"
+        smallint customer_inactivity_days "NOT NULL; smallint"
         smallint attribution_window_days "NOT NULL; smallint"
         jsonb settings "NOT NULL; jsonb"
         text status "NOT NULL; text"
@@ -78,6 +80,8 @@ erDiagram
         text language "NOT NULL; text"
         boolean is_disabled "NOT NULL; boolean"
         timestamp_with_time_zone last_sign_in_at "NULL; timestamp with time zone"
+        text terms_version "NULL; text"
+        timestamp_with_time_zone terms_accepted_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -101,7 +105,7 @@ erDiagram
         text p256dh "NOT NULL; text"
         text auth "NOT NULL; text"
         text user_agent "NULL; text"
-        timestamp_with_time_zone last_used_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone last_successful_push_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     roles {
@@ -130,6 +134,7 @@ erDiagram
         timestamp_with_time_zone joined_at "NULL; timestamp with time zone"
         timestamp_with_time_zone removed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone last_active_at "NULL; timestamp with time zone"
+        jsonb notification_preferences "NOT NULL; jsonb"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -164,7 +169,7 @@ erDiagram
         text target_type "NULL; text"
         uuid target_id "NULL; uuid"
         text reason "NOT NULL; text"
-        jsonb data "NULL; jsonb"
+        jsonb action_details "NULL; jsonb"
         inet ip "NULL; inet"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
@@ -189,11 +194,33 @@ erDiagram
         uuid updated_by_staff_id FK "NULL; uuid"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    staff_audit_log_days {
+        date day PK "NOT NULL; date"
+        integer row_count "NOT NULL; integer"
+        bytea previous_hash "NULL; bytea"
+        bytea hash "NOT NULL; bytea"
+        timestamp_with_time_zone sealed_at "NOT NULL; timestamp with time zone"
+    }
+    abuse_reports {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id "NOT NULL; uuid"
+        text source "NOT NULL; text"
+        text category "NOT NULL; text"
+        text status "NOT NULL; text"
+        text description "NOT NULL; text"
+        jsonb evidence "NULL; jsonb"
+        uuid reported_by_staff_id FK "NULL; uuid"
+        uuid handled_by_staff_id FK "NULL; uuid"
+        text resolution "NULL; text"
+        timestamp_with_time_zone resolved_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
 ```
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `contact-memory.ts`, `chats.ts`, `customers.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `customers.ts`.
 
 ```mermaid
 erDiagram
@@ -245,6 +272,8 @@ erDiagram
     stores ||..o{ contact_memories : "store_id"
     users |o..o{ contact_memories : "edited_by_user_id"
     contacts ||..o| contact_memories : "store_id, contact_id"
+    stores ||..o{ customer_insights : "store_id"
+    users |o..o{ customer_insights : "hidden_by_user_id"
     stores ||..o{ conversations : "store_id"
     contacts ||..o{ conversations : "contact_id"
     channel_connections ||..o{ conversations : "channel_connection_id"
@@ -267,6 +296,12 @@ erDiagram
     conversations |o..o{ social_comments : "store_id, conversation_id"
     stores ||..o{ saved_replies : "store_id"
     users |o..o{ saved_replies : "created_by_user_id"
+    stores ||..o{ sms_messages : "store_id"
+    contacts |o..o{ sms_messages : "contact_id"
+    sms_sender_ids |o..o{ sms_messages : "sender_id_id"
+    users |o..o{ sms_messages : "created_by_user_id"
+    contacts |o..o{ sms_messages : "store_id, contact_id"
+    sms_sender_ids |o..o{ sms_messages : "store_id, sender_id_id"
     stores ||..o{ customers : "store_id"
     bd_areas {
         integer id PK "NOT NULL; integer"
@@ -445,6 +480,22 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    customer_insights {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text kind "NOT NULL; text"
+        text source "NOT NULL; text"
+        date period_start "NOT NULL; date"
+        date period_end "NOT NULL; date"
+        jsonb figures "NOT NULL; jsonb"
+        text fact_text "NULL; text"
+        text tip_text "NULL; text"
+        uuid ai_run_id "NULL; uuid"
+        timestamp_with_time_zone hidden_at "NULL; timestamp with time zone"
+        uuid hidden_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone built_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
     conversations {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
@@ -456,7 +507,7 @@ erDiagram
         uuid assignee_user_id FK "NULL; uuid"
         text handover_reason "NULL; text"
         timestamp_with_time_zone handed_over_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone responder_returns_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone ai_resumes_at "NULL; timestamp with time zone"
         text intent_tag "NULL; text"
         text lead_temperature "NULL; text"
         boolean has_buying_interest "NOT NULL; boolean"
@@ -484,7 +535,7 @@ erDiagram
         text kind "NOT NULL; text"
         text body "NULL; text"
         jsonb attachments "NULL; jsonb"
-        text transcript "NULL; text"
+        text media_text "NULL; text"
         text external_id "NULL; text"
         text idempotency_key "NULL; text"
         text status "NOT NULL; text"
@@ -528,10 +579,31 @@ erDiagram
         text title "NOT NULL; text"
         text body "NOT NULL; text"
         text shortcut "NULL; text"
-        integer use_count "NOT NULL; integer"
         uuid created_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    sms_messages {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid contact_id FK "NULL; uuid"
+        text phone "NOT NULL; text"
+        text purpose "NOT NULL; text"
+        text subject_type "NULL; text"
+        uuid subject_id "NULL; uuid"
+        uuid sender_id_id FK "NULL; uuid"
+        text body "NOT NULL; text"
+        smallint parts "NOT NULL; smallint"
+        integer credits_used "NOT NULL; integer"
+        text status "NOT NULL; text"
+        text provider_message_id "NULL; text"
+        text error_code "NULL; text"
+        text idempotency_key "NOT NULL; text"
+        uuid created_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone sent_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     customers {
         uuid id PK "NOT NULL; uuid"
@@ -564,16 +636,22 @@ erDiagram
     contacts ||..o{ restock_requests : "store_id, contact_id"
     conversations |o..o{ restock_requests : "store_id, conversation_id"
     stores ||..o{ delivery_zones : "store_id"
+    stores ||..o{ discount_codes : "store_id"
+    contacts |o..o{ discount_codes : "contact_id"
+    users |o..o{ discount_codes : "created_by_user_id"
+    contacts |o..o{ discount_codes : "store_id, contact_id"
     stores ||..o{ orders : "store_id"
-    contacts |o..o{ orders : "contact_id"
+    contacts |o..o{ orders : "buyer_contact_id"
     conversations |o..o{ orders : "conversation_id"
     users |o..o{ orders : "created_by_user_id"
     bd_areas |o..o{ orders : "recipient_bd_area_id"
     delivery_zones |o..o{ orders : "delivery_zone_id"
+    discount_codes |o..o{ orders : "discount_code_id"
     users |o..o{ orders : "shipped_by_user_id"
     orders |o..o{ orders : "possible_duplicate_of_order_id"
-    contacts |o..o{ orders : "store_id, contact_id"
+    contacts |o..o{ orders : "store_id, buyer_contact_id"
     conversations |o..o{ orders : "store_id, conversation_id"
+    discount_codes |o..o{ orders : "store_id, discount_code_id"
     delivery_zones |o..o{ orders : "store_id, delivery_zone_id"
     orders |o..o{ orders : "store_id, possible_duplicate_of_order_id"
     stores ||..o{ order_items : "store_id"
@@ -599,6 +677,9 @@ erDiagram
     payment_intents ||..o{ refunds : "payment_intent_id"
     users |o..o{ refunds : "requested_by_user_id"
     payment_intents ||..o{ refunds : "store_id, payment_intent_id"
+    files |o..o{ gateway_settlement_lines : "report_file_id"
+    payment_intents |o..o{ gateway_settlement_lines : "payment_intent_id"
+    staff_users |o..o{ gateway_settlement_lines : "matched_by_staff_id"
     products {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
@@ -630,7 +711,7 @@ erDiagram
         text title "NOT NULL; text"
         jsonb option_values "NOT NULL; jsonb"
         text sku "NULL; text"
-        bigint price_poisha "NULL; bigint"
+        bigint price_override_poisha "NULL; bigint"
         bigint cost_poisha "NULL; bigint"
         integer on_hand "NOT NULL; integer"
         integer reserved "NOT NULL; integer"
@@ -639,7 +720,7 @@ erDiagram
         smallint position "NOT NULL; smallint"
         text status "NOT NULL; text"
         text external_source "NULL; text"
-        text external_account "NULL; text"
+        text external_account_id "NULL; text"
         text external_ref "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
@@ -678,17 +759,37 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    discount_codes {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        citext code "NOT NULL; citext"
+        text kind "NOT NULL; text"
+        integer discount_percent "NULL; integer"
+        bigint discount_amount_poisha "NULL; bigint"
+        bigint minimum_order_poisha "NULL; bigint"
+        text source_type "NOT NULL; text"
+        uuid source_id "NULL; uuid"
+        uuid contact_id FK "NULL; uuid"
+        timestamp_with_time_zone valid_from "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone valid_until "NULL; timestamp with time zone"
+        integer max_redemptions "NULL; integer"
+        integer redemption_count "NOT NULL; integer"
+        boolean is_disabled "NOT NULL; boolean"
+        uuid created_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
     orders {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
         integer number "NOT NULL; integer"
         text buyer_name "NULL; text"
-        uuid contact_id FK "NULL; uuid"
+        uuid buyer_contact_id FK "NULL; uuid"
         uuid conversation_id FK "NULL; uuid"
         text source "NOT NULL; text"
         text created_by_type "NOT NULL; text"
         uuid created_by_user_id FK "NULL; uuid"
-        boolean is_self_delivery "NOT NULL; boolean"
+        boolean is_recipient_buyer "NOT NULL; boolean"
         text recipient_name "NOT NULL; text"
         text recipient_phone "NOT NULL; text"
         text recipient_address "NOT NULL; text"
@@ -701,8 +802,9 @@ erDiagram
         text cancel_reason "NULL; text"
         text return_reason "NULL; text"
         text payment_status "NOT NULL; text"
-        bigint items_total_poisha "NOT NULL; bigint"
-        bigint discount_poisha "NOT NULL; bigint"
+        bigint items_subtotal_poisha "NOT NULL; bigint"
+        bigint order_discount_poisha "NOT NULL; bigint"
+        uuid discount_code_id FK "NULL; uuid"
         bigint delivery_charge_poisha "NOT NULL; bigint"
         boolean is_delivery_charge_overridden "NOT NULL; boolean"
         bigint advance_paid_poisha "NOT NULL; bigint"
@@ -724,7 +826,7 @@ erDiagram
         text attributed_source_type "NULL; text"
         uuid attributed_source_id "NULL; uuid"
         text attributed_channel "NULL; text"
-        timestamp_with_time_zone attributed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone attributed_touch_at "NULL; timestamp with time zone"
         uuid possible_duplicate_of_order_id FK "NULL; uuid"
         text note "NULL; text"
         text external_ref "NULL; text"
@@ -743,7 +845,7 @@ erDiagram
         integer delivered_quantity "NULL; integer"
         bigint unit_price_poisha "NOT NULL; bigint"
         bigint unit_cost_poisha "NULL; bigint"
-        bigint discount_poisha "NOT NULL; bigint"
+        bigint line_discount_poisha "NOT NULL; bigint"
         boolean is_stock_tracked "NOT NULL; boolean"
         boolean is_oversell_allowed "NOT NULL; boolean"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
@@ -775,20 +877,21 @@ erDiagram
         text currency "NOT NULL; text"
         text merchant_reference UK "NOT NULL; text"
         text short_code UK "NULL; text"
-        text__ methods "NULL; text[]"
+        text__ allowed_payment_methods "NULL; text[]"
         text gateway_payment_id "NULL; text"
-        text gateway_trx_id "NULL; text"
+        text gateway_transaction_id "NULL; text"
         text status "NOT NULL; text"
         text review_reason "NULL; text"
         bigint verified_amount_poisha "NULL; bigint"
         bigint refunded_poisha "NOT NULL; bigint"
         bigint reserved_refund_poisha "NOT NULL; bigint"
-        text card_masked "NULL; text"
+        text masked_card_label "NULL; text"
         text failure_reason "NULL; text"
         boolean is_sandbox "NOT NULL; boolean"
         timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone voided_at "NULL; timestamp with time zone"
         timestamp_with_time_zone succeeded_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone settled_at "NULL; timestamp with time zone"
         uuid verified_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone next_check_at "NULL; timestamp with time zone"
         smallint check_count "NOT NULL; smallint"
@@ -804,7 +907,7 @@ erDiagram
         text from_status "NULL; text"
         text to_status "NULL; text"
         text gateway_reference "NULL; text"
-        jsonb data "NULL; jsonb"
+        jsonb event_payload "NULL; jsonb"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     refunds {
@@ -818,6 +921,22 @@ erDiagram
         text idempotency_key "NOT NULL; text"
         boolean is_approved_with_two_factor "NOT NULL; boolean"
         uuid requested_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    gateway_settlement_lines {
+        uuid id PK "NOT NULL; uuid"
+        text gateway "NOT NULL; text"
+        date settlement_date "NOT NULL; date"
+        text gateway_transaction_id "NOT NULL; text"
+        bigint amount_poisha "NOT NULL; bigint"
+        bigint fee_poisha "NOT NULL; bigint"
+        uuid report_file_id FK "NULL; uuid"
+        uuid payment_intent_id FK "NULL; uuid"
+        text status "NOT NULL; text"
+        uuid matched_by_staff_id FK "NULL; uuid"
+        text note "NULL; text"
+        timestamp_with_time_zone matched_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -1004,11 +1123,11 @@ erDiagram
         text__ preferred_words "NOT NULL; text[]"
         text call_to_action_bn "NULL; text"
         text call_to_action_en "NULL; text"
-        text tone "NULL; text"
+        text default_tone "NULL; text"
         text__ languages "NOT NULL; text[]"
         text__ words_to_avoid "NOT NULL; text[]"
         text__ hashtags "NOT NULL; text[]"
-        boolean allows_emoji "NOT NULL; boolean"
+        boolean is_emoji_allowed "NOT NULL; boolean"
         uuid updated_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -1076,6 +1195,7 @@ erDiagram
         text meta_template_id "NULL; text"
         text status "NOT NULL; text"
         text rejection_reason "NULL; text"
+        text quality_rating "NOT NULL; text"
         boolean is_ready_made "NOT NULL; boolean"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
@@ -1121,7 +1241,7 @@ erDiagram
         uuid campaign_id FK "NOT NULL; uuid"
         uuid contact_id FK "NOT NULL; uuid"
         uuid contact_identity_id FK "NULL; uuid"
-        text address "NULL; text"
+        text destination_address "NULL; text"
         text status "NOT NULL; text"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
@@ -1238,10 +1358,14 @@ erDiagram
     stores ||..o| subscriptions : "store_id"
     plans ||..o{ subscriptions : "plan_id"
     plans |o..o{ subscriptions : "pending_plan_id"
+    stores ||..o{ subscription_items : "store_id"
+    subscriptions ||..o{ subscription_items : "subscription_id"
+    plans ||..o{ subscription_items : "plan_id"
+    subscriptions ||..o{ subscription_items : "store_id, subscription_id"
     stores ||..o{ invoices : "store_id"
-    invoices |o..o{ invoices : "credits_invoice_id"
+    invoices |o..o{ invoices : "credited_invoice_id"
     coupons |o..o{ invoices : "coupon_id"
-    invoices |o..o{ invoices : "store_id, credits_invoice_id"
+    invoices |o..o{ invoices : "store_id, credited_invoice_id"
     stores ||..o{ wallet_ledger : "store_id"
     users |o..o{ wallet_ledger : "actor_user_id"
     staff_users |o..o{ wallet_ledger : "actor_staff_id"
@@ -1249,6 +1373,7 @@ erDiagram
     plans {
         uuid id PK "NOT NULL; uuid"
         text code UK "NOT NULL; text"
+        text kind "NOT NULL; text"
         text name "NOT NULL; text"
         bigint monthly_price_poisha "NOT NULL; bigint"
         bigint yearly_price_poisha "NOT NULL; bigint"
@@ -1262,7 +1387,8 @@ erDiagram
         uuid id PK "NOT NULL; uuid"
         citext code UK "NOT NULL; citext"
         text kind "NOT NULL; text"
-        integer value "NOT NULL; integer"
+        integer discount_percent "NULL; integer"
+        bigint discount_amount_poisha "NULL; bigint"
         text__ plan_codes "NULL; text[]"
         timestamp_with_time_zone valid_from "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone valid_until "NULL; timestamp with time zone"
@@ -1277,11 +1403,14 @@ erDiagram
         uuid plan_id FK "NOT NULL; uuid"
         text billing_cycle "NOT NULL; text"
         text status "NOT NULL; text"
-        bigint price_poisha "NOT NULL; bigint"
+        bigint current_period_price_poisha "NOT NULL; bigint"
+        bigint pending_price_poisha "NULL; bigint"
+        timestamp_with_time_zone price_change_notified_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone price_change_starts_at "NULL; timestamp with time zone"
         timestamp_with_time_zone trial_ends_at "NULL; timestamp with time zone"
         timestamp_with_time_zone current_period_start "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone current_period_end "NOT NULL; timestamp with time zone"
-        boolean cancel_at_period_end "NOT NULL; boolean"
+        boolean is_cancellation_scheduled "NOT NULL; boolean"
         uuid pending_plan_id FK "NULL; uuid"
         text renewal_method "NOT NULL; text"
         bytea bkash_agreement_ciphertext "NULL; bytea"
@@ -1293,13 +1422,27 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    subscription_items {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid subscription_id FK "NOT NULL; uuid"
+        uuid plan_id FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        bigint current_period_price_poisha "NOT NULL; bigint"
+        bigint pending_price_poisha "NULL; bigint"
+        timestamp_with_time_zone price_change_starts_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone started_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone cancelled_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
     invoices {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
         text number UK "NOT NULL; text"
         text financial_year "NOT NULL; text"
         text kind "NOT NULL; text"
-        uuid credits_invoice_id FK "NULL; uuid"
+        uuid credited_invoice_id FK "NULL; uuid"
         jsonb lines "NOT NULL; jsonb"
         jsonb bill_to "NOT NULL; jsonb"
         bigint subtotal_poisha "NOT NULL; bigint"
@@ -1322,8 +1465,8 @@ erDiagram
         text wallet "NOT NULL; text"
         integer revision "NOT NULL; integer"
         text kind "NOT NULL; text"
-        bigint amount "NOT NULL; bigint"
-        bigint balance_after "NOT NULL; bigint"
+        bigint quantity_delta "NOT NULL; bigint"
+        bigint balance_quantity_after "NOT NULL; bigint"
         text reference_type "NULL; text"
         uuid reference_id "NULL; uuid"
         text idempotency_key "NOT NULL; text"
@@ -1347,7 +1490,7 @@ erDiagram
 
 ## Platform and reporting
 
-Schema files: `platform.ts`, `analytics.ts`, `tasks.ts`.
+Schema files: `platform.ts`, `data-requests.ts`, `analytics.ts`, `tasks.ts`.
 
 ```mermaid
 erDiagram
@@ -1356,8 +1499,16 @@ erDiagram
     staff_users |o..o{ audit_log : "actor_staff_id"
     stores ||..o{ notifications : "store_id"
     users ||..o{ notifications : "user_id"
-    stores ||..o{ files : "store_id"
+    stores |o..o{ files : "store_id"
     users |o..o{ files : "uploaded_by_user_id"
+    staff_users |o..o{ files : "uploaded_by_staff_id"
+    stores ||..o{ data_requests : "store_id"
+    contacts |o..o{ data_requests : "contact_id"
+    users |o..o{ data_requests : "requested_by_user_id"
+    staff_users |o..o{ data_requests : "handled_by_staff_id"
+    files |o..o{ data_requests : "file_id"
+    contacts |o..o{ data_requests : "store_id, contact_id"
+    files |o..o{ data_requests : "store_id, file_id"
     stores ||--o{ store_daily_metrics : "store_id"
     stores ||..o{ tasks : "store_id"
     contacts |o..o{ tasks : "contact_id"
@@ -1412,7 +1563,7 @@ erDiagram
         smallint priority "NOT NULL; smallint"
         text title "NOT NULL; text"
         text body "NULL; text"
-        jsonb data "NULL; jsonb"
+        jsonb action_context "NULL; jsonb"
         text action_url "NULL; text"
         bigint estimated_value_poisha "NULL; bigint"
         text status "NOT NULL; text"
@@ -1425,7 +1576,7 @@ erDiagram
     }
     files {
         uuid id PK "NOT NULL; uuid"
-        uuid store_id FK "NOT NULL; uuid"
+        uuid store_id FK "NULL; uuid"
         text purpose "NOT NULL; text"
         text object_key UK "NOT NULL; text"
         text content_type "NOT NULL; text"
@@ -1434,6 +1585,7 @@ erDiagram
         text status "NOT NULL; text"
         text reject_reason "NULL; text"
         uuid uploaded_by_user_id FK "NULL; uuid"
+        uuid uploaded_by_staff_id FK "NULL; uuid"
         timestamp_with_time_zone expires_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
@@ -1442,8 +1594,30 @@ erDiagram
         date completed_through "NOT NULL; date"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    data_requests {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text kind "NOT NULL; text"
+        text status "NOT NULL; text"
+        uuid contact_id FK "NULL; uuid"
+        uuid requested_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone due_at "NOT NULL; timestamp with time zone"
+        uuid handled_by_staff_id FK "NULL; uuid"
+        uuid file_id FK "NULL; uuid"
+        text note "NULL; text"
+        timestamp_with_time_zone completed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
     store_daily_metrics {
         uuid store_id PK,FK "NOT NULL; uuid"
+        date day PK "NOT NULL; date"
+        text metric PK "NOT NULL; text"
+        text dimension PK "NOT NULL; text"
+        bigint value "NOT NULL; bigint"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    platform_daily_metrics {
         date day PK "NOT NULL; date"
         text metric PK "NOT NULL; text"
         text dimension PK "NOT NULL; text"
@@ -1486,6 +1660,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `memberships_role_id_store_fk`                                       | `memberships(store_id, role_id)`                          | `roles(store_id, id)`                       | no action |
 | `roles_store_id_stores_id_fk`                                        | `roles(store_id)`                                         | `stores(id)`                                | no action |
 | `bd_areas_parent_id_bd_areas_id_fk`                                  | `bd_areas(parent_id)`                                     | `bd_areas(id)`                              | no action |
+| `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
+| `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
 | `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
 | `staff_audit_log_staff_user_id_staff_users_id_fk`                    | `staff_audit_log(staff_user_id)`                          | `staff_users(id)`                           | no action |
 | `staff_sessions_staff_user_id_staff_users_id_fk`                     | `staff_sessions(staff_user_id)`                           | `staff_users(id)`                           | cascade   |
@@ -1497,13 +1673,18 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `audit_log_actor_staff_id_staff_users_id_fk`                         | `audit_log(actor_staff_id)`                               | `staff_users(id)`                           | no action |
 | `files_store_id_stores_id_fk`                                        | `files(store_id)`                                         | `stores(id)`                                | no action |
 | `files_uploaded_by_user_id_users_id_fk`                              | `files(uploaded_by_user_id)`                              | `users(id)`                                 | no action |
+| `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
 | `coupons_created_by_staff_id_staff_users_id_fk`                      | `coupons(created_by_staff_id)`                            | `staff_users(id)`                           | no action |
 | `invoices_store_id_stores_id_fk`                                     | `invoices(store_id)`                                      | `stores(id)`                                | no action |
-| `invoices_credits_invoice_id_invoices_id_fk`                         | `invoices(credits_invoice_id)`                            | `invoices(id)`                              | no action |
+| `invoices_credited_invoice_id_invoices_id_fk`                        | `invoices(credited_invoice_id)`                           | `invoices(id)`                              | no action |
 | `invoices_coupon_id_coupons_id_fk`                                   | `invoices(coupon_id)`                                     | `coupons(id)`                               | no action |
-| `invoices_credits_invoice_id_store_fk`                               | `invoices(store_id, credits_invoice_id)`                  | `invoices(store_id, id)`                    | no action |
+| `invoices_credits_invoice_id_store_fk`                               | `invoices(store_id, credited_invoice_id)`                 | `invoices(store_id, id)`                    | no action |
+| `subscription_items_store_id_stores_id_fk`                           | `subscription_items(store_id)`                            | `stores(id)`                                | no action |
+| `subscription_items_subscription_id_subscriptions_id_fk`             | `subscription_items(subscription_id)`                     | `subscriptions(id)`                         | no action |
+| `subscription_items_plan_id_plans_id_fk`                             | `subscription_items(plan_id)`                             | `plans(id)`                                 | no action |
+| `subscription_items_subscription_id_store_fk`                        | `subscription_items(store_id, subscription_id)`           | `subscriptions(store_id, id)`               | no action |
 | `subscriptions_store_id_stores_id_fk`                                | `subscriptions(store_id)`                                 | `stores(id)`                                | no action |
 | `subscriptions_plan_id_plans_id_fk`                                  | `subscriptions(plan_id)`                                  | `plans(id)`                                 | no action |
 | `subscriptions_pending_plan_id_plans_id_fk`                          | `subscriptions(pending_plan_id)`                          | `plans(id)`                                 | no action |
@@ -1546,6 +1727,15 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_stats_contact_id_store_fk`                                  | `contact_stats(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
 | `contacts_store_id_stores_id_fk`                                     | `contacts(store_id)`                                      | `stores(id)`                                | no action |
 | `contacts_bd_area_id_bd_areas_id_fk`                                 | `contacts(bd_area_id)`                                    | `bd_areas(id)`                              | no action |
+| `customer_insights_store_id_stores_id_fk`                            | `customer_insights(store_id)`                             | `stores(id)`                                | no action |
+| `customer_insights_hidden_by_user_id_users_id_fk`                    | `customer_insights(hidden_by_user_id)`                    | `users(id)`                                 | no action |
+| `data_requests_store_id_stores_id_fk`                                | `data_requests(store_id)`                                 | `stores(id)`                                | no action |
+| `data_requests_contact_id_contacts_id_fk`                            | `data_requests(contact_id)`                               | `contacts(id)`                              | set null  |
+| `data_requests_requested_by_user_id_users_id_fk`                     | `data_requests(requested_by_user_id)`                     | `users(id)`                                 | no action |
+| `data_requests_handled_by_staff_id_staff_users_id_fk`                | `data_requests(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
+| `data_requests_file_id_files_id_fk`                                  | `data_requests(file_id)`                                  | `files(id)`                                 | no action |
+| `data_requests_contact_id_store_fk`                                  | `data_requests(store_id, contact_id)`                     | `contacts(store_id, id)`                    | no action |
+| `data_requests_file_id_store_fk`                                     | `data_requests(store_id, file_id)`                        | `files(store_id, id)`                       | no action |
 | `imports_store_id_stores_id_fk`                                      | `imports(store_id)`                                       | `stores(id)`                                | no action |
 | `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
 | `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |
@@ -1583,6 +1773,12 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `messages_conversation_id_store_fk`                                  | `messages(store_id, conversation_id)`                     | `conversations(store_id, id)`               | no action |
 | `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
 | `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
+| `sms_messages_store_id_stores_id_fk`                                 | `sms_messages(store_id)`                                  | `stores(id)`                                | no action |
+| `sms_messages_contact_id_contacts_id_fk`                             | `sms_messages(contact_id)`                                | `contacts(id)`                              | set null  |
+| `sms_messages_sender_id_id_sms_sender_ids_id_fk`                     | `sms_messages(sender_id_id)`                              | `sms_sender_ids(id)`                        | no action |
+| `sms_messages_created_by_user_id_users_id_fk`                        | `sms_messages(created_by_user_id)`                        | `users(id)`                                 | no action |
+| `sms_messages_contact_id_store_fk`                                   | `sms_messages(store_id, contact_id)`                      | `contacts(store_id, id)`                    | no action |
+| `sms_messages_sender_id_id_store_fk`                                 | `sms_messages(store_id, sender_id_id)`                    | `sms_sender_ids(store_id, id)`              | no action |
 | `social_comments_store_id_stores_id_fk`                              | `social_comments(store_id)`                               | `stores(id)`                                | no action |
 | `social_comments_channel_connection_id_channel_connections_id_fk`    | `social_comments(channel_connection_id)`                  | `channel_connections(id)`                   | no action |
 | `social_comments_post_target_id_post_targets_id_fk`                  | `social_comments(post_target_id)`                         | `post_targets(id)`                          | no action |
@@ -1624,23 +1820,32 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `stock_movements_actor_user_id_users_id_fk`                          | `stock_movements(actor_user_id)`                          | `users(id)`                                 | no action |
 | `stock_movements_variant_id_store_fk`                                | `stock_movements(store_id, variant_id)`                   | `product_variants(store_id, id)`            | no action |
 | `delivery_zones_store_id_stores_id_fk`                               | `delivery_zones(store_id)`                                | `stores(id)`                                | no action |
+| `discount_codes_store_id_stores_id_fk`                               | `discount_codes(store_id)`                                | `stores(id)`                                | no action |
+| `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |
+| `discount_codes_created_by_user_id_users_id_fk`                      | `discount_codes(created_by_user_id)`                      | `users(id)`                                 | no action |
+| `discount_codes_contact_id_store_fk`                                 | `discount_codes(store_id, contact_id)`                    | `contacts(store_id, id)`                    | no action |
 | `order_items_store_id_stores_id_fk`                                  | `order_items(store_id)`                                   | `stores(id)`                                | no action |
 | `order_items_order_id_orders_id_fk`                                  | `order_items(order_id)`                                   | `orders(id)`                                | cascade   |
 | `order_items_variant_id_product_variants_id_fk`                      | `order_items(variant_id)`                                 | `product_variants(id)`                      | no action |
 | `order_items_order_id_store_fk`                                      | `order_items(store_id, order_id)`                         | `orders(store_id, id)`                      | cascade   |
 | `order_items_variant_id_store_fk`                                    | `order_items(store_id, variant_id)`                       | `product_variants(store_id, id)`            | no action |
 | `orders_store_id_stores_id_fk`                                       | `orders(store_id)`                                        | `stores(id)`                                | no action |
-| `orders_contact_id_contacts_id_fk`                                   | `orders(contact_id)`                                      | `contacts(id)`                              | set null  |
+| `orders_buyer_contact_id_contacts_id_fk`                             | `orders(buyer_contact_id)`                                | `contacts(id)`                              | set null  |
 | `orders_conversation_id_conversations_id_fk`                         | `orders(conversation_id)`                                 | `conversations(id)`                         | set null  |
 | `orders_created_by_user_id_users_id_fk`                              | `orders(created_by_user_id)`                              | `users(id)`                                 | no action |
 | `orders_recipient_bd_area_id_bd_areas_id_fk`                         | `orders(recipient_bd_area_id)`                            | `bd_areas(id)`                              | no action |
 | `orders_delivery_zone_id_delivery_zones_id_fk`                       | `orders(delivery_zone_id)`                                | `delivery_zones(id)`                        | no action |
+| `orders_discount_code_id_discount_codes_id_fk`                       | `orders(discount_code_id)`                                | `discount_codes(id)`                        | no action |
 | `orders_shipped_by_user_id_users_id_fk`                              | `orders(shipped_by_user_id)`                              | `users(id)`                                 | no action |
 | `orders_possible_duplicate_of_order_id_orders_id_fk`                 | `orders(possible_duplicate_of_order_id)`                  | `orders(id)`                                | no action |
-| `orders_contact_id_store_fk`                                         | `orders(store_id, contact_id)`                            | `contacts(store_id, id)`                    | no action |
+| `orders_buyer_contact_id_store_fk`                                   | `orders(store_id, buyer_contact_id)`                      | `contacts(store_id, id)`                    | no action |
 | `orders_conversation_id_store_fk`                                    | `orders(store_id, conversation_id)`                       | `conversations(store_id, id)`               | no action |
+| `orders_discount_code_id_store_fk`                                   | `orders(store_id, discount_code_id)`                      | `discount_codes(store_id, id)`              | no action |
 | `orders_delivery_zone_id_store_fk`                                   | `orders(store_id, delivery_zone_id)`                      | `delivery_zones(store_id, id)`              | no action |
 | `orders_possible_duplicate_of_order_id_store_fk`                     | `orders(store_id, possible_duplicate_of_order_id)`        | `orders(store_id, id)`                      | no action |
+| `gateway_settlement_lines_report_file_id_files_id_fk`                | `gateway_settlement_lines(report_file_id)`                | `files(id)`                                 | no action |
+| `gateway_settlement_lines_payment_intent_id_payment_intents_id_fk`   | `gateway_settlement_lines(payment_intent_id)`             | `payment_intents(id)`                       | no action |
+| `gateway_settlement_lines_matched_by_staff_id_staff_users_id_fk`     | `gateway_settlement_lines(matched_by_staff_id)`           | `staff_users(id)`                           | no action |
 | `payment_events_store_id_stores_id_fk`                               | `payment_events(store_id)`                                | `stores(id)`                                | no action |
 | `payment_events_payment_intent_id_payment_intents_id_fk`             | `payment_events(payment_intent_id)`                       | `payment_intents(id)`                       | no action |
 | `payment_events_payment_intent_id_store_fk`                          | `payment_events(store_id, payment_intent_id)`             | `payment_intents(store_id, id)`             | no action |

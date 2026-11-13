@@ -11,7 +11,7 @@ CREATE TABLE "push_subscriptions" (
 	"p256dh" text NOT NULL,
 	"auth" text NOT NULL,
 	"user_agent" text,
-	"last_used_at" timestamp with time zone,
+	"last_successful_push_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -45,11 +45,14 @@ CREATE TABLE "users" (
 	"language" text DEFAULT 'en' NOT NULL,
 	"is_disabled" boolean DEFAULT false NOT NULL,
 	"last_sign_in_at" timestamp with time zone,
+	"terms_version" text,
+	"terms_accepted_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_has_identifier" CHECK ("users"."phone" is not null or "users"."email" is not null),
 	CONSTRAINT "users_phone_format" CHECK ("users"."phone" ~ '^01[3-9][0-9]{8}$'),
 	CONSTRAINT "users_language" CHECK ("users"."language" in ('en', 'bn')),
+	CONSTRAINT "users_terms" CHECK (("users"."terms_version" is null) = ("users"."terms_accepted_at" is null)),
 	CONSTRAINT "users_name_length" CHECK (char_length("users"."name") between 1 and 120)
 );
 --> statement-breakpoint
@@ -68,6 +71,7 @@ CREATE TABLE "memberships" (
 	"joined_at" timestamp with time zone,
 	"removed_at" timestamp with time zone,
 	"last_active_at" timestamp with time zone,
+	"notification_preferences" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "memberships_status" CHECK ("memberships"."status" in ('invited', 'active', 'removed')),
@@ -109,13 +113,13 @@ ALTER TABLE "stores" ADD COLUMN "email" "citext";--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "address" text;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "district" text;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "vat_bin" text;--> statement-breakpoint
-ALTER TABLE "stores" ADD COLUMN "trade_licence" text;--> statement-breakpoint
+ALTER TABLE "stores" ADD COLUMN "trade_licence_number" text;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "logo_object_key" text;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "time_zone" text DEFAULT 'Asia/Dhaka' NOT NULL;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "how_you_sell" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
-ALTER TABLE "stores" ADD COLUMN "customer_list_size" text;--> statement-breakpoint
+ALTER TABLE "stores" ADD COLUMN "onboarding_customer_count_range" text;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "extensions" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
-ALTER TABLE "stores" ADD COLUMN "inactivity_days" smallint DEFAULT 60 NOT NULL;--> statement-breakpoint
+ALTER TABLE "stores" ADD COLUMN "customer_inactivity_days" smallint DEFAULT 60 NOT NULL;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "attribution_window_days" smallint DEFAULT 7 NOT NULL;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "settings" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
 ALTER TABLE "stores" ADD COLUMN "status" text DEFAULT 'active' NOT NULL;--> statement-breakpoint
@@ -157,9 +161,9 @@ ALTER TABLE "stores" ADD CONSTRAINT "stores_name_length" CHECK (char_length("sto
 ALTER TABLE "stores" ADD CONSTRAINT "stores_slug_format" CHECK ("stores"."slug" ~ '^[a-z0-9][a-z0-9-]{2,39}$');--> statement-breakpoint
 ALTER TABLE "stores" ADD CONSTRAINT "stores_vat_bin_format" CHECK ("stores"."vat_bin" ~ '^[0-9]{13}$');--> statement-breakpoint
 ALTER TABLE "stores" ADD CONSTRAINT "stores_how_you_sell" CHECK ("stores"."how_you_sell" <@ array['social_media', 'online_store', 'shop_with_pos', 'shop_without_pos']::text[]);--> statement-breakpoint
-ALTER TABLE "stores" ADD CONSTRAINT "stores_customer_list_size" CHECK ("stores"."customer_list_size" in ('under_500', '500_to_2000', '2000_to_10000', 'over_10000'));--> statement-breakpoint
+ALTER TABLE "stores" ADD CONSTRAINT "stores_onboarding_customer_count_range" CHECK ("stores"."onboarding_customer_count_range" in ('under_500', '500_to_2000', '2000_to_10000', 'over_10000'));--> statement-breakpoint
 ALTER TABLE "stores" ADD CONSTRAINT "stores_extensions" CHECK ("stores"."extensions" <@ array['chats', 'sales', 'social_auto_post', 'physical_shop']::text[]);--> statement-breakpoint
-ALTER TABLE "stores" ADD CONSTRAINT "stores_inactivity_days" CHECK ("stores"."inactivity_days" between 30 and 180);--> statement-breakpoint
+ALTER TABLE "stores" ADD CONSTRAINT "stores_customer_inactivity_days" CHECK ("stores"."customer_inactivity_days" between 30 and 180);--> statement-breakpoint
 ALTER TABLE "stores" ADD CONSTRAINT "stores_attribution_window_days" CHECK ("stores"."attribution_window_days" in (1, 3, 7));--> statement-breakpoint
 ALTER TABLE "stores" ADD CONSTRAINT "stores_status" CHECK ("stores"."status" in ('active', 'suspended', 'closing'));--> statement-breakpoint
 

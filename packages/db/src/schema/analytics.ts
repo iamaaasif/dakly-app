@@ -20,3 +20,19 @@ export const storeDailyMetrics = pgTable(
   },
   (table) => [primaryKey({ columns: [table.storeId, table.day, table.metric, table.dimension] })],
 );
+
+// Company metrics for the admin panel (MRR and its movements, sign-ups, new paying shops, failed
+// renewals, AI spend), one row per UTC day, metric and dimension. Written nightly by a definer
+// function from subscriptions, invoices and ai_runs; the app role has no access.
+export const platformDailyMetrics = pgTable(
+  'platform_daily_metrics',
+  {
+    day: date('day').notNull(),
+    metric: text('metric').notNull(),
+    // Plan code, gateway or provider the number is split by; empty for the total.
+    dimension: text('dimension').notNull().default(''),
+    value: bigint('value', { mode: 'number' }).notNull(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [primaryKey({ columns: [table.day, table.metric, table.dimension] })],
+);

@@ -15,13 +15,13 @@ const groups = [
   ['Stores, accounts and team', ['stores', 'auth', 'team', 'admin']],
   [
     'Channels, customers and chats',
-    ['areas', 'channels', 'contacts', 'contact-memory', 'chats', 'customers'],
+    ['areas', 'channels', 'contacts', 'contact-memory', 'customer-insights', 'chats', 'customers'],
   ],
   ['Products, orders and payments', ['products', 'orders', 'payments']],
   ['AI', ['ai']],
   ['Content, campaigns and automations', ['social', 'campaigns', 'automations']],
   ['Billing', ['billing']],
-  ['Platform and reporting', ['platform', 'analytics', 'tasks']],
+  ['Platform and reporting', ['platform', 'data-requests', 'analytics', 'tasks']],
 ];
 
 function primaryColumns(table) {

@@ -11,6 +11,31 @@ CREATE TABLE "delivery_zones" (
 	CONSTRAINT "delivery_zones_charge" CHECK ("delivery_zones"."charge_poisha" >= 0)
 );
 --> statement-breakpoint
+CREATE TABLE "discount_codes" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"code" "citext" NOT NULL,
+	"kind" text NOT NULL,
+	"discount_percent" integer,
+	"discount_amount_poisha" bigint,
+	"minimum_order_poisha" bigint,
+	"source_type" text NOT NULL,
+	"source_id" uuid,
+	"contact_id" uuid,
+	"valid_from" timestamp with time zone NOT NULL,
+	"valid_until" timestamp with time zone,
+	"max_redemptions" integer,
+	"redemption_count" integer DEFAULT 0 NOT NULL,
+	"is_disabled" boolean DEFAULT false NOT NULL,
+	"created_by_user_id" uuid,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "discount_codes_kind" CHECK ("discount_codes"."kind" in ('percent', 'amount', 'free_delivery')),
+	CONSTRAINT "discount_codes_source_type" CHECK ("discount_codes"."source_type" in ('manual', 'campaign', 'automation')),
+	CONSTRAINT "discount_codes_value" CHECK (("discount_codes"."kind" = 'percent' and "discount_codes"."discount_percent" between 1 and 100 and "discount_codes"."discount_amount_poisha" is null) or ("discount_codes"."kind" = 'amount' and "discount_codes"."discount_amount_poisha" > 0 and "discount_codes"."discount_percent" is null) or ("discount_codes"."kind" = 'free_delivery' and "discount_codes"."discount_percent" is null and "discount_codes"."discount_amount_poisha" is null)),
+	CONSTRAINT "discount_codes_redemptions" CHECK ("discount_codes"."max_redemptions" is null or "discount_codes"."redemption_count" <= "discount_codes"."max_redemptions")
+);
+--> statement-breakpoint
 CREATE TABLE "order_items" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"store_id" uuid NOT NULL,
@@ -22,12 +47,12 @@ CREATE TABLE "order_items" (
 	"delivered_quantity" integer,
 	"unit_price_poisha" bigint NOT NULL,
 	"unit_cost_poisha" bigint,
-	"discount_poisha" bigint DEFAULT 0 NOT NULL,
+	"line_discount_poisha" bigint DEFAULT 0 NOT NULL,
 	"is_stock_tracked" boolean NOT NULL,
 	"is_oversell_allowed" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "order_items_quantity" CHECK ("order_items"."quantity" > 0 and coalesce("order_items"."delivered_quantity", 0) between 0 and "order_items"."quantity"),
-	CONSTRAINT "order_items_money" CHECK ("order_items"."unit_price_poisha" > 0 and "order_items"."discount_poisha" >= 0)
+	CONSTRAINT "order_items_money" CHECK ("order_items"."unit_price_poisha" > 0 and "order_items"."line_discount_poisha" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "orders" (
@@ -35,12 +60,12 @@ CREATE TABLE "orders" (
 	"store_id" uuid NOT NULL,
 	"number" integer NOT NULL,
 	"buyer_name" text,
-	"contact_id" uuid,
+	"buyer_contact_id" uuid,
 	"conversation_id" uuid,
 	"source" text NOT NULL,
 	"created_by_type" text NOT NULL,
 	"created_by_user_id" uuid,
-	"is_self_delivery" boolean DEFAULT true NOT NULL,
+	"is_recipient_buyer" boolean DEFAULT true NOT NULL,
 	"recipient_name" text NOT NULL,
 	"recipient_phone" text NOT NULL,
 	"recipient_address" text NOT NULL,
@@ -53,8 +78,9 @@ CREATE TABLE "orders" (
 	"cancel_reason" text,
 	"return_reason" text,
 	"payment_status" text DEFAULT 'cod_pending' NOT NULL,
-	"items_total_poisha" bigint NOT NULL,
-	"discount_poisha" bigint DEFAULT 0 NOT NULL,
+	"items_subtotal_poisha" bigint NOT NULL,
+	"order_discount_poisha" bigint DEFAULT 0 NOT NULL,
+	"discount_code_id" uuid,
 	"delivery_charge_poisha" bigint DEFAULT 0 NOT NULL,
 	"is_delivery_charge_overridden" boolean DEFAULT false NOT NULL,
 	"advance_paid_poisha" bigint DEFAULT 0 NOT NULL,
@@ -76,7 +102,7 @@ CREATE TABLE "orders" (
 	"attributed_source_type" text,
 	"attributed_source_id" uuid,
 	"attributed_channel" text,
-	"attributed_at" timestamp with time zone,
+	"attributed_touch_at" timestamp with time zone,
 	"possible_duplicate_of_order_id" uuid,
 	"note" text,
 	"external_ref" text,
@@ -93,8 +119,28 @@ CREATE TABLE "orders" (
 	CONSTRAINT "orders_confirmation_method" CHECK ("orders"."confirmation_method" in ('whatsapp_reply', 'sms_link', 'chat_reply', 'staff', 'advance_paid')),
 	CONSTRAINT "orders_attributed_source_type" CHECK ("orders"."attributed_source_type" in ('campaign', 'automation', 'post')),
 	CONSTRAINT "orders_recipient_phone_format" CHECK ("orders"."recipient_phone" ~ '^01[3-9][0-9]{8}$'),
-	CONSTRAINT "orders_money" CHECK ("orders"."items_total_poisha" >= 0 and "orders"."discount_poisha" >= 0 and "orders"."delivery_charge_poisha" >= 0 and "orders"."advance_paid_poisha" >= 0 and "orders"."cod_amount_poisha" >= 0),
+	CONSTRAINT "orders_money" CHECK ("orders"."items_subtotal_poisha" >= 0 and "orders"."order_discount_poisha" >= 0 and "orders"."delivery_charge_poisha" >= 0 and "orders"."advance_paid_poisha" >= 0 and "orders"."cod_amount_poisha" >= 0),
 	CONSTRAINT "orders_number" CHECK ("orders"."number" > 0)
+);
+--> statement-breakpoint
+CREATE TABLE "gateway_settlement_lines" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"gateway" text NOT NULL,
+	"settlement_date" date NOT NULL,
+	"gateway_transaction_id" text NOT NULL,
+	"amount_poisha" bigint NOT NULL,
+	"fee_poisha" bigint DEFAULT 0 NOT NULL,
+	"report_file_id" uuid,
+	"payment_intent_id" uuid,
+	"status" text DEFAULT 'unmatched' NOT NULL,
+	"matched_by_staff_id" uuid,
+	"note" text,
+	"matched_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "gateway_settlement_lines_gateway" CHECK ("gateway_settlement_lines"."gateway" in ('bkash', 'nagad', 'city_bank')),
+	CONSTRAINT "gateway_settlement_lines_status" CHECK ("gateway_settlement_lines"."status" in ('matched', 'unmatched', 'gateway_error', 'refunded', 'escalated')),
+	CONSTRAINT "gateway_settlement_lines_amounts" CHECK ("gateway_settlement_lines"."amount_poisha" > 0 and "gateway_settlement_lines"."fee_poisha" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "payment_events" (
@@ -105,7 +151,7 @@ CREATE TABLE "payment_events" (
 	"from_status" text,
 	"to_status" text,
 	"gateway_reference" text,
-	"data" jsonb,
+	"event_payload" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "payment_events_kind" CHECK ("payment_events"."kind" in ('created', 'sent', 'opened', 'redirected', 'callback', 'verified', 'status_changed', 'refund_requested', 'refund_result', 'dispute'))
 );
@@ -141,20 +187,21 @@ CREATE TABLE "payment_intents" (
 	"currency" text DEFAULT 'BDT' NOT NULL,
 	"merchant_reference" text NOT NULL,
 	"short_code" text,
-	"methods" text[],
+	"allowed_payment_methods" text[],
 	"gateway_payment_id" text,
-	"gateway_trx_id" text,
+	"gateway_transaction_id" text,
 	"status" text DEFAULT 'created' NOT NULL,
 	"review_reason" text,
 	"verified_amount_poisha" bigint,
 	"refunded_poisha" bigint DEFAULT 0 NOT NULL,
 	"reserved_refund_poisha" bigint DEFAULT 0 NOT NULL,
-	"card_masked" text,
+	"masked_card_label" text,
 	"failure_reason" text,
 	"is_sandbox" boolean DEFAULT false NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
 	"voided_at" timestamp with time zone,
 	"succeeded_at" timestamp with time zone,
+	"settled_at" timestamp with time zone,
 	"verified_by_user_id" uuid,
 	"next_check_at" timestamp with time zone,
 	"check_count" smallint DEFAULT 0 NOT NULL,
@@ -213,35 +260,47 @@ CREATE TABLE "tasks" (
 --> statement-breakpoint
 CREATE UNIQUE INDEX "delivery_zones_store_id_id_key" ON "delivery_zones" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "delivery_zones_one_default_key" ON "delivery_zones" USING btree ("store_id") WHERE "delivery_zones"."is_default";--> statement-breakpoint
+CREATE UNIQUE INDEX "discount_codes_store_id_id_key" ON "discount_codes" USING btree ("store_id","id");--> statement-breakpoint
+CREATE UNIQUE INDEX "discount_codes_store_id_code_key" ON "discount_codes" USING btree ("store_id","code");--> statement-breakpoint
 CREATE UNIQUE INDEX "orders_store_id_id_key" ON "orders" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "orders_store_id_number_key" ON "orders" USING btree ("store_id","number");--> statement-breakpoint
 CREATE UNIQUE INDEX "orders_store_id_idempotency_key_key" ON "orders" USING btree ("store_id","idempotency_key") WHERE "orders"."idempotency_key" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "orders_store_id_external_ref_key" ON "orders" USING btree ("store_id","external_ref") WHERE "orders"."external_ref" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "gateway_settlement_lines_transaction_key" ON "gateway_settlement_lines" USING btree ("gateway","gateway_transaction_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "payment_gateway_credentials_store_id_id_key" ON "payment_gateway_credentials" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "payment_gateway_credentials_active_key" ON "payment_gateway_credentials" USING btree ("store_id","gateway","mode") WHERE "payment_gateway_credentials"."status" <> 'disconnected';--> statement-breakpoint
 CREATE UNIQUE INDEX "payment_intents_store_id_id_key" ON "payment_intents" USING btree ("store_id","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "payment_intents_merchant_reference_key" ON "payment_intents" USING btree ("merchant_reference");--> statement-breakpoint
 CREATE UNIQUE INDEX "payment_intents_short_code_key" ON "payment_intents" USING btree ("short_code");--> statement-breakpoint
-CREATE UNIQUE INDEX "payment_intents_gateway_trx_id_key" ON "payment_intents" USING btree ("gateway","gateway_trx_id") WHERE "payment_intents"."gateway_trx_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "payment_intents_gateway_transaction_id_key" ON "payment_intents" USING btree ("gateway","gateway_transaction_id") WHERE "payment_intents"."gateway_transaction_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "refunds_store_id_idempotency_key_key" ON "refunds" USING btree ("store_id","idempotency_key");--> statement-breakpoint
 ALTER TABLE "delivery_zones" ADD CONSTRAINT "delivery_zones_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "discount_codes" ADD CONSTRAINT "discount_codes_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "discount_codes" ADD CONSTRAINT "discount_codes_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "discount_codes" ADD CONSTRAINT "discount_codes_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "discount_codes" ADD CONSTRAINT "discount_codes_contact_id_store_fk" FOREIGN KEY ("store_id","contact_id") REFERENCES "public"."contacts"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_variant_id_product_variants_id_fk" FOREIGN KEY ("variant_id") REFERENCES "public"."product_variants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_order_id_store_fk" FOREIGN KEY ("store_id","order_id") REFERENCES "public"."orders"("store_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_items" ADD CONSTRAINT "order_items_variant_id_store_fk" FOREIGN KEY ("store_id","variant_id") REFERENCES "public"."product_variants"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "orders" ADD CONSTRAINT "orders_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_buyer_contact_id_contacts_id_fk" FOREIGN KEY ("buyer_contact_id") REFERENCES "public"."contacts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_recipient_bd_area_id_bd_areas_id_fk" FOREIGN KEY ("recipient_bd_area_id") REFERENCES "public"."bd_areas"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_delivery_zone_id_delivery_zones_id_fk" FOREIGN KEY ("delivery_zone_id") REFERENCES "public"."delivery_zones"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_discount_code_id_discount_codes_id_fk" FOREIGN KEY ("discount_code_id") REFERENCES "public"."discount_codes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_shipped_by_user_id_users_id_fk" FOREIGN KEY ("shipped_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_possible_duplicate_of_order_id_orders_id_fk" FOREIGN KEY ("possible_duplicate_of_order_id") REFERENCES "public"."orders"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "orders" ADD CONSTRAINT "orders_contact_id_store_fk" FOREIGN KEY ("store_id","contact_id") REFERENCES "public"."contacts"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_buyer_contact_id_store_fk" FOREIGN KEY ("store_id","buyer_contact_id") REFERENCES "public"."contacts"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_conversation_id_store_fk" FOREIGN KEY ("store_id","conversation_id") REFERENCES "public"."conversations"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "orders" ADD CONSTRAINT "orders_discount_code_id_store_fk" FOREIGN KEY ("store_id","discount_code_id") REFERENCES "public"."discount_codes"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_delivery_zone_id_store_fk" FOREIGN KEY ("store_id","delivery_zone_id") REFERENCES "public"."delivery_zones"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "orders" ADD CONSTRAINT "orders_possible_duplicate_of_order_id_store_fk" FOREIGN KEY ("store_id","possible_duplicate_of_order_id") REFERENCES "public"."orders"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "gateway_settlement_lines" ADD CONSTRAINT "gateway_settlement_lines_report_file_id_files_id_fk" FOREIGN KEY ("report_file_id") REFERENCES "public"."files"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "gateway_settlement_lines" ADD CONSTRAINT "gateway_settlement_lines_payment_intent_id_payment_intents_id_fk" FOREIGN KEY ("payment_intent_id") REFERENCES "public"."payment_intents"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "gateway_settlement_lines" ADD CONSTRAINT "gateway_settlement_lines_matched_by_staff_id_staff_users_id_fk" FOREIGN KEY ("matched_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payment_events" ADD CONSTRAINT "payment_events_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payment_events" ADD CONSTRAINT "payment_events_payment_intent_id_payment_intents_id_fk" FOREIGN KEY ("payment_intent_id") REFERENCES "public"."payment_intents"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payment_events" ADD CONSTRAINT "payment_events_payment_intent_id_store_fk" FOREIGN KEY ("store_id","payment_intent_id") REFERENCES "public"."payment_intents"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -271,23 +330,31 @@ ALTER TABLE "tasks" ADD CONSTRAINT "tasks_conversation_id_store_fk" FOREIGN KEY 
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_order_id_store_fk" FOREIGN KEY ("store_id","order_id") REFERENCES "public"."orders"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "delivery_zones_store_id_idx" ON "delivery_zones" USING btree ("store_id");--> statement-breakpoint
 CREATE INDEX "delivery_zones_bd_area_ids_idx" ON "delivery_zones" USING gin ("bd_area_ids");--> statement-breakpoint
+CREATE INDEX "discount_codes_store_id_source_idx" ON "discount_codes" USING btree ("store_id","source_type","source_id");--> statement-breakpoint
+CREATE INDEX "discount_codes_contact_id_idx" ON "discount_codes" USING btree ("contact_id");--> statement-breakpoint
+CREATE INDEX "discount_codes_created_by_user_id_idx" ON "discount_codes" USING btree ("created_by_user_id");--> statement-breakpoint
 CREATE INDEX "order_items_order_id_idx" ON "order_items" USING btree ("order_id");--> statement-breakpoint
 CREATE INDEX "order_items_store_id_variant_idx" ON "order_items" USING btree ("store_id","variant_id");--> statement-breakpoint
 CREATE INDEX "order_items_variant_id_idx" ON "order_items" USING btree ("variant_id");--> statement-breakpoint
 CREATE INDEX "orders_store_id_stage_idx" ON "orders" USING btree ("store_id","stage","created_at");--> statement-breakpoint
 CREATE INDEX "orders_store_id_created_at_idx" ON "orders" USING btree ("store_id","created_at");--> statement-breakpoint
-CREATE INDEX "orders_store_id_contact_idx" ON "orders" USING btree ("store_id","contact_id","created_at");--> statement-breakpoint
+CREATE INDEX "orders_store_id_buyer_contact_idx" ON "orders" USING btree ("store_id","buyer_contact_id","created_at");--> statement-breakpoint
 CREATE INDEX "orders_store_id_recipient_phone_idx" ON "orders" USING btree ("store_id","recipient_phone","created_at");--> statement-breakpoint
 CREATE INDEX "orders_store_id_recipient_phone_outcome_idx" ON "orders" USING btree ("store_id","recipient_phone") WHERE "orders"."stage" in ('delivered', 'partially_delivered', 'returned');--> statement-breakpoint
 CREATE INDEX "orders_store_id_attribution_idx" ON "orders" USING btree ("store_id","attributed_source_type","attributed_source_id") WHERE "orders"."attributed_source_type" is not null;--> statement-breakpoint
 CREATE INDEX "orders_store_id_follow_up_idx" ON "orders" USING btree ("store_id","follow_up_on") WHERE "orders"."stage" = 'on_hold';--> statement-breakpoint
-CREATE INDEX "orders_contact_id_idx" ON "orders" USING btree ("contact_id");--> statement-breakpoint
+CREATE INDEX "orders_buyer_contact_id_idx" ON "orders" USING btree ("buyer_contact_id");--> statement-breakpoint
 CREATE INDEX "orders_conversation_id_idx" ON "orders" USING btree ("conversation_id");--> statement-breakpoint
+CREATE INDEX "orders_discount_code_id_idx" ON "orders" USING btree ("discount_code_id");--> statement-breakpoint
 CREATE INDEX "orders_created_by_user_id_idx" ON "orders" USING btree ("created_by_user_id");--> statement-breakpoint
 CREATE INDEX "orders_shipped_by_user_id_idx" ON "orders" USING btree ("shipped_by_user_id");--> statement-breakpoint
 CREATE INDEX "orders_recipient_bd_area_id_idx" ON "orders" USING btree ("recipient_bd_area_id");--> statement-breakpoint
 CREATE INDEX "orders_delivery_zone_id_idx" ON "orders" USING btree ("delivery_zone_id");--> statement-breakpoint
 CREATE INDEX "orders_possible_duplicate_idx" ON "orders" USING btree ("possible_duplicate_of_order_id");--> statement-breakpoint
+CREATE INDEX "gateway_settlement_lines_queue_idx" ON "gateway_settlement_lines" USING btree ("settlement_date") WHERE "gateway_settlement_lines"."status" in ('unmatched', 'escalated');--> statement-breakpoint
+CREATE INDEX "gateway_settlement_lines_payment_intent_id_idx" ON "gateway_settlement_lines" USING btree ("payment_intent_id");--> statement-breakpoint
+CREATE INDEX "gateway_settlement_lines_report_file_id_idx" ON "gateway_settlement_lines" USING btree ("report_file_id");--> statement-breakpoint
+CREATE INDEX "gateway_settlement_lines_matched_by_staff_id_idx" ON "gateway_settlement_lines" USING btree ("matched_by_staff_id");--> statement-breakpoint
 CREATE INDEX "payment_events_intent_idx" ON "payment_events" USING btree ("store_id","payment_intent_id","created_at");--> statement-breakpoint
 CREATE INDEX "payment_events_payment_intent_id_idx" ON "payment_events" USING btree ("payment_intent_id");--> statement-breakpoint
 CREATE INDEX "payment_gateway_credentials_store_id_idx" ON "payment_gateway_credentials" USING btree ("store_id");--> statement-breakpoint
@@ -314,6 +381,10 @@ CREATE INDEX "tasks_created_by_user_id_idx" ON "tasks" USING btree ("created_by_
 -- Written by hand below this line (docs/rules/database.md, Migrations step 2). Row level
 -- security: a connection sees and writes only the rows of the store set by
 -- TenantDatabase.forStore. See docs/data/isolation-and-access.md.
+ALTER TABLE "discount_codes" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
+CREATE POLICY "discount_codes_isolation" ON "discount_codes"
+  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 ALTER TABLE "delivery_zones" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "delivery_zones_isolation" ON "delivery_zones"
   USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
@@ -366,5 +437,8 @@ AS $$
 $$;--> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION due_payment_checks(integer) FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION due_payment_checks(integer) TO dakly_app;--> statement-breakpoint
-ALTER TABLE "orders" ALTER CONSTRAINT "orders_contact_id_store_fk" DEFERRABLE INITIALLY IMMEDIATE;--> statement-breakpoint
+ALTER TABLE "orders" ALTER CONSTRAINT "orders_buyer_contact_id_store_fk" DEFERRABLE INITIALLY IMMEDIATE;--> statement-breakpoint
 ALTER TABLE "orders" ALTER CONSTRAINT "orders_conversation_id_store_fk" DEFERRABLE INITIALLY IMMEDIATE;--> statement-breakpoint
+
+-- Settlement lines are Dakly's own money, read by the admin app; a line is never deleted.
+REVOKE DELETE ON "gateway_settlement_lines" FROM dakly_app;--> statement-breakpoint

@@ -1,3 +1,22 @@
+CREATE TABLE "abuse_reports" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"store_id" uuid NOT NULL,
+	"source" text NOT NULL,
+	"category" text NOT NULL,
+	"status" text DEFAULT 'open' NOT NULL,
+	"description" text NOT NULL,
+	"evidence" jsonb,
+	"reported_by_staff_id" uuid,
+	"handled_by_staff_id" uuid,
+	"resolution" text,
+	"resolved_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "abuse_reports_source" CHECK ("abuse_reports"."source" in ('provider', 'customer', 'staff', 'system')),
+	CONSTRAINT "abuse_reports_category" CHECK ("abuse_reports"."category" in ('spam', 'ignored_opt_out', 'fraud', 'prohibited_content', 'other')),
+	CONSTRAINT "abuse_reports_status" CHECK ("abuse_reports"."status" in ('open', 'actioned', 'dismissed'))
+);
+--> statement-breakpoint
 CREATE TABLE "platform_settings" (
 	"key" text PRIMARY KEY NOT NULL,
 	"value" jsonb NOT NULL,
@@ -13,10 +32,19 @@ CREATE TABLE "staff_audit_log" (
 	"target_type" text,
 	"target_id" uuid,
 	"reason" text NOT NULL,
-	"data" jsonb,
+	"action_details" jsonb,
 	"ip" "inet",
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "staff_audit_log_reason_length" CHECK (char_length("staff_audit_log"."reason") >= 10)
+);
+--> statement-breakpoint
+CREATE TABLE "staff_audit_log_days" (
+	"day" date PRIMARY KEY NOT NULL,
+	"row_count" integer NOT NULL,
+	"previous_hash" "bytea",
+	"hash" "bytea" NOT NULL,
+	"sealed_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "staff_audit_log_days_row_count" CHECK ("staff_audit_log_days"."row_count" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "staff_sessions" (
@@ -84,7 +112,7 @@ CREATE TABLE "audit_log" (
 --> statement-breakpoint
 CREATE TABLE "files" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"store_id" uuid NOT NULL,
+	"store_id" uuid,
 	"purpose" text NOT NULL,
 	"object_key" text NOT NULL,
 	"content_type" text NOT NULL,
@@ -93,9 +121,11 @@ CREATE TABLE "files" (
 	"status" text DEFAULT 'pending' NOT NULL,
 	"reject_reason" text,
 	"uploaded_by_user_id" uuid,
+	"uploaded_by_staff_id" uuid,
 	"expires_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "files_purpose" CHECK ("files"."purpose" in ('product_image', 'post_media', 'knowledge_file', 'logo', 'import', 'export', 'sms_sender_document')),
+	CONSTRAINT "files_purpose" CHECK ("files"."purpose" in ('product_image', 'post_media', 'knowledge_file', 'logo', 'import', 'export', 'sms_sender_document', 'data_export', 'staff_export', 'settlement_report')),
+	CONSTRAINT "files_store" CHECK (("files"."store_id" is null) = ("files"."purpose" in ('staff_export', 'settlement_report'))),
 	CONSTRAINT "files_status" CHECK ("files"."status" in ('pending', 'ready', 'rejected')),
 	CONSTRAINT "files_size" CHECK ("files"."size_bytes" > 0 and "files"."size_bytes" <= 26214400)
 );
@@ -116,7 +146,7 @@ CREATE TABLE "notifications" (
 	"priority" smallint DEFAULT 0 NOT NULL,
 	"title" text NOT NULL,
 	"body" text,
-	"data" jsonb,
+	"action_context" jsonb,
 	"action_url" text,
 	"estimated_value_poisha" bigint,
 	"status" text DEFAULT 'new' NOT NULL,
@@ -160,6 +190,8 @@ CREATE UNIQUE INDEX "files_store_id_id_key" ON "files" USING btree ("store_id","
 CREATE UNIQUE INDEX "files_object_key_key" ON "files" USING btree ("object_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "notifications_store_id_user_id_dedupe_key_key" ON "notifications" USING btree ("store_id","user_id","dedupe_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "webhook_events_provider_external_id_key" ON "webhook_events" USING btree ("provider","external_id");--> statement-breakpoint
+ALTER TABLE "abuse_reports" ADD CONSTRAINT "abuse_reports_reported_by_staff_id_staff_users_id_fk" FOREIGN KEY ("reported_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "abuse_reports" ADD CONSTRAINT "abuse_reports_handled_by_staff_id_staff_users_id_fk" FOREIGN KEY ("handled_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "platform_settings" ADD CONSTRAINT "platform_settings_updated_by_staff_id_staff_users_id_fk" FOREIGN KEY ("updated_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_audit_log" ADD CONSTRAINT "staff_audit_log_staff_user_id_staff_users_id_fk" FOREIGN KEY ("staff_user_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "staff_sessions" ADD CONSTRAINT "staff_sessions_staff_user_id_staff_users_id_fk" FOREIGN KEY ("staff_user_id") REFERENCES "public"."staff_users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -171,8 +203,13 @@ ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_actor_user_id_users_id_fk" FOR
 ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_actor_staff_id_staff_users_id_fk" FOREIGN KEY ("actor_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "files" ADD CONSTRAINT "files_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "files" ADD CONSTRAINT "files_uploaded_by_user_id_users_id_fk" FOREIGN KEY ("uploaded_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "files" ADD CONSTRAINT "files_uploaded_by_staff_id_staff_users_id_fk" FOREIGN KEY ("uploaded_by_staff_id") REFERENCES "public"."staff_users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "abuse_reports_open_idx" ON "abuse_reports" USING btree ("created_at") WHERE "abuse_reports"."status" = 'open';--> statement-breakpoint
+CREATE INDEX "abuse_reports_store_id_created_at_idx" ON "abuse_reports" USING btree ("store_id","created_at");--> statement-breakpoint
+CREATE INDEX "abuse_reports_reported_by_staff_id_idx" ON "abuse_reports" USING btree ("reported_by_staff_id");--> statement-breakpoint
+CREATE INDEX "abuse_reports_handled_by_staff_id_idx" ON "abuse_reports" USING btree ("handled_by_staff_id");--> statement-breakpoint
 CREATE INDEX "platform_settings_updated_by_staff_id_idx" ON "platform_settings" USING btree ("updated_by_staff_id");--> statement-breakpoint
 CREATE INDEX "staff_audit_log_staff_user_id_created_at_idx" ON "staff_audit_log" USING btree ("staff_user_id","created_at");--> statement-breakpoint
 CREATE INDEX "staff_audit_log_store_id_created_at_idx" ON "staff_audit_log" USING btree ("store_id","created_at");--> statement-breakpoint
@@ -186,6 +223,7 @@ CREATE INDEX "audit_log_actor_user_id_idx" ON "audit_log" USING btree ("actor_us
 CREATE INDEX "audit_log_actor_staff_id_idx" ON "audit_log" USING btree ("actor_staff_id");--> statement-breakpoint
 CREATE INDEX "files_store_id_purpose_idx" ON "files" USING btree ("store_id","purpose","created_at");--> statement-breakpoint
 CREATE INDEX "files_uploaded_by_user_id_idx" ON "files" USING btree ("uploaded_by_user_id");--> statement-breakpoint
+CREATE INDEX "files_uploaded_by_staff_id_idx" ON "files" USING btree ("uploaded_by_staff_id");--> statement-breakpoint
 CREATE INDEX "files_expires_at_idx" ON "files" USING btree ("expires_at") WHERE "files"."expires_at" is not null;--> statement-breakpoint
 CREATE INDEX "notifications_store_id_user_id_status_idx" ON "notifications" USING btree ("store_id","user_id","status","created_at");--> statement-breakpoint
 CREATE INDEX "notifications_user_id_idx" ON "notifications" USING btree ("user_id");--> statement-breakpoint
@@ -252,3 +290,8 @@ AS $$
 $$;--> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION purge_webhook_events(timestamptz) FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION purge_webhook_events(timestamptz) TO dakly_app;--> statement-breakpoint
+
+-- Staff-only tables. The hash chain days are append-only; abuse reports are read and changed
+-- by the admin app only.
+REVOKE UPDATE, DELETE ON "staff_audit_log_days" FROM dakly_app;--> statement-breakpoint
+REVOKE DELETE ON "abuse_reports" FROM dakly_app;--> statement-breakpoint

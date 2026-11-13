@@ -17,9 +17,14 @@ export const filePurposes = [
   'import',
   'export',
   'sms_sender_document',
+  'data_export',
+  'staff_export',
+  'settlement_report',
 ] as const;
 export const fileStatuses = ['pending', 'ready', 'rejected'] as const;
 export const taskSources = ['manual', 'automation', 'ai'] as const;
 export const taskStatuses = ['open', 'done', 'cancelled'] as const;
 // Daily rollups the maintenance job builds; raw rows are dropped only behind their watermark.
 export const maintenanceRollups = ['tracked_link_visit_days', 'ai_run_daily_metrics'] as const;
+export const dataRequestKinds = ['store_export', 'store_delete', 'contact_delete'] as const;
+export const dataRequestStatuses = ['open', 'in_progress', 'done', 'rejected'] as const;

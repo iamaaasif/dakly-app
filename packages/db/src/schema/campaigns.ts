@@ -22,6 +22,7 @@ import {
   recipientSkipReasons,
   recipientStatuses,
   templateStatuses,
+  whatsappQualityRatings,
   trackedLinkKinds,
   trackedLinkSourceTypes,
 } from '@dakly/contracts/campaigns';
@@ -50,6 +51,10 @@ export const whatsappTemplates = pgTable(
     metaTemplateId: text('meta_template_id'),
     status: text('status', { enum: templateStatuses }).notNull().default('draft'),
     rejectionReason: text('rejection_reason'),
+    // Meta's rating for this template; a red template is paused before it hurts the number.
+    qualityRating: text('quality_rating', { enum: whatsappQualityRatings })
+      .notNull()
+      .default('unknown'),
     isReadyMade: boolean('is_ready_made').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -73,6 +78,10 @@ export const whatsappTemplates = pgTable(
     index('whatsapp_templates_store_id_status_idx').on(table.storeId, table.status),
     check('whatsapp_templates_category', isOneOf(table.category, messageCategories)),
     check('whatsapp_templates_status', isOneOf(table.status, templateStatuses)),
+    check(
+      'whatsapp_templates_quality_rating',
+      isOneOf(table.qualityRating, whatsappQualityRatings),
+    ),
   ],
 );
 
@@ -187,7 +196,7 @@ export const campaignRecipients = pgTable(
     // Identity must belong to this contact and the campaign's frozen connection. SMS has none.
     contactIdentityId: uuid('contact_identity_id').references(() => contactIdentities.id),
     // Phone or page-scoped id at freeze time.
-    address: text('address'),
+    destinationAddress: text('destination_address'),
     status: text('status', { enum: recipientStatuses }).notNull(),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),

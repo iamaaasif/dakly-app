@@ -40,3 +40,12 @@ export const messageSourceTypes = ['chat', 'campaign', 'automation', 'transactio
 export const aiRatings = ['good', 'bad'] as const;
 export const commentClassifications = ['question', 'positive', 'negative', 'spam'] as const;
 export const commentStatuses = ['new', 'replied', 'needs_you', 'hidden', 'ignored'] as const;
+// SMS sent outside a chat, campaign or workflow: order confirmation, order link receipt,
+// payment receipt, a one-off message from a customer profile.
+export const smsMessagePurposes = [
+  'order_confirmation',
+  'order_update',
+  'payment_receipt',
+  'manual',
+] as const;
+export const smsMessageStatuses = ['queued', 'sent', 'delivered', 'failed'] as const;

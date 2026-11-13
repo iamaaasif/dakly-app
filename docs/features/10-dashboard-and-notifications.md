@@ -270,7 +270,7 @@ Listens to most events to create notifications: `conversation.handed_over`, `pay
 
 ### Data
 
-`notifications` (one row per user, unique per store, user and dedupe key), `push_subscriptions`, `assistant_messages`. Full design: [docs/data](../data/README.md).
+`notifications` (one row per user, unique per store, user and dedupe key), `memberships.notification_preferences` (NOTIF-R2 timing and channels, digest daily or weekly), `push_subscriptions`, `assistant_messages`. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

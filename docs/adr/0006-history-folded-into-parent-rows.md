@@ -10,7 +10,7 @@ The release 1 spec had a history table for nearly every entity: order stage even
 ## Decision
 
 - Order and conversation timelines read `audit_log` by `(store_id, entity_type, entity_id, created_at)`. There is no `order_stage_events` table.
-- Attribution is columns on `orders` (`attributed_source_type`, `attributed_source_id`, `attributed_at`). There is no touches table; frequency caps read `campaign_recipients` and `automation_run_steps`.
+- Attribution is columns on `orders` (`attributed_source_type`, `attributed_source_id`, `attributed_touch_at`). There is no touches table; frequency caps read `campaign_recipients` and `automation_run_steps`.
 - Usage totals are summed from `usage_events` for the period; post metrics and campaign counts are columns on `post_targets` and `campaigns`, overwritten on refresh.
 - Tables that are records of money or stock (`payment_events`, `wallet_ledger`, `stock_movements`) stay separate and append-only, because their rows are the source of truth.
 

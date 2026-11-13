@@ -11,6 +11,8 @@ import {
   uniqueIndex,
   uuid,
   boolean,
+  smallint,
+  type PgTableExtraConfigValue,
 } from 'drizzle-orm/pg-core';
 import { chatChannels } from '@dakly/contracts/channels';
 import {
@@ -26,9 +28,11 @@ import {
   messageKinds,
   messageSourceTypes,
   messageStatuses,
+  smsMessagePurposes,
+  smsMessageStatuses,
 } from '@dakly/contracts/chats';
 import { users } from './auth';
-import { channelConnections } from './channels';
+import { channelConnections, smsSenderIds } from './channels';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';
 import { postTargets } from './social';
@@ -56,7 +60,8 @@ export const conversations = pgTable(
     assigneeUserId: uuid('assignee_user_id').references(() => users.id),
     handoverReason: text('handover_reason', { enum: handoverReasons }),
     handedOverAt: timestamptz('handed_over_at'),
-    responderReturnsAt: timestamptz('responder_returns_at'),
+    // When the AI takes the chat back after a person's last message (return timer).
+    aiResumesAt: timestamptz('ai_resumes_at'),
     intentTag: text('intent_tag'),
     leadTemperature: text('lead_temperature', { enum: leadTemperatures }),
     // Q7: Inquiry is a chat flag, not an order stage, until Asif decides.
@@ -109,9 +114,9 @@ export const conversations = pgTable(
     ),
     index('conversations_contact_id_idx').on(table.contactId),
     index('conversations_assignee_user_id_idx').on(table.assigneeUserId),
-    index('conversations_responder_returns_at_idx')
-      .on(table.responderReturnsAt)
-      .where(sql`${table.responderReturnsAt} is not null`),
+    index('conversations_ai_resumes_at_idx')
+      .on(table.aiResumesAt)
+      .where(sql`${table.aiResumesAt} is not null`),
     check(
       'conversations_memory_checkpoint',
       sql`(${table.memoryBuiltThroughMessageId} is null) = (${table.memoryBuiltThroughMessageAt} is null)`,
@@ -145,7 +150,7 @@ export const messages = pgTable(
     // Object keys in R2 plus type and size for each attachment.
     attachments: jsonb('attachments'),
     // Voice transcript or image description, so staff and the AI read the same text.
-    transcript: text('transcript'),
+    mediaText: text('media_text'),
     externalId: text('external_id'),
     idempotencyKey: text('idempotency_key'),
     status: text('status', { enum: messageStatuses }).notNull(),
@@ -282,7 +287,6 @@ export const savedReplies = pgTable(
     title: text('title').notNull(),
     body: text('body').notNull(),
     shortcut: text('shortcut'),
-    useCount: integer('use_count').notNull().default(0),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -293,5 +297,67 @@ export const savedReplies = pgTable(
       .where(sql`${table.shortcut} is not null`),
     index('saved_replies_store_id_idx').on(table.storeId),
     index('saved_replies_created_by_user_id_idx').on(table.createdByUserId),
+  ],
+);
+
+// SMS sent outside a chat, campaign or workflow (campaign and workflow sends have their own rows).
+// SMS is not a chat channel: Bangladesh A2P SMS cannot receive replies. Kept 13 months.
+export const smsMessages = pgTable(
+  'sms_messages',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    phone: text('phone').notNull(),
+    purpose: text('purpose', { enum: smsMessagePurposes }).notNull(),
+    // The order, payment intent or contact the message is about.
+    subjectType: text('subject_type'),
+    subjectId: uuid('subject_id'),
+    senderIdId: uuid('sender_id_id').references(() => smsSenderIds.id),
+    body: text('body').notNull(),
+    parts: smallint('parts').notNull(),
+    creditsUsed: integer('credits_used').notNull().default(0),
+    status: text('status', { enum: smsMessageStatuses }).notNull().default('queued'),
+    providerMessageId: text('provider_message_id'),
+    errorCode: text('error_code'),
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    sentAt: timestamptz('sent_at'),
+    deliveredAt: timestamptz('delivered_at'),
+    failedAt: timestamptz('failed_at'),
+    createdAt: createdAt(),
+  },
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'sms_messages_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    foreignKey({
+      name: 'sms_messages_sender_id_id_store_fk',
+      columns: [table.storeId, table.senderIdId],
+      foreignColumns: [smsSenderIds.storeId, smsSenderIds.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    uniqueIndex('sms_messages_store_id_idempotency_key_key').on(
+      table.storeId,
+      table.idempotencyKey,
+    ),
+    index('sms_messages_store_id_subject_idx').on(
+      table.storeId,
+      table.subjectType,
+      table.subjectId,
+    ),
+    index('sms_messages_store_id_created_at_idx').on(table.storeId, table.createdAt),
+    index('sms_messages_contact_id_idx').on(table.contactId),
+    index('sms_messages_sender_id_id_idx').on(table.senderIdId),
+    index('sms_messages_created_by_user_id_idx').on(table.createdByUserId),
+    uniqueIndex('sms_messages_provider_message_id_key')
+      .on(table.providerMessageId)
+      .where(sql`${table.providerMessageId} is not null`),
+    check('sms_messages_purpose', isOneOf(table.purpose, smsMessagePurposes)),
+    check('sms_messages_status', isOneOf(table.status, smsMessageStatuses)),
+    check('sms_messages_parts', sql`${table.parts} between 1 and 10 and ${table.creditsUsed} >= 0`),
   ],
 );

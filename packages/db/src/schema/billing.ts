@@ -21,7 +21,9 @@ import {
   couponKinds,
   invoiceKinds,
   invoiceStatuses,
+  planKinds,
   renewalMethods,
+  subscriptionItemStatuses,
   subscriptionStatuses,
   usageSources,
   usageUnits,
@@ -40,6 +42,7 @@ export const plans = pgTable(
   {
     id: id(),
     code: text('code').notNull(),
+    kind: text('kind', { enum: planKinds }).notNull().default('plan'),
     name: text('name').notNull(),
     monthlyPricePoisha: poisha('monthly_price_poisha').notNull(),
     yearlyPricePoisha: poisha('yearly_price_poisha').notNull(),
@@ -52,6 +55,7 @@ export const plans = pgTable(
   },
   (table): PgTableExtraConfigValue[] => [
     uniqueIndex('plans_code_key').on(table.code),
+    check('plans_kind', isOneOf(table.kind, planKinds)),
     check(
       'plans_prices',
       sql`${table.monthlyPricePoisha} >= 0 and ${table.yearlyPricePoisha} >= 0`,
@@ -65,8 +69,9 @@ export const coupons = pgTable(
     id: id(),
     code: citext('code').notNull(),
     kind: text('kind', { enum: couponKinds }).notNull(),
-    // Percent (1 to 100) or an amount in poisha, depending on kind.
-    value: integer('value').notNull(),
+    // Exactly one is set, matching kind.
+    discountPercent: integer('discount_percent'),
+    discountAmountPoisha: poisha('discount_amount_poisha'),
     planCodes: text('plan_codes').array(),
     validFrom: timestamptz('valid_from').notNull(),
     validUntil: timestamptz('valid_until'),
@@ -81,7 +86,7 @@ export const coupons = pgTable(
     check('coupons_kind', isOneOf(table.kind, couponKinds)),
     check(
       'coupons_value',
-      sql`${table.value} > 0 and (${table.kind} <> 'percent' or ${table.value} <= 100)`,
+      sql`(${table.kind} = 'percent' and ${table.discountPercent} between 1 and 100 and ${table.discountAmountPoisha} is null) or (${table.kind} = 'amount' and ${table.discountAmountPoisha} > 0 and ${table.discountPercent} is null)`,
     ),
     check(
       'coupons_redemptions',
@@ -104,12 +109,16 @@ export const subscriptions = pgTable(
       .references(() => plans.id),
     billingCycle: text('billing_cycle', { enum: billingCycles }).notNull().default('monthly'),
     status: text('status', { enum: subscriptionStatuses }).notNull(),
-    // Price at the time of the last renewal; price changes need 30 days' notice (ADM-R10).
-    pricePoisha: poisha('price_poisha').notNull(),
+    // The agreed price for the current period. A price change is stored as pending and starts
+    // at price_change_starts_at, at least 30 days after the shop was told (ADM-R10).
+    currentPeriodPricePoisha: poisha('current_period_price_poisha').notNull(),
+    pendingPricePoisha: poisha('pending_price_poisha'),
+    priceChangeNotifiedAt: timestamptz('price_change_notified_at'),
+    priceChangeStartsAt: timestamptz('price_change_starts_at'),
     trialEndsAt: timestamptz('trial_ends_at'),
     currentPeriodStart: timestamptz('current_period_start').notNull(),
     currentPeriodEnd: timestamptz('current_period_end').notNull(),
-    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    isCancellationScheduled: boolean('is_cancellation_scheduled').notNull().default(false),
     pendingPlanId: uuid('pending_plan_id').references(() => plans.id),
     renewalMethod: text('renewal_method', { enum: renewalMethods }).notNull().default('pay_link'),
     bkashAgreementCiphertext: bytea('bkash_agreement_ciphertext'),
@@ -123,6 +132,11 @@ export const subscriptions = pgTable(
   },
   (table): PgTableExtraConfigValue[] => [
     uniqueIndex('subscriptions_store_id_key').on(table.storeId),
+    uniqueIndex('subscriptions_store_id_id_key').on(table.storeId, table.id),
+    check(
+      'subscriptions_price_change',
+      sql`(${table.pendingPricePoisha} is null) = (${table.priceChangeStartsAt} is null) and coalesce(${table.pendingPricePoisha}, 0) >= 0`,
+    ),
     index('subscriptions_plan_id_idx').on(table.planId),
     index('subscriptions_pending_plan_id_idx').on(table.pendingPlanId),
     index('subscriptions_renewal_due_idx')
@@ -134,6 +148,53 @@ export const subscriptions = pgTable(
     check('subscriptions_billing_cycle', isOneOf(table.billingCycle, billingCycles)),
     check('subscriptions_status', isOneOf(table.status, subscriptionStatuses)),
     check('subscriptions_renewal_method', isOneOf(table.renewalMethod, renewalMethods)),
+  ],
+);
+
+// Add-ons bought on top of the plan (Chats AI tiers). Each renews with the subscription at its
+// own agreed price; a price change follows the same 30-day notice (ADM-R10).
+export const subscriptionItems = pgTable(
+  'subscription_items',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => subscriptions.id),
+    planId: uuid('plan_id')
+      .notNull()
+      .references(() => plans.id),
+    status: text('status', { enum: subscriptionItemStatuses }).notNull().default('active'),
+    currentPeriodPricePoisha: poisha('current_period_price_poisha').notNull(),
+    pendingPricePoisha: poisha('pending_price_poisha'),
+    priceChangeStartsAt: timestamptz('price_change_starts_at'),
+    startedAt: timestamptz('started_at').notNull(),
+    cancelledAt: timestamptz('cancelled_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'subscription_items_subscription_id_store_fk',
+      columns: [table.storeId, table.subscriptionId],
+      foreignColumns: [subscriptions.storeId, subscriptions.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    uniqueIndex('subscription_items_active_key')
+      .on(table.subscriptionId, table.planId)
+      .where(sql`${table.status} = 'active'`),
+    index('subscription_items_store_id_idx').on(table.storeId),
+    index('subscription_items_plan_id_idx').on(table.planId),
+    check('subscription_items_status', isOneOf(table.status, subscriptionItemStatuses)),
+    check(
+      'subscription_items_price_change',
+      sql`(${table.pendingPricePoisha} is null) = (${table.priceChangeStartsAt} is null)`,
+    ),
+    check(
+      'subscription_items_prices',
+      sql`${table.currentPeriodPricePoisha} >= 0 and coalesce(${table.pendingPricePoisha}, 0) >= 0`,
+    ),
   ],
 );
 
@@ -149,7 +210,7 @@ export const invoices = pgTable(
     number: text('number').notNull(),
     financialYear: text('financial_year').notNull(),
     kind: text('kind', { enum: invoiceKinds }).notNull().default('invoice'),
-    creditsInvoiceId: uuid('credits_invoice_id').references((): AnyPgColumn => invoices.id),
+    creditedInvoiceId: uuid('credited_invoice_id').references((): AnyPgColumn => invoices.id),
     lines: jsonb('lines').notNull(),
     billTo: jsonb('bill_to').notNull(),
     subtotalPoisha: poisha('subtotal_poisha').notNull(),
@@ -167,19 +228,19 @@ export const invoices = pgTable(
     uniqueIndex('invoices_store_id_id_key').on(table.storeId, table.id),
     foreignKey({
       name: 'invoices_credits_invoice_id_store_fk',
-      columns: [table.storeId, table.creditsInvoiceId],
+      columns: [table.storeId, table.creditedInvoiceId],
       foreignColumns: [invoices.storeId, invoices.id] as [AnyPgColumn, AnyPgColumn],
     }),
 
     uniqueIndex('invoices_number_key').on(table.number),
     index('invoices_store_id_issued_at_idx').on(table.storeId, table.issuedAt),
-    index('invoices_credits_invoice_id_idx').on(table.creditsInvoiceId),
+    index('invoices_credited_invoice_id_idx').on(table.creditedInvoiceId),
     index('invoices_coupon_id_idx').on(table.couponId),
     check('invoices_kind', isOneOf(table.kind, invoiceKinds)),
     check('invoices_status', isOneOf(table.status, invoiceStatuses)),
     check(
       'invoices_credit_note',
-      sql`(${table.kind} = 'credit_note') = (${table.creditsInvoiceId} is not null)`,
+      sql`(${table.kind} = 'credit_note') = (${table.creditedInvoiceId} is not null)`,
     ),
     check(
       'invoices_total',
@@ -206,8 +267,10 @@ export const walletLedger = pgTable(
     wallet: text('wallet', { enum: wallets }).notNull(),
     revision: integer('revision').notNull(),
     kind: text('kind', { enum: walletEntryKinds }).notNull(),
-    amount: bigint('amount', { mode: 'number' }).notNull(),
-    balanceAfter: bigint('balance_after', { mode: 'number' }).notNull(),
+    // Units follow the wallet: poisha for whatsapp_poisha, a count for the others. Never sum
+    // rows of different wallets.
+    quantityDelta: bigint('quantity_delta', { mode: 'number' }).notNull(),
+    balanceQuantityAfter: bigint('balance_quantity_after', { mode: 'number' }).notNull(),
     referenceType: text('reference_type'),
     referenceId: uuid('reference_id'),
     idempotencyKey: text('idempotency_key').notNull(),
@@ -232,8 +295,8 @@ export const walletLedger = pgTable(
     check('wallet_ledger_wallet', isOneOf(table.wallet, wallets)),
     check('wallet_ledger_kind', isOneOf(table.kind, walletEntryKinds)),
     check('wallet_ledger_actor_type', isOneOf(table.actorType, actorTypes)),
-    check('wallet_ledger_amount', sql`${table.amount} <> 0`),
-    check('wallet_ledger_balance', sql`${table.balanceAfter} >= 0`),
+    check('wallet_ledger_quantity', sql`${table.quantityDelta} <> 0`),
+    check('wallet_ledger_balance', sql`${table.balanceQuantityAfter} >= 0`),
     check('wallet_ledger_revision', sql`${table.revision} > 0`),
   ],
 );
