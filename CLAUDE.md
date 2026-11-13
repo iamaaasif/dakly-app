@@ -54,7 +54,7 @@ Run `pnpm check` before you open a PR. CI runs the same checks.
 
 ## Pull requests
 
-Under about 500 changed lines and one purpose each. Update the feature doc and the task's row in `docs/tasks.md` in the same PR. Fill in the PR template honestly, including the line that says you read every line of the diff. Schema changes need a migration generated with `pnpm --filter @dakly/db db:generate`; never edit an applied migration.
+Under about 500 changed lines and one purpose each. Name the branch `<type>/<task-id>-<what-it-does>`, such as `feat/acc-3-sessions`; never a tool default like `codex/...` (see `docs/rules/pull-requests.md`). Update the feature doc and the task's row in `docs/tasks.md` in the same PR. Fill in the PR template honestly, including the line that says you read every line of the diff. Schema changes need a migration generated with `pnpm --filter @dakly/db db:generate`; never edit an applied migration.
 
 ## Where to look
 

@@ -78,7 +78,7 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 - **List:** search by store name, owner phone, store ID, Facebook page ID, order number or invoice number. Columns: store, owner, plan, status (trial, active, past\_due, read\_only, suspended, deleted), MRR, sign-up date, last active, health score, flags. Filters on each. Export to CSV (finance and super admin only, logged).
 - **Shop detail**, with tabs:
   - **Overview:** owner and team (names and roles, phones masked), plan and renewal, balances, connected channels (Facebook page, Instagram, WhatsApp number, quality rating), connected couriers and gateways (status only, never secrets), extensions on, usage this period against limits, health score and reasons.
-  - **Billing:** subscriptions, invoices, payments, refunds, credit notes, balance ledger. Actions: refund, issue credit, extend trial, apply coupon, change plan, adjust balance, all with a required reason.
+  - **Billing:** subscriptions, invoices, payments, refunds, credit notes, balance ledger. Actions: refund, issue credit, extend trial, apply coupon, change plan, adjust balance, all with a required reason. Account recovery for a shop user (remove 2-step, replace a lost phone or email, sign out everywhere) with identity checks, a reason and notifications to the user and the store Owners; the shop sees it in its audit history (ADM-10).
   - **Messaging:** WhatsApp and SMS sent, delivered, failed, opt-outs and blocks in the last 30 days; template list with approval status; sender ID.
   - **AI:** AI replies, tokens and cost this period; recent AI replies flagged by owners; per-shop AI switch (on, paused) and per-shop monthly AI cost cap.
   - **Activity:** the shop's own activity log (read-only) and every admin action ever taken on this shop.
@@ -94,7 +94,7 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 
 #### Plans and pricing
 
-- Plans: name, monthly and yearly price, VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
+- Plans: name, monthly and yearly price, trial length in days (0 for no trial, D34), VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
 - Add-ons: Chats AI add-on tiers.
 - Unit prices: SMS per message, WhatsApp margin over Meta's rate per category, AI credit packs.
 - Coupons: code, percent or fixed, duration (once, N months, forever), limit of uses, expiry, which plans.

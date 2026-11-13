@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                           |
 | Extension | Core                                                                                                  |
 | Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,store-settings}/` |
-| Tasks     | ACC-1 to ACC-8                                                                                        |
+| Tasks     | ACC-1 to ACC-15; build order in [plans/core.md](../plans/core.md)                                     |
 
 ## Purpose
 
@@ -44,7 +44,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 | Create account (step 1 of 4)          | Full name, mobile, email (optional), password with strength meter, agree to Terms and Privacy.                                                                                                                                                                                                                                                        |
 | Verify (step 2 of 4)                  | 6-digit code boxes, resend timer 0:30, change number.                                                                                                                                                                                                                                                                                                 |
 | Business details (step 3 of 4)        | Business name, what you sell (8 chips), district (64), how you sell (4 multi-select cards: Facebook or social media; Online store; Shop with a POS; Shop without a POS), customer list size (Under 500; 500–2,000; 2,000–10,000; Over 10,000).                                                                                                        |
-| Pick a plan (step 4 of 4)             | Monthly / Yearly switch, 4 plan cards; paid plans say "Start 14-day free trial".                                                                                                                                                                                                                                                                      |
+| Pick a plan (step 4 of 4)             | Monthly / Yearly switch, 4 plan cards; paid plans say "Start N-day free trial", with N from the plan (D34).                                                                                                                                                                                                                                           |
 | Forgot password / New password / Done | Mobile number or email → code → new password (8+ characters with a number) → success.                                                                                                                                                                                                                                                                 |
 | Setup checklist (Dashboard)           | Built from the "how you sell" answers (see How it works). Shows "N of M done", each step with a button, Hide guide, Change setup.                                                                                                                                                                                                                     |
 | Extensions                            | 4 cards (Sales, Chats, Physical Shop, Social Auto Post): on/off switch, what it adds, Open. Header "N of 4 on".                                                                                                                                                                                                                                       |
@@ -60,7 +60,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 1. Step 1 validates fields inline. Mobile must be a valid Bangladeshi number not already registered; if it is, show "This number already has an account. Sign in instead" with a link.
 2. Dakly sends a 6-digit SMS code (valid 10 minutes, max 5 tries, resend after 30 seconds, max 5 sends per number per hour and 20 per IP per hour).
 3. Step 3 saves the store: name, business type, district (prefills Store settings), "how you sell" and size. Size sets the suggested plan (Under 500 → Starter; 500–2,000 → Starter; 2,000–10,000 → Growth; Over 10,000 → Pro), shown with a "Recommended" badge.
-4. Step 4: picking Free starts the Free plan; picking a paid plan starts a 14-day trial of it with no payment method. The trial banner in Plan and usage says when it ends.
+4. Step 4: picking Free starts the Free plan; picking a paid plan starts a trial of it with no payment method, as long as the plan's trial length set in the admin panel (D34; 0 means no trial). The trial banner in Plan and usage says when it ends.
 5. On finish, Dakly turns extensions on from the "how you sell" answers (see rule ACC-R5), shows the toast "Dakly is set up for how you sell. Turned on: …" and lands on the Dashboard with the setup checklist open.
 
 **Setup checklist**
@@ -98,7 +98,7 @@ Plan change: upgrades apply now and charge the prorated difference for the rest 
 | ACC-R3  | "Keep me signed in" lasts 30 days on that device; otherwise the session ends after 12 hours idle.                                                                                                                                                               |
 | ACC-R4  | Google sign-in links to an existing account only by verified email; a new Google sign-up must still verify a mobile number.                                                                                                                                     |
 | ACC-R5  | Extensions turned on at sign-up: Sales and Chats if "Facebook or social media" is picked; Sales if "Online store" is picked; Social Auto Post if "Facebook or social media" is picked; Physical Shop if a shop answer is picked (release 2). Core is always on. |
-| ACC-R6  | Only the Owner can change billing, close the business, or remove another Owner. Every store has at least one Owner.                                                                                                                                             |
+| ACC-R6  | Only the Owner can change billing or close the business. Every store has exactly one Owner; ownership changes only by transfer (D35).                                                                                                                           |
 | ACC-R7  | Close business requires typing the store name, offers an export of customers, orders and sales first, cancels billing at once and deletes data 30 days later. Can be undone within those 30 days by support.                                                    |
 | ACC-R8  | Plan limits: when customers reach the plan limit, new customers are still saved but marked "over limit" and excluded from campaigns until the owner upgrades. Never lose incoming orders or chats because of a limit.                                           |
 | ACC-R9  | Trial ending: remind 3 days and 1 day before by SMS, email (when verified) and in-app. With no payment method at the end, move to Free.                                                                                                                         |
@@ -301,27 +301,27 @@ Release 1 has five ways in (D20). All of them end at step 5 below.
 
 1. Phones are normalised to `01XXXXXXXXX` with `bdMobileSchema` from `packages/contracts/src/phone.ts`. Emails are trimmed and lower-cased.
 2. Codes are stored hashed, live 10 minutes and allow 5 tries. Sends are limited to 5 per phone or email and 20 per IP per hour (Valkey counters).
-3. Passwords are hashed with Argon2id. Wrong passwords are limited to 10 per account per hour, then a code is required. "Forgot password" sends a code to the phone or email on the account.
-4. On sign-up, Dakly creates the user, store, Owner membership, trial subscription and default settings in one transaction. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
-5. The API issues an opaque session token (32 random bytes) in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored, with the user, active store, IP, user agent and expiry (30 days sliding; 12 hours idle for members with the refund flag).
-6. Each request loads the session (Valkey cache, then Postgres), checks the membership is active, and sets `request.storeId`, `request.userId` and `request.permissions`. `StoreGuard` and `@RequirePermission('orders.edit')` read them.
+3. Passwords are hashed with Argon2id. Wrong passwords and codes share the ACC-R2 lockout (D35). "Forgot password" sends a code to the phone or email on the account.
+4. Sign-up commits twice ([plan](../plans/core.md)): verifying the code creates the user and a session with no store; the business details step then creates the store, Owner membership, subscription and default settings in one transaction. A user who stops in between resumes at business details on their next sign-in. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
+5. The API issues an opaque session token (32 random bytes) in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored, with the user, active store, IP, user agent and expiry (30 days sliding with "Keep me signed in", otherwise 12 hours idle; D35).
+6. Session and permission results are not cached across requests. A failed database check rejects access. Revoked sessions fail on the next request, including account routes without a store. Each request loads the session and current membership and role from the primary PostgreSQL database, checks the session is unexpired and not revoked and the membership is active, and sets `request.storeId`, `request.userId` and `request.access` (role, area levels and flags). `StoreGuard` and `@RequirePermission('orders.edit')` read them.
 
-Switching store: the session's active store changes through `POST /session/store`. The store id never comes from the client any other way.
+Switching store: the session's active store changes through `POST /me/active-store`. The store id never comes from the client any other way.
 
-Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member deletes all their sessions for that store at once. Revoking an unaccepted invite sets `removed`, records `removed_at`, and clears the invite token hash and expiry in the same transaction; its user ID may remain null. Only `active` memberships require a user. The complete `(store_id, status)` index supports member counts, including removed invites.
+Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member commits their new membership status, so the next request reads it and gets 401 for that store; their sessions keep working for their other stores. Revoking an unaccepted invite sets `removed`, records `removed_at`, and clears the invite token hash and expiry in the same transaction; its user ID may remain null. Only `active` memberships require a user. The complete `(store_id, status)` index supports member counts, including removed invites.
 
-Roles: five built-in roles live in code (`team/built-in-roles.ts`, pending review; the original spec stored them as rows). Custom roles are rows per store. A role maps each area to `none`, `view` or `edit`, plus the flags `seeFullPhone`, `exportLists`, `refund`. One pure function, `team/permissions.ts`, answers "can this member do this", and is unit-tested against the role table.
+Roles: four built-in roles live in code, `team/built-in-roles.ts` (Shop counter staff is added in release 2). Custom roles are rows per store. A role maps each area to `none`, `view` or `edit`, plus the flags `seeFullPhone`, `exportLists`, `refund`. One pure function, `team/permissions.ts`, answers "can this member do this", and is unit-tested against the role table.
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
 
-Password and 2-step: a password is optional (Argon2id). TOTP is optional for everyone and required for Owners before connecting a payment gateway.
+Password and 2-step: a password is optional (Argon2id). TOTP is optional for everyone in release 1 (D35). Requiring it for Owners before connecting a payment gateway is built with PAY-2.
 
 ### Rules
 
 1. Exactly one Owner per store. Transfer needs the new owner to accept and the old owner's code.
 2. An Owner cannot remove themselves. An Admin cannot change an Owner.
 3. A removed member's sessions stop working on the next request.
-4. Every change to roles, members, 2-step settings and sessions writes the audit log.
+4. Every change to roles and members writes the store audit log. Every change to a person's sign-in methods, 2-step settings and sessions writes `account_security_events` once, under the user.
 5. Turning an extension off hides its pages and nav entries and keeps all its data.
 
 ### Permissions
@@ -348,7 +348,7 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 
 ### Acceptance
 
-- Given a new number, when the person enters the right code, then a store exists with them as Owner and a 14-day trial.
+- Given a new number, entering the right code creates the user and a session without a store. Completing business details with an eligible plan creates the store and Owner membership atomically: Free starts immediately; a paid plan with a positive `trial_days` starts that trial; a paid plan without a trial requires checkout (PAY-7).
 - Given a Support agent, when they open Campaigns, then the page says they have no access, and the API returns `403 PERMISSION_DENIED` for campaign routes.
 
 ## Open questions
