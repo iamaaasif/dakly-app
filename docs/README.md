@@ -15,6 +15,10 @@ This folder is the single source of truth for building Dakly. If a doc here and 
 | [scale-and-security.md](scale-and-security.md) | Capacity targets, performance budgets, security standards                              | Before you design a table, a job or an endpoint |
 | [tasks.md](tasks.md)                           | Every release 1 task with its status                                                   | Picking up work, and when a PR merges           |
 
+## Development readiness review
+
+The [readiness review](reviews/development-readiness.md) records feature coverage, verified checks, contradictions and acceptance criteria to resolve before implementation. Follow-up work is tracked in [tasks.md](tasks.md#readiness-review-follow-up).
+
 ## Keeping the docs right
 
 - A PR that changes behaviour updates the feature doc in the same PR. A reviewer rejects a behaviour change with a stale doc.
