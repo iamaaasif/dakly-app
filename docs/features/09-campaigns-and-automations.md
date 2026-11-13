@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Campaigns send one message to a group once. Automations send messages on their own when a customer does something. Both reach only people who agreed to hear from the shop, and nothing goes out until a person approves it. Channels in release 1: WhatsApp and SMS; Messenger is open (Q14). Instagram DM campaigns are release 2 (D4); email is later (D2).
+Campaigns send one message to a group once. Automations send messages on their own when a customer does something. Both reach only people who agreed to hear from the shop, and nothing goes out until a person approves it. Channels in release 1: WhatsApp, SMS, and Messenger to people whose 24-hour chat window is open (D24). Instagram DM campaigns are release 2 (D4); email campaigns are later (D20). The market study behind the rules below: [automations, segments and campaigns study](https://claude.ai/artifact/E8kkbJNVxeZx6G8a3E57UQ).
 
 ## Decisions that change the PRD
 
@@ -19,8 +19,9 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - D20: email campaigns are a later release. Hide the email channel in the builder, recipes and channel lists.
 - D4: Instagram DM campaigns are release 2.
 - D3: AI voice calls are hidden.
-- Q6: release 1 automations are the fixed recipes with editable timing and text, not the free workflow builder, until Asif answers.
-- Q14: Messenger campaigns wait for Q14; WhatsApp and SMS come first.
+- D23: release 1 has the free workflow builder with a template library. The engineering section below replaces the earlier "7 fixed recipes" assumption.
+- D24: Messenger campaigns go only to people whose 24-hour window is open when their message is sent. Meta's Marketing Messages API is not offered to Bangladesh businesses, so CAMP-R6's opted-in path does not exist.
+- Channel rules checked on 13 Nov 2026 change CAMP-R4 (SMS opt-out is a link, not a reply) and add the WhatsApp daily reach and per-person limits; see "Channel rules" under Engineering.
 - D21: the shipping update fires when staff move an order to With courier, with the tracking code they typed. There is no courier status feed.
 
 ## Product requirements
@@ -112,9 +113,9 @@ Publish changes applies to people who enter after publishing. People already in 
 | CAMP-R1 | No campaign or automation sends without a person's approval (Approve, Enable or Publish).                                                                                                                                                                                                                                 |
 | CAMP-R2 | Marketing messages need channel consent; transactional workflow messages (order confirmation, shipping update) need only a phone and are labelled Transactional.                                                                                                                                                          |
 | CAMP-R3 | Frequency cap: a person gets at most 1 marketing message per store per channel per day and 3 per 7 days across campaigns and automations (editable).                                                                                                                                                                      |
-| CAMP-R4 | Every SMS marketing message ends with an opt-out ("STOP 1234" short form from the provider); WhatsApp marketing messages include a "Stop offers" quick-reply button.                                                                                                                                                      |
+| CAMP-R4 | Every SMS marketing message ends with a short opt-out link (dkly.co/s/abc) to a one-tap page in Bangla and English, because Bangladesh A2P SMS cannot receive replies (changed 13 Nov 2026); WhatsApp marketing messages include a "Stop offers" quick-reply button.                                                      |
 | CAMP-R5 | Cost estimate uses the real per-category rate: WhatsApp marketing about ৳9 and utility about ৳0.45 per delivered message (Meta Bangladesh rates from Oct 1, 2026, to be confirmed with the BSP) plus Dakly's margin; SMS ৳0.35–0.40 per part; Messenger free. Approve is blocked if the balance can't cover the estimate. |
-| CAMP-R6 | Meta Messenger marketing goes only to people who opted in to the Page's marketing messages; otherwise only within 24 hours of their last message.                                                                                                                                                                         |
+| CAMP-R6 | Messenger campaigns go only to people whose last message to the Page is under 23 hours old when their message is sent; anyone past that is skipped as "window closed" (D24).                                                                                                                                              |
 | CAMP-R7 | A Scheduled campaign can be edited or cancelled until 5 minutes before send; a Sending campaign can be paused (remaining messages stop).                                                                                                                                                                                  |
 | AUTO-R1 | A workflow can't be enabled if any message step has no approved template or no consent channel.                                                                                                                                                                                                                           |
 | AUTO-R2 | A person in two workflows that both fire the same day gets only the higher-priority message (Transactional > Abandoned > Welcome > Others), per CAMP-R3.                                                                                                                                                                  |
@@ -328,19 +329,37 @@ Campaign states: `draft` → `waiting_approval` → `scheduled` → `sending` �
 
 WhatsApp templates: every WhatsApp campaign uses a template. Edited or new templates go to Meta for approval; the campaign waits as Scheduled. A rejection moves it to Draft with Meta's reason in plain words.
 
-Automations (working assumption for Q6): fixed recipes with editable timing and text, not a free workflow builder.
+Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0.
 
-| Recipe                   | Trigger                                        |
-| ------------------------ | ---------------------------------------------- |
-| Abandoned chat follow-up | Buying interest, no order, inside the window   |
-| Order confirmation       | Order placed (transactional)                   |
-| Shipped                  | Order marked sent with courier (transactional) |
-| Advance not paid         | Advance requested, unpaid after N hours        |
-| Review request           | Delivered N days ago                           |
-| Restock alert            | Variant restocked, person waiting              |
-| Win back                 | No order in N days                             |
+### Channel rules
 
-Each recipe is an `automations` row (recipe key, on or off, settings validated by a zod schema per recipe) and an `automation_runs` row per contact and trigger, unique on (automation, contact, trigger), so an event delivered twice runs once.
+Checked 13 Nov 2026; sources are in the market study. Confirm the SMS rules with the chosen aggregator.
+
+| Channel   | Rule that shapes the build                                                                                                                                                                                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WhatsApp  | Bangladesh rates from 1 Oct 2026: marketing $0.0732, utility and authentication $0.0037 per delivered message. A business portfolio reaches 250 unique people a day when new, then 2K, 10K, 100K, unlimited; the schedule step reads it and spreads the send. |
+| WhatsApp  | Meta caps marketing per person and returns 131049: mark the recipient `meta_user_limit`, never retry within 24 hours, offer SMS. Marketing sent inside an open window does not count toward the cap.                                                          |
+| WhatsApp  | Utility templates must not carry offers; Meta re-categorises and bills them as marketing. The template editor blocks offer fields in utility templates.                                                                                                       |
+| Messenger | Marketing Messages API not offered in Bangladesh. POST_PURCHASE_UPDATE, CONFIRMED_EVENT_UPDATE and ACCOUNT_UPDATE tags rejected since 27 Apr 2026. HUMAN_AGENT lets a person reply for 7 days.                                                                |
+| SMS       | Marketing goes on the aggregator's promotional route with its Do Not Call filter; codes and order updates on the masking route. A2P cannot receive replies. Bangla is the suggested default (70 characters a part).                                           |
+
+Window first: a send step tries a free-form message on the channel where the customer's window is still open, then a WhatsApp template, then SMS, in an order the owner can change. A wait can end "before the window closes".
+
+### Workflow builder (D23)
+
+A workflow is a graph of steps: trigger (one event, filters checked once), wait (duration, time of day, or until an event with a timeout), condition split (up to 10 paths plus Else), random split (up to 4 paths), send (ordered channel list), action (tag, task for staff, hand to a person, coupon) and goal or exit. Workflow filters, exit conditions and consent are checked before every step and again at send time.
+
+Build in two stages so templates can ship if the canvas slips: (1) engine, versions, runs and the template library with settings forms; (2) the canvas.
+
+Template library: complete graphs shipped in code, copied into the store as a draft on Use template. Release 1 templates: COD confirmation, advance not paid, shipped, delivery feedback (these four are transactional and also listed in Orders settings), chat follow-up (inside the window only), order link not finished, back in stock, reorder or cross-sell, win back, first-order thank you, cancellation follow-up, and Eid ul-Fitr, Eid ul-Adha, Durga Puja and Pohela Boishakh greetings. Templates whose trigger source the store lacks (abandoned cart and checkout, browse abandonment, birthday) show what they need instead of Use.
+
+Limits: 50 steps a workflow, 90 days of waiting in total, 5 exit conditions, 100 workflows a store; warn when more than 10 active workflows share a trigger.
+
+Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.
+
+Versions: Publish writes an immutable `automation_versions` row. Runs keep the version they entered; the owner may choose "Stop the old version". Moving runs to a new version is allowed only where step keys match.
+
+Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept 90 days, for per-step numbers and the per-person history.
 
 ### Rules
 
@@ -349,8 +368,9 @@ From PRD tab 6:
 - CAMP-R1: No campaign or automation sends without a person's approval (Approve, Enable or Publish).
 - CAMP-R2: Marketing needs channel consent; transactional messages need only a phone and are labelled Transactional.
 - CAMP-R3: At most 1 marketing message per store per channel per day and 3 per 7 days, across campaigns and automations.
-- CAMP-R4: Every marketing SMS ends with an opt-out; WhatsApp marketing has a "Stop offers" button.
 - CAMP-R5: The estimate uses the real per-category rate. Approve is blocked if the balance cannot cover it.
+- CAMP-R4: Marketing SMS ends with a one-tap opt-out link; WhatsApp marketing has a "Stop offers" button.
+- CAMP-R6: Messenger campaigns only reach people whose window is open at send time.
 - CAMP-R7: A Scheduled campaign can be edited or cancelled until 5 minutes before sending; a Sending campaign can be paused.
 - AUTO-R1: An automation cannot be enabled if a message step has no approved template or no consented channel.
 - AUTO-R2: A person hit by two automations on the same day gets only the higher priority (Transactional, then the rest).
@@ -367,7 +387,7 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 
 ### Data
 
-`campaigns`, `campaign_recipients`, `whatsapp_templates`, `short_links`, `automations`, `automation_runs`. `touches` is cut by the schema review (pending review).
+`campaigns`, `campaign_recipients`, `whatsapp_templates`, `short_links` (`tracked_links` in the schema review), `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`. The builder (D23) adds the two `automation_*` tables to the schema review's 54. `campaigns.channel` allows `messenger`; recipient skip reasons add `meta_user_limit`, `window_closed`, `do_not_call` and `daily_reach_limit`. `touches` is cut by the schema review (pending review).
 
 ### Edge cases to test
 
@@ -375,6 +395,9 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 - 0 reachable people: Approve disabled with a reason and an SMS suggestion.
 - Bangla SMS over 70 characters shows parts and cost per part.
 - The same order event delivered twice sends one confirmation.
+- WhatsApp returns 131049 for a recipient: no retry for 24 hours, SMS offered.
+- A Messenger recipient's window closes while the campaign is sending: skipped as `window_closed`, not sent.
+- A workflow version is published while 40 people wait on a deleted step: they finish on the old version.
 
 ### Acceptance
 
@@ -383,4 +406,4 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 
 ## Open questions
 
-Q6 (recipes or builder), Q14 (Messenger campaigns), Q2 (BSP and margin).
+Q2 (BSP and margin). Still to confirm outside Dakly: Messenger utility template availability for Bangladesh Pages, and whether WhatsApp in-window utility messages are billed after 1 Oct 2026.

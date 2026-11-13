@@ -59,7 +59,7 @@ One clean list of every person who buys from the shop, wherever they bought, wit
 
 **Consent**
 
-Consent is stored per channel with source and time ("WhatsApp: yes, from Shopify checkout, Sep 12, 2026"). Sources: store checkout checkbox, chat opt-in button, manual entry with the owner's confirmation, import with the owner's confirmation, POS checkbox. Replying STOP (or বন্ধ) to SMS or WhatsApp, or blocking the Page, sets that channel to no immediately. Transactional messages (order confirmation, delivery updates, receipts, due reminders) do not need marketing consent but do respect "blocked".
+Consent is stored per channel with source and time ("WhatsApp: yes, from Shopify checkout, Sep 12, 2026"). Sources: store checkout checkbox, chat opt-in button, manual entry with the owner's confirmation, import with the owner's confirmation, POS checkbox. Replying STOP (or বন্ধ) on WhatsApp or Messenger, tapping the opt-out link in an SMS, or blocking the Page sets that channel to no immediately. Bangladesh A2P SMS cannot receive replies, so SMS opt-out is by link only. Transactional messages (order confirmation, delivery updates, receipts, due reminders) do not need marketing consent but do respect "blocked".
 
 **Voice add**
 
@@ -68,6 +68,8 @@ Audio is streamed to a speech-to-text service that handles Bangla and Banglish, 
 **Segments**
 
 Conditions available: Number of orders, Total spent (৳), Days since last order, Last purchase date, First purchase date, City or district, Usually buys (category), Bought product, Customer type (lifecycle stage), Source, Tag, Marketing consent (per channel), Birthday month, Return risk, Has due (release 2). Operators per type: number (is, is more than, is less than, between), text/list (is, is not, is any of), date (before, after, in the last N days). Groups combine with AND/OR. Counts are computed live against the database (not a sample) and cached for 60 seconds.
+
+Also in release 1, from the market study: event conditions (did an event N times in a period, with a property, or did not do it: ordered, tapped a campaign link, replied, received a campaign), chat window open now per channel, and lead temperature (Hot, Warm, Cold). Up to 20 conditions in two levels of groups and 200 saved segments a store. The preview explains why a person matches. "Enters a segment" as a workflow trigger is release 2, because it needs stored membership.
 
 **AI segment rules**
 
@@ -257,7 +259,7 @@ Consent
 
 1. Consent is append-only per contact and channel; the latest row wins.
 2. Sending reads only the current-consent view.
-3. "STOP" or "বন্ধ" on WhatsApp or SMS writes a withdrawal at once.
+3. "STOP" or "বন্ধ" on WhatsApp or Messenger, or the SMS opt-out link, writes a withdrawal at once.
 
 Stats: one `contact_stats` row per contact holds order count, net spend, first and last order, return count, return risk and lead temperature. It is recomputed for one contact on each order event and for all contacts nightly. Lists and segments read only this table.
 

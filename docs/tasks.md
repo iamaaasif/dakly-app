@@ -22,6 +22,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | FND-2 | Fastify adapter and Express ban                                                      | Done      | FND-1   | #1  |                                                            |
 | FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | Done      | FND-1   | #2  | Merged                                                     |
 | FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security      | In review | FND-3   | #3  | This PR                                                    |
+| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | In review | FND-4   |     |                                                            |
 | DB-1  | UUID v7 ids generated in the app; switch existing tables                             | Todo      |         |     |                                                            |
 | DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-1    |     |                                                            |
 | DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-1    |     |                                                            |
@@ -159,9 +160,9 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | CAMP-2 | Campaigns: draft, approval, frozen recipients, cost estimate     | Todo    | CUS-6, PAY-8  |     |                            |
 | CAMP-3 | Sender job, quiet hours, frequency cap, tracked links, callbacks | Todo    | CAMP-2        |     |                            |
 | CAMP-4 | Web: campaign list, builder, results                             | Todo    | CAMP-3        |     | Results page design needed |
-| CAMP-5 | Automation recipes and runs                                      | Todo    | CAMP-3        |     | Q6                         |
-| CAMP-6 | Web: automations list and recipe editor                          | Todo    | CAMP-5        |     |                            |
-| CAMP-7 | Messenger campaigns to opted-in people                           | Blocked | CAMP-3        |     | Q14                        |
+| CAMP-5 | Workflow engine, versions, runs and template library             | Todo    | CAMP-3        |     | D23                        |
+| CAMP-6 | Web: automations list, template library and builder canvas       | Todo    | CAMP-5        |     |                            |
+| CAMP-7 | Messenger campaigns to people with an open window                | Todo    | CAMP-3        |     | D24                        |
 | ANA-1  | Glossary report functions and daily summary tables               | Todo    | ORD-3         |     |                            |
 | ANA-2  | Attribution of orders to messages and posts                      | Todo    | ANA-1, CAMP-3 |     |                            |
 | ANA-3  | Web: Analytics tabs                                              | Todo    | ANA-2         |     |                            |
