@@ -41,13 +41,13 @@ Sign-up and sign-in
 
 Release 1 has five ways in (D20). All of them end at step 5 below.
 
-| Method             | How                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| Phone and code     | 6-digit code by SMS through the `SmsDriver`                                          |
-| Email and code     | 6-digit code by email through the `EmailDriver`                                      |
-| Phone and password | Password set at sign-up or later in Settings                                         |
-| Email and password | Same; the email must be verified by a code once before the password works            |
-| Google             | OpenID Connect with Google; Dakly keeps the Google subject id and the verified email |
+| Method             | How                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| Phone and code     | 6-digit code by SMS through the `SmsDriver`                                                    |
+| Email and code     | 6-digit code by email through the `EmailDriver` (SendGrid in production, Mailpit locally, D22) |
+| Phone and password | Password set at sign-up or later in Settings                                                   |
+| Email and password | Same; the email must be verified by a code once before the password works                      |
+| Google             | OpenID Connect with Google; Dakly keeps the Google subject id and the verified email           |
 
 1. Phones are normalised to `01XXXXXXXXX` with `bdMobileSchema` from `packages/contracts/src/phone.ts`. Emails are trimmed and lower-cased.
 2. Codes are stored hashed, live 10 minutes and allow 5 tries. Sends are limited to 5 per phone or email and 20 per IP per hour (Valkey counters).

@@ -25,7 +25,7 @@ These take weeks and block milestones:
 - Meta app review for messaging and page permissions (M3, M4).
 - Meta business verification and the WhatsApp BSP contract (M3, M11). Blocked on Q2.
 - bKash, Nagad and City Bank merchant applications for Dakly's own accounts (M9).
-- SMS provider account and sender id, and Amazon SES with a verified sending domain (M1).
+- SMS provider account and sender id, and a SendGrid account with a verified sending domain (M1).
 - Google OAuth client and consent screen verification (M1).
 - OpenAI organisation, zero data retention request (M7, Q9).
 - 200 anonymised chats from beta shops for the golden set (M7).

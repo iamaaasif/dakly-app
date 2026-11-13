@@ -37,19 +37,19 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M1. Account, stores and team
 
-| ID     | Task                                                                 | Status | Depends      | PR  | Notes             |
-| ------ | -------------------------------------------------------------------- | ------ | ------------ | --- | ----------------- |
-| ACC-1  | SMS driver interface and one provider driver                         | Todo   |              |     |                   |
-| ACC-2  | Sign-up and sign-in by SMS code (users, stores, memberships)         | Todo   | ACC-1, DB-1  |     |                   |
-| ACC-9  | Email driver (Amazon SES) and sign-in by email code                  | Todo   | ACC-2        |     | D20               |
-| ACC-10 | Password sign-in for phone and email; forgot password                | Todo   | ACC-2        |     | D20               |
-| ACC-11 | Google sign-in (OpenID Connect)                                      | Todo   | ACC-2        |     | D20               |
-| ACC-3  | Sessions: cookie, Valkey cache, `@CurrentUser`, `@RequirePermission` | Todo   | ACC-2        |     |                   |
-| ACC-4  | Roles and permissions function with built-in roles                   | Todo   | ACC-3        |     | Q10 roles in code |
-| ACC-5  | Invite, accept and remove members                                    | Todo   | ACC-4        |     |                   |
-| ACC-6  | Store switcher and store settings                                    | Todo   | ACC-3        |     | Q3 extra stores   |
-| ACC-7  | Devices list and remote sign-out; TOTP 2-step                        | Todo   | ACC-3        |     |                   |
-| ACC-8  | Web: sign-up, sign-in, team, store settings screens                  | Todo   | ACC-5, WEB-3 |     |                   |
+| ID     | Task                                                                                                  | Status | Depends      | PR  | Notes             |
+| ------ | ----------------------------------------------------------------------------------------------------- | ------ | ------------ | --- | ----------------- |
+| ACC-1  | SMS driver interface and one provider driver                                                          | Todo   |              |     |                   |
+| ACC-2  | Sign-up and sign-in by SMS code (users, stores, memberships)                                          | Todo   | ACC-1, DB-1  |     |                   |
+| ACC-9  | Email driver: SendGrid for production, SMTP to Mailpit for local dev and tests; sign-in by email code | Todo   | ACC-2        |     | D20, D22          |
+| ACC-10 | Password sign-in for phone and email; forgot password                                                 | Todo   | ACC-2        |     | D20               |
+| ACC-11 | Google sign-in (OpenID Connect)                                                                       | Todo   | ACC-2        |     | D20               |
+| ACC-3  | Sessions: cookie, Valkey cache, `@CurrentUser`, `@RequirePermission`                                  | Todo   | ACC-2        |     |                   |
+| ACC-4  | Roles and permissions function with built-in roles                                                    | Todo   | ACC-3        |     | Q10 roles in code |
+| ACC-5  | Invite, accept and remove members                                                                     | Todo   | ACC-4        |     |                   |
+| ACC-6  | Store switcher and store settings                                                                     | Todo   | ACC-3        |     | Q3 extra stores   |
+| ACC-7  | Devices list and remote sign-out; TOTP 2-step                                                         | Todo   | ACC-3        |     |                   |
+| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | Todo   | ACC-5, WEB-3 |     |                   |
 
 ## M2. Shared plumbing
 
