@@ -25,6 +25,7 @@ export class AppError extends Error {
 
 export const PLATFORM_ERRORS = {
   VALIDATION_FAILED: { status: 400, message: 'The request is not valid' },
+  PERMISSION_DENIED: { status: 403, message: 'You do not have permission to do this' },
   STORE_REQUIRED: { status: 401, message: 'Sign in to a store to continue' },
   INTERNAL_ERROR: { status: 500, message: 'Something went wrong' },
 } as const satisfies ErrorCatalog;

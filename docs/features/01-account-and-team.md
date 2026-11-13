@@ -314,6 +314,12 @@ Roles: four built-in roles live in code, `team/built-in-roles.ts` (Shop counter 
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
 
+The permission policy and four built-in roles are implemented (ACC-4). Every built-in role gets Dashboard View; Segments follows Customers. Areas absent from a role grant no access. Only Owner and Admin have the three flags. Unknown roles grant no access. `edit` includes `view`.
+
+`billing.edit`, store closing and ownership transfer always require the Owner. Custom role JSON accepts at most Billing View. Creating, editing or assigning a role must pass `canGrantRole`: every proposed area level and flag must be within the acting member's own access, including Owner authority.
+
+`TeamModule` exports `PermissionGuard` and its policy evaluator. The guard reads trusted `request.userId`, `request.storeId` and `request.access`. It supports `@RequirePermission`, `@AnyMember`, `@RequireUser` and `@Public`; missing classification or insufficient access returns `403 PERMISSION_DENIED`. Method access rules override controller rules. A signed-in user without a store can use `@RequireUser` routes. A known active member can use `@AnyMember` regardless of area levels. Session loading and production guard registration remain ACC-3; route inventory checks remain API-3. Existing store routes still return `401 STORE_REQUIRED` until session loading is built.
+
 Password and 2-step: a password is optional (Argon2id). TOTP is optional for everyone in release 1 (D35). Requiring it for Owners before connecting a payment gateway is built with PAY-2.
 
 ### Rules

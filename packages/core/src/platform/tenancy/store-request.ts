@@ -1,5 +1,9 @@
-// The auth middleware (not built yet) sets storeId after verifying the session token.
-// Nothing else may set it: never read a store id from the body, query or a header.
+import type { StoreAccess } from '@dakly/contracts/team';
+
+// The session layer sets these fields after checking the session and active membership.
+// Only this layer may set them; never read store access from incoming request data.
 export type StoreRequest = {
   storeId?: string;
+  userId?: string;
+  access?: StoreAccess;
 };
