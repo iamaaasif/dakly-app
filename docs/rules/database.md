@@ -43,6 +43,9 @@ PostgreSQL 16 with Drizzle ORM ([ADR 0002](../adr/0002-drizzle-orm.md)) and row 
 
 ## Transactions and locks
 
+- Services use `StoreTransaction.run(storeId, work)` for atomic actions across repositories or features. `runForNewStore(work)` supplies a generated UUID v7. Services never receive a Drizzle transaction. Each repository still calls `TenantDatabase.forStore`, which joins the active transaction for the same store and rejects another store. Errors that escape the action roll back every participating write; nested calls do not create savepoints.
+- Await all database work inside the action. Once it settles, inherited asynchronous callbacks cannot use its transaction. Global `users` and `sessions` are written outside store actions, with their commit order and retry path stated by the flow.
+
 - A transaction covers one business action and nothing slow. Never hold a transaction or a row lock while calling the AI model, a payment gateway, a courier or Meta. Read, release, call the vendor, then write in a new short transaction with a guard (pending review must-fix):
 
 ```ts

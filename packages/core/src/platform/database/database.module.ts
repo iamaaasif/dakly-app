@@ -2,6 +2,7 @@ import { Global, Inject, Injectable, Module, type OnApplicationShutdown } from '
 import { createDatabase } from '@dakly/db/client';
 import { loadEnv } from '../config/env';
 import { DATABASE, DATABASE_CONNECTION } from './database.tokens';
+import { StoreTransaction } from './store-transaction';
 import { TenantDatabase } from './tenant-database';
 
 type Connection = ReturnType<typeof createDatabase>;
@@ -29,7 +30,8 @@ class DatabaseShutdown implements OnApplicationShutdown {
     },
     DatabaseShutdown,
     TenantDatabase,
+    StoreTransaction,
   ],
-  exports: [TenantDatabase],
+  exports: [TenantDatabase, StoreTransaction],
 })
 export class DatabaseModule {}
