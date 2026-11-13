@@ -321,7 +321,7 @@ Password and 2-step: a password is optional (Argon2id). TOTP is optional for eve
 1. Exactly one Owner per store. Transfer needs the new owner to accept and the old owner's code.
 2. An Owner cannot remove themselves. An Admin cannot change an Owner.
 3. A removed member's sessions stop working on the next request.
-4. Every change to roles, members, 2-step settings and sessions writes the audit log.
+4. Every change to roles and members writes the store audit log. Every change to a person's sign-in methods, 2-step settings and sessions writes `account_security_events` once, under the user.
 5. Turning an extension off hides its pages and nav entries and keeps all its data.
 
 ### Permissions
