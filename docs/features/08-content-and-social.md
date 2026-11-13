@@ -203,7 +203,7 @@ Emits `post.scheduled`, `post.published`, `post.failed`.
 
 ### Data
 
-`brand_profiles`, `posts`, `post_targets`, `posting_slots`, `post_metrics`, `media_assets`. `content_generations` is cut by the schema review; generations would live in `ai_runs` (pending review).
+`brand_profiles`, `posts`, `post_targets` (metrics as columns, refreshed), `files` for media. The posting schedule lives in each connection's `settings`; AI captions are `ai_runs`. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

@@ -269,7 +269,7 @@ Listens to most events to create notifications: `conversation.handed_over`, `pay
 
 ### Data
 
-`notifications`, `notification_reads` or one row per user (pending review), `push_subscriptions`.
+`notifications` (one row per user, unique per store, user and dedupe key), `push_subscriptions`, `assistant_messages`. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

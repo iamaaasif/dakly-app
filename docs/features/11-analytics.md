@@ -217,7 +217,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 
 ### Data
 
-Summary tables per store and day, owned by `analytics/`. Exact list pending the schema review.
+`store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The metric list is task ANA-1. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

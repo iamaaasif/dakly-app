@@ -362,7 +362,7 @@ Emits `payment.succeeded`, `payment.failed`, `payment.refunded`, `subscription.r
 
 ### Data
 
-`payment_intents`, `payment_events`, `payment_gateway_credentials`, `payment_links`, `refunds`, `subscriptions`, `invoices`, `wallet_ledger`, `usage_events`. `usage_period_totals` is cut by the schema review (pending review).
+`payment_gateway_credentials`, `payment_intents` (also the payment link, by `short_code`), `payment_events` (append-only), `refunds`, `plans`, `coupons`, `subscriptions`, `invoices`, `invoice_counters`, `wallet_ledger` (append-only), `usage_events`. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

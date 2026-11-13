@@ -337,7 +337,7 @@ Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_
 
 ### Data
 
-`conversations`, `messages`, `saved_replies`, `ai_settings`, `knowledge_items`, `knowledge_chunks` (pgvector, exact scan per store), `ai_runs`, `usage_events`. `ai_test_cases` is deferred by the schema review (pending review).
+`conversations` (with `version` for the AI write check), `messages`, `social_comments`, `saved_replies`, `ai_agent_settings` (go-live test questions included), `knowledge_items`, `knowledge_chunks` (pgvector, exact scan per store), `ai_runs`, `assistant_messages`; usage goes to `usage_events`. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

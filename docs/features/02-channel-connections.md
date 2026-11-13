@@ -157,7 +157,7 @@ Emits `channel.connected`, `channel.needs_reconnect`, `channel.disconnected`.
 
 ### Data
 
-`channel_connections`, `webhook_events` (global, no `store_id`; read only by the intake job). The lookup function is `SECURITY DEFINER` with `search_path` set and `EXECUTE` granted only to the app role (pending review must-fix).
+`channel_connections` (posting schedule and WhatsApp ids in `settings`), `sms_sender_ids`, `webhook_events` (global, no `store_id`). The webhook finds its store through `store_id_for_channel_account`, a hardened `SECURITY DEFINER` function ([ADR 0005](../adr/0005-cross-store-access-through-functions.md)). Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

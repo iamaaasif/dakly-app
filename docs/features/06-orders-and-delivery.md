@@ -283,7 +283,7 @@ Emits `order.created`, `order.stage_changed`, `order.confirmed`, `order.cod_coll
 
 ### Data
 
-`orders` (with `courier_name` and `tracking_code` columns in release 1), `order_items`, `order_stage_events` (pending review: the schema review merges it into `audit_log`), `store_counters`, `delivery_zones`, `delivery_areas`. Courier tables (`courier_connections`, `shipments`, `cod_settlements`) come with the courier integration in a later release.
+`orders` (buyer in `contact_id`; delivery recipient as a snapshot per D26; `is_self_delivery` for D27; manual `courier` and `tracking_code` in release 1), `order_items`, `store_counters`, `delivery_zones` (district and upazila ids from `bd_areas`), `bd_areas` (global reference data). The stage timeline reads `audit_log` ([ADR 0006](../adr/0006-history-folded-into-parent-rows.md)). Courier tables come with the courier integration in a later release. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

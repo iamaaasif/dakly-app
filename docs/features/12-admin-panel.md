@@ -266,7 +266,7 @@ Shops list and detail; support access with the owner's consent; plans, prices, c
 
 ### Data
 
-`staff_users`, `staff_sessions`, `support_grants`, `staff_approvals` (deferred by the schema review, pending), `staff_audit_log`, `feature_flags`, `plan_catalogue`, `whatsapp_rates`. All global, no `store_id`.
+`staff_users`, `staff_sessions`, `staff_audit_log`, `staff_approvals`, `platform_settings` (AI models, rates, announcements), all global; `support_grants` lives under the store's RLS so the owner approves it in the shop app. Plans and coupons are in feature 07's tables. Store lists read `admin_store_overview` ([ADR 0005](../adr/0005-cross-store-access-through-functions.md)). Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

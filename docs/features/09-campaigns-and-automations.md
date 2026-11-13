@@ -387,7 +387,7 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 
 ### Data
 
-`campaigns`, `campaign_recipients`, `whatsapp_templates`, `short_links` (`tracked_links` in the schema review), `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`. The builder (D23) adds the two `automation_*` tables to the schema review's 54. `campaigns.channel` allows `messenger`; recipient skip reasons add `meta_user_limit`, `window_closed`, `do_not_call` and `daily_reach_limit`. `touches` is cut by the schema review (pending review).
+`whatsapp_templates`, `campaigns` (roll-up counts, `paused` and `failed` states), `campaign_recipients`, `tracked_links`, `automations`, `automation_versions`, `automation_runs`, `automation_run_steps`. `campaigns.channel` allows `messenger`; recipient skip reasons include `meta_user_limit`, `window_closed`, `do_not_call` and `daily_reach_limit`. Attribution is columns on `orders`. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

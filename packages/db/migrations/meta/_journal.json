@@ -15,6 +15,20 @@
       "when": 1794494098285,
       "tag": "0001_store_isolation_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794546641806,
+      "tag": "0002_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794546740272,
+      "tag": "0003_release_1_schema",
+      "breakpoints": true
     }
   ]
 }

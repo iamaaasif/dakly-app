@@ -1,7 +1,7 @@
-# Local development only: Postgres and Redis. Production uses DigitalOcean managed services.
+# Local development only: Postgres (with pgvector) and Redis. Production uses DigitalOcean managed services.
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: dakly
       POSTGRES_PASSWORD: dakly

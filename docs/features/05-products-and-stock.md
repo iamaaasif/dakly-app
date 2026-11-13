@@ -146,7 +146,7 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
 ### Data
 
-`products`, `product_options`, `variants`, `stock_movements`, `product_media`. `restock_requests` is deferred by the schema review (pending review).
+`products` (options as JSON, search embedding), `product_variants` (on hand and reserved), `stock_movements` (append-only), `restock_requests`, `files` for photos. Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 

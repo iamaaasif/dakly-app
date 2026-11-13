@@ -23,10 +23,12 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint             | Done      | FND-1   | #2  | Merged                                                     |
 | FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security      | In review | FND-3   | #3  | This PR                                                    |
 | FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules     | In review | FND-4   | #4  | This PR                                                    |
-| DB-1  | UUID v7 ids generated in the app; switch existing tables                             | Todo      |         |     |                                                            |
-| DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-1    |     |                                                            |
-| DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-1    |     |                                                            |
+| DB-1  | UUID v7 ids generated in the app; switch existing tables                             | In review |         | #6  | Done in DB-5; `customers` goes with CUS-1                  |
+| DB-2  | Outbox table, outbox relay job, event publishing helper                              | Todo      | DB-5    |     | Table in DB-5; relay and helper left                       |
+| DB-3  | Audit log table and `AuditService.record`                                            | Todo      | DB-5    |     | Table in DB-5; `AuditService` left                         |
 | DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                         | Todo      |         |     |                                                            |
+| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs               | In review |         | #6  | [data/](data/README.md); ADRs 0005 to 0007                 |
+| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                 | Todo      | DB-5    |     |                                                            |
 | API-1 | Logging (nestjs-pino), request ids, Sentry                                           | Todo      |         |     |                                                            |
 | API-2 | Rate limiting with Valkey storage                                                    | Todo      |         |     |                                                            |
 | API-3 | Route test that fails when a store route has no permission decorator                 | Todo      | ACC-3   |     |                                                            |

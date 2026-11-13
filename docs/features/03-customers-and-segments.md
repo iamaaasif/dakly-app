@@ -288,7 +288,7 @@ Emits `contact.created`, `contact.merged`, `consent.changed`, `segment.saved`. L
 
 ### Data
 
-`contacts`, `contact_identities`, `consents`, `contact_stats`, `tags`, `contact_tags`, `segments`, `imports`. `contact_merges` (undo for 7 days) is cut by the schema review (pending review).
+`contacts` (own phone saved under D27, unique per store; tags as a text array), `contact_match_suggestions` (possible matches for staff, including a D27 phone conflict), `contact_identities`, `consents` (append-only; read through the view `contact_consent_current`), `contact_stats` (no return risk; D26 reads it from orders by delivery phone), `segments`, `imports`, `tasks`. Merges are final and recorded in `audit_log`; the 7-day undo is an open gap in [feature-check.md](../data/feature-check.md). Full design: [docs/data](../data/README.md).
 
 ### Edge cases to test
 
