@@ -44,7 +44,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 | Create account (step 1 of 4)          | Full name, mobile, email (optional), password with strength meter, agree to Terms and Privacy.                                                                                                                                                                                                                                                        |
 | Verify (step 2 of 4)                  | 6-digit code boxes, resend timer 0:30, change number.                                                                                                                                                                                                                                                                                                 |
 | Business details (step 3 of 4)        | Business name, what you sell (8 chips), district (64), how you sell (4 multi-select cards: Facebook or social media; Online store; Shop with a POS; Shop without a POS), customer list size (Under 500; 500–2,000; 2,000–10,000; Over 10,000).                                                                                                        |
-| Pick a plan (step 4 of 4)             | Monthly / Yearly switch, 4 plan cards; paid plans say "Start 14-day free trial".                                                                                                                                                                                                                                                                      |
+| Pick a plan (step 4 of 4)             | Monthly / Yearly switch, 4 plan cards; paid plans say "Start N-day free trial", with N from the plan (D34).                                                                                                                                                                                                                                           |
 | Forgot password / New password / Done | Mobile number or email → code → new password (8+ characters with a number) → success.                                                                                                                                                                                                                                                                 |
 | Setup checklist (Dashboard)           | Built from the "how you sell" answers (see How it works). Shows "N of M done", each step with a button, Hide guide, Change setup.                                                                                                                                                                                                                     |
 | Extensions                            | 4 cards (Sales, Chats, Physical Shop, Social Auto Post): on/off switch, what it adds, Open. Header "N of 4 on".                                                                                                                                                                                                                                       |
@@ -60,7 +60,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 1. Step 1 validates fields inline. Mobile must be a valid Bangladeshi number not already registered; if it is, show "This number already has an account. Sign in instead" with a link.
 2. Dakly sends a 6-digit SMS code (valid 10 minutes, max 5 tries, resend after 30 seconds, max 5 sends per number per hour and 20 per IP per hour).
 3. Step 3 saves the store: name, business type, district (prefills Store settings), "how you sell" and size. Size sets the suggested plan (Under 500 → Starter; 500–2,000 → Starter; 2,000–10,000 → Growth; Over 10,000 → Pro), shown with a "Recommended" badge.
-4. Step 4: picking Free starts the Free plan; picking a paid plan starts a 14-day trial of it with no payment method. The trial banner in Plan and usage says when it ends.
+4. Step 4: picking Free starts the Free plan; picking a paid plan starts a trial of it with no payment method, as long as the plan's trial length set in the admin panel (D34; 0 means no trial). The trial banner in Plan and usage says when it ends.
 5. On finish, Dakly turns extensions on from the "how you sell" answers (see rule ACC-R5), shows the toast "Dakly is set up for how you sell. Turned on: …" and lands on the Dashboard with the setup checklist open.
 
 **Setup checklist**
@@ -348,7 +348,7 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 
 ### Acceptance
 
-- Given a new number, when the person enters the right code, then a store exists with them as Owner and a 14-day trial.
+- Given a new number, when the person enters the right code, then a store exists with them as Owner and a trial as long as the chosen plan's `trial_days`.
 - Given a Support agent, when they open Campaigns, then the page says they have no access, and the API returns `403 PERMISSION_DENIED` for campaign routes.
 
 ## Open questions

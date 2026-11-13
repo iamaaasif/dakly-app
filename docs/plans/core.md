@@ -14,7 +14,7 @@ The feature doc contradicts itself in a few places ([review](../reviews/features
 | C2  | Session lifetime (F09)                | ACC-R3: "Keep me signed in" lasts 30 days, sliding. Otherwise the session ends after 12 hours without a request.                                                                     |
 | C3  | Owner count (F11)                     | Exactly one Owner per store (the schema already allows at most one). Ownership moves only by transfer.                                                                               |
 | C4  | Sign-up identity                      | Every new account verifies a mobile number (step 1 screen, ACC-R4). Email code, email password and Google are ways to sign in to an account that has them.                           |
-| C5  | Free or trial (review, line 144)      | Picking Free starts Free with no trial. Picking a paid plan starts a 14-day trial of it.                                                                                             |
+| C5  | Free or trial (review, line 144)      | Decided by D34: the trial length is `plans.trial_days`, set in the admin panel. A plan with 0 days (Free at launch) starts with no trial. Nothing in code says 14.                   |
 | C6  | Web and API origin (code review CF-2) | Same origin: the web app forwards `/api/*` to the API (Next.js rewrites locally, the load balancer in production). No CORS. The `Origin` check still runs on every write.            |
 | C7  | MFA (F10)                             | TOTP is optional in release 1. Requiring it for Owners before a payment gateway connects is built with PAY-2, not here.                                                              |
 
@@ -34,15 +34,15 @@ Config refuses to start in production with a Mailpit, SMTP or fake driver select
 
 ## Shape of the code
 
-| Folder in `packages/core/src` | Owns                                                                                                                           |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `platform/`                   | Database scope, Valkey client, rate limiter, cookie and origin checks, `@RequirePermission` and the guards that read `request` |
-| `auth/`                       | `users` table, sign-in codes, passwords, Google, sign-up                                                                       |
-| `sessions/`                   | `sessions` table, cookie token, the global guard that loads a session, store switching                                         |
-| `stores/`                     | `stores`, `store_counters`, store settings, extensions                                                                         |
-| `team/`                       | `memberships`, `roles`, `permissions.ts`, built-in roles, invites                                                              |
-| `billing/`                    | Only `BillingService.startPlan` in M1; the rest is PAY-7                                                                       |
-| `audit/`                      | `AuditService.record`                                                                                                          |
+| Folder in `packages/core/src` | Owns                                                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `platform/`                   | Database scope, Valkey client, rate limiter, cookie and origin checks, `@RequirePermission` and the guards that read `request`            |
+| `auth/`                       | `users` table, sign-in codes, passwords, Google, sign-up                                                                                  |
+| `sessions/`                   | `sessions` table, cookie token, the global guard that loads a session, store switching                                                    |
+| `stores/`                     | `stores`, `store_counters`, store settings, extensions                                                                                    |
+| `team/`                       | `memberships`, `roles`, `permissions.ts`, built-in roles, invites                                                                         |
+| `billing/`                    | Only `BillingService.startPlan` in M1, reading `plans`; the rest is PAY-7. No price, trial length or discount is a constant in code (D34) |
+| `audit/`                      | `AuditService.record`                                                                                                                     |
 
 Platform cannot import features ([.dependency-cruiser.cjs](../../.dependency-cruiser.cjs)). So `platform` holds only the decorator and guards that read `request.storeId`, `request.userId` and `request.access`; `sessions/` fills them in by calling `TeamService`.
 
@@ -113,10 +113,20 @@ Each task is one PR under about 500 lines, in this order. "Done when" is the acc
 - Rules: phone through `bdMobileSchema`; codes and phones never logged; the SMS is sent after the code is saved, outside any transaction.
 - Tests: unit for every rule above (expiry, 5 tries, reuse, resend timer, lockout, send limits); `app.inject()` for sign-up then sign-in with the fake driver; a used code fails the second time.
 
+### PAY-10 · Plan catalogue and coupons as admin data
+
+- Scope (D34): one migration (`--name plan_trials_and_coupon_duration`), contracts and docs. Nothing else reads these columns until ACC-16 and PAY-7.
+  - `plans.trial_days smallint not null default 0`, check 0 to 90. 0 means no trial.
+  - `coupons.duration` (`once`, `months`, `forever`) and `coupons.duration_months` (set only for `months`, 1 to 36), the admin panel doc's "once, N months, forever".
+  - `subscriptions.coupon_id` (references `coupons`) and `subscriptions.coupon_months_left` (null unless the coupon's duration is `months`), so renewals know which discount still applies.
+  - A data migration (`--name plans_catalogue`) inserts the four plans from `seed.ts` with `trial_days` 0 for Free and 14 for the paid plans, only where the code does not exist yet. These are starting values; staff change them in the admin panel (ADM-4), and prices stay placeholders until Q1.
+- Rules: [database.md](../rules/database.md); never edit an applied migration; regenerate the ER diagram (`pnpm db:diagram`).
+- Tests: integration that the checks refuse `trial_days` 91, a `months` coupon without months, and a `once` coupon with months; `pnpm lint:docs` passes with the new diagram.
+
 ### ACC-16 · Create the store and start the plan
 
-- Scope: plans as data: a migration inserts the four plans from `seed.ts` (`--name plans_catalogue`; prices are placeholders until Q1, editable later from the admin panel). `POST /stores` (session with no store, and the user owns no store yet) takes business name, business type, district, how you sell, customer list size and plan code. In one `StoreTransaction.runForNewStore`: store with a generated slug, `store_counters`, Owner membership, `BillingService.startPlan` (C5), extensions from ACC-R5, audit row `store.created`. Then the session's active store becomes the new store. Response includes the recommended plan rule for the web form (size → plan).
-- Tests: unit for ACC-R5 and the size → plan mapping; integration that a failure in `startPlan` leaves no store, membership or counter; acceptance from the feature doc: Growth with "Facebook or social media" gives a Growth trial ending in 14 days with Sales, Chats and Social Auto Post on; Free gives no trial; a second `POST /stores` gives `409 STORE_LIMIT_REACHED` (Q3).
+- Scope: `POST /stores` (session with no store, and the user owns no store yet) takes business name, business type, district, how you sell, customer list size and plan code. In one `StoreTransaction.runForNewStore`: store with a generated slug, `store_counters`, Owner membership, `BillingService.startPlan` (reads the chosen plan row: a public plan only; `trial_days` > 0 starts `trialing` with `trial_ends_at` = now + `trial_days`, price from the plan row; 0 starts the plan with no trial), extensions from ACC-R5, audit row `store.created`. Then the session's active store becomes the new store. Response includes the recommended plan rule for the web form (size → plan).
+- Tests: unit for ACC-R5 and the size → plan mapping; integration that a failure in `startPlan` leaves no store, membership or counter; acceptance from the feature doc: Growth with "Facebook or social media" gives a Growth trial ending after the plan's `trial_days` with Sales, Chats and Social Auto Post on; after staff change Growth's `trial_days` to 30, the next sign-up gets 30 days and existing trials keep their end date; a plan with 0 days gives no trial; a non-public plan code is refused; a second `POST /stores` gives `409 STORE_LIMIT_REACHED` (Q3).
 
 ### ACC-9 · Email driver and sign-in by email code
 

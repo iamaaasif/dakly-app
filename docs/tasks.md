@@ -44,23 +44,24 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
-| ID     | Task                                                                                                  | Status  | Depends             | PR  | Notes                                            |
-| ------ | ----------------------------------------------------------------------------------------------------- | ------- | ------------------- | --- | ------------------------------------------------ |
-| ACC-4  | Permissions function, built-in roles, `@RequirePermission`                                            | Todo    |                     |     |                                                  |
-| ACC-3  | Sessions: cookie, Valkey cache, session guard, origin check, store switching                          | Todo    | ACC-4, API-2, REV-3 |     |                                                  |
-| ACC-1  | SMS driver interface, Mailpit dev driver                                                              | Todo    |                     |     | Real provider is ACC-14                          |
-| ACC-2  | Sign-up and sign-in by SMS code                                                                       | Todo    | ACC-1, ACC-3        |     |                                                  |
-| ACC-16 | Create the store and start the Free plan or a trial                                                   | Todo    | ACC-2, REV-4, DB-3  |     | Plan prices wait for Q1                          |
-| ACC-9  | Email driver: SendGrid for production, SMTP to Mailpit for local dev and tests; sign-in by email code | Todo    | ACC-2               |     | D20, D22                                         |
-| ACC-10 | Password sign-in for phone and email; forgot password                                                 | Todo    | ACC-2               |     | D20                                              |
-| ACC-11 | Google sign-in (OpenID Connect)                                                                       | Todo    | ACC-2               |     | D20; dev uses a fake driver                      |
-| ACC-5  | Invite, accept and remove members                                                                     | Todo    | ACC-16              |     |                                                  |
-| ACC-17 | Custom roles                                                                                          | Todo    | ACC-5               |     |                                                  |
-| ACC-6  | Store switcher and store settings                                                                     | Todo    | ACC-16              |     | Q3 extra stores                                  |
-| ACC-7  | Devices list and remote sign-out; TOTP 2-step                                                         | Todo    | ACC-3, DB-4         |     |                                                  |
-| ACC-14 | SMS provider driver for production                                                                    | Blocked | ACC-1               |     | Waits for the SMS provider account and sender id |
-| ACC-15 | Cross-store test for every store route                                                                | Todo    | ACC-5, ACC-6, API-3 |     | M1 exit check                                    |
-| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | Todo    | ACC-5, WEB-3        |     |                                                  |
+| ID     | Task                                                                                                  | Status  | Depends                    | PR  | Notes                                            |
+| ------ | ----------------------------------------------------------------------------------------------------- | ------- | -------------------------- | --- | ------------------------------------------------ |
+| ACC-4  | Permissions function, built-in roles, `@RequirePermission`                                            | Todo    |                            |     |                                                  |
+| ACC-3  | Sessions: cookie, Valkey cache, session guard, origin check, store switching                          | Todo    | ACC-4, API-2, REV-3        |     |                                                  |
+| ACC-1  | SMS driver interface, Mailpit dev driver                                                              | Todo    |                            |     | Real provider is ACC-14                          |
+| ACC-2  | Sign-up and sign-in by SMS code                                                                       | Todo    | ACC-1, ACC-3               |     |                                                  |
+| PAY-10 | Plan trial length, coupon duration and the starting plan catalogue as data                            | Todo    |                            |     | D34; [plan](plans/core.md)                       |
+| ACC-16 | Create the store and start the Free plan or a trial                                                   | Todo    | ACC-2, REV-4, DB-3, PAY-10 |     | Plan prices wait for Q1                          |
+| ACC-9  | Email driver: SendGrid for production, SMTP to Mailpit for local dev and tests; sign-in by email code | Todo    | ACC-2                      |     | D20, D22                                         |
+| ACC-10 | Password sign-in for phone and email; forgot password                                                 | Todo    | ACC-2                      |     | D20                                              |
+| ACC-11 | Google sign-in (OpenID Connect)                                                                       | Todo    | ACC-2                      |     | D20; dev uses a fake driver                      |
+| ACC-5  | Invite, accept and remove members                                                                     | Todo    | ACC-16                     |     |                                                  |
+| ACC-17 | Custom roles                                                                                          | Todo    | ACC-5                      |     |                                                  |
+| ACC-6  | Store switcher and store settings                                                                     | Todo    | ACC-16                     |     | Q3 extra stores                                  |
+| ACC-7  | Devices list and remote sign-out; TOTP 2-step                                                         | Todo    | ACC-3, DB-4                |     |                                                  |
+| ACC-14 | SMS provider driver for production                                                                    | Blocked | ACC-1                      |     | Waits for the SMS provider account and sender id |
+| ACC-15 | Cross-store test for every store route                                                                | Todo    | ACC-5, ACC-6, API-3        |     | M1 exit check                                    |
+| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | Todo    | ACC-5, WEB-3               |     |                                                  |
 
 ## M2. Shared plumbing
 
