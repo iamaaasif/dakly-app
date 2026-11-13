@@ -71,7 +71,7 @@ Facebook sellers lose orders because nobody answers "price koto?" at 11 pm. Chat
 
 **Taking an order in chat**
 
-1. When the customer shares any of name, phone, address or district, Dakly fills a draft order in the side panel and saves the person as a lead as soon as a valid phone appears (toast "Dakly saved Sadia Islam as a new lead from Messenger").
+1. Keep the chat contact as the buyer. When delivery name, phone, address or district arrives, fill the draft order's recipient details. If the buyer orders for someone else, these details belong only to the order and do not overwrite or merge the buyer profile. The buyer can remain identified by the chat without a phone (D26).
 2. Missing fields are asked for in one message ("অর্ডার করতে নাম, ফোন আর ঠিকানা দিন।").
 3. When complete, Dakly creates the order with status To confirm and sends the summary: items, size, total with delivery, COD, address, "ঠিক থাকলে 'হ্যাঁ' লিখুন।" (toast "Dakly AI took an order from Habib Rahman (#1063)").
 4. If "Confirm orders" is on and the customer says yes, the order moves to To pack ("confirmed by the customer"), stock is reserved, and Dakly replies that it will be packed and sent.
@@ -126,7 +126,7 @@ chat.message\_received, chat.ai\_replied, chat.handed\_over, chat.taken\_over, c
 
 - Given auto-reply is on and Women's Kurti M has 3 in stock at ৳1,850, when a customer writes "Kurti ta M size ache? price koto?", then within 10 seconds Dakly replies in Banglish or Bangla with the price, that M is in stock, the delivery charge for Dhaka and how to order.
 - Given "Damaged, wrong or fake product" is on, when a customer writes "kapor chera ashche", then Dakly sends the holding reply, the chat moves to Needs you with reason "Complaint", and the AI sends nothing more.
-- Given a customer shares name, phone and address, when the order is complete, then an order appears in Orders › To confirm with source Messenger and the customer appears in Customers › Leads from chats.
+- Given Rahim shares Karim's name, phone and address for delivery, when the order is complete, then it appears in Orders › To confirm with source Messenger under Rahim's chat contact and keeps Karim's details on that order. Karim's profile and purchase history do not change (D26).
 - Given the owner types "ঢাকার বাইরে ১৫০ টাকা" and saves, when a customer from Sylhet asks the delivery charge, then Dakly says ৳150.
 - Given a Messenger chat whose last customer message was 26 hours ago, then the AI does not reply and a person can still reply with the human agent tag.
 

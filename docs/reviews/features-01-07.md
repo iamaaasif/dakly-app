@@ -10,11 +10,11 @@ These are documentation and planning findings. A planned feature that has no imp
 
 ## Findings that affect security, stock or money
 
-### F01. Closed by product decision
+### F01. Closed by buyer and recipient decision
 
-[D25](../product/decisions.md) adds no OTP or separate phone check. Instead it narrows which confirmations verify a phone: a WhatsApp reply from that number, the SMS confirmation link sent to that number, staff confirmation or delivery. A yes in a Messenger or Instagram chat confirms the order but only creates a possible match for staff.
+[D26](../product/decisions.md) supersedes D25's matching rule. An order remains under the buyer, while another person's delivery name, phone and address stay on that order. No OTP or separate phone-possession check is required. Staff can confirm and mark delivery, but these actions do not verify buyer identity or merge contacts.
 
-Acceptance: type another contact's phone in Messenger, confirm an order there and ask the AI about past orders. No merge happens, a possible match is shown to staff, and no order of the other contact is revealed. Confirming the same order by WhatsApp reply from that number, by the SMS link, by staff or on delivery merges automatically.
+Acceptance: Rahim orders for Karim; keep the purchase under Rahim with Karim's delivery snapshot. Reverse the people and keep the new purchase under Karim. Staff confirmation, recipient confirmation and delivery preserve the buyer and both profiles. Count each order once under its buyer, even when its recipient is an existing customer.
 
 ### F02. The common stock guard blocks valid shipping and cancellation
 
@@ -181,7 +181,7 @@ Source: [feature 03](../features/03-customers-and-segments.md), lines 41–142 a
 | List, search, filters, sorting, columns, bulk actions          | CUS-5                    | List covered; bulk backend ownership partial                                   |
 | Profile, orders/activity/campaign tabs, notes/preferences      | CUS-5 plus ORD/CHAT/CAMP | Partial cross-feature timeline and permissions                                 |
 | Manual add/edit and contact kinds                              | CUS-1/5                  | Partial; F12                                                                   |
-| Phone/channel identities, duplicate suggestions, merge         | CUS-1/4                  | Covered; D25 closes F01 with narrowed verification; F13/F14 remain             |
+| Phone/channel identities, duplicate suggestions, merge         | CUS-1/4                  | Covered; D26 closes F01; buyer and recipient separate; F13/F14 remain          |
 | Seven-day merge undo                                           | Q10                      | Unresolved storage/scope; F29                                                  |
 | Consent ledger, opt-out, blocks, evidence                      | CUS-2, CAMP-3            | Covered; F14/F15                                                               |
 | Phone masking and export flags                                 | ACC-4, CUS-5, API-3      | Shared rules already require server-side masking                               |
@@ -216,7 +216,7 @@ Source: [feature 04](../features/04-chats-and-ai-agent.md), lines 42–192 and 2
 | Not a customer and channel blocking                      | CUS-1, CHAT-3/5            | Partial; exclusions specified                                                      |
 | AI settings, language, tone and pause scopes             | AI-4/8                     | Covered; F18                                                                       |
 | Knowledge/teach/files/links/feedback/version undo        | AI-3/8                     | Knowledge covered; feedback/version and voice-teaching workflow partial            |
-| Classification, retrieval, fact checks, tool access      | AI-4/5                     | Covered; F19/F20; D25 merge rule gates history                                     |
+| Classification, retrieval, fact checks, tool access      | AI-4/5                     | Covered; F19/F20; D26 keeps purchase history with buyer                            |
 | Draft/confirm/edit/cancel order                          | AI-5, ORD-3/4              | Covered; F03/F20/F22                                                               |
 | Handover, provider failure, spend/fairness controls      | AI-2/4                     | Covered; F06/F07 and Q15                                                           |
 | Practice mode, test suite, Go live, last-50-chat batch   | AI-6/7/8                   | Covered tasks; F29 storage and pass criteria unresolved                            |

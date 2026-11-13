@@ -19,6 +19,7 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - Q13: Shopify and WooCommerce sync is not built until Asif confirms it is in release 1.
 - Schema review (pending review): contacts are merged automatically only on a verified phone number. Name or email matches only suggest a merge.
 - D20: email addresses are stored and verified, but email marketing consent is not offered until email campaigns ship.
+- D26: delivery recipient details belong to the order. They do not replace the buyer profile, merge contacts or move purchase history. No OTP is required.
 
 ## Product requirements
 
@@ -52,9 +53,9 @@ One clean list of every person who buys from the shop, wherever they bought, wit
 
 **Identity and merging**
 
-1. Every incoming person (chat, store sync, POS, import, manual, voice, khata) is normalised to an 11-digit phone. If a customer with that phone exists in the store, the new data merges into it; otherwise a new contact is created.
+1. Normalise a person's own phone to 11 digits when supplied, and apply the identity-matching rules below before linking an existing contact. A chat contact may have no phone. A delivery recipient's phone belongs to the order and is excluded from buyer matching (D26).
 2. Merge rule for conflicting fields: keep the existing value unless it's empty; names from a store sync or the owner's own edits win over names from a chat profile; addresses keep the most recent; tags and consents are combined (a consent "no" from any source wins over "yes").
-3. Chat contacts without a phone are kept as chat-only contacts linked to their Messenger PSID or Instagram ID. When they share a phone, Dakly links them to the matching customer and says "Dakly matched Sadia Islam to an existing customer".
+3. Chat contacts without a phone remain linked to their Messenger PSID or Instagram ID. An own-phone match follows the identity rules below; a typed phone alone suggests a match for staff. Sharing another person's delivery details never links or merges that person with the chat buyer (D26).
 4. Possible duplicates (same name and district, phone differs by 1 digit, or same email) are listed in a "Possible duplicates" view for manual Merge or Keep separate. Merging keeps the older record's ID and moves all orders, chats and notes.
 
 **Consent**
@@ -121,7 +122,7 @@ customer.created, customer.updated, customer.merged, customer.consent_changed, c
 
 ### Acceptance criteria
 
-- Given a Shopify customer with phone 01712-458903 exists, when the same person messages on Messenger and shares "01712458903", then no new customer is created and the chat links to that customer.
+- Given an existing customer has phone 01712-458903, when a Messenger buyer enters that phone as a delivery recipient, then the order stays with the Messenger buyer and the existing customer is not merged or assigned the purchase (D26).
 - Given the owner types "customers who bought more than twice but haven't ordered in 45 days", then the builder shows Number of orders is more than 2 AND Days since last order is more than 45, with a live count.
 - Given a customer replies STOP to an SMS campaign, then their SMS consent becomes no within 1 minute and they are excluded from the next SMS send.
 - Given an import of 1,248 rows with 12 invalid phones, then results show 12 skipped and the error report lists each row and reason.
@@ -250,8 +251,10 @@ The customer counts on these pages disagree with the dashboard and Shopify in th
 Identity
 
 1. A contact is a person in one store. It may start with no phone, known only by a channel identity (Messenger PSID, Instagram scoped id, WhatsApp id) in `contact_identities`.
-2. When a phone arrives (typed in chat, on an order, from WhatsApp), `CustomersService` looks for a contact with that phone.
-3. Merge rule (pending review must-fix): merge automatically only when the phone is verified (D25). Verified means it came from WhatsApp itself, or an order with that phone was confirmed by a WhatsApp reply from that number, by the SMS confirmation link sent to that number, by staff, or was delivered. A phone typed in a chat, and an order confirmed only by a yes in that chat, create a "possible match" for staff to confirm. This stops someone typing another customer's number, confirming an order in Messenger and then asking the AI about that person's orders. No OTP or separate phone check is added.
+2. Resolve the buyer from the chat contact or the buyer selected or recorded when creating the order. A buyer can have a channel identity without a phone. A delivery phone is not a buyer lookup key.
+3. A phone supplied as the buyer's own phone follows the existing identity-matching policy: WhatsApp sender identity may support a match; a typed phone alone is a possible match for staff. Do not treat an order confirmation or delivery as identity evidence.
+4. Store the delivery recipient's name, phone and address on the order, even when the recipient is another existing customer. No recipient contact or second order is required. Do not merge the recipient with the buyer or overwrite either profile from these details (D26).
+5. Staff may confirm the order and mark it delivered without an OTP. These status changes, and confirmation replies or links from the recipient, do not change the buyer, customer identity or access to unrelated purchase history.
 
 Kind is derived by the stats job: `lead` (has a phone, no delivered order), `customer` (at least one delivered order). Only `not_customer` is set by hand.
 
@@ -294,7 +297,7 @@ Emits `contact.created`, `contact.merged`, `consent.changed`, `segment.saved`. L
 
 - Two contacts with the same phone created at the same moment.
 - Phone with Bangla digits or `+880`.
-- A typed, unverified phone that matches an existing customer does not merge.
+- A typed buyer phone alone does not merge contacts; a delivery phone never changes the buyer, including after staff confirmation or delivery (D26).
 - Segment counts with 50,000 contacts return in under 2 seconds.
 
 ### Acceptance
