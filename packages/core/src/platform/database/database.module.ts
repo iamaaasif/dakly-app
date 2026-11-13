@@ -36,6 +36,6 @@ class DatabaseShutdown implements OnApplicationShutdown {
     AccountDatabase,
     AccountTransaction,
   ],
-  exports: [TenantDatabase, StoreTransaction, AccountDatabase, AccountTransaction],
+  exports: [DATABASE, TenantDatabase, StoreTransaction, AccountDatabase, AccountTransaction],
 })
 export class DatabaseModule {}

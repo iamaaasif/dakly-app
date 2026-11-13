@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-VMEiYKYXXx3rbh504vrE5tQaMC4T7nacjdNtJoAUZIs=
+
 importers:
 
   .:
@@ -168,6 +170,9 @@ importers:
       '@dakly/db':
         specifier: workspace:*
         version: link:../db
+      '@fastify/cookie':
+        specifier: 11.0.2
+        version: 11.0.2(fastify@5.12.8)
       '@nestjs/common':
         specifier: ^11.1.0
         version: 11.2.9(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -180,6 +185,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.0
         version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)
+      fastify:
+        specifier: 5.12.8
+        version: 5.12.8
       ioredis:
         specifier: 5.11.1
         version: 5.11.1
@@ -820,6 +828,11 @@ packages:
 
   '@fastify/ajv-compiler@4.0.7':
     resolution: {integrity: sha512-VP0yIfwlc1ohj733keYDqyHm1VWeP9VQxYomunhr90jkC4aNNibbkrRiaNgPgqj1ORxUenILR4qzA/ppYBNAtQ==}
+
+  '@fastify/cookie@11.0.2':
+    resolution: {integrity: sha512-GWdwdGlgJxyvNv+QcKiGNevSspMQXncjMZ1J8IvuDQk0jvkzgWWZFNC2En3s+nHndZBGV8IbLwOI/sxCZw/mzA==}
+    peerDependencies:
+      fastify: ^5.0.0
 
   '@fastify/cors@11.3.0':
     resolution: {integrity: sha512-ggQGua+xHv1MvePbPr0v//xLYEsCXbWspquXCJS9Ot5YoRXq8J8ZWzHnxDBVnbtXosvistXo6LtNzOJswf64Fw==}
@@ -4542,6 +4555,12 @@ snapshots:
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       fast-uri: 4.2.3
+
+  '@fastify/cookie@11.0.2(fastify@5.12.8)':
+    dependencies:
+      cookie: 1.1.1
+      fastify: 5.12.8
+      fastify-plugin: 5.1.0
 
   '@fastify/cors@11.3.0':
     dependencies:

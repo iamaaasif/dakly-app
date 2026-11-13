@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { registerSessionCookies } from '@dakly/core/sessions/session-cookie';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { loadEnv } from '@dakly/core/platform/config/env';
@@ -11,6 +12,7 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
     bufferLogs: true,
   });
+  await registerSessionCookies(app);
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
   // Fastify listens on localhost only unless told otherwise; the Droplet needs all interfaces.

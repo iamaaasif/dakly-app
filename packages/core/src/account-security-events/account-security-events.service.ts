@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type {
   AccountSecurityEvent,
   AccountSecurityHistory,
@@ -7,7 +7,10 @@ import { AccountSecurityEventsRepository } from './account-security-events.repos
 
 @Injectable()
 export class AccountSecurityEventsService {
-  constructor(private readonly repository: AccountSecurityEventsRepository) {}
+  constructor(
+    @Inject(AccountSecurityEventsRepository)
+    private readonly repository: AccountSecurityEventsRepository,
+  ) {}
   async record(userId: string, entry: AccountSecurityEvent): Promise<void> {
     await this.repository.insert(userId, entry);
   }
