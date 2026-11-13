@@ -367,6 +367,28 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 - Given a new number, entering the right code creates the user and a session without a store. Completing business details with an eligible plan creates the store and Owner membership atomically: Free starts immediately; a paid plan with a positive `trial_days` starts that trial; a paid plan without a trial requires checkout (PAY-7).
 - Given a Support agent, when they open Campaigns, then the page says they have no access, and the API returns `403 PERMISSION_DENIED` for campaign routes.
 
+## SMS delivery in development
+
+ACC-1 provides `SmsDriver.send({ to, text })`, returning `{ providerMessageId }`.
+`MailpitSmsDriver` takes SMTP `{ host, port }` options and captures each SMS as an
+email to `<phone>@sms.dakly.test`. Its provider message id is Mailpit's queue id,
+so the API and UI can retrieve the captured message. The adapter sets five-second
+SMTP timeouts and returns `SMS_SEND_FAILED` without the raw vendor error. It logs
+neither phone numbers nor message text. `FakeSmsDriver` keeps message copies in
+memory and returns distinct ids for unit tests.
+
+`docker compose` runs Mailpit on localhost: SMTP port 1025 and UI/API port 8025.
+CI uses the same ports and checks readiness before tests. `MAILPIT_SMTP_HOST` and
+`MAILPIT_SMTP_PORT` configure the SMTP connection; `MAILPIT_API_URL` configures
+integration test read-back. The integration test removes only its own message.
+
+`SMS_DRIVER=mailpit` is the only supported selection and startup rejects it in
+production. Omission is allowed while there is no SMS consumer. ACC-2 must require
+a configured, usable driver when sign-in starts and must never default to Mailpit
+in production. Driver selection and auth wiring belong to ACC-2. Production SMS
+remains blocked on the provider account and sender id in ACC-14; captured messages
+do not prove live SMS delivery.
+
 ## Open questions
 
 Q3 (extra stores), Q11 (organisation above stores).

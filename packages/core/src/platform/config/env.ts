@@ -5,6 +5,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.url(),
   REDIS_URL: redisUrlSchema,
+  SMS_DRIVER: z.literal('mailpit').optional(),
+  MAILPIT_SMTP_HOST: z.string().min(1).default('127.0.0.1'),
+  MAILPIT_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
   SENTRY_DSN: z.url().optional(),
   WEB_ORIGINS: z
     .string()
@@ -18,5 +21,9 @@ export type Env = z.infer<typeof envSchema>;
 
 // Fails at startup, not at the first request, when a variable is missing.
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  return envSchema.parse(source);
+  const env = envSchema.parse(source);
+  if (env.NODE_ENV === 'production' && env.SMS_DRIVER === 'mailpit') {
+    throw new Error('SMS_DRIVER=mailpit is not allowed in production');
+  }
+  return env;
 }

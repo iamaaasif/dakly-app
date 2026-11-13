@@ -14,7 +14,14 @@
     "test:int": {
       "dependsOn": ["^build"],
       "cache": false,
-      "passThroughEnv": ["DATABASE_URL", "DATABASE_ADMIN_URL", "REDIS_URL"]
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "DATABASE_ADMIN_URL",
+        "REDIS_URL",
+        "MAILPIT_SMTP_HOST",
+        "MAILPIT_SMTP_PORT",
+        "MAILPIT_API_URL"
+      ]
     },
     "dev": {
       "dependsOn": ["^build"],
