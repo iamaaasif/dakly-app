@@ -1,5 +1,7 @@
 # Prototype review
 
+For the current evidence check, read the [development readiness review](../reviews/development-readiness.md) and [verified prototype corrections](../reviews/features-08-13.md#prototype-claims-checked-against-the-available-artifacts). The observations below include older states; do not treat an unresolved claim here as proof that a saved screen or current requirement is missing.
+
 What is wrong or missing in the design prototype across all pages. Problems that belong to one feature are in that feature doc, under "Where the prototype is wrong or missing". Decisions made after this review (D20 email sign-in, D21 no couriers, D3 no voice calls) change some priorities below; the feature docs carry the current answer.
 
 ## Missing designs
