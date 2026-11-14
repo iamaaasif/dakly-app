@@ -7,6 +7,7 @@ const groups = [
     boundary: 'account membership, token recipient, or new-store creation',
     routes: [
       'GET /me',
+      'GET /me/context',
       'GET /me/stores',
       'POST /me/active-store',
       'GET /me/sessions',

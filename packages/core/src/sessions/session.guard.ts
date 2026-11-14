@@ -1,3 +1,5 @@
+import { sessionContextTag } from './session-context';
+import { sessionError } from './sessions.errors';
 import { Reflector } from '@nestjs/core';
 import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
 import { type CanActivate, type ExecutionContext, Inject, Injectable } from '@nestjs/common';
@@ -38,8 +40,30 @@ export class SessionGuard implements CanActivate {
       request.storeId = session.activeStoreId;
       request.access = access;
     }
+    stampContext(context, request, rule);
     if (session.isRemembered)
       setSessionCookie(context.switchToHttp().getResponse<FastifyReply>(), token, true);
     return true;
   }
+}
+
+function stampContext(
+  context: ExecutionContext,
+  request: FastifyRequest & StoreRequest,
+  rule?: AccessRule,
+): void {
+  const reply = context.switchToHttp().getResponse<FastifyReply>();
+  reply.header('Cache-Control', 'no-store');
+  const tag = sessionContextTag(request.sessionId!, request.storeId, request.access);
+  reply.header('X-Session-Context', tag);
+  const isShopRequest =
+    rule?.kind === 'permission' ||
+    rule?.kind === 'member' ||
+    request.routeOptions.url === '/me/active-store';
+  if (
+    isShopRequest &&
+    request.headers['x-session-context'] !== undefined &&
+    request.headers['x-session-context'] !== tag
+  )
+    throw sessionError('SESSION_CONTEXT_CHANGED');
 }

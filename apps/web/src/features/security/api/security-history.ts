@@ -1,21 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import type { AccountSecurityHistoryPage } from '@dakly/contracts/account-security-events';
+import { apiRequest } from '@/lib/api-client';
+import { useSessionContext } from '@/lib/session-context';
+
 export function useSecurityHistory(before: string) {
+  const { data: session } = useSessionContext();
+  const contextTag = session?.contextTag;
   return useQuery({
-    queryKey: ['security-history', before],
+    queryKey: ['security-history', contextTag, before],
+    enabled: Boolean(contextTag),
     retry: false,
-    queryFn: async (): Promise<AccountSecurityHistoryPage> => {
-      const response = await fetch(`/api/me/security-history${before ? '?before=' + before : ''}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-      if (!response.ok)
-        throw new Error(
-          response.status === 401
-            ? 'Sign in to see your security history.'
-            : 'Could not load security history. Try again.',
-        );
-      return response.json();
-    },
+    queryFn: ({ signal }) =>
+      apiRequest<AccountSecurityHistoryPage>(
+        `/me/security-history${before ? '?before=' + before : ''}`,
+        { signal, contextTag },
+      ),
   });
 }

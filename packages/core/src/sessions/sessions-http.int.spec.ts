@@ -175,6 +175,92 @@ describe('Session boundary over Fastify and Postgres', () => {
     expect(customer.statusCode).toBe(200);
     expect(customer.json().phone).toBe('017XXXXX678');
   });
+  it('returns verified shell context and rejects stale store preconditions before writes', async () => {
+    const context = await app.inject({ url: '/me/context', headers: { cookie: cookie() } });
+    expect(context.statusCode).toBe(200);
+    const shell = context.json();
+    expect(shell.user).toEqual({ id: userId, name: 'Rina' });
+    expect(shell.stores).toHaveLength(2);
+    expect(shell.currentStore).toEqual({
+      storeId,
+      name: 'Rina shop',
+      canViewCustomers: true,
+      canCreateCustomer: false,
+      canApproveSupport: false,
+    });
+    expect(shell.contextTag).toMatch(/^[a-f0-9]{64}$/);
+    expect(context.headers['cache-control']).toBe('no-store');
+    await service.setActiveStore(userId, sessionId, otherStoreId);
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/customers',
+      headers: { cookie: cookie(), origin, 'x-session-context': shell.contextTag },
+      payload: { name: 'Must not be created', phone: '01855555555' },
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json().error.code).toBe('SESSION_CONTEXT_CHANGED');
+    const rows = await admin.db.select().from(customers).where(eq(customers.phone, '01855555555'));
+    expect(rows).toHaveLength(0);
+    const changed = await app.inject({ url: '/me/context', headers: { cookie: cookie() } });
+    expect(changed.json().currentStore.storeId).toBe(otherStoreId);
+    expect(changed.json().contextTag).not.toBe(shell.contextTag);
+    const staleSelection = await app.inject({
+      method: 'POST',
+      url: '/me/active-store',
+      headers: { cookie: cookie(), origin, 'x-session-context': shell.contextTag },
+      payload: { storeId },
+    });
+    expect(staleSelection.statusCode).toBe(409);
+    expect((await service.resolve(token))?.activeStoreId).toBe(otherStoreId);
+
+    await service.setActiveStore(userId, sessionId, storeId);
+  });
+  it('keeps account-only context usable and drops selected access after removal', async () => {
+    const created = await service.create(userId, { isRemembered: false });
+    const headers = { cookie: `dakly_session=${created.token}` };
+    const account = await app.inject({ url: '/me/context', headers });
+    expect(account.statusCode).toBe(200);
+    expect(account.json().currentStore).toBeNull();
+    expect(account.json().stores).toHaveLength(2);
+    await service.setActiveStore(userId, created.session.id, storeId);
+    const selected = await app.inject({ url: '/me/context', headers });
+    await admin.db
+      .update(memberships)
+      .set({ status: 'removed' })
+      .where(eq(memberships.storeId, storeId));
+    try {
+      const revoked = await app.inject({ url: '/me/context', headers });
+      expect(revoked.statusCode).toBe(200);
+      expect(revoked.json().currentStore).toBeNull();
+      expect(revoked.json().stores).toHaveLength(1);
+      expect(revoked.json().contextTag).not.toBe(selected.json().contextTag);
+      expect((await app.inject({ url: '/me', headers })).statusCode).toBe(200);
+    } finally {
+      await admin.db
+        .update(memberships)
+        .set({ status: 'active' })
+        .where(eq(memberships.storeId, storeId));
+    }
+  });
+  it('changes the shell context tag after a same-store permission change', async () => {
+    const headers = { cookie: cookie() };
+    const initial = (await app.inject({ url: '/me/context', headers })).json();
+    await admin.db
+      .update(memberships)
+      .set({ builtInRole: 'owner' })
+      .where(eq(memberships.storeId, storeId));
+    try {
+      const changed = (await app.inject({ url: '/me/context', headers })).json();
+      expect(changed.contextTag).not.toBe(initial.contextTag);
+      expect(changed.currentStore.canApproveSupport).toBe(true);
+      expect(changed.currentStore.canCreateCustomer).toBe(true);
+    } finally {
+      await admin.db
+        .update(memberships)
+        .set({ builtInRole: 'support_agent' })
+        .where(eq(memberships.storeId, storeId));
+    }
+  });
   it.each([undefined, 'https://elsewhere.test'])(
     'rejects a browser write with origin %s',
     async (value) => {

@@ -1,3 +1,4 @@
+import { useStoreRequest } from '@/lib/store-request';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SupportGrantPage, SupportSessionResponse } from '@dakly/contracts/support';
 import type { CreateCustomerInput, CustomerResponse } from '@dakly/contracts/customers';
@@ -17,13 +18,18 @@ async function request<T>(url: string, body?: unknown): Promise<T> {
   return text ? JSON.parse(text) : (undefined as T);
 }
 export function useOwnerSupport(before: string) {
+  const store = useStoreRequest();
   return useQuery({
-    queryKey: ['owner-support', before],
-    queryFn: () =>
-      request<SupportGrantPage>(`/api/support-access${before ? '?before=' + before : ''}`),
+    queryKey: ['owner-support', store.contextTag, before],
+    retry: false,
+    queryFn: ({ signal }) =>
+      store.request<SupportGrantPage>(`/support-access${before ? '?before=' + before : ''}`, {
+        signal,
+      }),
   });
 }
 export function useOwnerDecision() {
+  const store = useStoreRequest();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: {
@@ -31,11 +37,10 @@ export function useOwnerDecision() {
       action: 'code' | 'approve' | 'deny' | 'end';
       code?: string;
     }) =>
-      request(
-        `/api/support-access/${input.id}/${input.action}`,
-        input.code ? { code: input.code } : {},
-      ),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['owner-support'] }),
+      store.request(`/support-access/${input.id}/${input.action}`, {
+        body: input.code ? { code: input.code } : {},
+      }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['owner-support', store.contextTag] }),
   });
 }
 export function useSupportSession() {

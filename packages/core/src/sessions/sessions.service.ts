@@ -1,3 +1,5 @@
+import type { StoreAccess } from '@dakly/contracts/team';
+import { sessionContextTag } from './session-context';
 import type { AccountSecurityEvent } from '@dakly/contracts/account-security-events';
 import { UsersService } from '../auth/users.service';
 import { TeamService } from '../team/team.service';
@@ -5,7 +7,7 @@ import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { sessionError } from './sessions.errors';
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
+import type { CreateSessionInput, Session, SessionContext } from '@dakly/contracts/sessions';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { Clock } from '../platform/clock';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
@@ -23,6 +25,33 @@ export class SessionsService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(UsersService) private readonly users: UsersService,
   ) {}
+
+  async context(
+    userId: string,
+    sessionId: string,
+    storeId?: string,
+    access?: StoreAccess,
+  ): Promise<SessionContext> {
+    const [profile, stores] = await Promise.all([
+      this.users.profile(userId),
+      this.team.storesFor(userId),
+    ]);
+    const selected = stores.find((store) => store.storeId === storeId);
+    return {
+      user: { id: profile.id, name: profile.name },
+      stores,
+      currentStore:
+        selected && access
+          ? {
+              ...selected,
+              canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
+              canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
+              canApproveSupport: this.team.canApproveSupport(access),
+            }
+          : null,
+      contextTag: sessionContextTag(sessionId, storeId, access),
+    };
+  }
 
   async list(userId: string, currentSessionId: string, before?: string) {
     const rows = await this.repository.list(userId, this.clock.now(), before);
