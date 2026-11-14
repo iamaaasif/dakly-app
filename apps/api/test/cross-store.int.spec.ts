@@ -7,11 +7,12 @@ import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
 import { SmsService } from '@dakly/core/sms/sms.service';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { IsolationFixture, type Shop } from './isolation-fixture';
 import { isolationBoundaries } from './isolation-boundaries';
 import { IsolationInventory } from './isolation-inventory';
+import { captureRequestLogs } from './request-log-sink';
 
 const permissions = {
   areas: { customers: 'view' },
@@ -366,6 +367,8 @@ fixture('GET /account-recovery-history', async () => {
 });
 
 describe('every production shop route isolates its data', () => {
+  let logs: ReturnType<typeof captureRequestLogs>;
+  beforeEach(() => logs.beginTest());
   beforeAll(async () => {
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
     const adapter = new FastifyAdapter(createHttpServer(loadEnv().API_TRUSTED_PROXIES));
@@ -376,6 +379,7 @@ describe('every production shop route isolates its data', () => {
       logger: false,
       abortOnError: false,
     });
+    logs = captureRequestLogs(app);
     f = new IsolationFixture(app);
     vi.spyOn(app.get(SmsService), 'send').mockImplementation(async (message) => {
       f.sms.push(message);
@@ -388,6 +392,7 @@ describe('every production shop route isolates its data', () => {
     try {
       await f?.close();
     } finally {
+      logs?.restore();
       await app?.close();
       vi.restoreAllMocks();
       vi.unstubAllEnvs();
