@@ -47,8 +47,8 @@ export class UsersRepository {
     return row?.id;
   }
 
-  async lockInviteIdentity(storeId: string, userId: string) {
-    // Acceptance holds a read lock on the current identity in its store action; it never writes an account.
+  async lockVerifiedIdentity(storeId: string, userId: string) {
+    // Store actions hold current identity stable before locking the store; this never writes an account.
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
         .select({

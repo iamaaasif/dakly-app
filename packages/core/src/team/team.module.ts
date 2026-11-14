@@ -1,3 +1,7 @@
+import { CodesModule } from '../auth/codes.module';
+import { OwnershipTransferRepository } from './ownership-transfer.repository';
+import { OwnershipTransferService } from './ownership-transfer.service';
+import { OwnershipTransferController } from './ownership-transfer.controller';
 import { RolesController } from './roles.controller';
 import { RolesService } from './roles.service';
 import { RolesRepository } from './roles.repository';
@@ -22,10 +26,20 @@ import { InvitesController } from './invites.controller';
 import { INVITE_ORIGIN, InviteDelivery } from './invite-delivery';
 
 @Module({
-  imports: [UsersModule, BillingModule, AuditModule, SmsModule, EmailModule, CacheModule],
-  controllers: [MembersController, InvitesController, RolesController],
+  imports: [
+    CodesModule,
+    UsersModule,
+    BillingModule,
+    AuditModule,
+    SmsModule,
+    EmailModule,
+    CacheModule,
+  ],
+  controllers: [OwnershipTransferController, MembersController, InvitesController, RolesController],
   providers: [
     Clock,
+    OwnershipTransferRepository,
+    OwnershipTransferService,
     RolesService,
     RolesRepository,
     MembersRepository,

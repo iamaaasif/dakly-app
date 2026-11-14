@@ -18,13 +18,13 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { UsersModule } from './users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { SignInCodes } from './sign-in-codes';
-import { SignInFailures } from './sign-in-failures';
+import { CodesModule } from './codes.module';
 import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
     CacheModule,
+    CodesModule,
     UsersModule,
     SessionsModule,
     EmailModule,
@@ -48,9 +48,7 @@ import { SmsModule } from '../sms/sms.module';
     Clock,
     AuthService,
     EmailChangeService,
-    SignInCodes,
-    SignInFailures,
   ],
-  exports: [AuthService, SignInCodes, SignInFailures],
+  exports: [AuthService, CodesModule],
 })
 export class AuthModule {}

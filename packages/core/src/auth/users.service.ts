@@ -16,7 +16,7 @@ export class UsersService {
   verifiedRecipient(storeId: string, input: { phone?: string; email?: string }) {
     return this.repository.verifiedRecipient(storeId, input);
   }
-  lockInviteIdentity(storeId: string, userId: string) {
-    return this.repository.lockInviteIdentity(storeId, userId);
+  lockVerifiedIdentity(storeId: string, userId: string) {
+    return this.repository.lockVerifiedIdentity(storeId, userId);
   }
 }

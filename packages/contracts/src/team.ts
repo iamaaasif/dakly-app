@@ -101,3 +101,20 @@ export type RoleListResponse = {
   nextCursor: string | null;
   builtInRoles: { builtInRole: BuiltInRole; permissions: RolePermissions }[];
 };
+
+export const ownershipTransferCodeSchema = z.strictObject({ membershipId: z.uuid() });
+export const startOwnershipTransferSchema = ownershipTransferCodeSchema.extend({
+  code: z.string().regex(/^\d{6}$/),
+});
+export const acceptOwnershipTransferSchema = z.strictObject({ transferId: z.uuid() });
+export type OwnershipTransferCodeInput = z.infer<typeof ownershipTransferCodeSchema>;
+export type StartOwnershipTransferInput = z.infer<typeof startOwnershipTransferSchema>;
+export type AcceptOwnershipTransferInput = z.infer<typeof acceptOwnershipTransferSchema>;
+export type OwnershipTransferResponse = {
+  id: string;
+  ownerUserId: string;
+  newOwnerUserId: string;
+  expiresAt: string;
+  status: 'pending' | 'accepted' | 'cancelled' | 'expired';
+};
+export type CurrentOwnershipTransferResponse = { transfer: OwnershipTransferResponse | null };

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0022_snapshot.json`: **85 tables, 1151 columns, 337 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0023_snapshot.json`: **86 tables, 1159 columns, 341 explicit indexes and 278 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -28,6 +28,9 @@ erDiagram
     roles |o..o{ memberships : "role_id"
     users |o..o{ memberships : "invited_by_user_id"
     roles |o..o{ memberships : "store_id, role_id"
+    stores ||..o{ ownership_transfers : "store_id"
+    users ||..o{ ownership_transfers : "owner_user_id"
+    users ||..o{ ownership_transfers : "new_owner_user_id"
     staff_users ||..o{ staff_sessions : "staff_user_id"
     staff_users ||..o{ staff_audit_log : "staff_user_id"
     stores ||..o{ support_grants : "store_id"
@@ -149,6 +152,16 @@ erDiagram
         timestamp_with_time_zone removed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone last_active_at "NULL; timestamp with time zone"
         jsonb notification_preferences "NOT NULL; jsonb"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    ownership_transfers {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid owner_user_id FK "NOT NULL; uuid"
+        uuid new_owner_user_id FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -1942,4 +1955,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `memberships_role_id_roles_id_fk`                                    | `memberships(role_id)`                                    | `roles(id)`                                 | no action |
 | `memberships_invited_by_user_id_users_id_fk`                         | `memberships(invited_by_user_id)`                         | `users(id)`                                 | no action |
 | `memberships_role_id_store_fk`                                       | `memberships(store_id, role_id)`                          | `roles(store_id, id)`                       | no action |
+| `ownership_transfers_store_id_stores_id_fk`                          | `ownership_transfers(store_id)`                           | `stores(id)`                                | no action |
+| `ownership_transfers_owner_user_id_users_id_fk`                      | `ownership_transfers(owner_user_id)`                      | `users(id)`                                 | no action |
+| `ownership_transfers_new_owner_user_id_users_id_fk`                  | `ownership_transfers(new_owner_user_id)`                  | `users(id)`                                 | no action |
 | `roles_store_id_stores_id_fk`                                        | `roles(store_id)`                                         | `stores(id)`                                | no action |

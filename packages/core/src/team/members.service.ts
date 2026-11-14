@@ -181,7 +181,7 @@ export class MembersService {
     if (!located) throw teamError('INVITE_INVALID');
     return this.transaction.run(located.storeId, async () => {
       // Lock identity before the store, so email replacement cannot race recipient proof.
-      const identity = await this.users.lockInviteIdentity(located.storeId, userId);
+      const identity = await this.users.lockVerifiedIdentity(located.storeId, userId);
       return this.transaction.runLocked(located.storeId, async () => {
         const member = await this.findMember(located.storeId, located.membershipId);
         assertOpenInvite(member, this.clock.now());

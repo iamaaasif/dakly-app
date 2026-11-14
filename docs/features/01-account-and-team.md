@@ -405,6 +405,46 @@ The permission policy and four built-in roles are implemented (ACC-4). Every bui
 
 `billing.edit`, store closing and ownership transfer always require the Owner. Custom role JSON accepts at most Billing View. Creating, editing or assigning a role must pass `canGrantRole`: every proposed area level and flag must be within the acting member's own access, including Owner authority.
 
+Ownership transfer (ACC-18)
+
+The Owner selects another active member. `POST /store/ownership-transfer/code` takes
+`{ membershipId }` and sends a fresh six-digit code to the Owner's verified email,
+or verified phone when no verified email exists. The code expires after ten minutes
+and shares sign-in send limits, cooldown, failed-attempt limits and account lockout.
+It is bound to the acting Owner, store, proposed member and current verified contact.
+General sign-in codes and codes for other actions cannot start a transfer.
+
+`POST /store/ownership-transfer` takes `{ membershipId, code }` and creates a pending
+transfer valid for 48 hours. There is one pending transfer per store. Expired rows
+stop authorizing acceptance immediately and are marked expired when a new transfer
+starts. `GET /store/ownership-transfer` returns `{ transfer }` for the current Owner
+or named member. It returns `{ transfer: null }` to any active member when none is
+pending; other members receive `403 TRANSFER_DENIED` when one exists. Responses expose
+only transfer and account ids, status and expiry. The Owner cancels with
+`DELETE /store/ownership-transfer/:transferId`.
+
+The named member accepts with `POST /store/ownership-transfer/accept`, taking
+`{ transferId }`. Acceptance requires their active store membership. Q3's current
+one-owned-store limit also applies: a member already owning a store receives
+`409 TRANSFER_STORE_LIMIT`. Membership in other stores remains allowed. The same
+per-user advisory lock used by store creation serializes competing ownership grants.
+
+Code delivery and consumption occur outside store transactions. A consumed code stays
+spent when the database action fails. Starting a transfer rechecks current Owner
+access, member activity and verified identity after consumption. Identity reads hold
+a shared user lock through `UsersService.lockVerifiedIdentity` before the store lock;
+acceptance also takes the ownership advisory lock before the store lock. All reads
+inside these actions reuse the same connection.
+
+Acceptance locks the store row with `FOR NO KEY UPDATE`, then rechecks the pending
+transfer, expiry, named member and current Owner. It changes the previous Owner to
+Admin before promoting the named member to Owner, clears any custom role assignment,
+and records both `member.role_changed` events and the transfer acceptance in the
+same transaction. Audit failure rolls the whole action back. Start and cancellation
+also have atomic audit events. Member removal, role changes and transfer acceptance
+share the store lock; parallel acceptance or removal leaves exactly one Owner.
+Both accounts use their new permissions on their next request through ACC-3.
+
 `TeamModule` exports `PermissionGuard` and its policy evaluator. The guard reads trusted `request.userId`, `request.storeId` and `request.access`. It supports `@RequirePermission`, `@AnyMember`, `@RequireUser` and `@Public`; missing classification or insufficient access returns `403 PERMISSION_DENIED`. Method access rules override controller rules. A signed-in user without a store can use `@RequireUser` routes. A known active member can use `@AnyMember` regardless of area levels. ACC-3 registers the global guards in this order: Origin, Session, User, Store, Permission. User and store checks return `401 AUTH_REQUIRED` and `401 STORE_REQUIRED` before permission evaluation.
 
 API-3 inventories every HTTP handler registered by the production `AppModule`, including imported controllers and inherited methods. The check fails for a missing access rule. An explicit controller or method `StoreGuard` also requires an effective `@RequirePermission` or `@AnyMember` rule. Method rules override controller rules; local guards compose. The global conditional store guard alone does not classify public or user routes as store routes. Fixture controllers verify these failures, and `pnpm test:int` checks the real app.
