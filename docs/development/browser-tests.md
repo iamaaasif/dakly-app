@@ -1,0 +1,43 @@
+# Browser and component tests
+
+Use Node 22 from `.nvmrc` (22.12 or newer), pnpm 10.28.0 and the frozen lockfile. Playwright 1.58.2 installs its own Chromium; no system Chrome or globally installed test runner is used. On Linux, install the browser and its system dependencies:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --filter @dakly/web exec playwright install --with-deps chromium
+```
+
+Start the normal PostgreSQL 16, Redis 7 and Mailpit services. Use a dedicated local test database, with the `dakly_app` RLS role for `DATABASE_URL` and the migration owner for `DATABASE_ADMIN_URL`. Both database URLs and `REDIS_URL` must point to loopback hosts and contain no URL query options. Export them from your private test environment without printing their values. `MAILPIT_SMTP_HOST` must also be loopback; `MAILPIT_SMTP_PORT` and `MAILPIT_API_URL` follow the normal local service configuration. Prepare a fresh database using the same commands as CI:
+
+```bash
+psql "$DATABASE_ADMIN_URL" -f packages/db/local-init.sql
+pnpm exec turbo run build --filter=@dakly/db
+pnpm --filter @dakly/db db:migrate
+pnpm test:e2e
+```
+
+`pnpm test:e2e` builds the API, web app and their workspace dependencies itself. It starts the compiled production API entrypoint and production Next server, waits up to 30 seconds for each health endpoint, runs one Chromium flow, then stops its processes and removes its fixture. API port 4015 and web port 3015 must be free; the runner refuses to reuse another server. Build and runtime both use `WEB_API_URL=http://127.0.0.1:4015`; browser requests use `http://localhost:3015` through Next rewrites. Run one browser command per checkout.
+
+The API child receives `NODE_ENV=test`, private ephemeral encryption/signing keys and local Access verification keys. This boots the full application without Cloudflare or provider calls. Next runs in production mode. This process-local configuration changes no production defaults or integration-test origins. No worker or admin app is needed for the shell flow.
+
+## Fixture and coverage
+
+The runner creates two unique accounts with verified synthetic BD mobile numbers, two shops with owners, and a marketer membership for the browser account in the second shop. A random opaque session token is kept only in memory and the browser child's environment; only its hash is stored in PostgreSQL. The browser gets a Secure, HttpOnly, SameSite=Lax localhost cookie. Every browser request passes the real primary-database session and membership guards. This fixture is not sign-in or sign-up coverage.
+
+The test proves an anonymous customer page redirects to sign-in, an unchanged focus verification preserves the mounted customer draft and collapsed navigation, the native phone drawer handles keyboard focus and closes during verification, and an explicit shop change discards the draft. Both shops permit customer creation. A real form submission persists in the selected shop; a request with the old context receives 409 and leaves both shops unchanged. The flow checks 1280 px and 360 px layouts and has no retries or fixed sleeps.
+
+Fixture creation is transactional. Cleanup deletes only the generated users, shops and their rows, after owned processes stop, including test failures and SIGINT/SIGTERM cancellation. It never flushes Redis or deletes unrelated messages/data. A hard kill or machine loss cannot run cleanup; use a disposable database in CI and discard that database after such an interruption.
+
+## Results and component tests
+
+- `apps/web/playwright-report/`: HTML report, opened with `pnpm --filter @dakly/web exec playwright show-report`.
+- `apps/web/test-results/`: failure screenshots and assertion context.
+- `apps/web/e2e-artifacts/`: build, API, Next and test logs capped at 1 MiB each, plus cleanup confirmation. API request logs use the production redaction policy.
+
+These generated directories are ignored by Git. Each run clears its old artifacts. Traces and video are disabled because authenticated network traces can retain session credentials. CI uploads the directories even after failure and retains them for seven days.
+
+`pnpm --filter @dakly/web test` includes the existing Node formatter, transport, hook and Next config tests. Only DOM component files opt into jsdom using the Vitest environment annotation. Testing Library exercises labelled controls and user actions; the real drawer's browser focus behavior belongs in Chromium. `pnpm check` includes component tests and browser-test typechecking; `pnpm test:e2e` additionally needs the services and browser installation. Core and provider Vitest configs use `.mts` for native ESM loading without changing package runtime types.
+
+## ACC-8 extension
+
+Add actual Mailpit sign-up-to-Dashboard coverage and public `/security/recovery` link coverage in `apps/web/e2e/` when those screens exist. Use the same production servers and real guards; obtain codes from the configured local Mailpit API. Track newly created account/store IDs for scoped cleanup rather than granting a seeded session to a sign-up test. Keep the public recovery route outside the authenticated shell. Extend the fixture lifecycle for owned messages and account security rows when those flows create them; do not flush shared services or claim the seeded shell flow proves onboarding.

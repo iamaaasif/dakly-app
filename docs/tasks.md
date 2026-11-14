@@ -37,7 +37,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | Todo      | WEB-1       |     |                                                                  |
 | WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | In review | WEB-1       | #35 | Verified session context and responsive shell                    |
 | WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | In review |             | #36 | Exact money, store dates and supplied phone display values       |
-| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Todo      | WEB-3       |     |                                                                  |
+| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | In review | WEB-3       |     | Real API browser flow and component tests                        |
 | WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Todo      |             |     | Lockfile age rule blocked it on 13 Nov; retry after 15 Nov       |
 
 ## M1. Account, stores and team

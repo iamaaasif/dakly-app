@@ -76,3 +76,16 @@ jobs:
           psql "$DATABASE_ADMIN_URL" -f packages/db/local-init.sql
           pnpm --filter @dakly/db db:migrate
       - run: pnpm test:int
+      - name: Install Chromium
+        run: pnpm --filter @dakly/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Upload browser test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-tests
+          path: |
+            apps/web/e2e-artifacts/
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7

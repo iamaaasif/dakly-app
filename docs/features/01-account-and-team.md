@@ -221,6 +221,10 @@ React Query owns session and screen data. A switch unmounts shop content, cancel
 
 ACC-8 handoff paths are `/sign-in` and `/setup`. These interim pages explain that the corresponding flow is not available yet; ACC-8 replaces them with the actual forms. Accounts with existing memberships get a working shop chooser. Accounts without a shop can continue to `/setup` and use account Security. `/security` stays account-only, `/support` remains outside this shell, and public `/security/recovery` is reserved outside the authenticated route group. No future feature links, notification counts or metrics are shown.
 
+### Browser regression coverage (WEB-5)
+
+The committed Chromium shell test runs the production Next build and compiled API with real PostgreSQL authentication. It preserves an unfinished customer draft on unchanged focus, discards it on a real shop switch, checks native phone drawer keyboard behavior and proves customer writes belong to the verified shop. An old context receives 409 without extra writes. Testing Library checks the labelled shop chooser separately. See [browser tests](../development/browser-tests.md) for setup, fixture ownership and failure artifacts. ACC-8 adds real Mailpit signup and public recovery-link coverage; this seeded-session flow does not cover onboarding.
+
 ### Design review: Store settings, Team, Integrations, Settings and billing
 
 These admin areas are unusually complete for a prototype. Billing is fully localised: bKash/Nagad/Rocket, SSLCommerz, 15% VAT and Mushak-6.3 invoices, and the VAT maths is correct (৳3,490 + 15% = ৳4,013.50). The two big holes are WhatsApp message costs, which no plan or page explains, and the Orders and Inbox permissions for modules that don't exist.
