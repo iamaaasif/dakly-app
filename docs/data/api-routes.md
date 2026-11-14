@@ -57,6 +57,18 @@ resend is explicit. See [account and team](../features/01-account-and-team.md).
 | `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`         |
 | `GET /sms-sender-ids`, `POST /sms-sender-ids`                                                                  | `storeSettings` |
 
+Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
+requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
+patches preserve omitted fields and clear optional fields with `null`; name
+cannot be cleared. BIN uses `vatBin` (13 digits), and the trade licence uses
+`tradeLicenceNumber`. Empty or unknown input is rejected.
+`PATCH /store/extensions` accepts `{ extensions: [...] }` as the complete
+selection of `chats`, `sales` and `social_auto_post`, including an empty array.
+It returns the updated settings and requires Owner or Admin through the team
+policy; custom settings grants do not permit this action. Core stays implicit,
+and Physical Shop is excluded in release 1. Both writes audit field names
+atomically and retain business data when an extension is disabled.
+
 ## Customers and segments (03)
 
 | Route                                                                                                                    | Permission                                                       |

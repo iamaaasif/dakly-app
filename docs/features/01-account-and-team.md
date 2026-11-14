@@ -766,3 +766,34 @@ accounting. A pending email challenge also rechecks that its subject remains
 unlinked under the completion lock, even if another flow linked the same owner.
 The real client has a five-second transport timeout and a ten-second total bound.
 Live Google sign-in remains a staging check until an OAuth client is supplied.
+
+## Store settings and extensions (ACC-6)
+
+`GET /store` reads the session's active store with `storeSettings.view`.
+`PATCH /store` requires `storeSettings.edit` and accepts `name`, `legalName`,
+`businessType`, `phone`, `email`, `address`, `district`, `vatBin` and
+`tradeLicenceNumber`. Both return `StoreSettingsResponse`, which adds these
+settings to the existing store identity and extension fields. Signup's
+`StoreResponse` stays unchanged.
+
+Patches preserve omitted fields. Explicit `null` clears any setting except
+`name`; empty strings, empty patches and unknown fields are rejected. Names,
+business type, district, address and trade licence are trimmed. Phones use
+`bdMobileSchema`; BIN is exactly 13 ASCII digits. Name, business type, district
+and trade licence allow 100 characters, legal name 200, address 1,000 and email 254. Store contact details describe the business; the customer phone masking
+flag continues to govern customer records.
+
+`PATCH /store/extensions` replaces the selection with a unique `extensions`
+array containing only `chats`, `sales` and `social_auto_post`. An empty array
+turns all three off. Core is implicit and stays on; `core` and `physical_shop`
+are rejected in release 1. Only Owner and Admin may change extensions, through
+the pure team permission policy exposed by `TeamService`; a custom role with
+settings edit access cannot change them.
+
+Settings and extension changes atomically record `store.settings_changed` and
+`store.extensions_changed` audit entries. These contain field names only,
+without previous or new personal values. Disabling extensions changes only
+the stored selection and retains business data. Background job consumers do
+not exist yet; each feature must check its extension before running work when
+those consumers are built. Menu visibility and hidden-page redirects belong
+to the later web tasks. Store switching already uses ACC-3's account routes.

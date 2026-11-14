@@ -1,5 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { CreateStoreInput, StoreResponse } from '@dakly/contracts/stores';
+import type {
+  CreateStoreInput,
+  StoreResponse,
+  ChangeStoreSettingsInput,
+  ChangeStoreExtensionsInput,
+  StoreSettingsResponse,
+} from '@dakly/contracts/stores';
+import type { StoreAccess } from '@dakly/contracts/team';
+import { Clock } from '../platform/clock';
 import type { PlansResponse } from '@dakly/contracts/billing';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TeamService } from '../team/team.service';
@@ -12,6 +20,7 @@ import { storeError } from './stores.errors';
 @Injectable()
 export class StoresService {
   constructor(
+    @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresRepository) private readonly repository: StoresRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(TeamService) private readonly team: TeamService,
@@ -19,6 +28,61 @@ export class StoresService {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+  async settings(storeId: string): Promise<StoreSettingsResponse> {
+    const store = await this.repository.settings(storeId);
+    if (!store) throw storeError('STORE_NOT_FOUND');
+    return store;
+  }
+  changeSettings(
+    storeId: string,
+    input: ChangeStoreSettingsInput,
+    userId: string,
+  ): Promise<StoreSettingsResponse> {
+    return this.transaction.run(storeId, async () => {
+      const store = await this.repository.changeSettings(storeId, input, this.clock.now());
+      if (!store) throw storeError('STORE_NOT_FOUND');
+      await this.recordChange(
+        storeId,
+        userId,
+        'store.settings_changed',
+        Object.keys(input).filter(
+          (field) => input[field as keyof ChangeStoreSettingsInput] !== undefined,
+        ),
+      );
+      return store;
+    });
+  }
+  changeExtensions(
+    storeId: string,
+    input: ChangeStoreExtensionsInput,
+    actor: { userId: string; access: StoreAccess },
+  ): Promise<StoreSettingsResponse> {
+    if (!this.team.canChangeExtensions(actor.access)) throw storeError('STORE_EXTENSIONS_DENIED');
+    return this.transaction.run(storeId, async () => {
+      const store = await this.repository.changeExtensions(
+        storeId,
+        input.extensions,
+        this.clock.now(),
+      );
+      if (!store) throw storeError('STORE_NOT_FOUND');
+      await this.recordChange(storeId, actor.userId, 'store.extensions_changed', ['extensions']);
+      return store;
+    });
+  }
+  private recordChange(
+    storeId: string,
+    userId: string,
+    action: string,
+    changedFields: string[],
+  ): Promise<void> {
+    return this.audit.record(storeId, {
+      actor: { kind: 'user', userId },
+      action,
+      entityType: 'store',
+      entityId: storeId,
+      after: { changedFields },
+    });
+  }
   async plans(): Promise<PlansResponse> {
     return { plans: await this.billing.publicPlans(), recommendations: { ...recommendedPlans } };
   }
