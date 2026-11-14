@@ -44,8 +44,7 @@ export class StaffSessionsService {
     token: string | undefined,
     identity: AccessIdentity,
   ): Promise<StaffIdentity & { sessionId: string }> {
-    const now = this.clock.now();
-    const claims = token ? await this.tokens.verify(token, now) : undefined;
+    const claims = token ? await this.tokens.verify(token, this.clock.now()) : undefined;
     if (!claims || !token) throw staffError('STAFF_AUTH_REQUIRED');
     return this.transaction.run(claims.staffUserId, async () => {
       const staff = await this.repository.lock(claims.staffUserId);
@@ -62,6 +61,7 @@ export class StaffSessionsService {
         claims.sessionId,
         staffTokenHash(token),
       );
+      const now = this.clock.now();
       if (!session || !this.isCurrent(session, now)) throw staffError('STAFF_AUTH_REQUIRED');
       await this.repository.touchSession(staff.id, session.id, now);
       return { id: staff.id, name: staff.name, role: staff.role, sessionId: session.id };

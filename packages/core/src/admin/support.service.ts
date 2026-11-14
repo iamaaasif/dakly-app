@@ -58,14 +58,7 @@ export class SupportService {
         ip,
         { scopes: input.scopes, access: input.access, durationMinutes: input.durationMinutes },
       );
-      await this.repository.insert(
-        target.id,
-        id,
-        staff.id,
-        staff.sessionId,
-        input,
-        this.clock.now(),
-      );
+      await this.repository.insert(target.id, id, staff.id, input, this.clock.now());
       return ownerId;
     });
     try {
@@ -136,8 +129,10 @@ export class SupportService {
     return this.transaction.run(storeId, async () => {
       const current = await this.requestSubject(storeId, id, userId, sessionId);
       if (current.binding !== subject.binding) throw supportError('SUPPORT_DENIED');
+      const requested = await this.pending(storeId, id);
+      await this.assertStaff(storeId, requested.staffUserId);
+      // Disable can end the request while this action waits for the staff lock.
       const grant = await this.pending(storeId, id);
-      await this.assertStaff(storeId, grant.staffUserId, grant.staffSessionId!);
       const now = this.clock.now();
       const expiresAt = new Date(now.getTime() + grant.durationMinutes * 60000);
       await this.audit.record(
@@ -260,6 +255,7 @@ export class SupportService {
         { grantId: grant.id },
         'customer',
       );
+      await this.recordActivity(principal);
       return result;
     });
   }
@@ -279,8 +275,13 @@ export class SupportService {
         { grantId: grant.id },
         'customer',
       );
+      await this.recordActivity(principal);
       return result;
     });
+  }
+  private async recordActivity(principal: SupportPrincipal) {
+    if (!(await this.repository.touchParent(principal.storeId, principal, this.clock.now())))
+      throw supportError('SUPPORT_ENDED');
   }
   private async run<T>(
     token: string | undefined,
@@ -313,30 +314,34 @@ export class SupportService {
   private async authorize(principal: SupportPrincipal) {
     await this.assertStaff(principal.storeId, principal.staffUserId, principal.staffSessionId);
     const grant = await this.requireGrant(principal.storeId, principal.grantId);
-    if (
-      grant.staffUserId !== principal.staffUserId ||
-      grant.staffSessionId !== principal.staffSessionId ||
-      this.status(grant) !== 'approved'
-    )
+    if (grant.staffUserId !== principal.staffUserId || this.status(grant) !== 'approved')
       throw supportError('SUPPORT_ENDED');
     return grant;
   }
-  private async assertStaff(storeId: string, staffUserId: string, sessionId: string) {
-    const staff = await this.repository.staff(storeId, staffUserId, sessionId);
-    const now = this.clock.now();
+  private async assertStaff(storeId: string, staffUserId: string, sessionId?: string) {
+    const staff = await this.repository.staff(storeId, staffUserId);
     if (
       !staff ||
       staff.status !== 'active' ||
       !staff.enrolledAt ||
-      !requestRoles.includes(staff.role) ||
-      staff.revokedAt ||
-      staff.expiresAt <= now ||
-      !staff.lastSeenAt ||
-      staff.lastSeenAt.getTime() + 1800000 <= now.getTime()
+      !requestRoles.includes(staff.role)
     )
       throw supportError('SUPPORT_ENDED');
+    if (sessionId) await this.assertParent(storeId, staffUserId, sessionId);
     if (await this.identities.conflictsWithStore(storeId, staffUserId))
       throw supportError('SUPPORT_DENIED');
+  }
+  private async assertParent(storeId: string, staffUserId: string, sessionId: string) {
+    const parent = await this.repository.parent(storeId, staffUserId, sessionId);
+    const now = this.clock.now();
+    if (
+      !parent ||
+      parent.revokedAt ||
+      parent.expiresAt <= now ||
+      !parent.lastSeenAt ||
+      parent.lastSeenAt.getTime() + 1800000 <= now.getTime()
+    )
+      throw supportError('SUPPORT_ENDED');
   }
   private assertRole(staff: Staff) {
     if (!requestRoles.includes(staff.role)) throw supportError('SUPPORT_DENIED');

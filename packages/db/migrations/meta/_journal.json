@@ -253,6 +253,13 @@
       "when": 1794656673430,
       "tag": "0035_support_scope_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794659048940,
+      "tag": "0036_support_consent_lifetime",
+      "breakpoints": true
     }
   ]
 }

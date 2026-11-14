@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   staffUsers,
   staffChallenges,
@@ -224,7 +224,7 @@ export class StaffRepository {
     await this.scope.forStaff(staffUserId, (tx) =>
       tx
         .update(staffSessions)
-        .set({ lastSeenAt: now })
+        .set({ lastSeenAt: sql`greatest(${staffSessions.lastSeenAt}, ${now}::timestamptz)` })
         .where(and(eq(staffSessions.staffUserId, staffUserId), eq(staffSessions.id, sessionId))),
     );
   }

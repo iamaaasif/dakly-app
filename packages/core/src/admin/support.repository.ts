@@ -12,7 +12,6 @@ const grantColumns = {
   id: supportGrants.id,
   storeId: supportGrants.storeId,
   staffUserId: supportGrants.staffUserId,
-  staffSessionId: supportGrants.staffSessionId,
   staffName: staffUsers.name,
   scopes: supportGrants.scopes,
   access: supportGrants.access,
@@ -126,7 +125,6 @@ export class SupportRepository {
     storeId: string,
     id: string,
     staffUserId: string,
-    staffSessionId: string,
     input: SupportRequestInput,
     now: Date,
   ) {
@@ -135,7 +133,6 @@ export class SupportRepository {
         id,
         storeId,
         staffUserId,
-        staffSessionId,
         scopes: input.scopes,
         reason: input.reason,
         access: input.access,
@@ -158,7 +155,7 @@ export class SupportRepository {
         .where(and(eq(supportGrants.storeId, storeId), eq(supportGrants.id, id))),
     );
   }
-  async staff(storeId: string, staffUserId: string, sessionId: string) {
+  async staff(storeId: string, staffUserId: string) {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
@@ -170,18 +167,49 @@ export class SupportRepository {
               role: staffUsers.role,
               status: staffUsers.status,
               enrolledAt: staffUsers.enrolledAt,
+            })
+            .from(staffUsers)
+            .where(eq(staffUsers.id, staffUserId))
+            .for('update')
+        )[0],
+    );
+  }
+  async parent(storeId: string, staffUserId: string, sessionId: string) {
+    return this.tenant.forStore(
+      storeId,
+      async (tx) =>
+        (
+          await tx
+            .select({
               expiresAt: staffSessions.expiresAt,
               revokedAt: staffSessions.revokedAt,
               lastSeenAt: staffSessions.lastSeenAt,
             })
-            .from(staffUsers)
-            .innerJoin(
-              staffSessions,
-              and(eq(staffSessions.staffUserId, staffUsers.id), eq(staffSessions.id, sessionId)),
-            )
-            .where(eq(staffUsers.id, staffUserId))
-            .for('share')
+            .from(staffSessions)
+            .where(and(eq(staffSessions.staffUserId, staffUserId), eq(staffSessions.id, sessionId)))
+            .for('update')
         )[0],
+    );
+  }
+  async touchParent(storeId: string, principal: SupportPrincipal, now: Date) {
+    return this.tenant.inTransaction(
+      storeId,
+      async (tx) =>
+        (
+          await tx
+            .update(staffSessions)
+            .set({ lastSeenAt: sql`greatest(${staffSessions.lastSeenAt}, ${now}::timestamptz)` })
+            .where(
+              and(
+                eq(staffSessions.staffUserId, principal.staffUserId),
+                eq(staffSessions.id, principal.staffSessionId),
+                sql`${staffSessions.revokedAt} is null`,
+                sql`${staffSessions.expiresAt} > ${now}`,
+                sql`${staffSessions.lastSeenAt} > ${now}::timestamptz - interval '30 minutes'`,
+              ),
+            )
+            .returning({ id: staffSessions.id })
+        ).length > 0,
     );
   }
   async handoff(storeId: string, principal: SupportPrincipal, hash: Buffer, expiresAt: Date) {

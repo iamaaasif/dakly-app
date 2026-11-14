@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0035_snapshot.json`: **94 tables, 1240 columns, 368 explicit indexes and 294 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0036_snapshot.json`: **94 tables, 1239 columns, 367 explicit indexes and 293 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -38,7 +38,6 @@ erDiagram
     staff_users |o..o{ staff_audit_log : "staff_user_id"
     stores ||..o{ support_grants : "store_id"
     staff_users ||..o{ support_grants : "staff_user_id"
-    staff_sessions |o..o{ support_grants : "staff_session_id"
     users |o..o{ support_grants : "approved_by_user_id"
     staff_users |o..o{ platform_settings : "updated_by_staff_id"
     staff_users |o..o{ abuse_reports : "reported_by_staff_id"
@@ -259,7 +258,6 @@ erDiagram
         text status "NOT NULL; text"
         text reason "NOT NULL; text"
         integer duration_minutes "NOT NULL; integer"
-        uuid staff_session_id FK "NULL; uuid"
         boolean is_break_glass "NOT NULL; boolean"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone requested_at "NOT NULL; timestamp with time zone"
@@ -1813,7 +1811,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `staff_user_links_user_id_users_id_fk`                               | `staff_user_links(user_id)`                               | `users(id)`                                 | no action |
 | `support_grants_store_id_stores_id_fk`                               | `support_grants(store_id)`                                | `stores(id)`                                | no action |
 | `support_grants_staff_user_id_staff_users_id_fk`                     | `support_grants(staff_user_id)`                           | `staff_users(id)`                           | no action |
-| `support_grants_staff_session_id_staff_sessions_id_fk`               | `support_grants(staff_session_id)`                        | `staff_sessions(id)`                        | no action |
 | `support_grants_approved_by_user_id_users_id_fk`                     | `support_grants(approved_by_user_id)`                     | `users(id)`                                 | no action |
 | `support_sessions_store_id_stores_id_fk`                             | `support_sessions(store_id)`                              | `stores(id)`                                | no action |
 | `support_sessions_grant_id_support_grants_id_fk`                     | `support_sessions(grant_id)`                              | `support_grants(id)`                        | no action |
