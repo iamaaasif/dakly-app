@@ -5,11 +5,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { verifyCodeSchema, type SignUpInput } from '@dakly/contracts/auth';
 import { useVerifyCode } from '../api/verify-code';
 import { useRequestCode } from '../api/request-code';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 export function useSignUpVerification(
   account: { registration: SignUpInput; password: string },
   signupTicket: string | undefined,
-  isRemembered: boolean,
+  options: { isRemembered: boolean; onAuthenticated?: () => void },
 ) {
   const [seconds, setSeconds] = useState(30);
   const [challenge, setChallenge] = useState<string>();
@@ -21,7 +21,7 @@ export function useSignUpVerification(
       password: account.password,
       signupTicket,
       code: '',
-      isRemembered,
+      isRemembered: options.isRemembered,
     },
   });
   const verify = useVerifyCode();
@@ -31,7 +31,8 @@ export function useSignUpVerification(
     return () => clearInterval(interval);
   }, []);
   function complete() {
-    window.location.replace('/setup');
+    if (options.onAuthenticated) options.onAuthenticated();
+    else window.location.replace('/setup');
   }
   const submit = form.handleSubmit(async (input) => {
     try {

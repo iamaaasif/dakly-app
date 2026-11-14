@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { confirmPasswordResetSchema, passwordSchema } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 import { useConfirmReset } from '../api/confirm-reset';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import { AuthField } from './auth-field';
 import { TotpStep } from './totp-step';
 const resetSchema = confirmPasswordResetSchema

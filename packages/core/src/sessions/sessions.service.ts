@@ -47,6 +47,9 @@ export class SessionsService {
               canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
               canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
               canApproveSupport: this.team.canApproveSupport(access),
+              canViewTeam: this.team.canAccess(access, 'team', 'view'),
+              canEditTeam: this.team.canAccess(access, 'team', 'edit'),
+              canTransferOwnership: this.team.canTransferOwnership(access),
             }
           : null,
       contextTag: sessionContextTag(sessionId, storeId, access),

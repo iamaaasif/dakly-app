@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { browserRegistration } from './browser-registration.mjs';
+import { browserTeam } from './browser-team.mjs';
 
 const requireWeb = createRequire(new URL('../apps/web/package.json', import.meta.url));
 
@@ -8,13 +9,15 @@ export function browserFixture(databaseUrl, mailpitUrl) {
   const { createDatabase } = requireWeb('@dakly/db/client');
   const database = createDatabase(databaseUrl);
   const registration = browserRegistration(database, mailpitUrl);
+  const team = browserTeam(database, mailpitUrl);
   const userIds = [randomUUID(), randomUUID()];
   const storeIds = [randomUUID(), randomUUID()];
   const token = randomBytes(32).toString('base64url');
   return {
-    browser: { token, storeIds, registration: registration.browser },
+    browser: { token, storeIds, registration: registration.browser, team: team.browser },
     async seed() {
       await registration.seed();
+      await team.seed();
       const client = await database.pool.connect();
       try {
         await client.query('begin');
@@ -53,6 +56,7 @@ export function browserFixture(databaseUrl, mailpitUrl) {
       try {
         const results = await Promise.allSettled([
           registration.close(),
+          team.close(),
           (async () => {
             for (const table of ['customers', 'audit_log', 'memberships'])
               await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [

@@ -187,6 +187,9 @@ describe('Session boundary over Fastify and Postgres', () => {
       canViewCustomers: true,
       canCreateCustomer: false,
       canApproveSupport: false,
+      canViewTeam: false,
+      canEditTeam: false,
+      canTransferOwnership: false,
     });
     expect(shell.contextTag).toMatch(/^[a-f0-9]{64}$/);
     expect(context.headers['cache-control']).toBe('no-store');
@@ -253,12 +256,59 @@ describe('Session boundary over Fastify and Postgres', () => {
       const changed = (await app.inject({ url: '/me/context', headers })).json();
       expect(changed.contextTag).not.toBe(initial.contextTag);
       expect(changed.currentStore.canApproveSupport).toBe(true);
+      expect(changed.currentStore.canViewTeam).toBe(true);
+      expect(changed.currentStore.canEditTeam).toBe(true);
+      expect(changed.currentStore.canTransferOwnership).toBe(true);
       expect(changed.currentStore.canCreateCustomer).toBe(true);
     } finally {
       await admin.db
         .update(memberships)
         .set({ builtInRole: 'support_agent' })
         .where(eq(memberships.storeId, storeId));
+    }
+  });
+  it('derives Team capabilities from fresh custom grants without granting ownership', async () => {
+    const [role] = await admin.db
+      .insert(roles)
+      .values({ storeId, name: 'Team context reader', permissions: { team: 'view' } })
+      .returning({ id: roles.id });
+    await admin.db
+      .update(memberships)
+      .set({ builtInRole: null, roleId: role!.id })
+      .where(eq(memberships.storeId, storeId));
+    try {
+      const headers = { cookie: cookie() };
+      const before = (await app.inject({ url: '/me/context', headers })).json();
+      expect(before.currentStore).toMatchObject({
+        canViewTeam: true,
+        canEditTeam: false,
+        canTransferOwnership: false,
+      });
+      await admin.db
+        .update(roles)
+        .set({ permissions: { team: 'edit' } })
+        .where(eq(roles.id, role!.id));
+      const after = (await app.inject({ url: '/me/context', headers })).json();
+      expect(after.currentStore).toMatchObject({
+        canViewTeam: true,
+        canEditTeam: true,
+        canTransferOwnership: false,
+      });
+      expect(after.contextTag).not.toBe(before.contextTag);
+      const stale = await app.inject({
+        method: 'POST',
+        url: '/customers',
+        headers: { ...headers, origin, 'x-session-context': before.contextTag },
+        payload: { name: 'Must not be created', phone: '01855555555' },
+      });
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().error.code).toBe('SESSION_CONTEXT_CHANGED');
+    } finally {
+      await admin.db
+        .update(memberships)
+        .set({ builtInRole: 'support_agent', roleId: null })
+        .where(eq(memberships.storeId, storeId));
+      await admin.db.delete(roles).where(eq(roles.id, role!.id));
     }
   });
   it.each([undefined, 'https://elsewhere.test'])(

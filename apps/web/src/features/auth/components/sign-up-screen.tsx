@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import Link from 'next/link';
+import { AuthLink } from './auth-link';
 import type { SignUpInput } from '@dakly/contracts/auth';
 import type { AuthConfig } from '../auth.types';
 import { AuthFrame } from './auth-frame';
@@ -10,10 +10,14 @@ export function SignUpScreen({
   config,
   signupTicket,
   isRemembered = false,
+  onAuthenticated,
+  onSignIn,
 }: {
   config: AuthConfig;
   signupTicket?: string;
   isRemembered?: boolean;
+  onAuthenticated?: () => void;
+  onSignIn?: () => void;
 }) {
   const [account, setAccount] = useState<{ registration: SignUpInput; password: string } | null>(
     null,
@@ -25,9 +29,9 @@ export function SignUpScreen({
           Account registration is unavailable while our published Terms and Privacy documents are
           being prepared.
         </p>
-        <Link href="/sign-in" className="inline-flex min-h-10 items-center text-action underline">
+        <AuthLink href="/sign-in" onNavigate={onSignIn}>
           Sign in to an existing account
-        </Link>
+        </AuthLink>
       </AuthFrame>
     );
   return (
@@ -40,13 +44,14 @@ export function SignUpScreen({
           signupTicket={signupTicket}
           isRemembered={isRemembered}
           onBack={() => setAccount(null)}
+          onAuthenticated={onAuthenticated}
         />
       ) : (
         <SignUpAccount legal={config.legal} onSent={setAccount} />
       )}
-      <Link href="/sign-in" className="inline-flex min-h-10 items-center text-action underline">
+      <AuthLink href="/sign-in" onNavigate={onSignIn}>
         Already have an account? Sign in
-      </Link>
+      </AuthLink>
     </AuthFrame>
   );
 }

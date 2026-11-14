@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { totpSignInSchema } from '@dakly/contracts/totp';
 import { Button } from '@dakly/ui/button';
 import { useVerifyTotp } from '../api/verify-totp';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import { AuthField } from './auth-field';
 export function TotpStep({
   challengeId,

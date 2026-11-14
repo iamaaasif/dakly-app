@@ -26,6 +26,29 @@ describe('apiPost', () => {
     });
   });
 
+  it.each(['PATCH', 'DELETE'] as const)(
+    'sends a scoped %s and keeps stale writes rejected',
+    async (method) => {
+      let sent: RequestInit | undefined;
+      vi.stubGlobal('fetch', async (_url: string, options: RequestInit) => {
+        sent = options;
+        return Response.json(
+          { error: { code: 'SESSION_CONTEXT_CHANGED', message: 'Refresh' } },
+          { status: 409 },
+        );
+      });
+      await expect(
+        apiRequest('/members/member', {
+          method,
+          contextTag: 'old',
+          body: method === 'PATCH' ? { builtInRole: 'admin' } : undefined,
+        }),
+      ).rejects.toMatchObject({ code: 'SESSION_CONTEXT_CHANGED' });
+      expect(sent?.method).toBe(method);
+      expect(sent?.headers).toMatchObject({ 'X-Session-Context': 'old' });
+    },
+  );
+
   it('supports successful empty responses and passes the context precondition', async () => {
     let headers: HeadersInit | undefined;
     vi.stubGlobal('fetch', async (_path: string, options: RequestInit) => {

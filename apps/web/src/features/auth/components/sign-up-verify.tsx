@@ -9,16 +9,18 @@ export function SignUpVerify({
   signupTicket,
   isRemembered,
   onBack,
+  onAuthenticated,
 }: {
   account: { registration: SignUpInput; password: string };
   signupTicket?: string;
   isRemembered: boolean;
   onBack: () => void;
+  onAuthenticated?: () => void;
 }) {
   const { form, seconds, challenge, complete, submit, resend, pending } = useSignUpVerification(
     account,
     signupTicket,
-    isRemembered,
+    { isRemembered, onAuthenticated },
   );
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={complete} />;
   return (

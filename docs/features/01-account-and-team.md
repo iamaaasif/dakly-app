@@ -83,7 +83,7 @@ Turning an extension off hides its pages from the menu, stops its background job
 
 **Team**
 
-Invite by mobile number (the invite link goes by SMS or WhatsApp) or by email (D20), choose a role, invite link valid 7 days, resend or cancel. Seats count active members and pending invites. When seats are full, Invite shows the plan limit and an Upgrade button.
+Invite by mobile number (the invite link goes by SMS or WhatsApp) or by email (D20), choose a role, invite link valid 7 days, resend or cancel. Seats count active members and pending invites. When seats are full, Invite shows the actual plan limit and is disabled. Members or unaccepted invitations can be removed to free seats; billing checkout is separate scope.
 
 **Billing**
 
@@ -977,5 +977,59 @@ navigation. Opening a link never changes the account. Cancellation and completio
 require explicit POST actions. Completion issues no session and directs the person
 to sign in again. The recovery receipt explains that its reference and completion
 key must be kept safely before leaving; neither is saved in browser storage.
-Authenticated `/security` history is unchanged. Team and authenticated settings
-management remain the next two ACC-8 PRs.
+Authenticated `/security` history is unchanged. Authenticated settings
+management remains the final ACC-8 PR.
+
+## Team web screens (ACC-8, second slice)
+
+`/team?tab=members|roles` checks current Team View on every server page render,
+then uses the verified client context inside the shell. Both lists keep their
+cursor in the URL. Members shows the current plan’s seat use, contact data as
+masked by the API, status and exact last activity and invitation expiry in
+Asia/Dhaka. Team Edit enables phone or email invitations, role changes, resend,
+and named confirmation before removal or invitation cancellation. Owner is never
+an ordinary assignment option. Full seats disable new invitations; there is no
+billing destination until checkout exists.
+
+Roles shows built-in permissions read-only and paginated custom roles. Custom
+forms cover every contract area and the phone, export and refund flags. Billing
+Edit is unavailable for custom roles. The API enforces grant limits, duplicate
+names and membership references on deletion. Role changes affect assigned members
+on their next verified request, including the acting member.
+
+`/team/ownership` is available from shop navigation to every active member,
+including recipients without Team View. Only verified Owner capability enables
+requesting a code and starting a transfer to a named active member. The current
+Owner can cancel; only the named recipient can accept through a confirmation.
+The screen displays the API deadline and the existing one-owned-shop limit.
+Starting a transfer does not send a recipient notification: the Owner is told to
+ask the selected member to open Ownership transfer in their shop. Unrelated
+members receive the API denial without the pending transfer details.
+
+`GET /me/context` now also returns `canViewTeam`, `canEditTeam` and
+`canTransferOwnership`, derived by the existing Team service policy from the
+verified access on that request. There is no role-name authority in the browser
+and no new permission cache. Team shop requests use the opaque `contextTag`,
+including PATCH and DELETE. Successful changes refresh authoritative context and
+announce the existing identifier-free session change event; stale requests still
+fail with 409 before any write. Team dialogs suspend while that verification is
+pending or failed, so Refresh remains usable. Unchanged context restores the same
+form and original focus target; changed context disposes the draft.
+
+`/invites/accept#token=…` is a public entrypoint with no public invitation preview.
+It validates the exact notice fragment locally and removes it on entry and
+same-page notice changes. The token stays only in memory; reload requires opening
+the original notice again. Shared sign-in, Google and second-factor screens keep
+the invitation continuation in the same page. New recipients use shared account
+registration and mobile verification, then return to explicit acceptance without
+creating an owned shop. Authentication and GET never accept an invitation. The
+signed-in recipient explicitly posts acceptance, then explicitly opens the joined
+shop through the existing verified shop selector.
+
+Email invitations require the exact currently verified email. An optional email
+entered during mobile signup does not prove mailbox ownership. The screen directs
+such recipients to account Security, then to reopen the original notice; existing
+verified-email recipients can sign in and accept immediately. The final ACC-8
+settings slice must add actual add/verify/change-email management to `/security`,
+while retaining its existing account-only history. That integration remains
+required before the whole ACC-8 task is complete.

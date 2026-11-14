@@ -11,14 +11,18 @@ export class ApiError extends Error {
   }
 }
 
-type ApiOptions = { signal?: AbortSignal; contextTag?: string };
+type ApiOptions = {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  signal?: AbortSignal;
+  contextTag?: string;
+};
 
 export async function apiRequest<TResponse>(
   path: string,
   options: ApiOptions & { body?: unknown } = {},
 ): Promise<TResponse> {
   const response = await fetch(`/api${path}`, {
-    method: options.body === undefined ? 'GET' : 'POST',
+    method: requestMethod(options),
     headers: {
       'Content-Type': 'application/json',
       ...(options.contextTag ? { 'X-Session-Context': options.contextTag } : {}),
@@ -62,4 +66,8 @@ async function rejectResponse(response: Response, contextTag?: string): Promise<
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('dakly-context-changed'));
   }
   throw new ApiError(error.code, error.message, error.fields);
+}
+
+function requestMethod(options: ApiOptions & { body?: unknown }) {
+  return options.method ?? (options.body === undefined ? 'GET' : 'POST');
 }

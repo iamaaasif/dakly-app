@@ -147,7 +147,7 @@ async function main() {
     await waitForHealth(`${webOrigin}/api/health`, [api, next], controller.signal);
     await run(
       process.execPath,
-      [requireWeb.resolve('@playwright/test/cli'), 'test'],
+      [requireWeb.resolve('@playwright/test/cli'), 'test', ...process.argv.slice(2)],
       'playwright',
       {
         ...environment,

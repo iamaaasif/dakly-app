@@ -5,7 +5,7 @@ import { verifyEmailCodeSchema, type SignInResponse } from '@dakly/contracts/aut
 import { Button } from '@dakly/ui/button';
 import { useVerifyCode } from '../api/verify-code';
 import { useVerifyEmailCode } from '../api/verify-email-code';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import { AuthField } from './auth-field';
 const codeSchema = verifyEmailCodeSchema.pick({ code: true });
 type SignInCodeProps = {

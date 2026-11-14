@@ -32,6 +32,9 @@ export type SessionContext = {
         canViewCustomers: boolean;
         canCreateCustomer: boolean;
         canApproveSupport: boolean;
+        canViewTeam: boolean;
+        canEditTeam: boolean;
+        canTransferOwnership: boolean;
       })
     | null;
   contextTag: string;

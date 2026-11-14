@@ -4,6 +4,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useSessionBoundary } from '@/lib/use-session-boundary';
 import { SessionVerificationStatus } from './session-verification-status';
 import { ShellFrame } from './shell-frame';
+import { SessionInteraction } from './session-interaction';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const boundary = useSessionBoundary();
@@ -26,20 +27,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           onRetry={boundary.verify}
         />
       ) : null}
-      <div hidden={blocked} inert={blocked}>
-        {boundary.available && data ? (
-          <ShellFrame
-            key={`${data.contextTag}:${boundary.generation}`}
-            data={data}
-            blocked={blocked}
-            generation={boundary.generation}
-            onSwitch={boundary.switchStore}
-            onSignOut={boundary.signOut}
-          >
-            {children}
-          </ShellFrame>
-        ) : null}
-      </div>
+      <SessionInteraction.Provider value={blocked}>
+        <div hidden={blocked} inert={blocked}>
+          {boundary.available && data ? (
+            <ShellFrame
+              key={`${data.contextTag}:${boundary.generation}`}
+              data={data}
+              blocked={blocked}
+              generation={boundary.generation}
+              onSwitch={boundary.switchStore}
+              onSignOut={boundary.signOut}
+            >
+              {children}
+            </ShellFrame>
+          ) : null}
+        </div>
+      </SessionInteraction.Provider>
     </>
   );
 }

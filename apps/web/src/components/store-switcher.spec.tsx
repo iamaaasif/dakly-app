@@ -38,6 +38,9 @@ describe('StoreSwitcher', () => {
             canViewCustomers: true,
             canCreateCustomer: true,
             canApproveSupport: false,
+            canViewTeam: false,
+            canEditTeam: false,
+            canTransferOwnership: false,
           },
         }}
         onSwitch={onSwitch}

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useSessionContext } from '@/lib/session-context';
 
 type StorePageProps = {
-  permission: 'canViewCustomers' | 'canCreateCustomer' | 'canApproveSupport';
+  permission: 'canViewCustomers' | 'canCreateCustomer' | 'canApproveSupport' | 'canViewTeam';
   children: ReactNode;
 };
 export function StorePage({ permission, children }: StorePageProps) {

@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { verifyGoogleEmailSchema, type GoogleSignInResponse } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 import { useVerifyGoogleEmail } from '../api/verify-google-email';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import { AuthField } from './auth-field';
 export function GoogleEmail({
   verificationTicket,
