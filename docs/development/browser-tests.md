@@ -1,6 +1,6 @@
 # Browser and component tests
 
-Use Node 22 from `.nvmrc` (22.12 or newer), pnpm 10.28.0 and the frozen lockfile. Playwright 1.58.2 installs its own Chromium; no system Chrome or globally installed test runner is used. On Linux, install the browser and its system dependencies:
+Use Node 22 from `.nvmrc` (22.12 or newer), pnpm 10.28.0 and the frozen lockfile. Playwright 1.58.2 installs its own Chromium; no system Chrome or globally installed test runner is used. CI uses Ubuntu 24.04, which the pinned Playwright release supports. Keep the runner image pinned when changing browser dependencies; `ubuntu-latest` can move to an unsupported OS. On Linux, install the browser and its system dependencies:
 
 ```bash
 pnpm install --frozen-lockfile
