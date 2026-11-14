@@ -59,7 +59,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 
 1. Step 1 validates fields inline. Mobile must be a valid Bangladeshi number not already registered; if it is, show "This number already has an account. Sign in instead" with a link.
 2. Dakly sends a 6-digit SMS code (valid 10 minutes, max 5 tries, resend after 30 seconds, max 5 sends per number per hour and 20 per IP per hour).
-3. Step 3 saves the store: name, business type, district (prefills Store settings), "how you sell" and size. Size sets the suggested plan (Under 500 → Starter; 500–2,000 → Starter; 2,000–10,000 → Growth; Over 10,000 → Pro), shown with a "Recommended" badge.
+3. Step 3 collects a business draft: name, business type, district (prefills Store settings), "how you sell" and size. Step 4 submits these details with the selected plan and billing cycle in one atomic store-creation request. Size sets the suggested plan (Under 500 → Starter; 500–2,000 → Starter; 2,000–10,000 → Growth; Over 10,000 → Pro), shown with a "Recommended" badge.
 4. Step 4: picking Free starts the Free plan; picking a paid plan starts a trial of it with no payment method, as long as the plan's trial length set in the admin panel (D34; 0 means no trial). The trial banner in Plan and usage says when it ends.
 5. On finish, Dakly turns extensions on from the "how you sell" answers (see rule ACC-R5), shows the toast "Dakly is set up for how you sell. Turned on: …" and lands on the Dashboard with the setup checklist open.
 
@@ -318,7 +318,7 @@ Release 1 has five ways in (D20). All of them end at step 5 below.
 1. Phones are normalised to `01XXXXXXXXX` with `bdMobileSchema` from `packages/contracts/src/phone.ts`. Emails are trimmed and lower-cased.
 2. Codes are stored hashed, live 10 minutes and allow 5 tries. Sends are limited to 5 per phone or email and 20 per IP per hour (Valkey counters).
 3. Passwords are hashed with Argon2id. Wrong passwords and codes share the ACC-R2 lockout (D35). "Forgot password" sends a code to the phone or email on the account.
-4. Sign-up commits in stages ([plan](../plans/core.md)): verifying the code creates the user and a session with no store; the business details step then uses `StoreTransaction.runForNewStore` to create the store, Owner membership, subscription and default settings in one transaction. Global user and session writes stay outside that transaction. The active store is saved to the session after store setup commits; a retry after a failed session update finds the existing owned store and resumes. A user who stops in between resumes at business details on their next sign-in. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
+4. Sign-up commits in stages ([plan](../plans/core.md)): verifying the code creates the user and a session with no store; the final plan step submits business details and uses `StoreTransaction.runForNewStore` to create the store, Owner membership, subscription and default settings in one transaction. Global user and session writes stay outside that transaction. The active store is saved to the session after store setup commits; a retry after a failed session update finds the existing owned store and resumes. A user who stops in between resumes at business details on their next sign-in. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
 5. The API issues an opaque session token (32 random bytes) in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored, with the user, active store, IP, user agent and expiry (30 days sliding with "Keep me signed in", otherwise 12 hours idle; D35).
 6. Session and permission results are not cached across requests. A failed database check rejects access. Revoked sessions fail on the next request, including account routes without a store. Each request loads the session and current membership and role from the primary PostgreSQL database, checks the session is unexpired and not revoked and the membership is active, and sets `request.storeId`, `request.userId` and `request.access` (role, area levels and flags). `StoreGuard` and `@RequirePermission('orders.edit')` read them.
 
@@ -897,8 +897,7 @@ its audit event; it never signs the person in. Sign in again afterward. Completi
 is rejected early, after cancellation, or after credential/security-state changes.
 Any completed TOTP sign-in cancels a pending request. The cancellation link carries
 its different token in the URL fragment at `/security/recovery`; cancellation is
-an explicit POST, never a GET side effect. The public destination screen belongs
-to ACC-8 and is not served by this API slice. Recovery start, cancellation,
+an explicit POST, never a GET side effect. The public destination is the ACC-8 `/security/recovery` screen, outside the authenticated shell. Recovery start, cancellation,
 completion and TOTP changes write account security events. Immediate staff recovery
 remains the separate ADM-10 flow.
 
@@ -935,3 +934,48 @@ acceptance uses its named recipient. Support customer operations establish an ap
 and support session first. Account-only and staff routes remain explicit, separately tested
 boundaries. RLS and repository predicates are tested independently; see
 [the testing rules](../rules/testing.md#store-route-isolation).
+
+### Sign-in and setup screens (ACC-8, first PR)
+
+The public `/sign-in` screen supports phone or email with a password or a code,
+Keep me signed in, Google identity, and the required authenticator or backup-code
+step. `/forgot-password` requests a reset code and confirms the new password;
+accounts with two-step verification finish that step before receiving a session.
+Google email verification and signup tickets stay in component memory.
+
+`/sign-up` has account and SMS verification steps. `/setup` resumes the verified
+account at business details and plan choice. The final `POST /stores` commits the
+business details, Owner membership and subscription together. Reloading before
+verification clears the account draft; after verification, the session can resume
+setup. Business drafts stay in memory and are cleared on reload. A retry after a
+committed store uses the existing backend retry behavior rather than creating a
+second shop. Accounts with existing memberships choose their shop in the shell.
+
+Plans, prices, limits, trial lengths and recommendations come from `GET /plans`.
+A paid plan with no trial requires payment; checkout is not available in this
+slice, so it has no enabled start button. The backend also rejects such a creation
+with `PLAN_NEEDS_PAYMENT` and rolls back all store writes. No payment-required
+subscription or successful payment is invented. `/dashboard` is a minimal real
+landing with verified account/shop identity and working Customers, Security and
+Support access destinations according to current access. Analytics, setup
+checklists and checkout remain separate tasks.
+
+Registration requires `WEB_TERMS_URL`, `WEB_PRIVACY_URL` and `WEB_TERMS_VERSION`.
+The URLs must be published HTTPS documents. Missing configuration disables
+registration while existing-account sign-in remains available. The accepted
+version is sent through the existing signup contract. No legal text or version is
+supplied by default. `WEB_GOOGLE_CLIENT_ID` enables Google's actual Identity
+Services button and must match the API's `GOOGLE_CLIENT_ID` and approved browser
+origins. Missing configuration or an SDK load failure shows an unavailable state.
+The district selector follows the 64 names in migration 0003. The eight business
+labels are presentation choices; the existing contract remains a trimmed string.
+
+`/security/recovery` can request codes and recovery, accept a cancellation notice,
+or complete recovery with the separate saved completion key. Notice fragments
+are validated locally and removed from the address bar, including same-page link
+navigation. Opening a link never changes the account. Cancellation and completion
+require explicit POST actions. Completion issues no session and directs the person
+to sign in again. The recovery receipt explains that its reference and completion
+key must be kept safely before leaving; neither is saved in browser storage.
+Authenticated `/security` history is unchanged. Team and authenticated settings
+management remain the next two ACC-8 PRs.

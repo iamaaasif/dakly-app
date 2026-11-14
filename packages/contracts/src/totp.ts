@@ -32,3 +32,9 @@ export type TotpConfirmInput = z.infer<typeof totpConfirmSchema>;
 export type TotpRecoveryInput = z.infer<typeof totpRecoverySchema>;
 export type TotpRecoveryCodeInput = z.infer<typeof totpRecoveryCodeSchema>;
 export type TotpRecoveryTokenInput = z.infer<typeof totpRecoveryTokenSchema>;
+
+export type TotpRecoveryResponse = {
+  recoveryId: string;
+  completionToken: string;
+  eligibleAt: string | null;
+};

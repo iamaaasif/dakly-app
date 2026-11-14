@@ -43,3 +43,20 @@ These generated directories are ignored by Git. Each run clears its old artifact
 ## ACC-8 extension
 
 Add actual Mailpit sign-up-to-Dashboard coverage and public `/security/recovery` link coverage in `apps/web/e2e/` when those screens exist. Use the same production servers and real guards; obtain codes from the configured local Mailpit API. Track newly created account/store IDs for scoped cleanup rather than granting a seeded session to a sign-up test. Keep the public recovery route outside the authenticated shell. Extend the fixture lifecycle for owned messages and account security rows when those flows create them; do not flush shared services or claim the seeded shell flow proves onboarding.
+
+The signup browser case uses an owned synthetic phone and plan, reads the actual
+SMS code from Mailpit, and reaches the real Dashboard without a seeded session.
+It verifies store, Owner and subscription rows, then uses the normal TOTP setup
+API to exercise password plus backup-code sign-in. Public recovery uses the
+actual durable Mailpit notice link, proves link loading does not cancel, and
+finishes a separate request after changing only its owned, delivered recovery
+deadline. Completion must leave the browser signed out.
+
+The runner supplies fixture-only HTTPS Terms and Privacy URLs; the test intercepts
+those document responses. Production registration still requires published legal
+configuration. Auth screenshots and traces are disabled. Private input and notice
+navigation avoid credential-bearing Playwright step titles; cleanup scrubs private
+DOM content before any failure snapshot. Deliberate Dashboard screenshots contain
+only synthetic account/shop data. Teardown removes only the generated account,
+owned store/plan rows and exact recipient-matched Mailpit message IDs. Shared
+Redis rate-limit keys are never flushed; the test respects the real resend window.

@@ -1,17 +1,20 @@
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { browserRegistration } from './browser-registration.mjs';
 
 const requireWeb = createRequire(new URL('../apps/web/package.json', import.meta.url));
 
-export function browserFixture(databaseUrl) {
+export function browserFixture(databaseUrl, mailpitUrl) {
   const { createDatabase } = requireWeb('@dakly/db/client');
   const database = createDatabase(databaseUrl);
+  const registration = browserRegistration(database, mailpitUrl);
   const userIds = [randomUUID(), randomUUID()];
   const storeIds = [randomUUID(), randomUUID()];
   const token = randomBytes(32).toString('base64url');
   return {
-    browser: { token, storeIds },
+    browser: { token, storeIds, registration: registration.browser },
     async seed() {
+      await registration.seed();
       const client = await database.pool.connect();
       try {
         await client.query('begin');
@@ -48,18 +51,27 @@ export function browserFixture(databaseUrl) {
     },
     async close() {
       try {
-        for (const table of ['customers', 'audit_log', 'memberships'])
-          await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
-            storeIds,
-          ]);
-        await database.pool.query('delete from sessions where user_id=any($1::uuid[])', [userIds]);
-        await database.pool.query('delete from stores where id=any($1::uuid[])', [storeIds]);
-        await database.pool.query('delete from users where id=any($1::uuid[])', [userIds]);
-        const remaining = await database.pool.query(
-          'select id from users where id=any($1::uuid[]) union all select id from stores where id=any($2::uuid[])',
-          [userIds, storeIds],
-        );
-        if (remaining.rowCount !== 0) throw new Error('Browser fixture cleanup was incomplete');
+        const results = await Promise.allSettled([
+          registration.close(),
+          (async () => {
+            for (const table of ['customers', 'audit_log', 'memberships'])
+              await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
+                storeIds,
+              ]);
+            await database.pool.query('delete from sessions where user_id=any($1::uuid[])', [
+              userIds,
+            ]);
+            await database.pool.query('delete from stores where id=any($1::uuid[])', [storeIds]);
+            await database.pool.query('delete from users where id=any($1::uuid[])', [userIds]);
+            const remaining = await database.pool.query(
+              'select id from users where id=any($1::uuid[]) union all select id from stores where id=any($2::uuid[])',
+              [userIds, storeIds],
+            );
+            if (remaining.rowCount !== 0) throw new Error('Browser fixture cleanup was incomplete');
+          })(),
+        ]);
+        if (results.some((result) => result.status === 'rejected'))
+          throw new Error('Owned browser fixture cleanup failed');
       } finally {
         await database.pool.end();
       }

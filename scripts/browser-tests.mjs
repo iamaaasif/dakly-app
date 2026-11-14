@@ -90,11 +90,28 @@ async function main() {
   const databaseUrl = localService('DATABASE_ADMIN_URL');
   if (!['localhost', '127.0.0.1', '::1'].includes(process.env.MAILPIT_SMTP_HOST ?? '127.0.0.1'))
     throw new Error('MAILPIT_SMTP_HOST must use a loopback test service');
+  const mailpit = new URL(process.env.MAILPIT_API_URL);
+  if (
+    mailpit.protocol !== 'http:' ||
+    !['localhost', '127.0.0.1', '[::1]'].includes(mailpit.hostname) ||
+    mailpit.username ||
+    mailpit.password ||
+    mailpit.search ||
+    mailpit.hash
+  )
+    throw new Error('MAILPIT_API_URL must use a dedicated loopback test service');
   await Promise.all([requireFreePort(4015), requireFreePort(3015)]);
   for (const directory of [artifacts, `${web}/test-results`, `${web}/playwright-report`])
     await rm(directory, { recursive: true, force: true });
   await mkdir(artifacts, { recursive: true });
-  const environment = { ...process.env, WEB_API_URL: apiOrigin };
+  const environment = {
+    ...process.env,
+    WEB_API_URL: apiOrigin,
+    WEB_TERMS_URL: 'https://legal.browser.test/terms',
+    WEB_PRIVACY_URL: 'https://legal.browser.test/privacy',
+    WEB_TERMS_VERSION: 'browser-fixture-v1',
+    WEB_GOOGLE_CLIENT_ID: undefined,
+  };
   let fixture;
   try {
     await run(
@@ -104,7 +121,7 @@ async function main() {
       environment,
     );
     await Promise.all([requireFreePort(4015), requireFreePort(3015)]);
-    fixture = browserFixture(databaseUrl);
+    fixture = browserFixture(databaseUrl, mailpit.origin);
     await fixture.seed();
     const api = start(
       process.execPath,
