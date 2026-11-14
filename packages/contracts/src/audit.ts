@@ -10,6 +10,7 @@ export const auditEntrySchema = z.strictObject({
   actor: z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('user'), userId: z.uuid() }),
     z.strictObject({ kind: z.literal('system') }),
+    z.strictObject({ kind: z.literal('staff'), staffUserId: z.uuid() }),
   ]),
   action: identifier,
   entityType: identifier,

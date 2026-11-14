@@ -13,7 +13,10 @@ export class OriginGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    const origins = rule?.kind === 'staff' ? [loadEnv().ADMIN_ORIGIN] : this.origins;
+    const origins =
+      rule?.kind === 'staff' || rule?.kind === 'support-handoff'
+        ? [loadEnv().ADMIN_ORIGIN]
+        : this.origins;
     const request = context
       .switchToHttp()
       .getRequest<{ method: string; headers: { origin?: string } }>();

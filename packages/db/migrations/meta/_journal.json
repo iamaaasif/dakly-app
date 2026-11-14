@@ -218,6 +218,41 @@
       "when": 1794651068929,
       "tag": "0030_invalidate_disabled_staff_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794655289271,
+      "tag": "0031_staff_support_and_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794655614227,
+      "tag": "0032_staff_identity_insert_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794655855053,
+      "tag": "0033_support_function_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794656048620,
+      "tag": "0034_support_request_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794656673430,
+      "tag": "0035_support_scope_constraints",
+      "breakpoints": true
     }
   ]
 }

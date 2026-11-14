@@ -1,6 +1,6 @@
 import type { ErrorResponse } from '@dakly/contracts/errors';
-export async function adminRequest<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/admin/auth/${path}`, {
+export async function adminApi<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/admin/${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -12,4 +12,8 @@ export async function adminRequest<T>(path: string, body?: unknown): Promise<T> 
     throw new Error(payload?.error?.message ?? 'Could not complete the request. Try again.');
   }
   return response.status === 204 ? (undefined as T) : (response.json() as Promise<T>);
+}
+
+export function adminRequest<T>(path: string, body?: unknown): Promise<T> {
+  return adminApi<T>(`auth/${path}`, body);
 }

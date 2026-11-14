@@ -24,7 +24,7 @@ export class SessionGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (rule?.kind === 'staff') return true;
+    if (['support', 'support-handoff', 'staff'].includes(rule?.kind ?? '')) return true;
     const token = request.cookies[SESSION_COOKIE];
     if (!token) return true;
     const session = await this.sessions.resolve(token);

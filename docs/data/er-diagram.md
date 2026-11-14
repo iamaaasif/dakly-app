@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0030_snapshot.json`: **91 tables, 1209 columns, 350 explicit indexes and 284 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0035_snapshot.json`: **94 tables, 1240 columns, 368 explicit indexes and 294 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -38,6 +38,7 @@ erDiagram
     staff_users |o..o{ staff_audit_log : "staff_user_id"
     stores ||..o{ support_grants : "store_id"
     staff_users ||..o{ support_grants : "staff_user_id"
+    staff_sessions |o..o{ support_grants : "staff_session_id"
     users |o..o{ support_grants : "approved_by_user_id"
     staff_users |o..o{ platform_settings : "updated_by_staff_id"
     staff_users |o..o{ abuse_reports : "reported_by_staff_id"
@@ -45,6 +46,15 @@ erDiagram
     staff_users ||..o{ staff_identity_contacts : "staff_user_id"
     staff_users ||..o{ staff_passkeys : "staff_user_id"
     staff_users ||..o{ staff_challenges : "staff_user_id"
+    staff_users ||..o{ staff_user_links : "staff_user_id"
+    users ||..o{ staff_user_links : "user_id"
+    stores ||..o{ support_sessions : "store_id"
+    support_grants ||..o{ support_sessions : "grant_id"
+    staff_users ||..o{ support_sessions : "staff_user_id"
+    staff_sessions ||..o{ support_sessions : "staff_session_id"
+    support_grants ||..o{ support_sessions : "store_id, grant_id"
+    staff_users ||..o{ staff_audit_exports : "staff_user_id"
+    staff_sessions ||..o{ staff_audit_exports : "staff_session_id"
     stores {
         uuid id PK "NOT NULL; uuid"
         text name "NOT NULL; text"
@@ -229,6 +239,7 @@ erDiagram
     staff_audit_log {
         uuid id PK "NOT NULL; uuid"
         text operator_identity "NULL; text"
+        uuid actor_user_id "NULL; uuid"
         uuid staff_user_id FK "NULL; uuid"
         text action "NOT NULL; text"
         uuid store_id "NULL; uuid"
@@ -247,6 +258,8 @@ erDiagram
         text access "NOT NULL; text"
         text status "NOT NULL; text"
         text reason "NOT NULL; text"
+        integer duration_minutes "NOT NULL; integer"
+        uuid staff_session_id FK "NULL; uuid"
         boolean is_break_glass "NOT NULL; boolean"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone requested_at "NOT NULL; timestamp with time zone"
@@ -307,6 +320,40 @@ erDiagram
         smallint totp_key_version "NULL; smallint"
         timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone consumed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_user_links {
+        uuid id PK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    support_sessions {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid grant_id FK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        uuid staff_session_id FK "NOT NULL; uuid"
+        bytea handoff_hash UK "NOT NULL; bytea"
+        bytea token_hash UK "NULL; bytea"
+        timestamp_with_time_zone handoff_expires_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone consumed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_audit_exports {
+        uuid id PK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        uuid staff_session_id FK "NOT NULL; uuid"
+        text staff_name "NOT NULL; text"
+        jsonb filter "NOT NULL; jsonb"
+        text status "NOT NULL; text"
+        integer progress "NOT NULL; integer"
+        integer attempts "NOT NULL; integer"
+        uuid lease_id "NULL; uuid"
+        timestamp_with_time_zone leased_until "NULL; timestamp with time zone"
+        text contents "NULL; text"
+        text error "NULL; text"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -1755,14 +1802,24 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
 | `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
 | `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
+| `staff_audit_exports_staff_user_id_staff_users_id_fk`                | `staff_audit_exports(staff_user_id)`                      | `staff_users(id)`                           | no action |
+| `staff_audit_exports_staff_session_id_staff_sessions_id_fk`          | `staff_audit_exports(staff_session_id)`                   | `staff_sessions(id)`                        | no action |
 | `staff_audit_log_staff_user_id_staff_users_id_fk`                    | `staff_audit_log(staff_user_id)`                          | `staff_users(id)`                           | no action |
 | `staff_challenges_staff_user_id_staff_users_id_fk`                   | `staff_challenges(staff_user_id)`                         | `staff_users(id)`                           | no action |
 | `staff_identity_contacts_staff_user_id_staff_users_id_fk`            | `staff_identity_contacts(staff_user_id)`                  | `staff_users(id)`                           | no action |
 | `staff_passkeys_staff_user_id_staff_users_id_fk`                     | `staff_passkeys(staff_user_id)`                           | `staff_users(id)`                           | no action |
 | `staff_sessions_staff_user_id_staff_users_id_fk`                     | `staff_sessions(staff_user_id)`                           | `staff_users(id)`                           | cascade   |
+| `staff_user_links_staff_user_id_staff_users_id_fk`                   | `staff_user_links(staff_user_id)`                         | `staff_users(id)`                           | no action |
+| `staff_user_links_user_id_users_id_fk`                               | `staff_user_links(user_id)`                               | `users(id)`                                 | no action |
 | `support_grants_store_id_stores_id_fk`                               | `support_grants(store_id)`                                | `stores(id)`                                | no action |
 | `support_grants_staff_user_id_staff_users_id_fk`                     | `support_grants(staff_user_id)`                           | `staff_users(id)`                           | no action |
+| `support_grants_staff_session_id_staff_sessions_id_fk`               | `support_grants(staff_session_id)`                        | `staff_sessions(id)`                        | no action |
 | `support_grants_approved_by_user_id_users_id_fk`                     | `support_grants(approved_by_user_id)`                     | `users(id)`                                 | no action |
+| `support_sessions_store_id_stores_id_fk`                             | `support_sessions(store_id)`                              | `stores(id)`                                | no action |
+| `support_sessions_grant_id_support_grants_id_fk`                     | `support_sessions(grant_id)`                              | `support_grants(id)`                        | no action |
+| `support_sessions_staff_user_id_staff_users_id_fk`                   | `support_sessions(staff_user_id)`                         | `staff_users(id)`                           | no action |
+| `support_sessions_staff_session_id_staff_sessions_id_fk`             | `support_sessions(staff_session_id)`                      | `staff_sessions(id)`                        | no action |
+| `support_sessions_grant_store_fk`                                    | `support_sessions(store_id, grant_id)`                    | `support_grants(store_id, id)`              | no action |
 | `ai_agent_settings_store_id_stores_id_fk`                            | `ai_agent_settings(store_id)`                             | `stores(id)`                                | no action |
 | `ai_agent_settings_updated_by_user_id_users_id_fk`                   | `ai_agent_settings(updated_by_user_id)`                   | `users(id)`                                 | no action |
 | `ai_rule_changes_store_id_stores_id_fk`                              | `ai_rule_changes(store_id)`                               | `stores(id)`                                | no action |

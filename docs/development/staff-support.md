@@ -1,0 +1,33 @@
+# Staff support and audit operations
+
+ADM-2 exposes only customer read-by-ID and create through an approved support session. Future domain services must explicitly integrate the support principal and both audits before adding a scope. Never route arbitrary shop controllers through an outer support transaction.
+
+## Runtime and trust boundary
+
+The admin app requires Cloudflare Access on every page and API request, as in ADM-1. Set `ADMIN_ORIGIN`, `ADMIN_API_URL`, staff signing and Access settings as documented in [staff authentication](staff-authentication.md). Set the shop build's `WEB_API_URL` to the backend origin and the backend's `WEB_ORIGINS` to the exact public shop origin. Turbo forwards `WEB_API_URL` and `ADMIN_API_URL` at build time. Keep the existing trusted proxy allowlist and edge header overwrites.
+
+An Access-authenticated staff request creates a sixty-second one-use handoff bound to the current staff session and approved grant. The browser submits the proof in a form body to the configured first shop origin's fixed `/support/exchange` path. Only this route accepts `ADMIN_ORIGIN` as its browser origin. Subsequent support writes require a shop origin. There is no redirect input and no token in query strings or referrers. Request logging discards request bodies and redacts tokens.
+
+The exchange consumes the handoff and issues an opaque hashed token in `dakly_support`, host-only, HttpOnly, SameSite=Lax, Secure in production, Path=/support. The Next shop rewrite uses `/support/api/*`, preserving the path boundary. The ordinary `dakly_session` cookie is neither replaced nor used by support routes. The delegated support session does not require a Cloudflare assertion on the shop host; its authority comes from the verified one-use admin handoff and live parent session. Revoking or disabling that session invalidates support on the next request. Polling does not refresh staff idle time. No cross-request permission cache exists.
+
+Owner approval is a current authenticated shop-user action, with a code bound to the request, Owner user, verified phone and verification timestamp, requested access, scopes and duration. Initial issuance cannot bind an unknown browser session; approval separately validates the actual current session inside the store transaction. Identity changes and ownership changes invalidate earlier proof. Code consumption occurs outside the store transaction and rollback does not restore it. SMS delivery and Redis calls never run while store locks are held.
+
+## Audits and seals
+
+`StaffAuditService.recordForStore` requires an already active tenant transaction. Support actions write the global staff audit and the tenant activity audit before commit. Owner actions use `actorUserId`; support actions use `staffUserId` and the shop audit's `actorStaffId`. `StaffIdentityModule` exports the reusable identity-continuity service without importing staff sign-in providers. Its stable links never merge users.
+
+The insert trigger acquires a shared transaction advisory lock in namespace 41202 for the UTC day, reads `clock_timestamp()` after locking and retries the day calculation if midnight passed. It overrides caller timestamps. The sealer serializes only sealers (namespace 41203), takes the completed day's exclusive lock and waits for late committing inserts. Ordinary current-day writers do not wait on the prior-day seal. Writers in a transaction that spans midnight retain each acquired day lock until commit; keep business transactions short.
+
+The v1 seed is SHA-256 of UTF-8 `dakly-staff-audit-v1:YYYY-MM-DD:previousHashHex` (empty previous hash at genesis). For rows ordered by `(created_at,id)`, fold SHA-256 of the prior digest bytes followed by UTF-8 PostgreSQL `jsonb_build_array(...)::text`. The ordered fields are ID, staff actor, shop-user actor, operator identity, action, store, target type, target ID, reason, action details, IP host and the UTC timestamp formatted with six fractional digits. This retains database precision instead of converting through JavaScript Date. A database cursor streams the day with constant application memory. The timestamp/order index supports the scan.
+
+The worker seals at most seven completed days per thirty-second tick, including missed/empty days, and reports failures. The first day is the earliest audit row. Repeated calls after catch-up do nothing. `/admin/audit/verify?from=YYYY-MM-DD` recomputes up to 31 days, including previous-link comparison. App-role UPDATE/DELETE/TRUNCATE of rows and seals and direct seal insertion are denied. No retention purge is implemented. Keep at least seven years; exporting seal hashes to independent storage is needed to detect a privileged database owner rewriting the entire chain.
+
+## Audit exports
+
+Exports are global staff records: their queue payload contains only `exportId`, deliberately no invented store ID. The existing `bulk` queue has a concurrency-one audit processor, five attempts and exponential retry delay starting at thirty seconds. A bounded relay enqueues up to twenty pending records per tick. The database lease expires after five minutes; completion checks lease ownership. Worker shutdown awaits active work. Failures are sanitized, reported through ErrorReporter and retained in BullMQ's bounded failed-job set; configure Sentry alerting for production.
+
+Each artifact contains at most 1,000 matching rows and is generated outside the HTTP request. A 1,001st match fails the job visibly and requests narrower filters. CSV cells are quoted, quotes escaped, and spreadsheet formula prefixes (including leading tabs/newlines/spaces) protected. The staff-name watermark is protected too. Issuance and download are logged. Generation and download recheck staff authorization; the download is identity-bound, not a public signed link. Expired payloads are deleted in batches of at most 100. PostgreSQL is adequate for this bounded first consumer; high-volume or bulk owner-data exports remain ADM-9 and will need storage and capacity design.
+
+## Verification boundaries
+
+Local tests exercise app-role PostgreSQL, Redis codes, Fastify, actual Next rewrites and local browser fixtures. The seal race test clones the installed functions to an isolated schema and replaces only the database clock source, so midnight can be tested with real held transactions. This does not prove live Cloudflare/IdP policy, physical SMS delivery or browser scheduling while a tab is offline or suspended. Current customer masking remains the existing customer-service policy; the legacy format differs from the glossary and is not changed by this task.

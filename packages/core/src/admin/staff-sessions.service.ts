@@ -40,7 +40,10 @@ export class StaffSessionsService {
     });
     return token;
   }
-  async resolve(token: string | undefined, identity: AccessIdentity): Promise<StaffIdentity> {
+  async resolve(
+    token: string | undefined,
+    identity: AccessIdentity,
+  ): Promise<StaffIdentity & { sessionId: string }> {
     const now = this.clock.now();
     const claims = token ? await this.tokens.verify(token, now) : undefined;
     if (!claims || !token) throw staffError('STAFF_AUTH_REQUIRED');
@@ -61,7 +64,7 @@ export class StaffSessionsService {
       );
       if (!session || !this.isCurrent(session, now)) throw staffError('STAFF_AUTH_REQUIRED');
       await this.repository.touchSession(staff.id, session.id, now);
-      return { id: staff.id, name: staff.name, role: staff.role };
+      return { id: staff.id, name: staff.name, role: staff.role, sessionId: session.id };
     });
   }
   private isCurrent(

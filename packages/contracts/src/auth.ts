@@ -48,7 +48,8 @@ export type CodePurpose =
   | 'add_email'
   | 'email_change_proof'
   | 'password_change_proof'
-  | 'ownership_transfer';
+  | 'ownership_transfer'
+  | 'support_approval';
 
 const emailSchema = z
   .email()

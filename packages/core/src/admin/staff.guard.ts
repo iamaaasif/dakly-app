@@ -7,7 +7,10 @@ import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorat
 import { StaffAccessService } from './staff-access.service';
 import { StaffSessionsService } from './staff-sessions.service';
 import { STAFF_COOKIE } from './staff-cookie';
-export type StaffRequest = FastifyRequest & { staffAccess: AccessIdentity; staff: StaffIdentity };
+export type StaffRequest = FastifyRequest & {
+  staffAccess: AccessIdentity;
+  staff: StaffIdentity & { sessionId: string };
+};
 @Injectable()
 export class StaffGuard implements CanActivate {
   constructor(

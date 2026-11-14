@@ -33,7 +33,9 @@
     "pino-http": "10.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "@nestjs/bullmq": "11.0.5",
+    "bullmq": "5.81.5"
   },
   "devDependencies": {
     "@nestjs/platform-fastify": "^11.2.9",

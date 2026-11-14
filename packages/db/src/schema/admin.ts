@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  foreignKey,
   boolean,
   check,
   date,
@@ -87,6 +88,7 @@ export const staffAuditLog = pgTable(
   {
     id: id(),
     operatorIdentity: text('operator_identity'),
+    actorUserId: uuid('actor_user_id'),
     staffUserId: uuid('staff_user_id').references(() => staffUsers.id),
     action: text('action').notNull(),
     // No foreign key: the record must outlive a deleted store.
@@ -99,11 +101,13 @@ export const staffAuditLog = pgTable(
     createdAt: createdAt(),
   },
   (table) => [
+    index('staff_audit_log_order_idx').on(table.createdAt, table.id),
+    index('staff_audit_log_action_idx').on(table.action, table.createdAt, table.id),
     index('staff_audit_log_staff_user_id_created_at_idx').on(table.staffUserId, table.createdAt),
     index('staff_audit_log_store_id_created_at_idx').on(table.storeId, table.createdAt),
     check(
       'staff_audit_log_actor',
-      sql`(${table.staffUserId} is not null) <> (${table.operatorIdentity} is not null)`,
+      sql`num_nonnulls(${table.staffUserId}, ${table.operatorIdentity}, ${table.actorUserId}) = 1`,
     ),
     check('staff_audit_log_reason_length', sql`char_length(${table.reason}) >= 10`),
   ],
@@ -125,6 +129,8 @@ export const supportGrants = pgTable(
     access: text('access', { enum: supportGrantAccess }).notNull().default('read'),
     status: text('status', { enum: supportGrantStatuses }).notNull().default('requested'),
     reason: text('reason').notNull(),
+    durationMinutes: integer('duration_minutes').notNull().default(30),
+    staffSessionId: uuid('staff_session_id').references(() => staffSessions.id),
     isBreakGlass: boolean('is_break_glass').notNull().default(false),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     requestedAt: timestamptz('requested_at').notNull().defaultNow(),
@@ -133,6 +139,11 @@ export const supportGrants = pgTable(
     endedAt: timestamptz('ended_at'),
   },
   (table) => [
+    uniqueIndex('support_grants_store_id_id_key').on(table.storeId, table.id),
+    index('support_grants_staff_id_idx').on(table.staffUserId, table.id),
+    index('support_grants_store_id_idx').on(table.storeId, table.id),
+    check('support_grants_duration', sql`${table.durationMinutes} between 30 and 1440`),
+    index('support_grants_staff_session_id_idx').on(table.staffSessionId),
     index('support_grants_store_id_status_idx').on(table.storeId, table.status),
     index('support_grants_staff_user_id_status_idx').on(table.staffUserId, table.status),
     index('support_grants_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -260,5 +271,91 @@ export const staffChallenges = pgTable(
       'staff_challenges_purpose',
       sql`${table.purpose} in ('enroll', 'signin', 'setup_totp', 'setup_passkey')`,
     ),
+  ],
+);
+
+// Established links survive changes to either identity's contact details.
+export const staffUserLinks = pgTable(
+  'staff_user_links',
+  {
+    id: id(),
+    staffUserId: uuid('staff_user_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('staff_user_links_identity_key').on(table.staffUserId, table.userId),
+    index('staff_user_links_user_idx').on(table.userId),
+  ],
+);
+export const supportSessions = pgTable(
+  'support_sessions',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    grantId: uuid('grant_id')
+      .notNull()
+      .references(() => supportGrants.id),
+    staffUserId: uuid('staff_user_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    staffSessionId: uuid('staff_session_id')
+      .notNull()
+      .references(() => staffSessions.id),
+    handoffHash: bytea('handoff_hash').notNull(),
+    tokenHash: bytea('token_hash'),
+    handoffExpiresAt: timestamptz('handoff_expires_at').notNull(),
+    consumedAt: timestamptz('consumed_at'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'support_sessions_grant_store_fk',
+      columns: [table.storeId, table.grantId],
+      foreignColumns: [supportGrants.storeId, supportGrants.id],
+    }),
+    uniqueIndex('support_sessions_handoff_key').on(table.handoffHash),
+    uniqueIndex('support_sessions_token_key').on(table.tokenHash),
+    index('support_sessions_store_idx').on(table.storeId),
+    index('support_sessions_grant_idx').on(table.grantId),
+    index('support_sessions_staff_idx').on(table.staffUserId),
+    index('support_sessions_parent_idx').on(table.staffSessionId),
+  ],
+);
+export const staffAuditExports = pgTable(
+  'staff_audit_exports',
+  {
+    id: id(),
+    staffUserId: uuid('staff_user_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    staffSessionId: uuid('staff_session_id')
+      .notNull()
+      .references(() => staffSessions.id),
+    staffName: text('staff_name').notNull(),
+    filter: jsonb('filter').notNull(),
+    status: text('status', { enum: ['pending', 'ready', 'failed'] })
+      .notNull()
+      .default('pending'),
+    progress: integer('progress').notNull().default(0),
+    attempts: integer('attempts').notNull().default(0),
+    leaseId: uuid('lease_id'),
+    leasedUntil: timestamptz('leased_until'),
+    contents: text('contents'),
+    error: text('error'),
+    expiresAt: timestamptz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('staff_audit_exports_staff_idx').on(table.staffUserId),
+    index('staff_audit_exports_session_idx').on(table.staffSessionId),
+    index('staff_audit_exports_pending_idx').on(table.status, table.leasedUntil),
+    index('staff_audit_exports_expiry_idx').on(table.expiresAt),
   ],
 );
