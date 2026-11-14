@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { loadEnv } from '@dakly/core/platform/config/env';
+import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -10,9 +12,13 @@ describe('API route access rules', () => {
   let app: NestFastifyApplication;
 
   beforeAll(async () => {
-    app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
-      logger: false,
-    });
+    app = await NestFactory.create<NestFastifyApplication>(
+      AppModule,
+      new FastifyAdapter(createHttpServer(loadEnv().API_TRUSTED_PROXIES)),
+      {
+        logger: false,
+      },
+    );
     await registerSessionCookies(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
@@ -21,6 +27,23 @@ describe('API route access rules', () => {
     await app?.close();
   });
 
+  it('keeps health public and shop sessions protected with the bootstrap HTTP server', async () => {
+    const headers = {
+      host: 'api.example.test',
+      'x-forwarded-for': '203.0.113.7',
+      'x-forwarded-host': 'admin.example.test',
+      'x-forwarded-proto': 'https',
+    };
+    const health = await app.inject({ url: '/health', remoteAddress: '203.0.113.9', headers });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toEqual({ status: 'ok' });
+    const session = await app.inject({
+      url: '/me/sessions',
+      remoteAddress: '203.0.113.9',
+      headers,
+    });
+    expect(session.statusCode).toBe(401);
+  });
   it('classifies every HTTP handler in the production app', () => {
     const routes = assertRouteAccess(app);
     // These samples protect against accidentally inventorying only a fixture or the root module.

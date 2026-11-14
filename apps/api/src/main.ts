@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -9,9 +10,13 @@ import { AppModule } from './app.module';
 // Fastify over Express: about 3x the throughput on webhook intake. See ADR 0004.
 async function bootstrap(): Promise<void> {
   const env = loadEnv();
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
-    bufferLogs: true,
-  });
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter(createHttpServer(env.API_TRUSTED_PROXIES)),
+    {
+      bufferLogs: true,
+    },
+  );
   await registerSessionCookies(app);
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();

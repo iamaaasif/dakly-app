@@ -16,6 +16,7 @@ import { StaffProvisionService } from './staff-provision.service';
 import { AdminModule } from './admin.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../platform/database/database.module';
+import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { Clock } from '../platform/clock';
@@ -117,10 +118,14 @@ describe('Staff authentication over Fastify and PostgreSQL', () => {
       JSON.stringify({ keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'fixture' }] }),
     );
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
-    app = await NestFactory.create<NestFastifyApplication>(TestModule, new FastifyAdapter(), {
-      logger: false,
-      abortOnError: false,
-    });
+    app = await NestFactory.create<NestFastifyApplication>(
+      TestModule,
+      new FastifyAdapter(createHttpServer([])),
+      {
+        logger: false,
+        abortOnError: false,
+      },
+    );
     await registerSessionCookies(app);
     app.useGlobalFilters(new AppErrorFilter());
     await app.init();

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { trustedProxiesSchema } from './trusted-proxies';
 import { parseEncryptionConfiguration, type EncryptionConfiguration } from './encryption-config';
 import { redisUrlSchema } from '../queue/redis-connection';
 
@@ -34,6 +35,7 @@ const envSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9+/]{43}=$/)
     .optional(),
+  API_TRUSTED_PROXIES: trustedProxiesSchema,
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 

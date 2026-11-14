@@ -120,3 +120,31 @@ describe('Staff environment configuration', () => {
     ).toThrow();
   });
 });
+
+describe('API trusted proxy configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+  it('defaults to no trusted peers and accepts explicit IPs and CIDRs', () => {
+    expect(loadEnv(base).API_TRUSTED_PROXIES).toEqual([]);
+    expect(
+      loadEnv({ ...base, API_TRUSTED_PROXIES: '127.0.0.1, 10.42.0.0/24, ::1, fd00::/64' })
+        .API_TRUSTED_PROXIES,
+    ).toEqual(['127.0.0.1', '10.42.0.0/24', '::1', 'fd00::/64']);
+  });
+  it.each([
+    'true',
+    '1',
+    'loopback',
+    'localhost',
+    '*',
+    '0.0.0.0/0',
+    '::/0',
+    '127.0.0.1/33',
+    '::1/129',
+    '10.0.0.1/-1',
+    '127.0.0.1,',
+    'fe80::1%eth0',
+    '10.0.0.1/1.5',
+  ])('refuses ambiguous or unrestricted trust: %s', (value) => {
+    expect(() => loadEnv({ ...base, API_TRUSTED_PROXIES: value })).toThrow();
+  });
+});

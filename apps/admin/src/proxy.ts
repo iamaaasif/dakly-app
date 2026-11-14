@@ -5,7 +5,15 @@ let driver: CloudflareAccessDriver | undefined;
 export async function proxy(request: NextRequest) {
   try {
     const env = adminEnvironment();
-    if (request.nextUrl.hostname !== new URL(env.ADMIN_ORIGIN).hostname) throw new Error();
+    // Next's URL can use its internal listener hostname behind the ingress.
+    const origin = new URL(env.ADMIN_ORIGIN);
+    const host = request.headers.get('host');
+    if (
+      !host ||
+      !/^[a-zA-Z0-9.:[\]-]+$/.test(host) ||
+      new URL(`${origin.protocol}//${host}`).host !== origin.host
+    )
+      throw new Error();
     driver ??= new CloudflareAccessDriver({
       issuer: env.CLOUDFLARE_ACCESS_ISSUER,
       audience: env.CLOUDFLARE_ACCESS_AUDIENCE,
