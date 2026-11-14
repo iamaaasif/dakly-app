@@ -31,7 +31,7 @@ These follow [rules/database.md](../rules/database.md); the column helpers are i
 
 ## Tables
 
-After migration 0017 the schema has 85 tables: 84 planned tables (65 shop-scoped and 19 global), plus the `customers` example. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
+After migration 0019 the schema has 85 tables: 84 planned tables (65 shop-scoped and 19 global), plus the `customers` example. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
 
 Release 1 is split into one migration per feature area, in dependency order. Each holds its generated tables, then by hand the RLS policies, grants and functions for those tables. A later change is a new migration; a merged one is never edited.
 

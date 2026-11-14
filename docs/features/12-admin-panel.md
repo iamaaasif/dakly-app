@@ -97,7 +97,7 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 - Plans: name, monthly and yearly price, trial length in days (0 for no trial, D34), VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
 - Add-ons: Chats AI add-on tiers.
 - Unit prices: SMS per message, WhatsApp margin over Meta's rate per category, AI credit packs.
-- Coupons: code, percent or fixed, duration (once, N months, forever), limit of uses, expiry, which plans.
+- Coupons: code, percent or fixed, duration (once, 1 to 36 months, forever), limit of uses, expiry, which plans. After first redemption the discount and duration are fixed; staff create another coupon to change them. The lifetime redemption count cannot decrease. See [billing rules](07-payments-and-billing.md#how-it-works) for invoice timing.
 - Changing a price never changes existing subscribers until their next renewal, and only if "Apply to existing" is ticked, which schedules a 30-day notice to each affected shop.
 - VAT rate and invoice details (Dakly's legal name, BIN, address) live here and are read by invoicing.
 

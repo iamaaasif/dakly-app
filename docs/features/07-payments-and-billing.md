@@ -336,6 +336,12 @@ Credentials: each store's gateway credentials use envelope encryption. A per-sto
 
 Billing (flow A): subscription status `trialing`, `active`, `past_due`, `read_only`, `cancelled`. A daily job at 10:00 Asia/Dhaka renews (bKash agreement or pay link), retries on days 1, 3 and 5, sets `read_only` on day 8, and sends a deletion notice at day 60. One guard enforces read-only: AI replies, campaign sends, post publishing and automations fail with `STORE_READ_ONLY`; reading keeps working.
 
+Plan catalogue (PAY-10): `plans.trial_days` is 0 to 90; 0 means no trial. The one-time catalogue migration starts Free at 0 and Starter, Growth and Pro at 14 days. For an existing code it changes only a trial length still at 0. Later admin edits stay. Prices and allowances remain placeholders until Q1. The development seed uses these trial lengths too.
+
+Coupons carry `duration` (`once`, `months`, `forever`). `duration_months` is required only for `months`, from 1 to 36. Existing coupons default to `once`. Subscriptions carry `coupon_id` and `coupon_ends_at`; forever has no end time. The discount and duration cannot change after the first redemption; staff create a new coupon instead. The database rejects those edits and decreases to the lifetime redemption count.
+
+Coupon billing rules for PAY-7: once discounts the first paid invoice, then detaches. Months discounts each paid invoice whose period starts before redemption time plus N calendar months (`coupon_ends_at`). A yearly plan with a three-month coupon gets one discounted year. A failed and retried invoice remains one invoice and one redemption. PAY-10 adds storage and contracts only; trial creation (ACC-16), redemption, expiry and invoice consumers (PAY-7) remain planned.
+
 Usage: every billable thing goes through `UsageService.consume(storeId, unit, quantity, reference)`, which checks the allowance, then top-ups, and writes a usage event unique on reference. Units: `ai_conversation`, `ai_content`, `ai_ask`, `sms_credit`, `whatsapp_poisha`. 80% and 100% thresholds notify once per period.
 
 ### Rules

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0017_snapshot.json`: **85 tables, 1146 columns, 334 explicit indexes and 274 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0019_snapshot.json`: **85 tables, 1151 columns, 335 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1371,6 +1371,7 @@ erDiagram
     staff_users |o..o{ coupons : "created_by_staff_id"
     stores ||..o| subscriptions : "store_id"
     plans ||..o{ subscriptions : "plan_id"
+    coupons |o..o{ subscriptions : "coupon_id"
     plans |o..o{ subscriptions : "pending_plan_id"
     stores ||..o{ subscription_items : "store_id"
     subscriptions ||..o{ subscription_items : "subscription_id"
@@ -1389,6 +1390,7 @@ erDiagram
         text code UK "NOT NULL; text"
         text kind "NOT NULL; text"
         text name "NOT NULL; text"
+        smallint trial_days "NOT NULL; smallint"
         bigint monthly_price_poisha "NOT NULL; bigint"
         bigint yearly_price_poisha "NOT NULL; bigint"
         jsonb limits "NOT NULL; jsonb"
@@ -1401,6 +1403,8 @@ erDiagram
         uuid id PK "NOT NULL; uuid"
         citext code UK "NOT NULL; citext"
         text kind "NOT NULL; text"
+        text duration "NOT NULL; text"
+        smallint duration_months "NULL; smallint"
         integer discount_percent "NULL; integer"
         bigint discount_amount_poisha "NULL; bigint"
         text__ plan_codes "NULL; text[]"
@@ -1422,6 +1426,8 @@ erDiagram
         timestamp_with_time_zone price_change_notified_at "NULL; timestamp with time zone"
         timestamp_with_time_zone price_change_starts_at "NULL; timestamp with time zone"
         timestamp_with_time_zone trial_ends_at "NULL; timestamp with time zone"
+        uuid coupon_id FK "NULL; uuid"
+        timestamp_with_time_zone coupon_ends_at "NULL; timestamp with time zone"
         timestamp_with_time_zone current_period_start "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone current_period_end "NOT NULL; timestamp with time zone"
         boolean is_cancellation_scheduled "NOT NULL; boolean"
@@ -1724,6 +1730,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `subscription_items_subscription_id_store_fk`                        | `subscription_items(store_id, subscription_id)`           | `subscriptions(store_id, id)`               | no action |
 | `subscriptions_store_id_stores_id_fk`                                | `subscriptions(store_id)`                                 | `stores(id)`                                | no action |
 | `subscriptions_plan_id_plans_id_fk`                                  | `subscriptions(plan_id)`                                  | `plans(id)`                                 | no action |
+| `subscriptions_coupon_id_coupons_id_fk`                              | `subscriptions(coupon_id)`                                | `coupons(id)`                               | no action |
 | `subscriptions_pending_plan_id_plans_id_fk`                          | `subscriptions(pending_plan_id)`                          | `plans(id)`                                 | no action |
 | `usage_events_store_id_stores_id_fk`                                 | `usage_events(store_id)`                                  | `stores(id)`                                | no action |
 | `wallet_ledger_store_id_stores_id_fk`                                | `wallet_ledger(store_id)`                                 | `stores(id)`                                | no action |

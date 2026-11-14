@@ -127,6 +127,20 @@
       "when": 1794573637223,
       "tag": "0017_account_security_event_details",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794624908330,
+      "tag": "0018_plan_trials_and_coupon_duration",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794624922106,
+      "tag": "0019_plans_catalogue",
+      "breakpoints": true
     }
   ]
 }
