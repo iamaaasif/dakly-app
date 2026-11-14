@@ -4,8 +4,8 @@ import { useSessionVerification } from './use-session-verification';
 
 export function useSessionBoundary() {
   const verification = useSessionVerification();
-  const { session, client, close, verify, switching, setFailure } = verification;
-  const { channel, resume } = useSessionSync(close, verify);
+  const { session, client, close, pause, verify, switching, setFailure } = verification;
+  const { channel, resume } = useSessionSync({ close, pause, verify });
   async function switchStore(storeId: string) {
     if (switching.current) return;
     switching.current = true;

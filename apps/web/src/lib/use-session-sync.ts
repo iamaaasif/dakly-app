@@ -1,5 +1,13 @@
 import { useEffect, useRef } from 'react';
-export function useSessionSync(close: () => Promise<number>, verify: () => Promise<void>) {
+export function useSessionSync({
+  close,
+  pause,
+  verify,
+}: {
+  close: () => Promise<void>;
+  pause: () => number;
+  verify: () => Promise<void>;
+}) {
   const channel = useRef<BroadcastChannel | null>(null);
   const changing = useRef(false);
   useEffect(() => {
@@ -18,7 +26,7 @@ export function useSessionSync(close: () => Promise<number>, verify: () => Promi
     };
     const visible = () => {
       if (document.visibilityState === 'visible' && !changing.current) void verify();
-      else void close();
+      else pause();
     };
     const refresh = () => {
       if (!changing.current) void verify();
@@ -33,7 +41,7 @@ export function useSessionSync(close: () => Promise<number>, verify: () => Promi
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', visible);
     };
-  }, [close, verify]);
+  }, [close, pause, verify]);
   return {
     channel,
     resume: () => {

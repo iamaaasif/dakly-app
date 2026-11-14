@@ -11,12 +11,20 @@ import { StoreSwitcher } from './store-switcher';
 import type { SessionContext } from '@dakly/contracts/sessions';
 type ShellFrameProps = {
   data: SessionContext;
+  blocked: boolean;
   generation: number;
   onSwitch: (id: string) => Promise<void>;
   onSignOut: () => Promise<void>;
   children: ReactNode;
 };
-export function ShellFrame({ data, generation, onSwitch, onSignOut, children }: ShellFrameProps) {
+export function ShellFrame({
+  data,
+  blocked,
+  generation,
+  onSwitch,
+  onSignOut,
+  children,
+}: ShellFrameProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const needsStore = !data.currentStore && pathname !== '/security' && pathname !== '/setup';
@@ -42,7 +50,7 @@ export function ShellFrame({ data, generation, onSwitch, onSignOut, children }: 
       </aside>
       <div className="min-w-0 flex-1">
         <header className="flex flex-wrap items-center gap-4 border-b border-border bg-surface px-4 py-4 md:px-8">
-          <MobileNavigation session={data} />
+          <MobileNavigation session={data} blocked={blocked} />
           <StoreSwitcher session={data} onSwitch={onSwitch} />
           <p className="min-w-0 text-sm break-words text-text-muted md:ml-auto">{data.user.name}</p>
           <Button variant="secondary" onClick={() => void onSignOut()}>

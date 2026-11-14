@@ -5,9 +5,18 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
 import { ShellNavigation } from './shell-navigation';
 
-export function MobileNavigation({ session }: { session: SessionContext }) {
+export function MobileNavigation({
+  session,
+  blocked,
+}: {
+  session: SessionContext;
+  blocked: boolean;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (blocked) dialog.current?.close();
+  }, [blocked]);
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 768px)');
     const close = () => {
