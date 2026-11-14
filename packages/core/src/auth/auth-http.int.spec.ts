@@ -224,7 +224,7 @@ describe('SMS authentication over Fastify', () => {
     );
   });
 
-  it('enforces email uniqueness without marking an initial email verified', async () => {
+  it('does not reserve an unverified signup email against another account', async () => {
     const existing = registration();
     await admin.db
       .insert(users)
@@ -236,9 +236,9 @@ describe('SMS authentication over Fastify', () => {
       phone: input.phone,
       code: codeFor(input.phone),
     });
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe('AUTH_ACCOUNT_EXISTS');
-    expect(await admin.db.select().from(users).where(eq(users.phone, input.phone))).toHaveLength(0);
+    expect(response.statusCode).toBe(204);
+    const [created] = await admin.db.select().from(users).where(eq(users.phone, input.phone));
+    expect(created!.emailVerifiedAt).toBeNull();
   });
   it('signs into the same account after signup and clears user failures after commit', async () => {
     const input = registration();
@@ -318,5 +318,14 @@ describe('SMS authentication over Fastify', () => {
     expect(
       await admin.db.select().from(sessions).where(eq(sessions.userId, user!.id)),
     ).toHaveLength(1);
+  });
+  it('refuses sign-in by an unverified email without issuing a session', async () => {
+    const input = registration();
+    await admin.db
+      .insert(users)
+      .values({ name: input.name, phone: input.phone, email: input.email });
+    const response = await request('/auth/email/code', { email: input.email });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('AUTH_ACCOUNT_NOT_FOUND');
   });
 });

@@ -42,7 +42,9 @@ export const users = pgTable(
   },
   (table) => [
     uniqueIndex('users_phone_key').on(table.phone),
-    uniqueIndex('users_email_key').on(table.email),
+    uniqueIndex('users_email_key')
+      .on(table.email)
+      .where(sql`${table.emailVerifiedAt} is not null`),
     uniqueIndex('users_google_subject_key').on(table.googleSubject),
     check('users_has_identifier', sql`${table.phone} is not null or ${table.email} is not null`),
     check('users_phone_format', sql`${table.phone} ~ '^01[3-9][0-9]{8}$'`),

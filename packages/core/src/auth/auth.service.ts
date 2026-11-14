@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { RequestCodeInput, SignUpInput, VerifyCodeInput } from '@dakly/contracts/auth';
+import type {
+  RequestCodeInput,
+  SignUpInput,
+  VerifyCodeInput,
+  RequestEmailCodeInput,
+  VerifyEmailCodeInput,
+} from '@dakly/contracts/auth';
 import { SessionsService } from '../sessions/sessions.service';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { Clock } from '../platform/clock';
@@ -10,7 +16,13 @@ import { authError } from './auth.errors';
 
 export type SignInRequest = { ip: string; userAgent?: string; isRemembered: boolean };
 // A pending registration is inserted in the same account transaction as its first session.
-export type SignInUser = { id: string; target: string; registration?: SignUpInput };
+export type SignInUser = {
+  id: string;
+  target: string;
+  kind?: 'email';
+  deliveryEmail?: string;
+  registration?: SignUpInput;
+};
 
 @Injectable()
 export class AuthService {
@@ -28,7 +40,7 @@ export class AuthService {
     if (input.purpose === 'sign_up' && user) throw authError('AUTH_ACCOUNT_EXISTS');
     if (input.purpose === 'sign_in' && !user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
     await this.codes.send(
-      this.subject(input.phone, user?.id),
+      this.subject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
       input.purpose,
       ip,
       input.purpose === 'sign_up' ? input : undefined,
@@ -38,7 +50,7 @@ export class AuthService {
   async verifyCode(input: VerifyCodeInput, request: SignInRequest) {
     const user = await this.users.findByPhone(input.phone);
     const grant = await this.codes.consume(
-      this.subject(input.phone, user?.id),
+      this.subject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
       input.purpose,
       input.code,
       request.ip,
@@ -52,7 +64,36 @@ export class AuthService {
       );
     }
     if (!user || grant.userId !== user.id) throw authError('AUTH_CODE_INVALID');
-    return this.completeSignIn({ id: user.id, target: input.phone }, request);
+    return this.completeSignIn(
+      { id: user.id, target: input.phone, deliveryEmail: grant.email },
+      request,
+    );
+  }
+
+  async requestEmailCode(input: RequestEmailCodeInput, ip: string): Promise<void> {
+    const user = await this.users.findByVerifiedEmail(input.email);
+    if (!user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
+    await this.codes.send(
+      { target: input.email, userId: user.id, email: input.email, phone: user.phone ?? undefined },
+      'sign_in',
+      ip,
+    );
+  }
+
+  async verifyEmailCode(input: VerifyEmailCodeInput, request: SignInRequest) {
+    const user = await this.users.findByVerifiedEmail(input.email);
+    const grant = await this.codes.consume(
+      { target: input.email, userId: user?.id, email: user ? input.email : undefined },
+      'sign_in',
+      input.code,
+      request.ip,
+    );
+    if (!user || grant.userId !== user.id || grant.email !== input.email)
+      throw authError('AUTH_CODE_INVALID');
+    return this.completeSignIn(
+      { id: user.id, target: input.email, kind: 'email', deliveryEmail: grant.email },
+      request,
+    );
   }
 
   async completeSignIn(user: SignInUser, request: SignInRequest) {
@@ -65,7 +106,8 @@ export class AuthService {
       )
         throw authError('AUTH_ACCOUNT_EXISTS');
       const current = await this.users.lockForSignIn(user.id);
-      if (!current || current.phone !== user.target) throw authError('AUTH_CODE_INVALID');
+      if (!current) throw authError('AUTH_CODE_INVALID');
+      this.assertIdentity(user, current);
       if (current.isDisabled) throw authError('AUTH_DISABLED');
       // ACC-7 replaces this refusal with the challenge; no first factor may bypass it.
       if (current.totpEnabledAt) throw authError('AUTH_SECOND_FACTOR_REQUIRED');
@@ -76,7 +118,17 @@ export class AuthService {
     return result;
   }
 
-  private subject(target: string, userId?: string): SignInSubject {
-    return { target, userId, phone: target };
+  private assertIdentity(
+    user: SignInUser,
+    current: { phone: string | null; email: string | null; emailVerifiedAt: Date | null },
+  ): void {
+    const verifiedEmail = current.emailVerifiedAt ? current.email?.toLowerCase() : undefined;
+    const identifier = user.kind === 'email' ? verifiedEmail : current.phone;
+    if (identifier !== user.target || (user.deliveryEmail && verifiedEmail !== user.deliveryEmail))
+      throw authError('AUTH_CODE_INVALID');
+  }
+
+  private subject(target: string, userId?: string, email?: string | null): SignInSubject {
+    return { target, userId, phone: target, email: email?.toLowerCase() };
   }
 }

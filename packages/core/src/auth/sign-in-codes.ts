@@ -6,10 +6,17 @@ import { RateLimiter } from '../platform/cache/rate-limiter';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import { EmailService } from '../email/email.service';
 import { SMS_DRIVER } from './sms-provider';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
 
-type CodeGrant = { userId?: string; registration?: SignUpInput };
+export type PhoneProof = { phone: string; verifiedAt: string; expiresAt: number };
+type CodeGrant = {
+  userId?: string;
+  registration?: SignUpInput;
+  email?: string;
+  proof?: PhoneProof;
+};
 
 const SAVE = `
 if redis.call('EXISTS', KEYS[3]) == 1 then return -1 end
@@ -42,6 +49,7 @@ export class SignInCodes {
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
     @Inject(SignInFailures) private readonly failures: SignInFailures,
     @Inject(SMS_DRIVER) private readonly sms: SmsDriver,
+    @Inject(EmailService) private readonly email: EmailService,
   ) {}
 
   async send(
@@ -49,6 +57,7 @@ export class SignInCodes {
     purpose: CodePurpose,
     ip: string,
     registration?: SignUpInput,
+    proof?: PhoneProof,
   ): Promise<void> {
     await this.failures.assertAllowed(subject, ip);
     if (await this.client.connection.exists(authKey('resend', subject.target)))
@@ -60,15 +69,15 @@ export class SignInCodes {
       if (!(await this.limiter.consume(key, limit, 3600)).allowed)
         throw authError('AUTH_RATE_LIMITED');
     }
-    const code = await this.saveCode(subject, purpose, registration);
+    const code = await this.saveCode(subject, purpose, registration, proof);
     try {
-      await this.sms.send({
-        to: subject.target,
-        text: `Your Dakly code is ${code}. It expires in 10 minutes.`,
-      });
+      const text = `Your Dakly code is ${code}. It expires in 10 minutes.`;
+      if (subject.email)
+        await this.email.send({ to: subject.email, subject: 'Your Dakly code', text });
+      else await this.sms.send({ to: subject.target, text });
     } catch {
       // Keep the saved challenge and cooldown: delivery may have succeeded before the timeout.
-      throw authError('AUTH_SMS_UNAVAILABLE');
+      throw authError(subject.email ? 'AUTH_EMAIL_UNAVAILABLE' : 'AUTH_SMS_UNAVAILABLE');
     }
   }
 
@@ -82,9 +91,9 @@ export class SignInCodes {
     const data = await this.client.connection.eval(
       CONSUME,
       2,
-      this.key(subject.target, purpose),
-      this.marker(subject.target, purpose, code),
-      this.hash(subject.target, purpose, code),
+      this.key(this.boundTarget(subject), purpose),
+      this.marker(this.boundTarget(subject), purpose, code),
+      this.hash(this.boundTarget(subject), purpose, code),
     );
     if (data === -1) throw authError('AUTH_CODE_INVALID');
     if (typeof data !== 'string') {
@@ -98,6 +107,7 @@ export class SignInCodes {
     subject: SignInSubject,
     purpose: CodePurpose,
     registration?: SignUpInput,
+    proof?: PhoneProof,
   ): Promise<string> {
     // Do not regenerate a still-recognized consumed code for this target and purpose.
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -105,16 +115,25 @@ export class SignInCodes {
       const saved = await this.client.connection.eval(
         SAVE,
         3,
-        this.key(subject.target, purpose),
+        this.key(this.boundTarget(subject), purpose),
         authKey('resend', subject.target),
-        this.marker(subject.target, purpose, code),
-        this.hash(subject.target, purpose, code),
-        JSON.stringify({ userId: subject.userId, registration } satisfies CodeGrant),
+        this.marker(this.boundTarget(subject), purpose, code),
+        this.hash(this.boundTarget(subject), purpose, code),
+        JSON.stringify({
+          userId: subject.userId,
+          registration,
+          email: subject.email,
+          proof,
+        } satisfies CodeGrant),
       );
       if (saved === 1) return code;
       if (saved === 0) throw authError('AUTH_RATE_LIMITED');
     }
-    throw authError('AUTH_SMS_UNAVAILABLE');
+    throw authError(subject.email ? 'AUTH_EMAIL_UNAVAILABLE' : 'AUTH_SMS_UNAVAILABLE');
+  }
+
+  private boundTarget(subject: SignInSubject): string {
+    return subject.binding ? JSON.stringify([subject.target, subject.binding]) : subject.target;
   }
 
   private marker(target: string, purpose: CodePurpose, code: string): string {

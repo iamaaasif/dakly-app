@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0019_snapshot.json`: **85 tables, 1151 columns, 335 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0020_snapshot.json`: **85 tables, 1151 columns, 335 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -71,7 +71,7 @@ erDiagram
         text name "NOT NULL; text"
         text phone UK "NULL; text"
         timestamp_with_time_zone phone_verified_at "NULL; timestamp with time zone"
-        citext email UK "NULL; citext"
+        citext email "NULL; citext"
         timestamp_with_time_zone email_verified_at "NULL; timestamp with time zone"
         text password_hash "NULL; text"
         text google_subject UK "NULL; text"

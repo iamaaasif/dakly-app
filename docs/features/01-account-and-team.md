@@ -389,9 +389,9 @@ until ACC-14 supplies the provider account, sender id and adapter. Pure environm
 parsing remains separate from the consumer factory so cookie settings do not
 instantiate an SMS driver. Captured messages do not prove live SMS delivery.
 
-## SMS sign-up and sign-in
+## Code sign-up and sign-in
 
-ACC-2 provides two public browser routes. Both require an allowed `Origin`.
+ACC-2 provides the phone routes. Both require an allowed `Origin`.
 
 - `POST /auth/code`: `purpose: sign_up` takes name, normalized BD phone, optional
   email and `termsVersion`. An existing phone returns `409 AUTH_ACCOUNT_EXISTS`.
@@ -418,8 +418,9 @@ delivery failure retains the code and cooldown and returns `AUTH_SMS_UNAVAILABLE
 internal identity and plain request context, inserts a pending registration if
 needed, and commits the user and storeless session in one account transaction.
 Sign-up records phone verification and accepted terms; its optional email remains
-unverified. Database uniqueness also protects concurrent sign-ups and email
-collisions. A consumed code is never restored after database failure: the user
+unverified. Phone uniqueness protects concurrent sign-ups. Email uniqueness applies
+only to verified addresses, so an optional unverified signup email cannot reserve
+an identity. A consumed code is never restored after database failure: the user
 must request another code. If the database committed but clearing failure state
 fails, the response fails closed; a new sign-in attempt is required.
 
@@ -429,13 +430,65 @@ identity for 15 minutes; thirty failures from one IP block that IP for an hour.
 Resending does not clear failures. Only completed sign-in clears the identity
 counter, never the IP history. Unknown-target history expires after an hour when
 it has not reached a lock. The atomic transition into an account lock sends one
-SMS outside the database transaction. Notification failure leaves the lock intact
+notification outside the database transaction, by verified email when available
+and SMS otherwise. Notification failure leaves the lock intact
 and records a security event in logs without the phone or message text.
 
 TOTP-enabled accounts return `403 AUTH_SECOND_FACTOR_REQUIRED` and get no session.
 Their failure history is retained. ACC-7 must add its challenge inside the common
 completion path; no sign-in method may issue a session before that factor passes.
-Email/password and Google sign-in remain ACC-9, ACC-10 and ACC-11.
+Password and Google sign-in remain ACC-10 and ACC-11.
+
+## Email sign-in and identity changes (ACC-9)
+
+`EmailService` uses `EmailDriver.send({ to, subject, text, html? })`. Development
+uses `EMAIL_DRIVER=smtp` (the default) with the Mailpit SMTP settings. Production
+requires explicit `EMAIL_DRIVER=sendgrid`, `SENDGRID_API_KEY` and `EMAIL_FROM`.
+SMTP and fake selections are refused in production. SendGrid uses its HTTPS
+Mail Send endpoint with a five-second timeout and no redirects. Both drivers
+sanitize failures. SendGrid request shapes are tested with fake fetch; live
+SendGrid delivery remains untested until the sending domain is verified.
+The existing production SMS refusal still applies until ACC-14.
+
+`POST /auth/email/code` takes `email`; only a verified address can receive a
+sign-in code. `POST /auth/email/code/verify` takes `email`, `code` and optional
+`isRemembered`; it returns 204 and sets the shared session cookie. Both are public
+browser routes requiring an allowed origin. Email is normalized to lower case.
+Both methods call the same completion gate, including disabled-account and TOTP
+checks, shared account/IP lockouts, and one-use code consumption.
+
+Per D20, phone sign-in sends to the user's verified email when available and to
+SMS otherwise. The grant binds both the entered identifier and its email delivery
+identity. Completion rechecks them under the user lock: changing the email while
+a code is in flight invalidates that code even when the phone stays unchanged.
+Signup codes continue to prove the proposed phone by SMS.
+
+Adding or replacing an email requires a user session and an allowed origin:
+
+1. `POST /me/email/proof` takes the proposed `email` and sends a code to the
+   account's current verified phone. This explicitly proves phone control by SMS,
+   even when normal sign-in prefers email. Purpose `email_change_proof` binds the
+   account, phone and proposed email; a sign-in code cannot authorize this action.
+2. `POST /me/email` takes `email` and `proofCode`. It consumes that proof and sends
+   an `add_email` code to the new address, bound to the account and address. The old
+   verified email remains in place.
+3. `POST /me/email/verify` takes `email` and `code`. It consumes the code and locks
+   the user. The phone and its verification timestamp must still match, and the
+   original proof must be less than ten minutes old. The email update and one
+   `email.changed` account event commit together. No vendor call holds a database
+   transaction. Audit failure rolls the email change back.
+
+Consumed proof cannot be reused for a second address or account. Resends and
+successful proof checks do not clear sign-in failures. ACC-10 must extend this
+same proof flow with password verification; this task provides no password bypass.
+Accounts without a verified phone cannot use this proof path yet.
+
+Migration `0020_verified_email_identity` makes email uniqueness conditional on
+`email_verified_at`. Multiple unverified signup values can coexist; they cannot
+sign in, block a verified owner, or link their accounts. Verified lookup uses the
+partial unique index and never selects an unverified row. Concurrent verification
+of one address produces one owner and `409 AUTH_EMAIL_TAKEN` for the loser. Neither
+account is merged or cleared. See [ADR 0009](../adr/0009-verified-email-ownership.md).
 
 ## Store creation (ACC-16)
 

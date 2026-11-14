@@ -2,12 +2,18 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
   AUTH_ACCOUNT_EXISTS: { status: 409, message: 'This account already exists. Sign in instead' },
-  AUTH_ACCOUNT_NOT_FOUND: { status: 404, message: 'No account has this phone number' },
+  AUTH_ACCOUNT_NOT_FOUND: { status: 404, message: 'No account has this verified sign-in method' },
   AUTH_CODE_INVALID: { status: 400, message: 'The code is incorrect or expired' },
   AUTH_RATE_LIMITED: { status: 429, message: 'Too many attempts. Try again later' },
   AUTH_LOCKED: { status: 429, message: 'Sign-in is locked for 15 minutes' },
   AUTH_DISABLED: { status: 403, message: 'This account is disabled' },
   AUTH_SECOND_FACTOR_REQUIRED: { status: 403, message: 'A second factor is required to sign in' },
+  AUTH_PROOF_REQUIRED: { status: 403, message: 'Verify an existing sign-in method again' },
+  AUTH_EMAIL_TAKEN: { status: 409, message: 'This email belongs to another account' },
+  AUTH_EMAIL_UNAVAILABLE: {
+    status: 503,
+    message: 'Email delivery is unavailable. Try again later',
+  },
   AUTH_SMS_UNAVAILABLE: { status: 503, message: 'SMS delivery is unavailable. Try again later' },
 } as const satisfies ErrorCatalog;
 

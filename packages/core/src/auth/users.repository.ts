@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { uuidv7 } from '@dakly/db/uuid-v7';
 import type { Database } from '@dakly/db/client';
 import type { SignUpInput } from '@dakly/contracts/auth';
@@ -22,11 +22,39 @@ export class UsersRepository {
   async findByPhone(phone: string) {
     // The indexed identifier lookup establishes the identity before account scoping.
     const rows = await this.connection
-      .select({ id: users.id, phone: users.phone })
+      .select({
+        id: users.id,
+        phone: users.phone,
+        email: users.email,
+        emailVerifiedAt: users.emailVerifiedAt,
+      })
       .from(users)
       .where(eq(users.phone, phone))
       .limit(1);
     return rows[0];
+  }
+
+  async findByVerifiedEmail(email: string) {
+    const rows = await this.connection
+      .select({
+        id: users.id,
+        phone: users.phone,
+        email: users.email,
+        emailVerifiedAt: users.emailVerifiedAt,
+      })
+      .from(users)
+      .where(and(eq(users.email, email), isNotNull(users.emailVerifiedAt)))
+      .limit(1);
+    return rows[0];
+  }
+
+  async changeEmail(userId: string, email: string, now: Date): Promise<void> {
+    await this.database.forUser(userId, (tx) =>
+      tx
+        .update(users)
+        .set({ email, emailVerifiedAt: now, updatedAt: now })
+        .where(eq(users.id, userId)),
+    );
   }
 
   async create(userId: string, input: SignUpInput, now: Date): Promise<boolean> {
@@ -54,6 +82,9 @@ export class UsersRepository {
         .select({
           id: users.id,
           phone: users.phone,
+          phoneVerifiedAt: users.phoneVerifiedAt,
+          email: users.email,
+          emailVerifiedAt: users.emailVerifiedAt,
           isDisabled: users.isDisabled,
           totpEnabledAt: users.totpEnabledAt,
         })

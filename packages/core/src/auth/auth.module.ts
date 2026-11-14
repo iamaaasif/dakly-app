@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
 import { CacheModule } from '../platform/cache/cache.module';
+import { EmailModule } from '../email/email.module';
+import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
+import { EmailChangeService } from './email-change.service';
+import { EmailChangeController } from './email-change.controller';
 import { Clock } from '../platform/clock';
 import { SessionsModule } from '../sessions/sessions.module';
 import { UsersModule } from './users.module';
@@ -10,11 +14,12 @@ import { SignInFailures } from './sign-in-failures';
 import { SMS_DRIVER, createSmsDriver } from './sms-provider';
 
 @Module({
-  imports: [CacheModule, UsersModule, SessionsModule],
-  controllers: [AuthController],
+  imports: [CacheModule, UsersModule, SessionsModule, EmailModule, AccountSecurityEventsModule],
+  controllers: [AuthController, EmailChangeController],
   providers: [
     Clock,
     AuthService,
+    EmailChangeService,
     SignInCodes,
     SignInFailures,
     { provide: SMS_DRIVER, useFactory: createSmsDriver },

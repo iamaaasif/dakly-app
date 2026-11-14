@@ -8,12 +8,14 @@ import { ValkeyClient } from '../platform/cache/valkey-client';
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { EmailService } from '../email/email.service';
 import { authKey } from './auth-key';
 
 const sms = new FakeSmsDriver();
 const client = new ValkeyClient(process.env.REDIS_URL!);
-const failures = new SignInFailures(client, sms);
-const codes = new SignInCodes(client, new RateLimiter(client), failures, sms);
+const email = { send: async () => undefined } as unknown as EmailService;
+const failures = new SignInFailures(client, sms, email);
+const codes = new SignInCodes(client, new RateLimiter(client), failures, sms, email);
 const owned = new Set<string>();
 function fixture(userId?: string, ip = randomUUID()) {
   const target = randomUUID();
