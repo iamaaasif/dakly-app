@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { Skeleton } from '@dakly/ui/skeleton';
-import { formatDate } from '@/lib/format-date';
+import { formatDateTime } from '@/lib/format-date';
 import { useSecurityHistory } from '../api/security-history';
 export function SecurityHistory() {
   const before = useSearchParams().get('before') ?? '';
@@ -30,7 +30,7 @@ export function SecurityHistory() {
               ? 'Recovered by Dakly support'
               : item.event.replaceAll('.', ' ').replaceAll('_', ' ')}
           </h2>
-          <p>{formatDate(item.createdAt)}</p>
+          <p>{formatDateTime(item.createdAt)}</p>
           {item.reasonType ? <p>Reason: {item.reasonType.replaceAll('_', ' ')}</p> : null}
         </Card>
       ))}

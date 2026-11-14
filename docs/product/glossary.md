@@ -129,5 +129,15 @@ Segments are filters. A customer can be in several. To avoid confusion with the 
 
 - Money: `৳` then the amount with lakh grouping, no decimals unless the amount has poisha: `৳3,42,800`, `৳1,250.50`. One formatter in the web app does this.
 - Phone: stored `01712345678`; shown `01712-345678`; masked `01712-XXX678` for roles without the full-phone flag.
-- Dates: Asia/Dhaka. Today and yesterday by name, then `7 Nov`, then `7 Nov 2025` for other years.
+- Dates: store time zone, default Asia/Dhaka. Today and yesterday by name, then `7 Nov`, then `7 Nov 2025` for other years.
 - Times: `10:03 am`.
+
+Web display helpers live in `apps/web/src/lib/format-money.ts`, `format-date.ts` and
+`format-phone.ts`. `formatMoney` accepts safe integer poisha, keeps negative amounts
+and exact poisha, and throws `RangeError` for fractional, nonfinite or unsafe inputs.
+`formatDate(value, reference, timeZone)` requires a reference instant shared between
+server and initial browser render. It never reads the current clock. `formatTime`
+also accepts the store time zone; both default to Asia/Dhaka. Date inputs must carry
+an explicit UTC offset; invalid or ambiguous inputs throw `RangeError`.
+`formatDateTime` retains exact dates, minutes and the Asia/Dhaka label for security
+history and support deadlines. Relative dates do not replace expiry timestamps.
