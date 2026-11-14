@@ -11,6 +11,8 @@ import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
 import type { EmailMessage } from '@dakly/providers/email/email-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
+import { FakeGoogleIdentityDriver } from '@dakly/providers/google/fake-google-identity-driver';
+import { GoogleIdentityError } from '@dakly/providers/google/google-identity-driver';
 import { AuthModule } from './auth.module';
 import { UsersRepository } from './users.repository';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -486,6 +488,79 @@ describe('Google authentication over Fastify', () => {
       code: challenge.code,
     });
     expect(response.json().error.code).toBe('AUTH_GOOGLE_TICKET_INVALID');
+  });
+
+  it.each(['typed', 'unexpected'])(
+    'does not count %s provider outages against account, token or IP failure counters',
+    async (kind) => {
+      const owner = await account();
+      const idToken = token(randomUUID(), owner.email!);
+      const ip = `2001:db8::${randomInt(1, 65535).toString(16)}`;
+      ips.add(ip);
+      const target = authKey('google-token', idToken);
+      targets.add(target);
+      const redis = app.get(ValkeyClient).connection;
+      const keys = [
+        authKey('fail-user', owner.id),
+        authKey('fail-target', target),
+        authKey('fail-ip', ip),
+      ];
+      await redis.mset(keys[0]!, '2', keys[1]!, '3', keys[2]!, '4');
+      const failure =
+        kind === 'typed'
+          ? new GoogleIdentityError('GOOGLE_IDENTITY_UNAVAILABLE')
+          : new Error('private-provider-error');
+      const outage = vi
+        .spyOn(FakeGoogleIdentityDriver.prototype, 'verify')
+        .mockRejectedValue(failure);
+      try {
+        for (let attempt = 0; attempt < 35; attempt++) {
+          const value = attempt < 6 ? idToken : token(randomUUID(), owner.email!);
+          const fingerprint = authKey('google-token', value);
+          targets.add(fingerprint);
+          const response = await app.inject({
+            method: 'POST',
+            url: '/auth/google',
+            remoteAddress: ip,
+            payload: { idToken: value },
+            headers: { origin: 'http://localhost:3000' },
+          });
+          expect(response.statusCode).toBe(503);
+          expect(response.json().error.code).toBe('AUTH_GOOGLE_UNAVAILABLE');
+          expect(response.body).not.toContain('private-');
+          if (attempt >= 6) expect(await redis.get(authKey('fail-target', fingerprint))).toBeNull();
+        }
+      } finally {
+        outage.mockRestore();
+      }
+      expect(await redis.mget(...keys)).toEqual(['2', '3', '4']);
+      expect(
+        await admin.db.select().from(sessions).where(eq(sessions.userId, owner.id)),
+      ).toHaveLength(1);
+    },
+  );
+
+  it('refuses a third-party challenge if another flow links its subject to the same owner before the lock', async () => {
+    const owner = await account();
+    const challenge = await thirdParty(owner.email!);
+    const repository = app.get(UsersRepository);
+    const lock = repository.lockForSignIn.bind(repository);
+    vi.spyOn(repository, 'lockForSignIn').mockImplementationOnce(async (id) => {
+      await admin.db
+        .update(users)
+        .set({ googleSubject: challenge.subject })
+        .where(eq(users.id, id));
+      return lock(id);
+    });
+    const response = await post('/auth/google/email/verify', {
+      verificationTicket: challenge.verificationTicket,
+      code: challenge.code,
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('AUTH_GOOGLE_TICKET_INVALID');
+    expect(
+      await admin.db.select().from(sessions).where(eq(sessions.userId, owner.id)),
+    ).toHaveLength(1);
   });
 
   it('keeps distinct invalid tokens below the shared IP limit from blocking a valid account', async () => {

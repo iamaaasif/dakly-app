@@ -4,7 +4,10 @@ import { Logger, Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GoogleIdentityDriver } from '@dakly/providers/google/google-identity-driver';
+import {
+  GoogleIdentityError,
+  type GoogleIdentityDriver,
+} from '@dakly/providers/google/google-identity-driver';
 import { requestLoggingOptions } from '../platform/logging/request-logging';
 import { GOOGLE_IDENTITY_DRIVER } from './google-provider';
 import { GoogleIdentityService } from './google-identity.service';
@@ -47,10 +50,14 @@ describe('GoogleIdentityService verification metrics', () => {
     Logger.overrideLogger(false);
   });
 
-  it.each(['success', 'failure'] as const)(
+  it.each(['success', 'invalid', 'unavailable', 'unknown'] as const)(
     'records one count and monotonic duration for %s without personal data',
-    async (outcome) => {
-      if (outcome === 'failure')
+    async (resultKind) => {
+      const outcome = resultKind === 'success' ? 'success' : 'failure';
+      if (resultKind === 'invalid') failure = new GoogleIdentityError('GOOGLE_IDENTITY_INVALID');
+      if (resultKind === 'unavailable')
+        failure = new GoogleIdentityError('GOOGLE_IDENTITY_UNAVAILABLE');
+      if (resultKind === 'unknown')
         failure = Object.assign(new Error('private-token and private-provider-content'), {
           code: 'GOOGLE_PROVIDER_PRIVATE',
         });
@@ -61,7 +68,11 @@ describe('GoogleIdentityService verification metrics', () => {
       try {
         const result = app.get(GoogleIdentityService).verify(idToken);
         if (failure)
-          await expect(result).rejects.toMatchObject({ code: 'AUTH_INVALID_CREDENTIALS' });
+          await expect(result).rejects.toMatchObject(
+            resultKind === 'invalid'
+              ? { code: 'AUTH_INVALID_CREDENTIALS', status: 401 }
+              : { code: 'AUTH_GOOGLE_UNAVAILABLE', status: 503 },
+          );
         else await expect(result).resolves.toMatchObject({ subject: 'private-subject' });
       } finally {
         clock.mockRestore();

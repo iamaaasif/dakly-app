@@ -13,6 +13,7 @@ import { SignInCodes } from './sign-in-codes';
 import { SignInFailures } from './sign-in-failures';
 import { authError } from './auth.errors';
 import { authKey } from './auth-key';
+import { AppError } from '../platform/errors/app-error';
 
 type GoogleResult = GoogleSignInPending | { token: string };
 @Injectable()
@@ -32,7 +33,8 @@ export class GoogleService {
     try {
       identity = await this.identities.verify(input.idToken);
     } catch (error) {
-      await this.failures.recordFailure(unknown, request.ip);
+      if (error instanceof AppError && error.code === 'AUTH_INVALID_CREDENTIALS')
+        await this.failures.recordFailure(unknown, request.ip);
       throw error;
     }
     const linked = await this.users.findByGoogleSubject(identity.subject);
@@ -76,20 +78,21 @@ export class GoogleService {
       owner?.emailVerifiedAt?.toISOString() !== grant.expectedEmailVerifiedAt
     )
       throw authError('AUTH_GOOGLE_TICKET_INVALID');
-    return this.finish(grant.identity, owner?.id, request, grant.expectedEmailVerifiedAt);
+    return this.finish(grant.identity, owner?.id, request, grant.expectedEmailVerifiedAt, true);
   }
   private async finish(
     identity: GoogleIdentity,
     userId: string | undefined,
     request: SignInRequest,
     expectedEmailVerifiedAt?: string,
+    expectedUnlinked?: true,
   ): Promise<GoogleResult> {
     if (userId)
       return this.auth.completeSignIn(
         {
           id: userId,
           target: identity.email,
-          google: { identity, mode: 'link', expectedEmailVerifiedAt },
+          google: { identity, mode: 'link', expectedEmailVerifiedAt, expectedUnlinked },
         },
         request,
       );

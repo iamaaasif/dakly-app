@@ -1,5 +1,6 @@
 import {
   googleIdentity,
+  GoogleIdentityError,
   type GoogleIdentityDriver,
   type GoogleIdentity,
 } from './google-identity-driver';
@@ -10,7 +11,7 @@ export class FakeGoogleIdentityDriver implements GoogleIdentityDriver {
       if (!idToken.startsWith('fake-google:')) throw new Error('Invalid fake identity');
       return googleIdentity(JSON.parse(idToken.slice('fake-google:'.length)));
     } catch {
-      throw new Error('Google identity could not be verified');
+      throw new GoogleIdentityError('GOOGLE_IDENTITY_INVALID');
     }
   }
 }

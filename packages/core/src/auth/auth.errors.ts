@@ -1,6 +1,10 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
+  AUTH_GOOGLE_UNAVAILABLE: {
+    status: 503,
+    message: 'Google sign-in is unavailable. Try again later',
+  },
   AUTH_GOOGLE_CONFLICT: { status: 409, message: 'This Google identity cannot be linked' },
   AUTH_GOOGLE_TICKET_INVALID: {
     status: 400,

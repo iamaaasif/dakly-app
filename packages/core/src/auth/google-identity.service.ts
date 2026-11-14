@@ -15,8 +15,15 @@ export class GoogleIdentityService {
       const identity = await this.driver.verify(idToken);
       outcome = 'success';
       return identity;
-    } catch {
-      throw authError('AUTH_INVALID_CREDENTIALS');
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'GOOGLE_IDENTITY_INVALID'
+      )
+        throw authError('AUTH_INVALID_CREDENTIALS');
+      throw authError('AUTH_GOOGLE_UNAVAILABLE');
     } finally {
       this.logger.log(
         {

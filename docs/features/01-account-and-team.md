@@ -640,5 +640,10 @@ format is `fake-google:` followed by JSON containing `sub`, `email`,
 `GOOGLE_CLIENT_ID`; fake tokens fail real signature verification. Each driver call
 records a `google_identity_verification` metric observation through Nest/Pino with
 count, monotonic duration and success/failure only. Provider errors are sanitized.
+Certificate-fetch failures, verification timeouts and unexpected provider errors
+return `503 AUTH_GOOGLE_UNAVAILABLE` without changing credential-failure counters.
+Invalid identities return `401 AUTH_INVALID_CREDENTIALS` and retain normal failure
+accounting. A pending email challenge also rechecks that its subject remains
+unlinked under the completion lock, even if another flow linked the same owner.
 The real client has a five-second transport timeout and a ten-second total bound.
 Live Google sign-in remains a staging check until an OAuth client is supplied.

@@ -33,6 +33,7 @@ export type SignInUser = {
     identity: GoogleIdentity;
     mode: 'subject' | 'link' | 'signup';
     expectedEmailVerifiedAt?: string;
+    expectedUnlinked?: true;
   };
 };
 
@@ -201,6 +202,8 @@ export class AuthService {
       if (current.googleSubject !== identity.subject) throw authError('AUTH_INVALID_CREDENTIALS');
       return;
     }
+    if (google.expectedUnlinked && current.googleSubject !== null)
+      throw authError('AUTH_GOOGLE_TICKET_INVALID');
     this.assertGoogleLink(google, current);
   }
 

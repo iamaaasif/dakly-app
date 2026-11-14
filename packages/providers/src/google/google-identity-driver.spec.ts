@@ -54,6 +54,7 @@ describe('GoogleTokenDriver', () => {
     { sub: '' },
   ])('rejects invalid claims without leaking token content: %j', async (claims) => {
     await expect(driver().verify(token(claims))).rejects.toMatchObject({
+      code: 'GOOGLE_IDENTITY_INVALID',
       message: 'Google identity could not be verified',
     });
   });
@@ -69,7 +70,8 @@ describe('GoogleTokenDriver', () => {
       new Error('private-token'),
     );
     await expect(verifier.verify(token())).rejects.toMatchObject({
-      message: 'Google identity could not be verified',
+      code: 'GOOGLE_IDENTITY_UNAVAILABLE',
+      message: 'Google identity verification is unavailable',
     });
   });
   it('bounds an unresolved certificate request to ten seconds', async () => {
@@ -79,9 +81,10 @@ describe('GoogleTokenDriver', () => {
       vi.spyOn(OAuth2Client.prototype, 'getFederatedSignonCertsAsync').mockImplementation(
         () => new Promise(() => undefined),
       );
-      const rejected = expect(verifier.verify(token())).rejects.toThrow(
-        'Google identity could not be verified',
-      );
+      const rejected = expect(verifier.verify(token())).rejects.toMatchObject({
+        code: 'GOOGLE_IDENTITY_UNAVAILABLE',
+        message: 'Google identity verification is unavailable',
+      });
       await vi.advanceTimersByTimeAsync(10000);
       await rejected;
     } finally {
