@@ -12,6 +12,7 @@ export function StaffHome() {
   const router = useRouter();
   return (
     <AuthPanel
+      centered={false}
       title="Staff account"
       description="Your staff session is active for up to eight hours and ends after thirty minutes without activity."
     >

@@ -1,5 +1,9 @@
 import { AppError } from '../platform/errors/app-error';
 const errors = {
+  STAFF_ALERT_NOT_CONFIGURED: { status: 503, message: 'Staff alert delivery is not configured' },
+  STAFF_ALERT_DELIVERY_FAILED: { status: 503, message: 'Staff alert delivery failed' },
+  CONFIRMATION_INVALID: { status: 400, message: 'Review the current effect and confirm again' },
+  CONFIRMATION_UNAVAILABLE: { status: 503, message: 'Effect confirmation is unavailable' },
   SUPPORT_DENIED: { status: 403, message: 'Support access is not allowed' },
   SUPPORT_ENDED: { status: 403, message: 'Support access has ended or expired' },
   SUPPORT_NOT_FOUND: { status: 404, message: 'Support request not found' },

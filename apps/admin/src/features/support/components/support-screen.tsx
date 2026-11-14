@@ -1,4 +1,5 @@
 'use client';
+import { BreakGlassForm } from './break-glass-form';
 import { useState } from 'react';
 import type { SupportGrantResponse } from '@dakly/contracts/support';
 import { useForm } from 'react-hook-form';
@@ -15,7 +16,7 @@ import {
   useRequestSupport,
   useOpenSupport,
 } from '../api/support';
-export function SupportScreen() {
+export function SupportScreen({ canBreakGlass }: { canBreakGlass: boolean }) {
   const [target, setTarget] = useState<{ id: string; name: string }>();
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-4">
@@ -29,6 +30,7 @@ export function SupportScreen() {
       </p>
       <TargetSearch onSelect={setTarget} />
       <RequestForm target={target} />
+      {canBreakGlass ? <BreakGlassForm key={target?.id} target={target} /> : null}
       <RequestList />
     </main>
   );
@@ -170,6 +172,9 @@ function RequestCard({ grant }: { grant: SupportGrantResponse }) {
   return (
     <Card>
       <p className="font-semibold">{grant.reason}</p>
+      {grant.isBreakGlass ? (
+        <p className="text-danger">Break-glass access · no Owner approval</p>
+      ) : null}
       <p>
         {grant.status} · {grant.access === 'write' ? 'Read and write' : 'Read only'} ·{' '}
         {grant.durationMinutes} minutes

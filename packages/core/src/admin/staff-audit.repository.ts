@@ -9,16 +9,20 @@ export class StaffAuditRepository {
     @Inject(StaffDatabase) private readonly scope: StaffDatabase,
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
-  async recordForStore(storeId: string, entry: TenantStaffAudit): Promise<void> {
+  async recordForStore(storeId: string, entry: TenantStaffAudit): Promise<string> {
     const { actor, ...values } = entry;
-    await this.tenant.inTransaction(storeId, (tx) =>
-      tx.insert(staffAuditLog).values({
-        storeId,
-        ...values,
-        staffUserId: actor.kind === 'staff' ? actor.staffUserId : null,
-        actorUserId: actor.kind === 'user' ? actor.userId : null,
-      }),
+    const rows = await this.tenant.inTransaction(storeId, (tx) =>
+      tx
+        .insert(staffAuditLog)
+        .values({
+          storeId,
+          ...values,
+          staffUserId: actor.kind === 'staff' ? actor.staffUserId : null,
+          actorUserId: actor.kind === 'user' ? actor.userId : null,
+        })
+        .returning({ id: staffAuditLog.id }),
     );
+    return rows[0]!.id;
   }
   async provisioned(
     staffUserId: string,

@@ -18,6 +18,7 @@ export type SupportRequestInput = z.infer<typeof supportRequestSchema>;
 export type SupportGrantResponse = {
   id: string;
   staffName: string;
+  isBreakGlass: boolean;
   scopes: string[];
   access: (typeof supportGrantAccess)[number];
   status: (typeof supportGrantStatuses)[number];

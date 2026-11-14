@@ -9,6 +9,12 @@ import { TOTP, Secret } from 'otpauth';
 import { hashPassword } from '../platform/crypto/password';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { createDatabase } from '@dakly/db/client';
+import { SlackAlertDriver } from '@dakly/providers/staff-alert/slack/slack-alert-driver';
+import { StaffAlertsService } from './staff-alerts.service';
+import { StaffAlertsRepository } from './staff-alerts.repository';
+import { SupportRepository } from './support.repository';
+import { sql } from 'drizzle-orm';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { AdminModule } from './admin.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -235,6 +241,11 @@ async function exchangeProof(token: string) {
 beforeAll(async () => {
   const pair = await generateKeyPair('RS256');
   key = pair.privateKey;
+  vi.stubEnv('SLACK_BOT_TOKEN', 'local-test-token');
+  vi.stubEnv('SLACK_CHANNEL_ID', 'CLOCALTEST');
+  vi.spyOn(SlackAlertDriver.prototype, 'send').mockRejectedValue(
+    new Error('Local provider unavailable'),
+  );
   vi.stubEnv('ADMIN_ORIGIN', adminOrigin);
   vi.stubEnv('WEB_ORIGINS', shopOrigin);
   vi.stubEnv('CLOUDFLARE_ACCESS_ISSUER', 'https://dakly-test.cloudflareaccess.com');
@@ -262,6 +273,10 @@ afterEach(() => {
   now = new Date();
 });
 afterAll(async () => {
+  await database.pool.query(
+    'delete from staff_alert_deliveries where audit_id in (select id from staff_audit_log where staff_user_id=any($1::uuid[]))',
+    [staffIds],
+  );
   for (const table of [
     'support_sessions',
     'support_grants',
@@ -920,5 +935,382 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
     expect(
       (await admin(f, '/admin/audit?action=%27%3Bdrop%20table%20users%3B--')).json().rows,
     ).toEqual([]);
+  });
+});
+
+describe('Confirmed break-glass access', () => {
+  const input = (f: Fixture) => ({
+    targetId: f.storeId,
+    reason: 'Investigate security incident',
+    category: 'security_incident',
+  });
+  async function preview(f: Fixture) {
+    const response = await admin(f, '/admin/support/break-glass/preview', input(f));
+    expect(response.statusCode, response.body).toBe(201);
+    return response.json();
+  }
+  async function confirm(f: Fixture, effect: object) {
+    return admin(f, '/admin/support/break-glass', { ...effect, confirmed: true });
+  }
+  it('requires Super admin and confirmation bound to the displayed target, reason, end time and read-only effect', async () => {
+    const ordinary = await fixture();
+    expect(
+      (await admin(ordinary, '/admin/support/break-glass/preview', input(ordinary))).statusCode,
+    ).toBe(403);
+    const f = await fixture('super_admin');
+    const effect = await preview(f);
+    expect(effect.effect).toMatchObject({
+      targetId: f.storeId,
+      shopName: 'Support shop',
+      access: 'read',
+      scopes: ['customers'],
+      durationMinutes: 30,
+    });
+    expect(
+      (await database.pool.query('select id from support_grants where store_id=$1', [f.storeId]))
+        .rowCount,
+    ).toBe(0);
+    expect((await admin(f, '/admin/support/break-glass', effect)).statusCode).toBe(400);
+    expect(
+      (await confirm(f, { ...effect, effect: { ...effect.effect, targetId: ordinary.storeId } }))
+        .statusCode,
+    ).toBe(400);
+    expect(
+      (
+        await confirm(f, {
+          ...effect,
+          effect: { ...effect.effect, reason: 'A different legal reason' },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const response = await confirm(f, effect);
+    expect(response.statusCode, response.body).toBe(201);
+    const id = response.json().id;
+    expect((await confirm(f, effect)).json().id).toBe(id);
+    const { cookie } = await open(f, id);
+    expect((await shop(f, '/support/session', undefined, cookie)).json()).toMatchObject({
+      isBreakGlass: true,
+      access: 'read',
+      expiresAt: effect.effect.expiresAt,
+    });
+    expect(
+      (await shop(f, '/support/customers', { name: 'Blocked', phone: '01712345678' }, cookie))
+        .statusCode,
+    ).toBe(403);
+    const audit = await database.pool.query(
+      "select id,staff_user_id,reason,action_details from staff_audit_log where target_id=$1 and action='support.break_glass_opened'",
+      [id],
+    );
+    expect(audit.rowCount).toBe(1);
+    expect(audit.rows[0]).toMatchObject({ staff_user_id: f.staffId, reason: input(f).reason });
+    expect(
+      (
+        await database.pool.query('select status from staff_alert_deliveries where audit_id=$1', [
+          audit.rows[0].id,
+        ])
+      ).rows,
+    ).toEqual([{ status: 'pending' }]);
+    expect(
+      (
+        await database.pool.query(
+          "select actor_staff_id,after from audit_log where entity_id=$1 and action='support.break_glass_opened'",
+          [id],
+        )
+      ).rows[0],
+    ).toMatchObject({ actor_staff_id: f.staffId, after: { support: { isBreakGlass: true } } });
+    await database.pool.query("update staff_users set role='support' where id=$1", [f.staffId]);
+    expect((await shop(f, '/support/session', undefined, cookie)).statusCode).toBe(403);
+    expect((await admin(f, `/admin/support/${id}/handoff`, {})).statusCode).toBe(403);
+  });
+  it('rejects short reasons, expired confirmation, conflicts and rolls back both audit failure paths', async () => {
+    const f = await fixture('super_admin');
+    for (const reason of ['short', 'x'.repeat(1001)])
+      expect(
+        (await admin(f, '/admin/support/break-glass/preview', { ...input(f), reason })).statusCode,
+      ).toBe(400);
+    const effect = await preview(f);
+    now = new Date(now.getTime() + 301000);
+    expect((await confirm(f, effect)).statusCode).toBe(400);
+    now = new Date();
+    for (const service of [app.get(StaffAuditRepository), app.get(AuditService)]) {
+      const current = await preview(f);
+      const method = service instanceof StaffAuditRepository ? 'recordForStore' : 'record';
+      const spy = vi
+        .spyOn(service as AuditService, method as 'record')
+        .mockRejectedValueOnce(new Error('Audit unavailable'));
+      expect((await confirm(f, current)).statusCode).toBe(500);
+      spy.mockRestore();
+      expect(
+        (await database.pool.query('select id from support_grants where store_id=$1', [f.storeId]))
+          .rowCount,
+      ).toBe(0);
+      expect(
+        (
+          await database.pool.query(
+            "select id from staff_audit_log where store_id=$1 and action='support.break_glass_opened'",
+            [f.storeId],
+          )
+        ).rowCount,
+      ).toBe(0);
+    }
+  });
+  it('keeps Owner end final across confirmation retries and invalidates handoffs', async () => {
+    const f = await fixture('super_admin');
+    const effect = await preview(f);
+    const id = (await confirm(f, effect)).json().id;
+    const { cookie } = await open(f, id);
+    const handoff = await admin(f, `/admin/support/${id}/handoff`, {});
+    expect((await shop(f, `/support-access/${id}/end`, {})).statusCode).toBe(201);
+    expect((await confirm(f, effect)).json().id).toBe(id);
+    expect((await shop(f, '/support/session', undefined, cookie)).statusCode).toBe(403);
+    expect((await exchangeProof(handoff.json().token)).statusCode).toBe(403);
+    expect((await admin(f, `/admin/support/${id}/handoff`, {})).statusCode).toBe(403);
+    expect(
+      (await database.pool.query('select status from support_grants where id=$1', [id])).rows[0]
+        .status,
+    ).toBe('ended');
+  });
+  it('never revives disabled grants and rejects stale-parent proofs after fresh sign-in', async () => {
+    const f = await fixture('super_admin');
+    const effect = await preview(f);
+    const id = (await confirm(f, effect)).json().id;
+    const { cookie } = await open(f, id);
+    const handoff = await admin(f, `/admin/support/${id}/handoff`, {});
+    await database.pool.query("update staff_users set status='disabled' where id=$1", [f.staffId]);
+    await database.pool.query("update staff_users set status='active' where id=$1", [f.staffId]);
+    const fresh = await signInAgain(f);
+    expect((await confirm(fresh, effect)).statusCode).toBe(400);
+    expect((await shop(f, '/support/session', undefined, cookie)).statusCode).toBe(403);
+    expect((await exchangeProof(handoff.json().token)).statusCode).toBe(403);
+    expect((await admin(fresh, `/admin/support/${id}/handoff`, {})).statusCode).toBe(403);
+  });
+  it('binds current shop name, current Super admin role and verified own/work-store conflicts', async () => {
+    const f = await fixture('super_admin');
+    const effect = await preview(f);
+    await database.pool.query("update stores set name='Renamed shop' where id=$1", [f.storeId]);
+    expect((await confirm(f, effect)).statusCode).toBe(400);
+    const renamed = await preview(f);
+    await database.pool.query("update staff_users set role='support' where id=$1", [f.staffId]);
+    expect((await confirm(f, renamed)).statusCode).toBe(403);
+    await database.pool.query("update staff_users set role='super_admin' where id=$1", [f.staffId]);
+    const id = (await confirm(f, renamed)).json().id;
+    const { cookie } = await open(f, id);
+    await database.pool.query(
+      "insert into staff_identity_contacts(id,staff_user_id,kind,value) values(gen_random_uuid(),$1,'phone',$2)",
+      [f.staffId, f.phone],
+    );
+    expect((await admin(f, '/admin/support/break-glass/preview', input(f))).statusCode).toBe(403);
+    expect((await shop(f, '/support/session', undefined, cookie)).statusCode).toBe(403);
+    expect((await admin(f, `/admin/support/${id}/handoff`, {})).statusCode).toBe(403);
+  });
+  it('ends at the displayed deadline and preserves existing grant continuation with exact parents', async () => {
+    const f = await fixture('super_admin');
+    const effect = await preview(f);
+    now = new Date(now.getTime() + 240000);
+    const id = (await confirm(f, effect)).json().id;
+    const { cookie } = await open(f, id);
+    const unused = await admin(f, `/admin/support/${id}/handoff`, {});
+    await admin(f, '/admin/auth/sign-out', {});
+    const fresh = await signInAgain(f);
+    expect((await shop(f, '/support/session', undefined, cookie)).statusCode).toBe(403);
+    expect((await exchangeProof(unused.json().token)).statusCode).toBe(403);
+    const next = await open(fresh, id);
+    expect((await shop(fresh, '/support/session', undefined, next.cookie)).json().expiresAt).toBe(
+      effect.effect.expiresAt,
+    );
+    now = new Date(effect.effect.expiresAt);
+    expect((await shop(fresh, '/support/session', undefined, next.cookie)).statusCode).toBe(403);
+  });
+  it('has both audit records before grant insertion and rolls back durable intent failure', async () => {
+    const f = await fixture('super_admin');
+    const repository = app.get(SupportRepository);
+    const insert = repository.insertBreakGlass.bind(repository);
+    const probe = vi
+      .spyOn(repository, 'insertBreakGlass')
+      .mockImplementation(async (storeId, effect, time) => {
+        const tenant = app.get(TenantDatabase);
+        const state = await tenant.forStore(storeId, (tx) =>
+          tx.execute(sql`select
+        (select count(*) from staff_audit_log where target_id=${effect.id}::uuid and action='support.break_glass_opened') as staff,
+        (select count(*) from audit_log where entity_id=${effect.id}::uuid and action='support.break_glass_opened') as shop`),
+        );
+        expect(state.rows[0]).toEqual({ staff: '1', shop: '1' });
+        return insert(storeId, effect, time);
+      });
+    const intent = vi
+      .spyOn(app.get(StaffAlertsRepository), 'recordIntent')
+      .mockRejectedValueOnce(new Error('Intent unavailable'));
+    expect((await confirm(f, await preview(f))).statusCode).toBe(500);
+    probe.mockRestore();
+    intent.mockRestore();
+    expect(
+      (await database.pool.query('select id from support_grants where store_id=$1', [f.storeId]))
+        .rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await database.pool.query(
+          "select id from staff_audit_log where store_id=$1 and action='support.break_glass_opened'",
+          [f.storeId],
+        )
+      ).rowCount,
+    ).toBe(0);
+  });
+  it('alerts other Super admins, retries failures and sends outside store/staff locks only once after acknowledgement', async () => {
+    const f = await fixture('super_admin');
+    const other = await fixture('super_admin');
+    const id = (await confirm(f, await preview(f))).json().id;
+    const auditId = (
+      await database.pool.query(
+        "select id from staff_audit_log where target_id=$1 and action='support.break_glass_opened'",
+        [id],
+      )
+    ).rows[0].id;
+    expect(
+      (await admin(other, '/admin/alerts'))
+        .json()
+        .items.some((item: { id: string }) => item.id === auditId),
+    ).toBe(true);
+    const ordinary = await fixture();
+    expect((await admin(ordinary, '/admin/alerts')).statusCode).toBe(403);
+    const alerts = app.get(StaffAlertsService);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await expect(alerts.deliver(auditId)).rejects.toThrow();
+      now = new Date(now.getTime() + 30000 * 2 ** (attempt + 1));
+    }
+    const freshOther = await signInAgain(other);
+    const failed = (await admin(freshOther, '/admin/alerts'))
+      .json()
+      .items.find((item: { id: string }) => item.id === auditId);
+    expect(failed).toMatchObject({ status: 'failed', attempts: 5 });
+    expect(
+      (
+        await admin(freshOther, `/admin/alerts/${auditId}/retry`, {
+          reason: 'Slack channel configuration repaired',
+        })
+      ).statusCode,
+    ).toBe(201);
+    const send = vi.mocked(SlackAlertDriver.prototype.send);
+    send.mockImplementationOnce(async (message) => {
+      expect(message.text).not.toContain(input(f).reason);
+      const client = await database.pool.connect();
+      try {
+        await client.query('begin');
+        await client.query('select id from stores where id=$1 for update nowait', [f.storeId]);
+        await client.query('select id from staff_users where id=$1 for update nowait', [f.staffId]);
+      } finally {
+        await client.query('rollback');
+        client.release();
+      }
+    });
+    await alerts.deliver(auditId);
+    const count = send.mock.calls.length;
+    await alerts.deliver(auditId);
+    expect(send.mock.calls.length).toBe(count);
+    expect(
+      (
+        await database.pool.query('select status from staff_alert_deliveries where audit_id=$1', [
+          auditId,
+        ])
+      ).rows[0].status,
+    ).toBe('delivered');
+  });
+  it('reclaims a crashed lease, ignores stale acknowledgements and marks exhausted crashes visibly failed', async () => {
+    const f = await fixture('super_admin');
+    const id = (await confirm(f, await preview(f))).json().id;
+    const auditId = (
+      await database.pool.query(
+        "select id from staff_audit_log where target_id=$1 and action='support.break_glass_opened'",
+        [id],
+      )
+    ).rows[0].id;
+    const repository = app.get(StaffAlertsRepository);
+    const first = randomUUID(),
+      second = randomUUID();
+    expect(await repository.claim(auditId, first, now)).toEqual({ attempts: 1 });
+    expect(await repository.claim(auditId, second, now)).toBeUndefined();
+    now = new Date(now.getTime() + 61000);
+    expect(await repository.claim(auditId, second, now)).toEqual({ attempts: 2 });
+    await repository.finish(auditId, first, 'delivered', null, now, now);
+    expect(
+      (
+        await database.pool.query('select status from staff_alert_deliveries where audit_id=$1', [
+          auditId,
+        ])
+      ).rows[0].status,
+    ).toBe('pending');
+    await database.pool.query(
+      'update staff_alert_deliveries set attempts=5,leased_until=$2 where audit_id=$1',
+      [auditId, new Date(now.getTime() - 1)],
+    );
+    await repository.pending(now);
+    expect(
+      (
+        await database.pool.query(
+          'select status,error from staff_alert_deliveries where audit_id=$1',
+          [auditId],
+        )
+      ).rows[0],
+    ).toMatchObject({ status: 'failed' });
+  });
+  it.each(['finance', 'ops', 'trust_safety', 'analyst'])(
+    'rejects %s from the Super admin exception',
+    async (role) => {
+      const f = await fixture(role);
+      expect((await admin(f, '/admin/support/break-glass/preview', input(f))).statusCode).toBe(403);
+    },
+  );
+  it('reports missing Slack configuration without invoking a driver or claiming success', async () => {
+    const f = await fixture('super_admin');
+    const id = (await confirm(f, await preview(f))).json().id;
+    const auditId = (
+      await database.pool.query(
+        "select id from staff_audit_log where target_id=$1 and action='support.break_glass_opened'",
+        [id],
+      )
+    ).rows[0].id;
+    const send = vi.fn();
+    const alerts = new StaffAlertsService(
+      app.get(StaffAlertsRepository),
+      app.get(StaffTransaction),
+      app.get(Clock),
+      { send },
+      null,
+    );
+    await expect(alerts.deliver(auditId)).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+    const delivery = (
+      await database.pool.query(
+        'select status,error,delivered_at from staff_alert_deliveries where audit_id=$1',
+        [auditId],
+      )
+    ).rows[0];
+    expect(delivery.status).toBe('pending');
+    expect(delivery.error).toContain('Slack is not configured');
+    expect(delivery.delivered_at).toBeNull();
+  });
+  it('rejects altered duration/deadline/purpose/parent and explicitly false confirmation', async () => {
+    const f = await fixture('super_admin');
+    const original = await preview(f);
+    for (const changed of [
+      { expiresAt: new Date(now.getTime() + 3600000).toISOString() },
+      { durationMinutes: 60 },
+      { category: 'legal_request' },
+      { access: 'write' },
+      { scopes: ['orders'] },
+      { staffSessionId: randomUUID() },
+      { id: randomUUID() },
+    ]) {
+      expect(
+        (await confirm(f, { ...original, effect: { ...original.effect, ...changed } })).statusCode,
+      ).toBe(400);
+    }
+    expect(
+      (await admin(f, '/admin/support/break-glass', { ...original, confirmed: false })).statusCode,
+    ).toBe(400);
+    expect(
+      (await database.pool.query('select id from support_grants where store_id=$1', [f.storeId]))
+        .rowCount,
+    ).toBe(0);
   });
 });

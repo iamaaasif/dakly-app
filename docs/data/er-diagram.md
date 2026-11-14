@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0036_snapshot.json`: **94 tables, 1239 columns, 367 explicit indexes and 293 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0037_snapshot.json`: **95 tables, 1247 columns, 368 explicit indexes and 294 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -54,6 +54,7 @@ erDiagram
     support_grants ||..o{ support_sessions : "store_id, grant_id"
     staff_users ||..o{ staff_audit_exports : "staff_user_id"
     staff_sessions ||..o{ staff_audit_exports : "staff_session_id"
+    staff_audit_log ||--o| staff_alert_deliveries : "audit_id"
     stores {
         uuid id PK "NOT NULL; uuid"
         text name "NOT NULL; text"
@@ -353,6 +354,16 @@ erDiagram
         text error "NULL; text"
         timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_alert_deliveries {
+        uuid audit_id PK,FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        integer attempts "NOT NULL; integer"
+        uuid lease_id "NULL; uuid"
+        timestamp_with_time_zone leased_until "NULL; timestamp with time zone"
+        timestamp_with_time_zone next_attempt_at "NOT NULL; timestamp with time zone"
+        text error "NULL; text"
+        timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
     }
 ```
 
@@ -1800,6 +1811,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
 | `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
 | `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
+| `staff_alert_deliveries_audit_id_staff_audit_log_id_fk`              | `staff_alert_deliveries(audit_id)`                        | `staff_audit_log(id)`                       | no action |
 | `staff_audit_exports_staff_user_id_staff_users_id_fk`                | `staff_audit_exports(staff_user_id)`                      | `staff_users(id)`                           | no action |
 | `staff_audit_exports_staff_session_id_staff_sessions_id_fk`          | `staff_audit_exports(staff_session_id)`                   | `staff_sessions(id)`                        | no action |
 | `staff_audit_log_staff_user_id_staff_users_id_fk`                    | `staff_audit_log(staff_user_id)`                          | `staff_users(id)`                           | no action |

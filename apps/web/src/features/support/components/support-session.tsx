@@ -27,7 +27,13 @@ export function SupportSession() {
             aria-label="Active Dakly support access"
             className="space-y-2 rounded-md bg-danger p-4 text-on-primary"
           >
-            <p className="font-semibold">Dakly support ({session.data.staffName})</p>
+            <p className="font-semibold">
+              {session.data.isBreakGlass ? 'Dakly break-glass access' : 'Dakly support'} (
+              {session.data.staffName})
+            </p>
+            {session.data.isBreakGlass ? (
+              <p>Emergency read-only access. No Owner approval was requested.</p>
+            ) : null}
             <p>{session.data.storeName}</p>
             <p>{session.data.access === 'write' ? 'Read and write' : 'Read only'} · Customers</p>
             <p>Access expires {formatDate(session.data.expiresAt!)}</p>

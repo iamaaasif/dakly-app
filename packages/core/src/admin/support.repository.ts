@@ -13,6 +13,7 @@ const grantColumns = {
   storeId: supportGrants.storeId,
   staffUserId: supportGrants.staffUserId,
   staffName: staffUsers.name,
+  isBreakGlass: supportGrants.isBreakGlass,
   scopes: supportGrants.scopes,
   access: supportGrants.access,
   status: supportGrants.status,
@@ -138,6 +139,27 @@ export class SupportRepository {
         access: input.access,
         durationMinutes: input.durationMinutes,
         requestedAt: now,
+      }),
+    );
+  }
+  async insertBreakGlass(
+    storeId: string,
+    effect: import('@dakly/contracts/break-glass').BreakGlassEffect,
+    now: Date,
+  ) {
+    await this.tenant.inTransaction(storeId, (tx) =>
+      tx.insert(supportGrants).values({
+        id: effect.id,
+        storeId,
+        staffUserId: effect.staffUserId,
+        scopes: effect.scopes,
+        access: 'read',
+        status: 'approved',
+        reason: effect.reason,
+        isBreakGlass: true,
+        durationMinutes: 30,
+        requestedAt: now,
+        expiresAt: new Date(effect.expiresAt),
       }),
     );
   }

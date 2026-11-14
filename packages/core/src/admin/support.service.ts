@@ -1,11 +1,8 @@
+import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { randomBytes, createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { CreateCustomerInput } from '@dakly/contracts/customers';
-import type {
-  SupportPrincipal,
-  SupportRequestInput,
-  SupportGrantResponse,
-} from '@dakly/contracts/support';
+import type { SupportPrincipal, SupportRequestInput } from '@dakly/contracts/support';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { Clock } from '../platform/clock';
@@ -22,7 +19,6 @@ import { supportError } from './support.errors';
 const requestRoles = ['super_admin', 'support', 'trust_safety'];
 const tokenHash = (token: string) => createHash('sha256').update(token).digest();
 type Staff = StaffIdentity & { sessionId: string };
-type Grant = NonNullable<Awaited<ReturnType<SupportRepository['find']>>>;
 @Injectable()
 export class SupportService {
   constructor(
@@ -36,6 +32,10 @@ export class SupportService {
     @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(CustomersService) private readonly customers: CustomersService,
   ) {}
+  async authorizeBreakGlass(storeId: string, staff: Staff) {
+    const current = await this.assertStaff(storeId, staff.id, staff.sessionId);
+    if (current.role !== 'super_admin') throw supportError('SUPPORT_DENIED');
+  }
   targets(staff: Staff, query: string) {
     this.assertRole(staff);
     return this.repository.targets(query);
@@ -78,7 +78,7 @@ export class SupportService {
   async ownerRequests(storeId: string, userId: string, sessionId: string, before?: string) {
     return this.ownerAction(storeId, userId, sessionId, async () => {
       const items = (await this.repository.list(storeId, before)).map((grant) =>
-        this.response(grant),
+        supportGrantResponse(grant, this.clock.now()),
       );
       return { items, nextCursor: items.length === 50 ? items.at(-1)!.id : null };
     });
@@ -167,8 +167,8 @@ export class SupportService {
       const grant = await this.requireGrant(storeId, id);
       if (
         decision === 'denied'
-          ? this.status(grant) !== 'requested'
-          : this.status(grant) !== 'approved'
+          ? supportGrantStatus(grant, this.clock.now()) !== 'requested'
+          : supportGrantStatus(grant, this.clock.now()) !== 'approved'
       )
         throw supportError('SUPPORT_INVALID');
       await this.audit.record(
@@ -200,7 +200,7 @@ export class SupportService {
         id,
         { kind: 'staff', staffUserId: staff.id },
         'support.handoff_issued',
-        'Staff opened approved support session',
+        'Staff opened authorized support session',
         ip,
       );
       await this.repository.handoff(
@@ -227,7 +227,7 @@ export class SupportService {
         session.grantId,
         { kind: 'staff', staffUserId: session.staffUserId },
         'support.session_started',
-        'Staff entered approved support session',
+        'Staff entered authorized support session',
         ip,
       );
       await this.repository.consume(storeId, hash, tokenHash(token), this.clock.now());
@@ -236,7 +236,7 @@ export class SupportService {
   }
   async session(token: string | undefined) {
     return this.run(token, async (principal) => ({
-      ...this.response(await this.authorize(principal)),
+      ...supportGrantResponse(await this.authorize(principal), this.clock.now()),
       storeName: await this.repository.storeName(principal.storeId),
     }));
   }
@@ -262,7 +262,7 @@ export class SupportService {
   async createCustomer(token: string | undefined, input: CreateCustomerInput, ip: string) {
     return this.run(token, async (principal) => {
       const grant = await this.authorize(principal);
-      if (grant.access !== 'write' || !grant.scopes.includes('customers'))
+      if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
         return this.denied(principal, ip);
       const result = await this.customers.create(principal.storeId, input, { seeFullPhone: true });
       await this.audit.record(
@@ -312,9 +312,17 @@ export class SupportService {
     return null;
   }
   private async authorize(principal: SupportPrincipal) {
-    await this.assertStaff(principal.storeId, principal.staffUserId, principal.staffSessionId);
+    const staff = await this.assertStaff(
+      principal.storeId,
+      principal.staffUserId,
+      principal.staffSessionId,
+    );
     const grant = await this.requireGrant(principal.storeId, principal.grantId);
-    if (grant.staffUserId !== principal.staffUserId || this.status(grant) !== 'approved')
+    if (
+      (grant.isBreakGlass && (staff.role !== 'super_admin' || grant.access !== 'read')) ||
+      grant.staffUserId !== principal.staffUserId ||
+      supportGrantStatus(grant, this.clock.now()) !== 'approved'
+    )
       throw supportError('SUPPORT_ENDED');
     return grant;
   }
@@ -330,6 +338,7 @@ export class SupportService {
     if (sessionId) await this.assertParent(storeId, staffUserId, sessionId);
     if (await this.identities.conflictsWithStore(storeId, staffUserId))
       throw supportError('SUPPORT_DENIED');
+    return staff;
   }
   private async assertParent(storeId: string, staffUserId: string, sessionId: string) {
     const parent = await this.repository.parent(storeId, staffUserId, sessionId);
@@ -376,28 +385,8 @@ export class SupportService {
   }
   private async pending(storeId: string, id: string) {
     const grant = await this.requireGrant(storeId, id);
-    if (this.status(grant) !== 'requested') throw supportError('SUPPORT_INVALID');
+    if (supportGrantStatus(grant, this.clock.now()) !== 'requested')
+      throw supportError('SUPPORT_INVALID');
     return grant;
-  }
-  private status(grant: Grant) {
-    const now = this.clock.now();
-    return (grant.status === 'requested' &&
-      grant.requestedAt.getTime() + 1800000 <= now.getTime()) ||
-      (grant.status === 'approved' && (!grant.expiresAt || grant.expiresAt <= now))
-      ? 'expired'
-      : grant.status;
-  }
-  private response(grant: Grant): SupportGrantResponse {
-    return {
-      id: grant.id,
-      staffName: grant.staffName,
-      scopes: grant.scopes,
-      access: grant.access,
-      status: this.status(grant),
-      reason: grant.reason,
-      durationMinutes: grant.durationMinutes,
-      requestedAt: grant.requestedAt.toISOString(),
-      expiresAt: grant.expiresAt?.toISOString() ?? null,
-    };
   }
 }

@@ -1,3 +1,8 @@
+import { BreakGlassService } from './break-glass.service';
+import { BreakGlassController } from './break-glass.controller';
+import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { StaffAlertsModule } from './staff-alerts.module';
+import { StaffAlertsController } from './staff-alerts.controller';
 import { SupportAuditService } from './support-audit.service';
 import { UsersModule } from '../auth/users.module';
 import { CodesModule } from '../auth/codes.module';
@@ -35,6 +40,7 @@ import { StaffAuthController } from './staff-auth.controller';
 @Module({
   imports: [
     StaffHistoryModule,
+    StaffAlertsModule,
     StaffIdentityModule,
     CryptoModule,
     CacheModule,
@@ -47,6 +53,8 @@ import { StaffAuthController } from './staff-auth.controller';
   ],
   controllers: [
     StaffAuthController,
+    BreakGlassController,
+    StaffAlertsController,
     StaffSupportController,
     OwnerSupportController,
     SupportController,
@@ -54,6 +62,8 @@ import { StaffAuthController } from './staff-auth.controller';
   ],
   providers: [
     SupportRepository,
+    RiskyActionConfirmation,
+    BreakGlassService,
     SupportService,
     SupportAuditService,
     Clock,

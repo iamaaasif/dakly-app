@@ -41,6 +41,11 @@ function OwnerRequest({ grant }: { grant: SupportGrantResponse }) {
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">{grant.staffName}</h2>
         <p>{grant.reason}</p>
+        {grant.isBreakGlass ? (
+          <p className="text-danger">
+            Break-glass read-only access. No Owner approval was requested.
+          </p>
+        ) : null}
         <p>
           {grant.access === 'write' ? 'Read and write' : 'Read only'} · {grant.scopes.join(', ')} ·{' '}
           {grant.durationMinutes} minutes
