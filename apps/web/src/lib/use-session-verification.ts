@@ -14,6 +14,7 @@ export function useSessionVerification() {
   const [failure, setFailure] = useState('');
   const [generation, setGeneration] = useState(0);
   const revision = useRef(0);
+  const acceptedContextTag = useRef<string | undefined>(undefined);
   const switching = useRef(false);
   const pause = useCallback(() => {
     setBlocked(true);
@@ -33,14 +34,14 @@ export function useSessionVerification() {
   const verify = useCallback(async () => {
     if (switching.current) return;
     const current = pause();
-    const previous = client.getQueryData<SessionContext>(sessionContextKey);
     await client.cancelQueries({ queryKey: sessionContextKey });
     if (revision.current !== current) return;
     try {
       const verified = await client.fetchQuery<SessionContext>(freshContextQuery);
       if (revision.current !== current) return;
-      if (!sameContext(previous, verified)) await discard();
+      if (acceptedContextTag.current !== verified.contextTag) await discard();
       if (revision.current !== current) return;
+      acceptedContextTag.current = verified.contextTag;
       setAvailable(true);
       setBlocked(false);
       setFailure('');
@@ -63,8 +64,4 @@ export function useSessionVerification() {
     verify,
     switching,
   };
-}
-
-function sameContext(previous: SessionContext | undefined, verified: SessionContext): boolean {
-  return previous?.contextTag === verified.contextTag;
 }
