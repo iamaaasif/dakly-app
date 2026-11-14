@@ -76,7 +76,12 @@ export class RolesRepository {
     );
     return row!;
   }
-  async change(storeId: string, roleId: string, input: CreateRoleInput, now: Date): Promise<Role> {
+  async change(
+    storeId: string,
+    roleId: string,
+    input: CreateRoleInput,
+    now: Date,
+  ): Promise<Role | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(roles)
@@ -84,7 +89,7 @@ export class RolesRepository {
         .where(and(eq(roles.storeId, storeId), eq(roles.id, roleId)))
         .returning(roleColumns),
     );
-    return row!;
+    return row;
   }
   async remove(storeId: string, roleId: string): Promise<void> {
     await this.database.forStore(storeId, (tx) =>

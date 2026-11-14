@@ -66,6 +66,7 @@ export class RolesService {
       this.assertGrant(actor, proposed);
       await this.assertName(storeId, proposed.name, roleId);
       const role = await this.repository.change(storeId, roleId, proposed, this.clock.now());
+      if (!role) throw teamError('ROLE_NOT_FOUND');
       await this.record(storeId, roleId, actor.userId, 'role.changed');
       return this.response(role);
     });
