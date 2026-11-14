@@ -41,6 +41,7 @@ const envSchema = z.object({
     .regex(/^[A-Za-z0-9+/]{43}=$/)
     .optional(),
   API_TRUSTED_PROXIES: trustedProxiesSchema,
+  API_HOST: z.union([z.ipv4(), z.ipv6()]).default('0.0.0.0'),
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 

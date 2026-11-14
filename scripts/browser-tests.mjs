@@ -61,6 +61,7 @@ function apiEnvironment(environment) {
     ...environment,
     NODE_ENV: 'test',
     API_PORT: '4015',
+    API_HOST: '127.0.0.1',
     WEB_ORIGINS: webOrigin,
     ADMIN_ORIGIN: 'http://admin.localhost:3010',
     API_TRUSTED_PROXIES: '127.0.0.1,::1',
@@ -113,7 +114,14 @@ async function main() {
     );
     const next = start(
       process.execPath,
-      [requireWeb.resolve('next/dist/bin/next'), 'start', '--port', '3015'],
+      [
+        requireWeb.resolve('next/dist/bin/next'),
+        'start',
+        '--port',
+        '3015',
+        '--hostname',
+        '127.0.0.1',
+      ],
       'next',
       { ...environment, NODE_ENV: 'production' },
       web,
