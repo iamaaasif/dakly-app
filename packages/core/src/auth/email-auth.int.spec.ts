@@ -312,9 +312,12 @@ describe('Email authentication over Fastify', () => {
         email: user.email,
         code: codeFor(user.email!),
       });
-      expect(response.json().error.code).toBe(
-        state === 'disabled' ? 'AUTH_DISABLED' : 'AUTH_SECOND_FACTOR_REQUIRED',
-      );
+      if (state === 'disabled') expect(response.json().error.code).toBe('AUTH_DISABLED');
+      else {
+        expect(response.statusCode).toBe(202);
+        expect(response.json().status).toBe('totp_required');
+      }
+      expect(response.headers['set-cookie']).toBeUndefined();
       expect(
         await admin.db.select().from(sessions).where(eq(sessions.userId, user.id)),
       ).toHaveLength(1);

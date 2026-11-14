@@ -38,6 +38,9 @@ export type SignUpInput = z.infer<typeof signUpSchema>;
 export type RequestCodeInput = z.infer<typeof requestCodeSchema>;
 export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
 export type CodePurpose =
+  | 'totp_setup'
+  | 'totp_recovery_phone'
+  | 'totp_recovery_email'
   | 'google_email'
   | 'sign_up'
   | 'sign_in'

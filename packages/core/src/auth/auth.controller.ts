@@ -35,12 +35,16 @@ export class AuthController {
     @Body(new ZodValidationPipe(verifyCodeSchema)) input: VerifyCodeInput,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<void> {
+  ) {
     const result = await this.auth.verifyCode(input, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
       isRemembered: input.isRemembered,
     });
+    if ('challengeId' in result) {
+      reply.status(202);
+      return result;
+    }
     setSessionCookie(reply, result.token, input.isRemembered);
   }
   @Post('email/code')
@@ -58,12 +62,16 @@ export class AuthController {
     @Body(new ZodValidationPipe(verifyEmailCodeSchema)) input: VerifyEmailCodeInput,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<void> {
+  ) {
     const result = await this.auth.verifyEmailCode(input, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
       isRemembered: input.isRemembered,
     });
+    if ('challengeId' in result) {
+      reply.status(202);
+      return result;
+    }
     setSessionCookie(reply, result.token, input.isRemembered);
   }
 }

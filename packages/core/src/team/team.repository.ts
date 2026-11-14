@@ -59,6 +59,16 @@ export class TeamRepository {
     return rows[0];
   }
 
+  async accountOwnerContacts(userId: string) {
+    const result = await this.database.execute<{
+      userId: string;
+      phone: string | null;
+      email: string | null;
+    }>(
+      sql`select user_id as "userId",phone,email from account_store_owner_contacts(${userId}::uuid,null::uuid,1001)`,
+    );
+    return result.rows;
+  }
   async storesFor(userId: string): Promise<UserStore[]> {
     const result = await this.database.execute<{ storeId: string; name: string }>(
       sql`select store_id as "storeId", store_name as name from stores_for_user(${userId}::uuid)`,

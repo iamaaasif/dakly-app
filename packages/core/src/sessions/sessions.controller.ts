@@ -1,6 +1,23 @@
-import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Param,
+  Query,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
-import { activeStoreSchema, type ActiveStoreInput } from '@dakly/contracts/sessions';
+import {
+  sessionListSchema,
+  sessionIdSchema,
+  activeStoreSchema,
+  type ActiveStoreInput,
+} from '@dakly/contracts/sessions';
 import { UsersService } from '../auth/users.service';
 import { TeamService } from '../team/team.service';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
@@ -18,6 +35,31 @@ export class SessionsController {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(TeamService) private readonly team: TeamService,
   ) {}
+
+  @Get('me/sessions')
+  devices(
+    @CurrentUser() userId: string,
+    @Req() request: StoreRequest,
+    @Query(new ZodValidationPipe(sessionListSchema)) query: { before?: string },
+  ) {
+    return this.sessions.list(userId, request.sessionId!, query.before);
+  }
+  @Delete('me/sessions/:sessionId')
+  @HttpCode(204)
+  async revoke(
+    @CurrentUser() userId: string,
+    @Param('sessionId', new ZodValidationPipe(sessionIdSchema)) sessionId: string,
+    @Req() request: StoreRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    await this.sessions.revoke(userId, sessionId);
+    if (request.sessionId === sessionId) clearSessionCookie(reply);
+  }
+  @Post('me/sessions/sign-out-others')
+  @HttpCode(204)
+  revokeOthers(@CurrentUser() userId: string, @Req() request: StoreRequest) {
+    return this.sessions.revokeOthers(userId, request.sessionId!);
+  }
 
   @Get('me')
   me(@CurrentUser() userId: string) {

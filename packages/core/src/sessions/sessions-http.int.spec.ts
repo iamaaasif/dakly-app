@@ -159,7 +159,16 @@ describe('Session boundary over Fastify and Postgres', () => {
   it('returns only safe user fields, lists active stores and masks Support phone numbers', async () => {
     const me = await app.inject({ url: '/me', headers: { cookie: cookie() } });
     expect(me.statusCode).toBe(200);
-    expect(Object.keys(me.json()).sort()).toEqual(['email', 'id', 'name', 'phone']);
+    expect(Object.keys(me.json()).sort()).toEqual([
+      'email',
+      'hasPassword',
+      'id',
+      'isEmailVerified',
+      'isPhoneVerified',
+      'isTotpEnabled',
+      'name',
+      'phone',
+    ]);
     const shops = await app.inject({ url: '/me/stores', headers: { cookie: cookie() } });
     expect(shops.json()).toHaveLength(2);
     const customer = await getCustomer();

@@ -5,7 +5,11 @@ import { AppError } from '../errors/app-error';
 import { CRYPTO_ERRORS } from './crypto.errors';
 
 const contextSchema = z.discriminatedUnion('owner', [
-  z.object({ owner: z.literal('user'), userId: z.uuid(), purpose: z.literal('totp') }),
+  z.object({
+    owner: z.literal('user'),
+    userId: z.uuid(),
+    purpose: z.enum(['totp', 'account-security-notice']),
+  }),
   z.object({
     owner: z.literal('store'),
     storeId: z.uuid(),

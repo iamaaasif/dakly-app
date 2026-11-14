@@ -60,6 +60,8 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - name: Generate ephemeral encryption keys
+        run: node scripts/development-encryption.mjs --ci
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm build

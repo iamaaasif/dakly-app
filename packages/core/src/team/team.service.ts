@@ -35,6 +35,10 @@ export class TeamService {
     return this.repository.addOwner(storeId, userId);
   }
 
+  accountOwnerContacts(userId: string) {
+    return this.repository.accountOwnerContacts(userId);
+  }
+
   storesFor(userId: string) {
     return this.repository.storesFor(userId);
   }

@@ -1,3 +1,4 @@
+import { jobLogBindings } from './job-context';
 import { randomUUID } from 'node:crypto';
 import type { Options } from 'pino-http';
 import { serializeError } from './safe-error';
@@ -11,12 +12,21 @@ const sensitiveFields = [
   'cookie',
   'cookies',
   'authorization',
+  'challengeId',
+  'setupId',
+  'completionToken',
+  'cancelToken',
+  'backupCodes',
+  'backupCodeHashes',
+  'ciphertext',
+  'uri',
 ];
 
 export function requestLoggingOptions(): Options {
   const requestIds = new WeakMap<object, string>();
   return {
     level: 'info',
+    mixin: jobLogBindings,
     customProps: (request, response) => {
       let requestId = requestIds.get(request);
       if (!requestId) {

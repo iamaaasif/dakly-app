@@ -1,6 +1,23 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
+  AUTH_RECOVERY_OWNER_LIMIT: {
+    status: 409,
+    message: 'Self-service recovery supports up to 1000 store owners',
+  },
+  AUTH_RECOVERY_CONTACT_REQUIRED: {
+    status: 409,
+    message: 'A store owner needs a verified contact before recovery can start',
+  },
+  AUTH_TOTP_INVALID: {
+    status: 400,
+    message: 'The second-factor verification is incorrect, expired or already used',
+  },
+  AUTH_TOTP_ENABLED: { status: 409, message: 'Two-step verification is already enabled' },
+  AUTH_RECOVERY_PENDING: {
+    status: 409,
+    message: 'Recovery is waiting for notifications and the seven-day cancellation period',
+  },
   AUTH_GOOGLE_UNAVAILABLE: {
     status: 503,
     message: 'Google sign-in is unavailable. Try again later',

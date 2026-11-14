@@ -149,7 +149,7 @@ describe('SMS authentication over Fastify', () => {
     expect(devices).toHaveLength(1);
     expect(devices[0]!.activeStoreId).toBeNull();
     const me = await app.inject({ url: '/me', headers: { cookie: cookie.split(';')[0]! } });
-    expect(me.json()).toEqual({
+    expect(me.json()).toMatchObject({
       id: user!.id,
       name: input.name,
       phone: input.phone,
@@ -187,8 +187,9 @@ describe('SMS authentication over Fastify', () => {
       phone: target,
       code: codeFor(target),
     });
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('AUTH_SECOND_FACTOR_REQUIRED');
+    expect(response.statusCode).toBe(202);
+    expect(response.json().status).toBe('totp_required');
+    expect(response.headers['set-cookie']).toBeUndefined();
     expect(
       await admin.db.select().from(sessions).where(eq(sessions.userId, user!.id)),
     ).toHaveLength(0);

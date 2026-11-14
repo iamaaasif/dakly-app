@@ -5,6 +5,14 @@ import { UsersRepository } from './users.repository';
 @Injectable()
 export class UsersService {
   constructor(@Inject(UsersRepository) private readonly repository: UsersRepository) {}
+  lockAccount(userId: string) {
+    return this.repository.lockAccount(userId);
+  }
+
+  invalidateChallenges(userId: string) {
+    return this.repository.invalidateChallenges(userId);
+  }
+
   async profile(userId: string) {
     const user = await this.repository.findProfile(userId);
     if (!user) throw new AppError('AUTH_REQUIRED', PLATFORM_ERRORS.AUTH_REQUIRED);

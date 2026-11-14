@@ -237,9 +237,12 @@ describe('Google authentication over Fastify', () => {
       .set(state === 'disabled' ? { isDisabled: true } : { totpEnabledAt: new Date() })
       .where(eq(users.id, owner.id));
     const response = await google(token(randomUUID(), owner.email!));
-    expect(response.json().error.code).toBe(
-      state === 'disabled' ? 'AUTH_DISABLED' : 'AUTH_SECOND_FACTOR_REQUIRED',
-    );
+    if (state === 'disabled') expect(response.json().error.code).toBe('AUTH_DISABLED');
+    else {
+      expect(response.statusCode).toBe(202);
+      expect(response.json().status).toBe('totp_required');
+    }
+    expect(response.headers['set-cookie']).toBeUndefined();
     expect(
       (await admin.db.select().from(users).where(eq(users.id, owner.id)))[0]!.googleSubject,
     ).toBeNull();
@@ -439,9 +442,7 @@ describe('Google authentication over Fastify', () => {
     expect((await google(token(randomUUID(), owner.email!))).json().error.code).toBe('AUTH_LOCKED');
     await redis.set(authKey('fail-user', owner.id), '4', 'EX', 60);
     await admin.db.update(users).set({ totpEnabledAt: new Date() }).where(eq(users.id, owner.id));
-    expect((await google(token(randomUUID(), owner.email!))).json().error.code).toBe(
-      'AUTH_SECOND_FACTOR_REQUIRED',
-    );
+    expect((await google(token(randomUUID(), owner.email!))).json().status).toBe('totp_required');
     expect(await redis.get(authKey('fail-user', owner.id))).toBe('4');
     await admin.db.update(users).set({ totpEnabledAt: null }).where(eq(users.id, owner.id));
     expect((await google(token(randomUUID(), owner.email!))).statusCode).toBe(204);

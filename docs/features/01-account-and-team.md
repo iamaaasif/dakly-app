@@ -553,9 +553,9 @@ notification outside the database transaction, by verified email when available
 and SMS otherwise. Notification failure leaves the lock intact
 and records a security event in logs without the phone or message text.
 
-TOTP-enabled accounts return `403 AUTH_SECOND_FACTOR_REQUIRED` and get no session.
-Their failure history is retained. ACC-7 must add its challenge inside the common
-completion path; no sign-in method may issue a session before that factor passes.
+TOTP-enabled accounts return `202 { status: "totp_required", challengeId }` and get no session.
+Their failure history is retained. The common completion path rechecks the first
+factor and account state before a second factor can issue a session.
 Password and Google sign-in are described in their implementation sections below.
 
 ## Email sign-in and identity changes (ACC-9)
@@ -683,8 +683,7 @@ whitespace is preserved. Password and code failures use the same user and IP
 counters. Only completed sign-in clears the user counter. Password verification
 runs outside database locks, then `completeSignIn` locks the user and rechecks
 identifier ownership, current password state, disabled status and TOTP. A concurrent
-password replacement invalidates an already-verified old password. TOTP remains
-fail-closed pending ACC-7 and never receives a session from password first factor.
+password replacement invalidates an already-verified old password. TOTP returns a five-minute challenge and never issues a session from the password first factor.
 
 Signup may include `password` in the `sign_up` request to `POST /auth/code/verify`.
 The client retains it until verification; neither the code request nor its Valkey
@@ -738,7 +737,7 @@ local rows are never adopted, even when their email text matches. Existing subje
 links cannot be overwritten. Linking, `google.linked` history and the session commit
 together; history contains no token, subject or email. All successful paths use
 `completeSignIn`, preserve shared failure counters and enforce disabled-account and
-TOTP checks. Until ACC-7 issues challenges, enabled TOTP refuses the sign-in and link.
+TOTP checks. Enabled TOTP returns a challenge and postpones sign-in and linking until the second factor passes.
 
 Without an eligible existing account, the response is 202
 `{ status: 'signup_required', signupTicket }`, without a session. Request a normal
@@ -819,7 +818,75 @@ secret ciphertext. Secrets are limited to 16 KiB, giving at most 16,473 stored
 bytes. The master key version is stored separately and authenticated in both
 layers. No key table or schema change is needed.
 
-ACC-7 must import `CryptoModule` before storing TOTP secrets. The module requires
-keys at startup; DB-4 does not yet import it into the API or worker. Supplied
+ACC-7 imports `CryptoModule` in the API and security-notice worker. Both require
+configured encryption keys at startup. Supplied
 configuration is always validated by `loadEnv`, even before a consumer exists.
 See [security rules](../rules/security.md) for configuration and rotation.
+
+## Devices and two-step verification (ACC-7)
+
+`GET /me` includes only the additional non-secret flags `hasPassword`,
+`isPhoneVerified`, `isEmailVerified` and `isTotpEnabled`. Device management is
+account-scoped: `GET /me/sessions` returns up to 100 active sessions with a UUID
+`before` cursor, device label, user agent, IP, last seen and `isCurrent`.
+`DELETE /me/sessions/:sessionId` revokes an owned session immediately;
+`POST /me/sessions/sign-out-others` retains the current session. Missing or foreign
+session deletion changes no credential generation and writes no event.
+
+Enabling TOTP needs a fresh password or a purpose-bound code requested through
+`POST /me/totp/proof`. Setup returns a five-minute setup id and an `otpauth://` URI;
+confirmation accepts a six-digit authenticator code and returns ten random backup
+codes once. Store those codes privately. The account-bound DB-4 envelope protects
+the secret; only SHA-256 hashes of random backup codes are stored. Backup-code
+consumption removes the matching hash in the same guarded update that checks it.
+TOTP uses six digits, 30-second steps and one step of clock drift. A successfully
+used step cannot be replayed. Disabling requires TOTP or a backup code.
+
+Phone code, email code, password, password-reset completion and every Google path
+use `AuthService.completeSignIn`. A TOTP challenge retains the original first-factor
+binding, account credential fingerprint and remembered-session choice. It lasts
+five minutes and allows five incorrect attempts shared with the existing account
+lockout. Only full sign-in resets failures. The second step rechecks current
+password, verified contact state, Google link, TOTP state, disabled status and the
+account security generation under the account lock. Credential changes and actual
+session revocations invalidate pending challenges. A Redis busy claim prevents
+parallel use; wrong-code attempts release that claim without extending expiry.
+A crash or ambiguous storage failure consumes the challenge, requiring a new first
+factor. Successful session creation needs no Redis acknowledgement afterward.
+Google lockout delivery uses the account's verified contacts, never its subject id.
+
+Lost-authenticator recovery requires a phone code, a separate verified-email code
+when present, and the password when set. Recovery codes have their own purposes
+and bind to current credential state. `POST /auth/totp/recovery` returns a recovery
+id and a completion token once. Keep that token to complete recovery later.
+The database stores only token hashes. Each account receives SMS and verified
+email notices, and each distinct store Owner receives a notice through a verified
+contact. Destinations are deduplicated. Accounts with more than 1000 distinct
+Owners, or an Owner without a verified contact, cannot start self-service recovery;
+this is an operational recovery limit, not a store-membership limit.
+
+Each delivery has a separate encrypted notice using the account-owned
+`account-security-notice` encryption purpose. A bounded worker claims up to 20
+notices every 30 seconds with a two-minute lease, retries with backoff capped at an
+hour, and acknowledges only its own lease. Notices are durable across Redis and
+process loss. Vendors run outside database transactions. Delivery is at least
+once, so a timeout or crash may produce duplicate messages. A seven-day
+cancellation window starts only after every required driver accepts its notice;
+delivery failures delay eligibility. Acceptance does not prove the message was
+read. Workers stop polling and await active work on shutdown.
+
+After the deadline, explicitly call `POST /auth/totp/recovery/complete` with the
+separate completion token. This removes TOTP and revokes sessions atomically with
+its audit event; it never signs the person in. Sign in again afterward. Completion
+is rejected early, after cancellation, or after credential/security-state changes.
+Any completed TOTP sign-in cancels a pending request. The cancellation link carries
+its different token in the URL fragment at `/security/recovery`; cancellation is
+an explicit POST, never a GET side effect. The public destination screen belongs
+to ACC-8 and is not served by this API slice. Recovery start, cancellation,
+completion and TOTP changes write account security events. Immediate staff recovery
+remains the separate ADM-10 flow.
+
+An unknown user-agent/IP pair produces an encrypted durable new-device alert after
+successful sign-in, by verified email or SMS. The pair is checked under the same
+account lock as session insertion, so simultaneous sign-ins do not enqueue duplicate
+alerts for the same pair. Notice failure never rolls back an issued session.

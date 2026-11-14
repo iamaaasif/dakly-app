@@ -6,7 +6,7 @@ import type { Database } from '@dakly/db/client';
 import type { SignUpInput } from '@dakly/contracts/auth';
 import { DATABASE } from '../platform/database/database.tokens';
 import { users } from '@dakly/db/schema/auth';
-import type { UserProfile } from '@dakly/contracts/sessions';
+import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
 import { AccountDatabase } from '../platform/database/account-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -17,6 +17,20 @@ export class UsersRepository {
     @Inject(DATABASE) private readonly connection: Database,
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
+
+  async lockAccount(userId: string): Promise<void> {
+    await this.database.forUser(userId, (tx) =>
+      tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update').limit(1),
+    );
+  }
+  async invalidateChallenges(userId: string) {
+    await this.database.forUser(userId, (tx) =>
+      tx
+        .update(users)
+        .set({ securityVersion: sql`${users.securityVersion} + 1` })
+        .where(eq(users.id, userId)),
+    );
+  }
 
   async profiles(userIds: string[]): Promise<UserProfile[]> {
     if (userIds.length === 0) return [];
@@ -112,7 +126,11 @@ export class UsersRepository {
       await this.database.forUser(userId, (tx) =>
         tx
           .update(users)
-          .set({ googleSubject: subject, updatedAt: now })
+          .set({
+            googleSubject: subject,
+            securityVersion: sql`${users.securityVersion} + 1`,
+            updatedAt: now,
+          })
           .where(eq(users.id, userId)),
       );
       return true;
@@ -133,7 +151,10 @@ export class UsersRepository {
 
   async changePassword(userId: string, passwordHash: string, now: Date): Promise<void> {
     await this.database.forUser(userId, (tx) =>
-      tx.update(users).set({ passwordHash, updatedAt: now }).where(eq(users.id, userId)),
+      tx
+        .update(users)
+        .set({ passwordHash, securityVersion: sql`${users.securityVersion} + 1`, updatedAt: now })
+        .where(eq(users.id, userId)),
     );
   }
 
@@ -142,7 +163,12 @@ export class UsersRepository {
       await this.database.forUser(userId, (tx) =>
         tx
           .update(users)
-          .set({ email, emailVerifiedAt: now, updatedAt: now })
+          .set({
+            email,
+            emailVerifiedAt: now,
+            securityVersion: sql`${users.securityVersion} + 1`,
+            updatedAt: now,
+          })
           .where(eq(users.id, userId)),
       );
       return true;
@@ -204,6 +230,11 @@ export class UsersRepository {
           emailVerifiedAt: users.emailVerifiedAt,
           isDisabled: users.isDisabled,
           totpEnabledAt: users.totpEnabledAt,
+          totpSecretCiphertext: users.totpSecretCiphertext,
+          totpKeyVersion: users.totpKeyVersion,
+          totpLastStep: users.totpLastStep,
+          securityVersion: users.securityVersion,
+          backupCodeHashes: users.backupCodeHashes,
           passwordHash: users.passwordHash,
           googleSubject: users.googleSubject,
         })
@@ -220,7 +251,7 @@ export class UsersRepository {
       tx.update(users).set({ lastSignInAt: now, updatedAt: now }).where(eq(users.id, userId)),
     );
   }
-  async findProfile(userId: string): Promise<UserProfile | undefined> {
+  async findProfile(userId: string): Promise<AccountProfile | undefined> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx
         .select({
@@ -228,6 +259,10 @@ export class UsersRepository {
           name: users.name,
           phone: users.phone,
           email: users.email,
+          hasPassword: sql<boolean>`${users.passwordHash} is not null`,
+          isPhoneVerified: sql<boolean>`${users.phoneVerifiedAt} is not null`,
+          isEmailVerified: sql<boolean>`${users.emailVerifiedAt} is not null`,
+          isTotpEnabled: sql<boolean>`${users.totpEnabledAt} is not null`,
         })
         .from(users)
         .where(eq(users.id, userId))

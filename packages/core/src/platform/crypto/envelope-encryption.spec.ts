@@ -31,14 +31,17 @@ function createEncryption(keys: Record<string, Buffer> = { 1: masterKey }, curre
 }
 
 describe('EnvelopeEncryption', () => {
-  it.each([user, store])('round trips secret bytes for $owner ownership', (context) => {
-    const encryption = createEncryption();
-    const secret = encryption.encrypt(context, plaintext);
-    expect(secret.keyVersion).toBe(1);
-    expect(encryption.decrypt(context, secret)).toEqual(plaintext);
-    expect(secret.ciphertext.includes(plaintext)).toBe(false);
-    expect(encryption.encrypt(context, plaintext).ciphertext).not.toEqual(secret.ciphertext);
-  });
+  it.each([user, store, { ...user, purpose: 'account-security-notice' } as EncryptionContext])(
+    'round trips secret bytes for $owner $purpose ownership',
+    (context) => {
+      const encryption = createEncryption();
+      const secret = encryption.encrypt(context, plaintext);
+      expect(secret.keyVersion).toBe(1);
+      expect(encryption.decrypt(context, secret)).toEqual(plaintext);
+      expect(secret.ciphertext.includes(plaintext)).toBe(false);
+      expect(encryption.encrypt(context, plaintext).ciphertext).not.toEqual(secret.ciphertext);
+    },
+  );
 
   it('wraps an independent random data key and authenticates both layers', () => {
     const encryption = createEncryption();
@@ -163,6 +166,13 @@ describe('EnvelopeEncryption', () => {
       expect(JSON.stringify(error)).not.toContain(plaintext.toString());
       expect(error).not.toHaveProperty('cause');
     }
+  });
+
+  it('keeps notice payloads separate from TOTP even for the same account', () => {
+    const encryption = createEncryption();
+    const notice = { ...user, purpose: 'account-security-notice' } as EncryptionContext;
+    const payload = encryption.encrypt(notice, plaintext);
+    expect(() => encryption.decrypt(user, payload)).toThrow('Unable to decrypt secret');
   });
 
   it('requires configured keys when the consumer constructs the boundary', () => {

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0023_snapshot.json`: **86 tables, 1159 columns, 341 explicit indexes and 278 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0027_snapshot.json`: **88 tables, 1180 columns, 345 explicit indexes and 281 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -12,7 +12,7 @@ The schema defines relationships, not completed feature behavior. Refer to [revi
 
 ## Stores, accounts and team
 
-Schema files: `stores.ts`, `auth.ts`, `account-security-events.ts`, `team.ts`, `admin.ts`.
+Schema files: `stores.ts`, `auth.ts`, `account-security-events.ts`, `account-recovery.ts`, `team.ts`, `admin.ts`.
 
 ```mermaid
 erDiagram
@@ -22,6 +22,9 @@ erDiagram
     users ||..o{ push_subscriptions : "user_id"
     users ||..o{ account_security_events : "user_id"
     staff_users |o..o{ account_security_events : "actor_staff_id"
+    users ||..o{ account_recoveries : "user_id"
+    users ||..o{ account_security_notices : "user_id"
+    account_recoveries |o..o{ account_security_notices : "recovery_id"
     stores ||..o{ roles : "store_id"
     stores ||..o{ memberships : "store_id"
     users |o..o{ memberships : "user_id"
@@ -81,6 +84,8 @@ erDiagram
         bytea totp_secret_ciphertext "NULL; bytea"
         smallint totp_key_version "NULL; smallint"
         timestamp_with_time_zone totp_enabled_at "NULL; timestamp with time zone"
+        integer totp_last_step "NULL; integer"
+        integer security_version "NOT NULL; integer"
         text__ backup_code_hashes "NULL; text[]"
         text language "NOT NULL; text"
         boolean is_disabled "NOT NULL; boolean"
@@ -123,6 +128,29 @@ erDiagram
         inet ip "NULL; inet"
         text user_agent "NULL; text"
         jsonb details "NOT NULL; jsonb"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    account_recoveries {
+        uuid id PK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        text credential_state "NOT NULL; text"
+        text cancel_hash "NOT NULL; text"
+        text completion_hash "NOT NULL; text"
+        text status "NOT NULL; text"
+        timestamp_with_time_zone eligible_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    account_security_notices {
+        uuid id PK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        uuid recovery_id FK "NULL; uuid"
+        bytea ciphertext "NOT NULL; bytea"
+        smallint key_version "NOT NULL; smallint"
+        integer attempts "NOT NULL; integer"
+        timestamp_with_time_zone retry_at "NOT NULL; timestamp with time zone"
+        uuid lease_id "NULL; uuid"
+        timestamp_with_time_zone lease_until "NULL; timestamp with time zone"
+        timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     roles {
@@ -1681,6 +1709,9 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 
 | Constraint                                                           | Child columns                                             | Parent columns                              | On delete |
 | -------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------- | --------- |
+| `account_recoveries_user_id_users_id_fk`                             | `account_recoveries(user_id)`                             | `users(id)`                                 | cascade   |
+| `account_security_notices_user_id_users_id_fk`                       | `account_security_notices(user_id)`                       | `users(id)`                                 | cascade   |
+| `account_security_notices_recovery_id_account_recoveries_id_fk`      | `account_security_notices(recovery_id)`                   | `account_recoveries(id)`                    | cascade   |
 | `account_security_events_user_id_users_id_fk`                        | `account_security_events(user_id)`                        | `users(id)`                                 | no action |
 | `account_security_events_actor_staff_id_staff_users_id_fk`           | `account_security_events(actor_staff_id)`                 | `staff_users(id)`                           | no action |
 | `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |

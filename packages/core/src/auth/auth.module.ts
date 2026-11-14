@@ -1,3 +1,13 @@
+import { TotpRecoveryController } from './totp-recovery.controller';
+import { TotpRecoveryService } from './totp-recovery.service';
+import { SecurityNoticesModule } from './security-notices.module';
+import { TeamModule } from '../team/team.module';
+import { TotpController } from './totp.controller';
+import { TotpService } from './totp.service';
+import { TotpRepository } from './totp.repository';
+import { TotpCredentials } from './totp-credentials';
+import { TotpChallenges } from './totp-challenges';
+import { CryptoModule } from '../platform/crypto/crypto.module';
 import { GoogleService } from './google.service';
 import { GoogleIdentityService } from './google-identity.service';
 import { GoogleTickets } from './google-tickets';
@@ -23,6 +33,9 @@ import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
+    CryptoModule,
+    SecurityNoticesModule,
+    TeamModule,
     CacheModule,
     CodesModule,
     UsersModule,
@@ -32,6 +45,8 @@ import { SmsModule } from '../sms/sms.module';
     AccountSecurityEventsModule,
   ],
   controllers: [
+    TotpController,
+    TotpRecoveryController,
     AuthController,
     GoogleController,
     EmailChangeController,
@@ -39,6 +54,11 @@ import { SmsModule } from '../sms/sms.module';
     PasswordChangeController,
   ],
   providers: [
+    TotpRecoveryService,
+    TotpService,
+    TotpRepository,
+    TotpCredentials,
+    TotpChallenges,
     GoogleService,
     GoogleIdentityService,
     GoogleTickets,

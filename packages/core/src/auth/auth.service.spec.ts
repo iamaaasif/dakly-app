@@ -1,3 +1,7 @@
+import { TotpService } from './totp.service';
+import { TotpChallenges } from './totp-challenges';
+import { TotpRecoveryService } from './totp-recovery.service';
+import { SecurityNoticesService } from './security-notices.service';
 import { GoogleTickets } from './google-tickets';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import 'reflect-metadata';
@@ -35,6 +39,7 @@ const service = new AuthService(
   {} as SignInCodes,
   failureState as unknown as SignInFailures,
   {
+    knownDevice: async () => true,
     create: async (id: string) => {
       issued.push(id);
       return { token: 'internal-token' };
@@ -44,6 +49,14 @@ const service = new AuthService(
   { now: () => now } as Clock,
   {} as AccountSecurityEventsService,
   {} as GoogleTickets,
+  {
+    subject: (value: { id: string; phone: string }) => ({ userId: value.id, target: value.phone }),
+  } as TotpService,
+  {
+    issue: async () => ({ status: 'totp_required', challengeId: 'pending-challenge' }),
+  } as TotpChallenges,
+  {} as TotpRecoveryService,
+  { dispatch: async () => undefined } as SecurityNoticesService,
 );
 
 describe('AuthService completion gate', () => {
@@ -62,8 +75,17 @@ describe('AuthService completion gate', () => {
     expect(lastSignInAt).toEqual(now);
   });
 
+  it('returns a second-factor challenge without issuing a session or clearing failures', async () => {
+    user = { ...user, totpEnabledAt: now };
+    expect(await service.completeSignIn({ id: userId, target }, request)).toEqual({
+      status: 'totp_required',
+      challengeId: 'pending-challenge',
+    });
+    expect(issued).toEqual([]);
+    expect(remainingFailures).toBe(4);
+  });
+
   it.each([
-    { change: { totpEnabledAt: now }, code: 'AUTH_SECOND_FACTOR_REQUIRED' },
     { change: { isDisabled: true }, code: 'AUTH_DISABLED' },
     { change: { phone: '01812345678' }, code: 'AUTH_CODE_INVALID' },
   ])('refuses $code without issuing or resetting failure history', async ({ change, code }) => {

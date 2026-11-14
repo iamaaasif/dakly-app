@@ -13,3 +13,13 @@ export type Session = {
 export type CreateSessionInput = { isRemembered: boolean; ip?: string; userAgent?: string };
 export type UserProfile = { id: string; name: string; phone: string | null; email: string | null };
 export type UserStore = { storeId: string; name: string };
+
+export const sessionListSchema = z.strictObject({ before: z.uuid().optional() });
+export const sessionIdSchema = z.uuid();
+
+export type AccountProfile = UserProfile & {
+  hasPassword: boolean;
+  isPhoneVerified: boolean;
+  isEmailVerified: boolean;
+  isTotpEnabled: boolean;
+};
