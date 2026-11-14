@@ -27,6 +27,9 @@ describe('API route access rules', () => {
     expect(routes).toEqual(
       expect.arrayContaining([
         'HealthController.check',
+        'StaffAuthController.signIn',
+        'StaffAuthController.enroll',
+        'StaffAuthController.session',
         'SessionsController.me',
         'SessionsController.devices',
         'SessionsController.revoke',

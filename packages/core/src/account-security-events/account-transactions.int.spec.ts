@@ -171,10 +171,10 @@ describe('AccountSecurityEventsService (Postgres)', () => {
     );
     await expect(
       stores.run(randomUUID(), () => transaction.run(userId, async () => undefined)),
-    ).rejects.toThrow('Cannot mix account and store transactions');
+    ).rejects.toThrow('Cannot mix staff, account and store transactions');
     await expect(
       transaction.run(userId, () => stores.run(randomUUID(), async () => undefined)),
-    ).rejects.toThrow('Cannot mix account and store transactions');
+    ).rejects.toThrow('Cannot mix staff, account and store transactions');
   });
   it('rejects inherited work after its account action has finished', async () => {
     let finish!: () => void;

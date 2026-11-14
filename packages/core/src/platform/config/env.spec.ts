@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { loadEnv } from './env';
+import { loadEnv, loadStaffEnv } from './env';
 
 describe('loadEnv', () => {
   it.each(['https://localhost:6379', 'redis://localhost/-1', 'redis://localhost/1.5'])(
@@ -28,8 +28,10 @@ describe('SMS driver configuration', () => {
     });
   });
 
-  it('parses production environment independently of consumer startup validation', () => {
-    expect(loadEnv({ ...base, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+  it('requires staff Access and session configuration in production', () => {
+    expect(() => loadStaffEnv({ ...base, NODE_ENV: 'production' })).toThrow(
+      'Staff Access and session configuration is required in production',
+    );
   });
 
   it('rejects unsupported driver names', () => {
@@ -87,8 +89,34 @@ describe('encryption configuration', () => {
     { ENCRYPTION_MASTER_KEYS: JSON.stringify({ 1: key, '01': key }) },
     { ENCRYPTION_MASTER_KEYS: JSON.stringify({ 1: key, 32768: key }) },
   ])('rejects invalid key configuration at startup without exposing key material', (invalid) => {
-    expect(() => loadEnv({ ...configured, ...invalid })).toThrow(
+    expect(() => loadStaffEnv({ ...configured, ...invalid })).toThrow(
       'Invalid encryption configuration',
     );
+  });
+});
+
+describe('Staff environment configuration', () => {
+  const configured = {
+    DATABASE_URL: 'postgres://localhost/dakly',
+    REDIS_URL: 'redis://localhost',
+    NODE_ENV: 'production',
+    ADMIN_ORIGIN: 'https://admin.dakly.test',
+    CLOUDFLARE_ACCESS_ISSUER: 'https://dakly.cloudflareaccess.com',
+    CLOUDFLARE_ACCESS_AUDIENCE: 'staff-app',
+    STAFF_SESSION_SIGNING_KEY: randomBytes(32).toString('base64'),
+  };
+  it('accepts configured production verification and rejects development keys', () => {
+    expect(loadStaffEnv(configured).ADMIN_ORIGIN).toBe(configured.ADMIN_ORIGIN);
+    expect(() =>
+      loadStaffEnv({ ...configured, CLOUDFLARE_ACCESS_DEVELOPMENT_JWKS: '{"keys":[]}' }),
+    ).toThrow('Development Access keys are not allowed');
+  });
+  it('rejects an insecure origin or an arbitrary JWKS issuer', () => {
+    expect(() =>
+      loadStaffEnv({ ...configured, ADMIN_ORIGIN: 'http://admin.dakly.test' }),
+    ).toThrow();
+    expect(() =>
+      loadStaffEnv({ ...configured, CLOUDFLARE_ACCESS_ISSUER: 'https://attacker.test' }),
+    ).toThrow();
   });
 });

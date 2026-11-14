@@ -113,7 +113,7 @@ export default tseslint.config(
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['apps/{web,admin}/**/*.{ts,tsx}'],
     languageOptions: {
       globals: { ...globals.browser },
     },
@@ -124,8 +124,8 @@ export default tseslint.config(
   },
   {
     // Next.js needs default exports only from route files.
-    files: ['apps/web/src/**/*.{ts,tsx}'],
-    ignores: ['apps/web/src/app/**'],
+    files: ['apps/{web,admin}/src/**/*.{ts,tsx}'],
+    ignores: ['apps/{web,admin}/src/app/**'],
     rules: {
       'no-restricted-syntax': [
         'error',
@@ -140,7 +140,7 @@ export default tseslint.config(
   },
   {
     // The formatters are the one place allowed to call Intl.
-    files: ['apps/web/src/lib/format-*.ts'],
+    files: ['apps/{web,admin}/src/lib/format-*.ts'],
     rules: {
       'no-restricted-syntax': ['error', ...restrictedSyntax],
     },

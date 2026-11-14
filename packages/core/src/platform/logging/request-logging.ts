@@ -4,6 +4,10 @@ import type { Options } from 'pino-http';
 import { serializeError } from './safe-error';
 
 const sensitiveFields = [
+  'proof',
+  'secret',
+  'credential',
+  'assertion',
   'phone',
   'email',
   'password',

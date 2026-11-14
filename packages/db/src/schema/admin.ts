@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -32,6 +33,12 @@ export const staffUsers = pgTable(
     id: id(),
     email: citext('email').notNull(),
     name: text('name').notNull(),
+    accessSubject: text('access_subject'),
+    passwordHash: text('password_hash'),
+    enrolledAt: timestamptz('enrolled_at'),
+    failedAttempts: integer('failed_attempts').notNull().default(0),
+    blockedUntil: timestamptz('blocked_until'),
+    totpLastStep: bigint('totp_last_step', { mode: 'number' }),
     role: text('role', { enum: staffRoles }).notNull(),
     status: text('status', { enum: staffStatuses }).notNull().default('active'),
     totpSecretCiphertext: bytea('totp_secret_ciphertext'),
@@ -43,6 +50,7 @@ export const staffUsers = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('staff_users_access_subject_key').on(table.accessSubject),
     uniqueIndex('staff_users_email_key').on(table.email),
     check('staff_users_role', isOneOf(table.role, staffRoles)),
     check('staff_users_status', isOneOf(table.status, staffStatuses)),
@@ -59,6 +67,7 @@ export const staffSessions = pgTable(
       .references(() => staffUsers.id, { onDelete: 'cascade' }),
     ip: inet('ip'),
     userAgent: text('user_agent'),
+    lastSeenAt: timestamptz('last_seen_at'),
     expiresAt: timestamptz('expires_at').notNull(),
     revokedAt: timestamptz('revoked_at'),
     createdAt: createdAt(),
@@ -77,9 +86,8 @@ export const staffAuditLog = pgTable(
   'staff_audit_log',
   {
     id: id(),
-    staffUserId: uuid('staff_user_id')
-      .notNull()
-      .references(() => staffUsers.id),
+    operatorIdentity: text('operator_identity'),
+    staffUserId: uuid('staff_user_id').references(() => staffUsers.id),
     action: text('action').notNull(),
     // No foreign key: the record must outlive a deleted store.
     storeId: uuid('store_id'),
@@ -93,6 +101,10 @@ export const staffAuditLog = pgTable(
   (table) => [
     index('staff_audit_log_staff_user_id_created_at_idx').on(table.staffUserId, table.createdAt),
     index('staff_audit_log_store_id_created_at_idx').on(table.storeId, table.createdAt),
+    check(
+      'staff_audit_log_actor',
+      sql`(${table.staffUserId} is not null) <> (${table.operatorIdentity} is not null)`,
+    ),
     check('staff_audit_log_reason_length', sql`char_length(${table.reason}) >= 10`),
   ],
 );
@@ -185,5 +197,68 @@ export const abuseReports = pgTable(
     check('abuse_reports_source', isOneOf(table.source, abuseReportSources)),
     check('abuse_reports_category', isOneOf(table.category, abuseReportCategories)),
     check('abuse_reports_status', isOneOf(table.status, abuseReportStatuses)),
+  ],
+);
+
+// Provisioning establishes these contacts; the browser cannot change conflict evidence.
+export const staffIdentityContacts = pgTable(
+  'staff_identity_contacts',
+  {
+    id: id(),
+    staffUserId: uuid('staff_user_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    kind: text('kind', { enum: ['phone', 'email'] }).notNull(),
+    value: text('value').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('staff_identity_contacts_value_idx').on(table.kind, table.value),
+    uniqueIndex('staff_identity_contacts_staff_value_key').on(
+      table.staffUserId,
+      table.kind,
+      table.value,
+    ),
+    check('staff_identity_contacts_kind', sql`${table.kind} in ('phone', 'email')`),
+  ],
+);
+export const staffPasskeys = pgTable(
+  'staff_passkeys',
+  {
+    credentialId: text('credential_id').primaryKey(),
+    staffUserId: uuid('staff_user_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    publicKey: bytea('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index('staff_passkeys_staff_user_id_idx').on(table.staffUserId)],
+);
+export const staffChallenges = pgTable(
+  'staff_challenges',
+  {
+    tokenHash: bytea('token_hash').primaryKey(),
+    staffUserId: uuid('staff_user_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    purpose: text('purpose', {
+      enum: ['enroll', 'signin', 'setup_totp', 'setup_passkey'],
+    }).notNull(),
+    passwordHash: text('password_hash'),
+    passwordState: text('password_state'),
+    webauthnChallenge: text('webauthn_challenge'),
+    totpSecretCiphertext: bytea('totp_secret_ciphertext'),
+    totpKeyVersion: smallint('totp_key_version'),
+    expiresAt: timestamptz('expires_at').notNull(),
+    consumedAt: timestamptz('consumed_at'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('staff_challenges_staff_user_id_idx').on(table.staffUserId),
+    check(
+      'staff_challenges_purpose',
+      sql`${table.purpose} in ('enroll', 'signin', 'setup_totp', 'setup_passkey')`,
+    ),
   ],
 );

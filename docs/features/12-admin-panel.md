@@ -275,3 +275,7 @@ Shops list and detail; support access with the owner's consent; plans, prices, c
 ## Open questions
 
 None.
+
+## ADM-1 implementation
+
+The staff app now provides Access-protected password sign-in, real passkey or TOTP enrollment and verification, sign-out and a minimal staff entry screen. Staff identities, challenges, sessions and transactions are separate from shop accounts. Provisioning requires a privileged operator and creates a single-use enrollment proof; no public signup or default password exists. Personal contact evidence is established by the operator and cannot be edited by the browser. See [staff authentication operations](../development/staff-authentication.md) for configuration, operator attribution, pending enrollment renewal and session behavior. Business screens and staff lifecycle controls remain later tasks.

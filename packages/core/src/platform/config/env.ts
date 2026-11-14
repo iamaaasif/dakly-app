@@ -20,6 +20,20 @@ const envSchema = z.object({
     .default('http://localhost:3000')
     .transform((value) => value.split(',').map((origin) => origin.trim()))
     .pipe(z.array(z.url().refine((value) => new URL(value).origin === value)).min(1)),
+  ADMIN_ORIGIN: z
+    .url()
+    .refine((value) => new URL(value).origin === value)
+    .default('http://localhost:3010'),
+  CLOUDFLARE_ACCESS_ISSUER: z
+    .url()
+    .refine((value) => /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/.test(value))
+    .optional(),
+  CLOUDFLARE_ACCESS_AUDIENCE: z.string().min(1).optional(),
+  CLOUDFLARE_ACCESS_DEVELOPMENT_JWKS: z.string().optional(),
+  STAFF_SESSION_SIGNING_KEY: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/)
+    .optional(),
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 
@@ -35,6 +49,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error('Fake Google identity is not allowed in production');
   if (env.GOOGLE_IDENTITY_DRIVER === 'google' && !env.GOOGLE_CLIENT_ID)
     throw new Error('GOOGLE_CLIENT_ID is required for Google identity');
+  if (env.NODE_ENV === 'production' && env.CLOUDFLARE_ACCESS_DEVELOPMENT_JWKS)
+    throw new Error('Development Access keys are not allowed in production');
   return {
     ...env,
     encryption: parseEncryptionConfiguration(
@@ -42,4 +58,22 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       source.ENCRYPTION_MASTER_KEYS,
     ),
   };
+}
+
+export function loadStaffEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const env = loadEnv(source);
+  if (env.WEB_ORIGINS.includes(env.ADMIN_ORIGIN))
+    throw new Error('Admin and shop origins must differ');
+
+  if (env.NODE_ENV === 'production') {
+    if (
+      !env.CLOUDFLARE_ACCESS_ISSUER ||
+      !env.CLOUDFLARE_ACCESS_AUDIENCE ||
+      !env.STAFF_SESSION_SIGNING_KEY
+    )
+      throw new Error('Staff Access and session configuration is required in production');
+    if (!env.ADMIN_ORIGIN.startsWith('https://'))
+      throw new Error('Admin origin must use HTTPS in production');
+  }
+  return env;
 }

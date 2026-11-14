@@ -4,6 +4,8 @@ import { OriginGuard } from './origin.guard';
 
 const context = (method: string, origin?: string) =>
   ({
+    getHandler: () => function handler() {},
+    getClass: () => class Controller {},
     switchToHttp: () => ({ getRequest: () => ({ method, headers: { origin } }) }),
   }) as ExecutionContext;
 

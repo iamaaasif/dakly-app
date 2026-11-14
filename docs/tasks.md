@@ -183,13 +183,13 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M12. Admin panel
 
-| ID    | Task                                                                          | Status | Depends      | PR  | Notes |
-| ----- | ----------------------------------------------------------------------------- | ------ | ------------ | --- | ----- |
-| ADM-1 | `apps/admin`, staff users, passkey or TOTP, staff sessions, Cloudflare Access | Todo   | WEB-1        |     |       |
-| ADM-2 | Staff audit log; support grants with owner approval                           | Todo   | ADM-1        |     |       |
-| ADM-3 | Shops list and detail through report functions                                | Todo   | ADM-2        |     |       |
-| ADM-4 | Plans catalogue, refunds, credits, reconciliation queue                       | Todo   | ADM-2, PAY-7 |     |       |
-| ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo   | ADM-2, AI-2  |     |       |
+| ID    | Task                                                                          | Status    | Depends      | PR  | Notes |
+| ----- | ----------------------------------------------------------------------------- | --------- | ------------ | --- | ----- |
+| ADM-1 | `apps/admin`, staff users, passkey or TOTP, staff sessions, Cloudflare Access | In review | WEB-1        |     |       |
+| ADM-2 | Staff audit log; support grants with owner approval                           | Todo      | ADM-1        |     |       |
+| ADM-3 | Shops list and detail through report functions                                | Todo      | ADM-2        |     |       |
+| ADM-4 | Plans catalogue, refunds, credits, reconciliation queue                       | Todo      | ADM-2, PAY-7 |     |       |
+| ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo      | ADM-2, AI-2  |     |       |
 
 ## Readiness review follow-up
 

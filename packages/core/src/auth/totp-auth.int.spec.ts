@@ -19,7 +19,7 @@ import { Clock } from '../platform/clock';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
 import { ValkeyClient } from '../platform/cache/valkey-client';
-import { TotpCredentials } from './totp-credentials';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { SessionsService } from '../sessions/sessions.service';
 import { SecurityNoticesService } from './security-notices.service';
 import { authKey } from './auth-key';

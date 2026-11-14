@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0027_snapshot.json`: **88 tables, 1180 columns, 345 explicit indexes and 281 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0030_snapshot.json`: **91 tables, 1209 columns, 350 explicit indexes and 284 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -35,13 +35,16 @@ erDiagram
     users ||..o{ ownership_transfers : "owner_user_id"
     users ||..o{ ownership_transfers : "new_owner_user_id"
     staff_users ||..o{ staff_sessions : "staff_user_id"
-    staff_users ||..o{ staff_audit_log : "staff_user_id"
+    staff_users |o..o{ staff_audit_log : "staff_user_id"
     stores ||..o{ support_grants : "store_id"
     staff_users ||..o{ support_grants : "staff_user_id"
     users |o..o{ support_grants : "approved_by_user_id"
     staff_users |o..o{ platform_settings : "updated_by_staff_id"
     staff_users |o..o{ abuse_reports : "reported_by_staff_id"
     staff_users |o..o{ abuse_reports : "handled_by_staff_id"
+    staff_users ||..o{ staff_identity_contacts : "staff_user_id"
+    staff_users ||..o{ staff_passkeys : "staff_user_id"
+    staff_users ||..o{ staff_challenges : "staff_user_id"
     stores {
         uuid id PK "NOT NULL; uuid"
         text name "NOT NULL; text"
@@ -197,6 +200,12 @@ erDiagram
         uuid id PK "NOT NULL; uuid"
         citext email UK "NOT NULL; citext"
         text name "NOT NULL; text"
+        text access_subject UK "NULL; text"
+        text password_hash "NULL; text"
+        timestamp_with_time_zone enrolled_at "NULL; timestamp with time zone"
+        integer failed_attempts "NOT NULL; integer"
+        timestamp_with_time_zone blocked_until "NULL; timestamp with time zone"
+        bigint totp_last_step "NULL; bigint"
         text role "NOT NULL; text"
         text status "NOT NULL; text"
         bytea totp_secret_ciphertext "NULL; bytea"
@@ -212,13 +221,15 @@ erDiagram
         uuid staff_user_id FK "NOT NULL; uuid"
         inet ip "NULL; inet"
         text user_agent "NULL; text"
+        timestamp_with_time_zone last_seen_at "NULL; timestamp with time zone"
         timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone revoked_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     staff_audit_log {
         uuid id PK "NOT NULL; uuid"
-        uuid staff_user_id FK "NOT NULL; uuid"
+        text operator_identity "NULL; text"
+        uuid staff_user_id FK "NULL; uuid"
         text action "NOT NULL; text"
         uuid store_id "NULL; uuid"
         text target_type "NULL; text"
@@ -270,6 +281,33 @@ erDiagram
         timestamp_with_time_zone resolved_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    staff_identity_contacts {
+        uuid id PK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        text kind "NOT NULL; text"
+        text value "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_passkeys {
+        text credential_id PK "NOT NULL; text"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        bytea public_key "NOT NULL; bytea"
+        bigint counter "NOT NULL; bigint"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_challenges {
+        bytea token_hash PK "NOT NULL; bytea"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        text purpose "NOT NULL; text"
+        text password_hash "NULL; text"
+        text password_state "NULL; text"
+        text webauthn_challenge "NULL; text"
+        bytea totp_secret_ciphertext "NULL; bytea"
+        smallint totp_key_version "NULL; smallint"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone consumed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
 
@@ -1718,6 +1756,9 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
 | `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
 | `staff_audit_log_staff_user_id_staff_users_id_fk`                    | `staff_audit_log(staff_user_id)`                          | `staff_users(id)`                           | no action |
+| `staff_challenges_staff_user_id_staff_users_id_fk`                   | `staff_challenges(staff_user_id)`                         | `staff_users(id)`                           | no action |
+| `staff_identity_contacts_staff_user_id_staff_users_id_fk`            | `staff_identity_contacts(staff_user_id)`                  | `staff_users(id)`                           | no action |
+| `staff_passkeys_staff_user_id_staff_users_id_fk`                     | `staff_passkeys(staff_user_id)`                           | `staff_users(id)`                           | no action |
 | `staff_sessions_staff_user_id_staff_users_id_fk`                     | `staff_sessions(staff_user_id)`                           | `staff_users(id)`                           | cascade   |
 | `support_grants_store_id_stores_id_fk`                               | `support_grants(store_id)`                                | `stores(id)`                                | no action |
 | `support_grants_staff_user_id_staff_users_id_fk`                     | `support_grants(staff_user_id)`                           | `staff_users(id)`                           | no action |

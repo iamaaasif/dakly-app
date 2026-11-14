@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { verify } from 'argon2';
+import { verifyPassword } from '../platform/crypto/password';
 import { UsersRepository } from './users.repository';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
 import { Clock } from '../platform/clock';
@@ -23,7 +23,7 @@ export class PasswordCredentials {
     await this.failures.assertAllowed(subject, ip);
     // This short read finishes before the expensive verification; callers recheck the proof under lock.
     const user = subject.userId ? await this.users.lockForSignIn(subject.userId) : undefined;
-    if (!user?.passwordHash || !(await verify(user.passwordHash, password))) {
+    if (!user?.passwordHash || !(await verifyPassword(user.passwordHash, password))) {
       await this.failures.recordFailure(this.failureSubject(subject, user), ip);
       throw authError('AUTH_INVALID_CREDENTIALS');
     }

@@ -1,3 +1,5 @@
+import { Reflector } from '@nestjs/core';
+import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
 import { type CanActivate, type ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { StoreRequest } from '../platform/tenancy/store-request';
@@ -8,6 +10,7 @@ import { SESSION_COOKIE, setSessionCookie } from '../platform/http/session-cooki
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(
+    @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(TeamService) private readonly team: TeamService,
   ) {}
@@ -17,6 +20,11 @@ export class SessionGuard implements CanActivate {
     delete request.sessionId;
     delete request.storeId;
     delete request.access;
+    const rule = this.reflector.getAllAndOverride<AccessRule>(ACCESS_RULE, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (rule?.kind === 'staff') return true;
     const token = request.cookies[SESSION_COOKIE];
     if (!token) return true;
     const session = await this.sessions.resolve(token);

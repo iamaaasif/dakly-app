@@ -12,7 +12,7 @@ export class StoreGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (rule?.kind === 'public' || rule?.kind === 'user') return true;
+    if (rule?.kind === 'public' || rule?.kind === 'user' || rule?.kind === 'staff') return true;
     const request = context.switchToHttp().getRequest<StoreRequest>();
     if (!request.storeId) {
       throw new AppError('STORE_REQUIRED', PLATFORM_ERRORS.STORE_REQUIRED);
