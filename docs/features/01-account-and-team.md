@@ -450,6 +450,12 @@ sanitize failures. SendGrid request shapes are tested with fake fetch; live
 SendGrid delivery remains untested until the sending domain is verified.
 The existing production SMS refusal still applies until ACC-14.
 
+Each EmailService call emits one `email_delivery` metric observation through the
+existing JSON logger: count 1, elapsed monotonic milliseconds and success/failure
+outcome. These log-based observations support aggregation; no metrics dashboard
+or exporter is installed by this task. Fields contain no recipient, content,
+credentials or error payload. A failed call retains its original driver error.
+
 `POST /auth/email/code` takes `email`; only a verified address can receive a
 sign-in code. `POST /auth/email/code/verify` takes `email`, `code` and optional
 `isRemembered`; it returns 204 and sets the shared session cookie. Both are public
