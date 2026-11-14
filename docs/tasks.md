@@ -62,7 +62,7 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 | ACC-7  | Devices list and remote sign-out; TOTP 2-step                                                         | In review   | ACC-2, ACC-3, DB-4                                                               | [#28](https://github.com/iamaaasif/dakly-app/pull/28) |                                                        |
 | ACC-14 | SMS provider driver for production                                                                    | Blocked     | ACC-1                                                                            |                                                       | Waits for the SMS provider account and sender id       |
 | ACC-15 | Cross-store test for every store route                                                                | In review   | ACC-5, ACC-6, ACC-17, ACC-18, API-3                                              | #34                                                   | M1 exit check                                          |
-| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | In progress | ACC-6, ACC-7, ACC-9, ACC-10, ACC-11, ACC-16, ACC-17, ACC-18, WEB-3, WEB-4, WEB-5 |                                                       | Sign-in/sign-up In review; Team and settings pending   |
+| ACC-8  | Web: sign-up, sign-in, team, store settings screens                                                   | In progress | ACC-6, ACC-7, ACC-9, ACC-10, ACC-11, ACC-16, ACC-17, ACC-18, WEB-3, WEB-4, WEB-5 | #38                                                   | Sign-in/sign-up In review; Team and settings pending   |
 
 ## M2. Shared plumbing
 
