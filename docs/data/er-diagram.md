@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0037_snapshot.json`: **95 tables, 1247 columns, 368 explicit indexes and 294 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0041_snapshot.json`: **96 tables, 1249 columns, 369 explicit indexes and 296 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -12,7 +12,7 @@ The schema defines relationships, not completed feature behavior. Refer to [revi
 
 ## Stores, accounts and team
 
-Schema files: `stores.ts`, `auth.ts`, `account-security-events.ts`, `account-recovery.ts`, `team.ts`, `admin.ts`.
+Schema files: `stores.ts`, `auth.ts`, `account-security-events.ts`, `account-recovery.ts`, `team.ts`, `admin.ts`, `staff-recovery.ts`.
 
 ```mermaid
 erDiagram
@@ -55,6 +55,8 @@ erDiagram
     staff_users ||..o{ staff_audit_exports : "staff_user_id"
     staff_sessions ||..o{ staff_audit_exports : "staff_session_id"
     staff_audit_log ||--o| staff_alert_deliveries : "audit_id"
+    stores ||--o{ staff_recovery_history : "store_id"
+    staff_audit_log ||--o{ staff_recovery_history : "audit_id"
     stores {
         uuid id PK "NOT NULL; uuid"
         text name "NOT NULL; text"
@@ -364,6 +366,10 @@ erDiagram
         timestamp_with_time_zone next_attempt_at "NOT NULL; timestamp with time zone"
         text error "NULL; text"
         timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
+    }
+    staff_recovery_history {
+        uuid store_id PK,FK "NOT NULL; uuid"
+        uuid audit_id PK,FK "NOT NULL; uuid"
     }
 ```
 
@@ -2078,6 +2084,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `posts_store_id_stores_id_fk`                                        | `posts(store_id)`                                         | `stores(id)`                                | no action |
 | `posts_created_by_user_id_users_id_fk`                               | `posts(created_by_user_id)`                               | `users(id)`                                 | no action |
 | `posts_approved_by_user_id_users_id_fk`                              | `posts(approved_by_user_id)`                              | `users(id)`                                 | no action |
+| `staff_recovery_history_store_id_stores_id_fk`                       | `staff_recovery_history(store_id)`                        | `stores(id)`                                | no action |
+| `staff_recovery_history_audit_id_staff_audit_log_id_fk`              | `staff_recovery_history(audit_id)`                        | `staff_audit_log(id)`                       | no action |
 | `store_counters_store_id_stores_id_fk`                               | `store_counters(store_id)`                                | `stores(id)`                                | no action |
 | `tasks_store_id_stores_id_fk`                                        | `tasks(store_id)`                                         | `stores(id)`                                | no action |
 | `tasks_contact_id_contacts_id_fk`                                    | `tasks(contact_id)`                                       | `contacts(id)`                              | cascade   |

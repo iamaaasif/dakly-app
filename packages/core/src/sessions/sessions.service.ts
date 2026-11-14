@@ -1,3 +1,4 @@
+import type { AccountSecurityEvent } from '@dakly/contracts/account-security-events';
 import { UsersService } from '../auth/users.service';
 import { TeamService } from '../team/team.service';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
@@ -78,11 +79,15 @@ export class SessionsService {
     return this.revokeSessions(userId, sessionId, true);
   }
 
-  async revokeAll(userId: string, ip: string): Promise<void> {
+  async revokeAll(
+    userId: string,
+    ip: string,
+    actor: AccountSecurityEvent['actor'] = { kind: 'user' },
+  ): Promise<void> {
     await this.transaction.run(userId, async () => {
       await this.users.invalidateChallenges(userId);
       await this.repository.revokeAll(userId, this.clock.now());
-      await this.events.record(userId, { event: 'sessions.revoked', actor: { kind: 'user' }, ip });
+      await this.events.record(userId, { event: 'sessions.revoked', actor, ip });
     });
   }
 

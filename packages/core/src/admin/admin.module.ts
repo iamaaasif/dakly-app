@@ -1,3 +1,13 @@
+import {
+  StaffRecoveryController,
+  OwnerRecoveryHistoryController,
+  AccountRecoveryHistoryController,
+} from './staff-recovery.controller';
+import { StaffRecoveryService } from './staff-recovery.service';
+import { StaffRecoveryRepository } from './staff-recovery.repository';
+import { SecurityNoticesModule } from '../auth/security-notices.module';
+import { SessionsModule } from '../sessions/sessions.module';
+import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
 import { BreakGlassService } from './break-glass.service';
 import { BreakGlassController } from './break-glass.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
@@ -39,6 +49,9 @@ import { StaffGuard } from './staff.guard';
 import { StaffAuthController } from './staff-auth.controller';
 @Module({
   imports: [
+    SecurityNoticesModule,
+    SessionsModule,
+    AccountSecurityEventsModule,
     StaffHistoryModule,
     StaffAlertsModule,
     StaffIdentityModule,
@@ -52,6 +65,9 @@ import { StaffAuthController } from './staff-auth.controller';
     AuditModule,
   ],
   controllers: [
+    StaffRecoveryController,
+    OwnerRecoveryHistoryController,
+    AccountRecoveryHistoryController,
     StaffAuthController,
     BreakGlassController,
     StaffAlertsController,
@@ -61,6 +77,8 @@ import { StaffAuthController } from './staff-auth.controller';
     StaffHistoryController,
   ],
   providers: [
+    StaffRecoveryService,
+    StaffRecoveryRepository,
     SupportRepository,
     RiskyActionConfirmation,
     BreakGlassService,

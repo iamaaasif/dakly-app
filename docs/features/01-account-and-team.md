@@ -890,3 +890,21 @@ An unknown user-agent/IP pair produces an encrypted durable new-device alert aft
 successful sign-in, by verified email or SMS. The pair is checked under the same
 account lock as session insertion, so simultaneous sign-ins do not enqueue duplicate
 alerts for the same pair. Notice failure never rolls back an issued session.
+
+### Staff recovery history (ADM-10)
+
+Authorized Support and Super admins can recover an eligible shop account immediately
+with checked identity outcomes, a required reason and exact-effect confirmation.
+Replacement contacts require action-bound verification codes. The account ID stays
+the same. Recovery removes selected TOTP and backup codes, replaces selected
+verified contacts, cancels pending self-service recovery, invalidates challenges
+and revokes all sessions in the same transaction as its staff audit, account history,
+shop history mappings and durable security notices. Staff-linked targets and
+own/work-store recovery are prohibited even after contact changes.
+
+The account-only `GET /me/security-history` route returns cursor-paginated safe event
+metadata. The initial `/security` consumer labels staff recovery “Recovered by Dakly
+support” with its date and reason type. It works without an active shop. ACC-8 adds
+the rest of the Security screen; the full Owner audit page remains ACC-13. See the
+[admin feature](12-admin-panel.md#adm-10-implementation) for recovery proof, notification
+and operational bounds.

@@ -30,6 +30,11 @@ export function StaffHome() {
         <div className="space-y-4">
           <p className="font-medium">{session.data.name}</p>
           <nav className="flex flex-wrap gap-4">
+            {['support', 'super_admin'].includes(session.data.role) ? (
+              <Link href="/account-recovery" className="text-action underline">
+                Recover shop account
+              </Link>
+            ) : null}
             <Link href="/support" className="text-action underline">
               Support access
             </Link>

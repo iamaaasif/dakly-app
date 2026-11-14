@@ -1,10 +1,11 @@
 import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { uuidv7 } from '@dakly/db/uuid-v7';
 import type { Database } from '@dakly/db/client';
 import type { SignUpInput } from '@dakly/contracts/auth';
 import { DATABASE } from '../platform/database/database.tokens';
+import { accountRecoveries } from '@dakly/db/schema/account-recovery';
 import { users } from '@dakly/db/schema/auth';
 import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
 import { AccountDatabase } from '../platform/database/account-database';
@@ -17,6 +18,62 @@ export class UsersRepository {
     @Inject(DATABASE) private readonly connection: Database,
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
+
+  async recoveryTarget(identifier: string) {
+    const [user] = await this.connection
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        or(
+          and(eq(users.phone, identifier), isNotNull(users.phoneVerifiedAt)),
+          and(eq(users.email, identifier), isNotNull(users.emailVerifiedAt)),
+        ),
+      )
+      .limit(1);
+    return user?.id;
+  }
+  async recover(
+    userId: string,
+    changes: { removeTotp: boolean; newPhone?: string; newEmail?: string },
+    now: Date,
+  ) {
+    try {
+      await this.database.inTransaction(userId, async (tx) => {
+        await tx
+          .update(users)
+          .set({
+            ...(changes.newPhone ? { phone: changes.newPhone, phoneVerifiedAt: now } : {}),
+            ...(changes.newEmail ? { email: changes.newEmail, emailVerifiedAt: now } : {}),
+            ...(changes.removeTotp
+              ? {
+                  totpSecretCiphertext: null,
+                  totpKeyVersion: null,
+                  totpEnabledAt: null,
+                  totpLastStep: null,
+                  backupCodeHashes: null,
+                }
+              : {}),
+            securityVersion: sql`${users.securityVersion} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(users.id, userId));
+        await tx
+          .update(accountRecoveries)
+          .set({ status: 'cancelled' })
+          .where(
+            and(eq(accountRecoveries.userId, userId), eq(accountRecoveries.status, 'pending')),
+          );
+      });
+      return true;
+    } catch (error) {
+      if (
+        this.isUniqueConflict(error, 'users_phone_key') ||
+        this.isUniqueConflict(error, 'users_email_key')
+      )
+        return false;
+      throw error;
+    }
+  }
 
   async lockAccount(userId: string): Promise<void> {
     await this.database.forUser(userId, (tx) =>

@@ -14,7 +14,15 @@ const byName = new Map(tables.map((table) => [table.name, table]));
 const groups = [
   [
     'Stores, accounts and team',
-    ['stores', 'auth', 'account-security-events', 'account-recovery', 'team', 'admin'],
+    [
+      'stores',
+      'auth',
+      'account-security-events',
+      'account-recovery',
+      'team',
+      'admin',
+      'staff-recovery',
+    ],
   ],
   [
     'Channels, customers and chats',
