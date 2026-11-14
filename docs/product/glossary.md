@@ -137,7 +137,7 @@ Web display helpers live in `apps/web/src/lib/format-money.ts`, `format-date.ts`
 and exact poisha, and throws `RangeError` for fractional, nonfinite or unsafe inputs.
 `formatDate(value, reference, timeZone)` requires a reference instant shared between
 server and initial browser render. It never reads the current clock. `formatTime`
-also accepts the store time zone; both default to Asia/Dhaka. Date inputs must carry
+also accepts the store time zone; both default to Asia/Dhaka. ISO date inputs must carry
 an explicit UTC offset; invalid or ambiguous inputs throw `RangeError`.
 `formatDateTime` retains exact dates, minutes and the Asia/Dhaka label for security
 history and support deadlines. Relative dates do not replace expiry timestamps.

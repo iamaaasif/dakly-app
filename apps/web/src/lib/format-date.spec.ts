@@ -77,3 +77,41 @@ describe('date input errors', () => {
     expect(() => formatTime('2026-11-14T04:03:00Z', 'invalid')).toThrow(RangeError);
   });
 });
+
+describe.each([
+  ['formatDateTime', formatDateTime],
+  ['formatTime', formatTime],
+  ['formatDate value', (value: string) => formatDate(value, '2026-11-14T04:03:00Z')],
+  ['formatDate reference', (value: string) => formatDate('2026-11-14T04:03:00Z', value)],
+] as const)('%s calendar validation', (_name, format) => {
+  it.each([
+    '2026-02-30T10:03:00Z',
+    '2026-04-31T10:03:00Z',
+    '2026-02-29T10:03:00+06:00',
+    '1900-02-29T10:03:00Z',
+    '2100-02-29T10:03:00-05:00',
+    '2024-02-30T10:03:00Z',
+  ])('rejects impossible calendar date %s instead of normalizing it', (value) => {
+    expect(() => format(value)).toThrow(RangeError);
+  });
+});
+
+describe('valid calendar dates', () => {
+  it.each(['2000-02-29T10:03:00Z', '2024-02-29T10:03:00+06:00'])(
+    'accepts leap day %s with an explicit offset',
+    (value) => {
+      expect(formatDate(value, value)).toBe('Today');
+    },
+  );
+
+  it('keeps a valid leap day in a year below 100', () => {
+    expect(formatDate('0096-02-29T10:03:00Z', '0096-03-01T10:03:00Z', 'UTC')).toBe('Yesterday');
+  });
+
+  it.each([
+    ['2027-01-01T00:03:00+06:00', '1 Jan 2027, 00:03 (Asia/Dhaka)'],
+    ['2026-12-31T23:03:00-05:00', '1 Jan 2027, 10:03 (Asia/Dhaka)'],
+  ])('accepts the calendar date before applying the UTC offset in %s', (value, expected) => {
+    expect(formatDateTime(value)).toBe(expected);
+  });
+});

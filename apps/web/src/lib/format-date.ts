@@ -34,9 +34,23 @@ export function formatTime(value: string, timeZone = 'Asia/Dhaka'): string {
 }
 
 function parseInstant(value: string): number {
+  const components = /^([+-]\d{6}|\d{4})-(\d{2})-(\d{2})T/i.exec(value);
   const timestamp = Date.parse(value);
-  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || !Number.isFinite(timestamp)) {
+  if (!components || !/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) || !Number.isFinite(timestamp)) {
     throw new RangeError('Dates must be valid instants with an explicit UTC offset');
+  }
+
+  const year = Number(components[1]);
+  const month = Number(components[2]);
+  const day = Number(components[3]);
+  const calendar = new Date(0);
+  calendar.setUTCFullYear(year, month - 1, day);
+  if (
+    calendar.getUTCFullYear() !== year ||
+    calendar.getUTCMonth() !== month - 1 ||
+    calendar.getUTCDate() !== day
+  ) {
+    throw new RangeError('Dates must have a valid calendar date');
   }
   return timestamp;
 }
