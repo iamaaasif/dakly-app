@@ -33,7 +33,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | API-1 | Logging (nestjs-pino), request ids, Sentry                                               | In review |             | #9  | [plan](plans/core.md)                                            |
 | API-2 | Rate limiting with Valkey storage                                                        | In review |             | #10 | Valkey client and per-key limiter; [plan](plans/core.md)         |
 | API-3 | Route test that fails when a route has no access rule or a store route has no permission | In review | ACC-3       | #15 | [plan](plans/core.md)                                            |
-| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | In review |             |     | [design/theme.md](design/theme.md)                               |
+| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | In review |             | #29 | [design/theme.md](design/theme.md)                               |
 | WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | Todo      | WEB-1       |     |                                                                  |
 | WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Todo      | WEB-1       |     |                                                                  |
 | WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Todo      |             |     |                                                                  |
