@@ -20,10 +20,17 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures } from './sign-in-failures';
-import { SMS_DRIVER, createSmsDriver } from './sms-provider';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
-  imports: [CacheModule, UsersModule, SessionsModule, EmailModule, AccountSecurityEventsModule],
+  imports: [
+    CacheModule,
+    UsersModule,
+    SessionsModule,
+    EmailModule,
+    SmsModule,
+    AccountSecurityEventsModule,
+  ],
   controllers: [
     AuthController,
     GoogleController,
@@ -43,7 +50,6 @@ import { SMS_DRIVER, createSmsDriver } from './sms-provider';
     EmailChangeService,
     SignInCodes,
     SignInFailures,
-    { provide: SMS_DRIVER, useFactory: createSmsDriver },
   ],
   exports: [AuthService, SignInCodes, SignInFailures],
 })

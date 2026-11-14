@@ -318,6 +318,62 @@ Customer routes require `customers.view` or `customers.edit`. Their service requ
 
 Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member commits their new membership status, so the next request reads it and gets 401 for that store; their sessions keep working for their other stores. Revoking an unaccepted invite sets `removed`, records `removed_at`, and clears the invite token hash and expiry in the same transaction; its user ID may remain null. Only `active` memberships require a user. The complete `(store_id, status)` index supports member counts, including removed invites.
 
+ACC-5 serves `GET /members`, `POST /members/invites`,
+`POST /members/invites/:membershipId/resend`, `PATCH /members/:membershipId`,
+`DELETE /members/:membershipId` and the signed-in account route `POST /invites/accept`.
+Team View reads the list; Team Edit manages members. An invite takes exactly one
+normalized `phone` or `email`, and exactly one `builtInRole` or same-store `roleId`.
+No ordinary membership action can invite, remove or change the Owner. Assignments
+must fit the actor's current grants. Custom-role creation remains ACC-17.
+
+The list includes active members and pending invitations, including expired invitations
+that can be resent. It returns `{ items, nextCursor, seats: { used, limit } }`, with
+default `limit=50` and maximum 100. A cursor is the last membership ID; the database
+resolves its exact `(created_at, id)` boundary within this store, preserving timestamp
+precision. Profiles use one bounded UsersService batch. Phones are masked without
+`seeFullPhone`; invite hashes and raw links never appear in API responses.
+
+Seat allocation counts active members plus unexpired pending invites. BillingService
+reads the current plan limit; a missing limit allows no additional seats. Each write
+locks the store row with `FOR NO KEY UPDATE` and records the membership change and
+audit event in the same store transaction. The lock serializes seat allocation without
+blocking foreign-key checks from account actions. An expired resend must reserve a
+seat again; a full store returns `409 TEAM_SEATS_FULL`.
+
+Invite tokens contain 32 random bytes, are stored only as SHA-256 hashes, and expire
+after seven days. Delivery uses SMS for phone invitations and email for email invitations,
+after commit. The link carries its token in the URL fragment. Acceptance locates the
+store through `membership_for_invite`, then rechecks the current token, status and expiry
+under the store lock. Before acquiring that lock, UsersService holds a shared read lock
+on the signed-in user's current verified identity in the same store action. This special
+account read never writes an account or nests an account transaction. A typed unverified
+email or phone cannot accept an invite. Acceptance neither creates a user nor changes an
+existing active membership; re-inviting a removed user restores their existing membership.
+The response identifies the store and membership; switching the active store remains explicit.
+
+Send and resend share a 30-second cooldown and five sends per normalized recipient per
+store per hour, plus twenty sends per IP per hour. Valkey keys contain hashes rather than
+recipient values and use a separate namespace from sign-in. Reservations happen before
+the store transaction and remain consumed on database or vendor failure.
+
+Repeating invite creation for the same pending recipient and role returns that invite
+without another send, audit event or seat. A different role returns `409 INVITE_EXISTS`;
+use the explicit role-change route. An expired invite is also returned unchanged until
+explicitly resent. This recipient-based retry rule does not use `Idempotency-Key`.
+Resend rotates the token, invalidating earlier links. A vendor failure returns
+`503 INVITE_DELIVERY_UNAVAILABLE` while leaving the committed invitation valid because
+delivery may have succeeded before a timeout. Find it with `GET /members`, then resend
+after the cooldown. No queue or automatic retry runs. Cancel and remove are repeat-safe;
+acceptance tokens are single-use. Later requests observe committed access changes; already
+authorized requests may finish.
+
+SmsModule now exports SmsService for authentication and team invitations. Every SMS
+attempt records `sms_delivery` with count, monotonic duration and success/failure through
+Nest/Pino, including sign-in codes and lock notices. Labels contain no recipient, link,
+message text or vendor exception. This closes the earlier SMS metrics gap. Production
+SMS remains fail-closed until ACC-14 supplies a provider; Mailpit checks do not prove
+live SMS or SendGrid delivery.
+
 Roles: four built-in roles live in code, `team/built-in-roles.ts` (Shop counter staff is added in release 2). Custom roles are rows per store. A role maps each area to `none`, `view` or `edit`, plus the flags `seeFullPhone`, `exportLists`, `refund`. One pure function, `team/permissions.ts`, answers "can this member do this", and is unit-tested against the role table.
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
@@ -382,8 +438,8 @@ CI uses the same ports and checks readiness before tests. `MAILPIT_SMTP_HOST` an
 `MAILPIT_SMTP_PORT` configure the SMTP connection; `MAILPIT_API_URL` configures
 integration test read-back. The integration test removes only its own message.
 
-`SMS_DRIVER=mailpit` is the only supported selection. ACC-2 selects Mailpit in
-development and tests, using the SMTP settings above. Auth startup fails in
+`SMS_DRIVER=mailpit` is the only supported selection. SmsModule selects Mailpit in
+development and tests, using the SMTP settings above. Application startup fails in
 production even when `SMS_DRIVER` is omitted: no usable production driver exists
 until ACC-14 supplies the provider account, sender id and adapter. Pure environment
 parsing remains separate from the consumer factory so cookie settings do not

@@ -84,6 +84,7 @@ export const memberships = pgTable(
       .where(sql`${table.builtInRole} = 'owner' and ${table.status} = 'active'`),
     uniqueIndex('memberships_invite_token_hash_key').on(table.inviteTokenHash),
     index('memberships_store_id_status_idx').on(table.storeId, table.status),
+    index('memberships_store_id_created_at_id_idx').on(table.storeId, table.createdAt, table.id),
     index('memberships_user_id_idx').on(table.userId),
     index('memberships_role_id_idx').on(table.roleId),
     index('memberships_invited_by_user_id_idx').on(table.invitedByUserId),

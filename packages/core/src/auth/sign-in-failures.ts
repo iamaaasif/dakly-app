@@ -1,10 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
+import { SmsService } from '../sms/sms.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 import { EmailService } from '../email/email.service';
-import { SMS_DRIVER } from './sms-provider';
 
 export type SignInSubject = {
   userId?: string;
@@ -32,7 +31,7 @@ export class SignInFailures {
   private readonly logger = new Logger(SignInFailures.name);
   constructor(
     @Inject(ValkeyClient) private readonly client: ValkeyClient,
-    @Inject(SMS_DRIVER) private readonly sms: SmsDriver,
+    @Inject(SmsService) private readonly sms: SmsService,
     @Inject(EmailService) private readonly email: EmailService,
   ) {}
 

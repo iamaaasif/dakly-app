@@ -38,10 +38,14 @@ Merge requests carry a stable operation key through all retries, including retri
 | `GET /store`, `PATCH /store`                                                                                                                                   | `storeSettings` |
 | `PATCH /store/extensions`                                                                                                                                      | Owner or Admin  |
 | `GET /store/setup-checklist`                                                                                                                                   | any member      |
-| `GET /members`, `POST /members/invites` (idem), `PATCH /members/:membershipId`, `DELETE /members/:membershipId`                                                | `team`          |
+| `GET /members`, `POST /members/invites`, `POST /members/invites/:membershipId/resend`, `PATCH /members/:membershipId`, `DELETE /members/:membershipId`         | `team`          |
 | `GET /roles`, `POST /roles`, `PATCH /roles/:roleId`, `DELETE /roles/:roleId`                                                                                   | `team`          |
 | `GET /audit-log`                                                                                                                                               | Owner           |
 | `GET /support-grants`, `POST /support-grants/:supportGrantId/approve`, `POST /support-grants/:supportGrantId/deny`, `POST /support-grants/:supportGrantId/end` | Owner           |
+
+Team invite creation uses the pending recipient and role as its retry identity instead
+of an `Idempotency-Key` header. Matching retries return the pending invite without sending;
+resend is explicit. See [account and team](../features/01-account-and-team.md).
 
 ## Channels (02)
 

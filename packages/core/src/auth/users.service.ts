@@ -10,4 +10,13 @@ export class UsersService {
     if (!user) throw new AppError('AUTH_REQUIRED', PLATFORM_ERRORS.AUTH_REQUIRED);
     return user;
   }
+  profiles(userIds: string[]) {
+    return this.repository.profiles(userIds);
+  }
+  verifiedRecipient(input: { phone?: string; email?: string }) {
+    return this.repository.verifiedRecipient(input);
+  }
+  lockInviteIdentity(storeId: string, userId: string) {
+    return this.repository.lockInviteIdentity(storeId, userId);
+  }
 }

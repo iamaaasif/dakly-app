@@ -1,6 +1,6 @@
 import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from '@dakly/db/uuid-v7';
 import type { Database } from '@dakly/db/client';
 import type { SignUpInput } from '@dakly/contracts/auth';
@@ -8,13 +8,56 @@ import { DATABASE } from '../platform/database/database.tokens';
 import { users } from '@dakly/db/schema/auth';
 import type { UserProfile } from '@dakly/contracts/sessions';
 import { AccountDatabase } from '../platform/database/account-database';
+import { TenantDatabase } from '../platform/database/tenant-database';
 
 @Injectable()
 export class UsersRepository {
   constructor(
     @Inject(AccountDatabase) private readonly database: AccountDatabase,
     @Inject(DATABASE) private readonly connection: Database,
+    @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
+
+  async profiles(userIds: string[]): Promise<UserProfile[]> {
+    if (userIds.length === 0) return [];
+    if (userIds.length > 100) throw new Error('Account profile batch exceeds 100');
+    return this.connection
+      .select({ id: users.id, name: users.name, phone: users.phone, email: users.email })
+      .from(users)
+      .where(inArray(users.id, userIds))
+      .limit(100);
+  }
+
+  async verifiedRecipient(input: { phone?: string; email?: string }): Promise<string | undefined> {
+    const [row] = await this.connection
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        input.phone
+          ? and(eq(users.phone, input.phone), isNotNull(users.phoneVerifiedAt))
+          : and(eq(users.email, input.email!), isNotNull(users.emailVerifiedAt)),
+      )
+      .limit(1);
+    return row?.id;
+  }
+
+  async lockInviteIdentity(storeId: string, userId: string) {
+    // Acceptance holds a read lock on the current identity in its store action; it never writes an account.
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({
+          phone: users.phone,
+          phoneVerifiedAt: users.phoneVerifiedAt,
+          email: users.email,
+          emailVerifiedAt: users.emailVerifiedAt,
+        })
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.isDisabled, false)))
+        .for('share')
+        .limit(1),
+    );
+    return row;
+  }
 
   allocateId(): string {
     return uuidv7();

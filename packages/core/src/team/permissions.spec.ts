@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AccessLevel, PermissionArea, StoreAccess } from '@dakly/contracts/team';
 import { builtInRoleAccess } from './built-in-roles';
-import { canAccess, canDo, canGrantRole } from './permissions';
+import { canAccess, canDo, canGrantRole, canManageMember } from './permissions';
 
 const expectedAreas = [
   ['dashboard', 'view', 'view', 'view', 'view'],
@@ -33,6 +33,24 @@ const customAccess: StoreAccess = {
 };
 
 describe('permission policy', () => {
+  it('never assigns or changes Owner through ordinary membership management', () => {
+    expect(canManageMember(builtInRoleAccess.owner, builtInRoleAccess.owner)).toBe(false);
+    expect(canManageMember(builtInRoleAccess.admin, builtInRoleAccess.owner)).toBe(false);
+    expect(
+      canManageMember(builtInRoleAccess.owner, builtInRoleAccess.admin, builtInRoleAccess.owner),
+    ).toBe(false);
+    expect(canManageMember(builtInRoleAccess.admin, builtInRoleAccess.marketer)).toBe(true);
+    expect(canManageMember(builtInRoleAccess.marketer, builtInRoleAccess.support_agent)).toBe(
+      false,
+    );
+    expect(
+      canManageMember(
+        { ...builtInRoleAccess.admin, seeFullPhone: false },
+        builtInRoleAccess.marketer,
+        builtInRoleAccess.admin,
+      ),
+    ).toBe(false);
+  });
   it.each(roleAreas)('$role has $expected access to $area', ({ role, area, expected }) => {
     expect(canAccess(builtInRoleAccess[role], area, 'view')).toBe(expected !== 'none');
     expect(canAccess(builtInRoleAccess[role], area, 'edit')).toBe(expected === 'edit');
