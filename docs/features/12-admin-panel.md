@@ -320,7 +320,9 @@ replacement phone or email needs its own single-use code, bound to this action,
 account, staff session and current account security state.
 
 One account transaction locks the person, their shops in ID order, the staff row
-and staff session. It checks current authority again, inserts `staff_audit_log`
+and staff session. Memberships are refreshed after store-lock waits, so a former
+shop receives neither notices nor history. New memberships serialize through the
+user identity lock. It checks current authority again, inserts `staff_audit_log`
 before changing credentials, removes selected TOTP and backup codes, changes
 verified contacts, cancels pending self-service recovery, revokes every session,
 records staff-attributed account history and writes encrypted notice intents.

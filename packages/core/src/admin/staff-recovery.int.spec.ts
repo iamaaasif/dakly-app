@@ -1,3 +1,5 @@
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { newId } from '../platform/database/new-id';
 import { TOTP, Secret } from 'otpauth';
 import { ValkeyClient } from '../platform/cache/valkey-client';
@@ -12,8 +14,11 @@ import { sql } from 'drizzle-orm';
 import { createDatabase } from '@dakly/db/client';
 import type { StaffRecoveryPreview, StaffRecoveryRequest } from '@dakly/contracts/staff-recovery';
 import { AdminModule } from './admin.module';
+import { StoresModule } from '../stores/stores.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StaffRepository } from './staff.repository';
+import { StaffDatabase } from '../platform/database/staff-database';
 import { StaffTransaction } from '../platform/database/staff-transaction';
 import { AccountDatabase } from '../platform/database/account-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -30,7 +35,7 @@ import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '../platform/http/session-cookie';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 class TestModule {}
-Module({ imports: [DatabaseModule, AuthModule, AdminModule] })(TestModule);
+Module({ imports: [DatabaseModule, AuthModule, AdminModule, StoresModule] })(TestModule);
 const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const userIds: string[] = [],
   storeIds: string[] = [],
@@ -206,6 +211,8 @@ afterAll(async () => {
   await database.pool.query('delete from account_security_events where user_id=any($1::uuid[])', [
     userIds,
   ]);
+  for (const table of ['audit_log', 'subscriptions', 'store_counters'])
+    await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [storeIds]);
   await database.pool.query('delete from memberships where store_id=any($1::uuid[])', [storeIds]);
   await database.pool.query('delete from sessions where user_id=any($1::uuid[])', [userIds]);
   for (const table of [
@@ -610,6 +617,381 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     expect((await pending).statusCode).toBe(403);
     spy.mockRestore();
     expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
+  });
+  it('excludes a former shop Owner when membership removal commits while recovery waits for its store lock', async () => {
+    const f = await fixture();
+    const formerOwner = await user();
+    const removedStore = await store(formerOwner.id, f.id);
+    const p = await preview(f);
+    const removal = await database.pool.connect();
+    let pending: ReturnType<typeof admin> | undefined;
+    try {
+      await removal.query('begin');
+      const {
+        rows: [{ pid }],
+      } = await removal.query('select pg_backend_pid() as pid');
+      await removal.query('select id from stores where id=$1 for no key update', [removedStore]);
+      pending = admin(f, '', { ...p, confirmed: true });
+      await expect
+        .poll(
+          async () =>
+            (
+              await database.pool.query(
+                'select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',
+                [pid],
+              )
+            ).rows[0].blocked,
+        )
+        .toBe(true);
+      await removal.query(
+        "update memberships set status='removed',removed_at=now() where store_id=$1 and user_id=$2",
+        [removedStore, f.id],
+      );
+      await removal.query('commit');
+      const result = await pending;
+      expect(result.statusCode, result.body).toBe(201);
+      await app.get(SecurityNoticesService).dispatch(f.id);
+      expect(
+        delivered.filter((message) => [formerOwner.phone, formerOwner.email].includes(message.to)),
+      ).toEqual([]);
+      expect(await app.get(StaffRecoveryRepository).history(removedStore)).toEqual([]);
+      expect(await recoveryRows(f.id)).toMatchObject({ history: 1, notices: 2 });
+    } finally {
+      await removal.query('rollback');
+      removal.release();
+      await pending;
+    }
+  });
+  it.each(['/lookup', '/preview', ''])(
+    'serializes contact provisioning against recovery %s without a user and identity lock deadlock',
+    async (path) => {
+      const f = await fixture();
+      const p = await preview(f);
+      const newStaffId = randomUUID();
+      staffIds.push(newStaffId);
+      const users = app.get(UsersService);
+      const original = users.recoveryState.bind(users);
+      let release!: () => void, started!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const began = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const spy = vi.spyOn(users, 'recoveryState').mockImplementationOnce(async (id) => {
+        const result = await original(id);
+        started();
+        await waiting;
+        return result;
+      });
+      let payload: object = { ...p, confirmed: true };
+      if (path === '/lookup') payload = { identifier: f.phone };
+      if (path === '/preview') payload = input(f);
+      const recovery = admin(f, path, payload);
+      await began;
+      let provisioningPid = 0,
+        settled = false;
+      const provision = app
+        .get(StaffDatabase)
+        .forStaff(newStaffId, async (tx) => {
+          provisioningPid = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
+            .rows[0]!.pid;
+          await app.get(StaffRepository).provision(newStaffId, {
+            operatorIdentity: 'recovery-test',
+            email: `${newStaffId}@example.test`,
+            name: 'Concurrent staff',
+            role: 'support',
+            accessSubject: newStaffId,
+            phone: f.phone,
+            personalEmails: [f.email],
+            reason: 'Provision trusted support identity',
+          });
+        })
+        .then(
+          () => {
+            settled = true;
+            return { ok: true };
+          },
+          (error) => {
+            settled = true;
+            return { ok: false, error };
+          },
+        );
+      try {
+        await expect
+          .poll(
+            async () =>
+              settled ||
+              (
+                await database.pool.query(
+                  "select exists(select 1 from pg_stat_activity where pid=$1 and wait_event_type='Lock') as blocked",
+                  [provisioningPid],
+                )
+              ).rows[0].blocked,
+          )
+          .toBe(true);
+        release();
+        const [result, provisioned] = await Promise.all([recovery, provision]);
+        expect(provisioned).toEqual({ ok: true });
+        expect(result.statusCode, result.body).toBe(403);
+        expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
+        expect(
+          (
+            await database.pool.query(
+              'select user_id from staff_user_links where staff_user_id=$1',
+              [newStaffId],
+            )
+          ).rows,
+        ).toEqual([{ user_id: f.id }]);
+      } finally {
+        release();
+        await Promise.allSettled([recovery, provision]);
+        spy.mockRestore();
+      }
+    },
+  );
+  it.each(['provision-first', 'recovery-first'])(
+    'orders shared contact keys without deadlock when %s',
+    async (order) => {
+      const f = await fixture();
+      f.email = `a_b.${f.id}@example.test`;
+      await database.pool.query('update users set email=$2 where id=$1', [f.id, f.email]);
+      const newPhone = phone(),
+        newEmail = `ab-${f.id}@example.test`;
+      const p = await preview(f, { newPhone, newEmail });
+      const phoneCode = await proof(f, p, 'phone'),
+        emailCode = await proof(f, p, 'email');
+      const newStaffId = randomUUID();
+      staffIds.push(newStaffId);
+      const gate = await database.pool.connect();
+      let provision: Promise<void> | undefined, recovery: ReturnType<typeof admin> | undefined;
+      try {
+        await gate.query('begin');
+        const {
+          rows: [{ pid }],
+        } = await gate.query('select pg_backend_pid() as pid');
+        const {
+          rows: [{ value: firstEmail }],
+        } = await gate.query('select value from unnest($1::text[]) value order by value limit 1', [
+          [f.email, newEmail],
+        ]);
+        await gate.query(
+          "select pg_advisory_xact_lock(hashtextextended('staff-identity:email:' || $1,0))",
+          [firstEmail],
+        );
+        const startProvision = () =>
+          app.get(StaffDatabase).forStaff(newStaffId, () =>
+            app.get(StaffRepository).provision(newStaffId, {
+              operatorIdentity: 'recovery-test',
+              email: `zz-${newStaffId}@example.test`,
+              name: 'Concurrent staff',
+              role: 'support',
+              accessSubject: newStaffId,
+              phone: f.phone,
+              personalEmails: [f.email, newEmail],
+              reason: 'Provision trusted support identity',
+            }),
+          );
+        const startRecovery = () => admin(f, '', { ...p, confirmed: true, phoneCode, emailCode });
+        const waitForQueued = async (total: number) =>
+          expect
+            .poll(async () =>
+              Number(
+                (
+                  await database.pool.query(
+                    'with recursive blocked(pid) as (select $1::int union select a.pid from pg_stat_activity a join blocked b on b.pid=any(pg_blocking_pids(a.pid))) select count(*)-1 as total from blocked',
+                    [pid],
+                  )
+                ).rows[0].total,
+              ),
+            )
+            .toBe(total);
+        if (order === 'provision-first') provision = startProvision();
+        else recovery = startRecovery();
+        await waitForQueued(1);
+        if (order === 'provision-first') recovery = startRecovery();
+        else provision = startProvision();
+        await waitForQueued(2);
+        await gate.query('commit');
+        const [result] = await Promise.all([recovery!, provision!]);
+        expect(result.statusCode, result.body).toBe(order === 'provision-first' ? 403 : 201);
+        expect(
+          (
+            await database.pool.query(
+              'select user_id from staff_user_links where staff_user_id=$1',
+              [newStaffId],
+            )
+          ).rows,
+        ).toEqual([{ user_id: f.id }]);
+        expect((await state(f.id)).phone).toBe(order === 'provision-first' ? f.phone : newPhone);
+      } finally {
+        await gate.query('rollback');
+        gate.release();
+        await Promise.allSettled([provision, recovery]);
+      }
+    },
+  );
+  it('rejects an already authorized second-factor sign-in queued behind session revocation', async () => {
+    const f = await fixture();
+    const backupCode = randomBytes(10).toString('hex');
+    const secret = app
+      .get(EnvelopeEncryption)
+      .encrypt(
+        { owner: 'user', userId: f.id, purpose: 'totp' },
+        Buffer.from('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'),
+      );
+    await database.pool.query(
+      'update users set totp_secret_ciphertext=$2,totp_key_version=$3,backup_code_hashes=$4 where id=$1',
+      [
+        f.id,
+        secret.ciphertext,
+        secret.keyVersion,
+        [app.get(TotpCredentials).hashBackup(f.id, backupCode)],
+      ],
+    );
+    const p = await preview(f, { removeTotp: false });
+    const post = (url: string, payload: object) =>
+      app.inject({
+        method: 'POST',
+        url,
+        payload,
+        headers: { host: 'localhost:3000', origin: 'http://localhost:3000' },
+        remoteAddress: f.ip,
+      });
+    expect((await post('/auth/code', { purpose: 'sign_in', phone: f.phone })).statusCode).toBe(204);
+    const code = delivered
+      .filter((message) => message.to === f.email)
+      .at(-1)!
+      .text.match(/\b\d{6}\b/)![0];
+    const challenge = await post('/auth/code/verify', { purpose: 'sign_in', phone: f.phone, code });
+    expect(challenge.statusCode, challenge.body).toBe(202);
+    const holder = await database.pool.connect();
+    let recovery: ReturnType<typeof admin> | undefined, signIn: ReturnType<typeof post> | undefined;
+    try {
+      await holder.query('begin');
+      const {
+        rows: [{ pid }],
+      } = await holder.query('select pg_backend_pid() as pid');
+      await holder.query('select id from users where id=$1 for no key update', [f.id]);
+      const waitForQueued = async (total: number) =>
+        expect
+          .poll(async () =>
+            Number(
+              (
+                await database.pool.query(
+                  'with recursive blocked(pid) as (select $1::int union select a.pid from pg_stat_activity a join blocked b on b.pid=any(pg_blocking_pids(a.pid))) select count(*)-1 as total from blocked',
+                  [pid],
+                )
+              ).rows[0].total,
+            ),
+          )
+          .toBe(total);
+      recovery = admin(f, '', { ...p, confirmed: true });
+      await waitForQueued(1);
+      signIn = post('/auth/totp', { challengeId: challenge.json().challengeId, code: backupCode });
+      await waitForQueued(2);
+      await holder.query('commit');
+      const [recovered, attempt] = await Promise.all([recovery, signIn]);
+      expect(recovered.statusCode, recovered.body).toBe(201);
+      expect(attempt.statusCode, attempt.body).toBe(400);
+      expect(attempt.json().error.code).toBe('AUTH_TOTP_INVALID');
+      const sessions = await database.pool.query(
+        'select revoked_at from sessions where user_id=$1',
+        [f.id],
+      );
+      expect(sessions.rows).toHaveLength(2);
+      expect(sessions.rows.every((row) => row.revoked_at)).toBe(true);
+      expect((await state(f.id)).backup_code_hashes).toEqual([
+        app.get(TotpCredentials).hashBackup(f.id, backupCode),
+      ]);
+    } finally {
+      await holder.query('rollback');
+      holder.release();
+      await Promise.allSettled([recovery, signIn]);
+    }
+  });
+  it('queues new-store creation behind recovery and does not attach the earlier event to the later store', async () => {
+    const f = await fixture('support', false);
+    const p = await preview(f);
+    const users = app.get(UsersService);
+    const original = users.recoveryState.bind(users);
+    let release!: () => void,
+      started!: () => void,
+      recoveryPid = 0;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const began = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const spy = vi.spyOn(users, 'recoveryState').mockImplementationOnce(async (id) => {
+      const result = await original(id);
+      recoveryPid = await app
+        .get(AccountDatabase)
+        .inTransaction(
+          id,
+          async (tx) =>
+            (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid,
+        );
+      started();
+      await waiting;
+      return result;
+    });
+    const recovery = admin(f, '', { ...p, confirmed: true });
+    await began;
+    let completed = false;
+    const creating = app
+      .inject({
+        method: 'POST',
+        url: '/stores',
+        headers: { host: 'localhost:3000', origin: 'http://localhost:3000', cookie: f.cookies[0] },
+        payload: {
+          name: 'Concurrent recovery shop',
+          businessType: 'Clothing',
+          district: 'Dhaka',
+          howYouSell: ['social_media'],
+          customerListSize: '2000_to_10000',
+          planCode: 'growth',
+          billingCycle: 'yearly',
+        },
+      })
+      .then((result) => {
+        completed = true;
+        return result;
+      });
+    try {
+      await expect
+        .poll(
+          async () =>
+            completed ||
+            (
+              await database.pool.query(
+                'select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',
+                [recoveryPid],
+              )
+            ).rows[0].blocked,
+        )
+        .toBe(true);
+      expect(completed).toBe(false);
+      expect(
+        (await database.pool.query('select store_id from memberships where user_id=$1', [f.id]))
+          .rows,
+      ).toEqual([]);
+      release();
+      expect((await recovery).statusCode).toBe(201);
+      await creating;
+      expect(await recoveryRows(f.id)).toMatchObject({ history: 0 });
+      expect((await shop(f.cookies[0]!, '/me')).statusCode).toBe(401);
+    } finally {
+      release();
+      await Promise.allSettled([recovery, creating]);
+      spy.mockRestore();
+      const created = await database.pool.query(
+        'select store_id from memberships where user_id=$1',
+        [f.id],
+      );
+      storeIds.push(...created.rows.map((row) => row.store_id));
+    }
   });
   it('persists every recipient beyond one delivery batch and keeps canonical shop history', async () => {
     const f = await fixture();

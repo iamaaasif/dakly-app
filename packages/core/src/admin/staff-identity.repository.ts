@@ -26,9 +26,9 @@ export class StaffIdentityRepository {
             ...(contact.email ? [`email:${contact.email.toLowerCase()}`] : []),
           ]),
         ),
-      ].sort();
+      ];
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended('staff-identity:' || value,0)) from unnest(${sql.param(keys)}::text[]) value order by value`,
+        sql`select pg_advisory_xact_lock(hashtextextended('staff-identity:' || value,0)) from unnest(${sql.param(keys)}::text[]) value order by split_part(value,':',1),substr(value,strpos(value,':')+1)`,
       );
       return (
         await tx.execute<{ conflicts: boolean }>(sql`select

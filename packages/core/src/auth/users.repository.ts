@@ -9,7 +9,7 @@ import { accountRecoveries } from '@dakly/db/schema/account-recovery';
 import { users } from '@dakly/db/schema/auth';
 import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
 import { AccountDatabase } from '../platform/database/account-database';
-import { TenantDatabase } from '../platform/database/tenant-database';
+import { TenantDatabase, type Transaction } from '../platform/database/tenant-database';
 
 @Injectable()
 export class UsersRepository {
@@ -39,6 +39,7 @@ export class UsersRepository {
   ) {
     try {
       await this.database.inTransaction(userId, async (tx) => {
+        await this.lockIdentityContacts(tx, userId, changes.newPhone, changes.newEmail);
         await tx
           .update(users)
           .set({
@@ -77,7 +78,12 @@ export class UsersRepository {
 
   async lockAccount(userId: string): Promise<void> {
     await this.database.forUser(userId, (tx) =>
-      tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update').limit(1),
+      tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, userId))
+        .for('no key update')
+        .limit(1),
     );
   }
   async invalidateChallenges(userId: string) {
@@ -217,8 +223,9 @@ export class UsersRepository {
 
   async changeEmail(userId: string, email: string, now: Date): Promise<boolean> {
     try {
-      await this.database.forUser(userId, (tx) =>
-        tx
+      await this.database.forUser(userId, async (tx) => {
+        await this.lockIdentityContacts(tx, userId, undefined, email);
+        await tx
           .update(users)
           .set({
             email,
@@ -226,14 +233,32 @@ export class UsersRepository {
             securityVersion: sql`${users.securityVersion} + 1`,
             updatedAt: now,
           })
-          .where(eq(users.id, userId)),
-      );
+          .where(eq(users.id, userId));
+      });
       return true;
     } catch (error) {
       // The caller maps this known constraint conflict and rolls back the account action.
       if (this.isUniqueConflict(error, 'users_email_key')) return false;
       throw error;
     }
+  }
+
+  private async lockIdentityContacts(
+    tx: Transaction,
+    userId: string,
+    phone?: string,
+    email?: string,
+  ) {
+    // Contact UPDATE upgrades the user lock; take all trigger keys while FK checks can still finish.
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended('staff-identity:' || kind || ':' || value,0))
+      from (select distinct kind,value from users u cross join lateral (values
+        ('phone',case when u.phone_verified_at is not null then u.phone end),
+        ('email',case when u.email_verified_at is not null then lower(u.email::text) end),
+        ('phone',${phone ?? null}::text),('email',${email ?? null}::text)
+      ) contacts(kind,value) where u.id=${userId}::uuid and value is not null) identities
+      order by kind,value
+    `);
   }
 
   private isUniqueConflict(error: unknown, constraint: string): boolean {
@@ -277,6 +302,7 @@ export class UsersRepository {
   }
 
   async lockForSignIn(userId: string) {
+    // Serialize account decisions while allowing staff association foreign-key checks.
     const rows = await this.database.forUser(userId, (tx) =>
       tx
         .select({
@@ -297,7 +323,7 @@ export class UsersRepository {
         })
         .from(users)
         .where(eq(users.id, userId))
-        .for('update')
+        .for('no key update')
         .limit(1),
     );
     return rows[0];

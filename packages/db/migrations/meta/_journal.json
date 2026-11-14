@@ -295,6 +295,13 @@
       "when": 1794665126356,
       "tag": "0041_recovery_history_tenant_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794667106961,
+      "tag": "0042_recovery_snapshot_locking",
+      "breakpoints": true
     }
   ]
 }
