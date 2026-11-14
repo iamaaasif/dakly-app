@@ -62,7 +62,17 @@
     @apply bg-background font-sans text-base text-text antialiased;
   }
 
+  /* English content inside a Bangla section needs its original heading defaults. */
+  :lang(en) {
+    --text-lg--line-height: 1.75rem;
+    --text-xl--line-height: 2.125rem;
+    --text-2xl--line-height: 2.625rem;
+  }
+
   :lang(bn) {
+    --text-lg--line-height: 1.5;
+    --text-xl--line-height: 1.5;
+    --text-2xl--line-height: 1.5;
     line-height: 1.5;
   }
 }

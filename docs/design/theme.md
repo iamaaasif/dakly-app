@@ -47,7 +47,7 @@ Status badges pair each status text token with its matching soft fill (all excee
 
 ## Type
 
-Font: Inter, with `"Noto Sans Bengali"` next in the stack so Bangla AI output and customer names render well. Load both with `next/font`.
+Font: Inter, with `"Noto Sans Bengali"` next in the stack so Bangla AI output and customer names render well. Load both with `next/font`. Bangla-tagged content, including inherited language, uses 1.5 line height for heading defaults. Explicit leading must keep at least that minimum; larger unitless or fixed leading is preserved. Nested English content uses the original sizes and line heights below.
 
 | Token       | Size / line height | Weight | Use                                |
 | ----------- | ------------------ | ------ | ---------------------------------- |
