@@ -1,3 +1,4 @@
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthService } from './auth.service';
@@ -40,6 +41,7 @@ const service = new AuthService(
   } as unknown as SessionsService,
   { run: async (_id: string, work: () => Promise<unknown>) => work() } as AccountTransaction,
   { now: () => now } as Clock,
+  {} as AccountSecurityEventsService,
 );
 
 describe('AuthService completion gate', () => {

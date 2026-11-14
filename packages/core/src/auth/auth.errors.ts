@@ -1,6 +1,8 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
+  AUTH_INVALID_CREDENTIALS: { status: 401, message: 'The sign-in credentials are incorrect' },
+  AUTH_EMAIL_UNVERIFIED: { status: 403, message: 'Verify this email before signing in' },
   AUTH_ACCOUNT_EXISTS: { status: 409, message: 'This account already exists. Sign in instead' },
   AUTH_ACCOUNT_NOT_FOUND: { status: 404, message: 'No account has this verified sign-in method' },
   AUTH_CODE_INVALID: { status: 400, message: 'The code is incorrect or expired' },

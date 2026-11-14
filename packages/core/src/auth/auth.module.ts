@@ -1,3 +1,7 @@
+import { PasswordService } from './password.service';
+import { PasswordCredentials } from './password-credentials';
+import { PasswordController } from './password.controller';
+import { PasswordChangeController } from './password-change.controller';
 import { Module } from '@nestjs/common';
 import { CacheModule } from '../platform/cache/cache.module';
 import { EmailModule } from '../email/email.module';
@@ -15,8 +19,15 @@ import { SMS_DRIVER, createSmsDriver } from './sms-provider';
 
 @Module({
   imports: [CacheModule, UsersModule, SessionsModule, EmailModule, AccountSecurityEventsModule],
-  controllers: [AuthController, EmailChangeController],
+  controllers: [
+    AuthController,
+    EmailChangeController,
+    PasswordController,
+    PasswordChangeController,
+  ],
   providers: [
+    PasswordService,
+    PasswordCredentials,
     Clock,
     AuthService,
     EmailChangeService,

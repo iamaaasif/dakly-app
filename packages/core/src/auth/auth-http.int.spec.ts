@@ -79,10 +79,34 @@ describe('SMS authentication over Fastify', () => {
           keys.push(authKey('consumed', JSON.stringify([message.to, purpose, code])));
     }
     await app.get(ValkeyClient).connection.del(...keys);
+    await admin.pool.query('delete from account_security_events where user_id = any($1::uuid[])', [
+      identities.map((user) => user.id),
+    ]);
     await admin.db.delete(users).where(inArray(users.phone, phones));
     await admin.pool.end();
     await app?.close();
     vi.restoreAllMocks();
+  });
+  it('sets an initial Argon2id password only after consuming signup phone proof', async () => {
+    const input = registration();
+    await request('/auth/code', input);
+    const cached = await app
+      .get(ValkeyClient)
+      .connection.hgetall(authKey('code:sign_up', input.phone));
+    expect(JSON.stringify(cached)).not.toContain('initialpass1');
+    const response = await request('/auth/code/verify', {
+      purpose: 'sign_up',
+      phone: input.phone,
+      code: codeFor(input.phone),
+      password: 'initialpass1',
+    });
+    expect(response.statusCode).toBe(204);
+    const [user] = await admin.db.select().from(users).where(eq(users.phone, input.phone));
+    expect(user!.passwordHash).toMatch(/^\$argon2id\$v=19\$m=65536,t=3,p=4\$/);
+    expect(
+      (await request('/auth/password', { identifier: input.phone, password: 'initialpass1' }))
+        .statusCode,
+    ).toBe(204);
   });
   it('rejects an unknown sign-in phone without sending an SMS', async () => {
     const before = fake.messages.length;

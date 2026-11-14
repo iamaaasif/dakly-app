@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from '@dakly/db/uuid-v7';
 import type { Database } from '@dakly/db/client';
 import type { SignUpInput } from '@dakly/contracts/auth';
@@ -48,22 +48,62 @@ export class UsersRepository {
     return rows[0];
   }
 
-  async changeEmail(userId: string, email: string, now: Date): Promise<void> {
+  async hasUnverifiedEmail(email: string): Promise<boolean> {
+    const rows = await this.connection
+      .select({ exists: sql<boolean>`true` })
+      .from(users)
+      .where(and(eq(users.email, email), isNull(users.emailVerifiedAt)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  async changePassword(userId: string, passwordHash: string, now: Date): Promise<void> {
     await this.database.forUser(userId, (tx) =>
-      tx
-        .update(users)
-        .set({ email, emailVerifiedAt: now, updatedAt: now })
-        .where(eq(users.id, userId)),
+      tx.update(users).set({ passwordHash, updatedAt: now }).where(eq(users.id, userId)),
     );
   }
 
-  async create(userId: string, input: SignUpInput, now: Date): Promise<boolean> {
+  async changeEmail(userId: string, email: string, now: Date): Promise<boolean> {
+    try {
+      await this.database.forUser(userId, (tx) =>
+        tx
+          .update(users)
+          .set({ email, emailVerifiedAt: now, updatedAt: now })
+          .where(eq(users.id, userId)),
+      );
+      return true;
+    } catch (error) {
+      // The caller maps this known constraint conflict and rolls back the account action.
+      if (this.isEmailConflict(error)) return false;
+      throw error;
+    }
+  }
+
+  private isEmailConflict(error: unknown): boolean {
+    const cause = error instanceof Error && error.cause ? error.cause : error;
+    return (
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      cause.code === '23505' &&
+      'constraint' in cause &&
+      cause.constraint === 'users_email_key'
+    );
+  }
+
+  async create(
+    userId: string,
+    input: SignUpInput,
+    now: Date,
+    passwordHash?: string,
+  ): Promise<boolean> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx
         .insert(users)
         .values({
           id: userId,
           name: input.name,
+          passwordHash,
           phone: input.phone,
           email: input.email,
           phoneVerifiedAt: now,
@@ -87,6 +127,7 @@ export class UsersRepository {
           emailVerifiedAt: users.emailVerifiedAt,
           isDisabled: users.isDisabled,
           totpEnabledAt: users.totpEnabledAt,
+          passwordHash: users.passwordHash,
         })
         .from(users)
         .where(eq(users.id, userId))

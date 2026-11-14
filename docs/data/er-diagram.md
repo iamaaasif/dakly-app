@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0020_snapshot.json`: **85 tables, 1151 columns, 335 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0021_snapshot.json`: **85 tables, 1151 columns, 336 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 

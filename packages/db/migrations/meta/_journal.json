@@ -148,6 +148,13 @@
       "when": 1794626892258,
       "tag": "0020_verified_email_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794628212072,
+      "tag": "0021_unverified_email_lookup",
+      "breakpoints": true
     }
   ]
 }

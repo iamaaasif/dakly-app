@@ -60,6 +60,13 @@ export class SessionsService {
     return this.revokeSessions(userId, sessionId, true);
   }
 
+  async revokeAll(userId: string, ip: string): Promise<void> {
+    await this.transaction.run(userId, async () => {
+      await this.repository.revokeAll(userId, this.clock.now());
+      await this.events.record(userId, { event: 'sessions.revoked', actor: { kind: 'user' }, ip });
+    });
+  }
+
   async setActiveStore(userId: string, sessionId: string, storeId: string): Promise<void> {
     if (!(await this.team.accessFor(storeId, userId))) throw sessionError('STORE_NOT_FOUND');
     if (!(await this.repository.setActiveStore(userId, sessionId, storeId, this.clock.now())))

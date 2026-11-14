@@ -109,6 +109,15 @@ export class SessionsRepository {
     return rows.length > 0;
   }
 
+  async revokeAll(userId: string, now: Date): Promise<void> {
+    await this.account.forUser(userId, (tx) =>
+      tx
+        .update(sessions)
+        .set({ revokedAt: now })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt))),
+    );
+  }
+
   async setActiveStore(userId: string, id: string, storeId: string, now: Date): Promise<boolean> {
     const rows = await this.account.forUser(userId, (tx) =>
       tx

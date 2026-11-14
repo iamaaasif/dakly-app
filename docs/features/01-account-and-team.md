@@ -475,19 +475,20 @@ Adding or replacing an email requires a user session and an allowed origin:
    account's current verified phone. This explicitly proves phone control by SMS,
    even when normal sign-in prefers email. Purpose `email_change_proof` binds the
    account, phone and proposed email; a sign-in code cannot authorize this action.
-2. `POST /me/email` takes `email` and `proofCode`. It consumes that proof and sends
+2. `POST /me/email` takes `email` and either `proofCode` or `currentPassword`. It verifies that proof and sends
    an `add_email` code to the new address, bound to the account and address. The old
    verified email remains in place.
 3. `POST /me/email/verify` takes `email` and `code`. It consumes the code and locks
-   the user. The phone and its verification timestamp must still match, and the
+   the user. Phone proof must still match the phone and verification timestamp;
+   password proof must still match the current password state. The
    original proof must be less than ten minutes old. The email update and one
    `email.changed` account event commit together. No vendor call holds a database
    transaction. Audit failure rolls the email change back.
 
 Consumed proof cannot be reused for a second address or account. Resends and
-successful proof checks do not clear sign-in failures. ACC-10 must extend this
-same proof flow with password verification; this task provides no password bypass.
-Accounts without a verified phone cannot use this proof path yet.
+successful proof checks do not clear sign-in failures. Password proof uses this
+same flow and has the same ten-minute deadline. It permits email changes for an
+account with a password even when no verified phone is available.
 
 Migration `0020_verified_email_identity` makes email uniqueness conditional on
 `email_verified_at`. Multiple unverified signup values can coexist; they cannot
@@ -547,3 +548,50 @@ Account `details` accepts only optional `sessionId` and `recoveryId` UUIDs. IP a
 `AccountSecurityEventsService.list(userId, { limit, before? })` reads only that user's events, newest UUID v7 first. `limit` is 1–100 and `before` is an exclusive UUID cursor; both come from the history query contract. A future route must derive `userId` from its verified session, never a query or body. No store or membership is required. Import each audit module to use its exported service; repositories remain private to their feature.
 
 Account events are kept for two years. Their user and staff foreign keys block deletion while history remains. The owner-only bounded purge function is implemented; DB-7 will schedule it daily, as described in [jobs](../data/jobs.md#run-maintenance). Account deletion and staff deletion must honor this retention rather than cascade away history.
+
+## Passwords (ACC-10)
+
+`POST /auth/password` takes `identifier` (a normalized Bangladeshi phone or email),
+`password` and optional `isRemembered`. A wrong password, account without a password,
+or unknown account returns the same `401 AUTH_INVALID_CREDENTIALS`. An unverified
+email returns `403 AUTH_EMAIL_UNVERIFIED`; the existence check uses migration
+`0021_unverified_email_lookup` without choosing an account among repeated unverified
+values. A verified email owner always takes precedence.
+
+Passwords use Argon2id library defaults: 64 MiB memory, three iterations and
+parallelism four. New passwords contain 8–128 characters and an ASCII number;
+whitespace is preserved. Password and code failures use the same user and IP
+counters. Only completed sign-in clears the user counter. Password verification
+runs outside database locks, then `completeSignIn` locks the user and rechecks
+identifier ownership, current password state, disabled status and TOTP. A concurrent
+password replacement invalidates an already-verified old password. TOTP remains
+fail-closed pending ACC-7 and never receives a session from password first factor.
+
+Signup may include `password` in the `sign_up` request to `POST /auth/code/verify`.
+The client retains it until verification; neither the code request nor its Valkey
+grant contains a password. The server consumes phone proof before hashing, then
+creates the user, password audit and session in one account transaction. Code-only
+signup remains valid.
+
+`POST /me/password/proof` accepts an empty object and sends a separate fresh code
+to the verified email, or verified phone by SMS. `POST /me/password` takes the new
+`password` and exactly one of `currentPassword` or `proofCode`. The code purpose is
+`password_change_proof`, bound to the user and current identity. It supports setting
+a first password after code-only signup. The initial signup code cannot be reused.
+Changing a password records `password.changed`; existing sessions remain signed in.
+
+`POST /auth/password-reset` takes `identifier` and sends a `reset_password` code by
+the same email-first delivery rule. `/auth/password-reset/confirm` takes that
+identifier, `code`, new `password` and optional `isRemembered`. It checks the code's
+purpose, account, delivery identity, verification timestamps and password state
+under the account lock. Sign-in and password-change codes cannot reset a password.
+The password update, revocation of every old session and `password.changed` and
+`sessions.revoked` events commit atomically. Audit failure rolls them all back.
+Reset then calls the common sign-in gate; TOTP can refuse session issuance while
+the reset and old-session revocation remain committed. Later account and store
+requests with revoked cookies return 401; requests already authorized may finish.
+
+Email-change and password-code proof stores only domain-separated fingerprints
+of password and identity state, never an encoded password hash or raw password.
+Proof expires after ten minutes and cannot survive a password or relevant identity
+replacement. Account event details contain no credentials or personal values.

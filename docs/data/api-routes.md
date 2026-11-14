@@ -8,26 +8,27 @@ Merge requests carry a stable operation key through all retries, including retri
 
 ## Without a store session
 
-| Route                                                             | Notes                                                                              |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `POST /auth/code`                                                 | Send a sign-in code by SMS or email; rate limited per target and IP                |
-| `POST /auth/code/verify`                                          | Sign in or sign up with the code                                                   |
-| `POST /auth/email/code`, `POST /auth/email/code/verify`           | Public, allowed origin; sign in through verified email                             |
-| `POST /me/email/proof`, `POST /me/email`, `POST /me/email/verify` | Signed-in user, allowed origin; existing-phone proof then new-address verification |
-| `POST /auth/password`                                             | Sign in with phone or email and password                                           |
-| `POST /auth/google`                                               | Sign in with a Google ID token                                                     |
-| `POST /auth/password-reset`, `POST /auth/password-reset/confirm`  | By code                                                                            |
-| `POST /auth/sign-out`                                             | Ends the session                                                                   |
-| `GET /me`, `PATCH /me`                                            | Profile, sign-in methods                                                           |
-| `GET /me/stores`, `POST /me/active-store`                         | Store switcher (`stores_for_user`)                                                 |
-| `POST /stores`                                                    | Create a store (sign-up step)                                                      |
-| `POST /invites/accept`                                            | Accept a team invite by token                                                      |
-| `POST /webhooks/meta`, `POST /webhooks/whatsapp`                  | Signature checked against `req.rawBody`                                            |
-| `POST /webhooks/payments/:gateway`                                | Gateway notifications                                                              |
-| `GET /payments/callback/:gateway`                                 | Customer returns from the gateway                                                  |
-| `GET /public/stores/:storeSlug/order-link/:shortCode`             | Order and payment page for the customer                                            |
-| `POST /public/stores/:storeSlug/order-link/:shortCode/confirm`    | Customer confirms an order                                                         |
-| `GET /l/:code`                                                    | Tracked link redirect, or SMS opt-out page                                         |
+| Route                                                             | Notes                                                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `POST /auth/code`                                                 | Send a sign-in code by SMS or email; rate limited per target and IP                            |
+| `POST /auth/code/verify`                                          | Sign in or sign up with the code                                                               |
+| `POST /auth/email/code`, `POST /auth/email/code/verify`           | Public, allowed origin; sign in through verified email                                         |
+| `POST /me/email/proof`, `POST /me/email`, `POST /me/email/verify` | Signed-in user, allowed origin; existing-phone or password proof then new-address verification |
+| `POST /me/password/proof`, `POST /me/password`                    | Signed-in user, allowed origin; fresh code or current password                                 |
+| `POST /auth/password`                                             | Sign in with phone or email and password                                                       |
+| `POST /auth/google`                                               | Sign in with a Google ID token                                                                 |
+| `POST /auth/password-reset`, `POST /auth/password-reset/confirm`  | By code                                                                                        |
+| `POST /auth/sign-out`                                             | Ends the session                                                                               |
+| `GET /me`, `PATCH /me`                                            | Profile, sign-in methods                                                                       |
+| `GET /me/stores`, `POST /me/active-store`                         | Store switcher (`stores_for_user`)                                                             |
+| `POST /stores`                                                    | Create a store (sign-up step)                                                                  |
+| `POST /invites/accept`                                            | Accept a team invite by token                                                                  |
+| `POST /webhooks/meta`, `POST /webhooks/whatsapp`                  | Signature checked against `req.rawBody`                                                        |
+| `POST /webhooks/payments/:gateway`                                | Gateway notifications                                                                          |
+| `GET /payments/callback/:gateway`                                 | Customer returns from the gateway                                                              |
+| `GET /public/stores/:storeSlug/order-link/:shortCode`             | Order and payment page for the customer                                                        |
+| `POST /public/stores/:storeSlug/order-link/:shortCode/confirm`    | Customer confirms an order                                                                     |
+| `GET /l/:code`                                                    | Tracked link redirect, or SMS opt-out page                                                     |
 
 ## Store and team (01)
 

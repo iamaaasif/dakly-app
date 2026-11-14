@@ -1,3 +1,5 @@
+import { hash, argon2id } from 'argon2';
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   RequestCodeInput,
@@ -12,6 +14,7 @@ import { Clock } from '../platform/clock';
 import { UsersRepository } from './users.repository';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { passwordState } from './password-credentials';
 import { authError } from './auth.errors';
 
 export type SignInRequest = { ip: string; userAgent?: string; isRemembered: boolean };
@@ -21,7 +24,9 @@ export type SignInUser = {
   target: string;
   kind?: 'email';
   deliveryEmail?: string;
+  passwordState?: string;
   registration?: SignUpInput;
+  registrationPasswordHash?: string;
 };
 
 @Injectable()
@@ -33,6 +38,7 @@ export class AuthService {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AccountTransaction) private readonly transaction: AccountTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
   ) {}
 
   async requestCode(input: RequestCodeInput, ip: string): Promise<void> {
@@ -59,7 +65,14 @@ export class AuthService {
       if (user) throw authError('AUTH_ACCOUNT_EXISTS');
       if (!grant.registration) throw authError('AUTH_CODE_INVALID');
       return this.completeSignIn(
-        { id: this.users.allocateId(), target: input.phone, registration: grant.registration },
+        {
+          id: this.users.allocateId(),
+          target: input.phone,
+          registration: grant.registration,
+          registrationPasswordHash: input.password
+            ? await hash(input.password, { type: argon2id })
+            : undefined,
+        },
         request,
       );
     }
@@ -102,15 +115,32 @@ export class AuthService {
     const result = await this.transaction.run(user.id, async () => {
       if (
         user.registration &&
-        !(await this.users.create(user.id, user.registration, this.clock.now()))
+        !(await this.users.create(
+          user.id,
+          user.registration,
+          this.clock.now(),
+          user.registrationPasswordHash,
+        ))
       )
         throw authError('AUTH_ACCOUNT_EXISTS');
       const current = await this.users.lockForSignIn(user.id);
-      if (!current) throw authError('AUTH_CODE_INVALID');
+      if (!current)
+        throw authError(user.passwordState ? 'AUTH_INVALID_CREDENTIALS' : 'AUTH_CODE_INVALID');
       this.assertIdentity(user, current);
+      if (
+        user.passwordState &&
+        user.passwordState !== passwordState(current.id, current.passwordHash)
+      )
+        throw authError('AUTH_INVALID_CREDENTIALS');
       if (current.isDisabled) throw authError('AUTH_DISABLED');
       // ACC-7 replaces this refusal with the challenge; no first factor may bypass it.
       if (current.totpEnabledAt) throw authError('AUTH_SECOND_FACTOR_REQUIRED');
+      if (user.registrationPasswordHash)
+        await this.events.record(user.id, {
+          event: 'password.changed',
+          actor: { kind: 'user' },
+          ip: request.ip,
+        });
       await this.users.signedIn(user.id, this.clock.now());
       return this.sessions.create(user.id, request);
     });
@@ -125,7 +155,7 @@ export class AuthService {
     const verifiedEmail = current.emailVerifiedAt ? current.email?.toLowerCase() : undefined;
     const identifier = user.kind === 'email' ? verifiedEmail : current.phone;
     if (identifier !== user.target || (user.deliveryEmail && verifiedEmail !== user.deliveryEmail))
-      throw authError('AUTH_CODE_INVALID');
+      throw authError(user.passwordState ? 'AUTH_INVALID_CREDENTIALS' : 'AUTH_CODE_INVALID');
   }
 
   private subject(target: string, userId?: string, email?: string | null): SignInSubject {
