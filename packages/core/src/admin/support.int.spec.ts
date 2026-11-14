@@ -309,6 +309,49 @@ afterAll(async () => {
   vi.unstubAllEnvs();
 });
 describe('Owner-approved support through Fastify and app-role PostgreSQL', () => {
+  it('limits cross-store staff metadata to approved fields and current authorized staff', async () => {
+    const first = await fixture(),
+      second = await fixture(),
+      finance = await fixture('finance');
+    const firstGrant = await request(first),
+      secondGrant = await request(second);
+    const targets = await admin(first, `/admin/support/targets?query=${second.storeId}`);
+    expect(targets.statusCode, targets.body).toBe(200);
+    expect(targets.json()).toEqual([{ id: second.storeId, name: 'Support shop' }]);
+    const allowed = [
+      'id',
+      'staffName',
+      'isBreakGlass',
+      'scopes',
+      'access',
+      'status',
+      'reason',
+      'durationMinutes',
+      'requestedAt',
+      'expiresAt',
+    ].sort();
+    for (const [actor, id] of [
+      [first, firstGrant],
+      [second, secondGrant],
+    ] as const) {
+      const listed = await admin(actor, '/admin/support');
+      expect(listed.statusCode, listed.body).toBe(200);
+      expect(listed.json().items).toHaveLength(1);
+      expect(listed.json().items[0]).toMatchObject({
+        id,
+        status: 'requested',
+        scopes: ['customers'],
+        access: 'write',
+      });
+      expect(Object.keys(listed.json().items[0]).sort()).toEqual(allowed);
+      expect(listed.json().nextCursor).toBeNull();
+    }
+    for (const url of ['/admin/support', `/admin/support/targets?query=${second.storeId}`]) {
+      expect((await admin(finance, url)).statusCode).toBe(403);
+      expect((await admin({ ...first, staffCookie: first.ownerCookie }, url)).statusCode).toBe(401);
+    }
+  });
+
   it('requires current Owner/session and request-bound one-use SMS proof, truthfully attributes consent', async () => {
     const f = await fixture();
     const id = await request(f);

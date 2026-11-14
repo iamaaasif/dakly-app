@@ -908,3 +908,14 @@ support” with its date and reason type. It works without an active shop. ACC-8
 the rest of the Security screen; the full Owner audit page remains ACC-13. See the
 [admin feature](12-admin-panel.md#adm-10-implementation) for recovery proof, notification
 and operational bounds.
+
+### Cross-store API coverage
+
+ACC-15 inventories the running Fastify application and requires fixtures for all shop routes,
+including Owner support grants and recovery history. Customers, members, roles, store settings
+and ownership transfers have authorized positive controls, indistinguishable foreign/missing-id
+404 responses, separate list data, and unchanged foreign rows after failed writes. Transfer
+acceptance uses its named recipient. Support customer operations establish an approved grant
+and support session first. Account-only and staff routes remain explicit, separately tested
+boundaries. RLS and repository predicates are tested independently; see
+[the testing rules](../rules/testing.md#store-route-isolation).

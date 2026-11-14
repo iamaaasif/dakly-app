@@ -132,6 +132,9 @@ importers:
         specifier: ^7.8.0
         version: 7.8.2
     devDependencies:
+      '@dakly/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@nestjs/cli':
         specifier: ^11.0.0
         version: 11.0.24(@types/node@22.20.5)(esbuild@0.28.2)(prettier@3.10.1)

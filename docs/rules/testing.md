@@ -18,3 +18,23 @@ Rules:
 - A bug fix starts with a failing test.
 
 Commands: `pnpm test` (unit), `pnpm test:int` (needs `DATABASE_URL` and `DATABASE_ADMIN_URL`, see README).
+
+## Store route isolation
+
+`apps/api/test/cross-store.int.spec.ts` boots the production API module with its full guard chain.
+Its Fastify route inventory requires an executable fixture for every shop route; account,
+public and staff routes have exact entries with their owning boundary tests in
+`isolation-boundaries.ts`. Generated HEAD routes share the GET fixture only when Fastify
+uses the identical handler and its HEAD response hook. A separate HEAD handler needs a fixture.
+
+Each tenant fixture proves a successful authorized action before testing foreign ids against
+missing ids, nonempty lists in both shops, and unchanged foreign rows after writes. Ownership
+acceptance uses the named recipient; support reads and writes use approved grants. Authorization
+errors are separate checks and never prove tenant isolation. Routes without a resource id prove
+that the session chooses the store for reads and writes.
+
+The API uses `dakly_app` with RLS. Direct reads without store predicates prove the policies;
+a disposable relation proves the assertions reject both extra foreign rows and missing own rows.
+Each feature's `owner-filters.int.spec.ts` separately uses `DATABASE_ADMIN_URL` to test repository
+predicates without RLS assistance. Only fixture rows are cleaned up. CI runs both through the
+existing `pnpm test:int` command.
