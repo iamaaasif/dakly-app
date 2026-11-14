@@ -249,7 +249,7 @@ export class MembersService {
       throw teamError('TEAM_SEATS_FULL');
   }
   private async assertNotActive(storeId: string, input: InviteMemberInput): Promise<void> {
-    const identity = await this.users.verifiedRecipient(input);
+    const identity = await this.users.verifiedRecipient(storeId, input);
     if (identity && (await this.repository.forUser(storeId, identity))?.status === 'active')
       throw teamError('MEMBER_ALREADY_ACTIVE');
   }

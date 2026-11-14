@@ -14,6 +14,7 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../platform/database/database.module';
+import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
 import { SessionsService } from '../sessions/sessions.service';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
@@ -144,6 +145,45 @@ describe('team membership over Fastify and Postgres', () => {
     expect(page.json().nextCursor).toBeTruthy();
     expect(JSON.stringify(page.json())).not.toContain('inviteTokenHash');
     await request(`/members/${result.id}`, {}, owner.cookie, 'DELETE');
+  });
+  it('creates an invitation without a second checkout while holding the store transaction', async () => {
+    const isolated = await NestFactory.create<NestFastifyApplication>(
+      TestModule,
+      new FastifyAdapter(),
+      { logger: false },
+    );
+    const connection = isolated.get<ReturnType<typeof createDatabase>>(DATABASE_CONNECTION);
+    connection.pool.options.max = 1;
+    connection.pool.options.connectionTimeoutMillis = 250;
+    try {
+      await registerSessionCookies(isolated);
+      isolated.useGlobalFilters(new AppErrorFilter());
+      await isolated.init();
+      await isolated.getHttpAdapter().getInstance().ready();
+      const target = phone();
+      const response = await isolated.inject({
+        method: 'POST',
+        url: '/members/invites',
+        headers: { origin: 'http://localhost:3000', cookie: owner.cookie },
+        payload: { phone: target, builtInRole: 'support_agent' },
+        remoteAddress: `2001:db8::${randomInt(1, 65535).toString(16)}`,
+      });
+      expect(response.statusCode).toBe(201);
+      expect(connection.pool.totalCount).toBe(1);
+      const [saved] = await admin.db
+        .select()
+        .from(memberships)
+        .where(eq(memberships.id, response.json().id));
+      expect(saved).toMatchObject({ storeId, status: 'invited', invitePhone: target });
+      const audit = await admin.pool.query('select action from audit_log where entity_id = $1', [
+        saved!.id,
+      ]);
+      expect(audit.rows).toEqual([{ action: 'member.invited' }]);
+      expect(tokenFor(target)).toMatch(/^[a-f0-9]{64}$/);
+      await request(`/members/${saved!.id}`, {}, owner.cookie, 'DELETE');
+    } finally {
+      await isolated.close();
+    }
   });
   it('accepts into a second store, rejects token reuse and observes removal on the next request', async () => {
     const other = await shop();

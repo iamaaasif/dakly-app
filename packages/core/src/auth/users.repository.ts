@@ -28,16 +28,22 @@ export class UsersRepository {
       .limit(100);
   }
 
-  async verifiedRecipient(input: { phone?: string; email?: string }): Promise<string | undefined> {
-    const [row] = await this.connection
-      .select({ id: users.id })
-      .from(users)
-      .where(
-        input.phone
-          ? and(eq(users.phone, input.phone), isNotNull(users.phoneVerifiedAt))
-          : and(eq(users.email, input.email!), isNotNull(users.emailVerifiedAt)),
-      )
-      .limit(1);
+  async verifiedRecipient(
+    storeId: string,
+    input: { phone?: string; email?: string },
+  ): Promise<string | undefined> {
+    // Invitation checks reuse the store action's connection while it holds the row lock.
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          input.phone
+            ? and(eq(users.phone, input.phone), isNotNull(users.phoneVerifiedAt))
+            : and(eq(users.email, input.email!), isNotNull(users.emailVerifiedAt)),
+        )
+        .limit(1),
+    );
     return row?.id;
   }
 
