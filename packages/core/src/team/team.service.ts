@@ -22,6 +22,14 @@ export class TeamService {
     return permissions.success ? { role: 'custom', ...permissions.data } : undefined;
   }
 
+  lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {
+    return this.repository.lockAndFindOwnedStore(storeId, userId);
+  }
+
+  addOwner(storeId: string, userId: string): Promise<void> {
+    return this.repository.addOwner(storeId, userId);
+  }
+
   storesFor(userId: string) {
     return this.repository.storesFor(userId);
   }

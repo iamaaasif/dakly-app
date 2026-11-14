@@ -437,6 +437,38 @@ Their failure history is retained. ACC-7 must add its challenge inside the commo
 completion path; no sign-in method may issue a session before that factor passes.
 Email/password and Google sign-in remain ACC-9, ACC-10 and ACC-11.
 
+## Store creation (ACC-16)
+
+`GET /plans` is public. It returns `{ plans, recommendations }`: public base plans,
+ordered by catalogue position, with both prices in poisha, trial days and limits.
+Customer size recommends Starter for the first two ranges, Growth for 2,000–10,000,
+and Pro above 10,000. Prices and trial lengths come from the catalogue on every read.
+
+`POST /stores` requires a signed-in user and an allowed origin. It takes `name`,
+`businessType`, `district`, `howYouSell`, `customerListSize`, `planCode` and
+`billingCycle` (`monthly` or `yearly`). A new store returns 201 with its `id`, `name`,
+`slug` and `extensions`. The slug is generated from the store UUID. The request
+cannot choose a store id.
+
+Under Q3, an account can own one store. Creation takes a user advisory lock and
+checks `stores_for_user` for an Owner membership inside the new-store transaction,
+before any writes. Store details, counter, Owner, subscription and `store.created`
+audit record commit together. A parallel request or retry returns the owned store
+with 200 and leaves its details and plan unchanged. Being staff in another store
+does not prevent creating an owned store.
+
+Social media enables Sales, Chats and Social Auto Post. Online store enables Sales.
+Shop answers are recorded but do not enable Physical Shop in release 1. Core is
+implicit. Plan selection uses the chosen cycle's catalogue price: zero starts an
+active plan without a trial; a paid price starts a trial for the current trial days.
+A paid plan with zero trial days returns `409 PLAN_NEEDS_PAYMENT` until PAY-7 adds
+checkout. Hidden plans and add-ons cannot be selected.
+
+Session activation is a separate write after commit. If it fails, the store stays
+created. Retrying `POST /stores` or calling `POST /me/active-store` recovers. The retry
+leaves the generated tenant scope before reading the owned store or activating it.
+The onboarding screens and setup checklist remain separate tasks.
+
 ## Open questions
 
 Q3 (extra stores), Q11 (organisation above stores).

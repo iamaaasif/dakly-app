@@ -338,9 +338,19 @@ Billing (flow A): subscription status `trialing`, `active`, `past_due`, `read_on
 
 Plan catalogue (PAY-10): `plans.trial_days` is 0 to 90; 0 means no trial. The one-time catalogue migration starts Free at 0 and Starter, Growth and Pro at 14 days. For an existing code it changes only a trial length still at 0. Later admin edits stay. Prices and allowances remain placeholders until Q1. The development seed uses these trial lengths too.
 
+ACC-16 implements `BillingService.startPlan` inside store creation. It accepts only
+public base plans and snapshots the selected monthly or yearly price. Zero price
+starts active with no trial, even if the plan has trial days. A paid price with trial
+days starts trialing; its trial and current period end at creation time plus that
+many UTC days. A paid price without a trial returns `409 PLAN_NEEDS_PAYMENT` until
+PAY-7 adds checkout. Free periods end one calendar month or year later, clamped to
+the last day of that month. Later catalogue edits affect new subscriptions only;
+existing trial end dates and agreed prices stay unchanged. No vendor is called
+inside the store transaction.
+
 Coupons carry `duration` (`once`, `months`, `forever`). `duration_months` is required only for `months`, from 1 to 36. Existing coupons default to `once`. Subscriptions carry `coupon_id` and `coupon_ends_at`; forever has no end time. The discount and duration cannot change after the first redemption; staff create a new coupon instead. The database rejects those edits and decreases to the lifetime redemption count.
 
-Coupon billing rules for PAY-7: once discounts the first paid invoice, then detaches. Months discounts each paid invoice whose period starts before redemption time plus N calendar months (`coupon_ends_at`). A yearly plan with a three-month coupon gets one discounted year. A failed and retried invoice remains one invoice and one redemption. PAY-10 adds storage and contracts only; trial creation (ACC-16), redemption, expiry and invoice consumers (PAY-7) remain planned.
+Coupon billing rules for PAY-7: once discounts the first paid invoice, then detaches. Months discounts each paid invoice whose period starts before redemption time plus N calendar months (`coupon_ends_at`). A yearly plan with a three-month coupon gets one discounted year. A failed and retried invoice remains one invoice and one redemption. PAY-10 adds storage and contracts only; redemption, expiry and invoice consumers (PAY-7) remain planned.
 
 Usage: every billable thing goes through `UsageService.consume(storeId, unit, quantity, reference)`, which checks the allowance, then top-ups, and writes a usage event unique on reference. Units: `ai_conversation`, `ai_content`, `ai_ask`, `sms_credit`, `whatsapp_poisha`. 80% and 100% thresholds notify once per period.
 

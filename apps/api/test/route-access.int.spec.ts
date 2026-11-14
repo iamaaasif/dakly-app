@@ -31,6 +31,8 @@ describe('API route access rules', () => {
         'AuthController.requestCode',
         'AuthController.verifyCode',
         'CustomersController.getById',
+        'StoresController.create',
+        'PlansController.list',
       ]),
     );
   });

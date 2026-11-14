@@ -13,6 +13,24 @@ export class TeamRepository {
     @Inject(DATABASE) private readonly database: Database,
   ) {}
 
+  async lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {
+    return this.tenant.forStore(storeId, async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${userId}, 0))`);
+      const result = await tx.execute<{ storeId: string }>(
+        sql`select store_id as "storeId" from stores_for_user(${userId}::uuid) where built_in_role = 'owner' limit 1`,
+      );
+      return result.rows[0]?.storeId;
+    });
+  }
+
+  async addOwner(storeId: string, userId: string): Promise<void> {
+    await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .insert(memberships)
+        .values({ storeId, userId, builtInRole: 'owner', status: 'active', joinedAt: sql`now()` }),
+    );
+  }
+
   async findAccess(storeId: string, userId: string) {
     const rows = await this.tenant.forStore(storeId, (tx) =>
       tx

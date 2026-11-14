@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { billingCycles } from './billing';
 
 // Allowed values for the stores and team tables. The database CHECK constraints are built
 // from these lists, so the API, the web app and Postgres accept exactly the same values.
@@ -29,3 +30,15 @@ export const notificationPreferencesSchema = z.strictObject({
   digest: z.enum(['off', 'daily', 'weekly']).default('daily'),
 });
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
+
+export const createStoreSchema = z.strictObject({
+  name: z.string().trim().min(1).max(100),
+  businessType: z.string().trim().min(1).max(100),
+  district: z.string().trim().min(1).max(100),
+  howYouSell: z.array(z.enum(howYouSellOptions)).min(1).max(4),
+  customerListSize: z.enum(customerListSizes),
+  planCode: z.string().trim().min(1).max(100),
+  billingCycle: z.enum(billingCycles),
+});
+export type CreateStoreInput = z.infer<typeof createStoreSchema>;
+export type StoreResponse = { id: string; name: string; slug: string | null; extensions: string[] };
