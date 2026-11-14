@@ -42,12 +42,18 @@ export class SecurityNoticesService {
   async dispatch(userId?: string) {
     try {
       const notices = await this.repository.claim(userId);
-      await Promise.all(notices.map((notice) => this.deliver(notice)));
+      const deliveries = await Promise.allSettled(notices.map((notice) => this.deliver(notice)));
+      for (const delivery of deliveries)
+        if (delivery.status === 'rejected') this.reportDispatchError(delivery.reason);
     } catch (error) {
-      this.reportJobError(error);
-      this.logger.error({ event: 'security' }, 'Account security notice polling failed');
+      this.reportDispatchError(error);
     }
   }
+  private reportDispatchError(error: unknown) {
+    this.reportJobError(error);
+    this.logger.error({ event: 'security' }, 'Account security notice polling failed');
+  }
+
   private reportJobError(error: unknown) {
     const { jobId } = jobLogBindings();
     if (jobId) this.reporter.reportJob(serializeError(error), jobId);
