@@ -324,7 +324,7 @@ ACC-5 serves `GET /members`, `POST /members/invites`,
 Team View reads the list; Team Edit manages members. An invite takes exactly one
 normalized `phone` or `email`, and exactly one `builtInRole` or same-store `roleId`.
 No ordinary membership action can invite, remove or change the Owner. Assignments
-must fit the actor's current grants. Custom-role creation remains ACC-17.
+must fit the actor's current grants.
 
 The list includes active members and pending invitations, including expired invitations
 that can be resent. It returns `{ items, nextCursor, seats: { used, limit } }`, with
@@ -375,6 +375,29 @@ SMS remains fail-closed until ACC-14 supplies a provider; Mailpit checks do not 
 live SMS or SendGrid delivery.
 
 Roles: four built-in roles live in code, `team/built-in-roles.ts` (Shop counter staff is added in release 2). Custom roles are rows per store. A role maps each area to `none`, `view` or `edit`, plus the flags `seeFullPhone`, `exportLists`, `refund`. One pure function, `team/permissions.ts`, answers "can this member do this", and is unit-tested against the role table.
+
+ACC-17 serves `GET /roles` with Team View, and `POST /roles`,
+`PATCH /roles/:roleId`, `DELETE /roles/:roleId` with Team Edit. Create takes
+`{ name, permissions }`; names are trimmed and limited to 60 characters. A patch
+changes the name, replaces the complete permission object, or both. The resulting
+permissions must fit the actor's grants even for a rename. Custom roles never grant
+Billing Edit or other Owner actions. Ordinary self-assignment is allowed when the
+grant rule permits it; it cannot grant Owner powers.
+
+The role list returns `{ items, nextCursor, builtInRoles }`. Custom items have
+`id`, `name` and `permissions`; the separate built-in metadata has `builtInRole`
+and `permissions`, with no editable database ID. Custom roles are ordered by ID
+using the `(store_id, id)` index, default to 50 per page and accept at most 100.
+The cursor is the last role ID in this store; a missing or foreign cursor returns
+an empty custom page. Built-in metadata accompanies every page.
+
+Role mutations share the membership store lock and commit `role.created`,
+`role.changed` or `role.deleted` audit events in the same transaction. Duplicate
+names within a store return `409 ROLE_NAME_EXISTS`. Missing or foreign roles
+return `404 ROLE_NOT_FOUND`. Deletion returns `409 ROLE_IN_USE` for any membership
+reference, including pending, expired or removed memberships, preserving membership
+history. Editing a role changes every assigned member's access on their next
+request; already authorized requests may finish.
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
 

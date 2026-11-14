@@ -1,3 +1,6 @@
+import { RolesController } from './roles.controller';
+import { RolesService } from './roles.service';
+import { RolesRepository } from './roles.repository';
 import { TeamRepository } from './team.repository';
 import { TeamService } from './team.service';
 import { Module } from '@nestjs/common';
@@ -20,9 +23,11 @@ import { INVITE_ORIGIN, InviteDelivery } from './invite-delivery';
 
 @Module({
   imports: [UsersModule, BillingModule, AuditModule, SmsModule, EmailModule, CacheModule],
-  controllers: [MembersController, InvitesController],
+  controllers: [MembersController, InvitesController, RolesController],
   providers: [
     Clock,
+    RolesService,
+    RolesRepository,
     MembersRepository,
     MembersService,
     InviteDelivery,

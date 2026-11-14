@@ -79,3 +79,25 @@ export type MemberListResponse = {
   nextCursor: string | null;
   seats: { used: number; limit: number };
 };
+
+const roleNameSchema = z.string().trim().min(1).max(60);
+export const createRoleSchema = z.strictObject({
+  name: roleNameSchema,
+  permissions: customRolePermissionsSchema,
+});
+export const changeRoleSchema = createRoleSchema
+  .partial()
+  .refine(
+    (input) => input.name !== undefined || input.permissions !== undefined,
+    'Provide a name or permissions',
+  );
+export const roleListQuerySchema = z.strictObject(memberListQuerySchema.shape);
+export type CreateRoleInput = z.infer<typeof createRoleSchema>;
+export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
+export type RoleListQuery = z.infer<typeof roleListQuerySchema>;
+export type RoleResponse = { id: string; name: string; permissions: RolePermissions };
+export type RoleListResponse = {
+  items: RoleResponse[];
+  nextCursor: string | null;
+  builtInRoles: { builtInRole: BuiltInRole; permissions: RolePermissions }[];
+};

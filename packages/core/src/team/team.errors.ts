@@ -1,6 +1,8 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const TEAM_ERRORS = {
+  ROLE_IN_USE: { status: 409, message: 'This role is still assigned to a membership' },
+  ROLE_NAME_EXISTS: { status: 409, message: 'A role with this name already exists' },
   MEMBER_NOT_FOUND: { status: 404, message: 'Member not found' },
   ROLE_NOT_FOUND: { status: 404, message: 'Role not found' },
   TEAM_ROLE_DENIED: { status: 403, message: 'This role change is not allowed' },
