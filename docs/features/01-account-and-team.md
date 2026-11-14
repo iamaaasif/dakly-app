@@ -797,3 +797,29 @@ the stored selection and retains business data. Background job consumers do
 not exist yet; each feature must check its extension before running work when
 those consumers are built. Menu visibility and hidden-page redirects belong
 to the later web tasks. Store switching already uses ACC-3's account routes.
+
+### Secret encryption boundary (DB-4)
+
+`platform/crypto/EnvelopeEncryption` accepts a typed owner and purpose plus secret
+bytes. It returns `{ ciphertext, keyVersion }` for the existing bytea and smallint
+columns. User TOTP uses `{ owner: 'user', userId, purpose: 'totp' }`; users do not
+belong to one store. Store purposes are `channel-access-token`,
+`payment-gateway-credentials` and `bkash-agreement`. Staff TOTP needs its own
+context when ADM-1 implements it.
+
+Every write generates a random 32-byte data key. AES-256-GCM encrypts the secret
+with that key and wraps the key with the selected master key. Both operations
+authenticate the owner, purpose, format and key version. Changing any byte or
+decrypting with another context, unavailable version or wrong key fails with a
+secret-free error. Previously configured versions remain readable after rotation.
+
+Envelope format 1 is binary: one format byte, 12-byte wrapping nonce, 16-byte
+wrapping tag, 32-byte wrapped key, 12-byte data nonce, 16-byte data tag, then the
+secret ciphertext. Secrets are limited to 16 KiB, giving at most 16,473 stored
+bytes. The master key version is stored separately and authenticated in both
+layers. No key table or schema change is needed.
+
+ACC-7 must import `CryptoModule` before storing TOTP secrets. The module requires
+keys at startup; DB-4 does not yet import it into the API or worker. Supplied
+configuration is always validated by `loadEnv`, even before a consumer exists.
+See [security rules](../rules/security.md) for configuration and rotation.

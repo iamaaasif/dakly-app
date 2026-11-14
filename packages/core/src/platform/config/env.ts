@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseEncryptionConfiguration, type EncryptionConfiguration } from './encryption-config';
 import { redisUrlSchema } from '../queue/redis-connection';
 
 const envSchema = z.object({
@@ -22,7 +23,7 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = z.infer<typeof envSchema> & { encryption: EncryptionConfiguration | undefined };
 
 // Fails at startup, not at the first request, when a variable is missing.
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -34,5 +35,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error('Fake Google identity is not allowed in production');
   if (env.GOOGLE_IDENTITY_DRIVER === 'google' && !env.GOOGLE_CLIENT_ID)
     throw new Error('GOOGLE_CLIENT_ID is required for Google identity');
-  return env;
+  return {
+    ...env,
+    encryption: parseEncryptionConfiguration(
+      source.ENCRYPTION_CURRENT_KEY_VERSION,
+      source.ENCRYPTION_MASTER_KEYS,
+    ),
+  };
 }

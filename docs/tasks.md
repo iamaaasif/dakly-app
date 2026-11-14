@@ -26,7 +26,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done      |             | #6  | Done in DB-5; `customers` goes with CUS-1                        |
 | DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Todo      | DB-5        |     | Table in DB-5; relay and helper left                             |
 | DB-3  | Store and account audit services                                                         | In review | DB-5, REV-4 | #12 | Atomic audit writes and account retention; [plan](plans/core.md) |
-| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Todo      |             |     | Needed by ACC-7; [plan](plans/core.md)                           |
+| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | In review |             |     | Needed by ACC-7; [plan](plans/core.md)                           |
 | DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done      |             | #6  | [data/](data/README.md); [review fixes](data/review-fixes.md)    |
 | DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo      | DB-5        |     |                                                                  |
 | DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo      | DB-5        |     | [growth.md](data/growth.md); all-store rollups                   |
