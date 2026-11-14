@@ -17,6 +17,7 @@ Merge requests carry a stable operation key through all retries, including retri
 | `POST /me/password/proof`, `POST /me/password`                    | Signed-in user, allowed origin; fresh code or current password                                 |
 | `POST /auth/password`                                             | Sign in with phone or email and password                                                       |
 | `POST /auth/google`                                               | Sign in with a Google ID token                                                                 |
+| `POST /auth/google/email/verify`                                  | Confirm fresh mailbox ownership for a pending Google identity                                  |
 | `POST /auth/password-reset`, `POST /auth/password-reset/confirm`  | By code                                                                                        |
 | `POST /auth/sign-out`                                             | Ends the session                                                                               |
 | `GET /me`, `PATCH /me`                                            | Profile, sign-in methods                                                                       |

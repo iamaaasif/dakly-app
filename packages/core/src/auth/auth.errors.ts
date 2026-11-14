@@ -1,6 +1,11 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
+  AUTH_GOOGLE_CONFLICT: { status: 409, message: 'This Google identity cannot be linked' },
+  AUTH_GOOGLE_TICKET_INVALID: {
+    status: 400,
+    message: 'The Google verification has expired or was already used',
+  },
   AUTH_INVALID_CREDENTIALS: { status: 401, message: 'The sign-in credentials are incorrect' },
   AUTH_EMAIL_UNVERIFIED: { status: 403, message: 'Verify this email before signing in' },
   AUTH_ACCOUNT_EXISTS: { status: 409, message: 'This account already exists. Sign in instead' },

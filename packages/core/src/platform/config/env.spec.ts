@@ -35,3 +35,15 @@ describe('SMS driver configuration', () => {
     expect(() => loadEnv({ ...base, SMS_DRIVER: 'unavailable' })).toThrow();
   });
 });
+
+describe('Google identity configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+  it('refuses fake Google identity in production', () => {
+    expect(() =>
+      loadEnv({ ...base, NODE_ENV: 'production', GOOGLE_IDENTITY_DRIVER: 'fake' }),
+    ).toThrow();
+  });
+  it('requires an audience for the real Google verifier', () => {
+    expect(() => loadEnv({ ...base, GOOGLE_IDENTITY_DRIVER: 'google' })).toThrow();
+  });
+});

@@ -1,3 +1,5 @@
+import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+import { GoogleTickets } from './google-tickets';
 import { hash, argon2id } from 'argon2';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Inject, Injectable } from '@nestjs/common';
@@ -27,6 +29,11 @@ export type SignInUser = {
   passwordState?: string;
   registration?: SignUpInput;
   registrationPasswordHash?: string;
+  google?: {
+    identity: GoogleIdentity;
+    mode: 'subject' | 'link' | 'signup';
+    expectedEmailVerifiedAt?: string;
+  };
 };
 
 @Injectable()
@@ -39,6 +46,7 @@ export class AuthService {
     @Inject(AccountTransaction) private readonly transaction: AccountTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
+    @Inject(GoogleTickets) private readonly googleTickets: GoogleTickets,
   ) {}
 
   async requestCode(input: RequestCodeInput, ip: string): Promise<void> {
@@ -64,17 +72,7 @@ export class AuthService {
     if (input.purpose === 'sign_up') {
       if (user) throw authError('AUTH_ACCOUNT_EXISTS');
       if (!grant.registration) throw authError('AUTH_CODE_INVALID');
-      return this.completeSignIn(
-        {
-          id: this.users.allocateId(),
-          target: input.phone,
-          registration: grant.registration,
-          registrationPasswordHash: input.password
-            ? await hash(input.password, { type: argon2id })
-            : undefined,
-        },
-        request,
-      );
+      return this.register(input, grant.registration, request);
     }
     if (!user || grant.userId !== user.id) throw authError('AUTH_CODE_INVALID');
     return this.completeSignIn(
@@ -90,6 +88,28 @@ export class AuthService {
       { target: input.email, userId: user.id, email: input.email, phone: user.phone ?? undefined },
       'sign_in',
       ip,
+    );
+  }
+
+  private async register(
+    input: VerifyCodeInput,
+    registration: SignUpInput,
+    request: SignInRequest,
+  ) {
+    const google = input.signupTicket
+      ? await this.googleTickets.read(input.signupTicket, 'signup', true)
+      : undefined;
+    return this.completeSignIn(
+      {
+        id: this.users.allocateId(),
+        target: input.phone,
+        registration,
+        google: google ? { identity: google.identity, mode: 'signup' } : undefined,
+        registrationPasswordHash: input.password
+          ? await hash(input.password, { type: argon2id })
+          : undefined,
+      },
+      request,
     );
   }
 
@@ -113,16 +133,7 @@ export class AuthService {
     const subject = this.subject(user.target, user.registration ? undefined : user.id);
     await this.failures.assertAllowed(subject, request.ip);
     const result = await this.transaction.run(user.id, async () => {
-      if (
-        user.registration &&
-        !(await this.users.create(
-          user.id,
-          user.registration,
-          this.clock.now(),
-          user.registrationPasswordHash,
-        ))
-      )
-        throw authError('AUTH_ACCOUNT_EXISTS');
+      await this.createRegistration(user);
       const current = await this.users.lockForSignIn(user.id);
       if (!current)
         throw authError(user.passwordState ? 'AUTH_INVALID_CREDENTIALS' : 'AUTH_CODE_INVALID');
@@ -135,6 +146,7 @@ export class AuthService {
       if (current.isDisabled) throw authError('AUTH_DISABLED');
       // ACC-7 replaces this refusal with the challenge; no first factor may bypass it.
       if (current.totpEnabledAt) throw authError('AUTH_SECOND_FACTOR_REQUIRED');
+      await this.completeGoogleLink(user, current.googleSubject, request.ip);
       if (user.registrationPasswordHash)
         await this.events.record(user.id, {
           event: 'password.changed',
@@ -150,12 +162,71 @@ export class AuthService {
 
   private assertIdentity(
     user: SignInUser,
-    current: { phone: string | null; email: string | null; emailVerifiedAt: Date | null },
+    current: {
+      phone: string | null;
+      email: string | null;
+      emailVerifiedAt: Date | null;
+      googleSubject: string | null;
+    },
   ): void {
+    if (user.google) {
+      return this.assertGoogleIdentity(user.google, current);
+    }
     const verifiedEmail = current.emailVerifiedAt ? current.email?.toLowerCase() : undefined;
     const identifier = user.kind === 'email' ? verifiedEmail : current.phone;
     if (identifier !== user.target || (user.deliveryEmail && verifiedEmail !== user.deliveryEmail))
       throw authError(user.passwordState ? 'AUTH_INVALID_CREDENTIALS' : 'AUTH_CODE_INVALID');
+  }
+
+  private async createRegistration(user: SignInUser) {
+    if (!user.registration) return;
+    if (
+      !(await this.users.create(
+        user.id,
+        user.registration,
+        this.clock.now(),
+        user.registrationPasswordHash,
+        user.google?.identity,
+      ))
+    )
+      throw authError('AUTH_ACCOUNT_EXISTS');
+  }
+
+  private assertGoogleIdentity(
+    google: NonNullable<SignInUser['google']>,
+    current: { googleSubject: string | null; email: string | null; emailVerifiedAt: Date | null },
+  ) {
+    const { identity, mode } = google;
+    if (mode !== 'link') {
+      if (current.googleSubject !== identity.subject) throw authError('AUTH_INVALID_CREDENTIALS');
+      return;
+    }
+    this.assertGoogleLink(google, current);
+  }
+
+  private assertGoogleLink(
+    google: NonNullable<SignInUser['google']>,
+    current: { googleSubject: string | null; email: string | null; emailVerifiedAt: Date | null },
+  ) {
+    if (
+      google.expectedEmailVerifiedAt &&
+      current.emailVerifiedAt?.toISOString() !== google.expectedEmailVerifiedAt
+    )
+      throw authError('AUTH_GOOGLE_TICKET_INVALID');
+    if (!current.emailVerifiedAt || current.email?.toLowerCase() !== google.identity.email)
+      throw authError('AUTH_INVALID_CREDENTIALS');
+    if (current.googleSubject && current.googleSubject !== google.identity.subject)
+      throw authError('AUTH_GOOGLE_CONFLICT');
+  }
+
+  private async completeGoogleLink(user: SignInUser, currentSubject: string | null, ip: string) {
+    if (!user.google || user.google.mode === 'subject') return;
+    if (user.google.mode === 'link') {
+      if (currentSubject === user.google.identity.subject) return;
+      if (!(await this.users.linkGoogle(user.id, user.google.identity.subject, this.clock.now())))
+        throw authError('AUTH_GOOGLE_CONFLICT');
+    }
+    await this.events.record(user.id, { event: 'google.linked', actor: { kind: 'user' }, ip });
   }
 
   private subject(target: string, userId?: string, email?: string | null): SignInSubject {

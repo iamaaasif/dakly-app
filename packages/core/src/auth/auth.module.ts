@@ -1,3 +1,8 @@
+import { GoogleService } from './google.service';
+import { GoogleIdentityService } from './google-identity.service';
+import { GoogleTickets } from './google-tickets';
+import { GoogleController } from './google.controller';
+import { GOOGLE_IDENTITY_DRIVER, createGoogleIdentityDriver } from './google-provider';
 import { PasswordService } from './password.service';
 import { PasswordCredentials } from './password-credentials';
 import { PasswordController } from './password.controller';
@@ -21,11 +26,16 @@ import { SMS_DRIVER, createSmsDriver } from './sms-provider';
   imports: [CacheModule, UsersModule, SessionsModule, EmailModule, AccountSecurityEventsModule],
   controllers: [
     AuthController,
+    GoogleController,
     EmailChangeController,
     PasswordController,
     PasswordChangeController,
   ],
   providers: [
+    GoogleService,
+    GoogleIdentityService,
+    GoogleTickets,
+    { provide: GOOGLE_IDENTITY_DRIVER, useFactory: createGoogleIdentityDriver },
     PasswordService,
     PasswordCredentials,
     Clock,

@@ -437,7 +437,7 @@ and records a security event in logs without the phone or message text.
 TOTP-enabled accounts return `403 AUTH_SECOND_FACTOR_REQUIRED` and get no session.
 Their failure history is retained. ACC-7 must add its challenge inside the common
 completion path; no sign-in method may issue a session before that factor passes.
-Password and Google sign-in remain ACC-10 and ACC-11.
+Password and Google sign-in are described in their implementation sections below.
 
 ## Email sign-in and identity changes (ACC-9)
 
@@ -595,3 +595,50 @@ Email-change and password-code proof stores only domain-separated fingerprints
 of password and identity state, never an encoded password hash or raw password.
 Proof expires after ten minutes and cannot survive a password or relevant identity
 replacement. Account event details contain no credentials or personal values.
+
+## Google sign-in (ACC-11)
+
+`POST /auth/google` accepts `{ idToken, isRemembered? }`. The real driver verifies
+Google's signature, issuer, expiry and the configured `GOOGLE_CLIENT_ID` audience
+with `google-auth-library`. A missing or unverified email is refused. The Google
+subject is the primary identity; its existing account wins even if Google's email
+now differs from the account's email.
+
+For an unmatched subject, verified Gmail or Workspace (`hd`) claims can establish
+email ownership. Other addresses require a fresh mailbox code because Google's
+`email_verified` claim can describe former ownership ([ADR 0010](../adr/0010-google-email-authority.md)).
+The response is 202 `{ status: 'email_verification_required', verificationTicket }`.
+Submit `{ verificationTicket, code, isRemembered? }` to
+`POST /auth/google/email/verify`. The code uses the existing `SignInCodes` limits,
+ten-minute expiry and `google_email` purpose. The opaque challenge binds the exact
+subject, address, verified owner or absence, and verification timestamp. Changed
+ownership or a newly linked subject invalidates it instead of choosing another user.
+
+An eligible verified email owner is linked under its current account lock. Unverified
+local rows are never adopted, even when their email text matches. Existing subject
+links cannot be overwritten. Linking, `google.linked` history and the session commit
+together; history contains no token, subject or email. All successful paths use
+`completeSignIn`, preserve shared failure counters and enforce disabled-account and
+TOTP checks. Until ACC-7 issues challenges, enabled TOTP refuses the sign-in and link.
+
+Without an eligible existing account, the response is 202
+`{ status: 'signup_required', signupTicket }`, without a session. Request a normal
+`sign_up` phone code, then include `signupTicket` in `POST /auth/code/verify`.
+Only after mobile proof succeeds is the ticket consumed and its server-held subject
+and verified email used for signup. The optional registration email cannot replace
+the ticket email. Successful sessions return 204 with the normal session cookie.
+
+Both ticket kinds contain 32 random bytes, have hashed Valkey keys, expire after
+fifteen minutes and are consumed atomically once. Wrong phone codes do not consume
+signup tickets. Once valid proof is consumed, a later database failure leaves it
+consumed; restart Google sign-in and request new codes, respecting resend limits.
+Parallel signup or newly claimed verified identities cannot create duplicate owners.
+
+`GOOGLE_IDENTITY_DRIVER=fake` is allowed only outside production. Its local token
+format is `fake-google:` followed by JSON containing `sub`, `email`,
+`email_verified: true` and optional `hd`. Production selects `google` and requires
+`GOOGLE_CLIENT_ID`; fake tokens fail real signature verification. Each driver call
+records a `google_identity_verification` metric observation through Nest/Pino with
+count, monotonic duration and success/failure only. Provider errors are sanitized.
+The real client has a five-second transport timeout and a ten-second total bound.
+Live Google sign-in remains a staging check until an OAuth client is supplied.

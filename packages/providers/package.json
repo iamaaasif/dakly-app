@@ -20,6 +20,7 @@
     "vitest": "4.1.12"
   },
   "dependencies": {
+    "google-auth-library": "11.3.4",
     "nodemailer": "10.4.0"
   }
 }

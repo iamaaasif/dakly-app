@@ -1,3 +1,4 @@
+import { GoogleTickets } from './google-tickets';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -42,6 +43,7 @@ const service = new AuthService(
   { run: async (_id: string, work: () => Promise<unknown>) => work() } as AccountTransaction,
   { now: () => now } as Clock,
   {} as AccountSecurityEventsService,
+  {} as GoogleTickets,
 );
 
 describe('AuthService completion gate', () => {
