@@ -38,7 +38,7 @@ Only for a screen with no backend yet that Asif needs to see early. Build it aga
 A task is Done when all of these are true:
 
 - [ ] Every rule and edge case in the feature doc for this slice has a test.
-- [ ] `pnpm check` passes locally and in CI, and `pnpm test:int` passes.
+- [ ] `pnpm check` and `pnpm test:int` pass locally, and every CI job passes. CI also runs `pnpm audit`, `pnpm test:e2e`, a secret scan and the PR rules check, which `pnpm check` does not.
 - [ ] New tables have `store_id`, RLS, and a cross-store test.
 - [ ] Every new route has a permission and a zod schema.
 - [ ] The screen has all four states and works at 360 px.

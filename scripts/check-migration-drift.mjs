@@ -13,6 +13,12 @@ function readDatabasePackageStatus() {
   });
 }
 
+// The schema imports @dakly/contracts from dist, and drizzle-kit exits 0 when that import
+// fails, so a missing build would pass silently.
+execFileSync('pnpm', ['exec', 'turbo', 'run', 'build', '--filter=@dakly/db^...'], {
+  cwd: root,
+  stdio: 'inherit',
+});
 const statusBefore = readDatabasePackageStatus();
 execFileSync('pnpm', ['--filter', '@dakly/db', 'db:generate'], { cwd: root, stdio: 'inherit' });
 const statusAfter = readDatabasePackageStatus();

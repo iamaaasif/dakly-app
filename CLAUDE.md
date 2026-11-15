@@ -47,10 +47,10 @@ pnpm dev                             # api :4000, web :3000, worker
 pnpm test                            # unit tests
 pnpm test:int                        # Postgres tests, needs DATABASE_URL and DATABASE_ADMIN_URL
 pnpm lint:docs                       # filler words, emoji, file names, links, task tracker
-pnpm check                           # everything CI runs
+pnpm check                           # format, build, lint, typecheck, drift, unit tests, knip, jscpd, docs
 ```
 
-Run `pnpm check` before you open a PR. CI runs the same checks.
+Run `pnpm check` before you open a PR. CI also runs `pnpm audit`, `pnpm test:int`, `pnpm test:e2e`, a secret scan and the PR rules check, which `pnpm check` does not.
 
 ## Pull requests
 
