@@ -21,6 +21,7 @@ export type UserStorePageQuery = z.infer<typeof userStorePageSchema>;
 export type UserStorePage = { items: UserStore[]; nextCursor: string | null };
 
 export const sessionListSchema = z.strictObject({ before: z.uuid().optional() });
+export type SessionListQuery = z.infer<typeof sessionListSchema>;
 export const sessionIdSchema = z.uuid();
 
 export type AccountProfile = UserProfile & {

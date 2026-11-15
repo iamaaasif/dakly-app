@@ -17,6 +17,7 @@ import {
   userStorePageSchema,
   type UserStorePageQuery,
   sessionListSchema,
+  type SessionListQuery,
   sessionIdSchema,
   activeStoreSchema,
   type ActiveStoreInput,
@@ -47,7 +48,7 @@ export class SessionsController {
   devices(
     @CurrentUser() userId: string,
     @CurrentSession() sessionId: string,
-    @Query(new ZodValidationPipe(sessionListSchema)) query: { before?: string },
+    @Query(new ZodValidationPipe(sessionListSchema)) query: SessionListQuery,
   ) {
     return this.sessions.list(userId, sessionId, query.before);
   }

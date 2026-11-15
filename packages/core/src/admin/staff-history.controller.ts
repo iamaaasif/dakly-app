@@ -11,12 +11,14 @@ import {
   Res,
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
-import { z } from 'zod';
 
 import {
   staffAuditSearchSchema,
   staffAuditExportSchema,
+  staffAuditVerifySchema,
   type StaffAuditSearch,
+  type StaffAuditExportInput,
+  type StaffAuditVerifyQuery,
 } from '@dakly/contracts/staff-audit';
 
 import { StaffAccess } from '../platform/tenancy/access.decorators';
@@ -39,8 +41,7 @@ export class StaffHistoryController {
   @Post('exports')
   request(
     @Req() request: StaffRequest,
-    @Body(new ZodValidationPipe(staffAuditExportSchema))
-    input: { filter: StaffAuditSearch; reason: string },
+    @Body(new ZodValidationPipe(staffAuditExportSchema)) input: StaffAuditExportInput,
   ) {
     return this.history.request(request.staff, input.filter, input.reason, request.ip);
   }
@@ -67,7 +68,7 @@ export class StaffHistoryController {
   @Get('verify')
   verify(
     @Req() request: StaffRequest,
-    @Query(new ZodValidationPipe(z.strictObject({ from: z.iso.date() }))) query: { from: string },
+    @Query(new ZodValidationPipe(staffAuditVerifySchema)) query: StaffAuditVerifyQuery,
   ) {
     return this.history.verify(request.staff, query.from);
   }

@@ -18,6 +18,9 @@ export const supportHandoffSchema = z.strictObject({
 });
 export const supportTargetSchema = z.strictObject({ query: z.string().trim().min(3).max(120) });
 export type SupportRequestInput = z.infer<typeof supportRequestSchema>;
+export type SupportDecisionInput = z.infer<typeof supportDecisionSchema>;
+export type SupportHandoffInput = z.infer<typeof supportHandoffSchema>;
+export type SupportTargetQuery = z.infer<typeof supportTargetSchema>;
 export type SupportGrantResponse = {
   id: string;
   staffName: string;
@@ -42,6 +45,7 @@ export type SupportSessionResponse = SupportGrantResponse & {
 };
 
 export const supportPageSchema = z.strictObject({ before: z.uuid().optional() });
+export type SupportPageQuery = z.infer<typeof supportPageSchema>;
 export type SupportGrantPage = { items: SupportGrantResponse[]; nextCursor: string | null };
 
 export type SupportCustomerResponse = CustomerResponse & { contextTag: string };

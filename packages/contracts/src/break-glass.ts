@@ -25,6 +25,7 @@ export const breakGlassConfirmationSchema = z.strictObject({
   confirmed: z.literal(true),
 });
 export const staffAlertRetrySchema = z.strictObject({ reason: supportReasonSchema });
+export type StaffAlertRetryInput = z.infer<typeof staffAlertRetrySchema>;
 export type BreakGlassRequest = z.infer<typeof breakGlassRequestSchema>;
 export type BreakGlassEffect = z.infer<typeof breakGlassEffectSchema>;
 export type BreakGlassPreview = { effect: BreakGlassEffect; proof: string };

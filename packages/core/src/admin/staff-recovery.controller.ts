@@ -1,9 +1,5 @@
-import { Body, Controller, Get, Header, HttpCode, Inject, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 
-import {
-  accountSecurityHistorySchema,
-  type AccountSecurityHistory,
-} from '@dakly/contracts/account-security-events';
 import {
   staffRecoveryLookupSchema,
   type StaffRecoveryLookup,
@@ -15,10 +11,7 @@ import {
   type StaffRecoveryConfirmation,
 } from '@dakly/contracts/staff-recovery';
 
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { AnyMember, RequireUser, StaffAccess } from '../platform/tenancy/access.decorators';
-import { CurrentStore } from '../platform/tenancy/current-store.decorator';
-import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+import { StaffAccess } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { StaffRecoveryService } from './staff-recovery.service';
 import type { StaffRequest } from './staff.guard';
@@ -58,36 +51,5 @@ export class StaffRecoveryController {
     @Body(new ZodValidationPipe(staffRecoveryConfirmationSchema)) input: StaffRecoveryConfirmation,
   ) {
     return this.recovery.recover(request.staff, input, request.ip);
-  }
-}
-@Controller('account-recovery-history')
-@AnyMember()
-export class OwnerRecoveryHistoryController {
-  constructor(@Inject(StaffRecoveryService) private readonly recovery: StaffRecoveryService) {}
-  @Get()
-  @Header('Cache-Control', 'no-store')
-  history(
-    @CurrentStore() storeId: string,
-    @CurrentUser() userId: string,
-    @Query(new ZodValidationPipe(accountSecurityHistorySchema)) query: AccountSecurityHistory,
-  ) {
-    return this.recovery.history(storeId, userId, query.before);
-  }
-}
-
-@Controller('me/security-history')
-@RequireUser()
-export class AccountRecoveryHistoryController {
-  constructor(
-    @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
-  ) {}
-
-  @Get()
-  @Header('Cache-Control', 'no-store')
-  history(
-    @CurrentUser() userId: string,
-    @Query(new ZodValidationPipe(accountSecurityHistorySchema)) query: AccountSecurityHistory,
-  ) {
-    return this.events.history(userId, query.before);
   }
 }

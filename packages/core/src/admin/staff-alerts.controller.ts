@@ -10,8 +10,8 @@ import {
   Req,
 } from '@nestjs/common';
 
-import { staffAlertRetrySchema } from '@dakly/contracts/break-glass';
-import { supportPageSchema } from '@dakly/contracts/support';
+import { staffAlertRetrySchema, type StaffAlertRetryInput } from '@dakly/contracts/break-glass';
+import { supportPageSchema, type SupportPageQuery } from '@dakly/contracts/support';
 
 import { StaffAccess } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
@@ -25,7 +25,7 @@ export class StaffAlertsController {
   @Get()
   list(
     @Req() request: StaffRequest,
-    @Query(new ZodValidationPipe(supportPageSchema)) query: { before?: string },
+    @Query(new ZodValidationPipe(supportPageSchema)) query: SupportPageQuery,
   ) {
     return this.alerts.list(request.staff, query.before);
   }
@@ -34,7 +34,7 @@ export class StaffAlertsController {
   retry(
     @Req() request: StaffRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body(new ZodValidationPipe(staffAlertRetrySchema)) input: { reason: string },
+    @Body(new ZodValidationPipe(staffAlertRetrySchema)) input: StaffAlertRetryInput,
   ) {
     return this.alerts.retry(request.staff, id, input.reason, request.ip);
   }
