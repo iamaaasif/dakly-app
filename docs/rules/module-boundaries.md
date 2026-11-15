@@ -20,9 +20,12 @@ import { CustomersService } from '../customers/customers.service';
 Other rules, all checked by `pnpm lint:boundaries` (`.dependency-cruiser.cjs`):
 
 - `platform/` never imports a feature.
-- Only `*.repository.ts` files and `platform/database/` import `@dakly/db` or `drizzle-orm`.
+- Only `*.repository.ts` files and `platform/database/` import `@dakly/db` or `drizzle-orm`; `apps/api` and `apps/worker` never do.
+- Controllers, guards, pipes, decorators and other files with a role suffix never import a repository. Services, their use-case files, jobs, other repositories and `*.module.ts` wiring may ([layers.md](layers.md)).
 - `packages/contracts` imports nothing but zod, because the browser uses it.
+- `packages/providers` never imports `packages/core`, `packages/db` or an app.
 - A web feature (`apps/web/src/features/x`) never imports another web feature.
-- No circular imports.
+- `apps/web` and `apps/admin` never import `packages/core` or `packages/db`.
+- No circular imports. Cycles through the web apps' `@/` alias are not seen, because dependency-cruiser does not resolve it.
 
 When feature A must react to something in feature B (order paid → send WhatsApp receipt), B emits an event and A listens. B does not call A.
