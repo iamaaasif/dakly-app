@@ -13,7 +13,8 @@ Every form uses React Hook Form with the zod schema from `@dakly/contracts`, the
 7. Money inputs take Taka from the person and convert to poisha once, in the form's submit handler: `toPoisha(values.price)`. Never send a float to the API.
 8. Phone inputs show `+880`, accept `01712345678`, `1712345678`, `+8801712345678` and Bangla digits, and let the contract schema normalise.
 9. Destructive actions (delete, cancel order, refund) need a confirm dialog that names the thing: "Cancel order #1042?".
-10. Long forms (campaign builder, product with variants) save a draft on the server, not in local storage.
+10. Secret-bearing forms use an explicit native POST method, including password, code, enrollment and recovery forms. Hydration handlers keep the normal API behavior; failed or unavailable JavaScript must never serialize secrets into a GET URL.
+11. Long forms (campaign builder, product with variants) save a draft on the server, not in local storage.
 
 Wrong:
 

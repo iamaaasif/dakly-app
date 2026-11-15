@@ -8,6 +8,7 @@ import {
   type StaffRecoveryEffect,
 } from '@dakly/contracts/staff-recovery';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+import { isStaffSessionCurrent } from './staff-session-policy';
 import { UsersService } from '../auth/users.service';
 import { SignInCodes } from '../auth/codes.module';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';
@@ -145,10 +146,7 @@ export class StaffRecoveryService {
       current.staff.status !== 'active' ||
       !current.staff.enrolledAt ||
       !current.session ||
-      current.session.revokedAt ||
-      current.session.expiresAt <= now ||
-      !current.session.lastSeenAt ||
-      current.session.lastSeenAt.getTime() + 1800000 <= now.getTime()
+      !isStaffSessionCurrent(current.session, now)
     )
       throw recoveryError('RECOVERY_DENIED');
   }

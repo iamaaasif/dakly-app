@@ -1,5 +1,6 @@
 'use client';
-import { formatDate } from '@/lib/format-date';
+import { formatDateTime } from '@/lib/format-date';
+import { formatPhone } from '@/lib/format-phone';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -36,20 +37,24 @@ export function SupportSession() {
             ) : null}
             <p>{session.data.storeName}</p>
             <p>{session.data.access === 'write' ? 'Read and write' : 'Read only'} · Customers</p>
-            <p>Access expires {formatDate(session.data.expiresAt!)}</p>
+            <p>Access expires {formatDateTime(session.data.expiresAt!)}</p>
             <p>The Owner can end this session at any time.</p>
           </section>
-          <SupportCustomers writable={session.data.access === 'write'} />
+          <SupportCustomers
+            key={session.data.contextTag}
+            contextTag={session.data.contextTag}
+            writable={session.data.access === 'write'}
+          />
         </>
       ) : null}
     </main>
   );
 }
-function SupportCustomers({ writable }: { writable: boolean }) {
+function SupportCustomers({ writable, contextTag }: { writable: boolean; contextTag: string }) {
   const [id, setId] = useState('');
   const [selected, setSelected] = useState('');
-  const customer = useSupportCustomer(selected);
-  const create = useSupportCreate();
+  const customer = useSupportCustomer(selected, contextTag);
+  const create = useSupportCreate(contextTag);
   const form = useForm<CreateCustomerInput>({ resolver: zodResolver(createCustomerSchema) });
   return (
     <>
@@ -70,7 +75,7 @@ function SupportCustomers({ writable }: { writable: boolean }) {
         {customer.error ? <p role="alert">{customer.error.message}</p> : null}
         {customer.data ? (
           <p>
-            {customer.data.name} · {customer.data.phone}
+            {customer.data.name} · {formatPhone(customer.data.phone)}
           </p>
         ) : null}
       </Card>

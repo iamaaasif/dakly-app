@@ -13,10 +13,13 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import {
+  userStorePageSchema,
+  type UserStorePageQuery,
   sessionListSchema,
   sessionIdSchema,
   activeStoreSchema,
   type ActiveStoreInput,
+  type SessionContext,
 } from '@dakly/contracts/sessions';
 import { UsersService } from '../auth/users.service';
 import { TeamService } from '../team/team.service';
@@ -66,9 +69,17 @@ export class SessionsController {
     return this.users.profile(userId);
   }
 
+  @Get('me/context')
+  context(@CurrentUser() userId: string, @Req() request: StoreRequest): Promise<SessionContext> {
+    return this.sessions.context(userId, request.sessionId!, request.storeId, request.access);
+  }
+
   @Get('me/stores')
-  stores(@CurrentUser() userId: string) {
-    return this.team.storesFor(userId);
+  stores(
+    @CurrentUser() userId: string,
+    @Query(new ZodValidationPipe(userStorePageSchema)) query: UserStorePageQuery,
+  ) {
+    return this.team.storesFor(userId, query);
   }
 
   @Post('me/active-store')

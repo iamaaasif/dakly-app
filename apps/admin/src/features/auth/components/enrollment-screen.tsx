@@ -21,7 +21,11 @@ export function EnrollmentScreen() {
       {enroll.data ? (
         <FactorChallenge enrollment={enroll.data} />
       ) : (
-        <form className="space-y-4" onSubmit={form.handleSubmit((input) => enroll.mutate(input))}>
+        <form
+          method="post"
+          className="space-y-4"
+          onSubmit={form.handleSubmit((input) => enroll.mutate(input))}
+        >
           <EnrollmentFields form={form} />
           {enroll.error ? (
             <p role="alert" className="text-danger">

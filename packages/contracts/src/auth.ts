@@ -111,3 +111,6 @@ export type VerifyGoogleEmailInput = z.infer<typeof verifyGoogleEmailSchema>;
 export type GoogleSignInPending =
   | { status: 'signup_required'; signupTicket: string }
   | { status: 'email_verification_required'; verificationTicket: string };
+
+export type SignInResponse = void | { status: 'totp_required'; challengeId: string };
+export type GoogleSignInResponse = SignInResponse | GoogleSignInPending;

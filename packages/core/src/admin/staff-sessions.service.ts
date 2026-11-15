@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { newId } from '../platform/database/new-id';
 import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+import { isStaffSessionCurrent, STAFF_SESSION_TTL_MS } from './staff-session-policy';
+import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
 import { Clock } from '../platform/clock';
 import { StaffRepository } from './staff.repository';
@@ -31,7 +32,7 @@ export class StaffSessionsService {
       ip,
       lastSeenAt: now,
       createdAt: now,
-      expiresAt: new Date(now.getTime() + 28800000),
+      expiresAt: new Date(now.getTime() + STAFF_SESSION_TTL_MS),
     });
     await this.repository.update(staff.id, {
       lastSignInAt: now,
@@ -62,20 +63,10 @@ export class StaffSessionsService {
         staffTokenHash(token),
       );
       const now = this.clock.now();
-      if (!session || !this.isCurrent(session, now)) throw staffError('STAFF_AUTH_REQUIRED');
+      if (!session || !isStaffSessionCurrent(session, now)) throw staffError('STAFF_AUTH_REQUIRED');
       await this.repository.touchSession(staff.id, session.id, now);
       return { id: staff.id, name: staff.name, role: staff.role, sessionId: session.id };
     });
-  }
-  private isCurrent(
-    session: { revokedAt: Date | null; expiresAt: Date; lastSeenAt: Date | null },
-    now: Date,
-  ): boolean {
-    return (
-      !session.revokedAt &&
-      session.expiresAt > now &&
-      Boolean(session.lastSeenAt && session.lastSeenAt.getTime() + 1800000 > now.getTime())
-    );
   }
   async signOut(staffUserId: string, ip: string): Promise<void> {
     await this.transaction.run(staffUserId, async () => {

@@ -1,19 +1,22 @@
 import 'reflect-metadata';
 import { randomUUID, randomBytes, createHash, randomInt } from 'node:crypto';
-import { Module } from '@nestjs/common';
+import { Logger as PinoNestLogger, LoggerModule } from 'nestjs-pino';
+import { Logger, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { beforeAll, afterAll, afterEach, describe, it, expect, vi } from 'vitest';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { TOTP, Secret } from 'otpauth';
-import { hashPassword } from '../platform/crypto/password';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { createDatabase } from '@dakly/db/client';
 import { SlackAlertDriver } from '@dakly/providers/staff-alert/slack/slack-alert-driver';
+import { sql } from 'drizzle-orm';
+import { requestLoggingOptions } from '../platform/logging/request-logging';
+import { CustomersService } from '../customers/customers.service';
+import { hashPassword } from '../platform/crypto/password';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StaffAlertsService } from './staff-alerts.service';
 import { StaffAlertsRepository } from './staff-alerts.repository';
 import { SupportRepository } from './support.repository';
-import { sql } from 'drizzle-orm';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AdminModule } from './admin.module';
 import { AuthModule } from '../auth/auth.module';
@@ -31,8 +34,19 @@ import { ValkeyClient } from '../platform/cache/valkey-client';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '../platform/http/session-cookie';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
+const logLines: string[] = [];
 class TestModule {}
-Module({ imports: [DatabaseModule, AuthModule, AdminModule] })(TestModule);
+Module({
+  imports: [
+    LoggerModule.forRoot({
+      assignResponse: true,
+      pinoHttp: [requestLoggingOptions(), { write: (line: string) => logLines.push(line) }],
+    }),
+    DatabaseModule,
+    AuthModule,
+    AdminModule,
+  ],
+})(TestModule);
 const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const actorIds: string[] = [];
 const storeIds: string[] = [];
@@ -262,6 +276,7 @@ beforeAll(async () => {
   );
   await registerSessionCookies(app);
   app.useGlobalFilters(new AppErrorFilter());
+  app.useLogger(app.get(PinoNestLogger));
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   vi.spyOn(Clock.prototype, 'now').mockImplementation(() => now);
@@ -309,6 +324,243 @@ afterAll(async () => {
   vi.unstubAllEnvs();
 });
 describe('Owner-approved support through Fastify and app-role PostgreSQL', () => {
+  it.each(['stores', 'staff_users', 'staff_sessions', 'support_sessions'])(
+    'answers GET /support/session while %s has a row lock',
+    async (table) => {
+      const f = await fixture();
+      const id = await request(f);
+      await approve(f, id);
+      const { cookie } = await open(f, id);
+      const holder = await database.pool.connect();
+      let pending: ReturnType<typeof shop> | undefined;
+      try {
+        await holder.query('begin');
+        const column = table === 'stores' || table === 'staff_users' ? 'id' : 'staff_user_id';
+        await holder.query(`select id from ${table} where ${column}=$1 for no key update`, [
+          table === 'stores' ? f.storeId : f.staffId,
+        ]);
+        pending = shop(f, '/support/session', undefined, cookie);
+        const response = await Promise.race([
+          pending,
+          new Promise<never>((_, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error('Support read waited for a row lock')),
+              1000,
+            );
+            void pending!.then(() => clearTimeout(timer));
+          }),
+        ]);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toMatchObject({ id, storeName: 'Support shop' });
+      } finally {
+        await holder.query('rollback');
+        holder.release();
+        await pending;
+      }
+    },
+  );
+  it.each(['stores', 'users', 'sessions'] as const)(
+    'answers GET /support-access while %s has a row lock',
+    async (table) => {
+      const f = await fixture();
+      const id = await request(f);
+      const holder = await database.pool.connect();
+      let pending: ReturnType<typeof shop> | undefined;
+      try {
+        await holder.query('begin');
+        const rowIds = { stores: f.storeId, users: f.userId, sessions: f.sessionId };
+        await holder.query(`select id from ${table} where id=$1 for no key update`, [
+          rowIds[table],
+        ]);
+        pending = shop(f, '/support-access');
+        const response = await Promise.race([
+          pending,
+          new Promise<never>((_, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error('Owner read waited for a row lock')),
+              1000,
+            );
+            void pending!.then(() => clearTimeout(timer));
+          }),
+        ]);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().items).toEqual([expect.objectContaining({ id })]);
+      } finally {
+        await holder.query('rollback');
+        holder.release();
+        await pending;
+      }
+    },
+  );
+  it('rejects a stale A draft after the same staff browser adopts delegation B', async () => {
+    const a = await fixture(),
+      other = await fixture();
+    const b = { ...other, staffId: a.staffId, staffCookie: a.staffCookie, assertion: a.assertion };
+    const grantA = await request(a);
+    await approve(a, grantA);
+    const grantB = await request(b);
+    await approve(b, grantB);
+    const openedA = await open(a, grantA),
+      openedB = await open(b, grantB);
+    const contextA = (await shop(a, '/support/session', undefined, openedA.cookie)).json()
+      .contextTag;
+    const input = { name: 'Stale draft', phone: `017${randomInt(10000000, 99999999)}` };
+    const stale = await app.inject({
+      method: 'POST',
+      url: '/support/customers',
+      headers: {
+        origin: shopOrigin,
+        cookie: openedB.cookie,
+        'x-support-context': contextA ?? 'missing-context',
+      },
+      payload: input,
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe('SUPPORT_CONTEXT_CHANGED');
+    expect(
+      (
+        await database.pool.query(
+          'select count(*)::int as count from customers where store_id=any($1::uuid[])',
+          [[a.storeId, b.storeId]],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    expect(
+      (
+        await database.pool.query(
+          "select count(*)::int as count from audit_log where store_id=any($1::uuid[]) and action='support.customer_created'",
+          [[a.storeId, b.storeId]],
+        )
+      ).rows[0].count,
+    ).toBe(0);
+    const contextB = (await shop(b, '/support/session', undefined, openedB.cookie)).json()
+      .contextTag;
+    expect(contextB).not.toBe(contextA);
+    const fresh = await app.inject({
+      method: 'POST',
+      url: '/support/customers',
+      headers: { origin: shopOrigin, cookie: openedB.cookie, 'x-support-context': contextB },
+      payload: { ...input, name: 'Explicit B draft' },
+    });
+    expect(fresh.statusCode).toBe(201);
+    expect(fresh.json().contextTag).toBe(contextB);
+    expect(
+      (await database.pool.query('select store_id from customers where id=$1', [fresh.json().id]))
+        .rows[0].store_id,
+    ).toBe(b.storeId);
+    const staleRead = await app.inject({
+      url: `/support/customers/${fresh.json().id}`,
+      headers: { cookie: openedB.cookie, 'x-support-context': contextA },
+    });
+    expect(staleRead.statusCode).toBe(409);
+  });
+
+  it('binds only verified shops to concurrent ordinary and support nested, error and completion logs', async () => {
+    const a = await fixture(),
+      b = await fixture();
+    const grantA = await request(a);
+    await approve(a, grantA);
+    const grantB = await request(b);
+    await approve(b, grantB);
+    const supportA = await open(a, grantA),
+      supportB = await open(b, grantB);
+    const account = await fixture();
+    await database.pool.query('update sessions set active_store_id=null where id=$1', [
+      account.sessionId,
+    ]);
+    const original = CustomersService.prototype.getById;
+    const probe = vi
+      .spyOn(CustomersService.prototype, 'getById')
+      .mockImplementation(async function (this: CustomersService, ...args) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        new Logger('NestedVendor').log({ event: 'vendor' }, 'Vendor request finished');
+        if (args[1] === failureId) throw new Error('Synthetic vendor failure');
+        return original.apply(this, args);
+      });
+    const failureId = randomUUID();
+    try {
+      logLines.length = 0;
+      const cases = [
+        { cookie: a.ownerCookie, url: `/customers/${failureId}`, storeId: a.storeId },
+        { cookie: b.ownerCookie, url: `/customers/${failureId}`, storeId: b.storeId },
+        { cookie: supportA.cookie, url: `/support/customers/${failureId}`, storeId: a.storeId },
+        { cookie: supportB.cookie, url: `/support/customers/${failureId}`, storeId: b.storeId },
+        { cookie: account.ownerCookie, url: '/me', storeId: undefined },
+        { cookie: '', url: '/me', storeId: undefined },
+      ];
+      const responses = await Promise.all(
+        cases.map((item) =>
+          app.inject({
+            url: item.url,
+            headers: {
+              cookie: item.cookie,
+              'x-store-id': 'spoofed-store',
+              'x-request-id': 'spoofed-request',
+            },
+          }),
+        ),
+      );
+      for (const [index, response] of responses.entries()) {
+        const lines = logLines
+          .map((line) => JSON.parse(line))
+          .filter((line) => line.requestId === response.headers['x-request-id']);
+        expect(lines.some((line) => line.msg === 'Request completed')).toBe(true);
+        if (cases[index]!.storeId) {
+          expect(response.statusCode).toBe(500);
+          expect(lines.some((line) => line.context === 'NestedVendor')).toBe(true);
+          expect(lines.some((line) => line.level === 50)).toBe(true);
+        }
+        for (const line of lines) expect(line.storeId).toBe(cases[index]!.storeId);
+      }
+      expect(logLines.join('')).not.toContain('spoofed-');
+    } finally {
+      probe.mockRestore();
+    }
+  });
+
+  it('limits cross-store staff metadata to approved fields and current authorized staff', async () => {
+    const first = await fixture(),
+      second = await fixture(),
+      finance = await fixture('finance');
+    const firstGrant = await request(first),
+      secondGrant = await request(second);
+    const targets = await admin(first, `/admin/support/targets?query=${second.storeId}`);
+    expect(targets.statusCode, targets.body).toBe(200);
+    expect(targets.json()).toEqual([{ id: second.storeId, name: 'Support shop' }]);
+    const allowed = [
+      'id',
+      'staffName',
+      'isBreakGlass',
+      'scopes',
+      'access',
+      'status',
+      'reason',
+      'durationMinutes',
+      'requestedAt',
+      'expiresAt',
+    ].sort();
+    for (const [actor, id] of [
+      [first, firstGrant],
+      [second, secondGrant],
+    ] as const) {
+      const listed = await admin(actor, '/admin/support');
+      expect(listed.statusCode, listed.body).toBe(200);
+      expect(listed.json().items).toHaveLength(1);
+      expect(listed.json().items[0]).toMatchObject({
+        id,
+        status: 'requested',
+        scopes: ['customers'],
+        access: 'write',
+      });
+      expect(Object.keys(listed.json().items[0]).sort()).toEqual(allowed);
+      expect(listed.json().nextCursor).toBeNull();
+    }
+    for (const url of ['/admin/support', `/admin/support/targets?query=${second.storeId}`]) {
+      expect((await admin(finance, url)).statusCode).toBe(403);
+      expect((await admin({ ...first, staffCookie: first.ownerCookie }, url)).statusCode).toBe(401);
+    }
+  });
+
   it('requires current Owner/session and request-bound one-use SMS proof, truthfully attributes consent', async () => {
     const f = await fixture();
     const id = await request(f);
