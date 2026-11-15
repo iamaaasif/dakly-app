@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { uuidv7 } from '@dakly/db/uuid-v7';
 import { TenantDatabase } from './tenant-database';
+import { eq } from 'drizzle-orm';
+import { stores } from '@dakly/db/schema/stores';
 
 @Injectable()
 export class StoreTransaction {
@@ -8,6 +10,18 @@ export class StoreTransaction {
 
   run<TResult>(storeId: string, work: () => Promise<TResult>): Promise<TResult> {
     return this.database.forStore(storeId, () => work());
+  }
+
+  runLocked<TResult>(storeId: string, work: () => Promise<TResult>): Promise<TResult> {
+    return this.database.forStore(storeId, async (tx) => {
+      // Serialize store decisions without blocking foreign-key checks from account actions.
+      await tx
+        .select({ id: stores.id })
+        .from(stores)
+        .where(eq(stores.id, storeId))
+        .for('no key update');
+      return work();
+    });
   }
 
   runForNewStore<TResult>(work: (storeId: string) => Promise<TResult>): Promise<TResult> {

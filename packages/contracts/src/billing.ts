@@ -39,3 +39,17 @@ export const usageSources = ['allowance', 'top_up'] as const;
 // A plan is the base subscription; an add-on (Chats AI tiers) is bought on top of one.
 export const planKinds = ['plan', 'add_on'] as const;
 export const subscriptionItemStatuses = ['active', 'cancelled'] as const;
+
+export const planLimitsSchema = z.record(z.string(), z.number().int().nonnegative());
+export type PublicPlan = {
+  code: string;
+  name: string;
+  monthlyPricePoisha: number;
+  yearlyPricePoisha: number;
+  trialDays: number;
+  limits: z.infer<typeof planLimitsSchema>;
+};
+export type PlansResponse = {
+  plans: PublicPlan[];
+  recommendations: Record<string, string>;
+};

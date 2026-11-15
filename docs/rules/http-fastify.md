@@ -14,7 +14,7 @@ Sources: the NestJS [Fastify adapter docs](https://docs.nestjs.com/techniques/pe
 | `@Res() res` and `res.json(...)`                          | Return the value from the handler; Nest sends it                                                     |
 | `res.redirect(url)` (Express order)                       | `reply.status(302).redirect(url)`                                                                    |
 | `JSON.stringify(req.body)` to check a webhook signature   | `req.rawBody` (see below)                                                                            |
-| Reading `X-Forwarded-For` or `CF-Connecting-IP` yourself  | `req.ip`, with `trustProxy` set to our proxies only                                                  |
+| Reading `X-Forwarded-For` or `CF-Connecting-IP` yourself  | `req.ip`, through the API server factory and explicit `API_TRUSTED_PROXIES`                          |
 | `trustProxy: true`                                        | The Cloudflare and load balancer ranges only, so a client cannot fake its IP                         |
 | Raising the 1 MiB body limit for the whole app            | Raise it on the one route that needs it                                                              |
 | Express-style middleware for auth or checks               | A guard or interceptor; middleware only sees the raw Node request (`req.raw`)                        |

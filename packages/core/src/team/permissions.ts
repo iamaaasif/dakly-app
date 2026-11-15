@@ -6,6 +6,7 @@ import {
   type OwnerAction,
   type PermissionArea,
   type StoreAccess,
+  type MemberRoleInput,
 } from '@dakly/contracts/team';
 
 const levelRanks = { none: 0, view: 1, edit: 2 } as const;
@@ -36,4 +37,32 @@ export function canGrantRole(grantor: StoreAccess, proposed: StoreAccess): boole
     return level === 'none' || canAccess(grantor, area, level);
   });
   return grantsOnlyOwnedAreas && permissionFlags.every((flag) => !proposed[flag] || grantor[flag]);
+}
+
+export function canManageMember(
+  actor: StoreAccess,
+  current: StoreAccess,
+  proposed?: StoreAccess,
+): boolean {
+  if (!canAccess(actor, 'team', 'edit') || !hasKnownRole(current) || current.role === 'owner')
+    return false;
+  return !proposed || (proposed.role !== 'owner' && canGrantRole(actor, proposed));
+}
+
+export function hasSameMemberRole(
+  current: { builtInRole: BuiltInRole | null; roleId: string | null },
+  proposed: MemberRoleInput,
+): boolean {
+  return (
+    current.builtInRole === (proposed.builtInRole ?? null) &&
+    current.roleId === (proposed.roleId ?? null)
+  );
+}
+
+export function canChangeExtensions(access: StoreAccess): boolean {
+  return access.role === 'owner' || access.role === 'admin';
+}
+
+export function canApproveSupport(access: StoreAccess): boolean {
+  return access.role === 'owner';
 }

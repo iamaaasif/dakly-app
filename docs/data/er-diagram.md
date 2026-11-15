@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0019_snapshot.json`: **85 tables, 1151 columns, 335 explicit indexes and 275 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0024_snapshot.json`: **96 tables, 1249 columns, 369 explicit indexes and 296 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -12,7 +12,7 @@ The schema defines relationships, not completed feature behavior. Refer to [revi
 
 ## Stores, accounts and team
 
-Schema files: `stores.ts`, `auth.ts`, `account-security-events.ts`, `team.ts`, `admin.ts`.
+Schema files: `stores.ts`, `auth.ts`, `account-security-events.ts`, `account-recovery.ts`, `team.ts`, `admin.ts`, `staff-recovery.ts`.
 
 ```mermaid
 erDiagram
@@ -22,20 +22,41 @@ erDiagram
     users ||..o{ push_subscriptions : "user_id"
     users ||..o{ account_security_events : "user_id"
     staff_users |o..o{ account_security_events : "actor_staff_id"
+    users ||..o{ account_recoveries : "user_id"
+    users ||..o{ account_security_notices : "user_id"
+    account_recoveries |o..o{ account_security_notices : "recovery_id"
     stores ||..o{ roles : "store_id"
     stores ||..o{ memberships : "store_id"
     users |o..o{ memberships : "user_id"
     roles |o..o{ memberships : "role_id"
     users |o..o{ memberships : "invited_by_user_id"
     roles |o..o{ memberships : "store_id, role_id"
+    stores ||..o{ ownership_transfers : "store_id"
+    users ||..o{ ownership_transfers : "owner_user_id"
+    users ||..o{ ownership_transfers : "new_owner_user_id"
     staff_users ||..o{ staff_sessions : "staff_user_id"
-    staff_users ||..o{ staff_audit_log : "staff_user_id"
+    staff_users |o..o{ staff_audit_log : "staff_user_id"
     stores ||..o{ support_grants : "store_id"
     staff_users ||..o{ support_grants : "staff_user_id"
     users |o..o{ support_grants : "approved_by_user_id"
     staff_users |o..o{ platform_settings : "updated_by_staff_id"
     staff_users |o..o{ abuse_reports : "reported_by_staff_id"
     staff_users |o..o{ abuse_reports : "handled_by_staff_id"
+    staff_users ||..o{ staff_identity_contacts : "staff_user_id"
+    staff_users ||..o{ staff_passkeys : "staff_user_id"
+    staff_users ||..o{ staff_challenges : "staff_user_id"
+    staff_users ||..o{ staff_user_links : "staff_user_id"
+    users ||..o{ staff_user_links : "user_id"
+    stores ||..o{ support_sessions : "store_id"
+    support_grants ||..o{ support_sessions : "grant_id"
+    staff_users ||..o{ support_sessions : "staff_user_id"
+    staff_sessions ||..o{ support_sessions : "staff_session_id"
+    support_grants ||..o{ support_sessions : "store_id, grant_id"
+    staff_users ||..o{ staff_audit_exports : "staff_user_id"
+    staff_sessions ||..o{ staff_audit_exports : "staff_session_id"
+    staff_audit_log ||--o| staff_alert_deliveries : "audit_id"
+    stores ||--o{ staff_recovery_history : "store_id"
+    staff_audit_log ||--o{ staff_recovery_history : "audit_id"
     stores {
         uuid id PK "NOT NULL; uuid"
         text name "NOT NULL; text"
@@ -71,13 +92,15 @@ erDiagram
         text name "NOT NULL; text"
         text phone UK "NULL; text"
         timestamp_with_time_zone phone_verified_at "NULL; timestamp with time zone"
-        citext email UK "NULL; citext"
+        citext email "NULL; citext"
         timestamp_with_time_zone email_verified_at "NULL; timestamp with time zone"
         text password_hash "NULL; text"
         text google_subject UK "NULL; text"
         bytea totp_secret_ciphertext "NULL; bytea"
         smallint totp_key_version "NULL; smallint"
         timestamp_with_time_zone totp_enabled_at "NULL; timestamp with time zone"
+        integer totp_last_step "NULL; integer"
+        integer security_version "NOT NULL; integer"
         text__ backup_code_hashes "NULL; text[]"
         text language "NOT NULL; text"
         boolean is_disabled "NOT NULL; boolean"
@@ -122,6 +145,29 @@ erDiagram
         jsonb details "NOT NULL; jsonb"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
+    account_recoveries {
+        uuid id PK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        text credential_state "NOT NULL; text"
+        text cancel_hash "NOT NULL; text"
+        text completion_hash "NOT NULL; text"
+        text status "NOT NULL; text"
+        timestamp_with_time_zone eligible_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    account_security_notices {
+        uuid id PK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        uuid recovery_id FK "NULL; uuid"
+        bytea ciphertext "NOT NULL; bytea"
+        smallint key_version "NOT NULL; smallint"
+        integer attempts "NOT NULL; integer"
+        timestamp_with_time_zone retry_at "NOT NULL; timestamp with time zone"
+        uuid lease_id "NULL; uuid"
+        timestamp_with_time_zone lease_until "NULL; timestamp with time zone"
+        timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
     roles {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
@@ -152,10 +198,26 @@ erDiagram
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
+    ownership_transfers {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid owner_user_id FK "NOT NULL; uuid"
+        uuid new_owner_user_id FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
     staff_users {
         uuid id PK "NOT NULL; uuid"
         citext email UK "NOT NULL; citext"
         text name "NOT NULL; text"
+        text access_subject UK "NULL; text"
+        text password_hash "NULL; text"
+        timestamp_with_time_zone enrolled_at "NULL; timestamp with time zone"
+        integer failed_attempts "NOT NULL; integer"
+        timestamp_with_time_zone blocked_until "NULL; timestamp with time zone"
+        bigint totp_last_step "NULL; bigint"
         text role "NOT NULL; text"
         text status "NOT NULL; text"
         bytea totp_secret_ciphertext "NULL; bytea"
@@ -171,13 +233,16 @@ erDiagram
         uuid staff_user_id FK "NOT NULL; uuid"
         inet ip "NULL; inet"
         text user_agent "NULL; text"
+        timestamp_with_time_zone last_seen_at "NULL; timestamp with time zone"
         timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone revoked_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     staff_audit_log {
         uuid id PK "NOT NULL; uuid"
-        uuid staff_user_id FK "NOT NULL; uuid"
+        text operator_identity "NULL; text"
+        uuid actor_user_id "NULL; uuid"
+        uuid staff_user_id FK "NULL; uuid"
         text action "NOT NULL; text"
         uuid store_id "NULL; uuid"
         text target_type "NULL; text"
@@ -195,6 +260,7 @@ erDiagram
         text access "NOT NULL; text"
         text status "NOT NULL; text"
         text reason "NOT NULL; text"
+        integer duration_minutes "NOT NULL; integer"
         boolean is_break_glass "NOT NULL; boolean"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone requested_at "NOT NULL; timestamp with time zone"
@@ -229,6 +295,81 @@ erDiagram
         timestamp_with_time_zone resolved_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    staff_identity_contacts {
+        uuid id PK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        text kind "NOT NULL; text"
+        text value "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_passkeys {
+        text credential_id PK "NOT NULL; text"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        bytea public_key "NOT NULL; bytea"
+        bigint counter "NOT NULL; bigint"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_challenges {
+        bytea token_hash PK "NOT NULL; bytea"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        text purpose "NOT NULL; text"
+        text password_hash "NULL; text"
+        text password_state "NULL; text"
+        text webauthn_challenge "NULL; text"
+        bytea totp_secret_ciphertext "NULL; bytea"
+        smallint totp_key_version "NULL; smallint"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone consumed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_user_links {
+        uuid id PK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        uuid user_id FK "NOT NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    support_sessions {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid grant_id FK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        uuid staff_session_id FK "NOT NULL; uuid"
+        bytea handoff_hash UK "NOT NULL; bytea"
+        bytea token_hash UK "NULL; bytea"
+        timestamp_with_time_zone handoff_expires_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone consumed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_audit_exports {
+        uuid id PK "NOT NULL; uuid"
+        uuid staff_user_id FK "NOT NULL; uuid"
+        uuid staff_session_id FK "NOT NULL; uuid"
+        text staff_name "NOT NULL; text"
+        jsonb filter "NOT NULL; jsonb"
+        text status "NOT NULL; text"
+        integer progress "NOT NULL; integer"
+        integer attempts "NOT NULL; integer"
+        uuid lease_id "NULL; uuid"
+        timestamp_with_time_zone leased_until "NULL; timestamp with time zone"
+        text contents "NULL; text"
+        text error "NULL; text"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    staff_alert_deliveries {
+        uuid audit_id PK,FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        integer attempts "NOT NULL; integer"
+        uuid lease_id "NULL; uuid"
+        timestamp_with_time_zone leased_until "NULL; timestamp with time zone"
+        timestamp_with_time_zone next_attempt_at "NOT NULL; timestamp with time zone"
+        text error "NULL; text"
+        timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
+    }
+    staff_recovery_history {
+        uuid store_id PK,FK "NOT NULL; uuid"
+        uuid audit_id PK,FK "NOT NULL; uuid"
     }
 ```
 
@@ -1668,18 +1809,41 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 
 | Constraint                                                           | Child columns                                             | Parent columns                              | On delete |
 | -------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------- | --------- |
+| `account_recoveries_user_id_users_id_fk`                             | `account_recoveries(user_id)`                             | `users(id)`                                 | cascade   |
+| `account_security_notices_user_id_users_id_fk`                       | `account_security_notices(user_id)`                       | `users(id)`                                 | cascade   |
+| `account_security_notices_recovery_id_account_recoveries_id_fk`      | `account_security_notices(recovery_id)`                   | `account_recoveries(id)`                    | cascade   |
 | `account_security_events_user_id_users_id_fk`                        | `account_security_events(user_id)`                        | `users(id)`                                 | no action |
 | `account_security_events_actor_staff_id_staff_users_id_fk`           | `account_security_events(actor_staff_id)`                 | `staff_users(id)`                           | no action |
-| `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
-| `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
-| `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
-| `staff_audit_log_staff_user_id_staff_users_id_fk`                    | `staff_audit_log(staff_user_id)`                          | `staff_users(id)`                           | no action |
 | `staff_sessions_staff_user_id_staff_users_id_fk`                     | `staff_sessions(staff_user_id)`                           | `staff_users(id)`                           | cascade   |
+| `staff_audit_log_staff_user_id_staff_users_id_fk`                    | `staff_audit_log(staff_user_id)`                          | `staff_users(id)`                           | no action |
 | `support_grants_store_id_stores_id_fk`                               | `support_grants(store_id)`                                | `stores(id)`                                | no action |
 | `support_grants_staff_user_id_staff_users_id_fk`                     | `support_grants(staff_user_id)`                           | `staff_users(id)`                           | no action |
 | `support_grants_approved_by_user_id_users_id_fk`                     | `support_grants(approved_by_user_id)`                     | `users(id)`                                 | no action |
+| `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
+| `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
+| `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
+| `staff_identity_contacts_staff_user_id_staff_users_id_fk`            | `staff_identity_contacts(staff_user_id)`                  | `staff_users(id)`                           | no action |
+| `staff_passkeys_staff_user_id_staff_users_id_fk`                     | `staff_passkeys(staff_user_id)`                           | `staff_users(id)`                           | no action |
+| `staff_challenges_staff_user_id_staff_users_id_fk`                   | `staff_challenges(staff_user_id)`                         | `staff_users(id)`                           | no action |
+| `staff_user_links_staff_user_id_staff_users_id_fk`                   | `staff_user_links(staff_user_id)`                         | `staff_users(id)`                           | no action |
+| `staff_user_links_user_id_users_id_fk`                               | `staff_user_links(user_id)`                               | `users(id)`                                 | no action |
+| `support_sessions_store_id_stores_id_fk`                             | `support_sessions(store_id)`                              | `stores(id)`                                | no action |
+| `support_sessions_grant_id_support_grants_id_fk`                     | `support_sessions(grant_id)`                              | `support_grants(id)`                        | no action |
+| `support_sessions_staff_user_id_staff_users_id_fk`                   | `support_sessions(staff_user_id)`                         | `staff_users(id)`                           | no action |
+| `support_sessions_staff_session_id_staff_sessions_id_fk`             | `support_sessions(staff_session_id)`                      | `staff_sessions(id)`                        | no action |
+| `support_sessions_grant_store_fk`                                    | `support_sessions(store_id, grant_id)`                    | `support_grants(store_id, id)`              | no action |
+| `staff_audit_exports_staff_user_id_staff_users_id_fk`                | `staff_audit_exports(staff_user_id)`                      | `staff_users(id)`                           | no action |
+| `staff_audit_exports_staff_session_id_staff_sessions_id_fk`          | `staff_audit_exports(staff_session_id)`                   | `staff_sessions(id)`                        | no action |
+| `staff_alert_deliveries_audit_id_staff_audit_log_id_fk`              | `staff_alert_deliveries(audit_id)`                        | `staff_audit_log(id)`                       | no action |
 | `ai_agent_settings_store_id_stores_id_fk`                            | `ai_agent_settings(store_id)`                             | `stores(id)`                                | no action |
 | `ai_agent_settings_updated_by_user_id_users_id_fk`                   | `ai_agent_settings(updated_by_user_id)`                   | `users(id)`                                 | no action |
+| `knowledge_items_store_id_stores_id_fk`                              | `knowledge_items(store_id)`                               | `stores(id)`                                | no action |
+| `knowledge_items_file_id_files_id_fk`                                | `knowledge_items(file_id)`                                | `files(id)`                                 | no action |
+| `knowledge_items_created_by_user_id_users_id_fk`                     | `knowledge_items(created_by_user_id)`                     | `users(id)`                                 | no action |
+| `knowledge_items_file_id_store_fk`                                   | `knowledge_items(store_id, file_id)`                      | `files(store_id, id)`                       | no action |
+| `knowledge_chunks_store_id_stores_id_fk`                             | `knowledge_chunks(store_id)`                              | `stores(id)`                                | no action |
+| `knowledge_chunks_knowledge_item_id_knowledge_items_id_fk`           | `knowledge_chunks(knowledge_item_id)`                     | `knowledge_items(id)`                       | cascade   |
+| `knowledge_chunks_knowledge_item_id_store_fk`                        | `knowledge_chunks(store_id, knowledge_item_id)`           | `knowledge_items(store_id, id)`             | cascade   |
 | `ai_rule_changes_store_id_stores_id_fk`                              | `ai_rule_changes(store_id)`                               | `stores(id)`                                | no action |
 | `ai_rule_changes_undoes_change_id_ai_rule_changes_id_fk`             | `ai_rule_changes(undoes_change_id)`                       | `ai_rule_changes(id)`                       | no action |
 | `ai_rule_changes_changed_by_user_id_users_id_fk`                     | `ai_rule_changes(changed_by_user_id)`                     | `users(id)`                                 | no action |
@@ -1687,23 +1851,19 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `ai_runs_store_id_stores_id_fk`                                      | `ai_runs(store_id)`                                       | `stores(id)`                                | no action |
 | `assistant_messages_store_id_stores_id_fk`                           | `assistant_messages(store_id)`                            | `stores(id)`                                | no action |
 | `assistant_messages_user_id_users_id_fk`                             | `assistant_messages(user_id)`                             | `users(id)`                                 | cascade   |
-| `knowledge_chunks_store_id_stores_id_fk`                             | `knowledge_chunks(store_id)`                              | `stores(id)`                                | no action |
-| `knowledge_chunks_knowledge_item_id_knowledge_items_id_fk`           | `knowledge_chunks(knowledge_item_id)`                     | `knowledge_items(id)`                       | cascade   |
-| `knowledge_chunks_knowledge_item_id_store_fk`                        | `knowledge_chunks(store_id, knowledge_item_id)`           | `knowledge_items(store_id, id)`             | cascade   |
-| `knowledge_items_store_id_stores_id_fk`                              | `knowledge_items(store_id)`                               | `stores(id)`                                | no action |
-| `knowledge_items_file_id_files_id_fk`                                | `knowledge_items(file_id)`                                | `files(id)`                                 | no action |
-| `knowledge_items_created_by_user_id_users_id_fk`                     | `knowledge_items(created_by_user_id)`                     | `users(id)`                                 | no action |
-| `knowledge_items_file_id_store_fk`                                   | `knowledge_items(store_id, file_id)`                      | `files(store_id, id)`                       | no action |
 | `store_daily_metrics_store_id_stores_id_fk`                          | `store_daily_metrics(store_id)`                           | `stores(id)`                                | no action |
 | `bd_areas_parent_id_bd_areas_id_fk`                                  | `bd_areas(parent_id)`                                     | `bd_areas(id)`                              | no action |
-| `push_subscriptions_user_id_users_id_fk`                             | `push_subscriptions(user_id)`                             | `users(id)`                                 | cascade   |
 | `sessions_user_id_users_id_fk`                                       | `sessions(user_id)`                                       | `users(id)`                                 | cascade   |
 | `sessions_active_store_id_stores_id_fk`                              | `sessions(active_store_id)`                               | `stores(id)`                                | no action |
-| `automation_run_steps_store_id_stores_id_fk`                         | `automation_run_steps(store_id)`                          | `stores(id)`                                | no action |
-| `automation_run_steps_run_id_automation_runs_id_fk`                  | `automation_run_steps(run_id)`                            | `automation_runs(id)`                       | cascade   |
-| `automation_run_steps_contact_id_contacts_id_fk`                     | `automation_run_steps(contact_id)`                        | `contacts(id)`                              | cascade   |
-| `automation_run_steps_run_id_store_fk`                               | `automation_run_steps(store_id, run_id)`                  | `automation_runs(store_id, id)`             | cascade   |
-| `automation_run_steps_contact_id_store_fk`                           | `automation_run_steps(store_id, contact_id)`              | `contacts(store_id, id)`                    | cascade   |
+| `push_subscriptions_user_id_users_id_fk`                             | `push_subscriptions(user_id)`                             | `users(id)`                                 | cascade   |
+| `automations_store_id_stores_id_fk`                                  | `automations(store_id)`                                   | `stores(id)`                                | no action |
+| `automations_published_version_id_automation_versions_id_fk`         | `automations(published_version_id)`                       | `automation_versions(id)`                   | no action |
+| `automations_created_by_user_id_users_id_fk`                         | `automations(created_by_user_id)`                         | `users(id)`                                 | no action |
+| `automations_published_version_id_store_fk`                          | `automations(store_id, published_version_id)`             | `automation_versions(store_id, id)`         | no action |
+| `automation_versions_store_id_stores_id_fk`                          | `automation_versions(store_id)`                           | `stores(id)`                                | no action |
+| `automation_versions_automation_id_automations_id_fk`                | `automation_versions(automation_id)`                      | `automations(id)`                           | no action |
+| `automation_versions_published_by_user_id_users_id_fk`               | `automation_versions(published_by_user_id)`               | `users(id)`                                 | no action |
+| `automation_versions_automation_id_store_fk`                         | `automation_versions(store_id, automation_id)`            | `automations(store_id, id)`                 | no action |
 | `automation_runs_store_id_stores_id_fk`                              | `automation_runs(store_id)`                               | `stores(id)`                                | no action |
 | `automation_runs_automation_id_automations_id_fk`                    | `automation_runs(automation_id)`                          | `automations(id)`                           | no action |
 | `automation_runs_version_id_automation_versions_id_fk`               | `automation_runs(version_id)`                             | `automation_versions(id)`                   | no action |
@@ -1711,38 +1871,31 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `automation_runs_automation_id_store_fk`                             | `automation_runs(store_id, automation_id)`                | `automations(store_id, id)`                 | no action |
 | `automation_runs_version_id_store_fk`                                | `automation_runs(store_id, version_id)`                   | `automation_versions(store_id, id)`         | no action |
 | `automation_runs_contact_id_store_fk`                                | `automation_runs(store_id, contact_id)`                   | `contacts(store_id, id)`                    | cascade   |
-| `automation_versions_store_id_stores_id_fk`                          | `automation_versions(store_id)`                           | `stores(id)`                                | no action |
-| `automation_versions_automation_id_automations_id_fk`                | `automation_versions(automation_id)`                      | `automations(id)`                           | no action |
-| `automation_versions_published_by_user_id_users_id_fk`               | `automation_versions(published_by_user_id)`               | `users(id)`                                 | no action |
-| `automation_versions_automation_id_store_fk`                         | `automation_versions(store_id, automation_id)`            | `automations(store_id, id)`                 | no action |
-| `automations_store_id_stores_id_fk`                                  | `automations(store_id)`                                   | `stores(id)`                                | no action |
-| `automations_published_version_id_automation_versions_id_fk`         | `automations(published_version_id)`                       | `automation_versions(id)`                   | no action |
-| `automations_created_by_user_id_users_id_fk`                         | `automations(created_by_user_id)`                         | `users(id)`                                 | no action |
-| `automations_published_version_id_store_fk`                          | `automations(store_id, published_version_id)`             | `automation_versions(store_id, id)`         | no action |
+| `automation_run_steps_store_id_stores_id_fk`                         | `automation_run_steps(store_id)`                          | `stores(id)`                                | no action |
+| `automation_run_steps_run_id_automation_runs_id_fk`                  | `automation_run_steps(run_id)`                            | `automation_runs(id)`                       | cascade   |
+| `automation_run_steps_contact_id_contacts_id_fk`                     | `automation_run_steps(contact_id)`                        | `contacts(id)`                              | cascade   |
+| `automation_run_steps_run_id_store_fk`                               | `automation_run_steps(store_id, run_id)`                  | `automation_runs(store_id, id)`             | cascade   |
+| `automation_run_steps_contact_id_store_fk`                           | `automation_run_steps(store_id, contact_id)`              | `contacts(store_id, id)`                    | cascade   |
 | `coupons_created_by_staff_id_staff_users_id_fk`                      | `coupons(created_by_staff_id)`                            | `staff_users(id)`                           | no action |
-| `invoices_store_id_stores_id_fk`                                     | `invoices(store_id)`                                      | `stores(id)`                                | no action |
-| `invoices_credited_invoice_id_invoices_id_fk`                        | `invoices(credited_invoice_id)`                           | `invoices(id)`                              | no action |
-| `invoices_coupon_id_coupons_id_fk`                                   | `invoices(coupon_id)`                                     | `coupons(id)`                               | no action |
-| `invoices_credits_invoice_id_store_fk`                               | `invoices(store_id, credited_invoice_id)`                 | `invoices(store_id, id)`                    | no action |
-| `subscription_items_store_id_stores_id_fk`                           | `subscription_items(store_id)`                            | `stores(id)`                                | no action |
-| `subscription_items_subscription_id_subscriptions_id_fk`             | `subscription_items(subscription_id)`                     | `subscriptions(id)`                         | no action |
-| `subscription_items_plan_id_plans_id_fk`                             | `subscription_items(plan_id)`                             | `plans(id)`                                 | no action |
-| `subscription_items_subscription_id_store_fk`                        | `subscription_items(store_id, subscription_id)`           | `subscriptions(store_id, id)`               | no action |
 | `subscriptions_store_id_stores_id_fk`                                | `subscriptions(store_id)`                                 | `stores(id)`                                | no action |
 | `subscriptions_plan_id_plans_id_fk`                                  | `subscriptions(plan_id)`                                  | `plans(id)`                                 | no action |
 | `subscriptions_coupon_id_coupons_id_fk`                              | `subscriptions(coupon_id)`                                | `coupons(id)`                               | no action |
 | `subscriptions_pending_plan_id_plans_id_fk`                          | `subscriptions(pending_plan_id)`                          | `plans(id)`                                 | no action |
-| `usage_events_store_id_stores_id_fk`                                 | `usage_events(store_id)`                                  | `stores(id)`                                | no action |
+| `subscription_items_store_id_stores_id_fk`                           | `subscription_items(store_id)`                            | `stores(id)`                                | no action |
+| `subscription_items_subscription_id_subscriptions_id_fk`             | `subscription_items(subscription_id)`                     | `subscriptions(id)`                         | no action |
+| `subscription_items_plan_id_plans_id_fk`                             | `subscription_items(plan_id)`                             | `plans(id)`                                 | no action |
+| `subscription_items_subscription_id_store_fk`                        | `subscription_items(store_id, subscription_id)`           | `subscriptions(store_id, id)`               | no action |
+| `invoices_store_id_stores_id_fk`                                     | `invoices(store_id)`                                      | `stores(id)`                                | no action |
+| `invoices_credited_invoice_id_invoices_id_fk`                        | `invoices(credited_invoice_id)`                           | `invoices(id)`                              | no action |
+| `invoices_coupon_id_coupons_id_fk`                                   | `invoices(coupon_id)`                                     | `coupons(id)`                               | no action |
+| `invoices_credits_invoice_id_store_fk`                               | `invoices(store_id, credited_invoice_id)`                 | `invoices(store_id, id)`                    | no action |
 | `wallet_ledger_store_id_stores_id_fk`                                | `wallet_ledger(store_id)`                                 | `stores(id)`                                | no action |
 | `wallet_ledger_actor_user_id_users_id_fk`                            | `wallet_ledger(actor_user_id)`                            | `users(id)`                                 | no action |
 | `wallet_ledger_actor_staff_id_staff_users_id_fk`                     | `wallet_ledger(actor_staff_id)`                           | `staff_users(id)`                           | no action |
-| `campaign_recipients_store_id_stores_id_fk`                          | `campaign_recipients(store_id)`                           | `stores(id)`                                | no action |
-| `campaign_recipients_campaign_id_campaigns_id_fk`                    | `campaign_recipients(campaign_id)`                        | `campaigns(id)`                             | cascade   |
-| `campaign_recipients_contact_id_contacts_id_fk`                      | `campaign_recipients(contact_id)`                         | `contacts(id)`                              | cascade   |
-| `campaign_recipients_contact_identity_id_contact_identities_id_fk`   | `campaign_recipients(contact_identity_id)`                | `contact_identities(id)`                    | no action |
-| `campaign_recipients_campaign_id_store_fk`                           | `campaign_recipients(store_id, campaign_id)`              | `campaigns(store_id, id)`                   | cascade   |
-| `campaign_recipients_contact_id_store_fk`                            | `campaign_recipients(store_id, contact_id)`               | `contacts(store_id, id)`                    | cascade   |
-| `campaign_recipients_contact_identity_id_store_fk`                   | `campaign_recipients(store_id, contact_identity_id)`      | `contact_identities(store_id, id)`          | no action |
+| `usage_events_store_id_stores_id_fk`                                 | `usage_events(store_id)`                                  | `stores(id)`                                | no action |
+| `whatsapp_templates_store_id_stores_id_fk`                           | `whatsapp_templates(store_id)`                            | `stores(id)`                                | no action |
+| `whatsapp_templates_channel_connection_id_channel_connections_id_fk` | `whatsapp_templates(channel_connection_id)`               | `channel_connections(id)`                   | no action |
+| `whatsapp_templates_channel_connection_id_store_fk`                  | `whatsapp_templates(store_id, channel_connection_id)`     | `channel_connections(store_id, id)`         | no action |
 | `campaigns_store_id_stores_id_fk`                                    | `campaigns(store_id)`                                     | `stores(id)`                                | no action |
 | `campaigns_channel_connection_id_channel_connections_id_fk`          | `campaigns(channel_connection_id)`                        | `channel_connections(id)`                   | no action |
 | `campaigns_whatsapp_template_id_whatsapp_templates_id_fk`            | `campaigns(whatsapp_template_id)`                         | `whatsapp_templates(id)`                    | no action |
@@ -1750,18 +1903,22 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `campaigns_created_by_user_id_users_id_fk`                           | `campaigns(created_by_user_id)`                           | `users(id)`                                 | no action |
 | `campaigns_channel_connection_id_store_fk`                           | `campaigns(store_id, channel_connection_id)`              | `channel_connections(store_id, id)`         | no action |
 | `campaigns_whatsapp_template_id_store_fk`                            | `campaigns(store_id, whatsapp_template_id)`               | `whatsapp_templates(store_id, id)`          | no action |
-| `tracked_link_visit_days_store_id_stores_id_fk`                      | `tracked_link_visit_days(store_id)`                       | `stores(id)`                                | no action |
-| `tracked_link_visit_days_tracked_link_id_tracked_links_id_fk`        | `tracked_link_visit_days(tracked_link_id)`                | `tracked_links(id)`                         | cascade   |
-| `tracked_link_visit_days_tracked_link_id_store_fk`                   | `tracked_link_visit_days(store_id, tracked_link_id)`      | `tracked_links(store_id, id)`               | cascade   |
-| `tracked_link_visits_store_id_stores_id_fk`                          | `tracked_link_visits(store_id)`                           | `stores(id)`                                | no action |
-| `tracked_link_visits_tracked_link_id_tracked_links_id_fk`            | `tracked_link_visits(tracked_link_id)`                    | `tracked_links(id)`                         | cascade   |
-| `tracked_link_visits_tracked_link_id_store_fk`                       | `tracked_link_visits(store_id, tracked_link_id)`          | `tracked_links(store_id, id)`               | cascade   |
+| `campaign_recipients_store_id_stores_id_fk`                          | `campaign_recipients(store_id)`                           | `stores(id)`                                | no action |
+| `campaign_recipients_campaign_id_campaigns_id_fk`                    | `campaign_recipients(campaign_id)`                        | `campaigns(id)`                             | cascade   |
+| `campaign_recipients_contact_id_contacts_id_fk`                      | `campaign_recipients(contact_id)`                         | `contacts(id)`                              | cascade   |
+| `campaign_recipients_contact_identity_id_contact_identities_id_fk`   | `campaign_recipients(contact_identity_id)`                | `contact_identities(id)`                    | no action |
+| `campaign_recipients_campaign_id_store_fk`                           | `campaign_recipients(store_id, campaign_id)`              | `campaigns(store_id, id)`                   | cascade   |
+| `campaign_recipients_contact_id_store_fk`                            | `campaign_recipients(store_id, contact_id)`               | `contacts(store_id, id)`                    | cascade   |
+| `campaign_recipients_contact_identity_id_store_fk`                   | `campaign_recipients(store_id, contact_identity_id)`      | `contact_identities(store_id, id)`          | no action |
 | `tracked_links_store_id_stores_id_fk`                                | `tracked_links(store_id)`                                 | `stores(id)`                                | no action |
 | `tracked_links_contact_id_contacts_id_fk`                            | `tracked_links(contact_id)`                               | `contacts(id)`                              | cascade   |
 | `tracked_links_contact_id_store_fk`                                  | `tracked_links(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
-| `whatsapp_templates_store_id_stores_id_fk`                           | `whatsapp_templates(store_id)`                            | `stores(id)`                                | no action |
-| `whatsapp_templates_channel_connection_id_channel_connections_id_fk` | `whatsapp_templates(channel_connection_id)`               | `channel_connections(id)`                   | no action |
-| `whatsapp_templates_channel_connection_id_store_fk`                  | `whatsapp_templates(store_id, channel_connection_id)`     | `channel_connections(store_id, id)`         | no action |
+| `tracked_link_visits_store_id_stores_id_fk`                          | `tracked_link_visits(store_id)`                           | `stores(id)`                                | no action |
+| `tracked_link_visits_tracked_link_id_tracked_links_id_fk`            | `tracked_link_visits(tracked_link_id)`                    | `tracked_links(id)`                         | cascade   |
+| `tracked_link_visits_tracked_link_id_store_fk`                       | `tracked_link_visits(store_id, tracked_link_id)`          | `tracked_links(store_id, id)`               | cascade   |
+| `tracked_link_visit_days_store_id_stores_id_fk`                      | `tracked_link_visit_days(store_id)`                       | `stores(id)`                                | no action |
+| `tracked_link_visit_days_tracked_link_id_tracked_links_id_fk`        | `tracked_link_visit_days(tracked_link_id)`                | `tracked_links(id)`                         | cascade   |
+| `tracked_link_visit_days_tracked_link_id_store_fk`                   | `tracked_link_visit_days(store_id, tracked_link_id)`      | `tracked_links(store_id, id)`               | cascade   |
 | `channel_connections_store_id_stores_id_fk`                          | `channel_connections(store_id)`                           | `stores(id)`                                | no action |
 | `channel_connections_connected_by_user_id_users_id_fk`               | `channel_connections(connected_by_user_id)`               | `users(id)`                                 | no action |
 | `sms_sender_ids_store_id_stores_id_fk`                               | `sms_sender_ids(store_id)`                                | `stores(id)`                                | no action |
@@ -1781,14 +1938,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `messages_author_user_id_users_id_fk`                                | `messages(author_user_id)`                                | `users(id)`                                 | no action |
 | `messages_rated_by_user_id_users_id_fk`                              | `messages(rated_by_user_id)`                              | `users(id)`                                 | no action |
 | `messages_conversation_id_store_fk`                                  | `messages(store_id, conversation_id)`                     | `conversations(store_id, id)`               | no action |
-| `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
-| `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
-| `sms_messages_store_id_stores_id_fk`                                 | `sms_messages(store_id)`                                  | `stores(id)`                                | no action |
-| `sms_messages_contact_id_contacts_id_fk`                             | `sms_messages(contact_id)`                                | `contacts(id)`                              | set null  |
-| `sms_messages_sender_id_id_sms_sender_ids_id_fk`                     | `sms_messages(sender_id_id)`                              | `sms_sender_ids(id)`                        | no action |
-| `sms_messages_created_by_user_id_users_id_fk`                        | `sms_messages(created_by_user_id)`                        | `users(id)`                                 | no action |
-| `sms_messages_contact_id_store_fk`                                   | `sms_messages(store_id, contact_id)`                      | `contacts(store_id, id)`                    | no action |
-| `sms_messages_sender_id_id_store_fk`                                 | `sms_messages(store_id, sender_id_id)`                    | `sms_sender_ids(store_id, id)`              | no action |
 | `social_comments_store_id_stores_id_fk`                              | `social_comments(store_id)`                               | `stores(id)`                                | no action |
 | `social_comments_channel_connection_id_channel_connections_id_fk`    | `social_comments(channel_connection_id)`                  | `channel_connections(id)`                   | no action |
 | `social_comments_post_target_id_post_targets_id_fk`                  | `social_comments(post_target_id)`                         | `post_targets(id)`                          | no action |
@@ -1798,25 +1947,20 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `social_comments_post_target_id_store_fk`                            | `social_comments(store_id, post_target_id)`               | `post_targets(store_id, id)`                | no action |
 | `social_comments_contact_id_store_fk`                                | `social_comments(store_id, contact_id)`                   | `contacts(store_id, id)`                    | no action |
 | `social_comments_conversation_id_store_fk`                           | `social_comments(store_id, conversation_id)`              | `conversations(store_id, id)`               | no action |
+| `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
+| `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
+| `sms_messages_store_id_stores_id_fk`                                 | `sms_messages(store_id)`                                  | `stores(id)`                                | no action |
+| `sms_messages_contact_id_contacts_id_fk`                             | `sms_messages(contact_id)`                                | `contacts(id)`                              | set null  |
+| `sms_messages_sender_id_id_sms_sender_ids_id_fk`                     | `sms_messages(sender_id_id)`                              | `sms_sender_ids(id)`                        | no action |
+| `sms_messages_created_by_user_id_users_id_fk`                        | `sms_messages(created_by_user_id)`                        | `users(id)`                                 | no action |
+| `sms_messages_contact_id_store_fk`                                   | `sms_messages(store_id, contact_id)`                      | `contacts(store_id, id)`                    | no action |
+| `sms_messages_sender_id_id_store_fk`                                 | `sms_messages(store_id, sender_id_id)`                    | `sms_sender_ids(store_id, id)`              | no action |
 | `contact_memories_contact_id_contacts_id_fk`                         | `contact_memories(contact_id)`                            | `contacts(id)`                              | cascade   |
 | `contact_memories_store_id_stores_id_fk`                             | `contact_memories(store_id)`                              | `stores(id)`                                | no action |
 | `contact_memories_edited_by_user_id_users_id_fk`                     | `contact_memories(edited_by_user_id)`                     | `users(id)`                                 | no action |
 | `contact_memories_contact_id_store_fk`                               | `contact_memories(store_id, contact_id)`                  | `contacts(store_id, id)`                    | cascade   |
-| `consents_store_id_stores_id_fk`                                     | `consents(store_id)`                                      | `stores(id)`                                | no action |
-| `consents_contact_id_contacts_id_fk`                                 | `consents(contact_id)`                                    | `contacts(id)`                              | cascade   |
-| `consents_captured_by_user_id_users_id_fk`                           | `consents(captured_by_user_id)`                           | `users(id)`                                 | no action |
-| `consents_contact_id_store_fk`                                       | `consents(store_id, contact_id)`                          | `contacts(store_id, id)`                    | cascade   |
-| `contact_identities_store_id_stores_id_fk`                           | `contact_identities(store_id)`                            | `stores(id)`                                | no action |
-| `contact_identities_contact_id_contacts_id_fk`                       | `contact_identities(contact_id)`                          | `contacts(id)`                              | cascade   |
-| `contact_identities_channel_connection_id_channel_connections_id_fk` | `contact_identities(channel_connection_id)`               | `channel_connections(id)`                   | no action |
-| `contact_identities_contact_id_store_fk`                             | `contact_identities(store_id, contact_id)`                | `contacts(store_id, id)`                    | cascade   |
-| `contact_identities_channel_connection_id_store_fk`                  | `contact_identities(store_id, channel_connection_id)`     | `channel_connections(store_id, id)`         | no action |
-| `contact_match_suggestions_store_id_stores_id_fk`                    | `contact_match_suggestions(store_id)`                     | `stores(id)`                                | no action |
-| `contact_match_suggestions_contact_id_contacts_id_fk`                | `contact_match_suggestions(contact_id)`                   | `contacts(id)`                              | cascade   |
-| `contact_match_suggestions_matched_contact_id_contacts_id_fk`        | `contact_match_suggestions(matched_contact_id)`           | `contacts(id)`                              | cascade   |
-| `contact_match_suggestions_decided_by_user_id_users_id_fk`           | `contact_match_suggestions(decided_by_user_id)`           | `users(id)`                                 | no action |
-| `contact_match_suggestions_contact_id_store_fk`                      | `contact_match_suggestions(store_id, contact_id)`         | `contacts(store_id, id)`                    | cascade   |
-| `contact_match_suggestions_matched_contact_id_store_fk`              | `contact_match_suggestions(store_id, matched_contact_id)` | `contacts(store_id, id)`                    | cascade   |
+| `contacts_store_id_stores_id_fk`                                     | `contacts(store_id)`                                      | `stores(id)`                                | no action |
+| `contacts_bd_area_id_bd_areas_id_fk`                                 | `contacts(bd_area_id)`                                    | `bd_areas(id)`                              | no action |
 | `contact_merges_store_id_stores_id_fk`                               | `contact_merges(store_id)`                                | `stores(id)`                                | no action |
 | `contact_merges_kept_contact_id_contacts_id_fk`                      | `contact_merges(kept_contact_id)`                         | `contacts(id)`                              | set null  |
 | `contact_merges_merged_contact_id_contacts_id_fk`                    | `contact_merges(merged_contact_id)`                       | `contacts(id)`                              | set null  |
@@ -1824,19 +1968,32 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_merges_undone_by_user_id_users_id_fk`                       | `contact_merges(undone_by_user_id)`                       | `users(id)`                                 | no action |
 | `contact_merges_kept_contact_id_store_fk`                            | `contact_merges(store_id, kept_contact_id)`               | `contacts(store_id, id)`                    | no action |
 | `contact_merges_merged_contact_id_store_fk`                          | `contact_merges(store_id, merged_contact_id)`             | `contacts(store_id, id)`                    | no action |
+| `contact_match_suggestions_store_id_stores_id_fk`                    | `contact_match_suggestions(store_id)`                     | `stores(id)`                                | no action |
+| `contact_match_suggestions_contact_id_contacts_id_fk`                | `contact_match_suggestions(contact_id)`                   | `contacts(id)`                              | cascade   |
+| `contact_match_suggestions_matched_contact_id_contacts_id_fk`        | `contact_match_suggestions(matched_contact_id)`           | `contacts(id)`                              | cascade   |
+| `contact_match_suggestions_decided_by_user_id_users_id_fk`           | `contact_match_suggestions(decided_by_user_id)`           | `users(id)`                                 | no action |
+| `contact_match_suggestions_contact_id_store_fk`                      | `contact_match_suggestions(store_id, contact_id)`         | `contacts(store_id, id)`                    | cascade   |
+| `contact_match_suggestions_matched_contact_id_store_fk`              | `contact_match_suggestions(store_id, matched_contact_id)` | `contacts(store_id, id)`                    | cascade   |
+| `contact_identities_store_id_stores_id_fk`                           | `contact_identities(store_id)`                            | `stores(id)`                                | no action |
+| `contact_identities_contact_id_contacts_id_fk`                       | `contact_identities(contact_id)`                          | `contacts(id)`                              | cascade   |
+| `contact_identities_channel_connection_id_channel_connections_id_fk` | `contact_identities(channel_connection_id)`               | `channel_connections(id)`                   | no action |
+| `contact_identities_contact_id_store_fk`                             | `contact_identities(store_id, contact_id)`                | `contacts(store_id, id)`                    | cascade   |
+| `contact_identities_channel_connection_id_store_fk`                  | `contact_identities(store_id, channel_connection_id)`     | `channel_connections(store_id, id)`         | no action |
+| `consents_store_id_stores_id_fk`                                     | `consents(store_id)`                                      | `stores(id)`                                | no action |
+| `consents_contact_id_contacts_id_fk`                                 | `consents(contact_id)`                                    | `contacts(id)`                              | cascade   |
+| `consents_captured_by_user_id_users_id_fk`                           | `consents(captured_by_user_id)`                           | `users(id)`                                 | no action |
+| `consents_contact_id_store_fk`                                       | `consents(store_id, contact_id)`                          | `contacts(store_id, id)`                    | cascade   |
 | `contact_stats_contact_id_contacts_id_fk`                            | `contact_stats(contact_id)`                               | `contacts(id)`                              | cascade   |
 | `contact_stats_store_id_stores_id_fk`                                | `contact_stats(store_id)`                                 | `stores(id)`                                | no action |
 | `contact_stats_contact_id_store_fk`                                  | `contact_stats(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
-| `contacts_store_id_stores_id_fk`                                     | `contacts(store_id)`                                      | `stores(id)`                                | no action |
-| `contacts_bd_area_id_bd_areas_id_fk`                                 | `contacts(bd_area_id)`                                    | `bd_areas(id)`                              | no action |
+| `segments_store_id_stores_id_fk`                                     | `segments(store_id)`                                      | `stores(id)`                                | no action |
+| `segments_created_by_user_id_users_id_fk`                            | `segments(created_by_user_id)`                            | `users(id)`                                 | no action |
 | `imports_store_id_stores_id_fk`                                      | `imports(store_id)`                                       | `stores(id)`                                | no action |
 | `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
 | `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |
 | `imports_created_by_user_id_users_id_fk`                             | `imports(created_by_user_id)`                             | `users(id)`                                 | no action |
 | `imports_file_id_store_fk`                                           | `imports(store_id, file_id)`                              | `files(store_id, id)`                       | no action |
 | `imports_report_file_id_store_fk`                                    | `imports(store_id, report_file_id)`                       | `files(store_id, id)`                       | no action |
-| `segments_store_id_stores_id_fk`                                     | `segments(store_id)`                                      | `stores(id)`                                | no action |
-| `segments_created_by_user_id_users_id_fk`                            | `segments(created_by_user_id)`                            | `users(id)`                                 | no action |
 | `customer_insights_store_id_stores_id_fk`                            | `customer_insights(store_id)`                             | `stores(id)`                                | no action |
 | `customer_insights_hidden_by_user_id_users_id_fk`                    | `customer_insights(hidden_by_user_id)`                    | `users(id)`                                 | no action |
 | `customers_store_id_stores_id_fk`                                    | `customers(store_id)`                                     | `stores(id)`                                | no action |
@@ -1852,11 +2009,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |
 | `discount_codes_created_by_user_id_users_id_fk`                      | `discount_codes(created_by_user_id)`                      | `users(id)`                                 | no action |
 | `discount_codes_contact_id_store_fk`                                 | `discount_codes(store_id, contact_id)`                    | `contacts(store_id, id)`                    | no action |
-| `order_items_store_id_stores_id_fk`                                  | `order_items(store_id)`                                   | `stores(id)`                                | no action |
-| `order_items_order_id_orders_id_fk`                                  | `order_items(order_id)`                                   | `orders(id)`                                | cascade   |
-| `order_items_variant_id_product_variants_id_fk`                      | `order_items(variant_id)`                                 | `product_variants(id)`                      | no action |
-| `order_items_order_id_store_fk`                                      | `order_items(store_id, order_id)`                         | `orders(store_id, id)`                      | cascade   |
-| `order_items_variant_id_store_fk`                                    | `order_items(store_id, variant_id)`                       | `product_variants(store_id, id)`            | no action |
 | `orders_store_id_stores_id_fk`                                       | `orders(store_id)`                                        | `stores(id)`                                | no action |
 | `orders_buyer_contact_id_contacts_id_fk`                             | `orders(buyer_contact_id)`                                | `contacts(id)`                              | set null  |
 | `orders_conversation_id_conversations_id_fk`                         | `orders(conversation_id)`                                 | `conversations(id)`                         | set null  |
@@ -1871,12 +2023,11 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `orders_discount_code_id_store_fk`                                   | `orders(store_id, discount_code_id)`                      | `discount_codes(store_id, id)`              | no action |
 | `orders_delivery_zone_id_store_fk`                                   | `orders(store_id, delivery_zone_id)`                      | `delivery_zones(store_id, id)`              | no action |
 | `orders_possible_duplicate_of_order_id_store_fk`                     | `orders(store_id, possible_duplicate_of_order_id)`        | `orders(store_id, id)`                      | no action |
-| `gateway_settlement_lines_report_file_id_files_id_fk`                | `gateway_settlement_lines(report_file_id)`                | `files(id)`                                 | no action |
-| `gateway_settlement_lines_payment_intent_id_payment_intents_id_fk`   | `gateway_settlement_lines(payment_intent_id)`             | `payment_intents(id)`                       | no action |
-| `gateway_settlement_lines_matched_by_staff_id_staff_users_id_fk`     | `gateway_settlement_lines(matched_by_staff_id)`           | `staff_users(id)`                           | no action |
-| `payment_events_store_id_stores_id_fk`                               | `payment_events(store_id)`                                | `stores(id)`                                | no action |
-| `payment_events_payment_intent_id_payment_intents_id_fk`             | `payment_events(payment_intent_id)`                       | `payment_intents(id)`                       | no action |
-| `payment_events_payment_intent_id_store_fk`                          | `payment_events(store_id, payment_intent_id)`             | `payment_intents(store_id, id)`             | no action |
+| `order_items_store_id_stores_id_fk`                                  | `order_items(store_id)`                                   | `stores(id)`                                | no action |
+| `order_items_order_id_orders_id_fk`                                  | `order_items(order_id)`                                   | `orders(id)`                                | cascade   |
+| `order_items_variant_id_product_variants_id_fk`                      | `order_items(variant_id)`                                 | `product_variants(id)`                      | no action |
+| `order_items_order_id_store_fk`                                      | `order_items(store_id, order_id)`                         | `orders(store_id, id)`                      | cascade   |
+| `order_items_variant_id_store_fk`                                    | `order_items(store_id, variant_id)`                       | `product_variants(store_id, id)`            | no action |
 | `payment_gateway_credentials_store_id_stores_id_fk`                  | `payment_gateway_credentials(store_id)`                   | `stores(id)`                                | no action |
 | `payment_gateway_credentials_connected_by_user_id_users_id_fk`       | `payment_gateway_credentials(connected_by_user_id)`       | `users(id)`                                 | no action |
 | `payment_intents_store_id_stores_id_fk`                              | `payment_intents(store_id)`                               | `stores(id)`                                | no action |
@@ -1888,22 +2039,32 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `payment_intents_credential_id_store_fk`                             | `payment_intents(store_id, credential_id)`                | `payment_gateway_credentials(store_id, id)` | no action |
 | `payment_intents_order_id_store_fk`                                  | `payment_intents(store_id, order_id)`                     | `orders(store_id, id)`                      | no action |
 | `payment_intents_invoice_id_store_fk`                                | `payment_intents(store_id, invoice_id)`                   | `invoices(store_id, id)`                    | no action |
+| `payment_events_store_id_stores_id_fk`                               | `payment_events(store_id)`                                | `stores(id)`                                | no action |
+| `payment_events_payment_intent_id_payment_intents_id_fk`             | `payment_events(payment_intent_id)`                       | `payment_intents(id)`                       | no action |
+| `payment_events_payment_intent_id_store_fk`                          | `payment_events(store_id, payment_intent_id)`             | `payment_intents(store_id, id)`             | no action |
 | `refunds_store_id_stores_id_fk`                                      | `refunds(store_id)`                                       | `stores(id)`                                | no action |
 | `refunds_payment_intent_id_payment_intents_id_fk`                    | `refunds(payment_intent_id)`                              | `payment_intents(id)`                       | no action |
 | `refunds_requested_by_user_id_users_id_fk`                           | `refunds(requested_by_user_id)`                           | `users(id)`                                 | no action |
 | `refunds_payment_intent_id_store_fk`                                 | `refunds(store_id, payment_intent_id)`                    | `payment_intents(store_id, id)`             | no action |
+| `gateway_settlement_lines_report_file_id_files_id_fk`                | `gateway_settlement_lines(report_file_id)`                | `files(id)`                                 | no action |
+| `gateway_settlement_lines_payment_intent_id_payment_intents_id_fk`   | `gateway_settlement_lines(payment_intent_id)`             | `payment_intents(id)`                       | no action |
+| `gateway_settlement_lines_matched_by_staff_id_staff_users_id_fk`     | `gateway_settlement_lines(matched_by_staff_id)`           | `staff_users(id)`                           | no action |
 | `audit_log_store_id_stores_id_fk`                                    | `audit_log(store_id)`                                     | `stores(id)`                                | no action |
 | `audit_log_actor_user_id_users_id_fk`                                | `audit_log(actor_user_id)`                                | `users(id)`                                 | no action |
 | `audit_log_actor_staff_id_staff_users_id_fk`                         | `audit_log(actor_staff_id)`                               | `staff_users(id)`                           | no action |
+| `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
+| `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
 | `files_store_id_stores_id_fk`                                        | `files(store_id)`                                         | `stores(id)`                                | no action |
 | `files_uploaded_by_user_id_users_id_fk`                              | `files(uploaded_by_user_id)`                              | `users(id)`                                 | no action |
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
-| `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
-| `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `products_store_id_stores_id_fk`                                     | `products(store_id)`                                      | `stores(id)`                                | no action |
 | `product_variants_store_id_stores_id_fk`                             | `product_variants(store_id)`                              | `stores(id)`                                | no action |
 | `product_variants_product_id_products_id_fk`                         | `product_variants(product_id)`                            | `products(id)`                              | no action |
 | `product_variants_product_id_store_fk`                               | `product_variants(store_id, product_id)`                  | `products(store_id, id)`                    | no action |
-| `products_store_id_stores_id_fk`                                     | `products(store_id)`                                      | `stores(id)`                                | no action |
+| `stock_movements_store_id_stores_id_fk`                              | `stock_movements(store_id)`                               | `stores(id)`                                | no action |
+| `stock_movements_variant_id_product_variants_id_fk`                  | `stock_movements(variant_id)`                             | `product_variants(id)`                      | no action |
+| `stock_movements_actor_user_id_users_id_fk`                          | `stock_movements(actor_user_id)`                          | `users(id)`                                 | no action |
+| `stock_movements_variant_id_store_fk`                                | `stock_movements(store_id, variant_id)`                   | `product_variants(store_id, id)`            | no action |
 | `restock_requests_store_id_stores_id_fk`                             | `restock_requests(store_id)`                              | `stores(id)`                                | no action |
 | `restock_requests_variant_id_product_variants_id_fk`                 | `restock_requests(variant_id)`                            | `product_variants(id)`                      | no action |
 | `restock_requests_contact_id_contacts_id_fk`                         | `restock_requests(contact_id)`                            | `contacts(id)`                              | cascade   |
@@ -1911,22 +2072,20 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `restock_requests_variant_id_store_fk`                               | `restock_requests(store_id, variant_id)`                  | `product_variants(store_id, id)`            | no action |
 | `restock_requests_contact_id_store_fk`                               | `restock_requests(store_id, contact_id)`                  | `contacts(store_id, id)`                    | cascade   |
 | `restock_requests_conversation_id_store_fk`                          | `restock_requests(store_id, conversation_id)`             | `conversations(store_id, id)`               | no action |
-| `stock_movements_store_id_stores_id_fk`                              | `stock_movements(store_id)`                               | `stores(id)`                                | no action |
-| `stock_movements_variant_id_product_variants_id_fk`                  | `stock_movements(variant_id)`                             | `product_variants(id)`                      | no action |
-| `stock_movements_actor_user_id_users_id_fk`                          | `stock_movements(actor_user_id)`                          | `users(id)`                                 | no action |
-| `stock_movements_variant_id_store_fk`                                | `stock_movements(store_id, variant_id)`                   | `product_variants(store_id, id)`            | no action |
 | `brand_profiles_store_id_stores_id_fk`                               | `brand_profiles(store_id)`                                | `stores(id)`                                | no action |
 | `brand_profiles_updated_by_user_id_users_id_fk`                      | `brand_profiles(updated_by_user_id)`                      | `users(id)`                                 | no action |
 | `content_pieces_store_id_stores_id_fk`                               | `content_pieces(store_id)`                                | `stores(id)`                                | no action |
 | `content_pieces_created_by_user_id_users_id_fk`                      | `content_pieces(created_by_user_id)`                      | `users(id)`                                 | no action |
+| `posts_store_id_stores_id_fk`                                        | `posts(store_id)`                                         | `stores(id)`                                | no action |
+| `posts_created_by_user_id_users_id_fk`                               | `posts(created_by_user_id)`                               | `users(id)`                                 | no action |
+| `posts_approved_by_user_id_users_id_fk`                              | `posts(approved_by_user_id)`                              | `users(id)`                                 | no action |
 | `post_targets_store_id_stores_id_fk`                                 | `post_targets(store_id)`                                  | `stores(id)`                                | no action |
 | `post_targets_post_id_posts_id_fk`                                   | `post_targets(post_id)`                                   | `posts(id)`                                 | cascade   |
 | `post_targets_channel_connection_id_channel_connections_id_fk`       | `post_targets(channel_connection_id)`                     | `channel_connections(id)`                   | no action |
 | `post_targets_post_id_store_fk`                                      | `post_targets(store_id, post_id)`                         | `posts(store_id, id)`                       | cascade   |
 | `post_targets_channel_connection_id_store_fk`                        | `post_targets(store_id, channel_connection_id)`           | `channel_connections(store_id, id)`         | no action |
-| `posts_store_id_stores_id_fk`                                        | `posts(store_id)`                                         | `stores(id)`                                | no action |
-| `posts_created_by_user_id_users_id_fk`                               | `posts(created_by_user_id)`                               | `users(id)`                                 | no action |
-| `posts_approved_by_user_id_users_id_fk`                              | `posts(approved_by_user_id)`                              | `users(id)`                                 | no action |
+| `staff_recovery_history_store_id_stores_id_fk`                       | `staff_recovery_history(store_id)`                        | `stores(id)`                                | no action |
+| `staff_recovery_history_audit_id_staff_audit_log_id_fk`              | `staff_recovery_history(audit_id)`                        | `staff_audit_log(id)`                       | no action |
 | `store_counters_store_id_stores_id_fk`                               | `store_counters(store_id)`                                | `stores(id)`                                | no action |
 | `tasks_store_id_stores_id_fk`                                        | `tasks(store_id)`                                         | `stores(id)`                                | no action |
 | `tasks_contact_id_contacts_id_fk`                                    | `tasks(contact_id)`                                       | `contacts(id)`                              | cascade   |
@@ -1937,9 +2096,12 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `tasks_contact_id_store_fk`                                          | `tasks(store_id, contact_id)`                             | `contacts(store_id, id)`                    | cascade   |
 | `tasks_conversation_id_store_fk`                                     | `tasks(store_id, conversation_id)`                        | `conversations(store_id, id)`               | no action |
 | `tasks_order_id_store_fk`                                            | `tasks(store_id, order_id)`                               | `orders(store_id, id)`                      | no action |
+| `roles_store_id_stores_id_fk`                                        | `roles(store_id)`                                         | `stores(id)`                                | no action |
 | `memberships_store_id_stores_id_fk`                                  | `memberships(store_id)`                                   | `stores(id)`                                | no action |
 | `memberships_user_id_users_id_fk`                                    | `memberships(user_id)`                                    | `users(id)`                                 | no action |
 | `memberships_role_id_roles_id_fk`                                    | `memberships(role_id)`                                    | `roles(id)`                                 | no action |
 | `memberships_invited_by_user_id_users_id_fk`                         | `memberships(invited_by_user_id)`                         | `users(id)`                                 | no action |
 | `memberships_role_id_store_fk`                                       | `memberships(store_id, role_id)`                          | `roles(store_id, id)`                       | no action |
-| `roles_store_id_stores_id_fk`                                        | `roles(store_id)`                                         | `stores(id)`                                | no action |
+| `ownership_transfers_store_id_stores_id_fk`                          | `ownership_transfers(store_id)`                           | `stores(id)`                                | no action |
+| `ownership_transfers_owner_user_id_users_id_fk`                      | `ownership_transfers(owner_user_id)`                      | `users(id)`                                 | no action |
+| `ownership_transfers_new_owner_user_id_users_id_fk`                  | `ownership_transfers(new_owner_user_id)`                  | `users(id)`                                 | no action |
