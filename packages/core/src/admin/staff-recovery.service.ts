@@ -219,6 +219,7 @@ export class StaffRecoveryService {
       this.consume(this.subject(effect, user, channel), channel, code, ip);
     if (provesCurrentContact(effect))
       return consume(input.phoneCode ? 'phone' : 'email', input.phoneCode ?? input.emailCode);
+    assertReplacementCodes(input);
     if (effect.newPhone) await consume('phone', input.phoneCode);
     if (effect.newEmail) await consume('email', input.emailCode);
   }
@@ -270,4 +271,10 @@ export class StaffRecoveryService {
 // Removing 2-step without a replacement contact is proved on a current verified contact.
 function provesCurrentContact(input: StaffRecoveryRequest) {
   return input.removeTotp && !input.newPhone && !input.newEmail;
+}
+
+// A missing second code must not burn the first one.
+function assertReplacementCodes({ effect, phoneCode, emailCode }: StaffRecoveryConfirmation) {
+  if ((effect.newPhone && !phoneCode) || (effect.newEmail && !emailCode))
+    throw recoveryError('RECOVERY_PROOF');
 }

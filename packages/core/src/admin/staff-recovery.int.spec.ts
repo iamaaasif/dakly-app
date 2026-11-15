@@ -1167,6 +1167,31 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
     expect((await state(f.id)).phone).toBe(p.effect.newPhone);
   });
+  it('keeps the user codes usable when the staff member is refused', async () => {
+    const f = await fixture(),
+      p = await preview(f, { newPhone: phone() });
+    const phoneCode = await proof(f, p, 'phone');
+    await database.pool.query("update staff_users set role='finance' where id=$1", [f.staffId]);
+    const refused = await admin(f, '', { ...p, confirmed: true, phoneCode });
+    expect(refused.statusCode, refused.body).toBe(403);
+    await database.pool.query("update staff_users set role='support' where id=$1", [f.staffId]);
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
+    expect((await state(f.id)).phone).toBe(p.effect.newPhone);
+  });
+  it('does not consume the phone code when the email code is missing', async () => {
+    const f = await fixture(),
+      p = await preview(f, { newPhone: phone(), newEmail: `new-${randomUUID()}@example.test` });
+    const phoneCode = await proof(f, p, 'phone'),
+      emailCode = await proof(f, p, 'email');
+    const refused = await admin(f, '', { ...p, confirmed: true, phoneCode });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.code).toBe('RECOVERY_PROOF');
+    expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode, emailCode })).statusCode).toBe(
+      201,
+    );
+    expect(await state(f.id)).toMatchObject({ phone: p.effect.newPhone, email: p.effect.newEmail });
+  });
   it('requires a current verified contact code to remove 2-step without a replacement contact', async () => {
     const f = await fixture(),
       p = await preview(f),
