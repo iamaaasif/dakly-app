@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useCurrentTransfer } from '../api/current-transfer';
+import { OwnershipEmpty } from './ownership-empty';
 import { TeamLoading } from './team-loading';
-import { TransferRequest } from './transfer-request';
 import { TransferStatus } from './transfer-status';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -38,19 +38,5 @@ export function OwnershipScreen({ cursor }: { cursor?: string }) {
       ) : null}
       {content}
     </main>
-  );
-}
-function OwnershipEmpty({ canTransfer, cursor }: { canTransfer: boolean; cursor?: string }) {
-  return (
-    <section className="space-y-4">
-      <p role="status">No pending ownership transfer.</p>
-      {canTransfer ? (
-        <TransferRequest cursor={cursor} />
-      ) : (
-        <p>
-          Only the current Owner can start a transfer. If you are selected, return here to accept.
-        </p>
-      )}
-    </section>
   );
 }

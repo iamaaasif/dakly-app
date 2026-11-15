@@ -1,15 +1,10 @@
 'use client';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
 
-import { supportDecisionSchema, type SupportGrantResponse } from '@dakly/contracts/support';
 import { Button } from '@dakly/ui/button';
-import { Card } from '@dakly/ui/card';
-import { Input } from '@dakly/ui/input';
 
-import { useOwnerSupport, useOwnerDecision } from '../api/support';
-import { formatDateTime } from '@/lib/format-date';
+import { useOwnerSupport } from '../api/support';
+import { OwnerRequest } from './owner-request';
 
 export function OwnerSupport() {
   const params = useSearchParams();
@@ -37,92 +32,3 @@ export function OwnerSupport() {
     </main>
   );
 }
-function OwnerRequest({ grant }: { grant: SupportGrantResponse }) {
-  const action = useOwnerDecision();
-  return (
-    <Card>
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">{grant.staffName}</h2>
-        <p>{grant.reason}</p>
-        {grant.isBreakGlass ? (
-          <p className="text-danger">
-            Break-glass read-only access. No Owner approval was requested.
-          </p>
-        ) : null}
-        <p>
-          {grant.access === 'write' ? 'Read and write' : 'Read only'} · {grant.scopes.join(', ')} ·{' '}
-          {grant.durationMinutes} minutes
-        </p>
-        <p>{grant.status === 'approved' ? 'Active support access' : `Status: ${grant.status}`}</p>
-        {grant.expiresAt ? <p>Ends {formatDateTime(grant.expiresAt)}</p> : null}
-        {grant.status === 'requested' ? (
-          <>
-            <Button
-              loading={action.isPending}
-              onClick={() => action.mutate({ id: grant.id, action: 'code' })}
-            >
-              Resend approval code
-            </Button>
-            <ApprovalCode grant={grant} action={action} />
-            <Button
-              variant="secondary"
-              loading={action.isPending}
-              onClick={() => action.mutate({ id: grant.id, action: 'deny' })}
-            >
-              Deny request
-            </Button>
-          </>
-        ) : null}
-        {grant.status === 'approved' ? (
-          <Button
-            variant="danger"
-            loading={action.isPending}
-            onClick={() => action.mutate({ id: grant.id, action: 'end' })}
-          >
-            End now
-          </Button>
-        ) : null}
-        {action.error ? <p role="alert">{action.error.message}</p> : null}
-        {action.isSuccess ? <p role="status">{confirmation[action.variables!.action]}</p> : null}
-      </div>
-    </Card>
-  );
-}
-
-function ApprovalCode({
-  grant,
-  action,
-}: {
-  grant: SupportGrantResponse;
-  action: ReturnType<typeof useOwnerDecision>;
-}) {
-  const form = useForm<{ code: string }>({ resolver: zodResolver(supportDecisionSchema) });
-  return (
-    <form
-      method="post"
-      className="space-y-3"
-      onSubmit={form.handleSubmit((input) =>
-        action.mutate({ id: grant.id, action: 'approve', code: input.code }),
-      )}
-    >
-      <label htmlFor={`code-${grant.id}`}>SMS approval code</label>
-      <Input
-        id={`code-${grant.id}`}
-        autoComplete="one-time-code"
-        inputMode="numeric"
-        {...form.register('code')}
-      />
-      {form.formState.errors.code ? <p role="alert">Enter the six-digit code.</p> : null}
-      <Button type="submit" loading={action.isPending}>
-        Approve access
-      </Button>
-    </form>
-  );
-}
-
-const confirmation = {
-  code: 'Approval code sent to your verified phone.',
-  approve: 'Support access approved.',
-  deny: 'Support request denied.',
-  end: 'Support access ended.',
-} as const;
