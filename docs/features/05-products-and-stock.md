@@ -6,7 +6,7 @@
 | Status    | Not started                                                      |
 | Extension | Sales                                                            |
 | Code      | `packages/core/src/products/`, `apps/web/src/features/products/` |
-| Tasks     | PROD-1 to PROD-4                                                 |
+| Tasks     | PROD-1 to PROD-6                                                 |
 
 ## Purpose
 

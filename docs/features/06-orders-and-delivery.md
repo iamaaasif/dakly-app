@@ -6,7 +6,7 @@
 | Status    | Not started                                                                          |
 | Extension | Sales                                                                                |
 | Code      | `packages/core/src/{orders,delivery}/`, `apps/web/src/features/{orders,order-link}/` |
-| Tasks     | ORD-1 to ORD-6, ORD-9 (ORD-7 and ORD-8 are later)                                    |
+| Tasks     | ORD-1 to ORD-6, ORD-9, ORD-10 (ORD-7 and ORD-8 are later)                            |
 
 ## Purpose
 

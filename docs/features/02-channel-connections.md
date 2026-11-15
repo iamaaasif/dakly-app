@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                                                            |
 | Extension | Core                                                                                                                                   |
 | Code      | `packages/core/src/channels/`, `packages/providers/src/channel/{messenger,instagram,whatsapp}/`, `apps/web/src/features/integrations/` |
-| Tasks     | CHN-1 to CHN-5                                                                                                                         |
+| Tasks     | CHN-1 to CHN-6                                                                                                                         |
 
 ## Purpose
 

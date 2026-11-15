@@ -3,10 +3,10 @@
 |           |                                                                                                                                   |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Release   | 1 (lean core)                                                                                                                     |
-| Status    | In progress                                                                                                                       |
+| Status    | Building                                                                                                                          |
 | Extension | Internal, staff only                                                                                                              |
 | Code      | `apps/admin` (Next.js), `packages/core/src/admin/` under `/admin` on the staff hostname; shop `/support` for approved delegations |
-| Tasks     | ADM-1 to ADM-6; support, audit, break-glass and account recovery implemented; ADM-3 to ADM-5 remain planned                       |
+| Tasks     | ADM-1 to ADM-10                                                                                                                   |
 
 ## Purpose
 

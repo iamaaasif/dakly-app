@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                              |
 | Extension | Core                                                                                                     |
 | Code      | `packages/core/src/{campaigns,automations,templates}/`, `apps/web/src/features/{campaigns,automations}/` |
-| Tasks     | CAMP-1 to CAMP-7                                                                                         |
+| Tasks     | CAMP-1 to CAMP-8                                                                                         |
 
 ## Purpose
 

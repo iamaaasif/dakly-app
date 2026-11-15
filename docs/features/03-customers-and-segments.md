@@ -3,10 +3,10 @@
 |           |                                                                                          |
 | --------- | ---------------------------------------------------------------------------------------- |
 | Release   | 1                                                                                        |
-| Status    | Building (the `customers` example feature exists)                                        |
+| Status    | Not started (the `customers` example feature from FND-1 exists)                          |
 | Extension | Core                                                                                     |
 | Code      | `packages/core/src/{customers,segments}/`, `apps/web/src/features/{customers,segments}/` |
-| Tasks     | CUS-1 to CUS-7                                                                           |
+| Tasks     | CUS-1 to CUS-14                                                                          |
 
 ## Purpose
 

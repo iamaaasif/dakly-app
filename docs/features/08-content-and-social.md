@@ -6,7 +6,7 @@
 | Status    | Not started                                                                      |
 | Extension | Core (Content Studio), Social Auto Post                                          |
 | Code      | `packages/core/src/{content,social}/`, `apps/web/src/features/{content,social}/` |
-| Tasks     | SOC-1 to SOC-5                                                                   |
+| Tasks     | SOC-1 to SOC-6                                                                   |
 
 ## Purpose
 

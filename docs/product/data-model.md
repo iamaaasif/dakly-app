@@ -86,14 +86,14 @@ This tab is the shared vocabulary for engineering. It lists the main records, th
 
 ### Platform
 
-| Entity                | Key fields                                                                                                                                                          | Notes                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| Notification          | id, store\_id, user\_id (or all with access), category, priority, title, why, data, action, status (new, seen, done, snoozed), dedupe key                           | Smart notifications (tab 2).      |
-| Plan and subscription | store\_id, plan, status (trial, active, past\_due, cancelled), period start and end, add-ons                                                                        |                                   |
-| Usage counter         | store\_id, period, unit (customers, team seats, ai\_conversations, ai\_content, ai\_scans, ai\_voice\_entries, sms\_credits, whatsapp\_balance\_paisa), used, limit | Each AI feature has its own unit. |
-| Wallet transaction    | store\_id, type (top\_up, whatsapp\_charge, sms\_pack, refund), amount, balance after, reference                                                                    | WhatsApp prepaid ৳ balance.       |
-| Invoice               | store\_id, number, lines, VAT 15%, total, paid by, paid at                                                                                                          |                                   |
-| Audit log             | store\_id, actor, action, entity, before, after, at                                                                                                                 | Append only, kept 2 years.        |
+| Entity                | Key fields                                                                                                                                                          | Notes                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Notification          | id, store\_id, user\_id (or all with access), category, priority, title, why, data, action, status (new, seen, done, snoozed), dedupe key                           | Smart notifications (tab 2).                            |
+| Plan and subscription | store\_id, plan, status (trial, active, past\_due, cancelled), period start and end, add-ons                                                                        |                                                         |
+| Usage counter         | store\_id, period, unit (customers, team seats, ai\_conversations, ai\_content, ai\_scans, ai\_voice\_entries, sms\_credits, whatsapp\_balance\_paisa), used, limit | Each AI feature has its own unit.                       |
+| Wallet transaction    | store\_id, type (top\_up, whatsapp\_charge, sms\_pack, refund), amount, balance after, reference                                                                    | WhatsApp prepaid ৳ balance.                             |
+| Invoice               | store\_id, number, lines, VAT 15%, total, paid by, paid at                                                                                                          |                                                         |
+| Audit log             | store\_id, actor, action, entity, before, after, at                                                                                                                 | Append only, kept 24 months, then archived to R2 (D31). |
 
 ## Relationships at a glance
 
