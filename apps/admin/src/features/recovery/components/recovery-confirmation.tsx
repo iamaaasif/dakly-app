@@ -61,7 +61,7 @@ export function RecoveryConfirmation({
           </p>
         ) : null}
         {Object.keys(form.formState.errors).length ? (
-          <p role="alert">Enter a six-digit code for each replacement contact.</p>
+          <p role="alert">Enter each verification code as six digits.</p>
         ) : null}
         <RecoveryActions recover={recover} onClose={() => dialog.current?.close()} />
       </form>

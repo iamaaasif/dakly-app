@@ -15,6 +15,7 @@ import { createDatabase } from '@dakly/db/client';
 
 import { AuthModule } from '../auth/auth.module';
 import { SecurityNoticesService } from '../auth/security-notices.service';
+import { SignInCodesService } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { EmailService } from '../email/email.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
@@ -158,11 +159,31 @@ async function preview(f: Fixture, changes: Partial<StaffRecoveryRequest> = {}) 
 async function proof(f: Fixture, p: StaffRecoveryPreview, channel: 'phone' | 'email') {
   const response = await admin(f, '/code', { ...p, channel });
   expect(response.statusCode, response.body).toBe(204);
-  const target = channel === 'phone' ? p.effect.newPhone : p.effect.newEmail;
+  // Without a replacement contact, the code goes to the fixture's current verified contact.
+  const target =
+    channel === 'phone' ? (p.effect.newPhone ?? f.phone) : (p.effect.newEmail ?? f.email);
   return delivered
     .filter((message) => message.to === target)
     .at(-1)!
     .text.match(/\b\d{6}\b/)![0];
+}
+function pauseAfterProof() {
+  const codes = app.get(SignInCodesService),
+    original = codes.consume.bind(codes);
+  let resume!: () => void, proved!: () => void;
+  const resumed = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const consumed = new Promise<void>((resolve) => {
+    proved = resolve;
+  });
+  const spy = vi.spyOn(codes, 'consume').mockImplementationOnce(async (...args) => {
+    const grant = await original(...args);
+    proved();
+    await resumed;
+    return grant;
+  });
+  return { consumed, resume, restore: () => spy.mockRestore() };
 }
 async function state(id: string) {
   return (
@@ -325,7 +346,10 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     const spy = vi
       .spyOn(app.get(SecurityNoticesService), 'enqueue')
       .mockRejectedValueOnce(new Error('Fixture intent failure'));
-    expect((await admin(f, '', { ...next, confirmed: true })).statusCode).toBe(500);
+    expect(
+      (await admin(f, '', { ...next, confirmed: true, phoneCode: await proof(f, next, 'phone') }))
+        .statusCode,
+    ).toBe(500);
     spy.mockRestore();
     expect(await state(f.id)).toEqual(before);
     expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
@@ -364,7 +388,11 @@ describe('Staff account recovery over Fastify and Postgres', () => {
       expect(rows.rows).toHaveLength(1);
       return original(id, changes, now);
     });
-    const response = await admin(f, '', { ...p, confirmed: true });
+    const response = await admin(f, '', {
+      ...p,
+      confirmed: true,
+      phoneCode: await proof(f, p, 'phone'),
+    });
     spy.mockRestore();
     expect(response.statusCode, response.body).toBe(201);
     expect(await state(f.id)).toMatchObject({ totp_enabled_at: null, backup_code_hashes: null });
@@ -398,7 +426,10 @@ describe('Staff account recovery over Fastify and Postgres', () => {
         return '';
       }),
     );
-    expect((await admin(f, '', { ...p, confirmed: true })).statusCode).toBe(500);
+    expect(
+      (await admin(f, '', { ...p, confirmed: true, phoneCode: await proof(f, p, 'phone') }))
+        .statusCode,
+    ).toBe(500);
     spy.mockRestore();
     expect(await state(f.id)).toEqual(before);
     expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
@@ -446,8 +477,9 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     await database.pool.query('update users set security_version=security_version+1 where id=$1', [
       f.id,
     ]);
+    // A stale recovery is refused before the code is consumed, so a retry is still stale.
     expect((await admin(f, '', { ...p, confirmed: true, phoneCode: code })).statusCode).toBe(409);
-    expect((await admin(f, '', { ...p, confirmed: true, phoneCode: code })).statusCode).toBe(400);
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode: code })).statusCode).toBe(409);
     expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
   });
   it('denies a previously linked staff identity after its verified shop contacts change', async () => {
@@ -539,7 +571,8 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     const f = await fixture(),
       other = await fixture();
     const p = await preview(f);
-    expect((await admin(f, '', { ...p, confirmed: true })).statusCode).toBe(201);
+    const phoneCode = await proof(f, p, 'phone');
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
     expect((await shop(other.cookies[0]!, '/account-recovery-history')).json().items).toHaveLength(
       0,
     );
@@ -574,6 +607,7 @@ describe('Staff account recovery over Fastify and Postgres', () => {
   it('cannot restore future access when an old session lookup was already pending', async () => {
     const f = await fixture(),
       p = await preview(f),
+      phoneCode = await proof(f, p, 'phone'),
       repository = app.get(SessionsService);
     const original = repository.resolve.bind(repository);
     let release!: () => void, started!: () => void;
@@ -591,7 +625,7 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     });
     const pending = shop(f.cookies[0]!, '/me');
     await began;
-    expect((await admin(f, '', { ...p, confirmed: true })).statusCode).toBe(201);
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
     release();
     await pending;
     spy.mockRestore();
@@ -610,12 +644,17 @@ describe('Staff account recovery over Fastify and Postgres', () => {
       began = new Promise<void>((resolve) => {
         started = resolve;
       });
-    const spy = vi.spyOn(users, 'recoveryState').mockImplementationOnce(async (id) => {
-      started();
-      await waiting;
-      return original(id);
-    });
-    const pending = admin(f, '', { ...p, confirmed: true });
+    const phoneCode = await proof(f, p, 'phone');
+    // The first read is the check before the code is consumed; wait in the recovery transaction.
+    const spy = vi
+      .spyOn(users, 'recoveryState')
+      .mockImplementationOnce(original)
+      .mockImplementationOnce(async (id) => {
+        started();
+        await waiting;
+        return original(id);
+      });
+    const pending = admin(f, '', { ...p, confirmed: true, phoneCode });
     await began;
     await database.pool.query("update staff_users set status='disabled' where id=$1", [f.staffId]);
     release();
@@ -628,15 +667,20 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     const formerOwner = await user();
     const removedStore = await store(formerOwner.id, f.id);
     const p = await preview(f);
+    const phoneCode = await proof(f, p, 'phone');
     const removal = await database.pool.connect();
     let pending: ReturnType<typeof admin> | undefined;
+    // Lock the store after the code check, so the recovery transaction is the one that waits.
+    const paused = pauseAfterProof();
     try {
+      pending = admin(f, '', { ...p, confirmed: true, phoneCode });
+      await paused.consumed;
       await removal.query('begin');
       const {
         rows: [{ pid }],
       } = await removal.query('select pg_backend_pid() as pid');
       await removal.query('select id from stores where id=$1 for no key update', [removedStore]);
-      pending = admin(f, '', { ...p, confirmed: true });
+      paused.resume();
       await expect
         .poll(
           async () =>
@@ -662,6 +706,8 @@ describe('Staff account recovery over Fastify and Postgres', () => {
       expect(await app.get(StaffRecoveryRepository).history(removedStore)).toEqual([]);
       expect(await recoveryRows(f.id)).toMatchObject({ history: 1, notices: 2 });
     } finally {
+      paused.resume();
+      paused.restore();
       await removal.query('rollback');
       removal.release();
       await pending;
@@ -672,6 +718,9 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     async (path) => {
       const f = await fixture();
       const p = await preview(f);
+      let payload: object = input(f);
+      if (path === '') payload = { ...p, confirmed: true, phoneCode: await proof(f, p, 'phone') };
+      if (path === '/lookup') payload = { identifier: f.phone };
       const newStaffId = randomUUID();
       staffIds.push(newStaffId);
       const users = app.get(UsersService);
@@ -683,15 +732,15 @@ describe('Staff account recovery over Fastify and Postgres', () => {
       const began = new Promise<void>((resolve) => {
         started = resolve;
       });
-      const spy = vi.spyOn(users, 'recoveryState').mockImplementationOnce(async (id) => {
+      const spy = vi.spyOn(users, 'recoveryState');
+      // Recovery reads the account once before consuming the code; wait in the recovery transaction.
+      if (path === '') spy.mockImplementationOnce(original);
+      spy.mockImplementationOnce(async (id) => {
         const result = await original(id);
         started();
         await waiting;
         return result;
       });
-      let payload: object = { ...p, confirmed: true };
-      if (path === '/lookup') payload = { identifier: f.phone };
-      if (path === '/preview') payload = input(f);
       const recovery = admin(f, path, payload);
       await began;
       let provisioningPid = 0,
@@ -770,6 +819,8 @@ describe('Staff account recovery over Fastify and Postgres', () => {
       staffIds.push(newStaffId);
       const gate = await database.pool.connect();
       let provision: Promise<void> | undefined, recovery: ReturnType<typeof admin> | undefined;
+      const startRecovery = () => admin(f, '', { ...p, confirmed: true, phoneCode, emailCode });
+      const paused = order === 'recovery-first' ? pauseAfterProof() : undefined;
       try {
         await gate.query('begin');
         const {
@@ -780,10 +831,16 @@ describe('Staff account recovery over Fastify and Postgres', () => {
         } = await gate.query('select value from unnest($1::text[]) value order by value limit 1', [
           [f.email, newEmail],
         ]);
+        // Take the gate after the code check, so the recovery transaction is the one queued.
+        if (paused) {
+          recovery = startRecovery();
+          await paused.consumed;
+        }
         await gate.query(
           "select pg_advisory_xact_lock(hashtextextended('staff-identity:email:' || $1,0))",
           [firstEmail],
         );
+        paused?.resume();
         const startProvision = () =>
           app.get(StaffDatabase).forStaff(newStaffId, () =>
             app.get(StaffRepository).provision(newStaffId, {
@@ -797,7 +854,6 @@ describe('Staff account recovery over Fastify and Postgres', () => {
               reason: 'Provision trusted support identity',
             }),
           );
-        const startRecovery = () => admin(f, '', { ...p, confirmed: true, phoneCode, emailCode });
         const waitForQueued = async (total: number) =>
           expect
             .poll(async () =>
@@ -812,7 +868,6 @@ describe('Staff account recovery over Fastify and Postgres', () => {
             )
             .toBe(total);
         if (order === 'provision-first') provision = startProvision();
-        else recovery = startRecovery();
         await waitForQueued(1);
         if (order === 'provision-first') recovery = startRecovery();
         else provision = startProvision();
@@ -830,6 +885,8 @@ describe('Staff account recovery over Fastify and Postgres', () => {
         ).toEqual([{ user_id: f.id }]);
         expect((await state(f.id)).phone).toBe(order === 'provision-first' ? f.phone : newPhone);
       } finally {
+        paused?.resume();
+        paused?.restore();
         await gate.query('rollback');
         gate.release();
         await Promise.allSettled([provision, recovery]);
@@ -918,6 +975,7 @@ describe('Staff account recovery over Fastify and Postgres', () => {
   it('queues new-store creation behind recovery and does not attach the earlier event to the later store', async () => {
     const f = await fixture('support', false);
     const p = await preview(f);
+    const phoneCode = await proof(f, p, 'phone');
     const users = app.get(UsersService);
     const original = users.recoveryState.bind(users);
     let release!: () => void,
@@ -929,20 +987,24 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     const began = new Promise<void>((resolve) => {
       started = resolve;
     });
-    const spy = vi.spyOn(users, 'recoveryState').mockImplementationOnce(async (id) => {
-      const result = await original(id);
-      recoveryPid = await app
-        .get(AccountDatabase)
-        .inTransaction(
-          id,
-          async (tx) =>
-            (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid,
-        );
-      started();
-      await waiting;
-      return result;
-    });
-    const recovery = admin(f, '', { ...p, confirmed: true });
+    // The first read is the check before the code is consumed; wait in the recovery transaction.
+    const spy = vi
+      .spyOn(users, 'recoveryState')
+      .mockImplementationOnce(original)
+      .mockImplementationOnce(async (id) => {
+        const result = await original(id);
+        recoveryPid = await app
+          .get(AccountDatabase)
+          .inTransaction(
+            id,
+            async (tx) =>
+              (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid,
+          );
+        started();
+        await waiting;
+        return result;
+      });
+    const recovery = admin(f, '', { ...p, confirmed: true, phoneCode });
     await began;
     let completed = false;
     const creating = app
@@ -1003,7 +1065,8 @@ describe('Staff account recovery over Fastify and Postgres', () => {
     const owners = await Promise.all(Array.from({ length: 25 }, () => user()));
     await Promise.all(owners.map((owner) => store(owner.id, f.id)));
     const p = await preview(f);
-    expect((await admin(f, '', { ...p, confirmed: true })).statusCode).toBe(201);
+    const phoneCode = await proof(f, p, 'phone');
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
     expect(await recoveryRows(f.id)).toMatchObject({ history: 26, notices: 52 });
     const notices = app.get(SecurityNoticesService);
     await notices.dispatch(f.id);
@@ -1063,7 +1126,8 @@ describe('Staff account recovery over Fastify and Postgres', () => {
   it('retains failed notice intents and retries without repeating recovery', async () => {
     const f = await fixture(),
       p = await preview(f);
-    expect((await admin(f, '', { ...p, confirmed: true })).statusCode).toBe(201);
+    const phoneCode = await proof(f, p, 'phone');
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
     vi.mocked(EmailService.prototype.send).mockRejectedValueOnce(new Error('Local email failure'));
     await app.get(SecurityNoticesService).dispatch(f.id);
     const pending = await database.pool.query(
@@ -1085,5 +1149,57 @@ describe('Staff account recovery over Fastify and Postgres', () => {
       ).rows,
     ).toHaveLength(0);
     expect(await recoveryRows(f.id)).toMatchObject({ audits: 1, events: 2, notices: 2 });
+  });
+  it('runs the recovery checks before consuming the codes, so a refusal keeps them usable', async () => {
+    const f = await fixture(),
+      p = await preview(f, { newPhone: phone() });
+    const phoneCode = await proof(f, p, 'phone');
+    const owner = await user();
+    await database.pool.query(
+      'update users set phone_verified_at=null,email_verified_at=null where id=$1',
+      [owner.id],
+    );
+    await store(owner.id, f.id);
+    const refused = await admin(f, '', { ...p, confirmed: true, phoneCode });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.code).toBe('RECOVERY_CONTACT');
+    await database.pool.query('update users set email_verified_at=now() where id=$1', [owner.id]);
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode })).statusCode).toBe(201);
+    expect((await state(f.id)).phone).toBe(p.effect.newPhone);
+  });
+  it('requires a current verified contact code to remove 2-step without a replacement contact', async () => {
+    const f = await fixture(),
+      p = await preview(f),
+      before = await state(f.id);
+    const missing = await admin(f, '', { ...p, confirmed: true });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json().error.code).toBe('RECOVERY_PROOF');
+    const emailCode = await proof(f, p, 'email');
+    expect((await admin(f, '', { ...p, confirmed: true, phoneCode: emailCode })).statusCode).toBe(
+      400,
+    );
+    expect(await state(f.id)).toEqual(before);
+    expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
+    expect((await admin(f, '', { ...p, confirmed: true, emailCode })).statusCode).toBe(201);
+    expect(await state(f.id)).toMatchObject({ totp_enabled_at: null, backup_code_hashes: null });
+  });
+  it('refuses 2-step removal without a replacement contact when no current contact is verified', async () => {
+    const f = await fixture('support', false);
+    await database.pool.query('update users set phone_verified_at=null where id=$1', [f.id]);
+    const p = await preview(f);
+    const unverified = await admin(f, '/code', { ...p, channel: 'phone' });
+    expect(unverified.statusCode).toBe(400);
+    expect(unverified.json().error.code).toBe('RECOVERY_PROOF');
+    const emailCode = await proof(f, p, 'email');
+    await database.pool.query('update users set email_verified_at=null where id=$1', [f.id]);
+    const previewed = await admin(f, '/preview', input(f));
+    expect(previewed.statusCode).toBe(409);
+    expect(previewed.json().error.code).toBe('RECOVERY_CONTACT');
+    const recovered = await admin(f, '', { ...p, confirmed: true, emailCode });
+    expect(recovered.statusCode).toBe(409);
+    expect(recovered.json().error.code).toBe('RECOVERY_CONTACT');
+    expect(await recoveryRows(f.id)).toEqual({ audits: 0, events: 0, notices: 0, history: 0 });
+    expect((await state(f.id)).totp_enabled_at).not.toBeNull();
+    expect((await admin(f, '/preview', { ...input(f), removeTotp: false })).statusCode).toBe(201);
   });
 });
