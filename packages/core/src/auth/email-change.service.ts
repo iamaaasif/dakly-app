@@ -8,7 +8,8 @@ import { AccountTransaction } from '../platform/database/account-transaction';
 import { Clock } from '../platform/clock';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { UsersRepository } from './users.repository';
-import { SignInCodes, type PhoneProof } from './sign-in-codes';
+import { PasswordCredentials } from './password-credentials';
+import { SignInCodes, type PhoneProof, type FreshProof } from './sign-in-codes';
 import { authError } from './auth.errors';
 
 @Injectable()
@@ -18,6 +19,7 @@ export class EmailChangeService {
     @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(AccountTransaction) private readonly transaction: AccountTransaction,
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
+    @Inject(PasswordCredentials) private readonly passwords: PasswordCredentials,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -34,21 +36,16 @@ export class EmailChangeService {
   }
 
   async requestChange(userId: string, input: ChangeEmailInput, ip: string): Promise<void> {
-    const current = await this.phoneProof(userId);
-    const grant = await this.codes.consume(
-      this.proofSubject(userId, input.email, current.phone),
-      'email_change_proof',
-      input.proofCode,
-      ip,
-    );
-    if (grant.userId !== userId || !grant.proof || !this.matchesProof(current, grant.proof))
-      throw authError('AUTH_PROOF_REQUIRED');
+    const proof =
+      'currentPassword' in input
+        ? await this.passwords.check({ target: userId, userId }, input.currentPassword, ip)
+        : await this.consumePhoneProof(userId, input.email, input.proofCode, ip);
     await this.codes.send(
       { target: input.email, email: input.email, userId, binding: userId },
       'add_email',
       ip,
       undefined,
-      grant.proof,
+      proof,
     );
   }
 
@@ -61,30 +58,46 @@ export class EmailChangeService {
     );
     if (grant.userId !== userId || !grant.proof) throw authError('AUTH_PROOF_REQUIRED');
     const proof = grant.proof;
-    try {
-      await this.transaction.run(userId, async () => {
-        const current = await this.phoneProof(userId);
-        if (!this.matchesProof(current, proof)) throw authError('AUTH_PROOF_REQUIRED');
-        await this.users.changeEmail(userId, input.email, this.clock.now());
-        await this.events.record(userId, { event: 'email.changed', actor: { kind: 'user' }, ip });
-      });
-    } catch (error) {
-      // Translate only the email uniqueness violation; the account action has already rolled back.
-      if (this.isEmailConflict(error)) throw authError('AUTH_EMAIL_TAKEN');
-      throw error;
+    await this.transaction.run(userId, async () => {
+      await this.assertProof(userId, proof);
+      if (!(await this.users.changeEmail(userId, input.email, this.clock.now())))
+        throw authError('AUTH_EMAIL_TAKEN');
+      await this.events.record(userId, { event: 'email.changed', actor: { kind: 'user' }, ip });
+    });
+  }
+
+  private async assertProof(userId: string, proof: FreshProof): Promise<void> {
+    if ('passwordState' in proof) {
+      const current = await this.users.lockForSignIn(userId);
+      if (!current || current.isDisabled) throw authError('AUTH_PROOF_REQUIRED');
+      this.passwords.assertCurrent(userId, current.passwordHash, proof);
+    } else {
+      const current = await this.phoneProof(userId);
+      if (!this.matchesProof(current, proof)) throw authError('AUTH_PROOF_REQUIRED');
     }
   }
 
-  private isEmailConflict(error: unknown): boolean {
-    const cause = error instanceof Error && error.cause ? error.cause : error;
-    return (
-      typeof cause === 'object' &&
-      cause !== null &&
-      'code' in cause &&
-      cause.code === '23505' &&
-      'constraint' in cause &&
-      cause.constraint === 'users_email_key'
+  private async consumePhoneProof(
+    userId: string,
+    email: string,
+    code: string,
+    ip: string,
+  ): Promise<PhoneProof> {
+    const current = await this.phoneProof(userId);
+    const grant = await this.codes.consume(
+      this.proofSubject(userId, email, current.phone),
+      'email_change_proof',
+      code,
+      ip,
     );
+    if (
+      grant.userId !== userId ||
+      !grant.proof ||
+      !('phone' in grant.proof) ||
+      !this.matchesProof(current, grant.proof)
+    )
+      throw authError('AUTH_PROOF_REQUIRED');
+    return grant.proof;
   }
 
   private async phoneProof(userId: string): Promise<PhoneProof> {

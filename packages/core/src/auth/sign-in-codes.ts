@@ -1,21 +1,22 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { CodePurpose, SignUpInput } from '@dakly/contracts/auth';
-import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
+import { SmsService } from '../sms/sms.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 import { EmailService } from '../email/email.service';
-import { SMS_DRIVER } from './sms-provider';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
 
 export type PhoneProof = { phone: string; verifiedAt: string; expiresAt: number };
+export type PasswordProof = { passwordState: string; expiresAt: number; identifierState?: string };
+export type FreshProof = PhoneProof | PasswordProof;
 type CodeGrant = {
   userId?: string;
   registration?: SignUpInput;
   email?: string;
-  proof?: PhoneProof;
+  proof?: FreshProof;
 };
 
 const SAVE = `
@@ -48,7 +49,7 @@ export class SignInCodes {
     @Inject(ValkeyClient) private readonly client: ValkeyClient,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
     @Inject(SignInFailures) private readonly failures: SignInFailures,
-    @Inject(SMS_DRIVER) private readonly sms: SmsDriver,
+    @Inject(SmsService) private readonly sms: SmsService,
     @Inject(EmailService) private readonly email: EmailService,
   ) {}
 
@@ -57,7 +58,7 @@ export class SignInCodes {
     purpose: CodePurpose,
     ip: string,
     registration?: SignUpInput,
-    proof?: PhoneProof,
+    proof?: FreshProof,
   ): Promise<void> {
     await this.failures.assertAllowed(subject, ip);
     if (await this.client.connection.exists(authKey('resend', subject.target)))
@@ -107,7 +108,7 @@ export class SignInCodes {
     subject: SignInSubject,
     purpose: CodePurpose,
     registration?: SignUpInput,
-    proof?: PhoneProof,
+    proof?: FreshProof,
   ): Promise<string> {
     // Do not regenerate a still-recognized consumed code for this target and purpose.
     for (let attempt = 0; attempt < 10; attempt++) {

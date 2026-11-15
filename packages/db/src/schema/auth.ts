@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   pgTable,
   smallint,
   text,
@@ -30,6 +31,8 @@ export const users = pgTable(
     totpSecretCiphertext: bytea('totp_secret_ciphertext'),
     totpKeyVersion: smallint('totp_key_version'),
     totpEnabledAt: timestamptz('totp_enabled_at'),
+    totpLastStep: integer('totp_last_step'),
+    securityVersion: integer('security_version').notNull().default(0),
     backupCodeHashes: text('backup_code_hashes').array(),
     language: text('language', { enum: languages }).notNull().default('en'),
     isDisabled: boolean('is_disabled').notNull().default(false),
@@ -45,6 +48,9 @@ export const users = pgTable(
     uniqueIndex('users_email_key')
       .on(table.email)
       .where(sql`${table.emailVerifiedAt} is not null`),
+    index('users_unverified_email_idx')
+      .on(table.email)
+      .where(sql`${table.emailVerifiedAt} is null`),
     uniqueIndex('users_google_subject_key').on(table.googleSubject),
     check('users_has_identifier', sql`${table.phone} is not null or ${table.email} is not null`),
     check('users_phone_format', sql`${table.phone} ~ '^01[3-9][0-9]{8}$'`),
