@@ -1,4 +1,5 @@
-import { apiRequest, ApiError } from './api-client';
+import { ApiError } from '@dakly/ui/api-client';
+import { apiRequest } from './api-client';
 import { useSessionContext } from './session-context';
 
 export function useStoreRequest() {

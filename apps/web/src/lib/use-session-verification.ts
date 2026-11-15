@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SessionContext } from '@dakly/contracts/sessions';
-import { ApiError } from './api-client';
+import { ApiError } from '@dakly/ui/api-client';
 import { sessionContextKey, useSessionContext } from './session-context';
 
 const freshContextQuery = { queryKey: sessionContextKey, staleTime: 0 };

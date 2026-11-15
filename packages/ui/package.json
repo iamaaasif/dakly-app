@@ -11,13 +11,15 @@
     "./skeleton": "./src/skeleton.tsx",
     "./cn": "./src/cn.ts",
     "./theme.css": "./src/theme.css",
-    "./dialog": "./src/dialog.tsx"
+    "./dialog": "./src/dialog.tsx",
+    "./api-client": "./src/api-client.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@dakly/contracts": "workspace:*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "tailwind-merge": "3.4.0"

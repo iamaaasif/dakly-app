@@ -402,6 +402,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@dakly/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1

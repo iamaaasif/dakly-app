@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createStoreSchema } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
-import { ApiError } from '@/lib/api-client';
+import { ApiError } from '@dakly/ui/api-client';
 import { useCreateStore } from '../api/create-store';
 import { formError } from '@/lib/form-error';
 import type { BusinessDraft } from '../auth.types';

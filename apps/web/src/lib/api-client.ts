@@ -1,15 +1,4 @@
-import type { ErrorResponse } from '@dakly/contracts/errors';
-
-export class ApiError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly fields?: ErrorResponse['error']['fields'],
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+import { apiFetch, ApiError, readJson } from '@dakly/ui/api-client';
 
 type ApiOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -21,28 +10,22 @@ export async function apiRequest<TResponse>(
   path: string,
   options: ApiOptions & { body?: unknown } = {},
 ): Promise<TResponse> {
-  const response = await fetch(`/api${path}`, {
-    method: requestMethod(options),
-    headers: {
-      ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      ...(options.contextTag ? { 'X-Session-Context': options.contextTag } : {}),
-    },
-    credentials: 'include',
-    cache: 'no-store',
-    signal: options.signal,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  const { contextTag, ...request } = options;
+  const response = await apiFetch(`/api${path}`, {
+    ...request,
+    context: contextTag ? { header: 'X-Session-Context', tag: contextTag } : undefined,
+  }).catch((error: unknown) => {
+    if (contextTag && isContextFailure(error)) notifyContextChanged();
+    throw error;
   });
-  if (!response.ok) await rejectResponse(response, options.contextTag);
-  if (options.contextTag && response.headers.get('x-session-context') !== options.contextTag) {
-    if (typeof window !== 'undefined') window.dispatchEvent(new Event('dakly-context-changed'));
+  if (contextTag && response.headers.get('x-session-context') !== contextTag) {
+    notifyContextChanged();
     throw new ApiError(
       'SESSION_CONTEXT_CHANGED',
       'Your shop or access changed. Refresh to continue.',
     );
   }
-  return response.status === 204
-    ? (undefined as TResponse)
-    : (response.json() as Promise<TResponse>);
+  return readJson<TResponse>(response);
 }
 
 export function apiPost<TResponse>(
@@ -53,21 +36,13 @@ export function apiPost<TResponse>(
   return apiRequest<TResponse>(path, { ...options, body });
 }
 
-async function rejectResponse(response: Response, contextTag?: string): Promise<never> {
-  const payload = (await response.json().catch(() => undefined)) as ErrorResponse | undefined;
-  const error = payload?.error ?? {
-    code: 'REQUEST_FAILED',
-    message: 'Could not complete the request. Try again.',
-  };
-  if (
-    contextTag &&
-    (response.status === 401 || response.status === 403 || error.code === 'SESSION_CONTEXT_CHANGED')
-  ) {
-    if (typeof window !== 'undefined') window.dispatchEvent(new Event('dakly-context-changed'));
-  }
-  throw new ApiError(error.code, error.message, error.fields);
+function isContextFailure(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    (error.status === 401 || error.status === 403 || error.code === 'SESSION_CONTEXT_CHANGED')
+  );
 }
 
-function requestMethod(options: ApiOptions & { body?: unknown }) {
-  return options.method ?? (options.body === undefined ? 'GET' : 'POST');
+function notifyContextChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('dakly-context-changed'));
 }
