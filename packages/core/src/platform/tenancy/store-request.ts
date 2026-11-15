@@ -5,5 +5,6 @@ import type { StoreAccess } from '@dakly/contracts/team';
 export type StoreRequest = {
   storeId?: string;
   userId?: string;
+  sessionId?: string;
   access?: StoreAccess;
 };

@@ -1,3 +1,5 @@
+import { StaffDatabase } from './staff-database';
+import { StaffTransaction } from './staff-transaction';
 import { Global, Inject, Injectable, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { createDatabase } from '@dakly/db/client';
 import { loadEnv } from '../config/env';
@@ -35,7 +37,17 @@ class DatabaseShutdown implements OnApplicationShutdown {
     StoreTransaction,
     AccountDatabase,
     AccountTransaction,
+    StaffDatabase,
+    StaffTransaction,
   ],
-  exports: [TenantDatabase, StoreTransaction, AccountDatabase, AccountTransaction],
+  exports: [
+    StaffDatabase,
+    StaffTransaction,
+    DATABASE,
+    TenantDatabase,
+    StoreTransaction,
+    AccountDatabase,
+    AccountTransaction,
+  ],
 })
 export class DatabaseModule {}

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type {
   AccountSecurityEvent,
@@ -21,7 +21,7 @@ const historyColumns = {
 
 @Injectable()
 export class AccountSecurityEventsRepository {
-  constructor(private readonly database: AccountDatabase) {}
+  constructor(@Inject(AccountDatabase) private readonly database: AccountDatabase) {}
   async insert(userId: string, entry: AccountSecurityEvent): Promise<void> {
     await this.database.inTransaction(userId, (tx) =>
       tx.insert(accountSecurityEvents).values({

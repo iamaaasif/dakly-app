@@ -15,6 +15,7 @@ import { StoreGuard } from '../platform/tenancy/store.guard';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { builtInRoleAccess } from './built-in-roles';
+import { DatabaseModule } from '../platform/database/database.module';
 import { TeamModule } from './team.module';
 
 class PermissionController {
@@ -79,7 +80,7 @@ AnyMember()(StoreController.prototype, 'get', storeDescriptor);
 
 class PermissionTestModule {}
 Module({
-  imports: [TeamModule],
+  imports: [DatabaseModule, TeamModule],
   controllers: [PermissionController, UnclassifiedController, StoreController],
 })(PermissionTestModule);
 
@@ -92,6 +93,8 @@ describe('TeamModule permission guard over Fastify', () => {
   let trustedRequest: StoreRequest = {};
 
   beforeAll(async () => {
+    process.env.DATABASE_URL ??= 'postgres://localhost/dakly';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
     app = await NestFactory.create<NestFastifyApplication>(
       PermissionTestModule,
       new FastifyAdapter(),
