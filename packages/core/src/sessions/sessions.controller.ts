@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import {
+  userStorePageSchema,
+  type UserStorePageQuery,
   sessionListSchema,
   sessionIdSchema,
   activeStoreSchema,
@@ -73,8 +75,11 @@ export class SessionsController {
   }
 
   @Get('me/stores')
-  stores(@CurrentUser() userId: string) {
-    return this.team.storesFor(userId);
+  stores(
+    @CurrentUser() userId: string,
+    @Query(new ZodValidationPipe(userStorePageSchema)) query: UserStorePageQuery,
+  ) {
+    return this.team.storesFor(userId, query);
   }
 
   @Post('me/active-store')

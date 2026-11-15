@@ -1,3 +1,4 @@
+import type { CustomerResponse } from './customers';
 import { z } from 'zod';
 import { supportGrantAccess, type supportGrantStatuses } from './admin';
 export const supportScopes = ['customers'] as const;
@@ -33,7 +34,12 @@ export type SupportPrincipal = {
   staffUserId: string;
   staffSessionId: string;
 };
-export type SupportSessionResponse = SupportGrantResponse & { storeName: string };
+export type SupportSessionResponse = SupportGrantResponse & {
+  storeName: string;
+  contextTag: string;
+};
 
 export const supportPageSchema = z.strictObject({ before: z.uuid().optional() });
 export type SupportGrantPage = { items: SupportGrantResponse[]; nextCursor: string | null };
+
+export type SupportCustomerResponse = CustomerResponse & { contextTag: string };

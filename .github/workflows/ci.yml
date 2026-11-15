@@ -55,7 +55,7 @@ jobs:
       DATABASE_URL: postgres://dakly_app:dakly_app@localhost:5432/dakly
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4.4.0
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
@@ -81,7 +81,7 @@ jobs:
       - run: pnpm test:e2e
       - name: Upload browser test evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: browser-tests
           path: |

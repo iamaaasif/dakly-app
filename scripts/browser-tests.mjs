@@ -55,8 +55,7 @@ async function run(command, args, name, env, cwd) {
   if (code !== 0) throw new Error(`${name} failed; inspect apps/web/e2e-artifacts/${name}.log`);
 }
 
-function apiEnvironment(environment) {
-  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+function apiEnvironment(environment, publicKey) {
   return {
     ...environment,
     NODE_ENV: 'test',
@@ -90,11 +89,28 @@ async function main() {
   const databaseUrl = localService('DATABASE_ADMIN_URL');
   if (!['localhost', '127.0.0.1', '::1'].includes(process.env.MAILPIT_SMTP_HOST ?? '127.0.0.1'))
     throw new Error('MAILPIT_SMTP_HOST must use a loopback test service');
+  const mailpit = new URL(process.env.MAILPIT_API_URL);
+  if (
+    mailpit.protocol !== 'http:' ||
+    !['localhost', '127.0.0.1', '[::1]'].includes(mailpit.hostname) ||
+    mailpit.username ||
+    mailpit.password ||
+    mailpit.search ||
+    mailpit.hash
+  )
+    throw new Error('MAILPIT_API_URL must use a dedicated loopback test service');
   await Promise.all([requireFreePort(4015), requireFreePort(3015)]);
   for (const directory of [artifacts, `${web}/test-results`, `${web}/playwright-report`])
     await rm(directory, { recursive: true, force: true });
   await mkdir(artifacts, { recursive: true });
-  const environment = { ...process.env, WEB_API_URL: apiOrigin };
+  const environment = {
+    ...process.env,
+    WEB_API_URL: apiOrigin,
+    WEB_TERMS_URL: 'https://legal.browser.test/terms',
+    WEB_PRIVACY_URL: 'https://legal.browser.test/privacy',
+    WEB_TERMS_VERSION: 'browser-fixture-v1',
+    WEB_GOOGLE_CLIENT_ID: undefined,
+  };
   let fixture;
   try {
     await run(
@@ -104,14 +120,12 @@ async function main() {
       environment,
     );
     await Promise.all([requireFreePort(4015), requireFreePort(3015)]);
-    fixture = browserFixture(databaseUrl);
+    await run('pnpm', ['test:native-forms'], 'native-forms', environment);
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const apiEnv = apiEnvironment(environment, publicKey);
+    fixture = browserFixture(databaseUrl, mailpit.origin, apiEnv, privateKey);
     await fixture.seed();
-    const api = start(
-      process.execPath,
-      [`${root}apps/api/dist/main.js`],
-      'api',
-      apiEnvironment(environment),
-    );
+    const api = start(process.execPath, [`${root}apps/api/dist/main.js`], 'api', apiEnv);
     const next = start(
       process.execPath,
       [
@@ -130,7 +144,7 @@ async function main() {
     await waitForHealth(`${webOrigin}/api/health`, [api, next], controller.signal);
     await run(
       process.execPath,
-      [requireWeb.resolve('@playwright/test/cli'), 'test'],
+      [requireWeb.resolve('@playwright/test/cli'), 'test', ...process.argv.slice(2)],
       'playwright',
       {
         ...environment,

@@ -16,6 +16,7 @@ export function TotpForm({ challenge }: TotpFormProps) {
   });
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit((input) =>
         verify.mutate(input, { onSuccess: () => router.replace('/') }),

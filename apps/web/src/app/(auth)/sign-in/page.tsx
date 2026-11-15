@@ -1,9 +1,11 @@
-export default function SignInPage() {
-  return (
-    <main className="mx-auto max-w-2xl space-y-4 p-6">
-      <p className="text-lg font-bold">Dakly</p>
-      <h1 className="text-xl font-bold">Sign in required</h1>
-      <p>You need to sign in to continue. Sign-in is not available on this page yet.</p>
-    </main>
-  );
+export const dynamic = 'force-dynamic';
+import { SignInScreen } from '@/features/auth/components/sign-in-screen';
+import { webAuthConfig } from '@/platform/config/env';
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ method?: string }>;
+}) {
+  const { method } = await searchParams;
+  return <SignInScreen config={webAuthConfig()} method={method === 'email' ? 'email' : 'phone'} />;
 }
