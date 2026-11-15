@@ -23,7 +23,11 @@ describe('CustomersService', () => {
   it('creates a customer in the given store', async () => {
     repository.insert.mockResolvedValue(customer);
 
-    const result = await service.create(STORE_ID, { name: 'Rahim', phone: '01712345678' });
+    const result = await service.create(
+      STORE_ID,
+      { name: 'Rahim', phone: '01712345678' },
+      { seeFullPhone: true },
+    );
 
     expect(result).toEqual({ ...customer, createdAt: '2026-11-12T10:00:00.000Z' });
     expect(repository.insert).toHaveBeenCalledWith(STORE_ID, {
@@ -32,18 +36,37 @@ describe('CustomersService', () => {
     });
   });
 
+  it('masks phone numbers on both reads and creation without the flag', async () => {
+    repository.insert.mockResolvedValue(customer);
+    repository.findById.mockResolvedValue(customer);
+    expect(
+      (
+        await service.create(
+          STORE_ID,
+          { name: 'Rahim', phone: customer.phone },
+          { seeFullPhone: false },
+        )
+      ).phone,
+    ).toBe('017XXXXX678');
+    expect((await service.getById(STORE_ID, customer.id, { seeFullPhone: false })).phone).toBe(
+      '017XXXXX678',
+    );
+  });
+
   it('rejects a phone number the store already has', async () => {
     repository.insert.mockResolvedValue(undefined);
 
     await expect(
-      service.create(STORE_ID, { name: 'Rahim', phone: '01712345678' }),
+      service.create(STORE_ID, { name: 'Rahim', phone: '01712345678' }, { seeFullPhone: true }),
     ).rejects.toMatchObject({ code: 'CUSTOMER_PHONE_TAKEN', status: 409 });
   });
 
   it('returns 404 for a customer that is not in this store', async () => {
     repository.findById.mockResolvedValue(undefined);
 
-    await expect(service.getById(STORE_ID, customer.id)).rejects.toMatchObject({
+    await expect(
+      service.getById(STORE_ID, customer.id, { seeFullPhone: true }),
+    ).rejects.toMatchObject({
       code: 'CUSTOMER_NOT_FOUND',
       status: 404,
     });

@@ -26,11 +26,11 @@ Sign-up has two commits, not one: verifying the code creates the user and a sess
 
 SMS sender, SendGrid domain and Google OAuth client are not ready. Every vendor sits behind a driver in `packages/providers`, chosen by config:
 
-| Driver                 | Development, CI and tests                                                           | Production                                   |
-| ---------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------- |
-| `SmsDriver`            | `MailpitSmsDriver`: sends the SMS text as an email to `<phone>@sms.test` in Mailpit | Provider driver, ACC-14 (blocked)            |
-| `EmailDriver`          | `SmtpEmailDriver` to Mailpit                                                        | `SendGridEmailDriver`                        |
-| `GoogleIdentityDriver` | `FakeGoogleIdentityDriver`: accepts `fake:<subject>:<email>` tokens                 | `GoogleIdentityDriver` (google-auth-library) |
+| Driver                 | Development, CI and tests                                                           | Production                                |
+| ---------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
+| `SmsDriver`            | `MailpitSmsDriver`: sends the SMS text as an email to `<phone>@sms.test` in Mailpit | Provider driver, ACC-14 (blocked)         |
+| `EmailDriver`          | `SmtpEmailDriver` to Mailpit                                                        | `SendGridEmailDriver`                     |
+| `GoogleIdentityDriver` | `FakeGoogleIdentityDriver`: accepts `fake-google:` followed by JSON claims          | `GoogleTokenDriver` (google-auth-library) |
 
 Config refuses to start in production with a Mailpit, SMTP or fake driver selected. Tests use in-memory fakes that record what was sent. Passing CI with these drivers proves nothing about the live vendors: a real SMS send, a SendGrid send from the verified domain and a real Google sign-in are each checked by hand on staging before launch.
 
@@ -198,6 +198,21 @@ Branch: `feat/acc-11-google-sign-in`
 
 - Scope: `POST /auth/google` with an ID token, verified by `GoogleIdentityDriver` (audience is our client id; the email must be verified by Google). Match by `google_subject` first; else link to a user with the same verified email and save the subject (ACC-R4); else return a short-lived sign-up ticket (Valkey, 15 minutes, single use) that the phone sign-up in ACC-2 accepts and uses to save the subject and verified email. Matches end in `completeSignIn`, so TOTP applies once ACC-7 lands.
 - Tests: the three paths; an unverified Google email never links; a subject already linked to another user is refused; ticket reuse fails.
+
+Email authority correction ([ADR 0010](../adr/0010-google-email-authority.md)):
+after subject lookup, only Gmail or verified Workspace (`hd`) claims establish
+email ownership directly. Other addresses return 202 `email_verification_required`
+with `verificationTicket`, and receive a `google_email` code bound to the ticket,
+subject, address, expected verified owner (or absence) and verification timestamp.
+`POST /auth/google/email/verify` accepts `{ verificationTicket, code, isRemembered? }`.
+A stale owner or subject binding is refused; the client restarts Google sign-in.
+Successful sign-in returns 204 with the session cookie. A new identity returns 202
+`signup_required` with `signupTicket`; submit it on `POST /auth/code/verify` for
+`sign_up`, after requesting and receiving a phone code. Google claims never come
+from that phone request. Both tickets last fifteen minutes and are single use;
+the email code lasts ten minutes. Failed database writes do not restore consumed
+proof. Tests also cover third-party ownership, binding races, expiry, concurrent
+consumption, audit rollback and sanitized driver metrics.
 
 ### ACC-5 · Invite, accept and remove members
 

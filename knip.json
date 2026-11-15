@@ -8,9 +8,14 @@
       "entry": ["src/main.ts"]
     },
     "apps/web": {},
+    "apps/admin": {},
     "packages/*": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"]
+    },
+    "packages/ui": {
+      "entry": ["src/*.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}"]
     }
   }
 }

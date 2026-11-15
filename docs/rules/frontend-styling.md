@@ -19,7 +19,7 @@ Wrong:
 
 ```tsx
 <button
-  className={'px-4 py-2 rounded-[10px] text-white ' + (danger ? 'bg-[#dc4c4c]' : 'bg-[#f06306]')}
+  className={'text-white rounded-[10px] px-4 py-2 ' + (danger ? 'bg-[#dc4c4c]' : 'bg-[#f06306]')}
   style={{ fontSize: 13.5 }}
 >
   Delete
