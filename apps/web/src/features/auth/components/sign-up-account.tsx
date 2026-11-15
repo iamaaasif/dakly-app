@@ -6,7 +6,7 @@ import { passwordSchema, signUpSchema, type SignUpInput } from '@dakly/contracts
 import { Button } from '@dakly/ui/button';
 import type { AuthConfig } from '../auth.types';
 import { useRequestCode } from '../api/request-code';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import { SignUpFields } from './sign-up-fields';
 import { SignUpConsent } from './sign-up-consent';
 const accountSchema = signUpSchema.extend({
@@ -37,6 +37,7 @@ export function SignUpAccount({
   return (
     <FormProvider {...form}>
       <form
+        method="post"
         className="space-y-4"
         onSubmit={form.handleSubmit(async ({ password, consent: _consent, ...registration }) => {
           try {

@@ -5,7 +5,7 @@ import { passwordSignInSchema, passwordIdentifierSchema } from '@dakly/contracts
 import { usePasswordSignIn } from '../api/password-sign-in';
 import { useRequestCode } from '../api/request-code';
 import { useRequestEmailCode } from '../api/request-email-code';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 export function useSignInForm(method: 'phone' | 'email', isRemembered: boolean) {
   const [codeTarget, setCodeTarget] = useState<{
     identifier: string;

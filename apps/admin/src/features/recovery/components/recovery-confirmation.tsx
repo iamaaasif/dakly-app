@@ -37,7 +37,11 @@ export function RecoveryConfirmation({
       className="m-auto max-h-full w-full max-w-lg space-y-4 overflow-y-auto rounded-md border border-border bg-surface p-5 text-text"
     >
       <RecoveryEffect effect={effect} />
-      <form className="space-y-4" onSubmit={form.handleSubmit((input) => recover.mutate(input))}>
+      <form
+        method="post"
+        className="space-y-4"
+        onSubmit={form.handleSubmit((input) => recover.mutate(input))}
+      >
         <RecoveryContacts
           preview={preview}
           form={form}

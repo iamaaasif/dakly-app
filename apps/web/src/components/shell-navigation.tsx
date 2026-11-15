@@ -19,27 +19,7 @@ export function ShellNavigation({
   onNavigate,
 }: ShellNavigationProps) {
   const pathname = usePathname();
-  const links = [
-    {
-      href: '/dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      visible: Boolean(session.currentStore),
-    },
-    {
-      href: '/customers',
-      label: 'Customers',
-      icon: Users,
-      visible: session.currentStore?.canViewCustomers,
-    },
-    {
-      href: '/support-access',
-      label: 'Support access',
-      icon: LifeBuoy,
-      visible: session.currentStore?.canApproveSupport,
-    },
-    { href: '/security', label: 'Security', icon: ShieldCheck, visible: true },
-  ];
+  const links = navigationLinks(session);
   return (
     <div className="flex h-full min-w-0 flex-col gap-6 p-3">
       <p className="px-1 py-3 text-lg font-bold">{collapsed ? 'D' : 'Dakly'}</p>
@@ -68,4 +48,41 @@ export function ShellNavigation({
       {onCollapse ? <CollapseNavigation collapsed={collapsed} onCollapse={onCollapse} /> : null}
     </div>
   );
+}
+
+function navigationLinks(session: SessionContext) {
+  return [
+    {
+      href: '/dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      visible: Boolean(session.currentStore),
+    },
+    {
+      href: '/customers',
+      label: 'Customers',
+      icon: Users,
+      visible: session.currentStore?.canViewCustomers,
+    },
+    {
+      href: '/support-access',
+      label: 'Support access',
+      icon: LifeBuoy,
+      visible: session.currentStore?.canApproveSupport,
+    },
+    { href: '/team', label: 'Team', icon: Users, visible: session.currentStore?.canViewTeam },
+    {
+      href: '/team/ownership',
+      label: 'Ownership transfer',
+      icon: ShieldCheck,
+      visible: Boolean(session.currentStore),
+    },
+    {
+      href: '/settings',
+      label: 'Store settings',
+      icon: ShieldCheck,
+      visible: session.currentStore?.canViewStoreSettings,
+    },
+    { href: '/security', label: 'Security', icon: ShieldCheck, visible: true },
+  ];
 }

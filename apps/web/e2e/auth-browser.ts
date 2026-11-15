@@ -35,7 +35,7 @@ export async function messageText(phone: string, match: RegExp, seen: Set<string
   await expect
     .poll(
       async () => {
-        const recipient = `${phone}@sms.test`;
+        const recipient = phone.includes('@') ? phone : `${phone}@sms.test`;
         const response = await fetch(
           `${process.env.MAILPIT_API_URL}/api/v1/search?query=${encodeURIComponent(`to:${recipient}`)}&limit=100`,
         );

@@ -63,7 +63,7 @@ export function ShellFrame({
           className="mx-auto max-w-7xl"
           key={`${data.contextTag}:${generation}`}
         >
-          {needsStore ? <StoreRequired hasMemberships={data.stores.length > 0} /> : children}
+          {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}
         </div>
       </div>
     </div>

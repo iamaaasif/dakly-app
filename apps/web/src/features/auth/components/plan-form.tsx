@@ -6,7 +6,7 @@ import { createStoreSchema } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
 import { ApiError } from '@/lib/api-client';
 import { useCreateStore } from '../api/create-store';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import type { BusinessDraft } from '../auth.types';
 import { PlanChoice } from './plan-choice';
 import type { PlansResponse } from '@dakly/contracts/billing';
@@ -31,6 +31,7 @@ export function PlanForm({ draft, onBack, plans }: PlanFormProps) {
   }
   return (
     <form
+      method="post"
       className="space-y-6"
       onSubmit={form.handleSubmit(async (input) => {
         try {

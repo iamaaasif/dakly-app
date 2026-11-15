@@ -62,7 +62,7 @@ export function browserRegistration(database, mailpitUrl) {
   };
 }
 
-async function deleteMessages(api, recipient) {
+export async function deleteMessages(api, recipient) {
   const response = await fetch(
     `${api}/api/v1/search?query=${encodeURIComponent(`to:${recipient}`)}&limit=100`,
     { signal: AbortSignal.timeout(5000) },

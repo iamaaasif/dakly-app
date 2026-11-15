@@ -4,8 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { verifyGoogleEmailSchema, type GoogleSignInResponse } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 import { useVerifyGoogleEmail } from '../api/verify-google-email';
-import { formError } from '../form-error';
-import { AuthField } from './auth-field';
+import { formError } from '@/lib/form-error';
+import { FormField as AuthField } from '@/components/form-field';
 export function GoogleEmail({
   verificationTicket,
   isRemembered,
@@ -22,6 +22,7 @@ export function GoogleEmail({
   const verify = useVerifyGoogleEmail();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

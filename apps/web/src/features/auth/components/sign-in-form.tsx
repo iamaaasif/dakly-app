@@ -5,7 +5,7 @@ import { useSignInForm } from '../hooks/use-sign-in-form';
 import { SignInFields } from './sign-in-fields';
 import type { SignInResponse } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 import { SignInCode } from './sign-in-code';
 type SignInFormProps = {
   method: 'phone' | 'email';
@@ -31,6 +31,7 @@ export function SignInForm({ method, isRemembered, onResult, onRemember }: SignI
   return (
     <FormProvider {...form}>
       <form
+        method="post"
         className="space-y-4"
         onSubmit={form.handleSubmit(async (input) => {
           try {

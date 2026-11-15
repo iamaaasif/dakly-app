@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { loadEnv } from '../platform/config/env';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+import { STAFF_SESSION_TTL_MS } from './staff-session-policy';
+import { loadEnv } from '../platform/config/env';
 export const staffTokenHash = (token: string) => createHash('sha256').update(token).digest();
 export const newStaffProof = () => randomBytes(32).toString('base64url');
 @Injectable()
@@ -17,7 +18,7 @@ export class StaffTokens {
       .setIssuer('dakly-staff')
       .setAudience('dakly-admin')
       .setIssuedAt(Math.floor(now.getTime() / 1000))
-      .setExpirationTime(Math.floor(now.getTime() / 1000) + 28800)
+      .setExpirationTime(Math.floor(now.getTime() / 1000) + STAFF_SESSION_TTL_MS / 1000)
       .sign(Buffer.from(this.key, 'base64'));
   }
   async verify(

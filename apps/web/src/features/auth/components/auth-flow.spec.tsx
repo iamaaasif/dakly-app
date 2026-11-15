@@ -15,6 +15,30 @@ function show(children: ReactNode) {
   return render(<QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>);
 }
 describe('Sign in', () => {
+  it('returns an invited recipient to its caller only after authentication', async () => {
+    vi.stubGlobal(
+      'BroadcastChannel',
+      class {
+        postMessage() {}
+        close() {}
+      },
+    );
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 204 }));
+    let completed = false;
+    show(
+      <SignInScreen
+        config={{ legal: null, googleClientId: null }}
+        onAuthenticated={() => {
+          completed = true;
+        }}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Mobile number'), '01712345678');
+    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => expect(completed).toBe(true));
+  });
   it('offers real password, code and recovery entry points without requiring registration config', () => {
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
     expect(screen.getByLabelText('Mobile number')).toBeTruthy();

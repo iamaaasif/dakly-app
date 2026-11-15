@@ -1,7 +1,7 @@
 'use client';
 import type { SignUpInput } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { TotpStep } from './totp-step';
 import { useSignUpVerification } from '../hooks/use-sign-up-verification';
 export function SignUpVerify({
@@ -9,20 +9,22 @@ export function SignUpVerify({
   signupTicket,
   isRemembered,
   onBack,
+  onAuthenticated,
 }: {
   account: { registration: SignUpInput; password: string };
   signupTicket?: string;
   isRemembered: boolean;
   onBack: () => void;
+  onAuthenticated?: () => void;
 }) {
   const { form, seconds, challenge, complete, submit, resend, pending } = useSignUpVerification(
     account,
     signupTicket,
-    isRemembered,
+    { isRemembered, onAuthenticated },
   );
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={complete} />;
   return (
-    <form className="space-y-4" onSubmit={submit}>
+    <form method="post" className="space-y-4" onSubmit={submit}>
       <p>Enter the six-digit SMS code. It expires after ten minutes.</p>
       <AuthField
         label="Verification code"

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { totpRecoverySchema, type TotpRecoveryResponse } from '@dakly/contracts/totp';
 import { useRequestRecoveryCode } from '../api/request-recovery-code';
 import { useStartRecovery } from '../api/start-recovery';
-import { formError } from '../form-error';
+import { formError } from '@/lib/form-error';
 const recoverySchema = totpRecoverySchema.extend({
   emailCode: z.union([
     totpRecoverySchema.shape.emailCode,

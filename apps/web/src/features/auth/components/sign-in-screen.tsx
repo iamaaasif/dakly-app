@@ -1,5 +1,6 @@
 'use client';
-import Link from 'next/link';
+import { AuthLink } from './auth-link';
+import { SignInNavigation } from './sign-in-navigation';
 import { useState } from 'react';
 import type { GoogleSignInResponse } from '@dakly/contracts/auth';
 import type { AuthConfig } from '../auth.types';
@@ -9,15 +10,35 @@ import { TotpStep } from './totp-step';
 import { GoogleSignIn } from './google-sign-in';
 import { GoogleEmail } from './google-email';
 import { SignUpScreen } from './sign-up-screen';
-type SignInScreenProps = { config: AuthConfig; method?: 'phone' | 'email' };
-export function SignInScreen({ config, method = 'phone' }: SignInScreenProps) {
+type SignInScreenProps = {
+  config: AuthConfig;
+  method?: 'phone' | 'email';
+  onAuthenticated?: () => void;
+  onNavigate?: (view: 'phone' | 'email' | 'signup') => void;
+};
+export function SignInScreen({
+  config,
+  method = 'phone',
+  onAuthenticated,
+  onNavigate,
+}: SignInScreenProps) {
   const [pending, setPending] = useState<GoogleSignInResponse>();
   const [remember, setRemember] = useState(false);
-  const result = (value: GoogleSignInResponse) =>
-    value ? setPending(value) : window.location.replace('/dashboard');
+  const complete = onAuthenticated ?? (() => window.location.replace('/dashboard'));
+  const result = (value: GoogleSignInResponse) => (value ? setPending(value) : complete());
+  function returnToSignIn() {
+    setPending(undefined);
+    onNavigate?.('phone');
+  }
   if (pending?.status === 'signup_required')
     return (
-      <SignUpScreen config={config} signupTicket={pending.signupTicket} isRemembered={remember} />
+      <SignUpScreen
+        config={config}
+        signupTicket={pending.signupTicket}
+        isRemembered={remember}
+        onAuthenticated={onAuthenticated}
+        onSignIn={onNavigate ? returnToSignIn : undefined}
+      />
     );
   if (pending?.status === 'totp_required')
     return (
@@ -38,22 +59,7 @@ export function SignInScreen({ config, method = 'phone' }: SignInScreenProps) {
   return (
     <AuthFrame title="Sign in">
       <div className="space-y-4">
-        <nav aria-label="Sign-in method" className="flex gap-4">
-          <Link
-            href="/sign-in"
-            aria-current={method === 'phone' ? 'page' : undefined}
-            className="inline-flex min-h-10 items-center text-action underline"
-          >
-            Mobile
-          </Link>
-          <Link
-            href="/sign-in?method=email"
-            aria-current={method === 'email' ? 'page' : undefined}
-            className="inline-flex min-h-10 items-center text-action underline"
-          >
-            Email
-          </Link>
-        </nav>
+        <SignInNavigation method={method} onNavigate={onNavigate} />
         <SignInForm
           key={method}
           method={method}
@@ -62,10 +68,14 @@ export function SignInScreen({ config, method = 'phone' }: SignInScreenProps) {
           onRemember={setRemember}
         />
         <GoogleSignIn clientId={config.googleClientId} isRemembered={remember} onResult={result} />
-        <Link href="/sign-up" className="inline-flex min-h-10 items-center text-action underline">
+        <AuthLink href="/sign-up" onNavigate={navigateTo(onNavigate, 'signup')}>
           Create an account
-        </Link>
+        </AuthLink>
       </div>
     </AuthFrame>
   );
+}
+
+function navigateTo(onNavigate: SignInScreenProps['onNavigate'], view: 'phone' | 'signup') {
+  return onNavigate ? () => onNavigate(view) : undefined;
 }
