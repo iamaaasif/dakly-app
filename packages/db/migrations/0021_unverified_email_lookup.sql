@@ -1,1 +1,0 @@
-CREATE INDEX "users_unverified_email_idx" ON "users" USING btree ("email") WHERE "users"."email_verified_at" is null;

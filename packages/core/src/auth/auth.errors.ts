@@ -1,6 +1,36 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
+  AUTH_CONTACT_TAKEN: {
+    status: 409,
+    message: 'The replacement contact belongs to another account',
+  },
+  AUTH_RECOVERY_OWNER_LIMIT: {
+    status: 409,
+    message: 'Self-service recovery supports up to 1000 store owners',
+  },
+  AUTH_RECOVERY_CONTACT_REQUIRED: {
+    status: 409,
+    message: 'A store owner needs a verified contact before recovery can start',
+  },
+  AUTH_TOTP_INVALID: {
+    status: 400,
+    message: 'The second-factor verification is incorrect, expired or already used',
+  },
+  AUTH_TOTP_ENABLED: { status: 409, message: 'Two-step verification is already enabled' },
+  AUTH_RECOVERY_PENDING: {
+    status: 409,
+    message: 'Recovery is waiting for notifications and the seven-day cancellation period',
+  },
+  AUTH_GOOGLE_UNAVAILABLE: {
+    status: 503,
+    message: 'Google sign-in is unavailable. Try again later',
+  },
+  AUTH_GOOGLE_CONFLICT: { status: 409, message: 'This Google identity cannot be linked' },
+  AUTH_GOOGLE_TICKET_INVALID: {
+    status: 400,
+    message: 'The Google verification has expired or was already used',
+  },
   AUTH_INVALID_CREDENTIALS: { status: 401, message: 'The sign-in credentials are incorrect' },
   AUTH_EMAIL_UNVERIFIED: { status: 403, message: 'Verify this email before signing in' },
   AUTH_ACCOUNT_EXISTS: { status: 409, message: 'This account already exists. Sign in instead' },
