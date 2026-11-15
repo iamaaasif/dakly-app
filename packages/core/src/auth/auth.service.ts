@@ -56,12 +56,12 @@ export class AuthService {
     const user = await this.users.findByPhone(input.phone);
     if (input.purpose === 'sign_up' && user) throw authError('AUTH_ACCOUNT_EXISTS');
     if (input.purpose === 'sign_in' && !user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
-    await this.codes.send(
-      this.subject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
-      input.purpose,
+    await this.codes.send({
+      subject: this.subject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
+      purpose: input.purpose,
       ip,
-      input.purpose === 'sign_up' ? input : undefined,
-    );
+      registration: input.purpose === 'sign_up' ? input : undefined,
+    });
   }
 
   async verifyCode(input: VerifyCodeInput, request: SignInRequest) {
@@ -87,11 +87,16 @@ export class AuthService {
   async requestEmailCode(input: RequestEmailCodeInput, ip: string): Promise<void> {
     const user = await this.users.findByVerifiedEmail(input.email);
     if (!user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
-    await this.codes.send(
-      { target: input.email, userId: user.id, email: input.email, phone: user.phone ?? undefined },
-      'sign_in',
+    await this.codes.send({
+      subject: {
+        target: input.email,
+        userId: user.id,
+        email: input.email,
+        phone: user.phone ?? undefined,
+      },
+      purpose: 'sign_in',
       ip,
-    );
+    });
   }
 
   private async register(
@@ -229,13 +234,12 @@ export class AuthService {
   private async createRegistration(user: SignInUser) {
     if (!user.registration) return;
     if (
-      !(await this.users.create(
-        user.id,
-        user.registration,
-        this.clock.now(),
-        user.registrationPasswordHash,
-        user.google?.identity,
-      ))
+      !(await this.users.create(user.id, {
+        input: user.registration,
+        now: this.clock.now(),
+        passwordHash: user.registrationPasswordHash,
+        google: user.google?.identity,
+      }))
     )
       throw authError('AUTH_ACCOUNT_EXISTS');
   }

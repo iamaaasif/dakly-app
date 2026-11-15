@@ -49,7 +49,7 @@ export class SupportOwnerService {
 
   async requestCode(storeId: string, { id, userId, sessionId, ip }: SupportCodeRequest) {
     const subject = await this.requestSubject(storeId, id, userId, sessionId);
-    await this.codes.send(subject, 'support_approval', ip);
+    await this.codes.send({ subject, purpose: 'support_approval', ip });
   }
 
   private async requestSubject(storeId: string, id: string, userId: string, sessionId?: string) {

@@ -50,13 +50,12 @@ describe('team filters without RLS assistance', () => {
     expect((await members.list(f.b, { limit: 50 })).map((row) => row.id)).toEqual([f.memberB]);
     const input = { phone: '01711000002', builtInRole: 'support_agent' as const },
       hash = Buffer.alloc(32, 1);
-    const invite = await members.insertInvite(
-      f.a,
+    const invite = await members.insertInvite(f.a, {
       input,
-      f.userA,
+      userId: f.userA,
       hash,
-      new Date(Date.now() + 60000),
-    );
+      expiresAt: new Date(Date.now() + 60000),
+    });
     expect(await members.findRecipient(f.a, input)).toMatchObject({ id: invite.id });
     expect(await members.findRecipient(f.b, input)).toBeUndefined();
     expect(await members.matchesToken(f.a, invite.id, hash)).toBe(true);

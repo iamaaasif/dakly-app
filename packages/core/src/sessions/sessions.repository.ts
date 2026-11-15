@@ -17,6 +17,13 @@ const columns = {
   expiresAt: sessions.expiresAt,
 };
 
+type NewSession = {
+  tokenHash: Buffer;
+  input: CreateSessionInput;
+  now: Date;
+  expiresAt: Date;
+};
+
 @Injectable()
 export class SessionsRepository {
   constructor(
@@ -95,13 +102,7 @@ export class SessionsRepository {
     return rows[0];
   }
 
-  async insert(
-    userId: string,
-    tokenHash: Buffer,
-    input: CreateSessionInput,
-    now: Date,
-    expiresAt: Date,
-  ): Promise<Session> {
+  async insert(userId: string, { tokenHash, input, now, expiresAt }: NewSession): Promise<Session> {
     const rows = await this.account.forUser(userId, (tx) =>
       tx
         .insert(sessions)

@@ -64,9 +64,14 @@ export class TotpService {
 
   async requestSetupProof(userId: string, ip: string) {
     const user = await this.current(userId);
-    await this.codes.send(this.subject(user), 'totp_setup', ip, undefined, {
-      ...this.passwords.proof(user.id, user.passwordHash),
-      identifierState: accountCredentialState(user),
+    await this.codes.send({
+      subject: this.subject(user),
+      purpose: 'totp_setup',
+      ip,
+      proof: {
+        ...this.passwords.proof(user.id, user.passwordHash),
+        identifierState: accountCredentialState(user),
+      },
     });
   }
 
@@ -159,13 +164,12 @@ export class TotpService {
       )
         throw authError('AUTH_TOTP_INVALID');
       const { backupCodes } = this.credentials.generate(current.id);
-      await this.repository.enable(
-        userId,
+      await this.repository.enable(userId, {
         envelope,
-        backupCodes.map((code) => this.credentials.hashBackup(userId, code)),
+        backupCodeHashes: backupCodes.map((code) => this.credentials.hashBackup(userId, code)),
         step,
-        this.clock.now(),
-      );
+        now: this.clock.now(),
+      });
       await this.events.record(userId, { event: 'totp.enabled', actor: { kind: 'user' }, ip });
       return { backupCodes };
     });

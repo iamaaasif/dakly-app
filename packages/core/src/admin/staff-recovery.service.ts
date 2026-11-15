@@ -79,11 +79,11 @@ export class StaffRecoveryService {
       await this.assertCurrent(input.effect, user);
     });
     const subject = this.subject(input.effect, input.channel);
-    await this.codes.send(
+    await this.codes.send({
       subject,
-      input.channel === 'phone' ? 'staff_recovery_phone' : 'staff_recovery_email',
+      purpose: input.channel === 'phone' ? 'staff_recovery_phone' : 'staff_recovery_email',
       ip,
-    );
+    });
   }
 
   async recover(staff: Staff, input: StaffRecoveryConfirmation, ip: string) {

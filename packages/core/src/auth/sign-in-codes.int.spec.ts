@@ -54,7 +54,7 @@ describe('Sign-in codes and failures in Valkey', () => {
 
   it('stores a hash for ten minutes and rejects an expired code', async () => {
     const { subject, ip, codeKey } = fixture();
-    await codes.send(subject, 'sign_in', ip);
+    await codes.send({ subject, purpose: 'sign_in', ip });
     const code = codeFor(subject.target);
     expect(code).toMatch(/^\d{6}$/);
     const stored = await client.connection.hgetall(codeKey);
@@ -72,7 +72,7 @@ describe('Sign-in codes and failures in Valkey', () => {
   it('binds the code to its target and purpose and consumes it only once under concurrency', async () => {
     const { subject, ip } = fixture();
     const other = fixture();
-    await codes.send(subject, 'sign_in', ip);
+    await codes.send({ subject, purpose: 'sign_in', ip });
     const code = codeFor(subject.target);
     await expect(codes.consume(other.subject, 'sign_in', code, other.ip)).rejects.toMatchObject({
       code: 'AUTH_CODE_INVALID',
@@ -88,7 +88,7 @@ describe('Sign-in codes and failures in Valkey', () => {
 
   it('deletes a challenge after five wrong tries even if shared failure state is reset', async () => {
     const { subject, ip, codeKey } = fixture();
-    await codes.send(subject, 'sign_in', ip);
+    await codes.send({ subject, purpose: 'sign_in', ip });
     const code = codeFor(subject.target);
     for (let attempt = 0; attempt < 5; attempt++) {
       await expect(codes.consume(subject, 'sign_in', wrongCode(code), ip)).rejects.toMatchObject({
@@ -104,8 +104,8 @@ describe('Sign-in codes and failures in Valkey', () => {
 
   it('enforces the thirty-second cooldown and five sends per target across purposes and IPs', async () => {
     const { subject, ip } = fixture();
-    await codes.send(subject, 'sign_in', ip);
-    await expect(codes.send(subject, 'sign_up', ip)).rejects.toMatchObject({
+    await codes.send({ subject, purpose: 'sign_in', ip });
+    await expect(codes.send({ subject, purpose: 'sign_up', ip })).rejects.toMatchObject({
       code: 'AUTH_RATE_LIMITED',
     });
     expect(await client.connection.ttl(authKey('resend', subject.target))).toBeGreaterThanOrEqual(
@@ -114,11 +114,13 @@ describe('Sign-in codes and failures in Valkey', () => {
     await client.connection.pexpire(authKey('resend', subject.target), 1);
     await setTimeout(10);
     for (let sent = 1; sent < 5; sent++) {
-      await codes.send(subject, 'sign_in', ip);
+      await codes.send({ subject, purpose: 'sign_in', ip });
       await client.connection.del(authKey('resend', subject.target));
     }
     const differentIp = fixture().ip;
-    await expect(codes.send(subject, 'sign_up', differentIp)).rejects.toMatchObject({
+    await expect(
+      codes.send({ subject, purpose: 'sign_up', ip: differentIp }),
+    ).rejects.toMatchObject({
       code: 'AUTH_RATE_LIMITED',
     });
   });
@@ -126,8 +128,10 @@ describe('Sign-in codes and failures in Valkey', () => {
   it('allows only twenty SMS sends per IP per hour across different targets', async () => {
     const ip = randomUUID();
     for (let sent = 0; sent < 20; sent++)
-      await codes.send(fixture(undefined, ip).subject, 'sign_in', ip);
-    await expect(codes.send(fixture(undefined, ip).subject, 'sign_in', ip)).rejects.toMatchObject({
+      await codes.send({ subject: fixture(undefined, ip).subject, purpose: 'sign_in', ip });
+    await expect(
+      codes.send({ subject: fixture(undefined, ip).subject, purpose: 'sign_in', ip }),
+    ).rejects.toMatchObject({
       code: 'AUTH_RATE_LIMITED',
     });
     expect(await client.connection.ttl(authKey('send-ip', ip))).toBeGreaterThanOrEqual(3599);
@@ -159,10 +163,10 @@ describe('Sign-in codes and failures in Valkey', () => {
 
   it('retains account failures when a code is resent', async () => {
     const { subject, ip } = fixture(randomUUID());
-    await codes.send(subject, 'sign_in', ip);
+    await codes.send({ subject, purpose: 'sign_in', ip });
     for (let attempt = 0; attempt < 4; attempt++) await failures.recordFailure(subject, ip);
     await client.connection.del(authKey('resend', subject.target));
-    await codes.send(subject, 'sign_in', ip);
+    await codes.send({ subject, purpose: 'sign_in', ip });
     await expect(failures.recordFailure(subject, ip)).rejects.toMatchObject({
       code: 'AUTH_LOCKED',
     });
@@ -199,12 +203,12 @@ describe('Sign-in codes and failures in Valkey', () => {
   it('retains the saved code and cooldown after uncertain SMS delivery', async () => {
     const { subject, ip, codeKey } = fixture();
     const send = vi.spyOn(sms, 'send').mockRejectedValueOnce(new Error('vendor timeout'));
-    await expect(codes.send(subject, 'sign_in', ip)).rejects.toMatchObject({
+    await expect(codes.send({ subject, purpose: 'sign_in', ip })).rejects.toMatchObject({
       code: 'AUTH_SMS_UNAVAILABLE',
     });
     send.mockRestore();
     expect(await client.connection.exists(codeKey)).toBe(1);
-    await expect(codes.send(subject, 'sign_in', ip)).rejects.toMatchObject({
+    await expect(codes.send({ subject, purpose: 'sign_in', ip })).rejects.toMatchObject({
       code: 'AUTH_RATE_LIMITED',
     });
   });
@@ -218,7 +222,7 @@ describe('Sign-in codes and failures in Valkey', () => {
   });
   it('rejects a consumed-code replay without counting it as a wrong code or extending its marker', async () => {
     const { subject, ip, codeKey } = fixture(randomUUID());
-    await codes.send(subject, 'sign_in', ip);
+    await codes.send({ subject, purpose: 'sign_in', ip });
     const code = codeFor(subject.target);
     for (let attempt = 0; attempt < 4; attempt++) await failures.recordFailure(subject, ip);
     await client.connection.pexpire(codeKey, 30000);

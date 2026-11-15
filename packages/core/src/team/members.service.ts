@@ -84,13 +84,12 @@ export class MembersService {
       const currentRole = await this.roleAccess(storeId, roleValues(input));
       this.assertManagement(actor, currentRole, currentRole);
       await this.assertSeat(storeId);
-      const member = await this.repository.insertInvite(
-        storeId,
+      const member = await this.repository.insertInvite(storeId, {
         input,
-        actor.userId,
-        hash(token),
-        this.expiry(),
-      );
+        userId: actor.userId,
+        hash: hash(token),
+        expiresAt: this.expiry(),
+      });
       await this.record(storeId, member.id, actor.userId, 'member.invited');
       return { member, created: true };
     });

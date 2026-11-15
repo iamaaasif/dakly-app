@@ -128,6 +128,29 @@ export default tseslint.config(
     },
   },
   {
+    // max-params cannot skip constructors, and NestJS constructors take injected dependencies.
+    files: ['packages/core/src/**/*.ts', 'apps/api/src/**/*.ts', 'apps/worker/src/**/*.ts'],
+    ignores: ['**/*.spec.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedSyntax,
+        ...['FunctionDeclaration', 'ArrowFunctionExpression', 'FunctionExpression'].map((node) => ({
+          selector: `${node}[params.length>4]:not(MethodDefinition[kind='constructor'] > FunctionExpression)`,
+          message: 'Use one object parameter when a function needs more than 4 values.',
+        })),
+      ],
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+    },
+  },
+  {
+    // NestJS binds one decorator to one handler parameter, so handlers cannot take one object.
+    files: ['packages/core/src/**/*.controller.ts', 'apps/api/src/**/*.controller.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...restrictedSyntax],
+    },
+  },
+  {
     files: ['scripts/**/*.mjs', 'apps/web/*.spec.mjs'],
     languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },
