@@ -49,7 +49,7 @@ import { UsersModule } from './users.module';
     SmsModule,
     AccountSecurityEventsModule,
     ClockModule,
-    // Sign-in and recovery queue notice delivery for the worker; an app-wide prefix still applies.
+    // Sign-in and recovery queue notice delivery for the worker.
     BullModule.registerQueueAsync({
       name: QUEUES.transactional,
       useFactory: () => ({ connection: toRedisConnection(loadEnv().REDIS_URL) }),

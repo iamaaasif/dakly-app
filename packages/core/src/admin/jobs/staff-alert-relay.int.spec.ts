@@ -50,13 +50,13 @@ function delivery(auditId: string) {
   return {
     name: STAFF_ALERT_DELIVERY,
     data: { auditId },
-    opts: expect.objectContaining({
+    opts: {
       deduplication: { id: auditId },
       attempts: 5,
       backoff: { type: 'exponential', delay: 30000 },
       removeOnComplete: true,
       removeOnFail: 100,
-    }),
+    },
   };
 }
 
