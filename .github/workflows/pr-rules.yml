@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # The script uses only Node built-ins, so this job installs no pnpm or dependencies.
+          package-manager-cache: false
       # Pull request text goes through the environment, never into the script itself.
       - run: node scripts/check-pull-request.mjs
         env:
