@@ -1,4 +1,4 @@
-import type { PermissionArea } from '@dakly/contracts/team';
+import type { AccessLevel, PermissionArea } from '@dakly/contracts/team';
 
 export const permissionLabels: Record<PermissionArea, string> = {
   dashboard: 'Dashboard',
@@ -22,3 +22,8 @@ export const flagLabels = {
   exportLists: 'Download customer lists',
   refund: 'Refund payments',
 } as const;
+export const accessLabels: Record<AccessLevel, string> = {
+  none: 'No access',
+  view: 'View',
+  edit: 'Edit',
+};

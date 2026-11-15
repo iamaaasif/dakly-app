@@ -1,6 +1,6 @@
 import { permissionAreas, type RolePermissions } from '@dakly/contracts/team';
 
-import { permissionLabels, flagLabels } from '../permission-labels';
+import { accessLabels, permissionLabels, flagLabels } from '../permission-labels';
 
 export function PermissionSummary({ permissions }: { permissions: RolePermissions }) {
   return (
@@ -10,7 +10,7 @@ export function PermissionSummary({ permissions }: { permissions: RolePermission
         {permissionAreas.map((area) => (
           <div key={area}>
             <dt className="font-medium">{permissionLabels[area]}</dt>
-            <dd>{permissions.areas[area] ?? 'none'}</dd>
+            <dd>{accessLabels[permissions.areas[area] ?? 'none']}</dd>
           </div>
         ))}
         {Object.entries(flagLabels).map(([flag, label]) => (

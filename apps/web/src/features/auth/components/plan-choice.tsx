@@ -30,7 +30,7 @@ export function PlanChoice({
       <ul className="mb-4 space-y-1">
         {Object.entries(plan.limits).map(([name, limit]) => (
           <li key={name}>
-            {name.replaceAll('_', ' ')}: {limit}
+            {limitLabels[name] ?? name.replaceAll('_', ' ')}: {limit}
           </li>
         ))}
       </ul>
@@ -47,3 +47,12 @@ export function PlanChoice({
     </Card>
   );
 }
+
+// Plan limits are an open record, so a key added later falls back to its spaced name.
+const limitLabels: Partial<Record<string, string>> = {
+  customers: 'Customers',
+  seats: 'Team seats',
+  ai_conversation: 'AI conversations',
+  ai_content: 'AI content',
+  ai_ask: 'Ask Dakly AI',
+};

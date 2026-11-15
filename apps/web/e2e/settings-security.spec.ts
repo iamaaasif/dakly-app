@@ -213,8 +213,10 @@ async function totp(page: Page, fixture: Fixture) {
     page.getByRole('button', { name: 'Set up authenticator', exact: true }),
   ).toBeVisible();
   await page.goto('/security?tab=history');
-  await expect(page.getByRole('heading', { name: 'totp enabled', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'email changed', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Two-step verification turned on', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Email changed', exact: true })).toBeVisible();
   await pictures(page, 'security-history');
 }
 async function passwordSignIn(page: Page, fixture: Fixture) {
