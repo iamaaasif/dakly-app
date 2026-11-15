@@ -6,11 +6,12 @@ import type {
   StaffAuditExportResponse,
 } from '@dakly/contracts/staff-audit';
 
+import { auditKeys } from './audit-keys';
 import { adminApi } from '@/lib/api-client';
 
 export function useAudit(query: string) {
   return useQuery({
-    queryKey: ['staff-audit', query],
+    queryKey: auditKeys.search(query),
     queryFn: () => adminApi<StaffAuditPage>(`audit?${query}`),
   });
 }
@@ -22,7 +23,7 @@ export function useAuditExport() {
 }
 export function useExportStatus(id: string | undefined) {
   return useQuery({
-    queryKey: ['staff-audit-export', id],
+    queryKey: auditKeys.export(id),
     enabled: Boolean(id),
     queryFn: () => adminApi<StaffAuditExportResponse>(`audit/exports/${id}`),
     refetchInterval: (query) => (query.state.data?.status === 'pending' ? 3000 : false),

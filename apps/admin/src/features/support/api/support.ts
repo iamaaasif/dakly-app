@@ -2,17 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { SupportGrantPage, SupportRequestInput } from '@dakly/contracts/support';
 
+import { supportKeys } from './support-keys';
 import { adminApi } from '@/lib/api-client';
 
 export function useSupportRequests(before: string) {
   return useQuery({
-    queryKey: ['support-requests', before],
+    queryKey: supportKeys.requestPage(before),
     queryFn: () => adminApi<SupportGrantPage>(`support${before ? '?before=' + before : ''}`),
   });
 }
 export function useSupportTargets(query: string) {
   return useQuery({
-    queryKey: ['support-targets', query],
+    queryKey: supportKeys.targets(query),
     enabled: query.length >= 3,
     queryFn: () =>
       adminApi<Array<{ id: string; name: string }>>(
@@ -25,7 +26,7 @@ export function useRequestSupport() {
   return useMutation({
     mutationFn: (input: SupportRequestInput) =>
       adminApi<{ id: string; codeSent: boolean }>('support', input),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['support-requests'] }),
+    onSuccess: () => client.invalidateQueries({ queryKey: supportKeys.requests }),
   });
 }
 export function useOpenSupport() {

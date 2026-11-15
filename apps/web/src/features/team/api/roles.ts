@@ -21,7 +21,7 @@ export function useRoles(cursor?: string) {
 export function useRoleOptions() {
   const { request, contextTag } = useStoreRequest();
   return useInfiniteQuery({
-    queryKey: [...teamKeys.roles(contextTag), 'options'],
+    queryKey: teamKeys.roleOptions(contextTag),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
       request<RoleListResponse>(
