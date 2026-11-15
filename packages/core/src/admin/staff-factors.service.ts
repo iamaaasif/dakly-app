@@ -6,6 +6,7 @@ import type {
   StaffAuthenticationInput,
 } from '@dakly/contracts/staff-auth';
 import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+import { PasskeyVerificationError } from '@dakly/providers/webauthn/passkey-driver';
 
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
@@ -14,6 +15,11 @@ import { StaffAuditService } from './staff-audit.service';
 import { StaffAuthService } from './staff-auth.service';
 import { StaffSessionsService } from './staff-sessions.service';
 import { StaffRepository } from './staff.repository';
+
+function rejectedPasskey(error: unknown): undefined {
+  if (error instanceof PasskeyVerificationError) return undefined;
+  throw error;
+}
 
 @Injectable()
 export class StaffFactorsService {
@@ -85,7 +91,7 @@ export class StaffFactorsService {
         return undefined;
       const credential = await this.auth.passkeys
         .register(input.credential, challenge.webauthnChallenge)
-        .catch(() => undefined);
+        .catch(rejectedPasskey);
       if (!credential) return undefined;
       await this.audit.record(staff.id, 'staff.enrolled_passkey', ip);
       await this.repository.addPasskey(staff.id, credential);
@@ -116,7 +122,7 @@ export class StaffFactorsService {
       if (!credential) return undefined;
       const counter = await this.auth.passkeys
         .authenticate(input.credential, challenge.webauthnChallenge, credential)
-        .catch(() => undefined);
+        .catch(rejectedPasskey);
       if (counter === undefined) return undefined;
       await this.repository.updateCounter(staff.id, credential.id, counter);
       return this.sessions.issue(staff, ip);

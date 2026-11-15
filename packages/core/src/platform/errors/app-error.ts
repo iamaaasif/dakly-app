@@ -27,6 +27,7 @@ export const PLATFORM_ERRORS = {
   AUTH_REQUIRED: { status: 401, message: 'Sign in to continue' },
   ORIGIN_REJECTED: { status: 403, message: 'Request origin is not allowed' },
   VALIDATION_FAILED: { status: 400, message: 'The request is not valid' },
+  FORWARDING_HEADERS_INVALID: { status: 400, message: 'Invalid proxy forwarding headers' },
   PERMISSION_DENIED: { status: 403, message: 'You do not have permission to do this' },
   STORE_REQUIRED: { status: 401, message: 'Sign in to a store to continue' },
   INTERNAL_ERROR: { status: 500, message: 'Something went wrong' },

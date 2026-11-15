@@ -11,6 +11,7 @@ import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
+import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import {
   BulkJobDispatcher,
@@ -34,6 +35,7 @@ import { AccountSecurityNoticesJob } from './account-security-notices.job';
   imports: [
     DiscoveryModule,
     LoggingModule,
+    ErrorReportingModule,
     StaffHistoryModule,
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.transactional }),

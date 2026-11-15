@@ -16,7 +16,7 @@ import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-drive
 
 import { AuditService } from '../audit/audit.service';
 import { AuthModule } from '../auth/auth.module';
-import { SignInCodes } from '../auth/codes.module';
+import { SignInCodesService } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { EmailService } from '../email/email.service';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -381,7 +381,7 @@ describe('ownership transfer over Fastify and Postgres', () => {
     const f = await fixture();
     const code = await proof(f);
     const [before] = await admin.db.select().from(users).where(eq(users.id, f.owner.id));
-    const codes = app.get(SignInCodes);
+    const codes = app.get(SignInCodesService);
     const consume = codes.consume.bind(codes);
     const changed = vi.spyOn(codes, 'consume').mockImplementationOnce(async (...args) => {
       const grant = await consume(...args);
@@ -413,7 +413,7 @@ describe('ownership transfer over Fastify and Postgres', () => {
     for (const change of ['owner', 'recipient'] as const) {
       const f = await fixture();
       const code = await proof(f);
-      const codes = app.get(SignInCodes);
+      const codes = app.get(SignInCodesService);
       const consume = codes.consume.bind(codes);
       const changed = vi.spyOn(codes, 'consume').mockImplementationOnce(async (...args) => {
         const grant = await consume(...args);

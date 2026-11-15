@@ -7,7 +7,7 @@ import type {
 } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
-import { SignInCodes, type SignInSubject } from '../auth/codes.module';
+import { SignInCodesService, type SignInSubject } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -34,7 +34,7 @@ export class OwnershipTransferService {
     @Inject(MembersRepository) private readonly members: MembersRepository,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(UsersService) private readonly users: UsersService,
-    @Inject(SignInCodes) private readonly codes: SignInCodes,
+    @Inject(SignInCodesService) private readonly codes: SignInCodesService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(Clock) private readonly clock: Clock,

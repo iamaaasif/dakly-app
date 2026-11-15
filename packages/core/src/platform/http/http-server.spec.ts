@@ -87,6 +87,9 @@ describe('API forwarding boundary', () => {
       headers: { ...headers, ...invalid },
     });
     expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: { code: 'FORWARDING_HEADERS_INVALID', message: 'Invalid proxy forwarding headers' },
+    });
   });
   it('preserves direct requests without forwarding headers', async () => {
     const response = await fixture().inject({
