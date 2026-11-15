@@ -319,7 +319,10 @@ NID last four matched, shop details matched when the person belongs to a shop, a
 call-back to the old number attempted. It never asks for document values. The
 confirmation names the person, requested changes and five-minute deadline. A
 replacement phone or email needs its own single-use code, bound to this action,
-account, staff session and current account security state.
+account, staff session and current account security state. Removing 2-step with no
+replacement contact needs one such code sent to the account's current verified phone
+or email, chosen on the confirmation screen. An account with neither is refused with
+`RECOVERY_CONTACT`. Sign-out-only recovery needs no code.
 
 One account transaction locks the person, their shops in ID order, the staff row
 and staff session. Memberships are refreshed after store-lock waits, so a former
@@ -328,7 +331,9 @@ user identity lock. It checks current authority again, inserts `staff_audit_log`
 before changing credentials, removes selected TOTP and backup codes, changes
 verified contacts, cancels pending self-service recovery, revokes every session,
 records staff-attributed account history and writes encrypted notice intents.
-Any failed write rolls everything back. Codes are consumed before locks and never
+Any failed write rolls everything back. The same authority, target and state checks
+run once before any code is consumed, so a refused request leaves the codes usable.
+Codes are then consumed before the recovery transaction takes its locks and are never
 restored. The persisted action ID rejects replay, including sign-out-only recovery.
 No cache operation is needed to revoke access.
 

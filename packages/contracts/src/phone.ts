@@ -14,3 +14,8 @@ export const bdMobileSchema = z
     return /^1\d{9}$/.test(digits) ? `0${digits}` : digits;
   })
   .pipe(z.string().regex(BD_MOBILE, 'Enter a valid Bangladesh mobile number'));
+
+// Shown to roles without the full-phone flag: 01712345678 becomes 01712-XXX678.
+export function maskPhone(phone: string): string {
+  return `${phone.slice(0, 5)}-XXX${phone.slice(-3)}`;
+}

@@ -330,7 +330,7 @@ Sessions use two access reads on each store request: the token-hash lookup joins
 
 `WEB_ORIGINS` is a comma-separated list of exact origins, defaulting to `http://localhost:3000` for local work. Every POST, PUT, PATCH and DELETE checks it, including requests without a session. Missing origins are rejected. There are no provider callback routes or exemptions yet; the signed callback marker is added with its first route. Cookies use `HttpOnly`, `SameSite=Lax` and `Path=/`, with `Secure` outside development. Remembered cookies renew their 30-day browser lifetime; other cookies have no persistent expiry.
 
-Customer routes require `customers.view` or `customers.edit`. Their service requires the caller's phone-access flag and masks all response phones without it, including create responses, as `017XXXXX678`.
+Customer routes require `customers.view` or `customers.edit`. Their service requires the caller's phone-access flag and masks all response phones without it, including create responses, as `01712-XXX678`.
 
 Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member commits their new membership status, so the next request reads it and gets 401 for that store; their sessions keep working for their other stores. Revoking an unaccepted invite sets `removed`, records `removed_at`, and clears the invite token hash and expiry in the same transaction; its user ID may remain null. Only `active` memberships require a user. The complete `(store_id, status)` index supports member counts, including removed invites.
 
@@ -413,7 +413,11 @@ names within a store return `409 ROLE_NAME_EXISTS`. Missing or foreign roles
 return `404 ROLE_NOT_FOUND`. Deletion returns `409 ROLE_IN_USE` for any membership
 reference, including pending, expired or removed memberships, preserving membership
 history. Editing a role changes every assigned member's access on their next
-request; already authorized requests may finish.
+request; already authorized requests may finish. A stored role whose permissions
+the contract no longer accepts still lists, showing only the areas and levels the
+contract knows, while access checks treat it as no access. Renaming such a role
+without sending its permissions returns `409 ROLE_PERMISSIONS_INVALID` and leaves
+the row unchanged; sending full permissions replaces them.
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
 

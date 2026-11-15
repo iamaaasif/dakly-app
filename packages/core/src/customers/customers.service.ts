@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { CreateCustomerInput, CustomerResponse } from '@dakly/contracts/customers';
+import { maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { customerError } from './customers.errors';
@@ -40,9 +41,7 @@ export class CustomersService {
 function toCustomerResponse(customer: Customer, seeFullPhone: boolean): CustomerResponse {
   return {
     ...customer,
-    phone: seeFullPhone
-      ? customer.phone
-      : `${customer.phone.slice(0, 3)}XXXXX${customer.phone.slice(-3)}`,
+    phone: seeFullPhone ? customer.phone : maskPhone(customer.phone),
     createdAt: customer.createdAt.toISOString(),
   };
 }

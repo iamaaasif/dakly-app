@@ -12,7 +12,7 @@ import {
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';
-import { SignInCodesService } from '../auth/sign-in-codes.service';
+import { SignInCodesService, type SignInSubject } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
 import { AccountTransaction } from '../platform/database/account-transaction';
@@ -59,7 +59,7 @@ export class StaffRecoveryService {
   preview(staff: Staff, input: StaffRecoveryRequest): Promise<StaffRecoveryPreview> {
     return this.transaction.run(input.targetId, async () => {
       const { user, stores } = await this.authorize(staff, input);
-      this.assertChecks(input, stores);
+      this.assertChecks(input, user, stores);
       const effect = staffRecoveryEffectSchema.parse({
         ...input,
         action: 'account.recovered',
@@ -76,13 +76,13 @@ export class StaffRecoveryService {
 
   async requestCode(staff: Staff, input: StaffRecoveryCode, ip: string) {
     this.verify(staff, input);
-    await this.transaction.run(input.effect.targetId, async () => {
+    const user = await this.transaction.run(input.effect.targetId, async () => {
       const { user } = await this.authorize(staff, input.effect);
       await this.assertCurrent(input.effect, user);
+      return user;
     });
-    const subject = this.subject(input.effect, input.channel);
     await this.codes.send({
-      subject,
+      subject: this.subject(input.effect, user, input.channel),
       purpose: input.channel === 'phone' ? 'staff_recovery_phone' : 'staff_recovery_email',
       ip,
     });
@@ -91,12 +91,9 @@ export class StaffRecoveryService {
   async recover(staff: Staff, input: StaffRecoveryConfirmation, ip: string) {
     this.verify(staff, input);
     const effect = input.effect;
-    await this.consume(effect, 'phone', input.phoneCode, ip);
-    await this.consume(effect, 'email', input.emailCode, ip);
+    await this.prove(staff, input, ip);
     return this.transaction.run(effect.targetId, async () => {
-      const { user, stores } = await this.authorize(staff, effect);
-      this.assertChecks(effect, stores);
-      await this.assertCurrent(effect, user);
+      const { user, stores } = await this.check(staff, effect);
       const now = this.clock.now();
       const actor = { kind: 'staff' as const, staffId: staff.id, reasonType: effect.reasonType };
       await this.audit.recordForAccount(user.id, effect.id, {
@@ -145,9 +142,18 @@ export class StaffRecoveryService {
     return { user, stores };
   }
 
-  private assertChecks(input: StaffRecoveryRequest, stores: RecoveryStores) {
+  private async check(staff: Staff, effect: StaffRecoveryEffect) {
+    const { user, stores } = await this.authorize(staff, effect);
+    this.assertChecks(effect, user, stores);
+    await this.assertCurrent(effect, user);
+    return { user, stores };
+  }
+
+  private assertChecks(input: StaffRecoveryRequest, user: RecoveryAccount, stores: RecoveryStores) {
     if (stores.stores.length && !input.checks.storeDetailsMatched)
       throw recoveryError('RECOVERY_CHECKS');
+    if (provesCurrentContact(input) && !user.phone && !user.email)
+      throw recoveryError('RECOVERY_CONTACT');
   }
 
   private assertStaff(current: RecoveryStaff) {
@@ -183,8 +189,11 @@ export class StaffRecoveryService {
       throw recoveryError('RECOVERY_STALE');
   }
 
-  private subject(effect: StaffRecoveryEffect, channel: 'phone' | 'email') {
-    const target = channel === 'phone' ? effect.newPhone : effect.newEmail;
+  private subject(effect: StaffRecoveryEffect, user: RecoveryAccount, channel: 'phone' | 'email') {
+    const contact = provesCurrentContact(effect)
+      ? user
+      : { phone: effect.newPhone, email: effect.newEmail };
+    const target = channel === 'phone' ? contact.phone : contact.email;
     if (!target) throw recoveryError('RECOVERY_PROOF');
     return {
       target,
@@ -201,21 +210,34 @@ export class StaffRecoveryService {
     };
   }
 
+  // Codes are consumed only after the same checks pass, so a refused request keeps them usable.
+  private async prove(staff: Staff, input: StaffRecoveryConfirmation, ip: string) {
+    const effect = input.effect;
+    if (!effect.removeTotp && !effect.newPhone && !effect.newEmail) return;
+    const { user } = await this.transaction.run(effect.targetId, () => this.check(staff, effect));
+    const consume = (channel: 'phone' | 'email', code: string | undefined) =>
+      this.consume(this.subject(effect, user, channel), channel, code, ip);
+    if (provesCurrentContact(effect))
+      return consume(input.phoneCode ? 'phone' : 'email', input.phoneCode ?? input.emailCode);
+    assertReplacementCodes(input);
+    if (effect.newPhone) await consume('phone', input.phoneCode);
+    if (effect.newEmail) await consume('email', input.emailCode);
+  }
+
   private async consume(
-    effect: StaffRecoveryEffect,
+    subject: SignInSubject,
     channel: 'phone' | 'email',
     code: string | undefined,
     ip: string,
   ) {
-    if (!(channel === 'phone' ? effect.newPhone : effect.newEmail)) return;
     if (!code) throw recoveryError('RECOVERY_PROOF');
     const grant = await this.codes.consume(
-      this.subject(effect, channel),
+      subject,
       channel === 'phone' ? 'staff_recovery_phone' : 'staff_recovery_email',
       code,
       ip,
     );
-    if (grant.userId !== effect.targetId) throw recoveryError('RECOVERY_PROOF');
+    if (grant.userId !== subject.userId) throw recoveryError('RECOVERY_PROOF');
   }
 
   private deliveries(
@@ -244,4 +266,15 @@ export class StaffRecoveryService {
       ).values(),
     ];
   }
+}
+
+// Removing 2-step without a replacement contact is proved on a current verified contact.
+function provesCurrentContact(input: StaffRecoveryRequest) {
+  return input.removeTotp && !input.newPhone && !input.newEmail;
+}
+
+// A missing second code must not burn the first one.
+function assertReplacementCodes({ effect, phoneCode, emailCode }: StaffRecoveryConfirmation) {
+  if ((effect.newPhone && !phoneCode) || (effect.newEmail && !emailCode))
+    throw recoveryError('RECOVERY_PROOF');
 }

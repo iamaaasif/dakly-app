@@ -171,6 +171,45 @@ describe('custom roles over Fastify and Postgres', () => {
     expect((await list(owner.cookie, '?limit=101')).statusCode).toBe(400);
     for (const id of ids) await request(`/roles/${id}`, {}, owner.cookie, 'DELETE');
   });
+  it('lists a stored role with permission keys the contract no longer knows', async () => {
+    const [role] = await admin.db
+      .insert(roles)
+      .values({
+        storeId,
+        name: randomUUID(),
+        permissions: { team: 'view', retiredArea: 'edit', orders: 'manage' },
+        canSeeFullPhone: true,
+      })
+      .returning({ id: roles.id });
+    const listed = await list(owner.cookie, '?limit=100');
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(
+      listed.json().items.find((row: { id: string }) => row.id === role!.id).permissions,
+    ).toEqual({ areas: { team: 'view' }, seeFullPhone: true, exportLists: false, refund: false });
+    const stored = async () =>
+      (await admin.db.select().from(roles).where(eq(roles.id, role!.id)))[0]!.permissions;
+    const renamed = await request(`/roles/${role!.id}`, { name: 'Renamed' }, owner.cookie, 'PATCH');
+    expect(renamed.statusCode, renamed.body).toBe(409);
+    expect(renamed.json().error.code).toBe('ROLE_PERMISSIONS_INVALID');
+    expect(await stored()).toEqual({ team: 'view', retiredArea: 'edit', orders: 'manage' });
+    const repaired = await request(
+      `/roles/${role!.id}`,
+      {
+        name: 'Repaired',
+        permissions: {
+          areas: { customers: 'view' },
+          seeFullPhone: false,
+          exportLists: false,
+          refund: false,
+        },
+      },
+      owner.cookie,
+      'PATCH',
+    );
+    expect(repaired.statusCode, repaired.body).toBe(200);
+    expect(await stored()).toEqual({ customers: 'view' });
+    await request(`/roles/${role!.id}`, {}, owner.cookie, 'DELETE');
+  });
   it('hides foreign roles from listing, editing and deletion', async () => {
     const other = await shop();
     const [foreign] = await admin.db

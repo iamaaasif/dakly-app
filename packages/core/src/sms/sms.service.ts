@@ -1,9 +1,8 @@
-import { performance } from 'node:perf_hooks';
-
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { SmsDriver, SmsMessage } from '@dakly/providers/sms/sms-driver';
 
+import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { SMS_DRIVER } from './sms-provider';
 
 @Injectable()
@@ -12,22 +11,8 @@ export class SmsService {
   constructor(@Inject(SMS_DRIVER) private readonly driver: SmsDriver) {}
 
   async send(message: SmsMessage): Promise<void> {
-    const startedAt = performance.now();
-    let outcome: 'success' | 'failure' = 'failure';
-    try {
-      await this.driver.send(message);
-      outcome = 'success';
-    } finally {
-      this.logger.log(
-        {
-          event: 'metric',
-          metric: 'sms_delivery',
-          count: 1,
-          durationMilliseconds: performance.now() - startedAt,
-          outcome,
-        },
-        'SMS delivery measured',
-      );
-    }
+    await measureVendorCall(this.logger, 'sms_delivery', 'SMS delivery measured', () =>
+      this.driver.send(message),
+    );
   }
 }

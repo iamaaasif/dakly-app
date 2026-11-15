@@ -459,7 +459,7 @@ describe('team membership over Fastify and Postgres', () => {
     const page = await app.inject({ url: '/members', headers: { cookie: target.cookie } });
     expect(page.statusCode).toBe(200);
     expect(page.json().items.find((row: { userId: string }) => row.userId === owner.id).phone).toBe(
-      `${owner.phone.slice(0, 3)}XXXXX${owner.phone.slice(-3)}`,
+      `${owner.phone.slice(0, 5)}-XXX${owner.phone.slice(-3)}`,
     );
     expect(
       (

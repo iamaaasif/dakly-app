@@ -1,13 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 
 import { builtInRoles } from '@dakly/contracts/stores';
 import {
+  accessLevels,
   customRolePermissionsSchema,
+  permissionAreas,
   type ChangeRoleInput,
   type CreateRoleInput,
   type RoleListQuery,
   type RoleListResponse,
   type RoleResponse,
+  type RolePermissions,
   type StoreAccess,
 } from '@dakly/contracts/team';
 
@@ -20,6 +24,8 @@ import { RolesRepository, type Role } from './roles.repository';
 import { teamError } from './team.errors';
 
 type Actor = { userId: string; access: StoreAccess };
+const areaSchema = z.enum(permissionAreas),
+  levelSchema = z.enum(accessLevels);
 @Injectable()
 export class RolesService {
   constructor(
@@ -63,7 +69,12 @@ export class RolesService {
     actor: Actor,
   ): Promise<RoleResponse> {
     return this.transaction.runLocked(storeId, async () => {
-      const current = this.response(await this.find(storeId, roleId));
+      const stored = await this.find(storeId, roleId);
+      // A rename must not rewrite a stored row the contract rejects: access checks treat that row
+      // as no access, so writing back its readable keys would grant access nobody chose.
+      if (!input.permissions && !hasValidPermissions(stored))
+        throw teamError('ROLE_PERMISSIONS_INVALID');
+      const current = this.response(stored);
       const proposed = {
         name: input.name ?? current.name,
         permissions: input.permissions ?? current.permissions,
@@ -116,7 +127,28 @@ export class RolesService {
   }
 
   private response(role: Role): RoleResponse {
-    const { id, name, ...permissions } = role;
-    return { id, name, permissions: customRolePermissionsSchema.parse(permissions) };
+    const { id, name, areas, seeFullPhone, exportLists, refund } = role;
+    return {
+      id,
+      name,
+      permissions: { areas: knownAreas(areas), seeFullPhone, exportLists, refund },
+    };
   }
+}
+
+function hasValidPermissions({ areas, seeFullPhone, exportLists, refund }: Role): boolean {
+  return customRolePermissionsSchema.safeParse({ areas, seeFullPhone, exportLists, refund })
+    .success;
+}
+
+// Input is validated on write; a stored row the contract no longer accepts must not break reads.
+function knownAreas(stored: unknown): RolePermissions['areas'] {
+  if (!stored || typeof stored !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(stored).flatMap(([area, level]) => {
+      const knownArea = areaSchema.safeParse(area),
+        knownLevel = levelSchema.safeParse(level);
+      return knownArea.success && knownLevel.success ? [[knownArea.data, knownLevel.data]] : [];
+    }),
+  );
 }

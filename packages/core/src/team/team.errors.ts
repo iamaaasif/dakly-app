@@ -10,6 +10,10 @@ const TEAM_ERRORS = {
   TRANSFER_STORE_LIMIT: { status: 409, message: 'This member already owns a store' },
   ROLE_IN_USE: { status: 409, message: 'This role is still assigned to a membership' },
   ROLE_NAME_EXISTS: { status: 409, message: 'A role with this name already exists' },
+  ROLE_PERMISSIONS_INVALID: {
+    status: 409,
+    message: "Choose this role's permissions again before you rename it",
+  },
   MEMBER_NOT_FOUND: { status: 404, message: 'Member not found' },
   ROLE_NOT_FOUND: { status: 404, message: 'Role not found' },
   TEAM_ROLE_DENIED: { status: 403, message: 'This role change is not allowed' },
