@@ -9,11 +9,11 @@ export class ZodValidationPipe<TSchema extends z.ZodType> implements PipeTransfo
   transform(value: unknown): z.output<TSchema> {
     const result = this.schema.safeParse(value);
     if (!result.success) {
-      const firstIssue = result.error.issues[0];
-      throw new AppError('VALIDATION_FAILED', {
-        status: PLATFORM_ERRORS.VALIDATION_FAILED.status,
-        message: firstIssue?.message ?? PLATFORM_ERRORS.VALIDATION_FAILED.message,
-      });
+      const fields = result.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      }));
+      throw new AppError('VALIDATION_FAILED', PLATFORM_ERRORS.VALIDATION_FAILED, fields);
     }
     return result.data;
   }

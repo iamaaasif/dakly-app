@@ -38,6 +38,13 @@ describe('CustomersRepository (Postgres)', () => {
   });
 
   it('hides other stores even when a query has no store filter', async () => {
+    const [customer] = await admin.db
+      .insert(customers)
+      .values({ storeId: storeA, name: 'Rina', phone: '01612345678' })
+      .returning({ id: customers.id });
+    const ownRows = await database.forStore(storeA, (tx) => tx.select().from(customers));
+    expect(ownRows.map((row) => row.id)).toContain(customer!.id);
+
     const rows = await database.forStore(storeB, (tx) => tx.select().from(customers));
 
     expect(rows).toEqual([]);

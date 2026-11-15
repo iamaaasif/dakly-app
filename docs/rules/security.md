@@ -6,7 +6,9 @@ Dakly holds shop customers' phones and messages and connects to their payment ac
 
 - Secrets come from the environment through `platform/config/env.ts`, parsed with zod at start-up. No `process.env` anywhere else.
 - No secret in the repo, in logs, in error messages, in job payloads or in the browser. `.env.example` lists names only.
-- Shop credentials (Page tokens, gateway keys, courier keys) use envelope encryption: a per-store data key encrypted by the master key, AES-256-GCM with the store id as associated data. Decrypt only at the moment of use, in the worker.
+- Shop credentials use `platform/crypto/EnvelopeEncryption`: a random 32-byte data key per secret, wrapped by a versioned master key. Both layers use AES-256-GCM and authenticate the owner, purpose, envelope format and master key version. Shop contexts are `store:<id>:<purpose>`; account TOTP uses `user:<id>:totp`. Staff TOTP uses the distinct `staff:<id>:totp` owner context. Durable account notices use the separate `user:<id>:account-security-notice` purpose. Decrypt shop credentials only at the moment of use, in the worker. TOTP verification decrypts in the account service.
+- Master keys come from `ENCRYPTION_MASTER_KEYS`, a JSON object mapping positive versions (1–32767) to canonical base64 32-byte keys. `ENCRYPTION_CURRENT_KEY_VERSION` selects new writes. Supply both variables together; startup rejects invalid supplied configuration. `CryptoModule` also refuses startup if keys are missing. Features using encryption must import it; ACC-7 imports it in both the API and account security notice worker, so missing keys now prevent their startup. There is no default key.
+- Rotate by adding a new randomly generated master key under a new version and selecting it as current. Keep old versions until every stored envelope and retained backup has been migrated or expired. Never replace the material for an existing version. DB-4 does not rewrite stored secrets automatically.
 - Credentials are write-only in the UI: after saving, show "Connected" and the last 4 characters, never the value.
 
 ## Input and output
@@ -23,7 +25,7 @@ Never log: tokens, keys, codes, passwords, full phone numbers, message text, add
 
 ## Rate limits
 
-`@nestjs/throttler` with Valkey storage. Defaults: sign-in codes 5 per phone and 20 per IP per hour; public order link 5 orders per phone per day and 30 per IP per hour; API 300 requests per minute per session. Webhooks are not rate limited but are queued.
+Use the atomic per-key Valkey limiter from `platform/cache/`. Auth uses per-account keys, so `@nestjs/throttler` is not installed yet. Auth-specific key selection and accounting belong to ACC-2. Planned limits: sign-in codes 5 per phone and 20 per IP per hour; public order link 5 orders per phone per day and 30 per IP per hour; API 300 requests per minute per session. Webhooks are not rate limited but are queued.
 
 ## Dependencies
 

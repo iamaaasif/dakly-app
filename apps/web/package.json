@@ -6,12 +6,15 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p e2e/tsconfig.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "@dakly/contracts": "workspace:*",
+    "@dakly/ui": "workspace:*",
     "@hookform/resolvers": "^5.2.0",
     "@tanstack/react-query": "^5.90.0",
+    "lucide-react": "0.468.0",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -19,9 +22,17 @@
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@dakly/db": "workspace:*",
+    "@playwright/test": "1.58.2",
+    "@tailwindcss/postcss": "4.1.18",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "typescript": "~5.9.3"
+    "jsdom": "27.4.0",
+    "tailwindcss": "4.1.18",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.0"
   }
 }

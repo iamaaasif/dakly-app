@@ -22,6 +22,7 @@ Needs Node 22, pnpm 10 and Docker.
 
 ```bash
 cp .env.example .env
+node scripts/development-encryption.mjs
 pnpm install
 docker compose up -d
 pnpm build
@@ -31,6 +32,12 @@ pnpm dev
 ```
 
 The API runs on http://localhost:4000 (`GET /health`), the web app on http://localhost:3000.
+The web client calls `/api/*` on its own origin. Next.js forwards that prefix to
+the local API on port 4000; the production load balancer provides the same route.
+
+`REDIS_URL` accepts `redis://` or `rediss://` (TLS), including encoded credentials.
+An optional database path such as `/1` selects that logical database. Invalid
+schemes, negative database numbers and non-integer paths fail at startup.
 
 ### Resetting the local database
 
@@ -54,3 +61,5 @@ pnpm check       # format, lint, module boundaries, typecheck, tests, dead code,
 ```
 
 CI runs the same checks on every pull request.
+
+Account two-step verification requires encryption keys. After copying `.env.example` to `.env`, run `node scripts/development-encryption.mjs` once to generate development-only keys without printing them. Keep that file private. CI generates a separate ephemeral key per run. Production supplies `ENCRYPTION_CURRENT_KEY_VERSION` and `ENCRYPTION_MASTER_KEYS` through secret configuration; never generate replacement keys for existing encrypted data.
