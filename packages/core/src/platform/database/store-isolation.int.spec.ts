@@ -11,6 +11,7 @@ import { TenantDatabase } from './tenant-database';
 // fails here before it reaches review.
 const globalTables = [
   'users',
+  'account_security_events',
   'sessions',
   'push_subscriptions',
   'outbox_events',

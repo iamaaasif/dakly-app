@@ -182,7 +182,7 @@ The 3-year column is where Dakly is designed to grow, not what release 1 must ru
 
 - TLS 1.2 or higher everywhere, HSTS on all domains.
 - Encryption at rest for databases, backups and files (AES-256, managed keys).
-- Third-party tokens (Meta, WhatsApp, Shopify, WooCommerce, couriers, POS) encrypted with envelope encryption (pending review: one master key with a `key_version` instead of a key per store), decrypted only in the worker that needs them, never returned to the browser.
+- Third-party tokens use envelope encryption: each secret has a random data key wrapped by the current versioned master key. Both AES-256-GCM layers authenticate the store and credential purpose, envelope format and key version. Retained master key versions decrypt older envelopes. The key ring is validated through platform config; see [security rules](rules/security.md). Tokens are decrypted only in the worker that needs them and never returned to the browser.
 - Secrets in a managed secrets store, rotated; no secrets in code or logs.
 - Personal data minimised in logs and analytics; phone numbers hashed where only matching is needed.
 - Data export: an Owner can export all store data. Deletion: closing a store deletes its data within 30 days (backups age out within 35 days); a customer's deletion request removes their personal data and anonymises their messages.

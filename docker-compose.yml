@@ -1,4 +1,4 @@
-# Local development only: Postgres (with pgvector) and Redis. Production uses DigitalOcean managed services.
+# Local development only: Postgres (with pgvector), Redis and Mailpit. Production uses DigitalOcean managed services.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -15,5 +15,15 @@ services:
     image: redis:7
     ports:
       - '6379:6379'
+  mailpit:
+    image: axllent/mailpit:v1.27.10
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 volumes:
   postgres-data:

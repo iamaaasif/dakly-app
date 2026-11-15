@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -36,17 +36,32 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      mailpit:
+        image: axllent/mailpit:v1.27.10
+        ports:
+          - 1025:1025
+          - 8025:8025
+        options: >-
+          --health-cmd "/mailpit readyz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
+      MAILPIT_SMTP_HOST: 127.0.0.1
+      MAILPIT_SMTP_PORT: 1025
+      MAILPIT_API_URL: http://127.0.0.1:8025
       REDIS_URL: redis://localhost:6379/15
       DATABASE_ADMIN_URL: postgres://dakly:dakly@localhost:5432/dakly
       DATABASE_URL: postgres://dakly_app:dakly_app@localhost:5432/dakly
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4.4.0
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
           cache: pnpm
+      - name: Generate ephemeral encryption keys
+        run: node scripts/development-encryption.mjs --ci
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm build
@@ -61,3 +76,16 @@ jobs:
           psql "$DATABASE_ADMIN_URL" -f packages/db/local-init.sql
           pnpm --filter @dakly/db db:migrate
       - run: pnpm test:int
+      - name: Install Chromium
+        run: pnpm --filter @dakly/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Upload browser test evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: browser-tests
+          path: |
+            apps/web/e2e-artifacts/
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7

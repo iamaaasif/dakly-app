@@ -19,6 +19,7 @@ import {
 import {
   billingCycles,
   couponKinds,
+  couponDurations,
   invoiceKinds,
   invoiceStatuses,
   planKinds,
@@ -44,6 +45,7 @@ export const plans = pgTable(
     code: text('code').notNull(),
     kind: text('kind', { enum: planKinds }).notNull().default('plan'),
     name: text('name').notNull(),
+    trialDays: smallint('trial_days').notNull().default(0),
     monthlyPricePoisha: poisha('monthly_price_poisha').notNull(),
     yearlyPricePoisha: poisha('yearly_price_poisha').notNull(),
     // Allowances per period: customers, seats, ai_conversation, ai_content, ai_ask, automations.
@@ -56,6 +58,7 @@ export const plans = pgTable(
   (table): PgTableExtraConfigValue[] => [
     uniqueIndex('plans_code_key').on(table.code),
     check('plans_kind', isOneOf(table.kind, planKinds)),
+    check('plans_trial_days', sql`${table.trialDays} between 0 and 90`),
     check(
       'plans_prices',
       sql`${table.monthlyPricePoisha} >= 0 and ${table.yearlyPricePoisha} >= 0`,
@@ -69,6 +72,8 @@ export const coupons = pgTable(
     id: id(),
     code: citext('code').notNull(),
     kind: text('kind', { enum: couponKinds }).notNull(),
+    duration: text('duration', { enum: couponDurations }).notNull().default('once'),
+    durationMonths: smallint('duration_months'),
     // Exactly one is set, matching kind.
     discountPercent: integer('discount_percent'),
     discountAmountPoisha: poisha('discount_amount_poisha'),
@@ -84,6 +89,12 @@ export const coupons = pgTable(
     uniqueIndex('coupons_code_key').on(table.code),
     index('coupons_created_by_staff_id_idx').on(table.createdByStaffId),
     check('coupons_kind', isOneOf(table.kind, couponKinds)),
+    check('coupons_duration', isOneOf(table.duration, couponDurations)),
+    check(
+      'coupons_duration_months',
+      sql`(${table.duration} = 'months' and ${table.durationMonths} is not null and ${table.durationMonths} between 1 and 36) or (${table.duration} in ('once', 'forever') and ${table.durationMonths} is null)`,
+    ),
+    check('coupons_redemption_count', sql`${table.redemptionCount} >= 0`),
     check(
       'coupons_value',
       sql`(${table.kind} = 'percent' and ${table.discountPercent} between 1 and 100 and ${table.discountAmountPoisha} is null) or (${table.kind} = 'amount' and ${table.discountAmountPoisha} > 0 and ${table.discountPercent} is null)`,
@@ -116,6 +127,8 @@ export const subscriptions = pgTable(
     priceChangeNotifiedAt: timestamptz('price_change_notified_at'),
     priceChangeStartsAt: timestamptz('price_change_starts_at'),
     trialEndsAt: timestamptz('trial_ends_at'),
+    couponId: uuid('coupon_id').references(() => coupons.id),
+    couponEndsAt: timestamptz('coupon_ends_at'),
     currentPeriodStart: timestamptz('current_period_start').notNull(),
     currentPeriodEnd: timestamptz('current_period_end').notNull(),
     isCancellationScheduled: boolean('is_cancellation_scheduled').notNull().default(false),
@@ -137,6 +150,7 @@ export const subscriptions = pgTable(
       'subscriptions_price_change',
       sql`(${table.pendingPricePoisha} is null) = (${table.priceChangeStartsAt} is null) and coalesce(${table.pendingPricePoisha}, 0) >= 0`,
     ),
+    index('subscriptions_coupon_id_idx').on(table.couponId),
     index('subscriptions_plan_id_idx').on(table.planId),
     index('subscriptions_pending_plan_id_idx').on(table.pendingPlanId),
     index('subscriptions_renewal_due_idx')
