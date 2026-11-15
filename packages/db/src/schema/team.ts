@@ -101,3 +101,39 @@ export const memberships = pgTable(
     ),
   ],
 );
+
+export const ownershipTransfers = pgTable(
+  'ownership_transfers',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id),
+    newOwnerUserId: uuid('new_owner_user_id')
+      .notNull()
+      .references(() => users.id),
+    status: text('status', { enum: ['pending', 'accepted', 'cancelled', 'expired'] }).notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('ownership_transfers_one_pending_key')
+      .on(table.storeId)
+      .where(sql`${table.status} = 'pending'`),
+    index('ownership_transfers_store_id_idx').on(table.storeId),
+    index('ownership_transfers_owner_user_id_idx').on(table.ownerUserId),
+    index('ownership_transfers_new_owner_user_id_idx').on(table.newOwnerUserId),
+    check(
+      'ownership_transfers_status',
+      isOneOf(table.status, ['pending', 'accepted', 'cancelled', 'expired']),
+    ),
+    check(
+      'ownership_transfers_distinct_users',
+      sql`${table.ownerUserId} <> ${table.newOwnerUserId}`,
+    ),
+  ],
+);

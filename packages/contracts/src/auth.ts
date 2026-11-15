@@ -38,13 +38,20 @@ export type SignUpInput = z.infer<typeof signUpSchema>;
 export type RequestCodeInput = z.infer<typeof requestCodeSchema>;
 export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;
 export type CodePurpose =
+  | 'totp_setup'
+  | 'totp_recovery_phone'
+  | 'totp_recovery_email'
   | 'google_email'
   | 'sign_up'
   | 'sign_in'
   | 'reset_password'
   | 'add_email'
   | 'email_change_proof'
-  | 'password_change_proof';
+  | 'password_change_proof'
+  | 'ownership_transfer'
+  | 'support_approval'
+  | 'staff_recovery_phone'
+  | 'staff_recovery_email';
 
 const emailSchema = z
   .email()
@@ -104,3 +111,6 @@ export type VerifyGoogleEmailInput = z.infer<typeof verifyGoogleEmailSchema>;
 export type GoogleSignInPending =
   | { status: 'signup_required'; signupTicket: string }
   | { status: 'email_verification_required'; verificationTicket: string };
+
+export type SignInResponse = void | { status: 'totp_required'; challengeId: string };
+export type GoogleSignInResponse = SignInResponse | GoogleSignInPending;

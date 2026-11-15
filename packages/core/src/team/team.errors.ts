@@ -1,6 +1,15 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const TEAM_ERRORS = {
+  TRANSFER_NOT_FOUND: { status: 404, message: 'Ownership transfer not found' },
+  TRANSFER_INVALID: { status: 400, message: 'This ownership transfer is no longer available' },
+  TRANSFER_EXISTS: { status: 409, message: 'An ownership transfer is already pending' },
+  TRANSFER_DENIED: { status: 403, message: 'This ownership transfer is not allowed' },
+  TRANSFER_IDENTITY_REQUIRED: { status: 403, message: 'Verify your phone or email first' },
+  TRANSFER_PROOF_INVALID: { status: 400, message: 'Request a new ownership transfer code' },
+  TRANSFER_STORE_LIMIT: { status: 409, message: 'This member already owns a store' },
+  ROLE_IN_USE: { status: 409, message: 'This role is still assigned to a membership' },
+  ROLE_NAME_EXISTS: { status: 409, message: 'A role with this name already exists' },
   MEMBER_NOT_FOUND: { status: 404, message: 'Member not found' },
   ROLE_NOT_FOUND: { status: 404, message: 'Role not found' },
   TEAM_ROLE_DENIED: { status: 403, message: 'This role change is not allowed' },

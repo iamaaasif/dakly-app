@@ -1,3 +1,13 @@
+import { TotpRecoveryController } from './totp-recovery.controller';
+import { TotpRecoveryService } from './totp-recovery.service';
+import { SecurityNoticesModule } from './security-notices.module';
+import { TeamModule } from '../team/team.module';
+import { TotpController } from './totp.controller';
+import { TotpService } from './totp.service';
+import { TotpRepository } from './totp.repository';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { TotpChallenges } from './totp-challenges';
+import { CryptoModule } from '../platform/crypto/crypto.module';
 import { GoogleService } from './google.service';
 import { GoogleIdentityService } from './google-identity.service';
 import { GoogleTickets } from './google-tickets';
@@ -18,13 +28,16 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { UsersModule } from './users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { SignInCodes } from './sign-in-codes';
-import { SignInFailures } from './sign-in-failures';
+import { CodesModule } from './codes.module';
 import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
+    CryptoModule,
+    SecurityNoticesModule,
+    TeamModule,
     CacheModule,
+    CodesModule,
     UsersModule,
     SessionsModule,
     EmailModule,
@@ -32,6 +45,8 @@ import { SmsModule } from '../sms/sms.module';
     AccountSecurityEventsModule,
   ],
   controllers: [
+    TotpController,
+    TotpRecoveryController,
     AuthController,
     GoogleController,
     EmailChangeController,
@@ -39,6 +54,11 @@ import { SmsModule } from '../sms/sms.module';
     PasswordChangeController,
   ],
   providers: [
+    TotpRecoveryService,
+    TotpService,
+    TotpRepository,
+    TotpCredentials,
+    TotpChallenges,
     GoogleService,
     GoogleIdentityService,
     GoogleTickets,
@@ -48,9 +68,7 @@ import { SmsModule } from '../sms/sms.module';
     Clock,
     AuthService,
     EmailChangeService,
-    SignInCodes,
-    SignInFailures,
   ],
-  exports: [AuthService, SignInCodes, SignInFailures],
+  exports: [AuthService, CodesModule],
 })
 export class AuthModule {}

@@ -389,9 +389,9 @@ describe('team membership over Fastify and Postgres', () => {
       locked = resolve;
     });
     const usersService = app.get(UsersService);
-    const original = usersService.lockInviteIdentity.bind(usersService);
+    const original = usersService.lockVerifiedIdentity.bind(usersService);
     const lock = vi
-      .spyOn(usersService, 'lockInviteIdentity')
+      .spyOn(usersService, 'lockVerifiedIdentity')
       .mockImplementationOnce(async (...args) => {
         const identity = await original(...args);
         locked();

@@ -251,19 +251,20 @@ describe('Password authentication over Fastify', () => {
         .update(users)
         .set(state === 'disabled' ? { isDisabled: true } : { totpEnabledAt: new Date() })
         .where(eq(users.id, user.id));
-      const expected = state === 'disabled' ? 'AUTH_DISABLED' : 'AUTH_SECOND_FACTOR_REQUIRED';
       await app.get(ValkeyClient).connection.set(authKey('fail-user', user.id), '3');
       const response = await post('/auth/password', {
         identifier: user.phone,
         password: 'originalpass1',
       });
-      expect(response.json().error.code).toBe(expected);
+      if (state === 'disabled') expect(response.json().error.code).toBe('AUTH_DISABLED');
+      else expect(response.json().status).toBe('totp_required');
       const reset = await post('/auth/password-reset/confirm', {
         identifier: user.phone,
         code: codeFor(user.email!),
         password: 'newpassword1',
       });
-      expect(reset.json().error.code).toBe(expected);
+      if (state === 'disabled') expect(reset.json().error.code).toBe('AUTH_DISABLED');
+      else expect(reset.json().status).toBe('totp_required');
       expect(reset.headers['set-cookie']).toBeUndefined();
       expect(await app.get(ValkeyClient).connection.get(authKey('fail-user', user.id))).toBe('3');
       if (state === 'totp')
