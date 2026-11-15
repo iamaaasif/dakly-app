@@ -19,7 +19,7 @@ import { AccountTransaction } from '../platform/database/account-transaction';
 import { newId } from '../platform/database/new-id';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
-import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { RiskyActionConfirmation, RISKY_ACTION_CONFIRM_MS } from './risky-action-confirmation';
 import { StaffAuditService } from './staff-audit.service';
 import { StaffIdentityService } from './staff-identity.service';
 import { recoveryError } from './staff-recovery.errors';
@@ -66,7 +66,7 @@ export class StaffRecoveryService {
         staffSessionId: staff.sessionId,
         targetName: user.name,
         credentialState: user.credentialState,
-        confirmBy: new Date(this.clock.now().getTime() + 300000).toISOString(),
+        confirmBy: new Date(this.clock.now().getTime() + RISKY_ACTION_CONFIRM_MS).toISOString(),
       });
       return { effect, proof: this.confirmation.sign(effect) };
     });

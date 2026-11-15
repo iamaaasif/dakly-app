@@ -4,6 +4,7 @@ import { SignInCodes, type SignInSubject } from '../auth/codes.module';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { MINUTE_MS } from '../platform/time';
 import { TeamService } from '../team/team.service';
 import { StaffIdentityService } from './staff-identity.service';
 import { SupportAuditService } from './support-audit.service';
@@ -93,7 +94,7 @@ export class SupportOwnerService {
       // Disable can end the request while this action waits for the staff lock.
       const grant = await this.pending(storeId, id);
       const now = this.clock.now();
-      const expiresAt = new Date(now.getTime() + grant.durationMinutes * 60000);
+      const expiresAt = new Date(now.getTime() + grant.durationMinutes * MINUTE_MS);
       await this.audit.record(storeId, {
         id,
         actor: { kind: 'user', userId },

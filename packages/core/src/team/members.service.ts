@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
@@ -18,7 +18,9 @@ import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
 import { BillingService } from '../billing/billing.service';
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { DAY_MS } from '../platform/time';
 import { builtInRoleAccess } from './built-in-roles';
 import { InviteDelivery } from './invite-delivery';
 import { assertInviteRecipient, assertOpenInvite } from './invite-policy';
@@ -27,6 +29,7 @@ import { canManageMember, hasSameMemberRole } from './permissions';
 import { teamError } from './team.errors';
 
 type Actor = { userId: string; access: StoreAccess };
+const INVITE_TTL_MS = 7 * DAY_MS;
 const revokedToken = { inviteTokenHash: null, inviteExpiresAt: null };
 
 @Injectable()
@@ -87,7 +90,7 @@ export class MembersService {
       const member = await this.repository.insertInvite(storeId, {
         input,
         userId: actor.userId,
-        hash: hash(token),
+        hash: hashToken(token),
         expiresAt: this.expiry(),
       });
       await this.record(storeId, member.id, actor.userId, 'member.invited');
@@ -125,7 +128,7 @@ export class MembersService {
       const updated = await this.repository.change(
         storeId,
         membershipId,
-        { inviteTokenHash: hash(token), inviteExpiresAt: this.expiry() },
+        { inviteTokenHash: hashToken(token), inviteExpiresAt: this.expiry() },
         this.clock.now(),
       );
       await this.record(storeId, membershipId, actor.userId, 'member.invite_resent');
@@ -178,7 +181,7 @@ export class MembersService {
   }
 
   async accept(userId: string, token: string): Promise<AcceptInviteResponse> {
-    const tokenHash = hash(token);
+    const tokenHash = hashToken(token);
     const located = await this.repository.locateInvite(tokenHash);
     if (!located) throw teamError('INVITE_INVALID');
     return this.transaction.run(located.storeId, async () => {
@@ -276,7 +279,7 @@ export class MembersService {
   }
 
   private expiry(): Date {
-    return new Date(this.clock.now().getTime() + 7 * 86400000);
+    return new Date(this.clock.now().getTime() + INVITE_TTL_MS);
   }
 
   private record(storeId: string, entityId: string, userId: string, action: string): Promise<void> {
@@ -308,7 +311,4 @@ export class MembersService {
       lastActiveAt: member.lastActiveAt?.toISOString() ?? null,
     };
   }
-}
-function hash(token: string): Buffer {
-  return createHash('sha256').update(token).digest();
 }

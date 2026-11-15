@@ -3,13 +3,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { StaffProvisionInput } from '@dakly/contracts/staff-auth';
 
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
+import { DAY_MS } from '../platform/time';
 import { staffError } from './admin.errors';
 import { StaffAuditService } from './staff-audit.service';
-import { newStaffProof, staffTokenHash } from './staff-tokens';
+import { newStaffProof } from './staff-tokens';
 import { StaffRepository } from './staff.repository';
 
+const STAFF_ENROLLMENT_TTL_MS = DAY_MS;
 @Injectable()
 export class StaffProvisionService {
   constructor(
@@ -38,9 +41,9 @@ export class StaffProvisionService {
       if (existingId) await this.repository.consumeAll(staffUserId, this.clock.now());
       else await this.repository.provision(staffUserId, input);
       await this.repository.addChallenge(staffUserId, {
-        tokenHash: staffTokenHash(proof),
+        tokenHash: hashToken(proof),
         purpose: 'enroll',
-        expiresAt: new Date(this.clock.now().getTime() + 86400000),
+        expiresAt: new Date(this.clock.now().getTime() + STAFF_ENROLLMENT_TTL_MS),
       });
     });
     return { proof, staffUserId };

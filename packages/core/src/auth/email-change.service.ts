@@ -11,7 +11,7 @@ import { Clock } from '../platform/clock';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { authError } from './auth.errors';
 import { PasswordCredentials } from './password-credentials';
-import { SignInCodes, type PhoneProof, type FreshProof } from './sign-in-codes';
+import { FRESH_PROOF_TTL_MS, SignInCodes, type PhoneProof, type FreshProof } from './sign-in-codes';
 import { UsersRepository } from './users.repository';
 
 @Injectable()
@@ -107,7 +107,7 @@ export class EmailChangeService {
     return {
       phone: user.phone,
       verifiedAt: user.phoneVerifiedAt.toISOString(),
-      expiresAt: this.clock.now().getTime() + 600_000,
+      expiresAt: this.clock.now().getTime() + FRESH_PROOF_TTL_MS,
     };
   }
 

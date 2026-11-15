@@ -3,7 +3,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 
 import { loadEnv } from '../platform/config/env';
+import { MINUTE_MS } from '../platform/time';
+import { canonicalJson } from './canonical-json';
 import { supportError } from './support.errors';
+
+export const RISKY_ACTION_CONFIRM_MS = 5 * MINUTE_MS;
 
 @Injectable()
 export class RiskyActionConfirmation {
@@ -12,7 +16,7 @@ export class RiskyActionConfirmation {
     if (!this.key) throw supportError('CONFIRMATION_UNAVAILABLE');
     return createHmac('sha256', Buffer.from(this.key, 'base64'))
       .update('dakly-admin-effect-confirmation-v1:')
-      .update(JSON.stringify(effect))
+      .update(canonicalJson(effect))
       .digest('hex');
   }
 
