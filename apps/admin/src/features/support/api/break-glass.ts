@@ -6,6 +6,7 @@ import type {
   BreakGlassConfirmation,
 } from '@dakly/contracts/break-glass';
 
+import { supportKeys } from './support-keys';
 import { adminApi } from '@/lib/api-client';
 
 export function useBreakGlassPreview() {
@@ -19,6 +20,6 @@ export function useConfirmBreakGlass() {
   return useMutation({
     mutationFn: (input: BreakGlassConfirmation) =>
       adminApi<{ id: string }>('support/break-glass', input),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['support-requests'] }),
+    onSuccess: () => client.invalidateQueries({ queryKey: supportKeys.requests }),
   });
 }

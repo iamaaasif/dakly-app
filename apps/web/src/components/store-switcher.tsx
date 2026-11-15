@@ -3,6 +3,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import type { UserStorePage, SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
 
+import { storeSwitcherKeys } from './store-switcher-keys';
 import { apiRequest } from '@/lib/api-client';
 
 type StoreSwitcherProps = { session: SessionContext; onSwitch: (storeId: string) => Promise<void> };
@@ -55,7 +56,7 @@ export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
 
 function useStoreOptions(session: SessionContext) {
   const shops = useInfiniteQuery({
-    queryKey: ['membership-picker', session.contextTag],
+    queryKey: storeSwitcherKeys.stores(session.contextTag),
     initialPageParam: '',
     queryFn: ({ pageParam, signal }) =>
       apiRequest<UserStorePage>(`/me/stores?limit=50${pageParam ? `&after=${pageParam}` : ''}`, {

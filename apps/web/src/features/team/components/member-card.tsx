@@ -19,7 +19,7 @@ export function MemberCard({ member, canEdit }: { member: MemberResponse; canEdi
         </div>
         <div>
           <dt>Status</dt>
-          <dd>{member.status}</dd>
+          <dd>{statusLabels[member.status]}</dd>
         </div>
         <div>
           <dt>Contact</dt>
@@ -52,3 +52,9 @@ export function MemberCard({ member, canEdit }: { member: MemberResponse; canEdi
     </Card>
   );
 }
+
+const statusLabels: Record<MemberResponse['status'], string> = {
+  invited: 'Invited',
+  active: 'Active',
+  removed: 'Removed',
+};

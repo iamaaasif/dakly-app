@@ -21,9 +21,9 @@ export function AuditFilters() {
           router.push(`/audit?${query}`);
         }}
       >
-        {['action', 'staffUserId', 'storeId', 'from', 'to'].map((key) => (
+        {Object.entries(filterLabels).map(([key, label]) => (
           <label key={key}>
-            {key}
+            {label}
             <Input
               name={key}
               defaultValue={params.get(key) ?? ''}
@@ -39,3 +39,11 @@ export function AuditFilters() {
     </Card>
   );
 }
+
+const filterLabels = {
+  action: 'Action',
+  staffUserId: 'Staff user ID',
+  storeId: 'Shop ID',
+  from: 'From',
+  to: 'To',
+};

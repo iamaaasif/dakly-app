@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
+import type { AccountSecurityHistoryPage } from '@dakly/contracts/account-security-events';
 import { Card } from '@dakly/ui/card';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
@@ -25,10 +26,10 @@ export function SecurityHistory() {
           <h2 className="font-semibold">
             {item.event === 'recovery.completed' && item.actorType === 'staff'
               ? 'Recovered by Dakly support'
-              : item.event.replaceAll('.', ' ').replaceAll('_', ' ')}
+              : eventLabels[item.event]}
           </h2>
           <p>{formatDateTime(item.createdAt)}</p>
-          {item.reasonType ? <p>Reason: {item.reasonType.replaceAll('_', ' ')}</p> : null}
+          {item.reasonType ? <p>Reason: {reasonLabels[item.reasonType]}</p> : null}
         </Card>
       ))}
       {history.data?.nextCursor ? (
@@ -47,3 +48,24 @@ export function SecurityHistory() {
     </section>
   );
 }
+
+type HistoryItem = AccountSecurityHistoryPage['items'][number];
+
+const eventLabels: Record<HistoryItem['event'], string> = {
+  'password.changed': 'Password changed',
+  'totp.enabled': 'Two-step verification turned on',
+  'totp.disabled': 'Two-step verification turned off',
+  'recovery.started': 'Account recovery started',
+  'recovery.cancelled': 'Account recovery cancelled',
+  'recovery.completed': 'Account recovered',
+  'email.changed': 'Email changed',
+  'phone.changed': 'Mobile number changed',
+  'sessions.revoked': 'Devices signed out',
+  'google.linked': 'Google account linked',
+};
+
+const reasonLabels: Record<NonNullable<HistoryItem['reasonType']>, string> = {
+  lost_phone: 'Lost phone',
+  lost_authenticator: 'Lost authenticator app',
+  lost_email: 'Lost access to email',
+};

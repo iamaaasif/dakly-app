@@ -1,5 +1,5 @@
 'use client';
-import { useSupportSession } from '../api/support';
+import { useSupportSession } from '../api/support-session';
 import { SupportCustomers } from './support-customers';
 import { formatDateTime } from '@/lib/format-date';
 

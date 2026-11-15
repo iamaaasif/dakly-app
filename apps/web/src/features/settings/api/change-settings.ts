@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { ChangeStoreSettingsInput, StoreSettingsResponse } from '@dakly/contracts/stores';
 
-import { settingsKey } from './store-settings';
+import { settingsKeys } from './settings-keys';
 import { notifySessionChange } from '@/lib/notify-session-change';
 import { useStoreRequest } from '@/lib/store-request';
 
@@ -15,7 +15,7 @@ export function useChangeSettings() {
     onSuccess: async () => {
       window.dispatchEvent(new Event('dakly-context-changed'));
       notifySessionChange();
-      await client.invalidateQueries({ queryKey: settingsKey });
+      await client.invalidateQueries({ queryKey: settingsKeys.all });
     },
   });
 }

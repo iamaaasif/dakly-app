@@ -3,7 +3,7 @@ import { type SupportGrantResponse } from '@dakly/contracts/support';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 
-import { useOwnerDecision } from '../api/support';
+import { useOwnerDecision } from '../api/owner-decision';
 import { ApprovalCode } from './approval-code';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -20,10 +20,15 @@ export function OwnerRequest({ grant }: { grant: SupportGrantResponse }) {
           </p>
         ) : null}
         <p>
-          {grant.access === 'write' ? 'Read and write' : 'Read only'} · {grant.scopes.join(', ')} ·{' '}
+          {grant.access === 'write' ? 'Read and write' : 'Read only'} ·{' '}
+          {grant.scopes.map((scope) => scopeLabels[scope] ?? scope).join(', ')} ·{' '}
           {grant.durationMinutes} minutes
         </p>
-        <p>{grant.status === 'approved' ? 'Active support access' : `Status: ${grant.status}`}</p>
+        <p>
+          {grant.status === 'approved'
+            ? 'Active support access'
+            : `Status: ${statusLabels[grant.status]}`}
+        </p>
         {grant.expiresAt ? <p>Ends {formatDateTime(grant.expiresAt)}</p> : null}
         {grant.status === 'requested' ? (
           <>
@@ -65,3 +70,14 @@ const confirmation = {
   deny: 'Support request denied.',
   end: 'Support access ended.',
 } as const;
+
+const statusLabels: Record<SupportGrantResponse['status'], string> = {
+  requested: 'Requested',
+  approved: 'Active',
+  denied: 'Denied',
+  ended: 'Ended',
+  expired: 'Expired',
+};
+
+// Scopes are open strings in the response; an unknown one shows as sent.
+const scopeLabels: Partial<Record<string, string>> = { customers: 'Customers' };
