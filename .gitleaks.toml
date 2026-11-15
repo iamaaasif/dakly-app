@@ -1,0 +1,19 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixtures: the RFC 6238 test secret and fake passwords"
+paths = [
+  '''^packages/core/src/admin/staff-auth\.int\.spec\.ts$''',
+  '''^packages/core/src/admin/support\.int\.spec\.ts$''',
+  '''^packages/core/src/auth/totp-auth\.int\.spec\.ts$''',
+  '''^packages/core/src/auth/totp-credentials\.spec\.ts$''',
+]
+
+# The generic-api-key rule reads "escaping, expiry/revocation" in a review table as a key.
+# Allowed only in the commit that added it, so a later edit to that file is scanned again.
+[[allowlists]]
+description = "Prose false positive in a review document"
+condition = "AND"
+commits = ["674ab62c4fdf70e771aa4f8873addb5ed2b87ce2"]
+paths = ['''^docs/reviews/features-08-13\.md$''']
