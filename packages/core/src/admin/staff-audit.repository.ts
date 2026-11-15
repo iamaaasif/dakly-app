@@ -1,0 +1,73 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { staffAuditLog } from '@dakly/db/schema/admin';
+import { TenantDatabase } from '../platform/database/tenant-database';
+import type { TenantStaffAudit } from '@dakly/contracts/staff-audit';
+import { AccountDatabase } from '../platform/database/account-database';
+import { StaffDatabase } from '../platform/database/staff-database';
+@Injectable()
+export class StaffAuditRepository {
+  constructor(
+    @Inject(AccountDatabase) private readonly account: AccountDatabase,
+    @Inject(StaffDatabase) private readonly scope: StaffDatabase,
+    @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
+  ) {}
+  async recordForAccount(userId: string, id: string, entry: TenantStaffAudit): Promise<string> {
+    const { actor, ...values } = entry;
+    await this.account.inTransaction(userId, (tx) =>
+      tx.insert(staffAuditLog).values({
+        ...values,
+        id,
+        targetType: 'user',
+        targetId: userId,
+        staffUserId: actor.kind === 'staff' ? actor.staffUserId : null,
+        actorUserId: actor.kind === 'user' ? actor.userId : null,
+      }),
+    );
+    return id;
+  }
+  async recordForStore(storeId: string, entry: TenantStaffAudit): Promise<string> {
+    const { actor, ...values } = entry;
+    const rows = await this.tenant.inTransaction(storeId, (tx) =>
+      tx
+        .insert(staffAuditLog)
+        .values({
+          storeId,
+          ...values,
+          staffUserId: actor.kind === 'staff' ? actor.staffUserId : null,
+          actorUserId: actor.kind === 'user' ? actor.userId : null,
+        })
+        .returning({ id: staffAuditLog.id }),
+    );
+    return rows[0]!.id;
+  }
+  async provisioned(
+    staffUserId: string,
+    operatorIdentity: string,
+    reason: string,
+    reissued: boolean,
+  ): Promise<void> {
+    await this.scope.inTransaction(staffUserId, (tx) =>
+      tx.insert(staffAuditLog).values({
+        operatorIdentity,
+        staffUserId: null,
+        action: reissued ? 'staff.enrollment_reissued' : 'staff.provisioned',
+        targetType: 'staff',
+        targetId: staffUserId,
+        reason,
+        actionDetails: { source: 'privileged_operator_attestation' },
+      }),
+    );
+  }
+  async record(staffUserId: string, action: string, ip: string): Promise<void> {
+    await this.scope.inTransaction(staffUserId, (tx) =>
+      tx.insert(staffAuditLog).values({
+        staffUserId,
+        action,
+        ip,
+        targetType: 'staff',
+        targetId: staffUserId,
+        reason: 'Staff authentication requested',
+      }),
+    );
+  }
+}

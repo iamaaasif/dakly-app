@@ -2,7 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
 import { memberships, roles } from '@dakly/db/schema/team';
-import type { UserStore } from '@dakly/contracts/sessions';
+import type { UserStore, UserStorePageQuery } from '@dakly/contracts/sessions';
+import { AccountDatabase } from '../platform/database/account-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { DATABASE } from '../platform/database/database.tokens';
 
@@ -11,6 +12,7 @@ export class TeamRepository {
   constructor(
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
     @Inject(DATABASE) private readonly database: Database,
+    @Inject(AccountDatabase) private readonly account: AccountDatabase,
   ) {}
 
   async lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {
@@ -59,9 +61,31 @@ export class TeamRepository {
     return rows[0];
   }
 
-  async storesFor(userId: string): Promise<UserStore[]> {
-    const result = await this.database.execute<{ storeId: string; name: string }>(
-      sql`select store_id as "storeId", store_name as name from stores_for_user(${userId}::uuid)`,
+  async accountOwnerContacts(userId: string) {
+    const result = await this.account.inTransaction(userId, (tx) =>
+      tx.execute<{
+        userId: string;
+        phone: string | null;
+        email: string | null;
+      }>(
+        sql`select user_id as "userId",phone,email from locked_account_store_owner_contacts(${userId}::uuid)`,
+      ),
+    );
+    return result.rows;
+  }
+  async storeContext(userId: string, storeId?: string) {
+    const result = await this.database.execute<{
+      hasMemberships: boolean;
+      storeId: string | null;
+      name: string | null;
+    }>(
+      sql`select has_memberships as "hasMemberships",store_id as "storeId",store_name as name from user_store_context(${userId}::uuid,${storeId ?? null}::uuid)`,
+    );
+    return result.rows[0]!;
+  }
+  async storesFor(userId: string, query: UserStorePageQuery): Promise<UserStore[]> {
+    const result = await this.database.execute<UserStore>(
+      sql`select store_id as "storeId", store_name as name from user_store_page(${userId}::uuid,${query.after ?? null}::uuid,${query.limit + 1})`,
     );
     return result.rows;
   }

@@ -38,3 +38,14 @@ export const accountSecurityHistorySchema = z.strictObject({
   limit: z.number().int().min(1).max(100).default(50),
 });
 export type AccountSecurityHistory = z.infer<typeof accountSecurityHistorySchema>;
+
+export type AccountSecurityHistoryPage = {
+  items: {
+    id: string;
+    event: (typeof accountSecurityEventTypes)[number];
+    actorType: (typeof accountSecurityActorTypes)[number];
+    reasonType: (typeof accountRecoveryReasons)[number] | null;
+    createdAt: string;
+  }[];
+  nextCursor: string | null;
+};

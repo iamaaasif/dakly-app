@@ -1,4 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { UsersService } from '../auth/users.service';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import type {
   CreateStoreInput,
   StoreResponse,
@@ -20,6 +22,7 @@ import { storeError } from './stores.errors';
 @Injectable()
 export class StoresService {
   constructor(
+    @Inject(UsersService) private readonly users: UsersService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresRepository) private readonly repository: StoresRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -92,6 +95,9 @@ export class StoresService {
     input: CreateStoreInput,
   ): Promise<{ store: StoreResponse; isCreated: boolean }> {
     const result = await this.transaction.runForNewStore(async (storeId) => {
+      // Account recovery must see the complete membership set before its store snapshot.
+      if (!(await this.users.lockVerifiedIdentity(storeId, userId)))
+        throw new AppError('AUTH_REQUIRED', PLATFORM_ERRORS.AUTH_REQUIRED);
       const ownedStoreId = await this.team.lockAndFindOwnedStore(storeId, userId);
       if (ownedStoreId) return { storeId: ownedStoreId, isCreated: false };
       await this.repository.insert(storeId, input, onboardingExtensions(input.howYouSell));
