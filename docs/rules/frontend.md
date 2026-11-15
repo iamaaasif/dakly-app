@@ -66,7 +66,7 @@ export default async function OrdersPage() {
 ## Server and client components
 
 - Components are server components by default. Add `'use client'` only to the smallest component that needs state, effects, event handlers or browser APIs.
-- Shop data is fetched on the client with React Query through the API (`apps/api`), because every request needs the session cookie checked by the API and the screens update live. Do not call the database or `packages/core` from Next.js.
+- Shop data is fetched on the client with React Query through the API (`apps/api`), because every request needs the session cookie checked by the API and the screens update live. Do not call the database or `packages/core` from Next.js (`pnpm lint:boundaries`).
 - Server components may render static shells and read the session for the page check.
 
 ## Files and names

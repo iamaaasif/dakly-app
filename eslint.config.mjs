@@ -12,8 +12,7 @@ const restrictedSyntax = [
   },
 ];
 
-// Web rules from docs/rules/frontend-*.md that a parser can see.
-const webRestrictedSyntax = [
+const hexColourSyntax = [
   {
     selector: 'Literal[value=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]',
     message: 'Use a theme token, not a hex colour. See docs/rules/frontend-styling.md.',
@@ -22,6 +21,11 @@ const webRestrictedSyntax = [
     selector: 'Literal[value=/\\[#[0-9a-fA-F]{3,8}\\]/]',
     message: 'Use a theme token, not an arbitrary hex class. See docs/rules/frontend-styling.md.',
   },
+];
+
+// Web rules from docs/rules/frontend-*.md that a parser can see.
+const webRestrictedSyntax = [
+  ...hexColourSyntax,
   {
     selector: "CallExpression[callee.property.name='toLocaleString']",
     message: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
@@ -31,6 +35,29 @@ const webRestrictedSyntax = [
     message: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
   },
 ];
+
+const testFiles = ['**/*.spec.ts', '**/*.spec.tsx', '**/test/**', '**/e2e/**'];
+
+// Tests may cast a partial fake; production code fixes the type instead.
+const doubleAssertion = {
+  selector:
+    "TSAsExpression[expression.type='TSAsExpression'][expression.typeAnnotation.type='TSUnknownKeyword']",
+  message: 'Do not cast through `as unknown as`. Fix the type, or parse the value with zod.',
+};
+
+// A file gets only the last no-restricted-syntax list that matches it, so each block that sets one
+// is followed by a copy for non-test files that adds the `as unknown as` check.
+function withProductionSyntax(block) {
+  const [, ...selectors] = block.rules['no-restricted-syntax'];
+  return [
+    block,
+    {
+      files: block.files,
+      ignores: [...(block.ignores ?? []), ...testFiles],
+      rules: { 'no-restricted-syntax': ['error', ...selectors, doubleAssertion] },
+    },
+  ];
+}
 
 // Limits that keep code small and readable. See docs/rules/simplicity.md.
 export default tseslint.config(
@@ -45,7 +72,7 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  {
+  ...withProductionSyntax({
     files: ['**/*.{ts,tsx}'],
     plugins: { sonarjs, 'import-x': importX, '@stylistic': stylistic },
     languageOptions: {
@@ -111,7 +138,7 @@ export default tseslint.config(
         },
       ],
     },
-  },
+  }),
   {
     // Tests may be long and describe many cases.
     files: ['**/*.spec.ts', '**/*.spec.tsx', '**/test/**'],
@@ -127,7 +154,7 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'off',
     },
   },
-  {
+  ...withProductionSyntax({
     // max-params cannot skip constructors, and NestJS constructors take injected dependencies.
     files: ['packages/core/src/**/*.ts', 'apps/api/src/**/*.ts', 'apps/worker/src/**/*.ts'],
     ignores: ['**/*.spec.ts'],
@@ -142,14 +169,14 @@ export default tseslint.config(
       ],
       '@typescript-eslint/no-non-null-assertion': 'warn',
     },
-  },
-  {
+  }),
+  ...withProductionSyntax({
     // NestJS binds one decorator to one handler parameter, so handlers cannot take one object.
     files: ['packages/core/src/**/*.controller.ts', 'apps/api/src/**/*.controller.ts'],
     rules: {
       'no-restricted-syntax': ['error', ...restrictedSyntax],
     },
-  },
+  }),
   {
     files: ['scripts/**/*.mjs', 'apps/web/*.spec.mjs'],
     languageOptions: { globals: { ...globals.node } },
@@ -159,7 +186,7 @@ export default tseslint.config(
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
   },
-  {
+  ...withProductionSyntax({
     files: ['apps/{web,admin}/**/*.{ts,tsx}'],
     languageOptions: {
       globals: { ...globals.browser },
@@ -168,8 +195,8 @@ export default tseslint.config(
       'max-params': ['error', 3],
       'no-restricted-syntax': ['error', ...restrictedSyntax, ...webRestrictedSyntax],
     },
-  },
-  {
+  }),
+  ...withProductionSyntax({
     // Next.js needs default exports only from route files.
     files: ['apps/{web,admin}/src/**/*.{ts,tsx}'],
     ignores: ['apps/{web,admin}/src/app/**'],
@@ -184,12 +211,18 @@ export default tseslint.config(
         },
       ],
     },
-  },
-  {
+  }),
+  ...withProductionSyntax({
     // The formatters are the one place allowed to call Intl.
     files: ['apps/{web,admin}/src/lib/format-*.ts'],
     rules: {
       'no-restricted-syntax': ['error', ...restrictedSyntax],
     },
-  },
+  }),
+  ...withProductionSyntax({
+    files: ['packages/ui/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': ['error', ...restrictedSyntax, ...hexColourSyntax],
+    },
+  }),
 );

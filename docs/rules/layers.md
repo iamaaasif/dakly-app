@@ -10,6 +10,8 @@ Calls go one way: controller → service → repository. No layer skips one, and
 
 **Why:** a job, a webhook and an HTTP request can all reuse a service. Rules in a controller have to be copied.
 
+`pnpm lint:boundaries` fails when a controller, guard, pipe, decorator or other file with a role suffix imports a repository. Only `*.service.ts`, `*.job.ts`, `*.repository.ts`, `*.module.ts`, specs and use-case files without a role suffix may. The other directions in the table are checked in review.
+
 Wrong:
 
 ```ts
