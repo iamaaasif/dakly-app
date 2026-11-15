@@ -303,3 +303,47 @@ Both staff and shop audits record the actual actor, reason and read-only effect 
 Current Super admins see a bounded break-glass alert history on the admin home. The separate worker delivers alerts to the configured internal Slack channel, with five bounded attempts, expiring claims and visible failure state. A Super admin can request another bounded retry after repair with an audited reason. Missing configuration cannot count as delivery. No recipient count or second approver blocks the action. The alert text contains event/staff/shop identifiers, purpose and deadline; free-text reasons remain in restricted Dakly history. Slack delivery is at-least-once across ambiguous remote acknowledgement or worker crashes.
 
 This slice does not implement refunds, billing, deletion, global AI controls or account recovery. ADM-10 may reuse the effect signer and the transactional staff audit service at its own concrete recovery action. See [staff support operations](../development/staff-support.md) for deployment and local verification limits.
+
+### ADM-10 implementation
+
+Support and Super admins recover shop accounts at `/account-recovery`. An exact
+verified phone or email lookup returns only the eligible account's ID and name.
+Other staff roles, staff-linked accounts, staff-owned replacement contacts and
+own/work-store conflicts are rejected. Staff identity links survive changes to
+verified shop contacts; an unverified email does not establish a link.
+
+The form records a reason type, a 10–1000 character explanation and check outcomes:
+NID last four matched, shop details matched when the person belongs to a shop, and
+call-back to the old number attempted. It never asks for document values. The
+confirmation names the person, requested changes and five-minute deadline. A
+replacement phone or email needs its own single-use code, bound to this action,
+account, staff session and current account security state.
+
+One account transaction locks the person, their shops in ID order, the staff row
+and staff session. Memberships are refreshed after store-lock waits, so a former
+shop receives neither notices nor history. New memberships serialize through the
+user identity lock. It checks current authority again, inserts `staff_audit_log`
+before changing credentials, removes selected TOTP and backup codes, changes
+verified contacts, cancels pending self-service recovery, revokes every session,
+records staff-attributed account history and writes encrypted notice intents.
+Any failed write rolls everything back. Codes are consumed before locks and never
+restored. The persisted action ID rejects replay, including sign-out-only recovery.
+No cache operation is needed to revoke access.
+
+Security notices name what changed, when and the reason type. Each available
+verified old and replacement contact receives its channel's notice. Every relevant
+Owner receives both SMS and email when both are verified, including disabled Owners.
+Shared destinations are deduplicated. The existing account notice worker retries
+individual durable deliveries. Recovery does not wait for delivery. A request can
+cover at most 100 shops and 1,000 distinct Owners; overflow fails before mutation
+or audit, and never silently drops recipients. With the current one-active-Owner-per-shop rule, at most 204 messages are
+constructed before deduplication.
+
+`GET /account-recovery-history` requires the current shop Owner and reads immutable
+RLS-protected mappings to the shops involved at recovery time. Later membership
+in another shop cannot expose older recoveries there. A later Owner of the original
+shop can read its history. ACC-13 will integrate this endpoint into the full Owner
+audit page. The person's `/security` page already displays “Recovered by Dakly
+support”, date and reason type through `GET /me/security-history`; ACC-8 will
+integrate it into the full Security screen. Neither endpoint exposes the free-text
+staff reason, check outcomes, or document data.

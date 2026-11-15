@@ -267,6 +267,41 @@
       "when": 1794661589333,
       "tag": "0037_staff_break_glass_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794663875538,
+      "tag": "0038_staff_account_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794664450402,
+      "tag": "0039_staff_recovery_history_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794664959815,
+      "tag": "0040_minimal_recovery_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794665126356,
+      "tag": "0041_recovery_history_tenant_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794667106961,
+      "tag": "0042_recovery_snapshot_locking",
+      "breakpoints": true
     }
   ]
 }

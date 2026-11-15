@@ -128,3 +128,32 @@ The restricted `preserve_staff_user_identity()` trigger records verified contact
 `staff_alert_deliveries` is global delivery state keyed by `staff_audit_log.id`, with no copied shop/customer payload and no invented shop-user identity. Intent joins the active tenant transaction through `recordIntent`; failure rolls back both audits and the grant. The admin-home reader joins authoritative staff audit events, checks a current Super admin session under staff locks, and paginates at 50 rows using the action/time/ID audit index. The pending partial index bounds the relay to twenty due events and terminal crash cleanup to one hundred rows. The app may select/insert/update delivery state; the staff audit remains append-only.
 
 The existing `support_request_metadata` definer additionally returns `isBreakGlass`; its exact staff-ID filter, fifty-row limit, qualified tables, fixed search path and restricted execution remain in force. No new cross-tenant definer or bypass role was added. The alert worker payload contains only the global audit ID, deliberately no fabricated store ID, like existing staff audit exports.
+
+### Staff account recovery
+
+`staff_recovery_history` holds only the shop and canonical staff-audit reference,
+with their pair as its primary key. The safe history projection reads the subject,
+reason type and event time from that immutable audit. It has tenant RLS and
+read-only app grants.
+`staff_recovery_stores` returns a bounded snapshot of at most 100 shops and 1,000
+Owners, locking shops in ID order after the account row is locked. It refreshes
+active memberships after any store-lock wait before deriving conflicts, recipients
+and history mappings. Overflow returns
+a marker before acquiring an unbounded lock set. `record_staff_recovery_history`
+inserts mappings from the persisted account recovery audit and current memberships,
+using the canonical action UUID v7 as the cursor. Both narrow functions set
+`search_path = pg_catalog, public, pg_temp`, revoke PUBLIC execution and grant only
+`dakly_app`. The write joins the active account transaction; it never starts nested
+store actions. Read routes take shop identity only from the authenticated session
+and require the current Owner.
+
+Account security decisions hold `FOR NO KEY UPDATE` on the user. This still
+serializes account writers and conflicts with invitation/store-creation identity
+`FOR SHARE` locks, but permits staff association foreign-key `KEY SHARE` checks.
+Before updating a phone or email, recovery and email change acquire all verified
+old and candidate contact advisory locks in kind/value order. Staff provisioning
+prelocks its normalized contact batch with the same PostgreSQL `ORDER BY kind,value`
+as recovery, auth and the identity trigger, using the database collation. Recovery reads committed
+identity associations after the advisory locks. Stronger contact-update locks thus
+cannot form a cycle with association insertion; the user primary key, foreign keys
+and durable identity triggers remain unchanged.

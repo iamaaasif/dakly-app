@@ -129,6 +129,133 @@ describe('Email authentication over Fastify', () => {
     await app.close();
     vi.restoreAllMocks();
   });
+  it('preserves a concurrently provisioned identity through a normal email change without deadlock', async () => {
+    const user = await account();
+    const change = await beginChange(user);
+    const staffId = randomUUID();
+    await admin.pool.query(
+      "insert into staff_users(id,email,name,role) values($1,$2,'Concurrent staff','support')",
+      [staffId, `${staffId}@example.test`],
+    );
+    const repository = app.get(UsersRepository);
+    const original = repository.lockForSignIn.bind(repository);
+    let release!: () => void, started!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const began = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const spy = vi.spyOn(repository, 'lockForSignIn').mockImplementationOnce(async (id) => {
+      const result = await original(id);
+      started();
+      await waiting;
+      return result;
+    });
+    const changing = post('/me/email/verify', change, user.cookie);
+    await began;
+    const provisioning = await admin.pool.connect();
+    const {
+      rows: [{ pid }],
+    } = await provisioning.query('select pg_backend_pid() as pid');
+    let settled = false;
+    const provision = provisioning
+      .query(
+        "insert into staff_identity_contacts(id,staff_user_id,kind,value) values(gen_random_uuid(),$1,'email',$2),(gen_random_uuid(),$1,'phone',$3)",
+        [staffId, user.email, user.phone],
+      )
+      .then(
+        () => {
+          settled = true;
+          return { ok: true };
+        },
+        (error) => {
+          settled = true;
+          return { ok: false, error };
+        },
+      );
+    try {
+      await expect
+        .poll(
+          async () =>
+            settled ||
+            (
+              await admin.pool.query(
+                "select exists(select 1 from pg_stat_activity where pid=$1 and wait_event_type='Lock') as blocked",
+                [pid],
+              )
+            ).rows[0].blocked,
+        )
+        .toBe(true);
+      release();
+      const [response, provisioned] = await Promise.all([changing, provision]);
+      expect(provisioned).toEqual({ ok: true });
+      expect(response.statusCode, response.body).toBe(204);
+      expect(
+        (
+          await admin.pool.query('select user_id from staff_user_links where staff_user_id=$1', [
+            staffId,
+          ])
+        ).rows,
+      ).toEqual([{ user_id: user.id }]);
+      expect(
+        (await admin.pool.query('select email from users where id=$1', [user.id])).rows[0].email,
+      ).toBe(change.email);
+    } finally {
+      release();
+      await Promise.allSettled([changing, provision]);
+      spy.mockRestore();
+      provisioning.release();
+      await admin.pool.query('delete from staff_identity_contacts where staff_user_id=$1', [
+        staffId,
+      ]);
+      await admin.pool.query('delete from staff_user_links where staff_user_id=$1', [staffId]);
+      await admin.pool.query('delete from staff_users where id=$1', [staffId]);
+    }
+  });
+  it('locks the replacement identity before an email update upgrades the account row lock', async () => {
+    const user = await account();
+    const change = await beginChange(user);
+    const holder = await admin.pool.connect();
+    let pending: ReturnType<typeof post> | undefined;
+    try {
+      await holder.query('begin');
+      const {
+        rows: [{ pid }],
+      } = await holder.query('select pg_backend_pid() as pid');
+      await holder.query(
+        "select pg_advisory_xact_lock(hashtextextended('staff-identity:email:' || $1,0))",
+        [change.email],
+      );
+      pending = post('/me/email/verify', change, user.cookie);
+      await expect
+        .poll(
+          async () =>
+            (
+              await admin.pool.query(
+                'select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',
+                [pid],
+              )
+            ).rows[0].blocked,
+        )
+        .toBe(true);
+      // A provisioning link must still be able to check its user FK while identity proof waits.
+      expect(
+        (await admin.pool.query('select id from users where id=$1 for key share nowait', [user.id]))
+          .rows,
+      ).toEqual([{ id: user.id }]);
+      await holder.query('commit');
+      const response = await pending;
+      expect(response.statusCode, response.body).toBe(204);
+      expect(
+        (await admin.pool.query('select email from users where id=$1', [user.id])).rows[0].email,
+      ).toBe(change.email);
+    } finally {
+      await holder.query('rollback');
+      holder.release();
+      await pending;
+    }
+  });
   it('signs in by case-insensitive verified email and consumes the code once', async () => {
     const user = await account();
     expect((await post('/auth/email/code', { email: user.email!.toUpperCase() })).statusCode).toBe(
