@@ -58,3 +58,11 @@ export function hasSameMemberRole(
     current.roleId === (proposed.roleId ?? null)
   );
 }
+
+export function canChangeExtensions(access: StoreAccess): boolean {
+  return access.role === 'owner' || access.role === 'admin';
+}
+
+export function canApproveSupport(access: StoreAccess): boolean {
+  return access.role === 'owner';
+}

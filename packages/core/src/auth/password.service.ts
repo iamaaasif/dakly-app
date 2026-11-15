@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { hash, argon2id } from 'argon2';
+import { hashPassword } from '../platform/crypto/password';
 import type {
   ChangePasswordInput,
   ConfirmPasswordResetInput,
@@ -50,7 +50,7 @@ export class PasswordService {
   async confirmReset(input: ConfirmPasswordResetInput, request: SignInRequest) {
     const subject = await this.lookup(input.identifier, request.ip);
     const proof = await this.consumeProof(subject, 'reset_password', input.code, request.ip);
-    const passwordHash = await hash(input.password, { type: argon2id });
+    const passwordHash = await hashPassword(input.password);
     await this.replace(subject, proof, passwordHash, request.ip, true);
     return this.auth.completeSignIn(
       {
@@ -74,7 +74,7 @@ export class PasswordService {
       'currentPassword' in input
         ? await this.credentials.check(subject, input.currentPassword, ip)
         : await this.consumeProof(subject, 'password_change_proof', input.proofCode, ip);
-    const passwordHash = await hash(input.password, { type: argon2id });
+    const passwordHash = await hashPassword(input.password);
     await this.replace(subject, proof, passwordHash, ip, false);
   }
 
