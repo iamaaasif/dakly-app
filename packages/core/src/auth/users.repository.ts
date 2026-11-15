@@ -252,13 +252,21 @@ export class UsersRepository {
   ) {
     // Contact UPDATE upgrades the user lock; take all trigger keys while FK checks can still finish.
     await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended('staff-identity:' || kind || ':' || value,0))
-      from (select distinct kind,value from users u cross join lateral (values
-        ('phone',case when u.phone_verified_at is not null then u.phone end),
-        ('email',case when u.email_verified_at is not null then lower(u.email::text) end),
-        ('phone',${phone ?? null}::text),('email',${email ?? null}::text)
-      ) contacts(kind,value) where u.id=${userId}::uuid and value is not null) identities
-      order by kind,value
+      select pg_advisory_xact_lock(hashtextextended('staff-identity:' || kind || ':' || value, 0))
+      from (
+        select distinct kind, value
+        from users u
+        cross join lateral (
+          values
+            ('phone', case when u.phone_verified_at is not null then u.phone end),
+            ('email', case when u.email_verified_at is not null then lower(u.email::text) end),
+            ('phone', ${phone ?? null}::text),
+            ('email', ${email ?? null}::text)
+        ) contacts(kind, value)
+        where u.id=${userId}::uuid
+          and value is not null
+      ) identities
+      order by kind, value
     `);
   }
 

@@ -25,23 +25,27 @@ import { StaffHistoryService } from './staff-history.service';
 @StaffAccess(true, ['super_admin'])
 export class StaffHistoryController {
   constructor(@Inject(StaffHistoryService) private readonly history: StaffHistoryService) {}
-  @Get() search(
+  @Get()
+  search(
     @Req() request: StaffRequest,
     @Query(new ZodValidationPipe(staffAuditSearchSchema)) query: StaffAuditSearch,
   ) {
     return this.history.search(request.staff, query);
   }
-  @Post('exports') request(
+  @Post('exports')
+  request(
     @Req() request: StaffRequest,
     @Body(new ZodValidationPipe(staffAuditExportSchema))
     input: { filter: StaffAuditSearch; reason: string },
   ) {
     return this.history.request(request.staff, input.filter, input.reason, request.ip);
   }
-  @Get('exports/:id') get(@Req() request: StaffRequest, @Param('id', ParseUUIDPipe) id: string) {
+  @Get('exports/:id')
+  get(@Req() request: StaffRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.history.get(request.staff, id);
   }
-  @Get('exports/:id/download') async download(
+  @Get('exports/:id/download')
+  async download(
     @Req() request: StaffRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Res() reply: FastifyReply,
@@ -53,7 +57,8 @@ export class StaffHistoryController {
       .type('text/csv; charset=utf-8')
       .send(body);
   }
-  @Get('verify') verify(
+  @Get('verify')
+  verify(
     @Req() request: StaffRequest,
     @Query(new ZodValidationPipe(z.strictObject({ from: z.iso.date() }))) query: { from: string },
   ) {

@@ -32,13 +32,32 @@ export class SecurityNoticesRepository {
   }
   async claim(userId?: string): Promise<ClaimedNotice[]> {
     const result = await this.database.execute<ClaimedNotice>(sql`
-      with due as (select id from account_security_notices
-        where delivered_at is null and retry_at <= clock_timestamp()
+      with due as (
+        select id
+        from account_security_notices
+        where delivered_at is null
+          and retry_at <= clock_timestamp()
           and (lease_until is null or lease_until < clock_timestamp())
           and (${userId ?? null}::uuid is null or user_id = ${userId ?? null}::uuid)
-        order by retry_at,id limit 20 for update skip locked)
-      update account_security_notices n set lease_id = gen_random_uuid(),lease_until = clock_timestamp() + interval '2 minutes',attempts = attempts + 1
-      from due where n.id=due.id returning n.id,n.user_id as "userId",n.recovery_id as "recoveryId",n.ciphertext,n.key_version as "keyVersion",n.lease_id as "leaseId",n.attempts
+        order by retry_at, id
+        limit 20
+        for update skip locked
+      )
+      update account_security_notices n
+      set
+        lease_id = gen_random_uuid(),
+        lease_until = clock_timestamp() + interval '2 minutes',
+        attempts = attempts + 1
+      from due
+      where n.id=due.id
+      returning
+        n.id,
+        n.user_id as "userId",
+        n.recovery_id as "recoveryId",
+        n.ciphertext,
+        n.key_version as "keyVersion",
+        n.lease_id as "leaseId",
+        n.attempts
     `);
     return result.rows;
   }

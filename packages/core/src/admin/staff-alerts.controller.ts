@@ -19,13 +19,15 @@ import type { StaffRequest } from './staff.guard';
 @StaffAccess(true, ['super_admin'])
 export class StaffAlertsController {
   constructor(@Inject(StaffAlertsService) private readonly alerts: StaffAlertsService) {}
-  @Get() list(
+  @Get()
+  list(
     @Req() request: StaffRequest,
     @Query(new ZodValidationPipe(supportPageSchema)) query: { before?: string },
   ) {
     return this.alerts.list(request.staff, query.before);
   }
-  @Post(':id/retry') retry(
+  @Post(':id/retry')
+  retry(
     @Req() request: StaffRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(staffAlertRetrySchema)) input: { reason: string },

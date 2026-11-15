@@ -28,13 +28,27 @@ export class StaffIdentityRepository {
         ),
       ];
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended('staff-identity:' || value,0)) from unnest(${sql.param(keys)}::text[]) value order by split_part(value,':',1),substr(value,strpos(value,':')+1)`,
+        sql`
+          select pg_advisory_xact_lock(hashtextextended('staff-identity:' || value, 0))
+          from unnest(${sql.param(keys)}::text[]) value
+          order by split_part(value, ':', 1), substr(value, strpos(value, ':')+1)`,
       );
       return (
-        await tx.execute<{ conflicts: boolean }>(sql`select
-        exists(select 1 from staff_user_links where user_id=${userId}::uuid)
-        or exists(select 1 from unnest(${sql.param(keys)}::text[]) identity_key join staff_identity_contacts c on c.kind=split_part(identity_key,':',1) and c.value=substr(identity_key,strpos(identity_key,':')+1))
-        or exists(select 1 from unnest(${sql.param(storeIds)}::uuid[]) target where staff_conflicts_with_store(${staffUserId}::uuid,target)) as conflicts`)
+        await tx.execute<{ conflicts: boolean }>(sql`
+          select
+            exists(select 1 from staff_user_links where user_id=${userId}::uuid)
+            or exists(
+              select 1
+              from unnest(${sql.param(keys)}::text[]) identity_key
+              join staff_identity_contacts c
+                on c.kind=split_part(identity_key, ':', 1)
+                and c.value=substr(identity_key, strpos(identity_key, ':')+1)
+            )
+            or exists(
+              select 1
+              from unnest(${sql.param(storeIds)}::uuid[]) target
+              where staff_conflicts_with_store(${staffUserId}::uuid, target)
+            ) as conflicts`)
       ).rows[0]!.conflicts;
     });
   }
@@ -44,7 +58,7 @@ export class StaffIdentityRepository {
       async (tx) =>
         (
           await tx.execute<{ conflicts: boolean }>(
-            sql`select staff_conflicts_with_store(${staffUserId}::uuid,${storeId}::uuid) as conflicts`,
+            sql`select staff_conflicts_with_store(${staffUserId}::uuid, ${storeId}::uuid) as conflicts`,
           )
         ).rows[0]!.conflicts,
     );

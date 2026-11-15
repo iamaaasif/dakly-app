@@ -23,13 +23,15 @@ import type { StaffRequest } from './staff.guard';
 @StaffAccess(true, ['support', 'super_admin'])
 export class StaffRecoveryController {
   constructor(@Inject(StaffRecoveryService) private readonly recovery: StaffRecoveryService) {}
-  @Post('lookup') lookup(
+  @Post('lookup')
+  lookup(
     @Req() request: StaffRequest,
     @Body(new ZodValidationPipe(staffRecoveryLookupSchema)) input: StaffRecoveryLookup,
   ) {
     return this.recovery.lookup(request.staff, input.identifier);
   }
-  @Post('preview') preview(
+  @Post('preview')
+  preview(
     @Req() request: StaffRequest,
     @Body(new ZodValidationPipe(staffRecoveryRequestSchema)) input: StaffRecoveryRequest,
   ) {
@@ -43,7 +45,8 @@ export class StaffRecoveryController {
   ) {
     return this.recovery.requestCode(request.staff, input, request.ip);
   }
-  @Post() recover(
+  @Post()
+  recover(
     @Req() request: StaffRequest,
     @Body(new ZodValidationPipe(staffRecoveryConfirmationSchema)) input: StaffRecoveryConfirmation,
   ) {

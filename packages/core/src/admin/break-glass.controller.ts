@@ -13,13 +13,15 @@ import type { StaffRequest } from './staff.guard';
 @StaffAccess(true, ['super_admin'])
 export class BreakGlassController {
   constructor(@Inject(BreakGlassService) private readonly support: BreakGlassService) {}
-  @Post('preview') preview(
+  @Post('preview')
+  preview(
     @Req() request: StaffRequest,
     @Body(new ZodValidationPipe(breakGlassRequestSchema)) input: BreakGlassRequest,
   ) {
     return this.support.previewBreakGlass(request.staff, input);
   }
-  @Post() confirm(
+  @Post()
+  confirm(
     @Req() request: StaffRequest,
     @Body(new ZodValidationPipe(breakGlassConfirmationSchema)) input: BreakGlassConfirmation,
   ) {

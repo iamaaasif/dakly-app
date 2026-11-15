@@ -14,10 +14,15 @@ export type TotpChallenge = {
 };
 const ATTEMPT = `
 local data = redis.call('HGET', KEYS[1], 'data')
-if not data or redis.call('HEXISTS',KEYS[1],'busy') == 1 then return nil end
+if not data or redis.call('HEXISTS', KEYS[1], 'busy') == 1 then
+  return nil
+end
 local attempts = redis.call('HINCRBY', KEYS[1], 'tries', 1)
-if attempts > 5 then redis.call('DEL', KEYS[1]); return nil end
-redis.call('HSET',KEYS[1],'busy',ARGV[1])
+if attempts > 5 then
+  redis.call('DEL', KEYS[1]);
+  return nil
+end
+redis.call('HSET', KEYS[1], 'busy', ARGV[1])
 return data
 `;
 @Injectable()
@@ -62,9 +67,14 @@ export class TotpChallenges {
   async release(challengeId: string, attemptId: string): Promise<void> {
     await this.cache.connection.eval(
       `
-      if redis.call('HGET',KEYS[1],'busy') ~= ARGV[1] then return 0 end
-      if tonumber(redis.call('HGET',KEYS[1],'tries') or '5') >= 5 then redis.call('DEL',KEYS[1])
-      else redis.call('HDEL',KEYS[1],'busy') end
+      if redis.call('HGET', KEYS[1], 'busy') ~= ARGV[1] then
+        return 0
+      end
+      if tonumber(redis.call('HGET', KEYS[1], 'tries') or '5') >= 5 then
+        redis.call('DEL', KEYS[1])
+      else
+        redis.call('HDEL', KEYS[1], 'busy')
+      end
       return 1
     `,
       1,
