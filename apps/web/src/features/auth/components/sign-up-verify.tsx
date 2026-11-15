@@ -24,7 +24,7 @@ export function SignUpVerify({
   );
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={complete} />;
   return (
-    <form className="space-y-4" onSubmit={submit}>
+    <form method="post" className="space-y-4" onSubmit={submit}>
       <p>Enter the six-digit SMS code. It expires after ten minutes.</p>
       <AuthField
         label="Verification code"

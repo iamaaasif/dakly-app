@@ -178,17 +178,80 @@ describe('Session boundary over Fastify and Postgres', () => {
       'phone',
     ]);
     const shops = await app.inject({ url: '/me/stores', headers: { cookie: cookie() } });
-    expect(shops.json()).toHaveLength(2);
+    expect(shops.json().items).toHaveLength(2);
     const customer = await getCustomer();
     expect(customer.statusCode).toBe(200);
     expect(customer.json().phone).toBe('017XXXXX678');
   });
+  it('keeps selected metadata independent of bounded membership pages and rechecks removal', async () => {
+    const extra = Array.from({ length: 55 }, () => crypto.randomUUID()).sort();
+    const selected = extra.at(-1)!;
+    const created = await service.create(userId, { isRemembered: false });
+    const headers = { cookie: `dakly_session=${created.token}` };
+    try {
+      await admin.pool.query(
+        "insert into stores(id,name) select id,'Paged shop' from unnest($1::uuid[]) id",
+        [extra],
+      );
+      await admin.pool.query(
+        "insert into memberships(id,store_id,user_id,built_in_role,status) select gen_random_uuid(),id,$2,'admin','active' from unnest($1::uuid[]) id",
+        [extra, userId],
+      );
+      await service.setActiveStore(userId, created.session.id, selected);
+      const context = (await app.inject({ url: '/me/context', headers })).json();
+      expect(context.stores).toBeUndefined();
+      expect(context.hasMemberships).toBe(true);
+      expect(context.currentStore.storeId).toBe(selected);
+      const first = (await app.inject({ url: '/me/stores?limit=10', headers })).json();
+      expect(first.items).toHaveLength(10);
+      expect(first.items.some((shop: { storeId: string }) => shop.storeId === selected)).toBe(
+        false,
+      );
+      const second = (
+        await app.inject({ url: `/me/stores?limit=50&after=${first.nextCursor}`, headers })
+      ).json();
+      expect(second.items).toHaveLength(47);
+      expect(second.nextCursor).toBeNull();
+      expect(new Set([...first.items, ...second.items].map((shop) => shop.storeId)).size).toBe(57);
+      expect((await app.inject({ url: '/me/stores?limit=51', headers })).statusCode).toBe(400);
+      await admin.pool.query(
+        "update memberships set status='removed' where store_id=$1 and user_id=$2",
+        [selected, userId],
+      );
+      expect((await app.inject({ url: '/me/context', headers })).json().currentStore).toBeNull();
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/me/active-store',
+            headers: { ...headers, origin },
+            payload: { storeId: selected },
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/me/active-store',
+            headers: { ...headers, origin },
+            payload: { storeId },
+          })
+        ).statusCode,
+      ).toBe(204);
+    } finally {
+      await admin.pool.query('delete from sessions where id=$1', [created.session.id]);
+      await admin.pool.query('delete from memberships where store_id=any($1::uuid[])', [extra]);
+      await admin.pool.query('delete from stores where id=any($1::uuid[])', [extra]);
+    }
+  });
+
   it('returns verified shell context and rejects stale store preconditions before writes', async () => {
     const context = await app.inject({ url: '/me/context', headers: { cookie: cookie() } });
     expect(context.statusCode).toBe(200);
     const shell = context.json();
     expect(shell.user).toEqual({ id: userId, name: 'Rina' });
-    expect(shell.stores).toHaveLength(2);
+    expect(shell.hasMemberships).toBe(true);
     expect(shell.currentStore).toEqual({
       storeId,
       name: 'Rina shop',
@@ -331,7 +394,7 @@ describe('Session boundary over Fastify and Postgres', () => {
     const account = await app.inject({ url: '/me/context', headers });
     expect(account.statusCode).toBe(200);
     expect(account.json().currentStore).toBeNull();
-    expect(account.json().stores).toHaveLength(2);
+    expect(account.json().hasMemberships).toBe(true);
     await service.setActiveStore(userId, created.session.id, storeId);
     const selected = await app.inject({ url: '/me/context', headers });
     await admin.db
@@ -342,7 +405,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       const revoked = await app.inject({ url: '/me/context', headers });
       expect(revoked.statusCode).toBe(200);
       expect(revoked.json().currentStore).toBeNull();
-      expect(revoked.json().stores).toHaveLength(1);
+      expect(revoked.json().hasMemberships).toBe(true);
       expect(revoked.json().contextTag).not.toBe(selected.json().contextTag);
       expect((await app.inject({ url: '/me', headers })).statusCode).toBe(200);
     } finally {

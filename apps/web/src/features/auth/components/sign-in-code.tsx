@@ -20,6 +20,7 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
   const email = useVerifyEmailCode();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async ({ code }) => {
         try {

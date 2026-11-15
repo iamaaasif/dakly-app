@@ -79,7 +79,7 @@ function transport() {
       return signedIn
         ? Response.json({
             user: { id: 'recipient', name: 'Rina' },
-            stores: [],
+            hasMemberships: false,
             currentStore: null,
             contextTag: 'verified',
           })

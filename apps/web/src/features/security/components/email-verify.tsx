@@ -13,6 +13,7 @@ export function EmailVerify({ email, onDone }: { email: string; onDone: () => vo
   const verify = useVerifyEmail();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

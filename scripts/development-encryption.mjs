@@ -13,7 +13,9 @@ if (version !== keys)
   throw new Error('Complete the existing encryption configuration before generating keys');
 if (!keys) {
   if (!isCi && existsSync(target)) chmodSync(target, 0o600);
-  const encoded = JSON.stringify({ 1: randomBytes(32).toString('base64') });
+  const key = randomBytes(32).toString('base64');
+  const encoded = JSON.stringify({ 1: key });
+  if (isCi) process.stdout.write(`::add-mask::${key}\n::add-mask::${encoded}\n`);
   const value = isCi ? encoded : `'${encoded}'`;
   appendFileSync(target, `\nENCRYPTION_CURRENT_KEY_VERSION=1\nENCRYPTION_MASTER_KEYS=${value}\n`, {
     mode: 0o600,

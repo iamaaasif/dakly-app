@@ -31,7 +31,7 @@ describe('Invitation entry', () => {
       return signedIn
         ? Response.json({
             user: { id: 'recipient', name: 'Rina' },
-            stores: [],
+            hasMemberships: false,
             currentStore: null,
             contextTag: 'verified',
           })
@@ -75,7 +75,7 @@ describe('Invitation entry', () => {
     vi.stubGlobal('fetch', async () =>
       Response.json({
         user: { id: 'recipient', name: 'Rina' },
-        stores: [],
+        hasMemberships: false,
         currentStore: null,
         contextTag: 'verified',
       }),

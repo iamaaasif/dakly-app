@@ -1,6 +1,9 @@
+import { supportContextTag, assertSupportContext, assertSupportParent } from './support-session';
+import { bindVerifiedStore } from '../platform/logging/request-logging';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { randomBytes, createHash } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { CreateCustomerInput } from '@dakly/contracts/customers';
 import type { SupportPrincipal, SupportRequestInput } from '@dakly/contracts/support';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
@@ -31,6 +34,7 @@ export class SupportService {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(CustomersService) private readonly customers: CustomersService,
+    @Optional() @Inject(PinoLogger) private readonly logger?: PinoLogger,
   ) {}
   async authorizeBreakGlass(storeId: string, staff: Staff) {
     const current = await this.assertStaff(storeId, staff.id, staff.sessionId);
@@ -235,14 +239,21 @@ export class SupportService {
     });
   }
   async session(token: string | undefined) {
-    return this.run(token, async (principal) => ({
+    return this.run(token, async (principal, contextTag) => ({
       ...supportGrantResponse(await this.authorize(principal), this.clock.now()),
       storeName: await this.repository.storeName(principal.storeId),
+      contextTag,
     }));
   }
-  async customer(token: string | undefined, id: string, ip: string) {
-    return this.run(token, async (principal) => {
+  async customer(
+    token: string | undefined,
+    id: string,
+    ip: string,
+    expectedContext?: string | string[],
+  ) {
+    return this.run(token, async (principal, contextTag) => {
       const grant = await this.authorize(principal);
+      assertSupportContext(expectedContext, contextTag);
       if (!grant.scopes.includes('customers')) return this.denied(principal, ip);
       const result = await this.customers.getById(principal.storeId, id, { seeFullPhone: true });
       await this.audit.record(
@@ -256,12 +267,18 @@ export class SupportService {
         'customer',
       );
       await this.recordActivity(principal);
-      return result;
+      return { ...result, contextTag };
     });
   }
-  async createCustomer(token: string | undefined, input: CreateCustomerInput, ip: string) {
-    return this.run(token, async (principal) => {
+  async createCustomer(
+    token: string | undefined,
+    input: CreateCustomerInput,
+    ip: string,
+    expectedContext?: string | string[],
+  ) {
+    return this.run(token, async (principal, contextTag) => {
       const grant = await this.authorize(principal);
+      assertSupportContext(expectedContext, contextTag);
       if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
         return this.denied(principal, ip);
       const result = await this.customers.create(principal.storeId, input, { seeFullPhone: true });
@@ -276,7 +293,7 @@ export class SupportService {
         'customer',
       );
       await this.recordActivity(principal);
-      return result;
+      return { ...result, contextTag };
     });
   }
   private async recordActivity(principal: SupportPrincipal) {
@@ -285,7 +302,7 @@ export class SupportService {
   }
   private async run<T>(
     token: string | undefined,
-    work: (principal: SupportPrincipal) => Promise<T>,
+    work: (principal: SupportPrincipal, contextTag: string) => Promise<T>,
   ) {
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw supportError('SUPPORT_ENDED');
     const hash = tokenHash(token);
@@ -294,7 +311,7 @@ export class SupportService {
     const result = await this.transaction.runLocked(storeId, async () => {
       const session = await this.repository.session(storeId, hash, false);
       if (!session) throw supportError('SUPPORT_ENDED');
-      return work(session);
+      return work(session, supportContextTag(hash));
     });
     // Denial audit must commit before sending the permission error.
     if (result === null) throw supportError('SUPPORT_DENIED');
@@ -324,6 +341,7 @@ export class SupportService {
       supportGrantStatus(grant, this.clock.now()) !== 'approved'
     )
       throw supportError('SUPPORT_ENDED');
+    bindVerifiedStore(this.logger, principal.storeId);
     return grant;
   }
   private async assertStaff(storeId: string, staffUserId: string, sessionId?: string) {
@@ -341,17 +359,12 @@ export class SupportService {
     return staff;
   }
   private async assertParent(storeId: string, staffUserId: string, sessionId: string) {
-    const parent = await this.repository.parent(storeId, staffUserId, sessionId);
-    const now = this.clock.now();
-    if (
-      !parent ||
-      parent.revokedAt ||
-      parent.expiresAt <= now ||
-      !parent.lastSeenAt ||
-      parent.lastSeenAt.getTime() + 1800000 <= now.getTime()
-    )
-      throw supportError('SUPPORT_ENDED');
+    assertSupportParent(
+      await this.repository.parent(storeId, staffUserId, sessionId),
+      this.clock.now(),
+    );
   }
+
   private assertRole(staff: Staff) {
     if (!requestRoles.includes(staff.role)) throw supportError('SUPPORT_DENIED');
   }

@@ -24,6 +24,7 @@ export function EmailForm({ profile, onDone }: { profile: AccountProfile; onDone
   if (email) return <EmailVerify email={email} onDone={onDone} />;
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

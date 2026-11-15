@@ -211,9 +211,9 @@ The entry flow is thorough and local-first (mobile number + OTP, bKash/Nagad mes
 
 ### App shell (WEB-3)
 
-The signed-in shell contains only implemented destinations: Customers for members with view access, Support access for the current owner, and account Security. Customer creation requires edit access. The desktop sidebar collapses to labeled icons; the phone drawer supports keyboard focus containment, Escape and return focus. Store and profile names come from the API. The header signs out through the existing account endpoint, clears the browser query cache and returns to `/sign-in`. One selected shop is shown as text; multiple memberships use a native chooser.
+The signed-in shell contains only implemented destinations: Customers for members with view access, Support access for the current owner, and account Security. Customer creation requires edit access. The desktop sidebar collapses to labeled icons; the phone drawer supports keyboard focus containment, Escape and return focus. Store and profile names come from the API. The header signs out through the existing account endpoint, clears the browser query cache and returns to `/sign-in`. The native shop chooser loads bounded pages on request; the full selected name is also shown as text, including when its option is outside the loaded page.
 
-`GET /me/context` requires an account session. It returns the profile id/name, active membership shop names, the verified current shop with screen capabilities, and `contextTag`. The session guard reads the session and membership from primary PostgreSQL once per request; the context service reuses those access results and existing account/team services. It adds no table, column, cross-request permission cache or browser authorization rule. Removed membership leaves the account usable with no current shop.
+`GET /me/context` requires an account session. It returns the profile id/name, `hasMemberships`, the independently verified current shop with screen capabilities, and `contextTag`. `GET /me/stores?after=<store UUID>&limit=50` returns a bounded `{ items, nextCursor }` picker page; `limit` is 1–50. The picker loads further pages only on request and preserves a selected shop outside loaded pages. There is no account membership cap. The session guard reads the session and membership from primary PostgreSQL once per request; the context service reuses those access results and existing account/team services. It adds no table, column, cross-request permission cache or browser authorization rule. Removed membership leaves the account usable with no current shop.
 
 Normal shell business requests send `X-Session-Context`, an opaque digest of the verified session, selected shop and effective permissions. The guard compares it with fresh primary context before business controllers, including shop selection, and rejects a mismatch with `SESSION_CONTEXT_CHANGED` (409). The header only checks consistency; it never selects a shop or grants access. Existing API clients without the header remain compatible. Responses carry the verified tag and `Cache-Control: no-store`. Account Security validates response tags without requiring a selected shop. Support/staff sessions retain their separate boundaries.
 
@@ -858,6 +858,8 @@ consumption removes the matching hash in the same guarded update that checks it.
 TOTP uses six digits, 30-second steps and one step of clock drift. A successfully
 used step cannot be replayed. Disabling requires TOTP or a backup code.
 
+Setup publishes its encrypted five-minute cache record after releasing the account transaction. Confirmation checks the code and consumes the one-use record before locking the account; it then rechecks credential state, the bound live session, setup expiry, code age and disabled/enabled state. No Redis operation runs under the account lock. A consumed record is never restored after a database rollback or ambiguous cache reply.
+
 Phone code, email code, password, password-reset completion and every Google path
 use `AuthService.completeSignIn`. A TOTP challenge retains the original first-factor
 binding, account credential fingerprint and remembered-session choice. It lasts
@@ -879,7 +881,7 @@ The database stores only token hashes. Each account receives SMS and verified
 email notices, and each distinct store Owner receives a notice through a verified
 contact. Destinations are deduplicated. Accounts with more than 1000 distinct
 Owners, or an Owner without a verified contact, cannot start self-service recovery;
-this is an operational recovery limit, not a store-membership limit.
+this is an operational recovery limit, not a store-membership limit. The recovering account row is locked first; the same account transaction locks its shops in sorted order and rereads current memberships and Owners before the single bulk notice insert. Disabled Owners remain recipients. Membership removals and ownership transfers that commit while a shop lock is queued are reflected in the final recipients.
 
 Each delivery has a separate encrypted notice using the account-owned
 `account-security-notice` encryption purpose. A bounded worker claims up to 20

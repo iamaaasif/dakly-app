@@ -21,6 +21,7 @@ export function TotpStep({
   const verify = useVerifyTotp();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

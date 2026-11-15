@@ -51,7 +51,11 @@ function RecoveryForm({ target }: { target: StaffRecoveryTarget }) {
         with the person first. Record outcomes only; never enter document numbers or NID digits.
       </p>
       <Card>
-        <form className="space-y-4" onSubmit={form.handleSubmit((input) => preview.mutate(input))}>
+        <form
+          method="post"
+          className="space-y-4"
+          onSubmit={form.handleSubmit((input) => preview.mutate(input))}
+        >
           <RecoveryFields form={form} />
           {Object.keys(form.formState.errors).length ? (
             <p role="alert">

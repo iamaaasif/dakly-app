@@ -4,6 +4,7 @@ import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { RolesRepository } from './roles.repository';
 import { MembersRepository } from './members.repository';
 import { OwnershipTransferRepository } from './ownership-transfer.repository';
+import { AccountDatabase } from '../platform/database/account-database';
 import { TeamRepository } from './team.repository';
 const permissions = { areas: {}, seeFullPhone: false, exportLists: false, refund: false };
 describe('team filters without RLS assistance', () => {
@@ -11,7 +12,7 @@ describe('team filters without RLS assistance', () => {
   const roles = new RolesRepository(f.tenant);
   const members = new MembersRepository(f.tenant, f.connection.db);
   const transfers = new OwnershipTransferRepository(f.tenant);
-  const team = new TeamRepository(f.tenant, f.connection.db);
+  const team = new TeamRepository(f.tenant, f.connection.db, new AccountDatabase(f.connection.db));
   beforeAll(() => f.setup());
   afterAll(() => f.close());
   it('filters role lists, names, references, changes and deletions', async () => {

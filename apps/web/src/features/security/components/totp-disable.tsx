@@ -10,6 +10,7 @@ export function TotpDisable({ onDone }: { onDone: () => void }) {
   const disable = useDisableTotp();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

@@ -165,7 +165,12 @@ export class SupportController {
   @Get('customers/:id')
   @Header('Cache-Control', 'no-store')
   customer(@Req() request: FastifyRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.support.customer(request.cookies[cookie], id, request.ip);
+    return this.support.customer(
+      request.cookies[cookie],
+      id,
+      request.ip,
+      request.headers['x-support-context'],
+    );
   }
   @Post('customers')
   @Header('Cache-Control', 'no-store')
@@ -173,6 +178,11 @@ export class SupportController {
     @Req() request: FastifyRequest,
     @Body(new ZodValidationPipe(createCustomerSchema)) input: CreateCustomerInput,
   ) {
-    return this.support.createCustomer(request.cookies[cookie], input, request.ip);
+    return this.support.createCustomer(
+      request.cookies[cookie],
+      input,
+      request.ip,
+      request.headers['x-support-context'],
+    );
   }
 }

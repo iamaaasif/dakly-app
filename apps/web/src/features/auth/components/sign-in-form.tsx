@@ -31,6 +31,7 @@ export function SignInForm({ method, isRemembered, onResult, onRemember }: SignI
   return (
     <FormProvider {...form}>
       <form
+        method="post"
         className="space-y-4"
         onSubmit={form.handleSubmit(async (input) => {
           try {
