@@ -11,7 +11,7 @@ Everything in this repo should read as if a careful person wrote it for a collea
 5. One example per rule. No shouting in capitals, no "IMPORTANT", no "CRITICAL".
 6. No emoji in docs, code, comments, commit messages or UI copy.
 7. No banners or footers that say a tool wrote something. Authorship is in git.
-8. No filler. `pnpm lint:docs` flags these words and phrases in Markdown and in code comments:
+8. No filler. `pnpm lint:docs` flags these words and phrases in Markdown and in code comments. "Unlock" is the exception: it also has a plain meaning (unlock an order), so it is checked in review.
 
 | Avoid                                                                         | Write instead                   |
 | ----------------------------------------------------------------------------- | ------------------------------- |
