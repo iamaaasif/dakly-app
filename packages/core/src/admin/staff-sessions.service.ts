@@ -4,12 +4,13 @@ import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
 
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
 import { staffError } from './admin.errors';
 import { StaffAuditService } from './staff-audit.service';
 import { isStaffSessionCurrent, STAFF_SESSION_TTL_MS } from './staff-session-policy';
-import { StaffTokens, staffTokenHash } from './staff-tokens';
+import { StaffTokens } from './staff-tokens';
 import { StaffRepository } from './staff.repository';
 
 @Injectable()
@@ -31,7 +32,7 @@ export class StaffSessionsService {
     await this.repository.consumeAll(staff.id, now);
     await this.repository.createSession(staff.id, {
       id,
-      tokenHash: staffTokenHash(token),
+      tokenHash: hashToken(token),
       ip,
       lastSeenAt: now,
       createdAt: now,
@@ -61,11 +62,7 @@ export class StaffSessionsService {
         staff.email.toLowerCase() !== identity.email
       )
         throw staffError('STAFF_AUTH_REQUIRED');
-      const session = await this.repository.session(
-        staff.id,
-        claims.sessionId,
-        staffTokenHash(token),
-      );
+      const session = await this.repository.session(staff.id, claims.sessionId, hashToken(token));
       const now = this.clock.now();
       if (!session || !isStaffSessionCurrent(session, now)) throw staffError('STAFF_AUTH_REQUIRED');
       await this.repository.touchSession(staff.id, session.id, now);

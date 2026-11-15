@@ -6,9 +6,11 @@ import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
+import { DAY_MS } from '../platform/time';
 import { StaffHistoryRepository } from './staff-history.repository';
 import { supportError } from './support.errors';
 
+const STAFF_EXPORT_TTL_MS = DAY_MS;
 @Injectable()
 export class StaffHistoryService {
   constructor(
@@ -44,7 +46,7 @@ export class StaffHistoryService {
         name: staff.name,
         filter,
         reason,
-        expiresAt: new Date(this.clock.now().getTime() + 86400000),
+        expiresAt: new Date(this.clock.now().getTime() + STAFF_EXPORT_TTL_MS),
         ip,
       }),
     );

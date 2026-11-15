@@ -4,7 +4,7 @@ import { Clock } from '../platform/clock';
 import { verifyPassword } from '../platform/crypto/password';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
-import type { PasswordProof } from './sign-in-codes';
+import { FRESH_PROOF_TTL_MS, type PasswordProof } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
 import { UsersRepository } from './users.repository';
 
@@ -47,7 +47,7 @@ export class PasswordCredentials {
   proof(userId: string, hash: string | null): PasswordProof {
     return {
       passwordState: passwordState(userId, hash),
-      expiresAt: this.clock.now().getTime() + 600_000,
+      expiresAt: this.clock.now().getTime() + FRESH_PROOF_TTL_MS,
     };
   }
 

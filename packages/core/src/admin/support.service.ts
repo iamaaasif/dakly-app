@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
@@ -9,9 +9,11 @@ import type { SupportPrincipal, SupportRequestInput } from '@dakly/contracts/sup
 
 import { CustomersService } from '../customers/customers.service';
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { bindVerifiedStore } from '../platform/logging/request-logging';
+import { MINUTE_MS } from '../platform/time';
 import { StaffIdentityService } from './staff-identity.service';
 import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
@@ -21,7 +23,7 @@ import { supportContextTag, assertSupportContext, assertSupportParent } from './
 import { supportError, isSupportCodeUnavailable } from './support.errors';
 import { SupportRepository } from './support.repository';
 
-const tokenHash = (token: string) => createHash('sha256').update(token).digest();
+const SUPPORT_HANDOFF_TTL_MS = MINUTE_MS;
 type Staff = StaffIdentity & { sessionId: string };
 @Injectable()
 export class SupportService {
@@ -113,15 +115,15 @@ export class SupportService {
       await this.repository.handoff(
         principal.storeId,
         principal,
-        tokenHash(token),
-        new Date(this.clock.now().getTime() + 60000),
+        hashToken(token),
+        new Date(this.clock.now().getTime() + SUPPORT_HANDOFF_TTL_MS),
       );
       return { token };
     });
   }
 
   async exchange(token: string, ip: string) {
-    const hash = tokenHash(token);
+    const hash = hashToken(token);
     const storeId = await this.repository.locateHandoff(hash);
     if (!storeId) throw supportError('SUPPORT_ENDED');
     return this.transaction.runLocked(storeId, async () => {
@@ -137,7 +139,7 @@ export class SupportService {
         reason: 'Staff entered authorized support session',
         ip,
       });
-      await this.repository.consume(storeId, hash, tokenHash(token), this.clock.now());
+      await this.repository.consume(storeId, hash, hashToken(token), this.clock.now());
       return token;
     });
   }
@@ -219,7 +221,7 @@ export class SupportService {
     work: (principal: SupportPrincipal, contextTag: string) => Promise<T>,
   ) {
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw supportError('SUPPORT_ENDED');
-    const hash = tokenHash(token);
+    const hash = hashToken(token);
     const storeId = await this.repository.locateSession(hash);
     if (!storeId) throw supportError('SUPPORT_ENDED');
     const result = await this.transaction.runLocked(storeId, async () => {
@@ -237,7 +239,7 @@ export class SupportService {
     work: (principal: SupportPrincipal, contextTag: string) => Promise<T>,
   ) {
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw supportError('SUPPORT_ENDED');
-    const hash = tokenHash(token);
+    const hash = hashToken(token);
     const storeId = await this.repository.locateSession(hash);
     if (!storeId) throw supportError('SUPPORT_ENDED');
     return this.transaction.run(storeId, async () => {

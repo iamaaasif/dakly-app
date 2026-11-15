@@ -106,7 +106,16 @@ describe('Staff environment configuration', () => {
     CLOUDFLARE_ACCESS_ISSUER: 'https://dakly.cloudflareaccess.com',
     CLOUDFLARE_ACCESS_AUDIENCE: 'staff-app',
     STAFF_SESSION_SIGNING_KEY: randomBytes(32).toString('base64'),
+    CODE_HASH_KEY: randomBytes(32).toString('base64'),
   };
+  it('requires the code hash key in production only', () => {
+    expect(() => loadStaffEnv({ ...configured, CODE_HASH_KEY: undefined })).toThrow(
+      'CODE_HASH_KEY is required in production',
+    );
+    const development = { ...configured, NODE_ENV: 'development', CODE_HASH_KEY: undefined };
+    expect(loadStaffEnv(development).CODE_HASH_KEY).toBeUndefined();
+    expect(loadStaffEnv({ ...development, NODE_ENV: 'test' }).CODE_HASH_KEY).toBeUndefined();
+  });
   it('accepts configured production verification and rejects development keys', () => {
     expect(loadStaffEnv(configured).ADMIN_ORIGIN).toBe(configured.ADMIN_ORIGIN);
     expect(() =>

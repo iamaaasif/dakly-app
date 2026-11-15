@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { PublicPlan, billingCycles } from '@dakly/contracts/billing';
 
 import { Clock } from '../platform/clock';
+import { DAY_MS } from '../platform/time';
 import { billingError } from './billing.errors';
 import { BillingRepository } from './billing.repository';
 
@@ -36,7 +37,7 @@ export class BillingService {
     const price = cycle === 'monthly' ? plan.monthlyPricePoisha : plan.yearlyPricePoisha;
     if (price > 0 && plan.trialDays === 0) throw billingError('PLAN_NEEDS_PAYMENT');
     const now = this.clock.now();
-    const trialEndsAt = price > 0 ? new Date(now.getTime() + plan.trialDays * 86400000) : null;
+    const trialEndsAt = price > 0 ? new Date(now.getTime() + plan.trialDays * DAY_MS) : null;
     return this.repository.insertSubscription(storeId, {
       planId: plan.id,
       billingCycle: cycle,
