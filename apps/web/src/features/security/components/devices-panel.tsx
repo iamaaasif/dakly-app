@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { DeviceSession } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { DeviceCard } from './device-card';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { useDevices } from '../api/devices';
@@ -11,12 +12,7 @@ export function DevicesPanel({ before }: { before?: string }) {
   const [selected, setSelected] = useState<DeviceSession | 'others'>();
   if (devices.isPending) return <Skeleton className="h-40 w-full" />;
   if (devices.error)
-    return (
-      <div role="alert">
-        <p>{devices.error.message}</p>
-        <Button onClick={() => void devices.refetch()}>Retry</Button>
-      </div>
-    );
+    return <QueryError message={devices.error.message} onRetry={() => void devices.refetch()} />;
   return (
     <section className="space-y-4">
       <h2 className="text-lg font-semibold">Devices</h2>

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { useProfile } from '../api/profile';
 import { ProfilePanel } from './profile-panel';
@@ -44,10 +44,7 @@ function SecurityContent({ tab, before }: { tab: string; before?: string }) {
   return (
     <>
       {profile.error ? (
-        <div role="alert">
-          <p>{profile.error.message}</p>
-          <Button onClick={() => void profile.refetch()}>Retry</Button>
-        </div>
+        <QueryError message={profile.error.message} onRetry={() => void profile.refetch()} />
       ) : null}
       {profile.data ? <Panel profile={profile.data} /> : null}
     </>

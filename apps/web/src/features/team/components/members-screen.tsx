@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
 import { useMembers } from '../api/members';
@@ -15,10 +16,11 @@ export function MembersScreen({ cursor }: { cursor?: string }) {
   if (members.isPending) return <TeamLoading />;
   if (members.error)
     return (
-      <div role="alert">
-        <p>{members.error.message}</p>
-        <Button onClick={() => void members.refetch()}>Retry members</Button>
-      </div>
+      <QueryError
+        message={members.error.message}
+        onRetry={() => void members.refetch()}
+        retryLabel="Retry members"
+      />
     );
   const { seats, items, nextCursor } = members.data;
   const canEdit = Boolean(context?.currentStore?.canEditTeam);

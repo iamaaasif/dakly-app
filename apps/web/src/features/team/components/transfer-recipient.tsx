@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ownershipTransferCodeSchema, type MemberResponse } from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { useSessionContext } from '@/lib/session-context';
 import { formError } from '@/lib/form-error';
 import { useMembers } from '../api/members';
@@ -22,10 +23,11 @@ export function TransferRecipient({ cursor, onSent }: TransferRecipientProps) {
   if (members.isPending) return <TeamLoading />;
   if (members.error)
     return (
-      <div role="alert">
-        <p>{members.error.message}</p>
-        <Button onClick={() => void members.refetch()}>Retry members</Button>
-      </div>
+      <QueryError
+        message={members.error.message}
+        onRetry={() => void members.refetch()}
+        retryLabel="Retry members"
+      />
     );
   const eligible = members.data.items.filter(
     (member) => member.status === 'active' && member.userId !== session?.user.id,

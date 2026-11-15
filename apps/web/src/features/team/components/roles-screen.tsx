@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { Card } from '@dakly/ui/card';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
@@ -18,10 +19,11 @@ export function RolesScreen({ cursor }: { cursor?: string }) {
   if (roles.isPending) return <TeamLoading />;
   if (roles.error)
     return (
-      <div role="alert">
-        <p>{roles.error.message}</p>
-        <Button onClick={() => void roles.refetch()}>Retry roles</Button>
-      </div>
+      <QueryError
+        message={roles.error.message}
+        onRetry={() => void roles.refetch()}
+        retryLabel="Retry roles"
+      />
     );
   const canEdit = Boolean(context?.currentStore?.canEditTeam);
   return (

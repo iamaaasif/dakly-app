@@ -1,10 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createStoreSchema } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
-import { ApiError } from '@/lib/api-client';
+import { ApiError } from '@dakly/ui/api-client';
 import { useCreateStore } from '../api/create-store';
 import { formError } from '@/lib/form-error';
 import type { BusinessDraft } from '../auth.types';
@@ -14,20 +14,17 @@ import { BillingCycle } from './billing-cycle';
 type PlanFormProps = { draft: BusinessDraft; onBack: () => void; plans: PlansResponse };
 export function PlanForm({ draft, onBack, plans }: PlanFormProps) {
   const create = useCreateStore();
-  const [cycle, setCycle] = useState<'monthly' | 'yearly'>(() =>
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).get('cycle') === 'yearly'
-      ? 'yearly'
-      : 'monthly',
-  );
+  const router = useRouter();
+  const pathname = usePathname();
+  const cycle: 'monthly' | 'yearly' =
+    useSearchParams().get('cycle') === 'yearly' ? 'yearly' : 'monthly';
   const form = useForm({
     resolver: zodResolver(createStoreSchema),
     defaultValues: { ...draft, planCode: '', billingCycle: cycle },
   });
   function chooseCycle(value: 'monthly' | 'yearly') {
-    setCycle(value);
     form.setValue('billingCycle', value);
-    window.history.replaceState(null, '', `?cycle=${value}`);
+    router.replace(`${pathname}?cycle=${value}`, { scroll: false });
   }
   return (
     <form
