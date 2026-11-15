@@ -12,6 +12,7 @@ export class AuditRepository {
         storeId,
         actorType: entry.actor.kind,
         actorUserId: entry.actor.kind === 'user' ? entry.actor.userId : null,
+        actorStaffId: entry.actor.kind === 'staff' ? entry.actor.staffUserId : null,
         action: entry.action,
         entityType: entry.entityType,
         entityId: entry.entityId,
