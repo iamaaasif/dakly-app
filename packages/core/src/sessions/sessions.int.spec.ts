@@ -1,3 +1,5 @@
+import { UsersModule } from '../auth/users.module';
+import { UsersService } from '../auth/users.service';
 import 'reflect-metadata';
 import { createHash } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
@@ -18,7 +20,7 @@ import { AccountSecurityEventsModule } from '../account-security-events/account-
 import { TeamService } from '../team/team.service';
 
 class AuditTestModule {}
-Module({ imports: [DatabaseModule, AccountSecurityEventsModule] })(AuditTestModule);
+Module({ imports: [DatabaseModule, AccountSecurityEventsModule, UsersModule] })(AuditTestModule);
 
 // Real storage catches plaintext tokens, stale renewal, missing user filters and non-atomic audit.
 describe('SessionsService (Postgres)', () => {
@@ -44,6 +46,7 @@ describe('SessionsService (Postgres)', () => {
       events,
       clock as Clock,
       {} as TeamService,
+      context.get(UsersService),
     );
     const rows = await admin.db
       .insert(users)

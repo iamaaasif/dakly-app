@@ -1,9 +1,13 @@
+import type { StoreAccess } from '@dakly/contracts/team';
+import { sessionContextTag } from './session-context';
+import type { AccountSecurityEvent } from '@dakly/contracts/account-security-events';
+import { UsersService } from '../auth/users.service';
 import { TeamService } from '../team/team.service';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { sessionError } from './sessions.errors';
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
+import type { CreateSessionInput, Session, SessionContext } from '@dakly/contracts/sessions';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { Clock } from '../platform/clock';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
@@ -19,7 +23,62 @@ export class SessionsService {
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(TeamService) private readonly team: TeamService,
+    @Inject(UsersService) private readonly users: UsersService,
   ) {}
+
+  async context(
+    userId: string,
+    sessionId: string,
+    storeId?: string,
+    access?: StoreAccess,
+  ): Promise<SessionContext> {
+    const [profile, metadata] = await Promise.all([
+      this.users.profile(userId),
+      this.team.storeContext(userId, storeId),
+    ]);
+    const selected =
+      metadata.storeId && metadata.name ? { storeId: metadata.storeId, name: metadata.name } : null;
+    return {
+      user: { id: profile.id, name: profile.name },
+      hasMemberships: metadata.hasMemberships,
+      currentStore:
+        selected && access
+          ? {
+              ...selected,
+              canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
+              canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
+              canApproveSupport: this.team.canApproveSupport(access),
+              canViewStoreSettings: this.team.canAccess(access, 'storeSettings', 'view'),
+              canEditStoreSettings: this.team.canAccess(access, 'storeSettings', 'edit'),
+              canChangeExtensions: this.team.canChangeExtensions(access),
+              canViewTeam: this.team.canAccess(access, 'team', 'view'),
+              canEditTeam: this.team.canAccess(access, 'team', 'edit'),
+              canTransferOwnership: this.team.canTransferOwnership(access),
+            }
+          : null,
+      contextTag: sessionContextTag(sessionId, storeId, access),
+    };
+  }
+
+  async list(userId: string, currentSessionId: string, before?: string) {
+    const rows = await this.repository.list(userId, this.clock.now(), before);
+    return {
+      items: rows.map(({ userId: _userId, activeStoreId: _storeId, userAgent, ...session }) => ({
+        ...session,
+        userAgent,
+        device: deviceName(userAgent),
+        isCurrent: session.id === currentSessionId,
+      })),
+      nextCursor: rows.length === 100 ? rows.at(-1)!.id : null,
+    };
+  }
+  isActive(userId: string, sessionId: string) {
+    return this.repository.isActive(userId, sessionId, this.clock.now());
+  }
+
+  knownDevice(userId: string, ip: string, userAgent?: string) {
+    return this.repository.knownDevice(userId, ip, userAgent);
+  }
 
   async create(
     userId: string,
@@ -60,6 +119,18 @@ export class SessionsService {
     return this.revokeSessions(userId, sessionId, true);
   }
 
+  async revokeAll(
+    userId: string,
+    ip: string,
+    actor: AccountSecurityEvent['actor'] = { kind: 'user' },
+  ): Promise<void> {
+    await this.transaction.run(userId, async () => {
+      await this.users.invalidateChallenges(userId);
+      await this.repository.revokeAll(userId, this.clock.now());
+      await this.events.record(userId, { event: 'sessions.revoked', actor, ip });
+    });
+  }
+
   async setActiveStore(userId: string, sessionId: string, storeId: string): Promise<void> {
     if (!(await this.team.accessFor(storeId, userId))) throw sessionError('STORE_NOT_FOUND');
     if (!(await this.repository.setActiveStore(userId, sessionId, storeId, this.clock.now())))
@@ -68,13 +139,16 @@ export class SessionsService {
 
   private async revokeSessions(userId: string, sessionId: string, others: boolean): Promise<void> {
     await this.transaction.run(userId, async () => {
+      await this.users.lockAccount(userId);
       const changed = await this.repository.revoke(userId, sessionId, this.clock.now(), others);
-      if (changed)
+      if (changed) {
+        await this.users.invalidateChallenges(userId);
         await this.events.record(userId, {
           event: 'sessions.revoked',
           actor: { kind: 'user' },
           details: { sessionId },
         });
+      }
     });
   }
 }
@@ -84,4 +158,24 @@ function hash(token: string): Buffer {
 }
 function lifetimeMilliseconds(isRemembered: boolean): number {
   return (isRemembered ? 30 * 24 : 12) * 60 * 60 * 1000;
+}
+
+function deviceName(userAgent: string | null): string {
+  if (!userAgent) return 'Unknown device';
+  const browsers: Array<[RegExp, string]> = [
+    [/Edg\//, 'Edge'],
+    [/Firefox\//, 'Firefox'],
+    [/Chrome\//, 'Chrome'],
+    [/Safari\//, 'Safari'],
+  ];
+  const devices: Array<[RegExp, string]> = [
+    [/Android/, 'Android'],
+    [/iPhone|iPad/, 'iOS'],
+    [/Windows/, 'Windows'],
+    [/Macintosh/, 'macOS'],
+    [/Linux/, 'Linux'],
+  ];
+  const browser = browsers.find(([pattern]) => pattern.test(userAgent))?.[1] ?? 'Browser';
+  const device = devices.find(([pattern]) => pattern.test(userAgent))?.[1] ?? 'Unknown device';
+  return `${browser} on ${device}`;
 }

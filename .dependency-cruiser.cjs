@@ -29,10 +29,10 @@ module.exports = {
       comment:
         'A web feature never imports another feature. Move shared code to src/components or src/lib.',
       severity: 'error',
-      from: { path: '^apps/web/src/features/([^/]+)/' },
+      from: { path: '^apps/(web|admin)/src/features/([^/]+)/' },
       to: {
-        path: '^apps/web/src/features/',
-        pathNot: '^apps/web/src/features/$1/',
+        path: '^apps/(?:web|admin)/src/features/',
+        pathNot: '^apps/$1/src/features/$2/',
       },
     },
     {
@@ -58,8 +58,8 @@ module.exports = {
         'apps/web/src/components and lib are shared by every feature, so they never import one. ' +
         'See docs/rules/frontend.md.',
       severity: 'error',
-      from: { path: '^apps/web/src/(components|lib)/' },
-      to: { path: '^apps/web/src/(features|app)/' },
+      from: { path: '^apps/(?:web|admin)/src/(components|lib)/' },
+      to: { path: '^apps/(?:web|admin)/src/(features|app)/' },
     },
     {
       name: 'providers-do-not-know-core',

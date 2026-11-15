@@ -1,13 +1,29 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { stores, storeCounters } from '@dakly/db/schema/stores';
-import type { CreateStoreInput, StoreResponse } from '@dakly/contracts/stores';
+import type {
+  CreateStoreInput,
+  StoreResponse,
+  StoreSettingsResponse,
+  ChangeStoreSettingsInput,
+} from '@dakly/contracts/stores';
 import { TenantDatabase } from '../platform/database/tenant-database';
 const storeColumns = {
   id: stores.id,
   name: stores.name,
   slug: stores.slug,
   extensions: stores.extensions,
+};
+const settingsColumns = {
+  ...storeColumns,
+  legalName: stores.legalName,
+  businessType: stores.businessType,
+  phone: stores.phone,
+  email: stores.email,
+  address: stores.address,
+  district: stores.district,
+  vatBin: stores.vatBin,
+  tradeLicenceNumber: stores.tradeLicenceNumber,
 };
 @Injectable()
 export class StoresRepository {
@@ -30,6 +46,40 @@ export class StoresRepository {
   async find(storeId: string): Promise<StoreResponse | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(storeColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row;
+  }
+  async settings(storeId: string): Promise<StoreSettingsResponse | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select(settingsColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row;
+  }
+  async changeSettings(
+    storeId: string,
+    input: ChangeStoreSettingsInput,
+    updatedAt: Date,
+  ): Promise<StoreSettingsResponse | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({ ...input, updatedAt })
+        .where(eq(stores.id, storeId))
+        .returning(settingsColumns),
+    );
+    return row;
+  }
+  async changeExtensions(
+    storeId: string,
+    extensions: string[],
+    updatedAt: Date,
+  ): Promise<StoreSettingsResponse | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({ extensions, updatedAt })
+        .where(eq(stores.id, storeId))
+        .returning(settingsColumns),
     );
     return row;
   }

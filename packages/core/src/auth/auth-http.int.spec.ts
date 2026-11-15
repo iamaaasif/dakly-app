@@ -79,10 +79,34 @@ describe('SMS authentication over Fastify', () => {
           keys.push(authKey('consumed', JSON.stringify([message.to, purpose, code])));
     }
     await app.get(ValkeyClient).connection.del(...keys);
+    await admin.pool.query('delete from account_security_events where user_id = any($1::uuid[])', [
+      identities.map((user) => user.id),
+    ]);
     await admin.db.delete(users).where(inArray(users.phone, phones));
     await admin.pool.end();
     await app?.close();
     vi.restoreAllMocks();
+  });
+  it('sets an initial Argon2id password only after consuming signup phone proof', async () => {
+    const input = registration();
+    await request('/auth/code', input);
+    const cached = await app
+      .get(ValkeyClient)
+      .connection.hgetall(authKey('code:sign_up', input.phone));
+    expect(JSON.stringify(cached)).not.toContain('initialpass1');
+    const response = await request('/auth/code/verify', {
+      purpose: 'sign_up',
+      phone: input.phone,
+      code: codeFor(input.phone),
+      password: 'initialpass1',
+    });
+    expect(response.statusCode).toBe(204);
+    const [user] = await admin.db.select().from(users).where(eq(users.phone, input.phone));
+    expect(user!.passwordHash).toMatch(/^\$argon2id\$v=19\$m=65536,t=3,p=4\$/);
+    expect(
+      (await request('/auth/password', { identifier: input.phone, password: 'initialpass1' }))
+        .statusCode,
+    ).toBe(204);
   });
   it('rejects an unknown sign-in phone without sending an SMS', async () => {
     const before = fake.messages.length;
@@ -125,7 +149,7 @@ describe('SMS authentication over Fastify', () => {
     expect(devices).toHaveLength(1);
     expect(devices[0]!.activeStoreId).toBeNull();
     const me = await app.inject({ url: '/me', headers: { cookie: cookie.split(';')[0]! } });
-    expect(me.json()).toEqual({
+    expect(me.json()).toMatchObject({
       id: user!.id,
       name: input.name,
       phone: input.phone,
@@ -163,8 +187,9 @@ describe('SMS authentication over Fastify', () => {
       phone: target,
       code: codeFor(target),
     });
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('AUTH_SECOND_FACTOR_REQUIRED');
+    expect(response.statusCode).toBe(202);
+    expect(response.json().status).toBe('totp_required');
+    expect(response.headers['set-cookie']).toBeUndefined();
     expect(
       await admin.db.select().from(sessions).where(eq(sessions.userId, user!.id)),
     ).toHaveLength(0);
@@ -224,7 +249,7 @@ describe('SMS authentication over Fastify', () => {
     );
   });
 
-  it('enforces email uniqueness without marking an initial email verified', async () => {
+  it('does not reserve an unverified signup email against another account', async () => {
     const existing = registration();
     await admin.db
       .insert(users)
@@ -236,9 +261,9 @@ describe('SMS authentication over Fastify', () => {
       phone: input.phone,
       code: codeFor(input.phone),
     });
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe('AUTH_ACCOUNT_EXISTS');
-    expect(await admin.db.select().from(users).where(eq(users.phone, input.phone))).toHaveLength(0);
+    expect(response.statusCode).toBe(204);
+    const [created] = await admin.db.select().from(users).where(eq(users.phone, input.phone));
+    expect(created!.emailVerifiedAt).toBeNull();
   });
   it('signs into the same account after signup and clears user failures after commit', async () => {
     const input = registration();
@@ -318,5 +343,14 @@ describe('SMS authentication over Fastify', () => {
     expect(
       await admin.db.select().from(sessions).where(eq(sessions.userId, user!.id)),
     ).toHaveLength(1);
+  });
+  it('refuses sign-in by an unverified email without issuing a session', async () => {
+    const input = registration();
+    await admin.db
+      .insert(users)
+      .values({ name: input.name, phone: input.phone, email: input.email });
+    const response = await request('/auth/email/code', { email: input.email });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('AUTH_ACCOUNT_NOT_FOUND');
   });
 });

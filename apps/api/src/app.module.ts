@@ -1,3 +1,4 @@
+import { AdminModule } from '@dakly/core/admin/admin.module';
 import { StoresModule } from '@dakly/core/stores/stores.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
@@ -9,6 +10,7 @@ import { HealthController } from './health.controller';
 
 @Module({
   imports: [
+    AdminModule,
     LoggingModule,
     DatabaseModule,
     AuthModule,
