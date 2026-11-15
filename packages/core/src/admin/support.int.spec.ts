@@ -565,6 +565,38 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
     }
   });
 
+  it('returns a next page cursor to staff and Owner only when another request exists', async () => {
+    const f = await fixture();
+    const addGrants = (count: number) =>
+      database.pool.query(
+        "insert into support_grants(id,store_id,staff_user_id,scopes,status,reason) select gen_random_uuid(),$1,$2,array['customers'],'ended','Paging check' from generate_series(1,$3::int)",
+        [f.storeId, f.staffId, count],
+      );
+    const pages = async (before = '') => {
+      const query = before ? `?before=${before}` : '';
+      const staffPage = await admin(f, `/admin/support${query}`);
+      const ownerPage = await shop(f, `/support-access${query}`);
+      expect(staffPage.statusCode, staffPage.body).toBe(200);
+      expect(ownerPage.statusCode, ownerPage.body).toBe(200);
+      return [staffPage.json(), ownerPage.json()];
+    };
+    await addGrants(50);
+    for (const page of await pages()) {
+      expect(page.items).toHaveLength(50);
+      expect(page.nextCursor).toBeNull();
+    }
+    await addGrants(1);
+    for (const page of await pages()) {
+      expect(page.items).toHaveLength(50);
+      expect(page.nextCursor).toBe(page.items[49].id);
+    }
+    const [{ nextCursor }] = await pages();
+    for (const page of await pages(nextCursor)) {
+      expect(page.items).toHaveLength(1);
+      expect(page.nextCursor).toBeNull();
+    }
+  });
+
   it('requires current Owner/session and request-bound one-use SMS proof, truthfully attributes consent', async () => {
     const f = await fixture();
     const id = await request(f);

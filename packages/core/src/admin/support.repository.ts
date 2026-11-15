@@ -156,7 +156,7 @@ export class SupportRepository {
           ),
         )
         .orderBy(sql`${supportGrants.id} desc`)
-        .limit(50),
+        .limit(51),
     );
   }
 

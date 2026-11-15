@@ -45,10 +45,9 @@ export class SupportOwnerService {
       await this.assertOwner(storeId, userId, (now) =>
         this.repository.readOwnerSession(storeId, userId, sessionId, now),
       );
-      const items = (await this.repository.list(storeId, before)).map((grant) =>
-        supportGrantResponse(grant, this.clock.now()),
-      );
-      return { items, nextCursor: items.length === 50 ? items.at(-1)!.id : null };
+      const rows = await this.repository.list(storeId, before);
+      const items = rows.slice(0, 50).map((grant) => supportGrantResponse(grant, this.clock.now()));
+      return { items, nextCursor: rows.length > 50 ? rows[49]!.id : null };
     });
   }
 

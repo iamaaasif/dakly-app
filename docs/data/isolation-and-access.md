@@ -85,7 +85,7 @@ Every definer function sets `search_path = pg_catalog, public, pg_temp`, so temp
 | `active_store_ids()`                          | stores with status `active`                                                                  | Active-store fan-outs; never retention rollups         |
 | `maintenance_store_ids(after, limit)`         | IDs of all retained stores, including suspended and closing, in UUID order; pages of 1–1,000 | Retention rollups before the global watermark advances |
 | `support_store_targets(search)`               | exact shop ID/name lookup by UUID or slug                                                    | Authenticated support request screen                   |
-| `support_request_metadata(staff, before)`     | fifty requester-owned grant metadata rows in ID order                                        | Staff support screen; no customer content              |
+| `support_request_metadata(staff, before)`     | fifty-one requester-owned grant metadata rows in ID order (0026)                             | Staff support screen; no customer content              |
 | `support_grant_store(staff, grant)`           | requester-owned grant's store ID                                                             | Approved handoff                                       |
 | `support_session_store(hash, handoff)`        | token-bound store ID only                                                                    | Support session exchange/resolution                    |
 | `staff_conflicts_with_store(staff, store)`    | whether an established linked user is an active member                                       | Support authorization                                  |
@@ -130,7 +130,7 @@ The restricted `preserve_staff_user_identity()` trigger records verified contact
 
 `staff_alert_deliveries` is global delivery state keyed by `staff_audit_log.id`, with no copied shop/customer payload and no invented shop-user identity. Intent joins the active tenant transaction through `recordIntent`; failure rolls back both audits and the grant. The admin-home reader joins authoritative staff audit events, checks a current Super admin session under staff locks, and paginates at 50 rows using the action/time/ID audit index. The pending partial index bounds the relay to twenty due events and terminal crash cleanup to one hundred rows. The app may select/insert/update delivery state; the staff audit remains append-only.
 
-The existing `support_request_metadata` definer additionally returns `isBreakGlass`; its exact staff-ID filter, fifty-row limit, qualified tables, fixed search path and restricted execution remain in force. No new cross-tenant definer or bypass role was added. The alert worker payload contains only the global audit ID, deliberately no fabricated store ID, like existing staff audit exports.
+The existing `support_request_metadata` definer additionally returns `isBreakGlass`; its exact staff-ID filter, row limit (fifty-one since 0026, one past the page), qualified tables, fixed search path and restricted execution remain in force. No new cross-tenant definer or bypass role was added. The alert worker payload contains only the global audit ID, deliberately no fabricated store ID, like existing staff audit exports.
 
 ### Staff account recovery
 
