@@ -9,12 +9,15 @@ import { AnyMember } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { StaffRecoveryService } from './staff-recovery.service';
+import { StaffRecoveryHistoryService } from './staff-recovery-history.service';
 
 @Controller('account-recovery-history')
 @AnyMember()
 export class OwnerRecoveryHistoryController {
-  constructor(@Inject(StaffRecoveryService) private readonly recovery: StaffRecoveryService) {}
+  constructor(
+    @Inject(StaffRecoveryHistoryService) private readonly recovery: StaffRecoveryHistoryService,
+  ) {}
+
   @Get()
   @Header('Cache-Control', 'no-store')
   history(
