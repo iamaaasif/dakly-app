@@ -31,6 +31,13 @@ function createEncryption(keys: Record<string, Buffer> = { 1: masterKey }, curre
 }
 
 describe('EnvelopeEncryption', () => {
+  it('separates staff factor envelopes from shop accounts even for an identical id', () => {
+    const encryption = createEncryption();
+    const context = { owner: 'staff', staffUserId: user.userId, purpose: 'totp' } as const;
+    const sealed = encryption.encrypt(context, plaintext);
+    expect(encryption.decrypt(context, sealed)).toEqual(plaintext);
+    expect(() => encryption.decrypt(user, sealed)).toThrow();
+  });
   it.each([user, store, { ...user, purpose: 'account-security-notice' } as EncryptionContext])(
     'round trips secret bytes for $owner $purpose ownership',
     (context) => {

@@ -1,12 +1,12 @@
 # Admin panel
 
-|           |                                                                                               |
-| --------- | --------------------------------------------------------------------------------------------- |
-| Release   | 1 (lean core)                                                                                 |
-| Status    | Not started                                                                                   |
-| Extension | Internal, staff only                                                                          |
-| Code      | `apps/admin` (Next.js), `packages/core/src/admin/` mounted under `/admin` on its own hostname |
-| Tasks     | ADM-1 to ADM-5                                                                                |
+|           |                                                                                                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Release   | 1 (lean core)                                                                                                                     |
+| Status    | In progress                                                                                                                       |
+| Extension | Internal, staff only                                                                                                              |
+| Code      | `apps/admin` (Next.js), `packages/core/src/admin/` under `/admin` on the staff hostname; shop `/support` for approved delegations |
+| Tasks     | ADM-1 to ADM-6; support, audit, break-glass and account recovery implemented; ADM-3 to ADM-5 remain planned                       |
 
 ## Purpose
 
@@ -92,6 +92,8 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 - Messages, orders and customer data are visible only inside this granted session. Outside it, admin screens show counts and metadata, never message bodies or customer phone numbers.
 - Break-glass: a super admin can open read-only access without consent during a security incident or legal request. It needs a written reason, alerts the other super admins, and is listed in the shop's activity log.
 
+Support session checks and Owner request lists read current rows without explicit row locks. Customer reads return full phone numbers and remain serialized with the Owner ending access. The support banner checks its session every 30 seconds while visible. Customer reads and writes keep their authorization locks and record audit and activity. Code-delivery failures and temporary send limits leave consent pending; unexpected failures reach the error handler.
+
 #### Plans and pricing
 
 - Plans: name, monthly and yearly price, trial length in days (0 for no trial, D34), VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).
@@ -157,7 +159,7 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 
 1. **Separate app, same backend.** The admin panel is its own Next.js app calling `/admin/*` API routes in the NestJS monolith. These routes use a separate guard: the staff JWT is issued only by the admin sign-in, carries the staff role, and is never accepted by shop routes, and the other way round.
 2. **Crossing tenants on purpose.** Shop routes always run with row-level security set to one store. Admin routes use the same app database role as the shop app, with no bypass of row level security ([ADR 0005](../adr/0005-cross-store-access-through-functions.md)): store lists come from `admin_store_overview`, and one store's data is read inside that store's scope under a support grant. Every admin query goes through a service that (a) checks the staff role's permission for that action, (b) strips fields the role may not see (message bodies, customer phones, secrets), and (c) writes an audit row in the same transaction as any change.
-3. **Support access** creates a time-limited grant row (staff, store, scope, expiry, approved\_by owner). The support session gets a short-lived shop token scoped to that store with an `impersonator` claim. Every action taken in that session is logged in both the shop's activity log and the admin audit log, with the staff member's name.
+3. **Support access** creates a time-limited grant row (staff, store, scope, expiry, approved\_by owner). The support session uses its own opaque token bound to the grant and live staff session; it never becomes a shop user or Owner. Every action taken in that session is logged in both the shop's activity log and the admin audit log, with the staff member's name.
 4. **Risky actions** (store deletion, refunds or credits above ৳50,000, bulk price changes, global AI pause, break-glass access) need only one staff member with the right role (D28). Each runs through one admin service method that takes a reason and writes `staff_audit_log` before the change, so a second approver could be added there later without changing the record.
 5. **Money actions** call the same billing service the shop app uses (tab 10). The admin panel never writes to billing tables directly, so invoices, ledgers and gateway calls stay consistent.
 6. **Provider switches and kill switches** are feature flags read by the workers on every job, cached for at most 30 seconds, so a switch takes effect across the system within a minute.
@@ -252,10 +254,10 @@ Shops list and detail; support access with the owner's consent; plans, prices, c
 1. Separate app at `admin.dakly.app` behind Cloudflare Access, with its own staff sessions.
 2. Staff accounts are `staff_users`, never shop `users`. Passkey or TOTP is required.
 3. Staff roles: super admin, support, finance, ops, trust and safety, analyst (`staffRoles` in `packages/contracts/src/admin.ts`). Refunds over a limit, plan overrides and data deletion need a reason and an audit row (no second approver, D28).
-4. Staff read shop data only through a support grant: the shop Owner approves a request in the app; the grant names the scope (chats, orders, billing) and expires (default 24 hours). The shop sees a banner while staff are inside.
+4. Staff read shop data only through a support grant: the shop Owner approves a request in the app; the grant names supported capabilities and expires after 30 minutes to 24 hours. The current implementation supports customer reads by ID and customer creation only; chats, orders and billing are not support capabilities yet. The shop sees a banner while staff are inside.
 5. Admin queries for one shop run through `TenantDatabase.forStore` with the granted store id, so RLS still applies. The admin API never connects as a role that bypasses RLS.
 6. Cross-store screens (shops list, usage totals, reconciliation) read from `SECURITY DEFINER` report functions or read-only views built for them (pending review must-fix), never by switching RLS off.
-7. Every staff action goes through domain services (no generic table editor over the database) and writes `staff_audit_log` (append-only, kept 2 years) and the shop's own audit log when it touches a shop.
+7. Every staff action goes through domain services (no generic table editor over the database) and writes `staff_audit_log` (append-only, kept at least 7 years) and the shop's own audit log when it touches a shop.
 
 ### Rules
 
@@ -275,3 +277,75 @@ Shops list and detail; support access with the owner's consent; plans, prices, c
 ## Open questions
 
 None.
+
+## ADM-1 implementation
+
+The staff app now provides Access-protected password sign-in, real passkey or TOTP enrollment and verification, sign-out and a minimal staff entry screen. Staff identities, challenges, sessions and transactions are separate from shop accounts. Provisioning requires a privileged operator and creates a single-use enrollment proof; no public signup or default password exists. Personal contact evidence is established by the operator and cannot be edited by the browser. See [staff authentication operations](../development/staff-authentication.md) for configuration, operator attribution, pending enrollment renewal and session behavior. Business screens and staff lifecycle controls remain later tasks.
+
+## ADM-2 implementation
+
+Staff can find a target by its exact shop slug or ID, then request read-only or read-and-write customer access for 30 minutes to 24 hours. The reason needs at least ten characters. The Owner sees the request at `/support-access` and receives a request-bound SMS code. Approval checks the current Owner, verified phone state, current shop session and one-use code. Codes expire after ten minutes; unanswered requests expire after thirty minutes. Delivery happens after the request commits; if it fails, the saved request remains visible and the Owner can resend. Denial and End now are Owner-only. Consent records the Owner as the actor in both audits.
+
+Staff open an approved grant from the admin support screen. A sixty-second, one-use form POST transfers it to the fixed shop `/support/exchange` path. Its token stays out of URLs. The shop uses a separate host-only HttpOnly cookie restricted to `/support`; ordinary shop sessions remain intact. Every operation checks the current staff account, parent session, grant, expiry, conflict and feature scope. The verified support response carries an opaque delegation context; customer requests send it as a consistency precondition, never as authority or a shop selector. Replacing the support cookie in another tab rejects the old draft before effects. Customer responses are stamped and checked, queries are scoped and cancelled by delegation, and changing delegation disposes the old form and results. Approval belongs to the staff identity until its own expiry or end. After fresh authenticated sign-in, a new handoff can use the remaining approval; old tokens remain bound to their revoked or expired parent. Disabling staff permanently ends outstanding grants. Successful audited customer work refreshes the thirty-minute idle window without extending the eight-hour absolute session limit. A five-second authorization-status heartbeat displays ended access within ten seconds on an active, connected page and does not extend staff idle time. Browser throttling or offline pages cannot guarantee repaint timing; the API still revokes access on the next request.
+
+The supported customer operations call the existing customer service in a short store transaction and write both audits in that transaction. Read-only write attempts are denied and logged. Support never receives Owner-only account, team, ownership or billing authority. Trusted staff contact matches to verified users persist as identity links, so changed phone/email details cannot erase an established own-store conflict. No customer accounts are merged.
+
+Super admins can search audit history and request a CSV containing at most 1,000 matching entries. Larger matches fail with a request to narrow the filters. The durable export runs on the existing `bulk` queue, shows progress, includes the requesting staff name, logs issuance/download and expires after 24 hours. Downloads require the same requesting identity and a current Super admin session; the issuing session must remain current. Expired artifacts are deleted in bounded batches. This first small export uses PostgreSQL storage, not R2 and not the later bulk customer-data export system.
+
+Staff audit rows and seals are append-only to the app role, retained indefinitely here with a minimum policy of seven years. A daily hash chain uses database timestamps with full microsecond precision and deterministic row order. Per-day locks include transactions that commit after midnight without holding a global writer lock. The worker catches up seven days per tick, including empty days; verification is available in bounded 31-day ranges. A database owner could rewrite rows and all hashes together: detecting that attack requires an external trusted copy of the seals.
+
+See [support and audit operations](../development/staff-support.md) for transport, sealing, export and verification details. Full shop-directory screens, staff lifecycle, recovery and bulk owner-data requests remain their own tasks.
+
+## ADM-6 implementation
+
+Super admins can review and confirm read-only break-glass access for a security incident or legal request. The existing customer scope supports reads by customer ID only. The preview shows the exact shop, reason, scope and deadline in Asia/Dhaka. Its deadline is thirty minutes from preview and confirmation expires in five minutes. Confirmation never moves that deadline. The signed effect binds the action ID, staff identity, current parent session and every displayed material value; target changes and stale confirmation require a new preview. No grant or alert intent exists before confirmation.
+
+Both staff and shop audits record the actual actor, reason and read-only effect before the grant is created, in the same tenant transaction as durable alert intent. The grant uses the existing support handoff/session path and `isBreakGlass`, without Owner approval or membership. Every use rechecks current Super admin role, active/enrolled staff, live parent session, conflict, grant and expiry. Owner End now and staff disable remain effective; retries of a committed action cannot create another grant or revive ended access. Shop history and the access banner identify break-glass explicitly.
+
+Current Super admins see a bounded break-glass alert history on the admin home. The separate worker delivers alerts to the configured internal Slack channel, with five bounded attempts, expiring claims and visible failure state. A Super admin can request another bounded retry after repair with an audited reason. Missing configuration cannot count as delivery. No recipient count or second approver blocks the action. The alert text contains event/staff/shop identifiers, purpose and deadline; free-text reasons remain in restricted Dakly history. Slack delivery is at-least-once across ambiguous remote acknowledgement or worker crashes.
+
+This slice does not implement refunds, billing, deletion, global AI controls or account recovery. ADM-10 may reuse the effect signer and the transactional staff audit service at its own concrete recovery action. See [staff support operations](../development/staff-support.md) for deployment and local verification limits.
+
+### ADM-10 implementation
+
+Support and Super admins recover shop accounts at `/account-recovery`. An exact
+verified phone or email lookup returns only the eligible account's ID and name.
+Other staff roles, staff-linked accounts, staff-owned replacement contacts and
+own/work-store conflicts are rejected. Staff identity links survive changes to
+verified shop contacts; an unverified email does not establish a link.
+
+The form records a reason type, a 10–1000 character explanation and check outcomes:
+NID last four matched, shop details matched when the person belongs to a shop, and
+call-back to the old number attempted. It never asks for document values. The
+confirmation names the person, requested changes and five-minute deadline. A
+replacement phone or email needs its own single-use code, bound to this action,
+account, staff session and current account security state.
+
+One account transaction locks the person, their shops in ID order, the staff row
+and staff session. Memberships are refreshed after store-lock waits, so a former
+shop receives neither notices nor history. New memberships serialize through the
+user identity lock. It checks current authority again, inserts `staff_audit_log`
+before changing credentials, removes selected TOTP and backup codes, changes
+verified contacts, cancels pending self-service recovery, revokes every session,
+records staff-attributed account history and writes encrypted notice intents.
+Any failed write rolls everything back. Codes are consumed before locks and never
+restored. The persisted action ID rejects replay, including sign-out-only recovery.
+No cache operation is needed to revoke access.
+
+Security notices name what changed, when and the reason type. Each available
+verified old and replacement contact receives its channel's notice. Every relevant
+Owner receives both SMS and email when both are verified, including disabled Owners.
+Shared destinations are deduplicated. The existing account notice worker retries
+individual durable deliveries. Recovery does not wait for delivery. A request can
+cover at most 100 shops and 1,000 distinct Owners; overflow fails before mutation
+or audit, and never silently drops recipients. With the current one-active-Owner-per-shop rule, at most 204 messages are
+constructed before deduplication.
+
+`GET /account-recovery-history` requires the current shop Owner and reads immutable
+RLS-protected mappings to the shops involved at recovery time. Later membership
+in another shop cannot expose older recoveries there. A later Owner of the original
+shop can read its history. ACC-13 will integrate this endpoint into the full Owner
+audit page. The person's `/security` page already displays “Recovered by Dakly
+support”, date and reason type through `GET /me/security-history`; ACC-8 will
+integrate it into the full Security screen. Neither endpoint exposes the free-text
+staff reason, check outcomes, or document data.

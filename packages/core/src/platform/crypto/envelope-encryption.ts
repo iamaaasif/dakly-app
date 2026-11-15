@@ -5,6 +5,7 @@ import { AppError } from '../errors/app-error';
 import { CRYPTO_ERRORS } from './crypto.errors';
 
 const contextSchema = z.discriminatedUnion('owner', [
+  z.object({ owner: z.literal('staff'), staffUserId: z.uuid(), purpose: z.literal('totp') }),
   z.object({
     owner: z.literal('user'),
     userId: z.uuid(),
@@ -23,9 +24,14 @@ const FORMAT_VERSION = 1;
 const MAX_SECRET_BYTES = 16384;
 const ENVELOPE_OVERHEAD_BYTES = 89;
 
+function ownerIdentifier(context: EncryptionContext): string {
+  if (context.owner === 'staff') return context.staffUserId;
+  return context.owner === 'user' ? context.userId : context.storeId;
+}
+
 function createAssociatedData(context: EncryptionContext, keyVersion: number) {
   const parsed = contextSchema.parse(context);
-  const ownerId = parsed.owner === 'user' ? parsed.userId : parsed.storeId;
+  const ownerId = ownerIdentifier(parsed);
   const prefix = `dakly:envelope:${FORMAT_VERSION}:${keyVersion}`;
   const binding = `${parsed.owner}:${ownerId.toLowerCase()}:${parsed.purpose}`;
   return {

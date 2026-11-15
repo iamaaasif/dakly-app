@@ -1,3 +1,4 @@
+import { SessionsService } from '../sessions/sessions.service';
 import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { TotpConfirmInput, TotpSetupInput } from '@dakly/contracts/totp';
@@ -8,7 +9,7 @@ import { Clock } from '../platform/clock';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { UsersRepository } from './users.repository';
 import { TotpRepository } from './totp.repository';
-import { TotpCredentials } from './totp-credentials';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { PasswordCredentials } from './password-credentials';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
@@ -19,6 +20,7 @@ import { authError } from './auth.errors';
 type Account = NonNullable<Awaited<ReturnType<UsersRepository['lockForSignIn']>>>;
 type Setup = {
   state: string;
+  expiresAt: number;
   userId: string;
   sessionId: string;
   ciphertext: string;
@@ -38,6 +40,7 @@ export class TotpService {
     @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(ValkeyClient) private readonly cache: ValkeyClient,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(SessionsService) private readonly sessions: SessionsService,
   ) {}
   async current(userId: string): Promise<Account> {
     const user = await this.users.lockForSignIn(userId);
@@ -68,9 +71,10 @@ export class TotpService {
         ? await this.passwords.check(subject, input.currentPassword, ip)
         : (await this.codes.consume(subject, 'totp_setup', input.proofCode, ip)).proof;
     if (!proof || !('passwordState' in proof)) throw authError('AUTH_PROOF_REQUIRED');
-    return this.transaction.run(userId, async () => {
+    const prepared = await this.transaction.run(userId, async () => {
       const current = await this.current(userId);
       if (current.totpEnabledAt) throw authError('AUTH_TOTP_ENABLED');
+      if (!(await this.sessions.isActive(userId, sessionId))) throw authError('AUTH_TOTP_INVALID');
       this.passwords.assertCurrent(userId, current.passwordHash, proof);
       if (
         accountCredentialState(current) !== accountCredentialState(user) ||
@@ -83,21 +87,28 @@ export class TotpService {
         Buffer.from(generated.secret),
       );
       const setupId = randomBytes(32).toString('base64url');
-      await this.cache.connection.set(
-        authKey('totp-setup', setupId),
-        JSON.stringify({
+      return {
+        setupId,
+        uri: generated.uri,
+        payload: {
           userId,
           sessionId,
           state: accountCredentialState(current),
+          expiresAt: this.clock.now().getTime() + 300000,
           ciphertext: envelope.ciphertext.toString('base64'),
           keyVersion: envelope.keyVersion,
-        } satisfies Setup),
-        'EX',
-        300,
-      );
-      return { setupId, uri: generated.uri };
+        } satisfies Setup,
+      };
     });
+    await this.cache.connection.set(
+      authKey('totp-setup', prepared.setupId),
+      JSON.stringify(prepared.payload),
+      'EX',
+      300,
+    );
+    return { setupId: prepared.setupId, uri: prepared.uri };
   }
+
   async confirm(userId: string, sessionId: string, input: TotpConfirmInput, ip: string) {
     const user = await this.current(userId);
     const subject = this.subject(user);
@@ -105,28 +116,40 @@ export class TotpService {
     const data = await this.cache.connection.get(authKey('totp-setup', input.setupId));
     if (!data) throw authError('AUTH_TOTP_INVALID');
     const setup = JSON.parse(data) as Setup;
-    if (setup.userId !== userId || setup.sessionId !== sessionId)
+    if (
+      setup.userId !== userId ||
+      setup.sessionId !== sessionId ||
+      !Number.isFinite(setup.expiresAt) ||
+      setup.expiresAt <= this.clock.now().getTime()
+    )
       throw authError('AUTH_TOTP_INVALID');
-    const result = await this.transaction.run(userId, async () => {
+    const envelope: EncryptedSecret = {
+      ciphertext: Buffer.from(setup.ciphertext, 'base64'),
+      keyVersion: setup.keyVersion,
+    };
+    const plaintext = this.encryption.decrypt({ owner: 'user', userId, purpose: 'totp' }, envelope);
+    let step: number | null;
+    try {
+      step = this.credentials.step(plaintext.toString(), input.code, this.clock.now().getTime());
+    } finally {
+      plaintext.fill(0);
+    }
+    if (step === null) {
+      await this.failures.recordFailure(subject, ip);
+      throw authError('AUTH_TOTP_INVALID');
+    }
+    // Consumption precedes the account lock and is never undone after a database failure.
+    if ((await this.cache.connection.del(authKey('totp-setup', input.setupId))) !== 1)
+      throw authError('AUTH_TOTP_INVALID');
+    return this.transaction.run(userId, async () => {
       const current = await this.current(userId);
-      if (current.totpEnabledAt || setup.state !== accountCredentialState(current))
-        throw authError('AUTH_TOTP_INVALID');
-      const envelope: EncryptedSecret = {
-        ciphertext: Buffer.from(setup.ciphertext, 'base64'),
-        keyVersion: setup.keyVersion,
-      };
-      const plaintext = this.encryption.decrypt(
-        { owner: 'user', userId, purpose: 'totp' },
-        envelope,
-      );
-      let step: number | null;
-      try {
-        step = this.credentials.step(plaintext.toString(), input.code, this.clock.now().getTime());
-      } finally {
-        plaintext.fill(0);
-      }
-      if (step === null) return undefined;
-      if ((await this.cache.connection.del(authKey('totp-setup', input.setupId))) !== 1)
+      if (
+        current.totpEnabledAt ||
+        setup.state !== accountCredentialState(current) ||
+        setup.expiresAt <= this.clock.now().getTime() ||
+        Math.abs(Math.floor(this.clock.now().getTime() / 30000) - step) > 1 ||
+        !(await this.sessions.isActive(userId, sessionId))
+      )
         throw authError('AUTH_TOTP_INVALID');
       const { backupCodes } = this.credentials.generate(current.id);
       await this.repository.enable(
@@ -139,11 +162,6 @@ export class TotpService {
       await this.events.record(userId, { event: 'totp.enabled', actor: { kind: 'user' }, ip });
       return { backupCodes };
     });
-    if (!result) {
-      await this.failures.recordFailure(subject, ip);
-      throw authError('AUTH_TOTP_INVALID');
-    }
-    return result;
   }
   async verify(user: Account, code: string): Promise<boolean> {
     if (!user.totpEnabledAt || !user.totpSecretCiphertext || !user.totpKeyVersion) return false;

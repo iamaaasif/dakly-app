@@ -4,7 +4,7 @@ import { TotpService } from './totp.service';
 import { TotpChallenges, type TotpChallenge } from './totp-challenges';
 import { accountCredentialState } from './account-credential-state';
 import { GoogleTickets } from './google-tickets';
-import { hash, argon2id } from 'argon2';
+import { hashPassword } from '../platform/crypto/password';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Inject, Injectable } from '@nestjs/common';
 import type {
@@ -106,9 +106,7 @@ export class AuthService {
         target: input.phone,
         registration,
         google: google ? { identity: google.identity, mode: 'signup' } : undefined,
-        registrationPasswordHash: input.password
-          ? await hash(input.password, { type: argon2id })
-          : undefined,
+        registrationPasswordHash: input.password ? await hashPassword(input.password) : undefined,
       },
       request,
     );

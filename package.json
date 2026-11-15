@@ -19,7 +19,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm lint:unused && pnpm lint:duplicates && pnpm lint:docs",
-    "db:diagram": "node scripts/generate-er-diagram.mjs"
+    "db:diagram": "node scripts/generate-er-diagram.mjs",
+    "test:e2e": "node scripts/browser-tests.mjs",
+    "test:native-forms": "node scripts/native-form-tests.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

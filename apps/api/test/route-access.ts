@@ -47,5 +47,11 @@ function accessViolation({ controller, handler }: Route, reflector: Reflector): 
     return 'store route needs RequirePermission or AnyMember';
   }
   if (!rule) return 'missing access rule';
+  return staffAccessViolation(reflector.get<string>(PATH_METADATA, controller), rule);
+}
+function staffAccessViolation(path: string | undefined, rule: AccessRule): string | undefined {
+  if (path?.startsWith('admin') && rule.kind !== 'staff') return 'admin route needs StaffAccess';
+  if (rule.kind === 'staff' && !path?.startsWith('admin'))
+    return 'staff routes must use admin namespace';
   return undefined;
 }
