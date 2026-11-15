@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { SignInCodes, type SignInSubject } from '../auth/codes.module';
+import { SignInCodesService, type SignInSubject } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -37,7 +37,7 @@ export class SupportOwnerService {
     @Inject(SupportAuditService) private readonly audit: SupportAuditService,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(UsersService) private readonly users: UsersService,
-    @Inject(SignInCodes) private readonly codes: SignInCodes,
+    @Inject(SignInCodesService) private readonly codes: SignInCodesService,
   ) {}
 
   async ownerRequests(storeId: string, userId: string, sessionId: string, before?: string) {

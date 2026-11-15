@@ -8,7 +8,7 @@ import { SecurityNoticesModule } from '../auth/security-notices.module';
 import { UsersModule } from '../auth/users.module';
 import { CustomersModule } from '../customers/customers.module';
 import { CacheModule } from '../platform/cache/cache.module';
-import { Clock } from '../platform/clock';
+import { ClockModule } from '../platform/clock.module';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { SessionsModule } from '../sessions/sessions.module';
@@ -61,6 +61,7 @@ import { SupportService } from './support.service';
     TeamModule,
     CustomersModule,
     AuditModule,
+    ClockModule,
   ],
   controllers: [
     StaffRecoveryController,
@@ -82,7 +83,6 @@ import { SupportService } from './support.service';
     SupportService,
     SupportOwnerService,
     SupportAuditService,
-    Clock,
     TotpCredentials,
     StaffRepository,
     StaffAuthService,

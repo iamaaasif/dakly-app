@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
 import { EmailModule } from '../email/email.module';
 import { CacheModule } from '../platform/cache/cache.module';
-import { Clock } from '../platform/clock';
+import { ClockModule } from '../platform/clock.module';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { SessionsModule } from '../sessions/sessions.module';
@@ -44,6 +44,7 @@ import { UsersModule } from './users.module';
     EmailModule,
     SmsModule,
     AccountSecurityEventsModule,
+    ClockModule,
   ],
   controllers: [
     TotpController,
@@ -66,7 +67,6 @@ import { UsersModule } from './users.module';
     { provide: GOOGLE_IDENTITY_DRIVER, useFactory: createGoogleIdentityDriver },
     PasswordService,
     PasswordCredentials,
-    Clock,
     AuthService,
     EmailChangeService,
   ],

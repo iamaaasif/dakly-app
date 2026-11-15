@@ -12,7 +12,8 @@ import type { GoogleIdentity } from '@dakly/providers/google/google-identity-dri
 import { AccountDatabase } from '../platform/database/account-database';
 import { DATABASE } from '../platform/database/database.tokens';
 import { databaseErrorCode } from '../platform/database/error-code';
-import { TenantDatabase, type Transaction } from '../platform/database/tenant-database';
+import type { Transaction } from '../platform/database/scoped-transactions';
+import { TenantDatabase } from '../platform/database/tenant-database';
 
 type NewUser = {
   input: SignUpInput;

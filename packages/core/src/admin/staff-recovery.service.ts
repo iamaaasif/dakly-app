@@ -11,8 +11,8 @@ import {
 } from '@dakly/contracts/staff-recovery';
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { SignInCodes } from '../auth/codes.module';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';
+import { SignInCodesService } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
 import { AccountTransaction } from '../platform/database/account-transaction';
@@ -37,7 +37,7 @@ export class StaffRecoveryService {
   constructor(
     @Inject(StaffRecoveryRepository) private readonly repository: StaffRecoveryRepository,
     @Inject(UsersService) private readonly users: UsersService,
-    @Inject(SignInCodes) private readonly codes: SignInCodes,
+    @Inject(SignInCodesService) private readonly codes: SignInCodesService,
     @Inject(SecurityNoticesService) private readonly notices: SecurityNoticesService,
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
     @Inject(SessionsService) private readonly sessions: SessionsService,

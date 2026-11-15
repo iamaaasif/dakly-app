@@ -3,6 +3,8 @@ import {
   generateAuthenticationOptions,
   verifyRegistrationResponse,
   verifyAuthenticationResponse,
+  SimpleWebAuthnError,
+  type SimpleWebAuthnErrorCode,
 } from '@simplewebauthn/server';
 
 import type {
@@ -11,6 +13,29 @@ import type {
   StaffRegistrationInput,
   StaffAuthenticationInput,
 } from '@dakly/contracts/staff-auth';
+
+export class PasskeyVerificationError extends Error {
+  constructor(cause?: unknown) {
+    super('Passkey verification failed', { cause });
+    this.name = 'PasskeyVerificationError';
+  }
+}
+
+// The library rejects a bad response by throwing. Only these two codes mean our own
+// settings or runtime are wrong, so they must not read as a wrong passkey.
+const setupErrorCodes: ReadonlySet<SimpleWebAuthnErrorCode> = new Set([
+  'BAD_ARGUMENT',
+  'RUNTIME_NO_PQC_SUPPORT',
+]);
+
+async function verify<TResult>(verification: () => Promise<TResult>): Promise<TResult> {
+  try {
+    return await verification();
+  } catch (error) {
+    if (error instanceof SimpleWebAuthnError && setupErrorCodes.has(error.code)) throw error;
+    throw new PasskeyVerificationError(error);
+  }
+}
 
 export class PasskeyDriver {
   constructor(private readonly origin: string) {}
@@ -49,16 +74,18 @@ export class PasskeyDriver {
   }
 
   async register(response: StaffRegistrationInput['credential'], challenge: string) {
-    const result = await verifyRegistrationResponse({
-      response,
-      expectedChallenge: challenge,
-      expectedOrigin: this.origin,
-      expectedRPID: new URL(this.origin).hostname,
-      requireUserVerification: true,
-      supportedAlgorithmIDs: [-7, -257],
-    });
-    if (!result.verified || !result.registrationInfo)
-      throw new Error('Passkey verification failed');
+    const expectedRPID = new URL(this.origin).hostname;
+    const result = await verify(() =>
+      verifyRegistrationResponse({
+        response,
+        expectedChallenge: challenge,
+        expectedOrigin: this.origin,
+        expectedRPID,
+        requireUserVerification: true,
+        supportedAlgorithmIDs: [-7, -257],
+      }),
+    );
+    if (!result.verified || !result.registrationInfo) throw new PasskeyVerificationError();
     return result.registrationInfo.credential;
   }
 
@@ -67,15 +94,19 @@ export class PasskeyDriver {
     challenge: string,
     credential: { id: string; publicKey: Uint8Array; counter: number },
   ) {
-    const result = await verifyAuthenticationResponse({
-      response,
-      expectedChallenge: challenge,
-      expectedOrigin: this.origin,
-      expectedRPID: new URL(this.origin).hostname,
-      requireUserVerification: true,
-      credential: { ...credential, publicKey: new Uint8Array(credential.publicKey) },
-    });
-    if (!result.verified) throw new Error('Passkey verification failed');
+    const expectedRPID = new URL(this.origin).hostname;
+    const publicKey = new Uint8Array(credential.publicKey);
+    const result = await verify(() =>
+      verifyAuthenticationResponse({
+        response,
+        expectedChallenge: challenge,
+        expectedOrigin: this.origin,
+        expectedRPID,
+        requireUserVerification: true,
+        credential: { ...credential, publicKey },
+      }),
+    );
+    if (!result.verified) throw new PasskeyVerificationError();
     return result.authenticationInfo.newCounter;
   }
 }

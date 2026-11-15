@@ -3,7 +3,10 @@ import { isIP } from 'node:net';
 
 import fastify from 'fastify';
 
+import type { ErrorResponse } from '@dakly/contracts/errors';
+
 import { compileProxyTrust } from '../config/trusted-proxies';
+import { PLATFORM_ERRORS } from '../errors/app-error';
 
 function validHost(value: string): boolean {
   if (!/^[a-zA-Z0-9.:[\]-]+$/.test(value)) return false;
@@ -45,7 +48,10 @@ export function createHttpServer(trustedProxies: string[]) {
       return;
     }
     if (!validForwarding(headers)) {
-      await reply.code(400).send({ message: 'Invalid proxy forwarding headers' });
+      const { status, message } = PLATFORM_ERRORS.FORWARDING_HEADERS_INVALID;
+      await reply
+        .code(status)
+        .send({ error: { code: 'FORWARDING_HEADERS_INVALID', message } } satisfies ErrorResponse);
       return;
     }
     const host = headers['x-forwarded-host'];

@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { SlackAlertDriver } from '@dakly/providers/staff-alert/slack/slack-alert-driver';
 
-import { Clock } from '../platform/clock';
+import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
 import { StaffAlertsRepository } from './staff-alerts.repository';
 import {
@@ -12,8 +12,8 @@ import {
 } from './staff-alerts.service';
 
 @Module({
+  imports: [ClockModule],
   providers: [
-    Clock,
     StaffAlertsRepository,
     StaffAlertsService,
     { provide: STAFF_ALERT_DRIVER, useFactory: () => new SlackAlertDriver() },

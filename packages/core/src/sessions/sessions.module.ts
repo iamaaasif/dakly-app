@@ -3,7 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
 import { UsersModule } from '../auth/users.module';
-import { Clock } from '../platform/clock';
+import { ClockModule } from '../platform/clock.module';
 import { OriginGuard } from '../platform/tenancy/origin.guard';
 import { PermissionGuard } from '../platform/tenancy/permission.guard';
 import { StoreGuard } from '../platform/tenancy/store.guard';
@@ -15,10 +15,9 @@ import { SessionsRepository } from './sessions.repository';
 import { SessionsService } from './sessions.service';
 
 @Module({
-  imports: [UsersModule, TeamModule, AccountSecurityEventsModule],
+  imports: [UsersModule, TeamModule, AccountSecurityEventsModule, ClockModule],
   controllers: [SessionsController],
   providers: [
-    Clock,
     SessionsService,
     SessionsRepository,
     { provide: APP_GUARD, useClass: OriginGuard },

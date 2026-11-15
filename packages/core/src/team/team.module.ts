@@ -6,7 +6,7 @@ import { UsersModule } from '../auth/users.module';
 import { BillingModule } from '../billing/billing.module';
 import { EmailModule } from '../email/email.module';
 import { CacheModule } from '../platform/cache/cache.module';
-import { Clock } from '../platform/clock';
+import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
 import { PERMISSION_EVALUATOR } from '../platform/tenancy/permission-evaluator';
 import { PermissionGuard } from '../platform/tenancy/permission.guard';
@@ -35,10 +35,10 @@ import { TeamService } from './team.service';
     SmsModule,
     EmailModule,
     CacheModule,
+    ClockModule,
   ],
   controllers: [OwnershipTransferController, MembersController, InvitesController, RolesController],
   providers: [
-    Clock,
     OwnershipTransferRepository,
     OwnershipTransferService,
     RolesService,
