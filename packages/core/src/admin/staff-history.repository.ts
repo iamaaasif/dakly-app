@@ -1,3 +1,4 @@
+import { STAFF_IDLE_MS } from './staff-session-policy';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
@@ -73,7 +74,7 @@ export class StaffHistoryRepository {
   async currentStaff(staffUserId: string, sessionId: string) {
     return (
       await this.database.execute<{ valid: boolean }>(
-        sql`select exists(select 1 from staff_users u join staff_sessions s on s.staff_user_id=u.id where u.id=${staffUserId}::uuid and s.id=${sessionId}::uuid and u.status='active' and u.role='super_admin' and u.enrolled_at is not null and s.revoked_at is null and s.expires_at>clock_timestamp() and s.last_seen_at>clock_timestamp()-interval '30 minutes') as valid`,
+        sql`select exists(select 1 from staff_users u join staff_sessions s on s.staff_user_id=u.id where u.id=${staffUserId}::uuid and s.id=${sessionId}::uuid and u.status='active' and u.role='super_admin' and u.enrolled_at is not null and s.revoked_at is null and s.expires_at>clock_timestamp() and s.last_seen_at>clock_timestamp()-(${STAFF_IDLE_MS} * interval '1 millisecond')) as valid`,
       )
     ).rows[0]!.valid;
   }

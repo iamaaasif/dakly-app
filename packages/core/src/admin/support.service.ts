@@ -1,4 +1,9 @@
-import { supportContextTag, assertSupportContext, assertSupportParent } from './support-session';
+import {
+  denySupportAction,
+  runSupportSession,
+  assertSupportContext,
+  assertSupportStaff,
+} from './support-session';
 import { bindVerifiedStore } from '../platform/logging/request-logging';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { randomBytes, createHash } from 'node:crypto';
@@ -17,7 +22,7 @@ import { SupportAuditService } from './support-audit.service';
 import { CustomersService } from '../customers/customers.service';
 import { SupportRepository } from './support.repository';
 import { StaffIdentityService } from './staff-identity.service';
-import { supportError } from './support.errors';
+import { supportError, isSupportCodeUnavailable } from './support.errors';
 
 const requestRoles = ['super_admin', 'support', 'trust_safety'];
 const tokenHash = (token: string) => createHash('sha256').update(token).digest();
@@ -69,7 +74,8 @@ export class SupportService {
       const subject = await this.requestSubject(target.id, id, ownerId);
       await this.codes.send(subject, 'support_approval', ip);
       return { id, codeSent: true };
-    } catch {
+    } catch (error) {
+      if (!isSupportCodeUnavailable(error)) throw error;
       // Consent is still pending; the Owner can resend after delivery or cooldown recovers.
       return { id, codeSent: false };
     }
@@ -80,7 +86,8 @@ export class SupportService {
     return { items, nextCursor: items.length === 50 ? items.at(-1)!.id : null };
   }
   async ownerRequests(storeId: string, userId: string, sessionId: string, before?: string) {
-    return this.ownerAction(storeId, userId, sessionId, async () => {
+    return this.transaction.run(storeId, async () => {
+      await this.assertOwner(storeId, userId, sessionId, true);
       const items = (await this.repository.list(storeId, before)).map((grant) =>
         supportGrantResponse(grant, this.clock.now()),
       );
@@ -239,11 +246,17 @@ export class SupportService {
     });
   }
   async session(token: string | undefined) {
-    return this.run(token, async (principal, contextTag) => ({
-      ...supportGrantResponse(await this.authorize(principal), this.clock.now()),
-      storeName: await this.repository.storeName(principal.storeId),
-      contextTag,
-    }));
+    return runSupportSession(
+      this.repository,
+      this.transaction,
+      token,
+      async (principal, contextTag) => ({
+        ...supportGrantResponse(await this.authorize(principal, true), this.clock.now()),
+        storeName: await this.repository.storeName(principal.storeId),
+        contextTag,
+      }),
+      true,
+    );
   }
   async customer(
     token: string | undefined,
@@ -251,24 +264,31 @@ export class SupportService {
     ip: string,
     expectedContext?: string | string[],
   ) {
-    return this.run(token, async (principal, contextTag) => {
-      const grant = await this.authorize(principal);
-      assertSupportContext(expectedContext, contextTag);
-      if (!grant.scopes.includes('customers')) return this.denied(principal, ip);
-      const result = await this.customers.getById(principal.storeId, id, { seeFullPhone: true });
-      await this.audit.record(
-        principal.storeId,
-        id,
-        { kind: 'staff', staffUserId: principal.staffUserId },
-        'support.customer_read',
-        grant.reason,
-        ip,
-        { grantId: grant.id },
-        'customer',
-      );
-      await this.recordActivity(principal);
-      return { ...result, contextTag };
-    });
+    return runSupportSession(
+      this.repository,
+      this.transaction,
+      token,
+      async (principal, contextTag) => {
+        const grant = await this.authorize(principal, true);
+        assertSupportContext(expectedContext, contextTag);
+        if (!grant.scopes.includes('customers'))
+          return denySupportAction(this.audit, principal, ip);
+        const result = await this.customers.getById(principal.storeId, id, { seeFullPhone: true });
+        await this.audit.record(
+          principal.storeId,
+          id,
+          { kind: 'staff', staffUserId: principal.staffUserId },
+          'support.customer_read',
+          grant.reason,
+          ip,
+          { grantId: grant.id },
+          'customer',
+        );
+        await this.recordActivity(principal);
+        return { ...result, contextTag };
+      },
+      true,
+    );
   }
   async createCustomer(
     token: string | undefined,
@@ -276,63 +296,43 @@ export class SupportService {
     ip: string,
     expectedContext?: string | string[],
   ) {
-    return this.run(token, async (principal, contextTag) => {
-      const grant = await this.authorize(principal);
-      assertSupportContext(expectedContext, contextTag);
-      if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
-        return this.denied(principal, ip);
-      const result = await this.customers.create(principal.storeId, input, { seeFullPhone: true });
-      await this.audit.record(
-        principal.storeId,
-        result.id,
-        { kind: 'staff', staffUserId: principal.staffUserId },
-        'support.customer_created',
-        grant.reason,
-        ip,
-        { grantId: grant.id },
-        'customer',
-      );
-      await this.recordActivity(principal);
-      return { ...result, contextTag };
-    });
+    return runSupportSession(
+      this.repository,
+      this.transaction,
+      token,
+      async (principal, contextTag) => {
+        const grant = await this.authorize(principal);
+        assertSupportContext(expectedContext, contextTag);
+        if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
+          return denySupportAction(this.audit, principal, ip);
+        const result = await this.customers.create(principal.storeId, input, {
+          seeFullPhone: true,
+        });
+        await this.audit.record(
+          principal.storeId,
+          result.id,
+          { kind: 'staff', staffUserId: principal.staffUserId },
+          'support.customer_created',
+          grant.reason,
+          ip,
+          { grantId: grant.id },
+          'customer',
+        );
+        await this.recordActivity(principal);
+        return { ...result, contextTag };
+      },
+    );
   }
   private async recordActivity(principal: SupportPrincipal) {
     if (!(await this.repository.touchParent(principal.storeId, principal, this.clock.now())))
       throw supportError('SUPPORT_ENDED');
   }
-  private async run<T>(
-    token: string | undefined,
-    work: (principal: SupportPrincipal, contextTag: string) => Promise<T>,
-  ) {
-    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw supportError('SUPPORT_ENDED');
-    const hash = tokenHash(token);
-    const storeId = await this.repository.locate(hash, false);
-    if (!storeId) throw supportError('SUPPORT_ENDED');
-    const result = await this.transaction.runLocked(storeId, async () => {
-      const session = await this.repository.session(storeId, hash, false);
-      if (!session) throw supportError('SUPPORT_ENDED');
-      return work(session, supportContextTag(hash));
-    });
-    // Denial audit must commit before sending the permission error.
-    if (result === null) throw supportError('SUPPORT_DENIED');
-    return result;
-  }
-  private async denied(principal: SupportPrincipal, ip: string) {
-    await this.audit.record(
-      principal.storeId,
-      principal.grantId,
-      { kind: 'staff', staffUserId: principal.staffUserId },
-      'support.action_denied',
-      'Support scope denied the requested action',
-      ip,
-    );
-    return null;
-  }
-  private async authorize(principal: SupportPrincipal) {
+  private async authorize(principal: SupportPrincipal, readOnly = false) {
     const staff = await this.assertStaff(
       principal.storeId,
       principal.staffUserId,
       principal.staffSessionId,
+      readOnly,
     );
     const grant = await this.requireGrant(principal.storeId, principal.grantId);
     if (
@@ -344,27 +344,22 @@ export class SupportService {
     bindVerifiedStore(this.logger, principal.storeId);
     return grant;
   }
-  private async assertStaff(storeId: string, staffUserId: string, sessionId?: string) {
-    const staff = await this.repository.staff(storeId, staffUserId);
-    if (
-      !staff ||
-      staff.status !== 'active' ||
-      !staff.enrolledAt ||
-      !requestRoles.includes(staff.role)
-    )
-      throw supportError('SUPPORT_ENDED');
-    if (sessionId) await this.assertParent(storeId, staffUserId, sessionId);
-    if (await this.identities.conflictsWithStore(storeId, staffUserId))
-      throw supportError('SUPPORT_DENIED');
-    return staff;
-  }
-  private async assertParent(storeId: string, staffUserId: string, sessionId: string) {
-    assertSupportParent(
-      await this.repository.parent(storeId, staffUserId, sessionId),
-      this.clock.now(),
+  private async assertStaff(
+    storeId: string,
+    staffUserId: string,
+    sessionId?: string,
+    readOnly = false,
+  ) {
+    return assertSupportStaff(
+      this.repository,
+      this.identities,
+      storeId,
+      staffUserId,
+      sessionId,
+      this.clock,
+      readOnly,
     );
   }
-
   private assertRole(staff: Staff) {
     if (!requestRoles.includes(staff.role)) throw supportError('SUPPORT_DENIED');
   }
@@ -382,12 +377,14 @@ export class SupportService {
       });
     });
   }
-  private async assertOwner(storeId: string, userId: string, sessionId: string) {
+  private async assertOwner(storeId: string, userId: string, sessionId: string, readOnly = false) {
     const access = await this.team.accessFor(storeId, userId);
     if (
       !access ||
       !this.team.canApproveSupport(access) ||
-      !(await this.repository.ownerSession(storeId, userId, sessionId, this.clock.now()))
+      !(readOnly
+        ? await this.repository.readOwnerSession(storeId, userId, sessionId, this.clock.now())
+        : await this.repository.ownerSession(storeId, userId, sessionId, this.clock.now()))
     )
       throw supportError('SUPPORT_DENIED');
   }

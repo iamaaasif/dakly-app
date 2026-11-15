@@ -1,3 +1,4 @@
+import { databaseErrorCode } from '../platform/database/error-code';
 import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
@@ -266,8 +267,7 @@ export class UsersRepository {
     return (
       typeof cause === 'object' &&
       cause !== null &&
-      'code' in cause &&
-      cause.code === '23505' &&
+      databaseErrorCode(error) === '23505' &&
       'constraint' in cause &&
       cause.constraint === constraint
     );

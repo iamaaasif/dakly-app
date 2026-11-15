@@ -1,3 +1,4 @@
+import { STAFF_IDLE_MS } from './staff-session-policy';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
@@ -48,6 +49,28 @@ export class SupportRepository {
               ),
             )
             .for('share')
+        )[0],
+      ),
+    );
+  }
+  async readOwnerSession(storeId: string, userId: string, sessionId: string, now: Date) {
+    return this.tenant.forStore(storeId, async (tx) =>
+      Boolean(
+        (
+          await tx
+            .select({ id: sessions.id })
+            .from(sessions)
+            .innerJoin(users, eq(users.id, sessions.userId))
+            .where(
+              and(
+                eq(sessions.id, sessionId),
+                eq(sessions.userId, userId),
+                eq(sessions.activeStoreId, storeId),
+                eq(users.isDisabled, false),
+                sql`${sessions.revokedAt} is null`,
+                sql`${sessions.expiresAt}>${now}`,
+              ),
+            )
         )[0],
       ),
     );
@@ -196,6 +219,24 @@ export class SupportRepository {
         )[0],
     );
   }
+  async readStaff(storeId: string, staffUserId: string) {
+    return this.tenant.forStore(
+      storeId,
+      async (tx) =>
+        (
+          await tx
+            .select({
+              id: staffUsers.id,
+              name: staffUsers.name,
+              role: staffUsers.role,
+              status: staffUsers.status,
+              enrolledAt: staffUsers.enrolledAt,
+            })
+            .from(staffUsers)
+            .where(eq(staffUsers.id, staffUserId))
+        )[0],
+    );
+  }
   async parent(storeId: string, staffUserId: string, sessionId: string) {
     return this.tenant.forStore(
       storeId,
@@ -213,6 +254,22 @@ export class SupportRepository {
         )[0],
     );
   }
+  async readParent(storeId: string, staffUserId: string, sessionId: string) {
+    return this.tenant.forStore(
+      storeId,
+      async (tx) =>
+        (
+          await tx
+            .select({
+              expiresAt: staffSessions.expiresAt,
+              revokedAt: staffSessions.revokedAt,
+              lastSeenAt: staffSessions.lastSeenAt,
+            })
+            .from(staffSessions)
+            .where(and(eq(staffSessions.staffUserId, staffUserId), eq(staffSessions.id, sessionId)))
+        )[0],
+    );
+  }
   async touchParent(storeId: string, principal: SupportPrincipal, now: Date) {
     return this.tenant.inTransaction(
       storeId,
@@ -227,7 +284,7 @@ export class SupportRepository {
                 eq(staffSessions.id, principal.staffSessionId),
                 sql`${staffSessions.revokedAt} is null`,
                 sql`${staffSessions.expiresAt} > ${now}`,
-                sql`${staffSessions.lastSeenAt} > ${now}::timestamptz - interval '30 minutes'`,
+                sql`${staffSessions.lastSeenAt} > ${now}::timestamptz - (${STAFF_IDLE_MS} * interval '1 millisecond')`,
               ),
             )
             .returning({ id: staffSessions.id })
@@ -272,6 +329,25 @@ export class SupportRepository {
               ),
             )
             .for('update')
+        )[0],
+    );
+  }
+  async readSession(storeId: string, hash: Buffer) {
+    return this.tenant.forStore(
+      storeId,
+      async (tx) =>
+        (
+          await tx
+            .select({
+              storeId: supportSessions.storeId,
+              grantId: supportSessions.grantId,
+              staffUserId: supportSessions.staffUserId,
+              staffSessionId: supportSessions.staffSessionId,
+              consumedAt: supportSessions.consumedAt,
+              handoffExpiresAt: supportSessions.handoffExpiresAt,
+            })
+            .from(supportSessions)
+            .where(and(eq(supportSessions.storeId, storeId), eq(supportSessions.tokenHash, hash)))
         )[0],
     );
   }

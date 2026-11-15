@@ -1,3 +1,4 @@
+import { resetEnvForTests } from '../config/env';
 import type { ExecutionContext } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OriginGuard } from './origin.guard';
@@ -10,7 +11,10 @@ const context = (method: string, origin?: string) =>
   }) as ExecutionContext;
 
 describe('OriginGuard', () => {
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEnvForTests();
+  });
   const guard = () => {
     vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
     vi.stubEnv('REDIS_URL', 'redis://localhost:6379');

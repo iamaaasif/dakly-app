@@ -1,3 +1,4 @@
+import { isStaffSessionCurrent } from './staff-session-policy';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   staffRecoveryEffectSchema,
@@ -145,10 +146,7 @@ export class StaffRecoveryService {
       current.staff.status !== 'active' ||
       !current.staff.enrolledAt ||
       !current.session ||
-      current.session.revokedAt ||
-      current.session.expiresAt <= now ||
-      !current.session.lastSeenAt ||
-      current.session.lastSeenAt.getTime() + 1800000 <= now.getTime()
+      !isStaffSessionCurrent(current.session, now)
     )
       throw recoveryError('RECOVERY_DENIED');
   }

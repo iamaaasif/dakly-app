@@ -19,3 +19,16 @@ const errors = {
   AUDIT_EXPORT_UNAVAILABLE: { status: 404, message: 'Export is unavailable or expired' },
 } as const;
 export const supportError = (code: keyof typeof errors) => new AppError(code, errors[code]);
+
+export function isSupportCodeUnavailable(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    [
+      'AUTH_SMS_UNAVAILABLE',
+      'AUTH_EMAIL_UNAVAILABLE',
+      'AUTH_RATE_LIMITED',
+      'AUTH_LOCKED',
+      'SUPPORT_PHONE_REQUIRED',
+    ].includes(error.code)
+  );
+}

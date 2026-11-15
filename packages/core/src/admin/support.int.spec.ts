@@ -324,6 +324,104 @@ afterAll(async () => {
   vi.unstubAllEnvs();
 });
 describe('Owner-approved support through Fastify and app-role PostgreSQL', () => {
+  it.each(['stores', 'staff_users', 'staff_sessions', 'support_sessions'])(
+    'answers GET /support/session while %s has a row lock',
+    async (table) => {
+      const f = await fixture();
+      const id = await request(f);
+      await approve(f, id);
+      const { cookie } = await open(f, id);
+      const holder = await database.pool.connect();
+      let pending: ReturnType<typeof shop> | undefined;
+      try {
+        await holder.query('begin');
+        const column = table === 'stores' || table === 'staff_users' ? 'id' : 'staff_user_id';
+        await holder.query(`select id from ${table} where ${column}=$1 for no key update`, [
+          table === 'stores' ? f.storeId : f.staffId,
+        ]);
+        pending = shop(f, '/support/session', undefined, cookie);
+        const response = await Promise.race([
+          pending,
+          new Promise<never>((_, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error('Support read waited for a row lock')),
+              1000,
+            );
+            void pending!.then(() => clearTimeout(timer));
+          }),
+        ]);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toMatchObject({ id, storeName: 'Support shop' });
+      } finally {
+        await holder.query('rollback');
+        holder.release();
+        await pending;
+      }
+    },
+  );
+  it.each(['stores', 'users', 'sessions'] as const)(
+    'answers GET /support-access while %s has a row lock',
+    async (table) => {
+      const f = await fixture();
+      const id = await request(f);
+      const holder = await database.pool.connect();
+      let pending: ReturnType<typeof shop> | undefined;
+      try {
+        await holder.query('begin');
+        const rowIds = { stores: f.storeId, users: f.userId, sessions: f.sessionId };
+        await holder.query(`select id from ${table} where id=$1 for no key update`, [
+          rowIds[table],
+        ]);
+        pending = shop(f, '/support-access');
+        const response = await Promise.race([
+          pending,
+          new Promise<never>((_, reject) => {
+            const timer = setTimeout(
+              () => reject(new Error('Owner read waited for a row lock')),
+              1000,
+            );
+            void pending!.then(() => clearTimeout(timer));
+          }),
+        ]);
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().items).toEqual([expect.objectContaining({ id })]);
+      } finally {
+        await holder.query('rollback');
+        holder.release();
+        await pending;
+      }
+    },
+  );
+  it('reads a support customer while another transaction locks the store', async () => {
+    const f = await fixture();
+    const id = await request(f);
+    await approve(f, id);
+    const { cookie } = await open(f, id);
+    const customerId = await addCustomer(f, cookie);
+    const holder = await database.pool.connect();
+    let pending: ReturnType<typeof shop> | undefined;
+    try {
+      await holder.query('begin');
+      await holder.query('select id from stores where id=$1 for no key update', [f.storeId]);
+      pending = shop(f, `/support/customers/${customerId}`, undefined, cookie);
+      const response = await Promise.race([
+        pending,
+        new Promise<never>((_, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('Customer read waited for the store lock')),
+            1000,
+          );
+          void pending!.then(() => clearTimeout(timer));
+        }),
+      ]);
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ id: customerId });
+    } finally {
+      await holder.query('rollback');
+      holder.release();
+      await pending;
+    }
+  });
   it('rejects a stale A draft after the same staff browser adopts delegation B', async () => {
     const a = await fixture(),
       other = await fixture();
@@ -887,7 +985,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       now = new Date();
     }
   });
-  it('serializes concurrent Owner end, new sign-in and activity without restoring access', async () => {
+  it('keeps concurrent Owner end final during new sign-in and read activity', async () => {
     const f = await fixture();
     const id = await request(f, 'write', 120);
     await approve(f, id);
@@ -906,7 +1004,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       const signingIn = finishSignIn(f, challenge);
       await waitForBlockedTransactions(pid, 2);
       const ending = shop(f, `/support-access/${id}/end`, {}).then((result) => result);
-      await waitForBlockedTransactions(pid, 3);
+      expect((await ending).statusCode).toBe(201);
       await holder.query('commit');
       const [ended, fresh, result] = await Promise.all([ending, signingIn, activity]);
       expect(ended.statusCode, ended.body).toBe(201);

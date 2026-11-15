@@ -1,3 +1,4 @@
+import { resetEnvForTests } from '../config/env';
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { NestFactory } from '@nestjs/core';
@@ -6,7 +7,10 @@ import { CryptoModule } from './crypto.module';
 import { EnvelopeEncryption } from './envelope-encryption';
 
 describe('CryptoModule', () => {
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEnvForTests();
+  });
 
   function configureEnvironment() {
     vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
