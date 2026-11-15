@@ -12,7 +12,7 @@ import {
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';
-import { SignInCodesService } from '../auth/sign-in-codes.service';
+import { SignInCodesService, type SignInSubject } from '../auth/sign-in-codes.service';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
 import { AccountTransaction } from '../platform/database/account-transaction';
@@ -215,29 +215,28 @@ export class StaffRecoveryService {
     const effect = input.effect;
     if (!effect.removeTotp && !effect.newPhone && !effect.newEmail) return;
     const { user } = await this.transaction.run(effect.targetId, () => this.check(staff, effect));
-    if (provesCurrentContact(effect)) {
-      const channel = input.phoneCode ? 'phone' : 'email';
-      return this.consume(effect, user, channel, input.phoneCode ?? input.emailCode, ip);
-    }
-    if (effect.newPhone) await this.consume(effect, user, 'phone', input.phoneCode, ip);
-    if (effect.newEmail) await this.consume(effect, user, 'email', input.emailCode, ip);
+    const consume = (channel: 'phone' | 'email', code: string | undefined) =>
+      this.consume(this.subject(effect, user, channel), channel, code, ip);
+    if (provesCurrentContact(effect))
+      return consume(input.phoneCode ? 'phone' : 'email', input.phoneCode ?? input.emailCode);
+    if (effect.newPhone) await consume('phone', input.phoneCode);
+    if (effect.newEmail) await consume('email', input.emailCode);
   }
 
   private async consume(
-    effect: StaffRecoveryEffect,
-    user: RecoveryAccount,
+    subject: SignInSubject,
     channel: 'phone' | 'email',
     code: string | undefined,
     ip: string,
   ) {
     if (!code) throw recoveryError('RECOVERY_PROOF');
     const grant = await this.codes.consume(
-      this.subject(effect, user, channel),
+      subject,
       channel === 'phone' ? 'staff_recovery_phone' : 'staff_recovery_email',
       code,
       ip,
     );
-    if (grant.userId !== effect.targetId) throw recoveryError('RECOVERY_PROOF');
+    if (grant.userId !== subject.userId) throw recoveryError('RECOVERY_PROOF');
   }
 
   private deliveries(
