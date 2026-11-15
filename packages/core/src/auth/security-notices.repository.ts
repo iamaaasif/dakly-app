@@ -25,15 +25,23 @@ export class SecurityNoticesRepository {
   ) {}
 
   async enqueue(userId: string, envelopes: EncryptedSecret[], recoveryId?: string) {
-    if (!envelopes.length) return;
-    await this.account.forUser(userId, (tx) =>
+    if (!envelopes.length) return [];
+    const rows = await this.account.forUser(userId, (tx) =>
       tx
         .insert(accountSecurityNotices)
-        .values(envelopes.map((envelope) => ({ userId, recoveryId, ...envelope }))),
+        .values(envelopes.map((envelope) => ({ userId, recoveryId, ...envelope })))
+        .returning({ id: accountSecurityNotices.id }),
     );
+    return rows.map((row) => row.id);
   }
 
-  async claim(userId?: string): Promise<ClaimedNotice[]> {
+  async claim({
+    userId,
+    noticeId,
+  }: {
+    userId?: string;
+    noticeId?: string;
+  }): Promise<ClaimedNotice[]> {
     const result = await this.database.execute<ClaimedNotice>(sql`
       with due as (
         select id
@@ -42,6 +50,7 @@ export class SecurityNoticesRepository {
           and retry_at <= clock_timestamp()
           and (lease_until is null or lease_until < clock_timestamp())
           and (${userId ?? null}::uuid is null or user_id = ${userId ?? null}::uuid)
+          and (${noticeId ?? null}::uuid is null or id = ${noticeId ?? null}::uuid)
         order by retry_at, id
         limit 20
         for update skip locked

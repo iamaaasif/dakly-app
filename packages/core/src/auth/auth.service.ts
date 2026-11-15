@@ -1,4 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 
 import type {
   RequestCodeInput,
@@ -12,10 +14,12 @@ import { AccountSecurityEventsService } from '../account-security-events/account
 import { Clock } from '../platform/clock';
 import { hashPassword } from '../platform/crypto/password';
 import { AccountTransaction } from '../platform/database/account-transaction';
+import { QUEUES } from '../platform/queue/queues';
 import { SessionsService } from '../sessions/sessions.service';
 import { accountCredentialState } from './account-credential-state';
 import { authError } from './auth.errors';
 import { GoogleTickets } from './google-tickets';
+import { securityNoticeJob } from './jobs/send-security-notice.job';
 import { passwordState } from './password-credentials';
 import { SecurityNoticesService } from './security-notices.service';
 import type { SignInRequest, SignInUser } from './sign-in';
@@ -37,6 +41,7 @@ type SecondFactor = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     @Inject(UsersRepository) private readonly users: UsersRepository,
     @Inject(SignInCodes) private readonly codes: SignInCodes,
@@ -50,6 +55,7 @@ export class AuthService {
     @Inject(TotpChallenges) private readonly challenges: TotpChallenges,
     @Inject(TotpRecoveryService) private readonly recovery: TotpRecoveryService,
     @Inject(SecurityNoticesService) private readonly notices: SecurityNoticesService,
+    @InjectQueue(QUEUES.transactional) private readonly queue: Queue,
   ) {}
 
   async requestCode(input: RequestCodeInput, ip: string): Promise<void> {
@@ -144,6 +150,7 @@ export class AuthService {
     const account = user.registration ? undefined : await this.users.lockForSignIn(user.id);
     const subject = account ? this.totp.subject(account) : this.subject(user.target);
     await this.failures.assertAllowed(subject, request.ip);
+    let noticeIds: string[] = [];
     const result = await this.transaction.run(user.id, async () => {
       const current = await this.lockCurrent(user, secondFactor);
       if (secondFactor) {
@@ -153,7 +160,7 @@ export class AuthService {
       }
       if (secondFactor) await this.recovery.cancelPending(user.id, request.ip);
       await this.completeGoogleLink(user, current.googleSubject, request.ip);
-      await this.notifyNewDevice(current, request);
+      noticeIds = await this.notifyNewDevice(current, request);
       if (user.registrationPasswordHash)
         await this.events.record(user.id, {
           event: 'password.changed',
@@ -170,7 +177,7 @@ export class AuthService {
     }
     if ('pending' in result) return this.challenges.issue(user, request, result.pending);
     await this.failures.reset(subject);
-    await this.notices.dispatch(user.id);
+    await this.sendNotices(noticeIds);
     return result;
   }
 
@@ -199,18 +206,28 @@ export class AuthService {
     if (current.isDisabled) throw authError('AUTH_DISABLED');
   }
 
+  // The notice is already stored, so a queue outage leaves it for the scheduled sweep.
+  private async sendNotices(noticeIds: string[]) {
+    if (!noticeIds.length) return;
+    try {
+      await this.queue.addBulk(noticeIds.map(securityNoticeJob));
+    } catch {
+      this.logger.error({ event: 'security' }, 'Account security notice queueing failed');
+    }
+  }
+
   private async notifyNewDevice(current: Account, request: SignInRequest) {
-    if (await this.sessions.knownDevice(current.id, request.ip, request.userAgent)) return;
+    if (await this.sessions.knownDevice(current.id, request.ip, request.userAgent)) return [];
     const contact = this.totp.subject(current);
     const to = contact.email ?? contact.phone;
-    if (to)
-      await this.notices.enqueue(current.id, [
-        {
-          channel: contact.email ? 'email' : 'sms',
-          to,
-          text: 'A new device signed in to your Dakly account. Review devices in Security and sign out any you do not recognize.',
-        },
-      ]);
+    if (!to) return [];
+    return this.notices.enqueue(current.id, [
+      {
+        channel: contact.email ? 'email' : 'sms',
+        to,
+        text: 'A new device signed in to your Dakly account. Review devices in Security and sign out any you do not recognize.',
+      },
+    ]);
   }
 
   private assertIdentity(
