@@ -9,6 +9,7 @@ import {
   type TotpSignInInput,
   type TotpSetupInput,
   type TotpConfirmInput,
+  type TotpDisableInput,
 } from '@dakly/contracts/totp';
 
 import { setSessionCookie } from '../platform/http/session-cookie';
@@ -74,7 +75,7 @@ export class TotpController {
   @HttpCode(204)
   disable(
     @CurrentUser() userId: string,
-    @Body(new ZodValidationPipe(totpDisableSchema)) input: { code: string },
+    @Body(new ZodValidationPipe(totpDisableSchema)) input: TotpDisableInput,
     @Req() request: FastifyRequest,
   ) {
     return this.totp.disable(userId, input.code, request.ip);

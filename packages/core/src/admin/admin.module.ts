@@ -16,6 +16,8 @@ import { SmsModule } from '../sms/sms.module';
 import { TeamModule } from '../team/team.module';
 import { BreakGlassController } from './break-glass.controller';
 import { BreakGlassService } from './break-glass.service';
+import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
+import { OwnerSupportController } from './owner-support.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
 import { StaffAccessService } from './staff-access.service';
 import { StaffAlertsController } from './staff-alerts.controller';
@@ -29,24 +31,17 @@ import { StaffFactorsService } from './staff-factors.service';
 import { StaffHistoryController } from './staff-history.controller';
 import { StaffHistoryModule } from './staff-history.module';
 import { StaffIdentityModule } from './staff-identity.module';
-import {
-  StaffRecoveryController,
-  OwnerRecoveryHistoryController,
-  AccountRecoveryHistoryController,
-} from './staff-recovery.controller';
+import { StaffRecoveryController } from './staff-recovery.controller';
 import { StaffRecoveryRepository } from './staff-recovery.repository';
 import { StaffRecoveryService } from './staff-recovery.service';
 import { StaffSessionsService } from './staff-sessions.service';
+import { StaffSupportController } from './staff-support.controller';
 import { StaffTokens } from './staff-tokens';
 import { StaffGuard } from './staff.guard';
 import { StaffRepository } from './staff.repository';
 import { SupportAuditService } from './support-audit.service';
 import { SupportOwnerService } from './support-owner.service';
-import {
-  StaffSupportController,
-  OwnerSupportController,
-  SupportController,
-} from './support.controller';
+import { SupportController } from './support.controller';
 import { SupportRepository } from './support.repository';
 import { SupportService } from './support.service';
 
@@ -70,7 +65,6 @@ import { SupportService } from './support.service';
   controllers: [
     StaffRecoveryController,
     OwnerRecoveryHistoryController,
-    AccountRecoveryHistoryController,
     StaffAuthController,
     BreakGlassController,
     StaffAlertsController,

@@ -23,7 +23,10 @@ export const staffAuditExportSchema = z.strictObject({
   filter: staffAuditSearchSchema.omit({ cursor: true }),
   reason: z.string().trim().min(10).max(1000),
 });
+export const staffAuditVerifySchema = z.strictObject({ from: z.iso.date() });
 export type StaffAuditSearch = z.infer<typeof staffAuditSearchSchema>;
+export type StaffAuditExportInput = z.infer<typeof staffAuditExportSchema>;
+export type StaffAuditVerifyQuery = z.infer<typeof staffAuditVerifySchema>;
 export type StaffAuditRow = {
   id: string;
   staffUserId: string | null;
