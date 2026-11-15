@@ -1,4 +1,5 @@
 import type { CreateStoreInput } from '@dakly/contracts/stores';
+
 export function onboardingExtensions(answers: CreateStoreInput['howYouSell']): string[] {
   if (answers.includes('social_media')) return ['sales', 'chats', 'social_auto_post'];
   if (answers.includes('online_store')) return ['sales'];

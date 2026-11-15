@@ -1,10 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+
 import type { Database } from '@dakly/db/client';
 import { staffUserLinks } from '@dakly/db/schema/admin';
-import { DATABASE } from '../platform/database/database.tokens';
+
 import { AccountDatabase } from '../platform/database/account-database';
+import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+
 @Injectable()
 export class StaffIdentityRepository {
   constructor(

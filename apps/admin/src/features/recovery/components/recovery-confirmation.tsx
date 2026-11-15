@@ -1,7 +1,8 @@
 'use client';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import {
   staffRecoveryConfirmationSchema,
   type StaffRecoveryPreview,
@@ -9,8 +10,10 @@ import {
 } from '@dakly/contracts/staff-recovery';
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
-import { formatDate } from '@/lib/format-date';
+
 import { useRecoveryCode, useRecoverAccount } from '../api/recovery';
+import { formatDate } from '@/lib/format-date';
+
 export function RecoveryConfirmation({
   preview,
   onClose,

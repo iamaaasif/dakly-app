@@ -1,13 +1,15 @@
 import { sql } from 'drizzle-orm';
 import { check, index, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+
 import {
   accountRecoveryReasons,
   accountSecurityActorTypes,
   accountSecurityEventTypes,
 } from '@dakly/contracts/account-security-events';
-import { createdAt, id, inet, isOneOf } from './columns';
-import { users } from './auth';
+
 import { staffUsers } from './admin';
+import { users } from './auth';
+import { createdAt, id, inet, isOneOf } from './columns';
 
 export const accountSecurityEvents = pgTable(
   'account_security_events',

@@ -1,9 +1,13 @@
 import 'reflect-metadata';
 import { readFile, writeFile } from 'node:fs/promises';
+
 import { NestFactory } from '@nestjs/core';
+
 import { staffProvisionSchema } from '@dakly/contracts/staff-auth';
-import { StaffProvisionService } from './staff-provision.service';
+
 import { StaffProvisionModule } from './staff-provision.module';
+import { StaffProvisionService } from './staff-provision.service';
+
 async function provision(): Promise<void> {
   const [inputPath, outputPath] = process.argv.slice(2);
   if (!inputPath || !outputPath)

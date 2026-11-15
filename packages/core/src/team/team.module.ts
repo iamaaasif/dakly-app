@@ -1,29 +1,30 @@
-import { CodesModule } from '../auth/codes.module';
-import { OwnershipTransferRepository } from './ownership-transfer.repository';
-import { OwnershipTransferService } from './ownership-transfer.service';
-import { OwnershipTransferController } from './ownership-transfer.controller';
-import { RolesController } from './roles.controller';
-import { RolesService } from './roles.service';
-import { RolesRepository } from './roles.repository';
-import { TeamRepository } from './team.repository';
-import { TeamService } from './team.service';
 import { Module } from '@nestjs/common';
-import { PermissionGuard } from '../platform/tenancy/permission.guard';
-import { PERMISSION_EVALUATOR } from '../platform/tenancy/permission-evaluator';
-import { canAccess, hasKnownRole } from './permissions';
+
+import { AuditModule } from '../audit/audit.module';
+import { CodesModule } from '../auth/codes.module';
 import { UsersModule } from '../auth/users.module';
 import { BillingModule } from '../billing/billing.module';
-import { AuditModule } from '../audit/audit.module';
-import { SmsModule } from '../sms/sms.module';
 import { EmailModule } from '../email/email.module';
 import { CacheModule } from '../platform/cache/cache.module';
-import { loadEnv } from '../platform/config/env';
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
+import { PERMISSION_EVALUATOR } from '../platform/tenancy/permission-evaluator';
+import { PermissionGuard } from '../platform/tenancy/permission.guard';
+import { SmsModule } from '../sms/sms.module';
+import { INVITE_ORIGIN, InviteDelivery } from './invite-delivery';
+import { InvitesController } from './invites.controller';
+import { MembersController } from './members.controller';
 import { MembersRepository } from './members.repository';
 import { MembersService } from './members.service';
-import { MembersController } from './members.controller';
-import { InvitesController } from './invites.controller';
-import { INVITE_ORIGIN, InviteDelivery } from './invite-delivery';
+import { OwnershipTransferController } from './ownership-transfer.controller';
+import { OwnershipTransferRepository } from './ownership-transfer.repository';
+import { OwnershipTransferService } from './ownership-transfer.service';
+import { canAccess, hasKnownRole } from './permissions';
+import { RolesController } from './roles.controller';
+import { RolesRepository } from './roles.repository';
+import { RolesService } from './roles.service';
+import { TeamRepository } from './team.repository';
+import { TeamService } from './team.service';
 
 @Module({
   imports: [

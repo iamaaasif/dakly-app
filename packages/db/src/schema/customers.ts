@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+
 import { stores } from './stores';
 
 // Every table holding shop data has store_id and an RLS policy. See docs/rules/multi-tenancy.md.

@@ -1,30 +1,34 @@
-import { TotpService } from './totp.service';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { SecurityNoticesRepository } from './security-notices.repository';
-import { TeamService } from '../team/team.service';
 import 'reflect-metadata';
+
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { hash } from 'argon2';
-import { TOTP, Secret } from 'otpauth';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { hash } from 'argon2';
+import { TOTP, Secret } from 'otpauth';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
-import { AuthModule } from './auth.module';
-import { DatabaseModule } from '../platform/database/database.module';
+import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
+import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
+import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
-import { loadEnv } from '../platform/config/env';
-import { Clock } from '../platform/clock';
-import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
-import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
-import { ValkeyClient } from '../platform/cache/valkey-client';
-import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { SessionsService } from '../sessions/sessions.service';
-import { SecurityNoticesService } from './security-notices.service';
+import { TeamService } from '../team/team.service';
 import { authKey } from './auth-key';
+import { AuthModule } from './auth.module';
+import { SecurityNoticesRepository } from './security-notices.repository';
+import { SecurityNoticesService } from './security-notices.service';
+import { TotpService } from './totp.service';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule] })(TestModule);

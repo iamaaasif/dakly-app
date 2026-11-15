@@ -1,6 +1,8 @@
 import { useId, type ComponentProps } from 'react';
 import type { UseFormRegisterReturn, FieldError } from 'react-hook-form';
+
 import { Input } from '@dakly/ui/input';
+
 type TeamFieldProps = {
   label: string;
   field: UseFormRegisterReturn;

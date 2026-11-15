@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';

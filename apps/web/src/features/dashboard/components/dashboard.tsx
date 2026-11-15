@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
+
 import { useSessionContext } from '@/lib/session-context';
+
 export function Dashboard() {
   const { data } = useSessionContext();
   if (!data?.currentStore) return null;

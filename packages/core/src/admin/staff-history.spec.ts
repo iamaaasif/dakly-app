@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { exportCsv } from './staff-history.service';
+
 import type { StaffAuditRow } from '@dakly/contracts/staff-audit';
+
+import { exportCsv } from './staff-history.service';
+
 const row: StaffAuditRow = {
   id: 'id',
   createdAt: 'date',

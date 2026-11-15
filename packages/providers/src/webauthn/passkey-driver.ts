@@ -1,15 +1,17 @@
-import type {
-  PasskeyCreationOptions,
-  PasskeyRequestOptions,
-  StaffRegistrationInput,
-  StaffAuthenticationInput,
-} from '@dakly/contracts/staff-auth';
 import {
   generateRegistrationOptions,
   generateAuthenticationOptions,
   verifyRegistrationResponse,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
+
+import type {
+  PasskeyCreationOptions,
+  PasskeyRequestOptions,
+  StaffRegistrationInput,
+  StaffAuthenticationInput,
+} from '@dakly/contracts/staff-auth';
+
 export class PasskeyDriver {
   constructor(private readonly origin: string) {}
   async registration(staff: { id: string; email: string }): Promise<PasskeyCreationOptions> {

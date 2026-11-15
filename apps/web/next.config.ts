@@ -1,5 +1,6 @@
-import { webApiUrl } from './src/platform/config/env';
 import type { NextConfig } from 'next';
+
+import { webApiUrl } from './src/platform/config/env';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

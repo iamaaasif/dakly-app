@@ -1,8 +1,11 @@
 'use client';
 import Script from 'next/script';
 import { useRef, useState } from 'react';
+
 import type { GoogleSignInResponse } from '@dakly/contracts/auth';
+
 import { useGoogleSignIn } from '../api/google-sign-in';
+
 type GoogleIdentity = {
   accounts: {
     id: {

@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+
 import {
   totpSignInSchema,
   totpSetupSchema,
@@ -9,11 +10,12 @@ import {
   type TotpSetupInput,
   type TotpConfirmInput,
 } from '@dakly/contracts/totp';
+
+import { setSessionCookie } from '../platform/http/session-cookie';
 import { Public, RequireUser } from '../platform/tenancy/access.decorators';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { setSessionCookie } from '../platform/http/session-cookie';
 import { AuthService } from './auth.service';
 import { TotpService } from './totp.service';
 

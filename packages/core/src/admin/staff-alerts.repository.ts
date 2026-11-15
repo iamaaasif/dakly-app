@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+
+import type { StaffAlert } from '@dakly/contracts/break-glass';
 import type { Database } from '@dakly/db/client';
 import {
   staffAlertDeliveries,
@@ -7,10 +9,11 @@ import {
   staffUsers,
   staffSessions,
 } from '@dakly/db/schema/admin';
-import type { StaffAlert } from '@dakly/contracts/break-glass';
+
 import { DATABASE } from '../platform/database/database.tokens';
-import { TenantDatabase } from '../platform/database/tenant-database';
 import { StaffDatabase } from '../platform/database/staff-database';
+import { TenantDatabase } from '../platform/database/tenant-database';
+
 @Injectable()
 export class StaffAlertsRepository {
   constructor(

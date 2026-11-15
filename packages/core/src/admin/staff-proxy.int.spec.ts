@@ -9,19 +9,22 @@ import {
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
-import { AdminModule } from './admin.module';
+
+import { ValkeyClient } from '../platform/cache/valkey-client';
+import { hashPassword } from '../platform/crypto/password';
 import { DatabaseModule } from '../platform/database/database.module';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
-import { hashPassword } from '../platform/crypto/password';
-import { ValkeyClient } from '../platform/cache/valkey-client';
+import { AdminModule } from './admin.module';
 import { staffTokenHash } from './staff-tokens';
 
 class ProxyTestModule {}

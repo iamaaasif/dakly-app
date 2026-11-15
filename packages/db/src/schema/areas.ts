@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, text, type AnyPgColumn } from 'drizzle-orm/pg-core';
+
 import { bdAreaKinds } from '@dakly/contracts/orders';
+
 import { isOneOf } from './columns';
 
 // Global reference list of Bangladesh divisions, districts and upazilas, seeded by migration.

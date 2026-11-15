@@ -1,4 +1,5 @@
 import { createTransport } from 'nodemailer';
+
 import type { EmailDriver, EmailMessage } from '../email-driver';
 
 export class SmtpEmailDriver implements EmailDriver {

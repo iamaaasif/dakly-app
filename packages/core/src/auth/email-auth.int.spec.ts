@@ -1,26 +1,29 @@
 import 'reflect-metadata';
 import { randomInt, randomUUID } from 'node:crypto';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
 import type { EmailMessage } from '@dakly/providers/email/email-driver';
-import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import { AuthModule } from './auth.module';
-import { UsersRepository } from './users.repository';
-import { DatabaseModule } from '../platform/database/database.module';
+import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { Clock } from '../platform/clock';
+import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { SessionsService } from '../sessions/sessions.service';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { Clock } from '../platform/clock';
 import { authKey } from './auth-key';
+import { AuthModule } from './auth.module';
+import { UsersRepository } from './users.repository';
 
 class EmailTestModule {}
 Module({ imports: [DatabaseModule, AuthModule] })(EmailTestModule);

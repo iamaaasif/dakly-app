@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+import { PasswordResetConfirm } from './password-reset-confirm';
 import { SignInScreen } from './sign-in-screen';
 import { SignUpScreen } from './sign-up-screen';
-import { PasswordResetConfirm } from './password-reset-confirm';
-import type { ReactNode } from 'react';
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

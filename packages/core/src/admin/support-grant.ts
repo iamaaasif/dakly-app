@@ -1,5 +1,7 @@
 import type { SupportGrantResponse } from '@dakly/contracts/support';
+
 import type { SupportRepository } from './support.repository';
+
 type Grant = NonNullable<Awaited<ReturnType<SupportRepository['find']>>>;
 export function supportGrantStatus(grant: Grant, now: Date) {
   return (grant.status === 'requested' && grant.requestedAt.getTime() + 1800000 <= now.getTime()) ||

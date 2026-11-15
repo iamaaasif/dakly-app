@@ -1,11 +1,13 @@
-import { StaffDatabase } from './staff-database';
-import { StaffTransaction } from './staff-transaction';
 import { Global, Inject, Injectable, Module, type OnApplicationShutdown } from '@nestjs/common';
+
 import { createDatabase } from '@dakly/db/client';
+
 import { loadEnv } from '../config/env';
-import { DATABASE, DATABASE_CONNECTION } from './database.tokens';
 import { AccountDatabase } from './account-database';
 import { AccountTransaction } from './account-transaction';
+import { DATABASE, DATABASE_CONNECTION } from './database.tokens';
+import { StaffDatabase } from './staff-database';
+import { StaffTransaction } from './staff-transaction';
 import { StoreTransaction } from './store-transaction';
 import { TenantDatabase } from './tenant-database';
 

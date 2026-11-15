@@ -1,10 +1,12 @@
 import 'reflect-metadata';
-import { createHttpServer } from '@dakly/core/platform/http/http-server';
-import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { loadEnv } from '@dakly/core/platform/config/env';
 import { Logger } from 'nestjs-pino';
+
+import { loadEnv } from '@dakly/core/platform/config/env';
+import { createHttpServer } from '@dakly/core/platform/http/http-server';
+import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
+
 import { AppModule } from './app.module';
 
 // Fastify over Express: about 3x the throughput on webhook intake. See ADR 0004.

@@ -1,16 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type {
   ChangeEmailInput,
   RequestEmailCodeInput,
   VerifyNewEmailInput,
 } from '@dakly/contracts/auth';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { Clock } from '../platform/clock';
+
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { UsersRepository } from './users.repository';
+import { Clock } from '../platform/clock';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { authError } from './auth.errors';
 import { PasswordCredentials } from './password-credentials';
 import { SignInCodes, type PhoneProof, type FreshProof } from './sign-in-codes';
-import { authError } from './auth.errors';
+import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class EmailChangeService {

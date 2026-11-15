@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { createRoleSchema, changeRoleSchema, roleListQuerySchema } from './team';
 
 const permissions = {

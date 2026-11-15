@@ -1,6 +1,7 @@
 import { StaffAlerts } from '@/features/alerts/components/staff-alerts';
 import { StaffHome } from '@/features/auth/components/staff-home';
 import { requireStaff } from '@/lib/require-staff';
+
 export default async function HomePage() {
   const staff = await requireStaff();
   return (

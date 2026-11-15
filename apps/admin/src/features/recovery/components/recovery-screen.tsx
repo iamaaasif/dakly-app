@@ -1,19 +1,19 @@
 'use client';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useState } from 'react';
-import type { StaffRecoveryTarget } from '@dakly/contracts/staff-recovery';
-import { RecoveryLookup } from './recovery-lookup';
 import { useForm, type UseFormReturn } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  staffRecoveryRequestSchema,
-  type StaffRecoveryRequest,
-} from '@dakly/contracts/staff-recovery';
+
+import type { StaffRecoveryTarget, StaffRecoveryRequest } from '@dakly/contracts/staff-recovery';
+import { staffRecoveryRequestSchema } from '@dakly/contracts/staff-recovery';
 import { Button } from '@dakly/ui/button';
-import { Input } from '@dakly/ui/input';
 import { Card } from '@dakly/ui/card';
+import { Input } from '@dakly/ui/input';
+
 import { useRecoveryPreview } from '../api/recovery';
 import { RecoveryConfirmation } from './recovery-confirmation';
+import { RecoveryLookup } from './recovery-lookup';
+
 export function RecoveryScreen() {
   const [target, setTarget] = useState<StaffRecoveryTarget>();
   return (

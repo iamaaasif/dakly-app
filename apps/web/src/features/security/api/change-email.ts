@@ -1,5 +1,7 @@
 import type { ChangeEmailInput } from '@dakly/contracts/auth';
+
 import { useAccountMutation } from '../hooks/use-account-mutation';
+
 export function useChangeEmail() {
   return useAccountMutation<ChangeEmailInput, void>((request, body) =>
     request<void>('/me/email', { method: 'POST', body }),

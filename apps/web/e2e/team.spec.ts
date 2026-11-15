@@ -1,6 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
-import { createDatabase } from '@dakly/db/client';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { createDatabase } from '@dakly/db/client';
+
 import { privateInput, scrubPage, messageText } from './auth-browser';
 
 test.use({ screenshot: 'off' });

@@ -1,13 +1,15 @@
 'use client';
 
-import { Button } from '@dakly/ui/button';
-import { Card } from '@dakly/ui/card';
-import { Badge } from '@dakly/ui/badge';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+
 import { type CreateCustomerInput, createCustomerSchema } from '@dakly/contracts/customers';
-import { NewCustomerFields } from './new-customer-fields';
+import { Badge } from '@dakly/ui/badge';
+import { Button } from '@dakly/ui/button';
+import { Card } from '@dakly/ui/card';
+
 import { useCreateCustomer } from '../api/create-customer';
+import { NewCustomerFields } from './new-customer-fields';
 
 export function NewCustomerForm() {
   const { register, handleSubmit, reset, formState } = useForm<CreateCustomerInput>({

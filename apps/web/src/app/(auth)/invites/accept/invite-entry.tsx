@@ -1,9 +1,11 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { InvitationGate } from '@/features/team/components/invitation-gate';
+
+import type { AuthConfig } from '@/features/auth/auth.types';
 import { SignInScreen } from '@/features/auth/components/sign-in-screen';
 import { SignUpScreen } from '@/features/auth/components/sign-up-screen';
-import type { AuthConfig } from '@/features/auth/auth.types';
+import { InvitationGate } from '@/features/team/components/invitation-gate';
+
 export function InviteEntry({ config }: { config: AuthConfig }) {
   const query = useSearchParams();
   const router = useRouter();

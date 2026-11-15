@@ -1,6 +1,9 @@
 import { performance } from 'node:perf_hooks';
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
+
 import type { EmailDriver, EmailMessage } from '@dakly/providers/email/email-driver';
+
 import { EMAIL_DRIVER } from './email-provider';
 
 @Injectable()

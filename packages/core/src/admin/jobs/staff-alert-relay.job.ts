@@ -1,7 +1,4 @@
-import { ErrorReporter } from '../../platform/logging/error-reporter';
-import { serializeError } from '../../platform/logging/safe-error';
-import { jobLogBindings } from '../../platform/logging/job-context';
-import { QUEUES } from '../../platform/queue/queues';
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   Inject,
   Injectable,
@@ -9,10 +6,14 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+
+import { ErrorReporter } from '../../platform/logging/error-reporter';
+import { jobLogBindings, runWithJobContext } from '../../platform/logging/job-context';
+import { serializeError } from '../../platform/logging/safe-error';
+import { QUEUES } from '../../platform/queue/queues';
 import { StaffAlertsService } from '../staff-alerts.service';
-import { runWithJobContext } from '../../platform/logging/job-context';
+
 @Injectable()
 export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(StaffAlertRelayJob.name);

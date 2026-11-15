@@ -1,12 +1,15 @@
 import { Inject, Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
 import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
 import { StaffAccessService } from './staff-access.service';
-import { StaffSessionsService } from './staff-sessions.service';
 import { STAFF_COOKIE } from './staff-cookie';
+import { StaffSessionsService } from './staff-sessions.service';
+
 export type StaffRequest = FastifyRequest & {
   staffAccess: AccessIdentity;
   staff: StaffIdentity & { sessionId: string };

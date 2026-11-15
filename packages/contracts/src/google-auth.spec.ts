@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { googleSignInSchema, verifyCodeSchema, verifyGoogleEmailSchema } from './auth';
 
 describe('Google sign-in contracts', () => {

@@ -1,19 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
 import type {
   GoogleSignInInput,
   GoogleSignInPending,
   VerifyGoogleEmailInput,
 } from '@dakly/contracts/auth';
+import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
+import { AppError } from '../platform/errors/app-error';
+import { authKey } from './auth-key';
+import { authError } from './auth.errors';
 import { AuthService, type SignInRequest } from './auth.service';
-import { UsersRepository } from './users.repository';
 import { GoogleIdentityService } from './google-identity.service';
 import { GoogleTickets, type GoogleGrant } from './google-tickets';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures } from './sign-in-failures';
-import { authError } from './auth.errors';
-import { authKey } from './auth-key';
-import { AppError } from '../platform/errors/app-error';
+import { UsersRepository } from './users.repository';
 
 type GoogleResult =
   { status: 'totp_required'; challengeId: string } | GoogleSignInPending | { token: string };

@@ -1,14 +1,17 @@
 'use client';
-import { z } from 'zod';
-import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, FormProvider } from 'react-hook-form';
+import { z } from 'zod';
+
 import { passwordSchema, signUpSchema, type SignUpInput } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
-import type { AuthConfig } from '../auth.types';
+
 import { useRequestCode } from '../api/request-code';
-import { formError } from '@/lib/form-error';
-import { SignUpFields } from './sign-up-fields';
+import type { AuthConfig } from '../auth.types';
 import { SignUpConsent } from './sign-up-consent';
+import { SignUpFields } from './sign-up-fields';
+import { formError } from '@/lib/form-error';
+
 const accountSchema = signUpSchema.extend({
   password: passwordSchema,
   consent: z.literal(true, { error: 'Read and agree to the Terms and Privacy documents.' }),

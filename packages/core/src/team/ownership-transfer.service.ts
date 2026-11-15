@@ -1,15 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type {
   CurrentOwnershipTransferResponse,
   OwnershipTransferResponse,
   StartOwnershipTransferInput,
 } from '@dakly/contracts/team';
+
+import { AuditService } from '../audit/audit.service';
 import { SignInCodes, type SignInSubject } from '../auth/codes.module';
 import { UsersService } from '../auth/users.service';
-import { AuditService } from '../audit/audit.service';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { Clock } from '../platform/clock';
-import { TeamService } from './team.service';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { MembersRepository } from './members.repository';
 import {
   OwnershipTransferRepository,
@@ -17,6 +18,7 @@ import {
 } from './ownership-transfer.repository';
 import { canDo } from './permissions';
 import { teamError } from './team.errors';
+import { TeamService } from './team.service';
 
 @Injectable()
 export class OwnershipTransferService {

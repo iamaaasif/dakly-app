@@ -3,9 +3,10 @@ import { Controller, Get, Logger, Module, Post } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DrizzleQueryError } from 'drizzle-orm/errors';
+
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { AppErrorFilter } from '../errors/app-error.filter';
 import { ErrorReporter } from './error-reporter';

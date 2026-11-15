@@ -1,15 +1,18 @@
-import { ExtensionChoices, extensionSelection } from './extension-choices';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import {
   changeStoreExtensionsSchema,
   type ChangeStoreExtensionsInput,
   type StoreSettingsResponse,
 } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
-import { formError } from '@/lib/form-error';
+
 import { useChangeExtensions } from '../api/change-extensions';
+import { ExtensionChoices, extensionSelection } from './extension-choices';
+import { formError } from '@/lib/form-error';
+
 export function ExtensionsForm({
   store,
   editable,

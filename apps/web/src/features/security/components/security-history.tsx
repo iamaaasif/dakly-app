@@ -1,11 +1,14 @@
 'use client';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { QueryError } from '@dakly/ui/query-error';
+
 import { Card } from '@dakly/ui/card';
+import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
-import { formatDateTime } from '@/lib/format-date';
+
 import { useSecurityHistory } from '../api/security-history';
+import { formatDateTime } from '@/lib/format-date';
+
 export function SecurityHistory() {
   const before = useSearchParams().get('before') ?? '';
   const history = useSecurityHistory(before);

@@ -1,14 +1,16 @@
 'use client';
-import { Button } from '@dakly/ui/button';
-import { type ReactNode, useState } from 'react';
-import { StoreRequired } from './store-required';
 import { usePathname } from 'next/navigation';
-import { cn } from '@dakly/ui/cn';
-import { ShellNavigation } from './shell-navigation';
-import { MobileNavigation } from './mobile-navigation';
-import { StoreSwitcher } from './store-switcher';
+import { type ReactNode, useState } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
+
+import { MobileNavigation } from './mobile-navigation';
+import { ShellNavigation } from './shell-navigation';
+import { StoreRequired } from './store-required';
+import { StoreSwitcher } from './store-switcher';
+
 type ShellFrameProps = {
   data: SessionContext;
   blocked: boolean;

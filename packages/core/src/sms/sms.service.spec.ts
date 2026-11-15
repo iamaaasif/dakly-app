@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
+
 import { SmsService } from './sms.service';
 
 describe('shared SMS delivery', () => {

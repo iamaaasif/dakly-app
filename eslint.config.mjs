@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import importX from 'eslint-plugin-import-x';
 import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -45,7 +46,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    plugins: { sonarjs },
+    plugins: { sonarjs, 'import-x': importX },
     languageOptions: {
       globals: { ...globals.node },
     },
@@ -60,6 +61,23 @@ export default tseslint.config(
       'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
       'sonarjs/cognitive-complexity': ['error', 15],
       'no-nested-ternary': 'error',
+      'import-x/first': 'error',
+      'import-x/newline-after-import': 'error',
+      'import-x/no-duplicates': 'error',
+      'import-x/order': [
+        'error',
+        {
+          groups: ['builtin', 'external', 'internal', ['parent', 'sibling', 'index']],
+          // Workspace packages look like external scoped packages, so they need a path group.
+          pathGroups: [
+            { pattern: '@dakly/**', group: 'internal' },
+            { pattern: '@/**', group: 'parent' },
+          ],
+          pathGroupsExcludedImportTypes: ['builtin'],
+          'newlines-between': 'always',
+          alphabetize: { order: 'asc', caseInsensitive: true },
+        },
+      ],
       'no-restricted-syntax': ['error', ...restrictedSyntax],
       'no-restricted-imports': [
         'error',

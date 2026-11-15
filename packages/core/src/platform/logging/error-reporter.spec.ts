@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
 import { getGlobalScope } from '@sentry/core';
 import { DrizzleQueryError } from 'drizzle-orm/errors';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { ErrorReporter } from './error-reporter';
 import { serializeError } from './safe-error';
 

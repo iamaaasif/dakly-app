@@ -1,23 +1,25 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
-import { PasskeyDriver } from '@dakly/providers/webauthn/passkey-driver';
+
 import type {
   StaffSignInInput,
   StaffEnrollmentInput,
   StaffEnrollment,
   StaffChallenge,
 } from '@dakly/contracts/staff-auth';
-import { hashPassword, verifyPassword } from '../platform/crypto/password';
-import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
-import { StaffTransaction } from '../platform/database/staff-transaction';
+import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+import { PasskeyDriver } from '@dakly/providers/webauthn/passkey-driver';
+
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
-import { StaffRepository } from './staff.repository';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { hashPassword, verifyPassword } from '../platform/crypto/password';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { StaffTransaction } from '../platform/database/staff-transaction';
+import { staffError } from './admin.errors';
 import { StaffAttempts } from './staff-attempts';
 import { StaffAuditService } from './staff-audit.service';
 import { newStaffProof, staffTokenHash } from './staff-tokens';
-import { staffError } from './admin.errors';
+import { StaffRepository } from './staff.repository';
 
 export type LockedStaff = NonNullable<Awaited<ReturnType<StaffRepository['lock']>>>;
 @Injectable()

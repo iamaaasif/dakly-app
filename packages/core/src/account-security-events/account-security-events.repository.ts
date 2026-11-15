@@ -1,10 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, lt } from 'drizzle-orm';
+
 import type {
   AccountSecurityEvent,
   AccountSecurityHistory,
 } from '@dakly/contracts/account-security-events';
 import { accountSecurityEvents } from '@dakly/db/schema/account-security-events';
+
 import { AccountDatabase } from '../platform/database/account-database';
 
 const historyColumns = {

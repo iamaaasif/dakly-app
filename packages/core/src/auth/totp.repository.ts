@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+
 import { users } from '@dakly/db/schema/auth';
-import { AccountDatabase } from '../platform/database/account-database';
+
 import type { EncryptedSecret } from '../platform/crypto/envelope-encryption';
+import { AccountDatabase } from '../platform/database/account-database';
 
 @Injectable()
 export class TotpRepository {

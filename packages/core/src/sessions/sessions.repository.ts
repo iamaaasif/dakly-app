@@ -1,10 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, gt, isNull, ne, sql, desc, lt } from 'drizzle-orm';
+
+import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
 import type { Database } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
-import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
-import { DATABASE } from '../platform/database/database.tokens';
+
 import { AccountDatabase } from '../platform/database/account-database';
+import { DATABASE } from '../platform/database/database.tokens';
 
 const columns = {
   id: sessions.id,

@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { PublicPlan, billingCycles } from '@dakly/contracts/billing';
-import { BillingRepository } from './billing.repository';
-import { billingError } from './billing.errors';
+
 import { Clock } from '../platform/clock';
+import { billingError } from './billing.errors';
+import { BillingRepository } from './billing.repository';
 
 @Injectable()
 export class BillingService {

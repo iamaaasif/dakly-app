@@ -1,23 +1,26 @@
-import { UsersModule } from '../auth/users.module';
-import { UsersService } from '../auth/users.service';
 import 'reflect-metadata';
 import { createHash } from 'node:crypto';
+
+import { Module } from '@nestjs/common';
+import type { INestApplicationContext } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
+
+import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import { UsersModule } from '../auth/users.module';
+import { UsersService } from '../auth/users.service';
+import { Clock } from '../platform/clock';
 import { AccountDatabase } from '../platform/database/account-database';
 import { AccountTransaction } from '../platform/database/account-transaction';
+import { DatabaseModule } from '../platform/database/database.module';
+import { TeamService } from '../team/team.service';
 import { SessionsRepository } from './sessions.repository';
 import { SessionsService } from './sessions.service';
-import { Clock } from '../platform/clock';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { Module } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
-import type { INestApplicationContext } from '@nestjs/common';
-import { DatabaseModule } from '../platform/database/database.module';
-import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
-import { TeamService } from '../team/team.service';
 
 class AuditTestModule {}
 Module({ imports: [DatabaseModule, AccountSecurityEventsModule, UsersModule] })(AuditTestModule);

@@ -1,11 +1,13 @@
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { users } from '@dakly/db/schema/auth';
 import { stores } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
-import { TenantDatabase } from '../platform/database/tenant-database';
+
 import { AccountDatabase } from '../platform/database/account-database';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { TeamRepository } from './team.repository';
 import { TeamService } from './team.service';
 

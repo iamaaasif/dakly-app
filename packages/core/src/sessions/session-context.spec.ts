@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import type { StoreAccess } from '@dakly/contracts/team';
+
 import { sessionContextTag } from './session-context';
 
 describe('sessionContextTag', () => {

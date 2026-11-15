@@ -1,5 +1,7 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+
 import { createDatabase } from '@dakly/db/client';
+
 import { scrubPage } from './auth-browser';
 
 test.use({ screenshot: 'off' });

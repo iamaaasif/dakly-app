@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import { staffEnrollmentSchema, staffProvisionSchema, staffSignInSchema } from './staff-auth';
+
 describe('Staff authentication contracts', () => {
   it('rejects public identity or role injection during enrollment', () => {
     expect(

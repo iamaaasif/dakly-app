@@ -1,12 +1,15 @@
 'use client';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import { verifyEmailCodeSchema, type SignInResponse } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
+
 import { useVerifyCode } from '../api/verify-code';
 import { useVerifyEmailCode } from '../api/verify-email-code';
-import { formError } from '@/lib/form-error';
 import { FormField as AuthField } from '@/components/form-field';
+import { formError } from '@/lib/form-error';
+
 const codeSchema = verifyEmailCodeSchema.pick({ code: true });
 type SignInCodeProps = {
   target: { identifier: string; isRemembered: boolean };

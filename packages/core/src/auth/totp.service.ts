@@ -1,21 +1,24 @@
-import { SessionsService } from '../sessions/sessions.service';
 import { randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { TotpConfirmInput, TotpSetupInput } from '@dakly/contracts/totp';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { EnvelopeEncryption, type EncryptedSecret } from '../platform/crypto/envelope-encryption';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { UsersRepository } from './users.repository';
-import { TotpRepository } from './totp.repository';
+import { EnvelopeEncryption, type EncryptedSecret } from '../platform/crypto/envelope-encryption';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { PasswordCredentials } from './password-credentials';
-import { SignInCodes } from './sign-in-codes';
-import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
 import { accountCredentialState } from './account-credential-state';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import { PasswordCredentials } from './password-credentials';
+import { SignInCodes } from './sign-in-codes';
+import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { TotpRepository } from './totp.repository';
+import { UsersRepository } from './users.repository';
 
 type Account = NonNullable<Awaited<ReturnType<UsersRepository['lockForSignIn']>>>;
 type Setup = {

@@ -1,5 +1,3 @@
-import { RequirePermission } from '../platform/tenancy/access.decorators';
-import type { StoreRequest } from '../platform/tenancy/store-request';
 import {
   Body,
   Inject,
@@ -11,12 +9,16 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+
 import {
   type CreateCustomerInput,
   type CustomerResponse,
   createCustomerSchema,
 } from '@dakly/contracts/customers';
+
+import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
+import type { StoreRequest } from '../platform/tenancy/store-request';
 import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { CustomersService } from './customers.service';

@@ -1,4 +1,5 @@
 import type { JSONWebKeySet, JWTVerifyGetKey } from 'jose' with { 'resolution-mode': 'import' };
+
 export type AccessIdentity = { subject: string; email: string };
 export type AccessConfiguration = {
   issuer: string;

@@ -1,6 +1,8 @@
 import Link from 'next/link';
-import { requireSession } from '@/lib/require-session';
+
 import { SetupScreen } from '@/features/auth/components/setup-screen';
+import { requireSession } from '@/lib/require-session';
+
 export default async function SetupPage() {
   const session = await requireSession();
   if (session.hasMemberships)

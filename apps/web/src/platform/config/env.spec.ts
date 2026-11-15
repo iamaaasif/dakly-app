@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { webAuthConfig } from './env';
+
 afterEach(() => vi.unstubAllEnvs());
 describe('Registration configuration', () => {
   it('does not invent a legal version when documents are absent', () => {

@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { Redis } from 'ioredis';
+
 import { toRedisConnection } from '../queue/redis-connection';
 
 @Injectable()

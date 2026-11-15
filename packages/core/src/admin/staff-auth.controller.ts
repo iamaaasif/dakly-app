@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
+
 import {
   staffSignInSchema,
   staffEnrollmentSchema,
@@ -12,13 +13,15 @@ import {
   type StaffRegistrationInput,
   type StaffAuthenticationInput,
 } from '@dakly/contracts/staff-auth';
+
 import { StaffAccess } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { StaffAuthService } from './staff-auth.service';
+import { staffCookie, clearStaffCookie } from './staff-cookie';
 import { StaffFactorsService } from './staff-factors.service';
 import { StaffSessionsService } from './staff-sessions.service';
 import { type StaffRequest } from './staff.guard';
-import { staffCookie, clearStaffCookie } from './staff-cookie';
+
 @Controller('admin/auth')
 @StaffAccess(false)
 export class StaffAuthController {

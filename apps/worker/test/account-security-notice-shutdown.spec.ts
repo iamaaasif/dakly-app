@@ -1,17 +1,20 @@
 import 'reflect-metadata';
 import { createSecretKey, randomBytes, randomUUID } from 'node:crypto';
+
 import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SecurityNoticesService } from '@dakly/core/auth/security-notices.service';
-import type { SecurityNoticesRepository } from '@dakly/core/auth/security-notices.repository';
+
 import type { AccountRecoveryRepository } from '@dakly/core/auth/account-recovery.repository';
+import type { SecurityNoticesRepository } from '@dakly/core/auth/security-notices.repository';
+import { SecurityNoticesService } from '@dakly/core/auth/security-notices.service';
 import type { UsersRepository } from '@dakly/core/auth/users.repository';
-import type { AccountTransaction } from '@dakly/core/platform/database/account-transaction';
-import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { EmailService } from '@dakly/core/email/email.service';
-import type { SmsService } from '@dakly/core/sms/sms.service';
 import { Clock } from '@dakly/core/platform/clock';
+import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
+import type { AccountTransaction } from '@dakly/core/platform/database/account-transaction';
 import { ErrorReporter } from '@dakly/core/platform/logging/error-reporter';
+import type { SmsService } from '@dakly/core/sms/sms.service';
+
 import { AccountSecurityNoticesJob } from '../src/account-security-notices.job';
 
 function deferred() {

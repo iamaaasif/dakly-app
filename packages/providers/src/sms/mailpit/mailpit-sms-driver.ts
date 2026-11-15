@@ -1,4 +1,5 @@
 import { createTransport } from 'nodemailer';
+
 import { type SmsDriver, type SmsMessage, type SmsSendResult } from '../sms-driver';
 
 export class MailpitSmsDriver implements SmsDriver {

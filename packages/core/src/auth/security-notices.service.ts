@@ -1,16 +1,17 @@
-import { ErrorReporter } from '../platform/logging/error-reporter';
-import { serializeError } from '../platform/logging/safe-error';
-import { jobLogBindings } from '../platform/logging/job-context';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+
+import { EmailService } from '../email/email.service';
+import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { AccountTransaction } from '../platform/database/account-transaction';
-import { EmailService } from '../email/email.service';
+import { ErrorReporter } from '../platform/logging/error-reporter';
+import { jobLogBindings } from '../platform/logging/job-context';
+import { serializeError } from '../platform/logging/safe-error';
 import { SmsService } from '../sms/sms.service';
-import { Clock } from '../platform/clock';
-import { UsersRepository } from './users.repository';
-import { SecurityNoticesRepository, type ClaimedNotice } from './security-notices.repository';
-import { AccountRecoveryRepository } from './account-recovery.repository';
 import { accountCredentialState } from './account-credential-state';
+import { AccountRecoveryRepository } from './account-recovery.repository';
+import { SecurityNoticesRepository, type ClaimedNotice } from './security-notices.repository';
+import { UsersRepository } from './users.repository';
 
 export type SecurityNotice = { channel: 'sms' | 'email'; to: string; text: string };
 @Injectable()

@@ -1,10 +1,13 @@
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import { verifyNewEmailSchema } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
-import { FormField } from '@/components/form-field';
-import { securityFormError } from '../security-form-error';
+
 import { useVerifyEmail } from '../api/verify-email';
+import { securityFormError } from '../security-form-error';
+import { FormField } from '@/components/form-field';
+
 export function EmailVerify({ email, onDone }: { email: string; onDone: () => void }) {
   const form = useForm({
     resolver: zodResolver(verifyNewEmailSchema),

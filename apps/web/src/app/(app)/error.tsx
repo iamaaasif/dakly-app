@@ -1,5 +1,6 @@
 'use client';
 import { Button } from '@dakly/ui/button';
+
 export default function ErrorPage({ reset }: { reset: () => void }) {
   return (
     <main className="space-y-4 p-6">

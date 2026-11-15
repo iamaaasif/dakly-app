@@ -1,6 +1,8 @@
-import { isIP } from 'node:net';
 import type { IncomingHttpHeaders } from 'node:http';
+import { isIP } from 'node:net';
+
 import fastify from 'fastify';
+
 import { compileProxyTrust } from '../config/trusted-proxies';
 
 function validHost(value: string): boolean {

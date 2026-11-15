@@ -1,15 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { StoreTransaction } from '../platform/database/store-transaction';
-import { Clock } from '../platform/clock';
+
 import { SignInCodes, type SignInSubject } from '../auth/codes.module';
 import { UsersService } from '../auth/users.service';
+import { Clock } from '../platform/clock';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { TeamService } from '../team/team.service';
-import { SupportAuditService } from './support-audit.service';
-import { SupportRepository } from './support.repository';
 import { StaffIdentityService } from './staff-identity.service';
-import { supportError } from './support.errors';
+import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { supportRoles } from './support-roles';
+import { supportError } from './support.errors';
+import { SupportRepository } from './support.repository';
 
 @Injectable()
 export class SupportOwnerService {

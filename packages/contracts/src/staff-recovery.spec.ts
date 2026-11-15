@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import { staffRecoveryRequestSchema } from './staff-recovery';
+
 const input = {
   targetId: '01900000-0000-7000-8000-000000000001',
   reasonType: 'lost_phone',

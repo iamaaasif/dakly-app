@@ -12,6 +12,8 @@ import {
   Res,
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+
+import { createCustomerSchema, type CreateCustomerInput } from '@dakly/contracts/customers';
 import {
   supportRequestSchema,
   supportPageSchema,
@@ -20,7 +22,8 @@ import {
   supportHandoffSchema,
   type SupportRequestInput,
 } from '@dakly/contracts/support';
-import { createCustomerSchema, type CreateCustomerInput } from '@dakly/contracts/customers';
+
+import { loadEnv } from '../platform/config/env';
 import {
   StaffAccess,
   AnyMember,
@@ -29,11 +32,11 @@ import {
 } from '../platform/tenancy/access.decorators';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { loadEnv } from '../platform/config/env';
-import { SupportService } from './support.service';
+import type { StaffRequest } from './staff.guard';
 import { SupportOwnerService } from './support-owner.service';
 import { supportRoles } from './support-roles';
-import type { StaffRequest } from './staff.guard';
+import { SupportService } from './support.service';
+
 const cookie = 'dakly_support';
 @Controller('admin/support')
 @StaffAccess(true, supportRoles)

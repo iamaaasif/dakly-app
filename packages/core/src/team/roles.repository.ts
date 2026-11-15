@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gt } from 'drizzle-orm';
-import { memberships, roles } from '@dakly/db/schema/team';
+
 import type { CreateRoleInput, RoleListQuery } from '@dakly/contracts/team';
+import { memberships, roles } from '@dakly/db/schema/team';
+
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const roleColumns = {

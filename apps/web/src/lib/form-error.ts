@@ -1,5 +1,7 @@
 import type { FieldValues, Path, UseFormSetError } from 'react-hook-form';
+
 import { ApiError } from '@dakly/ui/api-client';
+
 export function formError<T extends FieldValues>(error: unknown, setError: UseFormSetError<T>) {
   if (error instanceof ApiError && error.fields) {
     for (const { path, message } of error.fields) setError(path as Path<T>, { message });

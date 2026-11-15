@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import * as social from './social';
+
 import * as campaigns from './campaigns';
+import * as social from './social';
 
 const connectionId = '018f0bd8-1234-7123-8123-123456789abc';
 const identityId = '018f0bd8-1234-7123-8123-123456789abd';

@@ -1,6 +1,8 @@
 import type { UseFormReturn } from 'react-hook-form';
+
 import type { StaffEnrollmentInput } from '@dakly/contracts/staff-auth';
 import { Input } from '@dakly/ui/input';
+
 type EnrollmentFieldsProps = { form: UseFormReturn<StaffEnrollmentInput> };
 export function EnrollmentFields({ form }: EnrollmentFieldsProps) {
   return (

@@ -1,5 +1,7 @@
 import type { RoleListResponse } from '@dakly/contracts/team';
+
 import { roleLabels } from '../role-label';
+
 type RoleOptionsProps = {
   builtInRoles: RoleListResponse['builtInRoles'];
   customRoles: RoleListResponse['items'];

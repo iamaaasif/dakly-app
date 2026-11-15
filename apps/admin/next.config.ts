@@ -1,5 +1,7 @@
-import { adminApiUrl } from './src/platform/config/env';
 import type { NextConfig } from 'next';
+
+import { adminApiUrl } from './src/platform/config/env';
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@dakly/ui'],

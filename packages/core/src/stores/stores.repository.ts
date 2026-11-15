@@ -1,13 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { stores, storeCounters } from '@dakly/db/schema/stores';
+
 import type {
   CreateStoreInput,
   StoreResponse,
   StoreSettingsResponse,
   ChangeStoreSettingsInput,
 } from '@dakly/contracts/stores';
+import { stores, storeCounters } from '@dakly/db/schema/stores';
+
 import { TenantDatabase } from '../platform/database/tenant-database';
+
 const storeColumns = {
   id: stores.id,
   name: stores.name,

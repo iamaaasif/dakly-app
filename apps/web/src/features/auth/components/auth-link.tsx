@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+
 export function AuthLink({
   href,
   onNavigate,

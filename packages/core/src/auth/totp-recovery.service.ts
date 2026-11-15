@@ -1,26 +1,29 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
 import type {
   TotpRecoveryCodeInput,
   TotpRecoveryInput,
   TotpRecoveryTokenInput,
 } from '@dakly/contracts/totp';
-import { AccountTransaction } from '../platform/database/account-transaction';
+
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { TeamService } from '../team/team.service';
-import { SessionsService } from '../sessions/sessions.service';
-import { loadEnv } from '../platform/config/env';
 import { Clock } from '../platform/clock';
-import { UsersRepository } from './users.repository';
-import { TotpService } from './totp.service';
-import { TotpRepository } from './totp.repository';
-import { PasswordCredentials } from './password-credentials';
-import { SignInCodes } from './sign-in-codes';
-import { AccountRecoveryRepository } from './account-recovery.repository';
-import { SecurityNoticesService, type SecurityNotice } from './security-notices.service';
+import { loadEnv } from '../platform/config/env';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
+import { TeamService } from '../team/team.service';
 import { accountCredentialState } from './account-credential-state';
+import { AccountRecoveryRepository } from './account-recovery.repository';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import { PasswordCredentials } from './password-credentials';
+import { SecurityNoticesService, type SecurityNotice } from './security-notices.service';
+import { SignInCodes } from './sign-in-codes';
+import { TotpRepository } from './totp.repository';
+import { TotpService } from './totp.service';
+import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class TotpRecoveryService {

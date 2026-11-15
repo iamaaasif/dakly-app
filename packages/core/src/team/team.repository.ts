@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+
+import type { UserStore, UserStorePageQuery } from '@dakly/contracts/sessions';
 import type { Database } from '@dakly/db/client';
 import { memberships, roles } from '@dakly/db/schema/team';
-import type { UserStore, UserStorePageQuery } from '@dakly/contracts/sessions';
+
 import { AccountDatabase } from '../platform/database/account-database';
-import { TenantDatabase } from '../platform/database/tenant-database';
 import { DATABASE } from '../platform/database/database.tokens';
+import { TenantDatabase } from '../platform/database/tenant-database';
 
 @Injectable()
 export class TeamRepository {

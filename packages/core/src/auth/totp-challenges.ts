@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
-import type { SignInRequest, SignInUser } from './sign-in';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import type { SignInRequest, SignInUser } from './sign-in';
 
 export type TotpChallenge = {
   user: SignInUser;

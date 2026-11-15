@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
+
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
-import { stores } from '@dakly/db/schema/stores';
 import { auditLog } from '@dakly/db/schema/platform';
-import { TenantDatabase } from '../platform/database/tenant-database';
+import { stores } from '@dakly/db/schema/stores';
+
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { AuditRepository } from './audit.repository';
 import { AuditService } from './audit.service';
 

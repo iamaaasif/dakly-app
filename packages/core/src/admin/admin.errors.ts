@@ -1,4 +1,5 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
+
 const errors = {
   STAFF_ACCESS_REQUIRED: { status: 403, message: 'Staff Access verification is required' },
   STAFF_AUTH_REQUIRED: { status: 401, message: 'Sign in to your staff account' },

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+
 export function StoreRequired({ hasMemberships }: { hasMemberships: boolean }) {
   return (
     <div className="space-y-4 p-6">

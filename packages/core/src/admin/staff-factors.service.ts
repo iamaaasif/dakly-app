@@ -1,17 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
 import type {
   StaffTotpInput,
   StaffRegistrationInput,
   StaffAuthenticationInput,
 } from '@dakly/contracts/staff-auth';
+import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
+import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { Clock } from '../platform/clock';
-import { StaffAuthService } from './staff-auth.service';
-import { StaffRepository } from './staff.repository';
-import { StaffSessionsService } from './staff-sessions.service';
 import { StaffAuditService } from './staff-audit.service';
+import { StaffAuthService } from './staff-auth.service';
+import { StaffSessionsService } from './staff-sessions.service';
+import { StaffRepository } from './staff.repository';
 
 @Injectable()
 export class StaffFactorsService {

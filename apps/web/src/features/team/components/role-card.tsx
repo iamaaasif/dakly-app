@@ -1,12 +1,15 @@
 import { useState } from 'react';
+
 import type { RoleResponse } from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
-import { SessionDialog as Dialog } from '@/components/session-dialog';
+
 import { useRemoveRole } from '../api/remove-role';
-import { RoleForm } from './role-form';
 import { PermissionSummary } from './permission-summary';
+import { RoleForm } from './role-form';
 import { TeamError } from './team-error';
+import { SessionDialog as Dialog } from '@/components/session-dialog';
+
 export function RoleCard({ role, canEdit }: { role: RoleResponse; canEdit: boolean }) {
   const [action, setAction] = useState<'edit' | 'delete' | null>(null);
   const remove = useRemoveRole(role.id);

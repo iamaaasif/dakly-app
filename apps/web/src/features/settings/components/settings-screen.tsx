@@ -1,12 +1,15 @@
 'use client';
 import Link from 'next/link';
+
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
+
+import { useStoreSettings } from '../api/store-settings';
+import { ExtensionsForm } from './extensions-form';
+import { StoreForm } from './store-form';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
-import { useStoreSettings } from '../api/store-settings';
-import { StoreForm } from './store-form';
-import { ExtensionsForm } from './extensions-form';
+
 export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
   return (
     <StorePage permission="canViewStoreSettings">

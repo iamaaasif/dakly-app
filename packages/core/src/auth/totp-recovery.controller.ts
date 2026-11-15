@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+
 import {
   totpRecoveryCodeSchema,
   totpRecoverySchema,
@@ -8,9 +9,11 @@ import {
   type TotpRecoveryInput,
   type TotpRecoveryTokenInput,
 } from '@dakly/contracts/totp';
+
 import { Public } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { TotpRecoveryService } from './totp-recovery.service';
+
 @Controller('auth/totp/recovery')
 @Public()
 export class TotpRecoveryController {

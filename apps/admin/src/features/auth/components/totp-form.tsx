@@ -1,11 +1,14 @@
 'use client';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+
 import { staffTotpSchema, type StaffTotpInput } from '@dakly/contracts/staff-auth';
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
+
 import { useVerifyTotp } from '../api/verify-totp';
+
 type TotpFormProps = { challenge: string };
 export function TotpForm({ challenge }: TotpFormProps) {
   const router = useRouter();

@@ -1,14 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
-import { isStaffSessionCurrent, STAFF_SESSION_TTL_MS } from './staff-session-policy';
+import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
+import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
-import { Clock } from '../platform/clock';
-import { StaffRepository } from './staff.repository';
-import { StaffTokens, staffTokenHash } from './staff-tokens';
 import { staffError } from './admin.errors';
 import { StaffAuditService } from './staff-audit.service';
+import { isStaffSessionCurrent, STAFF_SESSION_TTL_MS } from './staff-session-policy';
+import { StaffTokens, staffTokenHash } from './staff-tokens';
+import { StaffRepository } from './staff.repository';
 
 @Injectable()
 export class StaffSessionsService {

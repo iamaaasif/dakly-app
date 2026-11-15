@@ -1,12 +1,5 @@
-import { TotpRecoveryService } from './totp-recovery.service';
-import { SecurityNoticesService } from './security-notices.service';
-import { TotpService } from './totp.service';
-import { TotpChallenges, type TotpChallenge } from './totp-challenges';
-import { accountCredentialState } from './account-credential-state';
-import { GoogleTickets } from './google-tickets';
-import { hashPassword } from '../platform/crypto/password';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Inject, Injectable } from '@nestjs/common';
+
 import type {
   RequestCodeInput,
   SignUpInput,
@@ -14,17 +7,26 @@ import type {
   RequestEmailCodeInput,
   VerifyEmailCodeInput,
 } from '@dakly/contracts/auth';
-import { SessionsService } from '../sessions/sessions.service';
-import { AccountTransaction } from '../platform/database/account-transaction';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Clock } from '../platform/clock';
-import { UsersRepository } from './users.repository';
+import { hashPassword } from '../platform/crypto/password';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
+import { accountCredentialState } from './account-credential-state';
+import { authError } from './auth.errors';
+import { GoogleTickets } from './google-tickets';
+import { passwordState } from './password-credentials';
+import { SecurityNoticesService } from './security-notices.service';
+import type { SignInRequest, SignInUser } from './sign-in';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
-import { passwordState } from './password-credentials';
-import { authError } from './auth.errors';
+import { TotpChallenges, type TotpChallenge } from './totp-challenges';
+import { TotpRecoveryService } from './totp-recovery.service';
+import { TotpService } from './totp.service';
+import { UsersRepository } from './users.repository';
 
 export type { SignInRequest, SignInUser } from './sign-in';
-import type { SignInRequest, SignInUser } from './sign-in';
 
 type Account = NonNullable<Awaited<ReturnType<UsersRepository['lockForSignIn']>>>;
 type SecondFactor = {

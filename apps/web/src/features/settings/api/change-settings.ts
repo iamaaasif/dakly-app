@@ -1,8 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+
 import type { ChangeStoreSettingsInput, StoreSettingsResponse } from '@dakly/contracts/stores';
-import { useStoreRequest } from '@/lib/store-request';
-import { notifySessionChange } from '@/lib/notify-session-change';
+
 import { settingsKey } from './store-settings';
+import { notifySessionChange } from '@/lib/notify-session-change';
+import { useStoreRequest } from '@/lib/store-request';
+
 export function useChangeSettings() {
   const { request } = useStoreRequest();
   const client = useQueryClient();

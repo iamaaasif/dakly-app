@@ -1,6 +1,7 @@
-import { NewCustomerForm } from '@/features/customers/components/new-customer-form';
 import { StorePage } from '@/components/store-page';
+import { NewCustomerForm } from '@/features/customers/components/new-customer-form';
 import { requireSession } from '@/lib/require-session';
+
 export default async function CustomersPage() {
   await requireSession();
   return (

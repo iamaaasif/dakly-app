@@ -1,4 +1,5 @@
 import { AuthLink } from './auth-link';
+
 export function SignInNavigation({
   method,
   onNavigate,

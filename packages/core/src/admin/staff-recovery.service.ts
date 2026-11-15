@@ -1,4 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
+
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import {
   staffRecoveryEffectSchema,
   type StaffRecoveryRequest,
@@ -7,22 +9,23 @@ import {
   type StaffRecoveryConfirmation,
   type StaffRecoveryEffect,
 } from '@dakly/contracts/staff-recovery';
-import type { StaffIdentity } from '@dakly/contracts/staff-auth';
-import { isStaffSessionCurrent } from './staff-session-policy';
-import { UsersService } from '../auth/users.service';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { SignInCodes } from '../auth/codes.module';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { SessionsService } from '../sessions/sessions.service';
-import { AccountTransaction } from '../platform/database/account-transaction';
+import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
+import { AccountTransaction } from '../platform/database/account-transaction';
 import { newId } from '../platform/database/new-id';
+import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
+import { RiskyActionConfirmation } from './risky-action-confirmation';
 import { StaffAuditService } from './staff-audit.service';
 import { StaffIdentityService } from './staff-identity.service';
-import { RiskyActionConfirmation } from './risky-action-confirmation';
-import { StaffRecoveryRepository, type RecoveryStores } from './staff-recovery.repository';
 import { recoveryError } from './staff-recovery.errors';
+import { StaffRecoveryRepository, type RecoveryStores } from './staff-recovery.repository';
+import { isStaffSessionCurrent } from './staff-session-policy';
+
 type Staff = StaffIdentity & { sessionId: string };
 type RecoveryAccount = NonNullable<Awaited<ReturnType<UsersService['recoveryState']>>>;
 @Injectable()

@@ -1,11 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { StaffAuditSearch, StaffAuditPage, StaffAuditRow } from '@dakly/contracts/staff-audit';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
-import { StaffTransaction } from '../platform/database/staff-transaction';
+
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
+import { StaffTransaction } from '../platform/database/staff-transaction';
 import { StaffHistoryRepository } from './staff-history.repository';
 import { supportError } from './support.errors';
+
 @Injectable()
 export class StaffHistoryService {
   constructor(

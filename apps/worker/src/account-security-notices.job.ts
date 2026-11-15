@@ -1,11 +1,12 @@
-import { runWithJobContext } from '@dakly/core/platform/logging/job-context';
 import {
   Inject,
   Injectable,
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
+
 import { SecurityNoticesService } from '@dakly/core/auth/security-notices.service';
+import { runWithJobContext } from '@dakly/core/platform/logging/job-context';
 
 @Injectable()
 export class AccountSecurityNoticesJob implements OnApplicationBootstrap, OnApplicationShutdown {

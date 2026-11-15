@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+
 import { RecoveryScreen } from '@/features/auth/components/recovery-screen';
+
 export const metadata: Metadata = { referrer: 'no-referrer' };
 export default async function RecoveryPage({
   searchParams,

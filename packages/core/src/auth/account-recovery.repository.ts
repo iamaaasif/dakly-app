@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+
 import type { Database } from '@dakly/db/client';
 import { accountRecoveries, accountSecurityNotices } from '@dakly/db/schema/account-recovery';
+
 import { AccountDatabase } from '../platform/database/account-database';
 import { DATABASE } from '../platform/database/database.tokens';
 

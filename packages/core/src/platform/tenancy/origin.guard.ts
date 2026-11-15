@@ -1,8 +1,9 @@
 import { type CanActivate, type ExecutionContext, Injectable, Inject } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ACCESS_RULE, type AccessRule } from './access.decorators';
+
 import { loadEnv } from '../config/env';
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
+import { ACCESS_RULE, type AccessRule } from './access.decorators';
 
 @Injectable()
 export class OriginGuard implements CanActivate {

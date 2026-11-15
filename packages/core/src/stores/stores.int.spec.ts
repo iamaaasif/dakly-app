@@ -1,28 +1,30 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { users, sessions } from '@dakly/db/schema/auth';
 import { plans, subscriptions } from '@dakly/db/schema/billing';
-import { stores, storeCounters } from '@dakly/db/schema/stores';
 import { customers } from '@dakly/db/schema/customers';
-import { AuditService } from '../audit/audit.service';
-import { memberships, roles } from '@dakly/db/schema/team';
 import { auditLog } from '@dakly/db/schema/platform';
-import { DatabaseModule } from '../platform/database/database.module';
-import { SessionsModule } from '../sessions/sessions.module';
-import { SessionsService } from '../sessions/sessions.service';
+import { stores, storeCounters } from '@dakly/db/schema/stores';
+import { memberships, roles } from '@dakly/db/schema/team';
+
+import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
+import { DatabaseModule } from '../platform/database/database.module';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
-
+import { SessionsModule } from '../sessions/sessions.module';
+import { SessionsService } from '../sessions/sessions.service';
 import { StoresModule } from './stores.module';
 import { StoresRepository } from './stores.repository';
-import { TenantDatabase } from '../platform/database/tenant-database';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, SessionsModule, StoresModule] })(TestModule);

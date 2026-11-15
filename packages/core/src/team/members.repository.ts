@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, gt, inArray, or, sql } from 'drizzle-orm';
+
+import type { InviteMemberInput, MemberListQuery, MemberRoleInput } from '@dakly/contracts/team';
 import type { Database } from '@dakly/db/client';
 import { memberships, roles } from '@dakly/db/schema/team';
-import type { InviteMemberInput, MemberListQuery, MemberRoleInput } from '@dakly/contracts/team';
+
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 

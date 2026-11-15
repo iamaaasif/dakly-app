@@ -1,9 +1,11 @@
 'use client';
+import { Users, ShieldCheck, LifeBuoy, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Users, ShieldCheck, LifeBuoy, LayoutDashboard } from 'lucide-react';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
+
 import { CollapseNavigation } from './collapse-navigation';
 
 type ShellNavigationProps = {

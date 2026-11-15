@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { CloudflareAccessDriver } from './access-driver';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import { CloudflareAccessDriver } from './access-driver';
 
 describe('Cloudflare Access assertions', () => {
   let key: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];

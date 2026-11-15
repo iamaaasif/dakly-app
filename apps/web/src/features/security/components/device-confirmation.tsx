@@ -1,9 +1,11 @@
-import { Button } from '@dakly/ui/button';
-import { SessionDialog } from '@/components/session-dialog';
 import type { DeviceSession } from '@dakly/contracts/sessions';
+import { Button } from '@dakly/ui/button';
+
 import { useRevokeDevice } from '../api/revoke-device';
 import { useRevokeOtherDevices } from '../api/revoke-other-devices';
 import { useSecurityRefresh } from '../hooks/use-security-refresh';
+import { SessionDialog } from '@/components/session-dialog';
+
 export function DeviceConfirmation({
   device,
   onClose,

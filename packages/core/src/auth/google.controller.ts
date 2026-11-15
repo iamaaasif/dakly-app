@@ -1,14 +1,16 @@
 import { Body, Controller, Inject, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+
 import {
   googleSignInSchema,
   verifyGoogleEmailSchema,
   type GoogleSignInInput,
   type VerifyGoogleEmailInput,
 } from '@dakly/contracts/auth';
+
+import { setSessionCookie } from '../platform/http/session-cookie';
 import { Public } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { setSessionCookie } from '../platform/http/session-cookie';
 import { GoogleService } from './google.service';
 
 @Controller('auth/google')

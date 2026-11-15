@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
 import { Inter, Noto_Sans_Bengali } from 'next/font/google';
+import type { ReactNode } from 'react';
+
 import './globals.css';
 import { Providers } from './providers';
 

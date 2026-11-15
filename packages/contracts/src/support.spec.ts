@@ -1,6 +1,8 @@
-import { staffAuditSearchSchema } from './staff-audit';
 import { describe, it, expect } from 'vitest';
+
+import { staffAuditSearchSchema } from './staff-audit';
 import { supportRequestSchema } from './support';
+
 const request = {
   targetId: '019a7bd8-845e-7000-8000-000000000001',
   reason: 'Customer support issue',

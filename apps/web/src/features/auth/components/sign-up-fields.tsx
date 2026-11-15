@@ -1,6 +1,9 @@
 import { useFormContext } from 'react-hook-form';
+
 import { passwordSchema, type SignUpInput } from '@dakly/contracts/auth';
+
 import { FormField as AuthField } from '@/components/form-field';
+
 export function SignUpFields() {
   const form = useFormContext<SignUpInput & { password: string }>();
   const errors = form.formState.errors;

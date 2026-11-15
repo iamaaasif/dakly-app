@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
+
+import type { StaffProvisionInput } from '@dakly/contracts/staff-auth';
+import type { Database } from '@dakly/db/client';
 import {
   staffUsers,
   staffChallenges,
@@ -8,10 +11,9 @@ import {
   staffIdentityContacts,
 } from '@dakly/db/schema/admin';
 import { uuidv7 } from '@dakly/db/uuid-v7';
-import { StaffDatabase } from '../platform/database/staff-database';
+
 import { DATABASE } from '../platform/database/database.tokens';
-import type { Database } from '@dakly/db/client';
-import type { StaffProvisionInput } from '@dakly/contracts/staff-auth';
+import { StaffDatabase } from '../platform/database/staff-database';
 
 const staffColumns = {
   id: staffUsers.id,

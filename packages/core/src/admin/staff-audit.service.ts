@@ -1,6 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { TenantStaffAudit } from '@dakly/contracts/staff-audit';
+
 import { StaffAuditRepository } from './staff-audit.repository';
+
 @Injectable()
 export class StaffAuditService {
   constructor(@Inject(StaffAuditRepository) private readonly repository: StaffAuditRepository) {}

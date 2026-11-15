@@ -1,6 +1,8 @@
 import type { TotpRecoveryTokenInput } from '@dakly/contracts/totp';
 import { Button } from '@dakly/ui/button';
+
 import { useCancelRecovery } from '../api/cancel-recovery';
+
 export function RecoveryCancel({ notice }: { notice: TotpRecoveryTokenInput }) {
   const cancel = useCancelRecovery();
   if (cancel.isSuccess)

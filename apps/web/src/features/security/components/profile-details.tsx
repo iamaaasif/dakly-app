@@ -1,5 +1,7 @@
 import type { AccountProfile } from '@dakly/contracts/sessions';
+
 import { formatPhone } from '@/lib/format-phone';
+
 export function ProfileDetails({ profile }: { profile: AccountProfile }) {
   return (
     <dl className="space-y-3 break-words">

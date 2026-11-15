@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+
 import type { AuditEntry } from '@dakly/contracts/audit';
+
 import { AuditRepository } from './audit.repository';
 
 @Injectable()

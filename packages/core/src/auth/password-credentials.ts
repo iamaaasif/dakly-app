@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { verifyPassword } from '../platform/crypto/password';
-import { UsersRepository } from './users.repository';
-import { SignInFailures, type SignInSubject } from './sign-in-failures';
+
 import { Clock } from '../platform/clock';
+import { verifyPassword } from '../platform/crypto/password';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 import type { PasswordProof } from './sign-in-codes';
+import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { UsersRepository } from './users.repository';
 
 export function passwordState(userId: string, hash: string | null): string {
   return authKey('password-state', JSON.stringify([userId, hash]));

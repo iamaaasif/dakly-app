@@ -1,9 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { staffAuditLog } from '@dakly/db/schema/admin';
-import { TenantDatabase } from '../platform/database/tenant-database';
+
 import type { TenantStaffAudit } from '@dakly/contracts/staff-audit';
+import { staffAuditLog } from '@dakly/db/schema/admin';
+
 import { AccountDatabase } from '../platform/database/account-database';
 import { StaffDatabase } from '../platform/database/staff-database';
+import { TenantDatabase } from '../platform/database/tenant-database';
+
 @Injectable()
 export class StaffAuditRepository {
   constructor(

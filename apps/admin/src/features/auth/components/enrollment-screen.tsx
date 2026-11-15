@@ -1,12 +1,15 @@
 'use client';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import { staffEnrollmentSchema, type StaffEnrollmentInput } from '@dakly/contracts/staff-auth';
 import { Button } from '@dakly/ui/button';
-import { EnrollmentFields } from './enrollment-fields';
+
 import { useStaffEnrollment } from '../api/enroll';
 import { AuthPanel } from './auth-panel';
+import { EnrollmentFields } from './enrollment-fields';
 import { FactorChallenge } from './factor-challenge';
+
 export function EnrollmentScreen() {
   const enroll = useStaffEnrollment();
   const form = useForm<StaffEnrollmentInput>({

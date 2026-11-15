@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+
 import type { Database } from '@dakly/db/client';
-import { sql } from 'drizzle-orm';
 import { accountSecurityNotices } from '@dakly/db/schema/account-recovery';
+
+import type { EncryptedSecret } from '../platform/crypto/envelope-encryption';
 import { AccountDatabase } from '../platform/database/account-database';
 import { DATABASE } from '../platform/database/database.tokens';
-import type { EncryptedSecret } from '../platform/crypto/envelope-encryption';
 
 export type ClaimedNotice = {
   id: string;

@@ -1,11 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
+
+import type { StaffAuditSearch, StaffAuditRow } from '@dakly/contracts/staff-audit';
 import type { Database } from '@dakly/db/client';
 import { staffAuditLog, staffAuditExports } from '@dakly/db/schema/admin';
-import type { StaffAuditSearch, StaffAuditRow } from '@dakly/contracts/staff-audit';
-import { STAFF_IDLE_MS } from './staff-session-policy';
+
 import { DATABASE } from '../platform/database/database.tokens';
 import { StaffDatabase } from '../platform/database/staff-database';
+import { STAFF_IDLE_MS } from './staff-session-policy';
+
 @Injectable()
 export class StaffHistoryRepository {
   constructor(

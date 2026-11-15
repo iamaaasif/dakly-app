@@ -1,6 +1,8 @@
-import type { StoreAccess } from '@dakly/contracts/team';
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { CreateCustomerInput, CustomerResponse } from '@dakly/contracts/customers';
+import type { StoreAccess } from '@dakly/contracts/team';
+
 import { customerError } from './customers.errors';
 import { type Customer, CustomersRepository } from './customers.repository';
 

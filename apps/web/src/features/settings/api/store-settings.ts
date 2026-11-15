@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+
 import type { StoreSettingsResponse } from '@dakly/contracts/stores';
+
 import { useStoreRequest } from '@/lib/store-request';
+
 export const settingsKey = ['store-settings'] as const;
 export function useStoreSettings() {
   const { request, contextTag } = useStoreRequest();

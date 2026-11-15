@@ -1,6 +1,8 @@
 import { memberListQuerySchema } from '@dakly/contracts/team';
-import { requireSession } from '@/lib/require-session';
+
 import { TeamScreen } from '@/features/team/components/team-screen';
+import { requireSession } from '@/lib/require-session';
+
 export default async function TeamPage({
   searchParams,
 }: {

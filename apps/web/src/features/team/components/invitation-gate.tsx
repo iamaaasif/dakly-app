@@ -1,11 +1,14 @@
 'use client';
 import { type ReactNode, useState } from 'react';
+
 import { QueryError } from '@dakly/ui/query-error';
-import { useInvitationToken } from '../hooks/use-invitation-token';
+
 import { useInvitationSession } from '../hooks/use-invitation-session';
+import { useInvitationToken } from '../hooks/use-invitation-token';
 import { InvitationAccept } from './invitation-accept';
 import { InvitationAccepted } from './invitation-accepted';
 import { InvitationAuthentication } from './invitation-authentication';
+
 export function InvitationGate({ renderAuth }: { renderAuth: (done: () => void) => ReactNode }) {
   const notice = useInvitationToken();
   const { session, showAuth, checking, authFailed } = useInvitationSession();

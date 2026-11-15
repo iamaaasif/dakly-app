@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ADMIN_ORIGIN: z.url().default('http://localhost:3010'),

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+
 import { permissionAreas, type StoreAccess } from '@dakly/contracts/team';
 
 // This is a consistency tag, never an authorization credential or a store selector.

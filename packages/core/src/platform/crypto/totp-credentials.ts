@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
 import { Secret, TOTP } from 'otpauth';
 

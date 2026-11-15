@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { accountCredentialState } from './account-credential-state';
 import { authError } from './auth.errors';

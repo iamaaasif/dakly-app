@@ -1,6 +1,7 @@
 import { index, pgTable, primaryKey, uuid } from 'drizzle-orm/pg-core';
-import { stores } from './stores';
+
 import { staffAuditLog } from './admin';
+import { stores } from './stores';
 // Membership at recovery time determines which shops may read the canonical audit event.
 export const staffRecoveryHistory = pgTable(
   'staff_recovery_history',

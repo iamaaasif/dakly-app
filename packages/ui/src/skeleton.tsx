@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+
 import { cn } from './cn';
 
 export type SkeletonProps = ComponentProps<'div'>;

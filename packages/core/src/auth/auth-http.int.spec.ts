@@ -1,23 +1,26 @@
 import 'reflect-metadata';
 import { randomInt, randomUUID } from 'node:crypto';
+
+import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { Module } from '@nestjs/common';
-import { AuthModule } from './auth.module';
-import { DatabaseModule } from '../platform/database/database.module';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
-import { SessionsService } from '../sessions/sessions.service';
+
 import { ValkeyClient } from '../platform/cache/valkey-client';
-import { UsersRepository } from './users.repository';
-import { SignInFailures } from './sign-in-failures';
-import { authKey } from './auth-key';
+import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
+import { SessionsService } from '../sessions/sessions.service';
+import { authKey } from './auth-key';
+import { AuthModule } from './auth.module';
+import { SignInFailures } from './sign-in-failures';
+import { UsersRepository } from './users.repository';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule] })(TestModule);

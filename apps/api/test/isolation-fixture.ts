@@ -1,11 +1,13 @@
 import { randomInt, randomUUID } from 'node:crypto';
+
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { createDatabase } from '@dakly/db/client';
-import { SessionsService } from '@dakly/core/sessions/sessions.service';
-import { SupportService } from '@dakly/core/admin/support.service';
-import { StaffSessionsService } from '@dakly/core/admin/staff-sessions.service';
-import { StaffTransaction } from '@dakly/core/platform/database/staff-transaction';
 import { expect } from 'vitest';
+
+import { StaffSessionsService } from '@dakly/core/admin/staff-sessions.service';
+import { SupportService } from '@dakly/core/admin/support.service';
+import { StaffTransaction } from '@dakly/core/platform/database/staff-transaction';
+import { SessionsService } from '@dakly/core/sessions/sessions.service';
+import { createDatabase } from '@dakly/db/client';
 
 export type Actor = { id: string; phone: string; cookie: string };
 export type Shop = {

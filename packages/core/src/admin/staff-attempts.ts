@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Clock } from '../platform/clock';
+
 import { RateLimiter } from '../platform/cache/rate-limiter';
-import { StaffRepository } from './staff.repository';
-import { staffTokenHash } from './staff-tokens';
+import { Clock } from '../platform/clock';
 import { staffError } from './admin.errors';
+import { staffTokenHash } from './staff-tokens';
+import { StaffRepository } from './staff.repository';
+
 @Injectable()
 export class StaffAttempts {
   private readonly logger = new Logger(StaffAttempts.name);

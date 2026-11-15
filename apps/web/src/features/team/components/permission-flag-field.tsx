@@ -1,7 +1,10 @@
 import { useId } from 'react';
 import { useFormContext } from 'react-hook-form';
+
 import type { CreateRoleInput } from '@dakly/contracts/team';
+
 import { flagLabels } from '../permission-labels';
+
 export function PermissionFlagField({ flag }: { flag: keyof typeof flagLabels }) {
   const {
     register,

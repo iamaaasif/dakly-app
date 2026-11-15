@@ -1,11 +1,12 @@
-import { createRef } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Button } from './button';
-import { Input } from './input';
-import { Card } from './card';
+import { createRef } from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { Badge } from './badge';
+import { Button } from './button';
+import { Card } from './card';
+import { Input } from './input';
 import { Skeleton } from './skeleton';
 
 afterEach(cleanup);

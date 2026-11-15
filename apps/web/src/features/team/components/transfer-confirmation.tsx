@@ -1,8 +1,10 @@
 import { Button } from '@dakly/ui/button';
-import { SessionDialog as Dialog } from '@/components/session-dialog';
-import { useCancelTransfer } from '../api/cancel-transfer';
+
 import { useAcceptTransfer } from '../api/accept-transfer';
+import { useCancelTransfer } from '../api/cancel-transfer';
 import { TeamError } from './team-error';
+import { SessionDialog as Dialog } from '@/components/session-dialog';
+
 type TransferConfirmationProps = {
   action: 'accept' | 'cancel';
   transferId: string;

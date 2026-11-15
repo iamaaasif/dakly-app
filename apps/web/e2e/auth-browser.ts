@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+
 import { expect, type Page } from '@playwright/test';
 
 export async function privateInput(page: Page, name: string, value: string) {

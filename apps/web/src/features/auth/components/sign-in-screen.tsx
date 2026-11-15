@@ -1,15 +1,18 @@
 'use client';
-import { AuthLink } from './auth-link';
-import { SignInNavigation } from './sign-in-navigation';
 import { useState } from 'react';
+
 import type { GoogleSignInResponse } from '@dakly/contracts/auth';
+
 import type { AuthConfig } from '../auth.types';
 import { AuthFrame } from './auth-frame';
-import { SignInForm } from './sign-in-form';
-import { TotpStep } from './totp-step';
-import { GoogleSignIn } from './google-sign-in';
+import { AuthLink } from './auth-link';
 import { GoogleEmail } from './google-email';
+import { GoogleSignIn } from './google-sign-in';
+import { SignInForm } from './sign-in-form';
+import { SignInNavigation } from './sign-in-navigation';
 import { SignUpScreen } from './sign-up-screen';
+import { TotpStep } from './totp-step';
+
 type SignInScreenProps = {
   config: AuthConfig;
   method?: 'phone' | 'email';

@@ -1,5 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
+
 import { useAccountRequest } from '@/lib/account-request';
+
 export function useAccountMutation<Input, Output = void>(
   mutation: (
     request: ReturnType<typeof useAccountRequest>['request'],

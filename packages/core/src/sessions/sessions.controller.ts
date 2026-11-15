@@ -12,6 +12,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
+
 import {
   userStorePageSchema,
   type UserStorePageQuery,
@@ -21,14 +22,15 @@ import {
   type ActiveStoreInput,
   type SessionContext,
 } from '@dakly/contracts/sessions';
+
 import { UsersService } from '../auth/users.service';
-import { TeamService } from '../team/team.service';
-import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+import { clearSessionCookie } from '../platform/http/session-cookie';
 import { RequireUser } from '../platform/tenancy/access.decorators';
+import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { TeamService } from '../team/team.service';
 import { SessionsService } from './sessions.service';
-import { clearSessionCookie } from '../platform/http/session-cookie';
 
 @Controller()
 @RequireUser()

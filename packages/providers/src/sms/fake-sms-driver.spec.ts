@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { FakeSmsDriver } from './fake-sms-driver';
 
 describe('FakeSmsDriver', () => {

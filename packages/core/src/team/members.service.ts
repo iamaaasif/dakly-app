@@ -1,5 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
+import type { UserProfile } from '@dakly/contracts/sessions';
 import {
   customRolePermissionsSchema,
   type AcceptInviteResponse,
@@ -10,17 +13,17 @@ import {
   type MemberRoleInput,
   type StoreAccess,
 } from '@dakly/contracts/team';
-import type { UserProfile } from '@dakly/contracts/sessions';
+
+import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
 import { BillingService } from '../billing/billing.service';
-import { AuditService } from '../audit/audit.service';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { Clock } from '../platform/clock';
-import { MembersRepository, roleValues, type Member } from './members.repository';
-import { InviteDelivery } from './invite-delivery';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { builtInRoleAccess } from './built-in-roles';
-import { canManageMember, hasSameMemberRole } from './permissions';
+import { InviteDelivery } from './invite-delivery';
 import { assertInviteRecipient, assertOpenInvite } from './invite-policy';
+import { MembersRepository, roleValues, type Member } from './members.repository';
+import { canManageMember, hasSameMemberRole } from './permissions';
 import { teamError } from './team.errors';
 
 type Actor = { userId: string; access: StoreAccess };

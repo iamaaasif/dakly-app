@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { builtInRoles, type membershipStatuses } from './stores';
+
 import { bdMobileSchema } from './phone';
+import { builtInRoles, type membershipStatuses } from './stores';
 
 export const permissionAreas = [
   'dashboard',

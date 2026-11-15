@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { UsersModule } from '../auth/users.module';
-import { TeamModule } from '../team/team.module';
+
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
+import { UsersModule } from '../auth/users.module';
 import { Clock } from '../platform/clock';
 import { OriginGuard } from '../platform/tenancy/origin.guard';
-import { UserGuard } from '../platform/tenancy/user.guard';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import { PermissionGuard } from '../platform/tenancy/permission.guard';
+import { StoreGuard } from '../platform/tenancy/store.guard';
+import { UserGuard } from '../platform/tenancy/user.guard';
+import { TeamModule } from '../team/team.module';
 import { SessionGuard } from './session.guard';
 import { SessionsController } from './sessions.controller';
 import { SessionsRepository } from './sessions.repository';

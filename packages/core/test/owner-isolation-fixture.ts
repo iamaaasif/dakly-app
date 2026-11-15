@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { createDatabase } from '@dakly/db/client';
-import { TenantDatabase } from '../src/platform/database/tenant-database';
+
 import { expect } from 'vitest';
+
+import { createDatabase } from '@dakly/db/client';
+
+import { TenantDatabase } from '../src/platform/database/tenant-database';
 
 // Only owning-feature tests import their repositories. This helper supplies data and a real owner connection.
 export class OwnerIsolationFixture {

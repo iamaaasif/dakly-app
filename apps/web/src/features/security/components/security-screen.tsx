@@ -1,12 +1,15 @@
 'use client';
 import Link from 'next/link';
+
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
+
 import { useProfile } from '../api/profile';
-import { ProfilePanel } from './profile-panel';
-import { TotpPanel } from './totp-panel';
 import { DevicesPanel } from './devices-panel';
+import { ProfilePanel } from './profile-panel';
 import { SecurityHistory } from './security-history';
+import { TotpPanel } from './totp-panel';
+
 const sections = [
   ['profile', 'My profile'],
   ['devices', 'Devices'],

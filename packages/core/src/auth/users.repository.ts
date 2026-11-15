@@ -1,15 +1,17 @@
-import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
-import { uuidv7 } from '@dakly/db/uuid-v7';
-import type { Database } from '@dakly/db/client';
+
 import type { SignUpInput } from '@dakly/contracts/auth';
+import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
+import type { Database } from '@dakly/db/client';
 import { accountRecoveries } from '@dakly/db/schema/account-recovery';
 import { users } from '@dakly/db/schema/auth';
-import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
-import { databaseErrorCode } from '../platform/database/error-code';
-import { DATABASE } from '../platform/database/database.tokens';
+import { uuidv7 } from '@dakly/db/uuid-v7';
+import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
 import { AccountDatabase } from '../platform/database/account-database';
+import { DATABASE } from '../platform/database/database.tokens';
+import { databaseErrorCode } from '../platform/database/error-code';
 import { TenantDatabase, type Transaction } from '../platform/database/tenant-database';
 
 @Injectable()

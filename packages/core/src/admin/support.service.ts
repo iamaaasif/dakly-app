@@ -1,22 +1,25 @@
 import { randomBytes, createHash } from 'node:crypto';
-import { PinoLogger } from 'nestjs-pino';
+
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
+
 import type { CreateCustomerInput } from '@dakly/contracts/customers';
-import type { SupportPrincipal, SupportRequestInput } from '@dakly/contracts/support';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
-import { supportContextTag, assertSupportContext, assertSupportParent } from './support-session';
-import { SupportOwnerService } from './support-owner.service';
-import { supportRoles } from './support-roles';
-import { bindVerifiedStore } from '../platform/logging/request-logging';
-import { supportGrantResponse, supportGrantStatus } from './support-grant';
-import { StoreTransaction } from '../platform/database/store-transaction';
+import type { SupportPrincipal, SupportRequestInput } from '@dakly/contracts/support';
+
+import { CustomersService } from '../customers/customers.service';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
-import { SupportAuditService } from './support-audit.service';
-import { CustomersService } from '../customers/customers.service';
-import { SupportRepository } from './support.repository';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { bindVerifiedStore } from '../platform/logging/request-logging';
 import { StaffIdentityService } from './staff-identity.service';
+import { SupportAuditService } from './support-audit.service';
+import { supportGrantResponse, supportGrantStatus } from './support-grant';
+import { SupportOwnerService } from './support-owner.service';
+import { supportRoles } from './support-roles';
+import { supportContextTag, assertSupportContext, assertSupportParent } from './support-session';
 import { supportError, isSupportCodeUnavailable } from './support.errors';
+import { SupportRepository } from './support.repository';
 
 const tokenHash = (token: string) => createHash('sha256').update(token).digest();
 type Staff = StaffIdentity & { sessionId: string };

@@ -1,19 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import {
   breakGlassEffectSchema,
   type BreakGlassRequest,
   type BreakGlassConfirmation,
 } from '@dakly/contracts/break-glass';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+
 import { Clock } from '../platform/clock';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { newId } from '../platform/database/new-id';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { StaffAlertsService } from './staff-alerts.service';
+import { SupportAuditService } from './support-audit.service';
+import { supportError } from './support.errors';
 import { SupportRepository } from './support.repository';
 import { SupportService } from './support.service';
-import { SupportAuditService } from './support-audit.service';
-import { StaffAlertsService } from './staff-alerts.service';
-import { RiskyActionConfirmation } from './risky-action-confirmation';
-import { supportError } from './support.errors';
+
 type Staff = StaffIdentity & { sessionId: string };
 @Injectable()
 export class BreakGlassService {

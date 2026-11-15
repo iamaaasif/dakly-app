@@ -1,7 +1,8 @@
-import type * as React from 'react';
 import type * as ReactQuery from '@tanstack/react-query';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
+import type * as React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { useSessionVerification } from './use-session-verification';
 
 const { getClient } = vi.hoisted(() => ({ getClient: vi.fn() }));

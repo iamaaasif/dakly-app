@@ -3,7 +3,11 @@ import { Controller, Get, Module, UseGuards } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import type { StoreAccess } from '@dakly/contracts/team';
+
+import { DatabaseModule } from '../platform/database/database.module';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import {
   AnyMember,
   Public,
@@ -11,11 +15,9 @@ import {
   RequireUser,
 } from '../platform/tenancy/access.decorators';
 import { PermissionGuard } from '../platform/tenancy/permission.guard';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import type { StoreRequest } from '../platform/tenancy/store-request';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { StoreGuard } from '../platform/tenancy/store.guard';
 import { builtInRoleAccess } from './built-in-roles';
-import { DatabaseModule } from '../platform/database/database.module';
 import { TeamModule } from './team.module';
 
 class PermissionController {

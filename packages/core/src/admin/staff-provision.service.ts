@@ -1,12 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { newId } from '../platform/database/new-id';
+
 import type { StaffProvisionInput } from '@dakly/contracts/staff-auth';
-import { StaffTransaction } from '../platform/database/staff-transaction';
+
 import { Clock } from '../platform/clock';
-import { StaffRepository } from './staff.repository';
-import { StaffAuditService } from './staff-audit.service';
+import { newId } from '../platform/database/new-id';
+import { StaffTransaction } from '../platform/database/staff-transaction';
 import { staffError } from './admin.errors';
+import { StaffAuditService } from './staff-audit.service';
 import { newStaffProof, staffTokenHash } from './staff-tokens';
+import { StaffRepository } from './staff.repository';
+
 @Injectable()
 export class StaffProvisionService {
   constructor(

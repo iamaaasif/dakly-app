@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
+
 import { loadEnv } from '../platform/config/env';
 import { supportError } from './support.errors';
+
 @Injectable()
 export class RiskyActionConfirmation {
   private readonly key = loadEnv().STAFF_SESSION_SIGNING_KEY;

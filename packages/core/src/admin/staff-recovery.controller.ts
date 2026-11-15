@@ -1,5 +1,9 @@
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Body, Controller, Get, Header, HttpCode, Inject, Post, Query, Req } from '@nestjs/common';
+
+import {
+  accountSecurityHistorySchema,
+  type AccountSecurityHistory,
+} from '@dakly/contracts/account-security-events';
 import {
   staffRecoveryLookupSchema,
   type StaffRecoveryLookup,
@@ -10,15 +14,14 @@ import {
   type StaffRecoveryCode,
   type StaffRecoveryConfirmation,
 } from '@dakly/contracts/staff-recovery';
-import {
-  accountSecurityHistorySchema,
-  type AccountSecurityHistory,
-} from '@dakly/contracts/account-security-events';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { AnyMember, RequireUser, StaffAccess } from '../platform/tenancy/access.decorators';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { StaffRecoveryService } from './staff-recovery.service';
 import type { StaffRequest } from './staff.guard';
+
 @Controller('admin/account-recovery')
 @StaffAccess(true, ['support', 'super_admin'])
 export class StaffRecoveryController {

@@ -1,11 +1,14 @@
 import { useState } from 'react';
+
 import type { AccountProfile } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { SessionDialog } from '@/components/session-dialog';
-import { ProfileDetails } from './profile-details';
+
 import { useSecurityRefresh } from '../hooks/use-security-refresh';
 import { EmailForm } from './email-form';
 import { PasswordForm } from './password-form';
+import { ProfileDetails } from './profile-details';
+import { SessionDialog } from '@/components/session-dialog';
+
 export function ProfilePanel({ profile }: { profile: AccountProfile }) {
   const [editing, setEditing] = useState<'email' | 'password'>();
   const [saved, setSaved] = useState('');

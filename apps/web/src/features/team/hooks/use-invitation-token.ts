@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+
 import { acceptInviteSchema } from '@dakly/contracts/team';
+
 export function useInvitationToken() {
   const [token, setToken] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);

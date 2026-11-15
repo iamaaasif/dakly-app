@@ -1,29 +1,31 @@
 import 'reflect-metadata';
 import { randomInt, randomUUID, createHash } from 'node:crypto';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { users } from '@dakly/db/schema/auth';
-import { stores } from '@dakly/db/schema/stores';
-import { memberships } from '@dakly/db/schema/team';
 import { plans, subscriptions } from '@dakly/db/schema/billing';
+import { stores } from '@dakly/db/schema/stores';
+import { memberships, roles } from '@dakly/db/schema/team';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
-import { AuthModule } from '../auth/auth.module';
-import { DatabaseModule } from '../platform/database/database.module';
-import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
-import { SessionsService } from '../sessions/sessions.service';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
-import { registerSessionCookies } from '../platform/http/session-cookie';
+
 import { AuditService } from '../audit/audit.service';
+import { AuthModule } from '../auth/auth.module';
 import { UsersService } from '../auth/users.service';
 import { EmailService } from '../email/email.service';
-import { MembersRepository } from './members.repository';
+import { DatabaseModule } from '../platform/database/database.module';
+import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { registerSessionCookies } from '../platform/http/session-cookie';
+import { SessionsService } from '../sessions/sessions.service';
 import { InviteDelivery } from './invite-delivery';
-import { roles } from '@dakly/db/schema/team';
+import { MembersRepository } from './members.repository';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule] })(TestModule);

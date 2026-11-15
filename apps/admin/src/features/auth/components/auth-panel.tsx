@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
-import { cn } from '@dakly/ui/cn';
+
 import { Card } from '@dakly/ui/card';
+import { cn } from '@dakly/ui/cn';
+
 type AuthPanelProps = {
   title: string;
   description: string;

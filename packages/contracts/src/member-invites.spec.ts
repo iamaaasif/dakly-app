@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { inviteMemberSchema, memberListQuerySchema, memberRoleSchema } from './team';
 
 describe('team membership input', () => {

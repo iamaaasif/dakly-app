@@ -1,11 +1,14 @@
 import 'reflect-metadata';
 import { createHash, randomUUID } from 'node:crypto';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import { SmsService } from '../sms/sms.service';
+
 import { EmailService } from '../email/email.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { SmsService } from '../sms/sms.service';
 import { InviteDelivery } from './invite-delivery';
 
 describe('invite delivery limits in Valkey', () => {

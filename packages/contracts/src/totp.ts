@@ -1,5 +1,7 @@
 import { z } from 'zod';
+
 import { bdMobileSchema } from './phone';
+
 const tokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const codeSchema = z.string().regex(/^(\d{6}|[a-f0-9]{20})$/);
 export const totpSignInSchema = z.strictObject({ challengeId: tokenSchema, code: codeSchema });

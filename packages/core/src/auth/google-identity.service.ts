@@ -1,8 +1,11 @@
 import { performance } from 'node:perf_hooks';
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
+
 import type { GoogleIdentityDriver } from '@dakly/providers/google/google-identity-driver';
-import { GOOGLE_IDENTITY_DRIVER } from './google-provider';
+
 import { authError } from './auth.errors';
+import { GOOGLE_IDENTITY_DRIVER } from './google-provider';
 
 @Injectable()
 export class GoogleIdentityService {

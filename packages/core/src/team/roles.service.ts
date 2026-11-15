@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import { builtInRoles } from '@dakly/contracts/stores';
 import {
   customRolePermissionsSchema,
@@ -9,6 +10,7 @@ import {
   type RoleResponse,
   type StoreAccess,
 } from '@dakly/contracts/team';
+
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';

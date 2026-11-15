@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
+
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import {
   CloudflareAccessDriver,
   type AccessIdentity,
 } from '@dakly/providers/cloudflare/access-driver';
+
 import { loadStaffEnv } from '../platform/config/env';
 import { staffError } from './admin.errors';
-import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 
 @Injectable()
 export class StaffAccessService {

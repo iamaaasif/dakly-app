@@ -1,5 +1,7 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+
 import { createDatabase } from '@dakly/db/client';
+
 import { privateInput, scrubPage, messageText, authenticatorCode } from './auth-browser';
 
 test.use({ screenshot: 'off' });

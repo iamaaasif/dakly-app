@@ -11,9 +11,11 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import { builtInRoles, membershipStatuses } from '@dakly/contracts/stores';
-import { bytea, citext, createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
+
 import { users } from './auth';
+import { bytea, citext, createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
 import { stores } from './stores';
 
 // Custom roles only. The four built-in roles are code in team/permissions.ts, so the

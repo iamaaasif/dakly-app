@@ -1,7 +1,9 @@
-import type { PinoLogger } from 'nestjs-pino';
-import { jobLogBindings } from './job-context';
 import { randomUUID } from 'node:crypto';
+
+import type { PinoLogger } from 'nestjs-pino';
 import type { Options } from 'pino-http';
+
+import { jobLogBindings } from './job-context';
 import { serializeError } from './safe-error';
 
 const sensitiveFields = [

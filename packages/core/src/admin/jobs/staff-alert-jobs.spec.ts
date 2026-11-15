@@ -1,12 +1,15 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
+
 import { Logger } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { StaffAlertsService } from '../staff-alerts.service';
+
 import { ErrorReporter } from '../../platform/logging/error-reporter';
+import type { StaffAlertsService } from '../staff-alerts.service';
 import { StaffAlertDeliveryJob } from './staff-alert-delivery.job';
 import { StaffAlertRelayJob } from './staff-alert-relay.job';
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();

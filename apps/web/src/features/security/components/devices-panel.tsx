@@ -1,12 +1,15 @@
-import { useState } from 'react';
 import Link from 'next/link';
+import { useState } from 'react';
+
 import type { DeviceSession } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
-import { DeviceCard } from './device-card';
 import { Skeleton } from '@dakly/ui/skeleton';
+
 import { useDevices } from '../api/devices';
+import { DeviceCard } from './device-card';
 import { DeviceConfirmation } from './device-confirmation';
+
 export function DevicesPanel({ before }: { before?: string }) {
   const devices = useDevices(before);
   const [selected, setSelected] = useState<DeviceSession | 'others'>();

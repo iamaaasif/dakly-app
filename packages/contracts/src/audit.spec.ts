@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { auditEntrySchema } from './audit';
+
 import { accountSecurityEventSchema } from './account-security-events';
+import { auditEntrySchema } from './audit';
 
 const id = '019c01ea-cf15-7d31-a7f5-d73d66007ad7';
 

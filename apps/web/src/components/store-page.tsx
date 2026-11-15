@@ -1,5 +1,6 @@
 'use client';
 import type { ReactNode } from 'react';
+
 import { useSessionContext } from '@/lib/session-context';
 
 type StorePageProps = {

@@ -1,9 +1,12 @@
 import { useState } from 'react';
+
 import type { OwnershipTransferResponse } from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
+
 import { TransferConfirmation } from './transfer-confirmation';
 import { formatDateTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
+
 export function TransferStatus({ transfer }: { transfer: OwnershipTransferResponse }) {
   const { data } = useSessionContext();
   const [confirm, setConfirm] = useState<'accept' | 'cancel' | null>(null);

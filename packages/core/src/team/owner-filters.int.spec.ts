@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
-import { RolesRepository } from './roles.repository';
+import { AccountDatabase } from '../platform/database/account-database';
 import { MembersRepository } from './members.repository';
 import { OwnershipTransferRepository } from './ownership-transfer.repository';
-import { AccountDatabase } from '../platform/database/account-database';
+import { RolesRepository } from './roles.repository';
 import { TeamRepository } from './team.repository';
+
 const permissions = { areas: {}, seeFullPhone: false, exportLists: false, refund: false };
 describe('team filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();

@@ -1,5 +1,7 @@
 import type { UseFormReturn } from 'react-hook-form';
+
 import type { ChangeStoreExtensionsInput, StoreSettingsResponse } from '@dakly/contracts/stores';
+
 const choices = [
   { value: 'sales', label: 'Sales' },
   { value: 'chats', label: 'Chats' },

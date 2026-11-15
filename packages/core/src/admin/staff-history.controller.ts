@@ -10,17 +10,20 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { z } from 'zod';
 import type { FastifyReply } from 'fastify';
+import { z } from 'zod';
+
 import {
   staffAuditSearchSchema,
   staffAuditExportSchema,
   type StaffAuditSearch,
 } from '@dakly/contracts/staff-audit';
+
 import { StaffAccess } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import type { StaffRequest } from './staff.guard';
 import { StaffHistoryService } from './staff-history.service';
+import type { StaffRequest } from './staff.guard';
+
 @Controller('admin/audit')
 @StaffAccess(true, ['super_admin'])
 export class StaffHistoryController {

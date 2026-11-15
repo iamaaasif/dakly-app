@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import { StaffIdentityRepository } from './staff-identity.repository';
+
 @Injectable()
 export class StaffIdentityService {
   constructor(

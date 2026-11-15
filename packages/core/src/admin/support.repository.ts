@@ -1,14 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+
+import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
 import type { Database } from '@dakly/db/client';
 import { supportGrants, supportSessions, staffUsers, staffSessions } from '@dakly/db/schema/admin';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { memberships } from '@dakly/db/schema/team';
 import { stores } from '@dakly/db/schema/stores';
-import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
-import { STAFF_IDLE_MS } from './staff-session-policy';
+import { memberships } from '@dakly/db/schema/team';
+
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { STAFF_IDLE_MS } from './staff-session-policy';
+
 const staffColumns = {
   id: staffUsers.id,
   name: staffUsers.name,

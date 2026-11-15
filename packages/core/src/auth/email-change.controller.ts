@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+
 import {
   changeEmailSchema,
   requestEmailCodeSchema,
@@ -8,6 +9,7 @@ import {
   type RequestEmailCodeInput,
   type VerifyNewEmailInput,
 } from '@dakly/contracts/auth';
+
 import { RequireUser } from '../platform/tenancy/access.decorators';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';

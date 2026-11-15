@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, gt, lte } from 'drizzle-orm';
+
 import { ownershipTransfers } from '@dakly/db/schema/team';
+
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const transferColumns = {

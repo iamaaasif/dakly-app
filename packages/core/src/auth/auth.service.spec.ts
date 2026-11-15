@@ -1,18 +1,19 @@
-import { TotpService } from './totp.service';
-import { TotpChallenges } from './totp-challenges';
-import { TotpRecoveryService } from './totp-recovery.service';
-import { SecurityNoticesService } from './security-notices.service';
-import { GoogleTickets } from './google-tickets';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import { Clock } from '../platform/clock';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
 import { AuthService } from './auth.service';
-import { UsersRepository } from './users.repository';
+import { GoogleTickets } from './google-tickets';
+import { SecurityNoticesService } from './security-notices.service';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures } from './sign-in-failures';
-import { SessionsService } from '../sessions/sessions.service';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { Clock } from '../platform/clock';
+import { TotpChallenges } from './totp-challenges';
+import { TotpRecoveryService } from './totp-recovery.service';
+import { TotpService } from './totp.service';
+import { UsersRepository } from './users.repository';
 
 const userId = '019a76de-f000-7000-8000-000000000001';
 const target = '01712345678';

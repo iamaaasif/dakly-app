@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { UsersService } from '../auth/users.service';
-import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+
+import type { PlansResponse } from '@dakly/contracts/billing';
 import type {
   CreateStoreInput,
   StoreResponse,
@@ -9,16 +9,19 @@ import type {
   StoreSettingsResponse,
 } from '@dakly/contracts/stores';
 import type { StoreAccess } from '@dakly/contracts/team';
-import { Clock } from '../platform/clock';
-import type { PlansResponse } from '@dakly/contracts/billing';
-import { StoreTransaction } from '../platform/database/store-transaction';
-import { TeamService } from '../team/team.service';
-import { BillingService } from '../billing/billing.service';
-import { SessionsService } from '../sessions/sessions.service';
+
 import { AuditService } from '../audit/audit.service';
-import { StoresRepository } from './stores.repository';
+import { UsersService } from '../auth/users.service';
+import { BillingService } from '../billing/billing.service';
+import { Clock } from '../platform/clock';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { SessionsService } from '../sessions/sessions.service';
+import { TeamService } from '../team/team.service';
 import { onboardingExtensions, recommendedPlans } from './onboarding';
 import { storeError } from './stores.errors';
+import { StoresRepository } from './stores.repository';
+
 @Injectable()
 export class StoresService {
   constructor(

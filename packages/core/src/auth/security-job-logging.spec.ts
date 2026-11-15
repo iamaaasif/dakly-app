@@ -3,10 +3,11 @@ import { Logger, Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { SmsService } from '../sms/sms.service';
+
 import { EmailService } from '../email/email.service';
-import { requestLoggingOptions } from '../platform/logging/request-logging';
 import { jobLogBindings, runWithJobContext } from '../platform/logging/job-context';
+import { requestLoggingOptions } from '../platform/logging/request-logging';
+import { SmsService } from '../sms/sms.service';
 
 describe('Job logging context', () => {
   const lines: string[] = [];

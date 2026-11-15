@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type {
   AccountSecurityEvent,
   AccountSecurityHistory,
 } from '@dakly/contracts/account-security-events';
+
 import { AccountSecurityEventsRepository } from './account-security-events.repository';
 
 @Injectable()

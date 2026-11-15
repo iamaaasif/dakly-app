@@ -1,9 +1,11 @@
 import type { MemberResponse } from '@dakly/contracts/team';
 import { Card } from '@dakly/ui/card';
-import { formatPhone } from '@/lib/format-phone';
-import { formatDateTime } from '@/lib/format-date';
+
 import { roleLabels } from '../role-label';
 import { MemberActions } from './member-actions';
+import { formatDateTime } from '@/lib/format-date';
+import { formatPhone } from '@/lib/format-phone';
+
 export function MemberCard({ member, canEdit }: { member: MemberResponse; canEdit: boolean }) {
   const contact = member.phone ? formatPhone(member.phone) : member.email;
   const name = member.name ?? contact ?? 'Invited member';

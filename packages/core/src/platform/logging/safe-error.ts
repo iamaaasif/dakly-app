@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+
 import { databaseErrorCode } from '../database/error-code';
 
 const repositoryRoot = `${resolve(__dirname, '../../../../..').replaceAll('\\', '/')}/`;
