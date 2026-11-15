@@ -6,7 +6,7 @@
 | Status    | Not started                                                        |
 | Extension | Core                                                               |
 | Code      | `packages/core/src/analytics/`, `apps/web/src/features/analytics/` |
-| Tasks     | ANA-1 to ANA-3                                                     |
+| Tasks     | ANA-1 to ANA-4                                                     |
 
 ## Purpose
 

@@ -3,10 +3,10 @@
 |           |                                                                                                                                                      |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Release   | 1                                                                                                                                                    |
-| Status    | Not started                                                                                                                                          |
+| Status    | Building                                                                                                                                             |
 | Extension | Core                                                                                                                                                 |
 | Code      | `packages/core/src/{payments,billing,usage}/`, `packages/providers/src/payment/{bkash,nagad,citybank}/`, `apps/web/src/features/{payments,billing}/` |
-| Tasks     | PAY-1 to PAY-9                                                                                                                                       |
+| Tasks     | PAY-1 to PAY-10                                                                                                                                      |
 
 ## Purpose
 

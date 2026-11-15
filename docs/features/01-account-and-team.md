@@ -3,7 +3,7 @@
 |           |                                                                                                          |
 | --------- | -------------------------------------------------------------------------------------------------------- |
 | Release   | 1                                                                                                        |
-| Status    | In progress                                                                                              |
+| Status    | Building                                                                                                 |
 | Extension | Core                                                                                                     |
 | Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,settings,security}/` |
 | Tasks     | ACC-1 to ACC-18; build order in [plans/core.md](../plans/core.md)                                        |

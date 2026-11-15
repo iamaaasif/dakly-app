@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                                |
 | Extension | Core                                                                                                       |
 | Code      | `packages/core/src/{dashboard,notifications,ask}/`, `apps/web/src/features/{dashboard,notifications,ask}/` |
-| Tasks     | HOME-1 to HOME-4                                                                                           |
+| Tasks     | HOME-1 to HOME-6                                                                                           |
 
 ## Purpose
 
