@@ -14,6 +14,17 @@ import { DATABASE } from '../platform/database/database.tokens';
 import { StaffDatabase } from '../platform/database/staff-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
+type AlertRetry = { auditId: string; reason: string; ip: string; now: Date };
+
+type DeliveryResult = {
+  id: string;
+  leaseId: string;
+  status: 'pending' | 'failed' | 'delivered';
+  error: string | null;
+  nextAttemptAt: Date;
+  now: Date;
+};
+
 @Injectable()
 export class StaffAlertsRepository {
   constructor(
@@ -92,7 +103,7 @@ export class StaffAlertsRepository {
     });
   }
 
-  async retry(staffUserId: string, auditId: string, reason: string, ip: string, now: Date) {
+  async retry(staffUserId: string, { auditId, reason, ip, now }: AlertRetry) {
     await this.staff.inTransaction(staffUserId, async (tx) => {
       await tx.insert(staffAuditLog).values({
         staffUserId,
@@ -180,14 +191,7 @@ export class StaffAlertsRepository {
     ).rows[0];
   }
 
-  async finish(
-    id: string,
-    leaseId: string,
-    status: 'pending' | 'failed' | 'delivered',
-    error: string | null,
-    nextAttemptAt: Date,
-    now: Date,
-  ) {
+  async finish({ id, leaseId, status, error, nextAttemptAt, now }: DeliveryResult) {
     await this.database.execute(sql`
       update staff_alert_deliveries
       set

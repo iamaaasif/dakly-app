@@ -47,7 +47,7 @@ export class StaffAlertsService {
       const now = this.clock.now();
       if (!delivery || delivery.status !== 'failed' || delivery.nextAttemptAt > now)
         throw supportError('SUPPORT_INVALID');
-      await this.repository.retry(staff.id, id, reason, ip, now);
+      await this.repository.retry(staff.id, { auditId: id, reason, ip, now });
     });
   }
 
@@ -89,20 +89,27 @@ export class StaffAlertsService {
         this.credentials,
       );
       const now = this.clock.now();
-      await this.repository.finish(id, leaseId, 'delivered', null, now, now);
+      await this.repository.finish({
+        id,
+        leaseId,
+        status: 'delivered',
+        error: null,
+        nextAttemptAt: now,
+        now,
+      });
     } catch {
       const now = this.clock.now();
       const error = this.credentials
         ? 'Slack delivery failed. Check the configured channel and retry.'
         : 'Slack is not configured. Set its bot token and channel, restart the worker, then retry.';
-      await this.repository.finish(
+      await this.repository.finish({
         id,
         leaseId,
-        task.attempts >= 5 ? 'failed' : 'pending',
+        status: task.attempts >= 5 ? 'failed' : 'pending',
         error,
-        new Date(now.getTime() + 30000 * 2 ** task.attempts),
+        nextAttemptAt: new Date(now.getTime() + 30000 * 2 ** task.attempts),
         now,
-      );
+      });
       throw supportError('STAFF_ALERT_DELIVERY_FAILED');
     }
   }

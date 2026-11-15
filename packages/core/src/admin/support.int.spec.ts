@@ -1487,7 +1487,14 @@ describe('Confirmed break-glass access', () => {
     expect(await repository.claim(auditId, second, now)).toBeUndefined();
     now = new Date(now.getTime() + 61000);
     expect(await repository.claim(auditId, second, now)).toEqual({ attempts: 2 });
-    await repository.finish(auditId, first, 'delivered', null, now, now);
+    await repository.finish({
+      id: auditId,
+      leaseId: first,
+      status: 'delivered',
+      error: null,
+      nextAttemptAt: now,
+      now,
+    });
     expect(
       (
         await database.pool.query('select status from staff_alert_deliveries where audit_id=$1', [

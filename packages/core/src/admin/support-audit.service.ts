@@ -5,6 +5,17 @@ import type { AuditEntry } from '@dakly/contracts/audit';
 import { AuditService } from '../audit/audit.service';
 import { StaffAuditService } from './staff-audit.service';
 
+type SupportAuditEntry = {
+  id: string;
+  actor: { kind: 'staff'; staffUserId: string } | { kind: 'user'; userId: string };
+  action: string;
+  reason: string;
+  ip: string;
+  details?: Record<string, unknown>;
+  entityType?: string;
+  after?: AuditEntry['after'];
+};
+
 @Injectable()
 export class SupportAuditService {
   constructor(
@@ -14,14 +25,16 @@ export class SupportAuditService {
 
   async record(
     storeId: string,
-    id: string,
-    actor: { kind: 'staff'; staffUserId: string } | { kind: 'user'; userId: string },
-    action: string,
-    reason: string,
-    ip: string,
-    details?: Record<string, unknown>,
-    entityType = 'support_grant',
-    after?: AuditEntry['after'],
+    {
+      id,
+      actor,
+      action,
+      reason,
+      ip,
+      details,
+      entityType = 'support_grant',
+      after,
+    }: SupportAuditEntry,
   ) {
     const auditId = await this.staffAudit.recordForStore(storeId, {
       actor,

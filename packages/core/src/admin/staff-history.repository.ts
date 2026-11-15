@@ -9,6 +9,16 @@ import { DATABASE } from '../platform/database/database.tokens';
 import { StaffDatabase } from '../platform/database/staff-database';
 import { STAFF_IDLE_MS } from './staff-session-policy';
 
+type ExportRequest = {
+  sessionId: string;
+  id: string;
+  name: string;
+  filter: StaffAuditSearch;
+  reason: string;
+  expiresAt: Date;
+  ip: string;
+};
+
 @Injectable()
 export class StaffHistoryRepository {
   constructor(
@@ -48,13 +58,7 @@ export class StaffHistoryRepository {
 
   async requestExport(
     staffUserId: string,
-    sessionId: string,
-    id: string,
-    name: string,
-    filter: StaffAuditSearch,
-    reason: string,
-    expiresAt: Date,
-    ip: string,
+    { sessionId, id, name, filter, reason, expiresAt, ip }: ExportRequest,
   ) {
     await this.scope.inTransaction(staffUserId, async (tx) => {
       await tx.insert(staffAuditLog).values({
