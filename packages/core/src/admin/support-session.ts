@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isStaffSessionCurrent } from './staff-session-policy';
 import type { SupportRepository } from './support.repository';
 import { supportError } from './support.errors';
 
@@ -15,12 +16,5 @@ export function assertSupportParent(
   parent: Awaited<ReturnType<SupportRepository['parent']>>,
   now: Date,
 ): void {
-  if (
-    !parent ||
-    parent.revokedAt ||
-    parent.expiresAt <= now ||
-    !parent.lastSeenAt ||
-    parent.lastSeenAt.getTime() + 1800000 <= now.getTime()
-  )
-    throw supportError('SUPPORT_ENDED');
+  if (!parent || !isStaffSessionCurrent(parent, now)) throw supportError('SUPPORT_ENDED');
 }

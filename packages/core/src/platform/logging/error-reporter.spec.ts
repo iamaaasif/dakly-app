@@ -43,7 +43,7 @@ describe('ErrorReporter', () => {
       expect(event).toContain('DrizzleQueryError');
       expect(event).toContain('INTERNAL_ERROR');
       expect(event).toContain('2b59ea1c-40f5-4f30-a84b-b60ae6ec31a3');
-      expect(event).toContain('at <redacted>:');
+      expect(event).toContain('platform/logging/error-reporter.spec.ts:');
     },
   );
 

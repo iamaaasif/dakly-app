@@ -92,6 +92,8 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 - Messages, orders and customer data are visible only inside this granted session. Outside it, admin screens show counts and metadata, never message bodies or customer phone numbers.
 - Break-glass: a super admin can open read-only access without consent during a security incident or legal request. It needs a written reason, alerts the other super admins, and is listed in the shop's activity log.
 
+Support session checks and Owner request lists read current rows without explicit row locks. Customer reads return full phone numbers and remain serialized with the Owner ending access. The support banner checks its session every 30 seconds while visible. Customer reads and writes keep their authorization locks and record audit and activity. Code-delivery failures and temporary send limits leave consent pending; unexpected failures reach the error handler.
+
 #### Plans and pricing
 
 - Plans: name, monthly and yearly price, trial length in days (0 for no trial, D34), VAT inclusive or not, limits (stores, team seats, contacts, AI credits, automations, social accounts), included extensions, visibility (public, hidden, legacy).

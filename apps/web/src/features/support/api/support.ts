@@ -72,8 +72,7 @@ export function useSupportSession() {
   return useQuery({
     queryKey: ['support-session'],
     queryFn: ({ signal }) => request<SupportSessionResponse>('/support/api/session', { signal }),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 30000,
     retry: false,
   });
 }
