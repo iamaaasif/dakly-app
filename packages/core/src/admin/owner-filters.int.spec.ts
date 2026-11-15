@@ -40,19 +40,18 @@ describe('support and recovery filters without RLS assistance', () => {
       [f.b, b],
     ] as const)
       await f.tenant.forStore(storeId, () =>
-        repository.insert(
-          storeId,
+        repository.insert(storeId, {
           id,
-          staff,
-          {
+          staffUserId: staff,
+          input: {
             targetId: storeId,
             reason: 'Investigate customer issue',
             access: 'write',
             scopes: ['customers'],
             durationMinutes: 30,
           },
-          new Date(),
-        ),
+          now: new Date(),
+        }),
       );
     expect(await repository.find(f.a, a)).toMatchObject({ id: a });
     expect(await repository.find(f.b, a)).toBeUndefined();

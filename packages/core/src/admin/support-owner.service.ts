@@ -12,6 +12,18 @@ import { supportRoles } from './support-roles';
 import { supportError } from './support.errors';
 import { SupportRepository } from './support.repository';
 
+type SupportCodeRequest = { id: string; userId: string; sessionId?: string; ip: string };
+
+type SupportApproval = { id: string; userId: string; sessionId: string; code: string; ip: string };
+
+type SupportEnd = {
+  id: string;
+  userId: string;
+  sessionId: string;
+  decision: 'denied' | 'ended';
+  ip: string;
+};
+
 @Injectable()
 export class SupportOwnerService {
   constructor(
@@ -35,13 +47,7 @@ export class SupportOwnerService {
     });
   }
 
-  async requestCode(
-    storeId: string,
-    id: string,
-    userId: string,
-    sessionId: string | undefined,
-    ip: string,
-  ) {
+  async requestCode(storeId: string, { id, userId, sessionId, ip }: SupportCodeRequest) {
     const subject = await this.requestSubject(storeId, id, userId, sessionId);
     await this.codes.send(subject, 'support_approval', ip);
   }
@@ -75,14 +81,7 @@ export class SupportOwnerService {
     });
   }
 
-  async approve(
-    storeId: string,
-    id: string,
-    userId: string,
-    sessionId: string,
-    code: string,
-    ip: string,
-  ) {
+  async approve(storeId: string, { id, userId, sessionId, code, ip }: SupportApproval) {
     const subject = await this.requestSubject(storeId, id, userId, sessionId);
     const proof = await this.codes.consume(subject, 'support_approval', code, ip);
     if (proof.userId !== userId) throw supportError('SUPPORT_DENIED');
@@ -95,18 +94,17 @@ export class SupportOwnerService {
       const grant = await this.pending(storeId, id);
       const now = this.clock.now();
       const expiresAt = new Date(now.getTime() + grant.durationMinutes * 60000);
-      await this.audit.record(
-        storeId,
+      await this.audit.record(storeId, {
         id,
-        { kind: 'user', userId },
-        'support.approved',
-        'Owner approved support access',
+        actor: { kind: 'user', userId },
+        action: 'support.approved',
+        reason: 'Owner approved support access',
         ip,
-        {
+        details: {
           before: { status: 'requested' },
           after: { status: 'approved', expiresAt: expiresAt.toISOString() },
         },
-      );
+      });
       await this.repository.change(storeId, id, {
         status: 'approved',
         approvedByUserId: userId,
@@ -116,14 +114,7 @@ export class SupportOwnerService {
     });
   }
 
-  async end(
-    storeId: string,
-    id: string,
-    userId: string,
-    sessionId: string,
-    decision: 'denied' | 'ended',
-    ip: string,
-  ) {
+  async end(storeId: string, { id, userId, sessionId, decision, ip }: SupportEnd) {
     await this.ownerAction(storeId, userId, sessionId, async () => {
       const grant = await this.requireGrant(storeId, id);
       if (
@@ -132,15 +123,14 @@ export class SupportOwnerService {
           : supportGrantStatus(grant, this.clock.now()) !== 'approved'
       )
         throw supportError('SUPPORT_INVALID');
-      await this.audit.record(
-        storeId,
+      await this.audit.record(storeId, {
         id,
-        { kind: 'user', userId },
-        `support.${decision}`,
-        `Owner ${decision} support access`,
+        actor: { kind: 'user', userId },
+        action: `support.${decision}`,
+        reason: `Owner ${decision} support access`,
         ip,
-        { before: { status: grant.status }, after: { status: decision } },
-      );
+        details: { before: { status: grant.status }, after: { status: decision } },
+      });
       await this.repository.change(storeId, id, { status: decision, endedAt: this.clock.now() });
     });
   }

@@ -72,16 +72,15 @@ export class BreakGlassService {
       // The signed action ID is the replay record, including ended and expired grants.
       const existing = await this.repository.find(effect.targetId, effect.id);
       if (existing) return { id: existing.id };
-      const auditId = await this.audit.record(
-        effect.targetId,
-        effect.id,
-        { kind: 'staff', staffUserId: staff.id },
-        effect.action,
-        effect.reason,
+      const auditId = await this.audit.record(effect.targetId, {
+        id: effect.id,
+        actor: { kind: 'staff', staffUserId: staff.id },
+        action: effect.action,
+        reason: effect.reason,
         ip,
-        { ...effect, isBreakGlass: true },
-        'support_grant',
-        {
+        details: { ...effect, isBreakGlass: true },
+        entityType: 'support_grant',
+        after: {
           support: {
             isBreakGlass: true,
             access: effect.access,
@@ -91,7 +90,7 @@ export class BreakGlassService {
             expiresAt: effect.expiresAt,
           },
         },
-      );
+      });
       await this.repository.insertBreakGlass(effect.targetId, effect, this.clock.now());
       await this.alerts.recordIntent(effect.targetId, auditId);
       return { id: effect.id };

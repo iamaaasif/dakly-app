@@ -38,16 +38,15 @@ export class StaffHistoryService {
     await this.assertStaff(staff);
     const id = newId();
     await this.transaction.run(staff.id, () =>
-      this.repository.requestExport(
-        staff.id,
-        staff.sessionId,
+      this.repository.requestExport(staff.id, {
+        sessionId: staff.sessionId,
         id,
-        staff.name,
+        name: staff.name,
         filter,
         reason,
-        new Date(this.clock.now().getTime() + 86400000),
+        expiresAt: new Date(this.clock.now().getTime() + 86400000),
         ip,
-      ),
+      }),
     );
     return { id };
   }

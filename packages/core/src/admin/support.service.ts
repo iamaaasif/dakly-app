@@ -55,20 +55,28 @@ export class SupportService {
       await this.assertStaff(target.id, staff.id, staff.sessionId);
       const ownerId = await this.repository.owner(target.id);
       if (!ownerId) throw supportError('SUPPORT_INVALID');
-      await this.audit.record(
-        target.id,
+      await this.audit.record(target.id, {
         id,
-        { kind: 'staff', staffUserId: staff.id },
-        'support.requested',
-        input.reason,
+        actor: { kind: 'staff', staffUserId: staff.id },
+        action: 'support.requested',
+        reason: input.reason,
         ip,
-        { scopes: input.scopes, access: input.access, durationMinutes: input.durationMinutes },
-      );
-      await this.repository.insert(target.id, id, staff.id, input, this.clock.now());
+        details: {
+          scopes: input.scopes,
+          access: input.access,
+          durationMinutes: input.durationMinutes,
+        },
+      });
+      await this.repository.insert(target.id, {
+        id,
+        staffUserId: staff.id,
+        input,
+        now: this.clock.now(),
+      });
       return ownerId;
     });
     try {
-      await this.owner.requestCode(target.id, id, ownerId, undefined, ip);
+      await this.owner.requestCode(target.id, { id, userId: ownerId, ip });
       return { id, codeSent: true };
     } catch (error) {
       if (!isSupportCodeUnavailable(error)) throw error;
@@ -95,14 +103,13 @@ export class SupportService {
       };
       await this.authorize(principal);
       const token = randomBytes(32).toString('base64url');
-      await this.audit.record(
-        principal.storeId,
+      await this.audit.record(principal.storeId, {
         id,
-        { kind: 'staff', staffUserId: staff.id },
-        'support.handoff_issued',
-        'Staff opened authorized support session',
+        actor: { kind: 'staff', staffUserId: staff.id },
+        action: 'support.handoff_issued',
+        reason: 'Staff opened authorized support session',
         ip,
-      );
+      });
       await this.repository.handoff(
         principal.storeId,
         principal,
@@ -123,14 +130,13 @@ export class SupportService {
         throw supportError('SUPPORT_ENDED');
       await this.authorize(session);
       const token = randomBytes(32).toString('base64url');
-      await this.audit.record(
-        storeId,
-        session.grantId,
-        { kind: 'staff', staffUserId: session.staffUserId },
-        'support.session_started',
-        'Staff entered authorized support session',
+      await this.audit.record(storeId, {
+        id: session.grantId,
+        actor: { kind: 'staff', staffUserId: session.staffUserId },
+        action: 'support.session_started',
+        reason: 'Staff entered authorized support session',
         ip,
-      );
+      });
       await this.repository.consume(storeId, hash, tokenHash(token), this.clock.now());
       return token;
     });
@@ -163,16 +169,15 @@ export class SupportService {
       assertSupportContext(expectedContext, contextTag);
       if (!grant.scopes.includes('customers')) return this.denied(principal, ip);
       const result = await this.customers.getById(principal.storeId, id, { seeFullPhone: true });
-      await this.audit.record(
-        principal.storeId,
+      await this.audit.record(principal.storeId, {
         id,
-        { kind: 'staff', staffUserId: principal.staffUserId },
-        'support.customer_read',
-        grant.reason,
+        actor: { kind: 'staff', staffUserId: principal.staffUserId },
+        action: 'support.customer_read',
+        reason: grant.reason,
         ip,
-        { grantId: grant.id },
-        'customer',
-      );
+        details: { grantId: grant.id },
+        entityType: 'customer',
+      });
       await this.recordActivity(principal);
       return { ...result, contextTag };
     });
@@ -190,16 +195,15 @@ export class SupportService {
       if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
         return this.denied(principal, ip);
       const result = await this.customers.create(principal.storeId, input, { seeFullPhone: true });
-      await this.audit.record(
-        principal.storeId,
-        result.id,
-        { kind: 'staff', staffUserId: principal.staffUserId },
-        'support.customer_created',
-        grant.reason,
+      await this.audit.record(principal.storeId, {
+        id: result.id,
+        actor: { kind: 'staff', staffUserId: principal.staffUserId },
+        action: 'support.customer_created',
+        reason: grant.reason,
         ip,
-        { grantId: grant.id },
-        'customer',
-      );
+        details: { grantId: grant.id },
+        entityType: 'customer',
+      });
       await this.recordActivity(principal);
       return { ...result, contextTag };
     });
@@ -244,14 +248,13 @@ export class SupportService {
   }
 
   private async denied(principal: SupportPrincipal, ip: string) {
-    await this.audit.record(
-      principal.storeId,
-      principal.grantId,
-      { kind: 'staff', staffUserId: principal.staffUserId },
-      'support.action_denied',
-      'Support scope denied the requested action',
+    await this.audit.record(principal.storeId, {
+      id: principal.grantId,
+      actor: { kind: 'staff', staffUserId: principal.staffUserId },
+      action: 'support.action_denied',
+      reason: 'Support scope denied the requested action',
       ip,
-    );
+    });
     return null;
   }
 

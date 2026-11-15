@@ -47,6 +47,8 @@ const grantColumns = {
   expiresAt: supportGrants.expiresAt,
 };
 export type SupportGrant = typeof supportGrants.$inferSelect;
+type SupportRequest = { id: string; staffUserId: string; input: SupportRequestInput; now: Date };
+
 @Injectable()
 export class SupportRepository {
   constructor(
@@ -177,13 +179,7 @@ export class SupportRepository {
     );
   }
 
-  async insert(
-    storeId: string,
-    id: string,
-    staffUserId: string,
-    input: SupportRequestInput,
-    now: Date,
-  ) {
+  async insert(storeId: string, { id, staffUserId, input, now }: SupportRequest) {
     await this.tenant.inTransaction(storeId, (tx) =>
       tx.insert(supportGrants).values({
         id,
