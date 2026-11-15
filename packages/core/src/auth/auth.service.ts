@@ -64,7 +64,8 @@ export class AuthService {
       }
       if (secondFactor) await this.recovery.cancelPending(user.id, request.ip);
       await this.completeGoogleLink(user, current.googleSubject, request.ip);
-      noticeIds = await this.notifyNewDevice(current, request);
+      // A new account has no earlier device to compare with.
+      if (!user.registration) noticeIds = await this.notifyNewDevice(current, request);
       if (user.registrationPasswordHash)
         await this.events.record(user.id, {
           event: 'password.changed',

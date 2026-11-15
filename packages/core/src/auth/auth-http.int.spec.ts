@@ -302,6 +302,40 @@ describe('SMS authentication over Fastify', () => {
     expect(await app.get(ValkeyClient).connection.get(authKey('fail-ip', ip))).not.toBeNull();
   });
 
+  it('sends no new-device notice on sign-up, but does for a later sign-in from a new device', async () => {
+    const input = registration();
+    expect((await request('/auth/code', input)).statusCode).toBe(204);
+    const signUp = await request('/auth/code/verify', {
+      purpose: 'sign_up',
+      phone: input.phone,
+      code: codeFor(input.phone),
+    });
+    expect(signUp.statusCode).toBe(204);
+    const [user] = await admin.db.select().from(users).where(eq(users.phone, input.phone));
+    // Notices are encrypted at rest; these two steps can store only the new-device notice.
+    const notices = async () =>
+      (
+        await admin.pool.query(
+          'select count(*)::int as count from account_security_notices where user_id = $1',
+          [user!.id],
+        )
+      ).rows[0].count;
+    expect(await notices()).toBe(0);
+    await app.get(ValkeyClient).connection.del(authKey('resend', input.phone));
+    expect(
+      (await request('/auth/code', { purpose: 'sign_in', phone: input.phone })).statusCode,
+    ).toBe(204);
+    const signIn = await app.inject({
+      method: 'POST',
+      url: '/auth/code/verify',
+      headers: { origin, 'user-agent': 'Another browser' },
+      payload: { purpose: 'sign_in', phone: input.phone, code: codeFor(input.phone) },
+      remoteAddress: ip,
+    });
+    expect(signIn.statusCode).toBe(204);
+    expect(await notices()).toBe(1);
+  });
+
   it('rechecks the current phone when recovery races the initial lookup', async () => {
     const target = phone();
     const moved = phone();

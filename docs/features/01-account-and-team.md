@@ -909,7 +909,8 @@ An unknown user-agent/IP pair produces an encrypted durable new-device alert aft
 successful sign-in, by verified email or SMS. The pair is checked under the same
 account lock as session insertion, so simultaneous sign-ins do not enqueue duplicate
 alerts for the same pair. The alert is sent by the worker after sign-in; notice or
-queue failure never rolls back an issued session.
+queue failure never rolls back an issued session. Sign-up sends no alert, because a
+new account has no earlier device.
 
 ### Staff recovery history (ADM-10)
 
