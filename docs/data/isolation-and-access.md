@@ -32,6 +32,8 @@ Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore 
 
 ## Grants
 
+Production has no default privileges, so each table's grant to `dakly_app` is written in a migration; 0025 states it for every table created before it. `store-isolation.int.spec.ts` fails for a table or view without one.
+
 | Grant                           | Tables                                                                                                                                                                                | Why                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | No UPDATE or DELETE             | `account_security_events`, `audit_log`, `staff_audit_log`, `payment_events`, `wallet_ledger`, `stock_movements`, `usage_events`, `consents`, `ai_rule_changes`, `tracked_link_visits` | Records of what happened. A correction is a new row.                                            |

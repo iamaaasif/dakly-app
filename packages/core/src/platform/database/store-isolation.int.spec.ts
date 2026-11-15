@@ -92,6 +92,23 @@ describe('store isolation (Postgres)', () => {
     expect(result.rows.filter((row) => !row.relrowsecurity || row.readable)).toEqual([]);
   });
 
+  it('grants the app a privilege on every table and view, so production needs no default privileges', async () => {
+    const withoutAccess = [
+      // Company metrics, read and written only by owner functions for the admin panel.
+      'platform_daily_metrics',
+    ];
+    const result = await admin.db.execute<{ relname: string }>(sql`
+      select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'f')
+        -- Partition children are read through their parent's policy.
+        and not c.relispartition
+        and not has_table_privilege('dakly_app', c.oid,
+          'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+      order by c.relname`);
+
+    expect(result.rows.map((row) => row.relname)).toEqual(withoutAccess);
+  });
+
   it('never forces RLS on the table owner, so migrations and backfills keep working', async () => {
     const result = await admin.db.execute<{ relname: string }>(sql`
       select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
