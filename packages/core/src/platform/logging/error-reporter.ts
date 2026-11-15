@@ -43,13 +43,25 @@ export class ErrorReporter implements OnApplicationShutdown {
   }
 
   report(error: ReturnType<typeof serializeError>, requestId: string): void {
+    this.send(error, { requestId }, 'Request failed');
+  }
+
+  reportJob(error: ReturnType<typeof serializeError>, jobId: string): void {
+    this.send(error, { jobId }, 'Job failed');
+  }
+
+  private send(
+    error: ReturnType<typeof serializeError>,
+    context: { requestId: string } | { jobId: string },
+    message: string,
+  ): void {
     // captureEvent enriches events with global users and breadcrumbs, even without integrations.
     this.client?.sendEvent({
       event_id: randomUUID().replaceAll('-', ''),
       timestamp: Date.now() / 1000,
       level: 'error',
-      message: 'Request failed',
-      tags: { requestId, errorClass: error.errorClass, errorCode: error.errorCode },
+      message,
+      tags: { ...context, errorClass: error.errorClass, errorCode: error.errorCode },
       extra: { error },
     });
   }

@@ -22,6 +22,7 @@ Needs Node 22, pnpm 10 and Docker.
 
 ```bash
 cp .env.example .env
+node scripts/development-encryption.mjs
 pnpm install
 docker compose up -d
 pnpm build
@@ -60,3 +61,5 @@ pnpm check       # format, lint, module boundaries, typecheck, tests, dead code,
 ```
 
 CI runs the same checks on every pull request.
+
+Account two-step verification requires encryption keys. After copying `.env.example` to `.env`, run `node scripts/development-encryption.mjs` once to generate development-only keys without printing them. Keep that file private. CI generates a separate ephemeral key per run. Production supplies `ENCRYPTION_CURRENT_KEY_VERSION` and `ENCRYPTION_MASTER_KEYS` through secret configuration; never generate replacement keys for existing encrypted data.

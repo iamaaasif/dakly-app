@@ -1,11 +1,14 @@
 'use client';
 
+import { Button } from '@dakly/ui/button';
+import { Card } from '@dakly/ui/card';
+import { Badge } from '@dakly/ui/badge';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { type CreateCustomerInput, createCustomerSchema } from '@dakly/contracts/customers';
+import { NewCustomerFields } from './new-customer-fields';
 import { useCreateCustomer } from '../api/create-customer';
 
-// The form uses the same zod schema as the API, so each rule is written once.
 export function NewCustomerForm() {
   const { register, handleSubmit, reset, formState } = useForm<CreateCustomerInput>({
     resolver: zodResolver(createCustomerSchema),
@@ -17,21 +20,24 @@ export function NewCustomerForm() {
   );
 
   return (
-    <form onSubmit={onSubmit}>
-      <label>
-        Name
-        <input {...register('name')} />
-      </label>
-      {formState.errors.name && <p role="alert">{formState.errors.name.message}</p>}
-      <label>
-        Phone
-        <input {...register('phone')} inputMode="tel" placeholder="01XXXXXXXXX" />
-      </label>
-      {formState.errors.phone && <p role="alert">{formState.errors.phone.message}</p>}
-      {createCustomer.error && <p role="alert">{createCustomer.error.message}</p>}
-      <button type="submit" disabled={createCustomer.isPending}>
-        Add customer
-      </button>
-    </form>
+    <Card>
+      <h2 className="mb-6 text-md font-semibold">Add customer</h2>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <NewCustomerFields register={register} errors={formState.errors} />
+        {createCustomer.error && (
+          <p role="alert" className="text-danger">
+            {createCustomer.error.message}
+          </p>
+        )}
+        <Button type="submit" loading={createCustomer.isPending}>
+          Add customer
+        </Button>
+        {createCustomer.isSuccess && (
+          <p role="status">
+            <Badge variant="success">Customer added</Badge>
+          </p>
+        )}
+      </form>
+    </Card>
   );
 }
