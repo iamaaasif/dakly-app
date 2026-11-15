@@ -15,6 +15,7 @@ export class RiskyActionConfirmation {
       .update(JSON.stringify(effect))
       .digest('hex');
   }
+
   verify(effect: Record<string, unknown>, proof: string): void {
     const expected = Buffer.from(this.sign(effect), 'hex');
     const received = Buffer.from(proof, 'hex');

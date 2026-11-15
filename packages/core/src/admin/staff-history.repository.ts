@@ -15,6 +15,7 @@ export class StaffHistoryRepository {
     @Inject(DATABASE) private readonly database: Database,
     @Inject(StaffDatabase) private readonly scope: StaffDatabase,
   ) {}
+
   async search(filter: StaffAuditSearch, limit = 51) {
     const cursor = filter.cursor?.split('|');
     return (
@@ -44,6 +45,7 @@ export class StaffHistoryRepository {
         limit ${limit}`)
     ).rows;
   }
+
   async requestExport(
     staffUserId: string,
     sessionId: string,
@@ -69,6 +71,7 @@ export class StaffHistoryRepository {
         .values({ id, staffUserId, staffSessionId: sessionId, staffName: name, filter, expiresAt });
     });
   }
+
   async pending() {
     return (
       await this.database.execute<{ id: string }>(
@@ -83,6 +86,7 @@ export class StaffHistoryRepository {
       )
     ).rows;
   }
+
   async claim(id: string, leaseId: string) {
     return (
       await this.database.execute<{
@@ -113,6 +117,7 @@ export class StaffHistoryRepository {
       )
     ).rows[0];
   }
+
   async currentStaff(staffUserId: string, sessionId: string) {
     return (
       await this.database.execute<{ valid: boolean }>(
@@ -133,6 +138,7 @@ export class StaffHistoryRepository {
       )
     ).rows[0]!.valid;
   }
+
   async finish(id: string, leaseId: string, contents: string | null, error: string | null) {
     await this.database.execute(
       sql`
@@ -150,6 +156,7 @@ export class StaffHistoryRepository {
           and expires_at>clock_timestamp()`,
     );
   }
+
   async release(id: string, leaseId: string) {
     await this.database.execute(
       sql`
@@ -160,6 +167,7 @@ export class StaffHistoryRepository {
           and status='pending'`,
     );
   }
+
   async get(staffUserId: string, id: string) {
     return (
       await this.database.execute<{
@@ -187,6 +195,7 @@ export class StaffHistoryRepository {
       )
     ).rows[0];
   }
+
   async downloadAudit(staffUserId: string, id: string, ip: string) {
     await this.scope.inTransaction(staffUserId, (tx) =>
       tx.insert(staffAuditLog).values({
@@ -199,6 +208,7 @@ export class StaffHistoryRepository {
       }),
     );
   }
+
   async maintain() {
     await this.database.execute(
       sql`
@@ -225,6 +235,7 @@ export class StaffHistoryRepository {
         )`,
     );
   }
+
   async seal() {
     return (
       await this.database.execute<{ day: string | null }>(
@@ -232,6 +243,7 @@ export class StaffHistoryRepository {
       )
     ).rows[0]!.day;
   }
+
   async verify(from: string) {
     return (
       await this.database.execute<{ day: string; valid: boolean }>(

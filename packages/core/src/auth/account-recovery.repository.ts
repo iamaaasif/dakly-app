@@ -22,6 +22,7 @@ export class AccountRecoveryRepository {
     @Inject(AccountDatabase) private readonly account: AccountDatabase,
     @Inject(DATABASE) private readonly database: Database,
   ) {}
+
   async identify(recoveryId: string) {
     const [row] = await this.database
       .select({ userId: accountRecoveries.userId })
@@ -30,6 +31,7 @@ export class AccountRecoveryRepository {
       .limit(1);
     return row?.userId;
   }
+
   async read(userId: string, recoveryId: string) {
     const [row] = await this.account.forUser(userId, (tx) =>
       tx
@@ -40,6 +42,7 @@ export class AccountRecoveryRepository {
     );
     return row;
   }
+
   async start(
     userId: string,
     input: { credentialState: string; cancelHash: string; completionHash: string },
@@ -52,6 +55,7 @@ export class AccountRecoveryRepository {
     );
     return row!.id;
   }
+
   async cancelPending(userId: string) {
     return this.account.forUser(userId, (tx) =>
       tx
@@ -61,6 +65,7 @@ export class AccountRecoveryRepository {
         .returning({ id: accountRecoveries.id }),
     );
   }
+
   async finish(userId: string, recoveryId: string) {
     await this.account.forUser(userId, (tx) =>
       tx
@@ -75,6 +80,7 @@ export class AccountRecoveryRepository {
         ),
     );
   }
+
   async allowAfterNotices(userId: string, recoveryId: string, state: string, eligibleAt: Date) {
     await this.account.forUser(userId, (tx) =>
       tx

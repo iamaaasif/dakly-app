@@ -147,6 +147,7 @@ export class SignInCodes {
   private key(target: string, purpose: CodePurpose): string {
     return authKey(`code:${purpose}`, target);
   }
+
   private hash(target: string, purpose: CodePurpose, code: string): string {
     return authKey('code-hash', JSON.stringify([target, purpose, code]));
   }

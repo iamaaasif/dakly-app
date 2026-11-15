@@ -40,6 +40,7 @@ export class BillingRepository {
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
     @Inject(DATABASE) private readonly database: Database,
   ) {}
+
   async publicPlans(): Promise<Plan[]> {
     const rows = await this.database
       .select(planColumns)
@@ -48,12 +49,14 @@ export class BillingRepository {
       .orderBy(asc(plans.position), asc(plans.code));
     return rows.map((row) => ({ ...row, limits: planLimitsSchema.parse(row.limits) }));
   }
+
   async findPlan(storeId: string, code: string): Promise<Plan | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(planColumns).from(plans).where(eq(plans.code, code)).limit(1),
     );
     return row ? { ...row, limits: planLimitsSchema.parse(row.limits) } : undefined;
   }
+
   async insertSubscription(storeId: string, input: NewSubscription) {
     await this.tenant.forStore(storeId, (tx) =>
       tx.insert(subscriptions).values({ storeId, ...input }),

@@ -28,6 +28,7 @@ export class SecurityNoticesService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
   ) {}
+
   enqueue(userId: string, notices: SecurityNotice[], recoveryId?: string) {
     return this.repository.enqueue(
       userId,
@@ -40,6 +41,7 @@ export class SecurityNoticesService {
       recoveryId,
     );
   }
+
   async dispatch(userId?: string) {
     try {
       const notices = await this.repository.claim(userId);
@@ -50,6 +52,7 @@ export class SecurityNoticesService {
       this.reportDispatchError(error);
     }
   }
+
   private reportDispatchError(error: unknown) {
     this.reportJobError(error);
     this.logger.error({ event: 'security' }, 'Account security notice polling failed');

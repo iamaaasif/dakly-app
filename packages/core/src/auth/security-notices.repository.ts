@@ -23,6 +23,7 @@ export class SecurityNoticesRepository {
     @Inject(AccountDatabase) private readonly account: AccountDatabase,
     @Inject(DATABASE) private readonly database: Database,
   ) {}
+
   async enqueue(userId: string, envelopes: EncryptedSecret[], recoveryId?: string) {
     if (!envelopes.length) return;
     await this.account.forUser(userId, (tx) =>
@@ -31,6 +32,7 @@ export class SecurityNoticesRepository {
         .values(envelopes.map((envelope) => ({ userId, recoveryId, ...envelope }))),
     );
   }
+
   async claim(userId?: string): Promise<ClaimedNotice[]> {
     const result = await this.database.execute<ClaimedNotice>(sql`
       with due as (
@@ -62,6 +64,7 @@ export class SecurityNoticesRepository {
     `);
     return result.rows;
   }
+
   async delivered(notice: ClaimedNotice, now: Date): Promise<boolean> {
     const rows = await this.account.forUser(notice.userId, (tx) =>
       tx
@@ -78,6 +81,7 @@ export class SecurityNoticesRepository {
     );
     return rows.length === 1;
   }
+
   async failed(notice: ClaimedNotice, retryAt: Date) {
     await this.account.forUser(notice.userId, (tx) =>
       tx

@@ -34,6 +34,7 @@ export class StaffAuthService {
     @Inject(StaffAuditService) private readonly audit: StaffAuditService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async withStaff<T>(
     identity: AccessIdentity,
     ip: string,
@@ -61,9 +62,11 @@ export class StaffAuthService {
     if (result === undefined) throw staffError('STAFF_INVALID_CREDENTIALS');
     return result;
   }
+
   checkIp(ip: string): Promise<void> {
     return this.attempts.ip(ip);
   }
+
   async signIn(
     input: StaffSignInInput,
     identity: AccessIdentity,
@@ -102,6 +105,7 @@ export class StaffAuthService {
       return { challenge, factors, passkey };
     });
   }
+
   async enroll(
     input: StaffEnrollmentInput,
     identity: AccessIdentity,
@@ -145,6 +149,7 @@ export class StaffAuthService {
       return response;
     });
   }
+
   async challenge(staff: LockedStaff, token: string) {
     const challenge = await this.repository.challenge(staff.id, staffTokenHash(token));
     if (!challenge || challenge.consumedAt || challenge.expiresAt <= this.clock.now())
@@ -156,6 +161,7 @@ export class StaffAuthService {
       return undefined;
     return challenge;
   }
+
   private expiry() {
     return new Date(this.clock.now().getTime() + 300000);
   }

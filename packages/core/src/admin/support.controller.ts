@@ -49,6 +49,7 @@ export class StaffSupportController {
   ) {
     return this.support.targets(request.staff, input.query);
   }
+
   @Get()
   list(
     @Req() request: StaffRequest,
@@ -56,6 +57,7 @@ export class StaffSupportController {
   ) {
     return this.support.requested(request.staff, query.before);
   }
+
   @Post()
   request(
     @Req() request: StaffRequest,
@@ -63,6 +65,7 @@ export class StaffSupportController {
   ) {
     return this.support.request(request.staff, input, request.ip);
   }
+
   @Post(':id/handoff')
   async handoff(@Req() request: StaffRequest, @Param('id', ParseUUIDPipe) id: string) {
     return {
@@ -87,6 +90,7 @@ export class OwnerSupportController {
       query.before,
     );
   }
+
   @Post(':id/code')
   code(@Req() request: FastifyRequest & StoreRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.support.requestCode(
@@ -97,6 +101,7 @@ export class OwnerSupportController {
       request.ip,
     );
   }
+
   @Post(':id/approve')
   approve(
     @Req() request: FastifyRequest & StoreRequest,
@@ -112,6 +117,7 @@ export class OwnerSupportController {
       request.ip,
     );
   }
+
   @Post(':id/deny')
   deny(@Req() request: FastifyRequest & StoreRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.support.end(
@@ -123,6 +129,7 @@ export class OwnerSupportController {
       request.ip,
     );
   }
+
   @Post(':id/end')
   end(@Req() request: FastifyRequest & StoreRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.support.end(
@@ -157,11 +164,13 @@ export class SupportController {
     });
     return reply.code(303).redirect('/support');
   }
+
   @Get('session')
   session(@Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
     reply.header('Cache-Control', 'no-store');
     return this.support.session(request.cookies[cookie]);
   }
+
   @Get('customers/:id')
   @Header('Cache-Control', 'no-store')
   customer(@Req() request: FastifyRequest, @Param('id', ParseUUIDPipe) id: string) {
@@ -172,6 +181,7 @@ export class SupportController {
       request.headers['x-support-context'],
     );
   }
+
   @Post('customers')
   @Header('Cache-Control', 'no-store')
   create(

@@ -22,6 +22,7 @@ export class StaffAccessService {
             : undefined,
         })
       : undefined;
+
   async verify(
     assertion: string | undefined,
     hostname: string,
@@ -38,6 +39,7 @@ export class StaffAccessService {
       throw staffError('STAFF_ACCESS_REQUIRED');
     }
   }
+
   assertRole(staff: StaffIdentity, roles: StaffIdentity['role'][]): void {
     if (!roles.includes(staff.role)) throw staffError('STAFF_PERMISSION_DENIED');
   }

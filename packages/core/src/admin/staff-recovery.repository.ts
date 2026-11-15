@@ -20,6 +20,7 @@ export class StaffRecoveryRepository {
     @Inject(AccountDatabase) private readonly account: AccountDatabase,
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
+
   async stores(userId: string): Promise<RecoveryStores> {
     return this.account.inTransaction(
       userId,
@@ -31,6 +32,7 @@ export class StaffRecoveryRepository {
         ).rows[0]!.snapshot,
     );
   }
+
   async staff(userId: string, staffUserId: string, sessionId: string) {
     return this.account.inTransaction(userId, async (tx) => {
       const [staff] = await tx
@@ -54,6 +56,7 @@ export class StaffRecoveryRepository {
       return { staff, session };
     });
   }
+
   async used(userId: string, actionId: string) {
     return this.account.inTransaction(
       userId,
@@ -67,6 +70,7 @@ export class StaffRecoveryRepository {
         ).length > 0,
     );
   }
+
   async recordHistory(userId: string, auditId: string, stores: string[]) {
     await this.account.inTransaction(userId, (tx) =>
       tx.execute(
@@ -74,6 +78,7 @@ export class StaffRecoveryRepository {
       ),
     );
   }
+
   history(storeId: string, before?: string) {
     return this.tenant.forStore(storeId, (tx) =>
       tx

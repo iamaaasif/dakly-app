@@ -33,6 +33,7 @@ export class TotpChallenges {
     @Inject(ValkeyClient) private readonly cache: ValkeyClient,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async issue(user: SignInUser, request: SignInRequest, state: string) {
     const challengeId = randomBytes(32).toString('base64url');
     await this.cache.connection
@@ -53,6 +54,7 @@ export class TotpChallenges {
       .exec();
     return { status: 'totp_required' as const, challengeId };
   }
+
   async attempt(challengeId: string): Promise<TotpChallenge & { attemptId: string }> {
     const attemptId = randomBytes(32).toString('base64url');
     const data = await this.cache.connection.eval(
@@ -66,6 +68,7 @@ export class TotpChallenges {
     if (grant.expiresAt <= this.clock.now().getTime()) throw authError('AUTH_TOTP_INVALID');
     return { ...grant, attemptId };
   }
+
   async release(challengeId: string, attemptId: string): Promise<void> {
     await this.cache.connection.eval(
       `

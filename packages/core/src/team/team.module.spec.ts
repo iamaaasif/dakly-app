@@ -24,18 +24,23 @@ class PermissionController {
   edit() {
     return 'edited';
   }
+
   view() {
     return 'viewed';
   }
+
   billing() {
     return 'billed';
   }
+
   member() {
     return 'member';
   }
+
   user() {
     return 'user';
   }
+
   public() {
     return 'public';
   }

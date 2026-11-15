@@ -35,6 +35,7 @@ export class OwnershipTransferRepository {
     );
     return row;
   }
+
   async find(storeId: string, transferId: string): Promise<OwnershipTransfer | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
@@ -45,6 +46,7 @@ export class OwnershipTransferRepository {
     );
     return row;
   }
+
   async expire(storeId: string, now: Date): Promise<void> {
     await this.tenant.forStore(storeId, (tx) =>
       tx
@@ -59,6 +61,7 @@ export class OwnershipTransferRepository {
         ),
     );
   }
+
   async insert(
     storeId: string,
     ownerUserId: string,
@@ -73,6 +76,7 @@ export class OwnershipTransferRepository {
     );
     return row!;
   }
+
   async finish(
     storeId: string,
     transferId: string,

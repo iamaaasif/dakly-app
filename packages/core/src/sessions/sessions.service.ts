@@ -75,6 +75,7 @@ export class SessionsService {
       nextCursor: rows.length === 100 ? rows.at(-1)!.id : null,
     };
   }
+
   isActive(userId: string, sessionId: string) {
     return this.repository.isActive(userId, sessionId, this.clock.now());
   }

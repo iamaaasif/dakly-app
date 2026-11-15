@@ -5,12 +5,14 @@ export class IsolationInventory {
     for (const method of Array.isArray(route.method) ? route.method : [route.method])
       this.routes.set(`${method} ${route.url}`, route);
   }
+
   applicationRoutes() {
     return [...this.routes]
       .filter(([key, route]) => !this.generatedHead(key, route))
       .map(([key]) => key)
       .sort();
   }
+
   assertCovered(expected: Iterable<string>) {
     const routes = this.applicationRoutes(),
       declared = [...expected].sort();
@@ -21,6 +23,7 @@ export class IsolationInventory {
         `Missing isolation fixtures: ${missing.join(', ')}; stale fixtures: ${stale.join(', ')}`,
       );
   }
+
   private generatedHead(key: string, route: Route) {
     if (!key.startsWith('HEAD ')) return false;
     const get = this.routes.get(`GET ${route.url}`);

@@ -45,6 +45,7 @@ export class RolesController {
   ): Promise<RoleListResponse> {
     return this.roles.list(storeId, query);
   }
+
   @Post()
   @RequirePermission('team.edit')
   create(
@@ -55,6 +56,7 @@ export class RolesController {
   ): Promise<RoleResponse> {
     return this.roles.create(storeId, input, { userId, access: request.access! });
   }
+
   @Patch(':roleId')
   @RequirePermission('team.edit')
   change(
@@ -66,6 +68,7 @@ export class RolesController {
   ): Promise<RoleResponse> {
     return this.roles.change(storeId, roleId, input, { userId, access: request.access! });
   }
+
   @Delete(':roleId')
   @HttpCode(204)
   @RequirePermission('team.edit')

@@ -44,6 +44,7 @@ export class RolesService {
       }),
     };
   }
+
   create(storeId: string, input: CreateRoleInput, actor: Actor): Promise<RoleResponse> {
     return this.transaction.runLocked(storeId, async () => {
       this.assertGrant(actor, input);
@@ -53,6 +54,7 @@ export class RolesService {
       return this.response(role);
     });
   }
+
   change(
     storeId: string,
     roleId: string,
@@ -73,6 +75,7 @@ export class RolesService {
       return this.response(role);
     });
   }
+
   remove(storeId: string, roleId: string, actor: Actor): Promise<void> {
     return this.transaction.runLocked(storeId, async () => {
       if (!canAccess(actor.access, 'team', 'edit')) throw teamError('TEAM_ROLE_DENIED');
@@ -82,6 +85,7 @@ export class RolesService {
       await this.record(storeId, roleId, actor.userId, 'role.deleted');
     });
   }
+
   private assertGrant(actor: Actor, input: CreateRoleInput): void {
     if (
       !canAccess(actor.access, 'team', 'edit') ||
@@ -89,15 +93,18 @@ export class RolesService {
     )
       throw teamError('TEAM_ROLE_DENIED');
   }
+
   private async assertName(storeId: string, name: string, roleId?: string): Promise<void> {
     const existing = await this.repository.findNamed(storeId, name);
     if (existing && existing !== roleId) throw teamError('ROLE_NAME_EXISTS');
   }
+
   private async find(storeId: string, roleId: string): Promise<Role> {
     const role = await this.repository.find(storeId, roleId);
     if (!role) throw teamError('ROLE_NOT_FOUND');
     return role;
   }
+
   private record(storeId: string, entityId: string, userId: string, action: string): Promise<void> {
     return this.audit.record(storeId, {
       actor: { kind: 'user', userId },
@@ -106,6 +113,7 @@ export class RolesService {
       entityId,
     });
   }
+
   private response(role: Role): RoleResponse {
     const { id, name, ...permissions } = role;
     return { id, name, permissions: customRolePermissionsSchema.parse(permissions) };

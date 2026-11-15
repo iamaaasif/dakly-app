@@ -25,6 +25,7 @@ export class TotpController {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(TotpService) private readonly totp: TotpService,
   ) {}
+
   @Post('auth/totp')
   @Public()
   @HttpCode(204)
@@ -36,12 +37,14 @@ export class TotpController {
     const result = await this.auth.verifyTotp(input.challengeId, input.code, request.ip);
     if ('token' in result) setSessionCookie(reply, result.token, result.session.isRemembered);
   }
+
   @Post('me/totp/proof')
   @RequireUser()
   @HttpCode(204)
   proof(@CurrentUser() userId: string, @Req() request: StoreRequest & FastifyRequest) {
     return this.totp.requestSetupProof(userId, request.ip);
   }
+
   @Post('me/totp/setup')
   @RequireUser()
   @HttpCode(200)
@@ -52,6 +55,7 @@ export class TotpController {
   ) {
     return this.totp.setup(userId, request.sessionId!, input, request.ip);
   }
+
   @Post('me/totp/confirm')
   @RequireUser()
   @HttpCode(200)
@@ -62,6 +66,7 @@ export class TotpController {
   ) {
     return this.totp.confirm(userId, request.sessionId!, input, request.ip);
   }
+
   @Post('me/totp/disable')
   @RequireUser()
   @HttpCode(204)

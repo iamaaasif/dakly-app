@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import importX from 'eslint-plugin-import-x';
 import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
@@ -46,7 +47,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    plugins: { sonarjs, 'import-x': importX },
+    plugins: { sonarjs, 'import-x': importX, '@stylistic': stylistic },
     languageOptions: {
       globals: { ...globals.node },
     },
@@ -61,6 +62,11 @@ export default tseslint.config(
       'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
       'sonarjs/cognitive-complexity': ['error', 15],
       'no-nested-ternary': 'error',
+      '@stylistic/lines-between-class-members': [
+        'error',
+        'always',
+        { exceptAfterSingleLine: true },
+      ],
       'import-x/first': 'error',
       'import-x/newline-after-import': 'error',
       'import-x/no-duplicates': 'error',

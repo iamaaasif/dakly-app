@@ -26,6 +26,7 @@ export class SessionGuard implements CanActivate {
     @Inject(TeamService) private readonly team: TeamService,
     @Optional() @Inject(PinoLogger) private readonly logger?: PinoLogger,
   ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest & StoreRequest>();
     delete request.userId;

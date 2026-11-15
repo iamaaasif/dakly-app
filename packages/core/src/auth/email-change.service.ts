@@ -112,6 +112,7 @@ export class EmailChangeService {
       expiresAt: this.clock.now().getTime() + 600_000,
     };
   }
+
   private matchesProof(current: PhoneProof, proof: PhoneProof): boolean {
     return (
       current.phone === proof.phone &&
@@ -119,6 +120,7 @@ export class EmailChangeService {
       proof.expiresAt > this.clock.now().getTime()
     );
   }
+
   private proofSubject(userId: string, email: string, phone: string) {
     return { target: phone, phone, userId, binding: JSON.stringify([userId, email]) };
   }

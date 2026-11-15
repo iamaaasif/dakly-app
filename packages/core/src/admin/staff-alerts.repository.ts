@@ -21,11 +21,13 @@ export class StaffAlertsRepository {
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
     @Inject(StaffDatabase) private readonly staff: StaffDatabase,
   ) {}
+
   async recordIntent(storeId: string, auditId: string, now: Date) {
     await this.tenant.inTransaction(storeId, (tx) =>
       tx.insert(staffAlertDeliveries).values({ auditId, nextAttemptAt: now }),
     );
   }
+
   async currentStaff(staffUserId: string, sessionId: string) {
     return this.staff.inTransaction(staffUserId, async (tx) => {
       const [staff] = await tx
@@ -49,6 +51,7 @@ export class StaffAlertsRepository {
       return { staff, session };
     });
   }
+
   async list(staffUserId: string, before?: string) {
     return this.staff.inTransaction(
       staffUserId,
@@ -74,6 +77,7 @@ export class StaffAlertsRepository {
         ).rows,
     );
   }
+
   async lockDelivery(staffUserId: string, auditId: string) {
     return this.staff.inTransaction(staffUserId, async (tx) => {
       const [delivery] = await tx
@@ -87,6 +91,7 @@ export class StaffAlertsRepository {
       return delivery;
     });
   }
+
   async retry(staffUserId: string, auditId: string, reason: string, ip: string, now: Date) {
     await this.staff.inTransaction(staffUserId, async (tx) => {
       await tx.insert(staffAuditLog).values({
@@ -110,6 +115,7 @@ export class StaffAlertsRepository {
         .where(eq(staffAlertDeliveries.auditId, auditId));
     });
   }
+
   async pending(now: Date) {
     await this.database.execute(sql`
       update staff_alert_deliveries
@@ -139,6 +145,7 @@ export class StaffAlertsRepository {
         limit 20`)
     ).rows;
   }
+
   async claim(id: string, leaseId: string, now: Date) {
     return (
       await this.database.execute<{ attempts: number }>(sql`
@@ -155,6 +162,7 @@ export class StaffAlertsRepository {
         returning attempts`)
     ).rows[0];
   }
+
   async event(id: string) {
     return (
       await this.database.execute<{
@@ -171,6 +179,7 @@ export class StaffAlertsRepository {
           and action='support.break_glass_opened'`)
     ).rows[0];
   }
+
   async finish(
     id: string,
     leaseId: string,

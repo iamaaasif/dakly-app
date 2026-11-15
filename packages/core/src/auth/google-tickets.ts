@@ -27,6 +27,7 @@ export class GoogleTickets {
     );
     return ticket;
   }
+
   async read(
     ticket: string,
     purpose: GoogleGrant['purpose'],

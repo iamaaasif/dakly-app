@@ -47,6 +47,7 @@ export class MembersController {
   ): Promise<MemberListResponse> {
     return this.members.list(storeId, query, request.access!);
   }
+
   @Post('invites')
   @RequirePermission('team.edit')
   invite(
@@ -57,6 +58,7 @@ export class MembersController {
   ): Promise<MemberResponse> {
     return this.members.invite(storeId, input, { userId, access: request.access! }, request.ip);
   }
+
   @Post('invites/:membershipId/resend')
   @HttpCode(200)
   @RequirePermission('team.edit')
@@ -73,6 +75,7 @@ export class MembersController {
       request.ip,
     );
   }
+
   @Patch(':membershipId')
   @RequirePermission('team.edit')
   changeRole(
@@ -87,6 +90,7 @@ export class MembersController {
       access: request.access!,
     });
   }
+
   @Delete(':membershipId')
   @HttpCode(204)
   @RequirePermission('team.edit')

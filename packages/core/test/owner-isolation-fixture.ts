@@ -34,6 +34,7 @@ export class OwnerIsolationFixture {
       [this.memberA, this.a, this.userA, this.memberB, this.b, this.userB],
     );
   }
+
   async row(table: string, id: string) {
     return (
       await this.connection.pool.query(`select to_jsonb(t) as row from ${table} t where id=$1`, [
@@ -41,6 +42,7 @@ export class OwnerIsolationFixture {
       ])
     ).rows[0]?.row;
   }
+
   async close() {
     for (const table of [
       'support_sessions',

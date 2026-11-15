@@ -28,6 +28,7 @@ export class EmailChangeController {
   ): Promise<void> {
     return this.email.requestProof(userId, input, request.ip);
   }
+
   @Post()
   @HttpCode(204)
   change(
@@ -37,6 +38,7 @@ export class EmailChangeController {
   ): Promise<void> {
     return this.email.requestChange(userId, input, request.ip);
   }
+
   @Post('verify')
   @HttpCode(204)
   verify(

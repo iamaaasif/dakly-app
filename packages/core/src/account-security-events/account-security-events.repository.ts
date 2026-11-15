@@ -38,6 +38,7 @@ export class AccountSecurityEventsRepository {
       }),
     );
   }
+
   list(userId: string, page: AccountSecurityHistory) {
     return this.database.forUser(userId, (tx) =>
       tx

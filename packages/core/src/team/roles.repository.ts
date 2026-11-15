@@ -39,6 +39,7 @@ export class RolesRepository {
         .limit(query.limit + 1),
     );
   }
+
   async find(storeId: string, roleId: string): Promise<Role | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -49,6 +50,7 @@ export class RolesRepository {
     );
     return row;
   }
+
   async findNamed(storeId: string, name: string): Promise<string | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -59,6 +61,7 @@ export class RolesRepository {
     );
     return row?.id;
   }
+
   async isReferenced(storeId: string, roleId: string): Promise<boolean> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -69,6 +72,7 @@ export class RolesRepository {
     );
     return Boolean(row);
   }
+
   async insert(storeId: string, input: CreateRoleInput): Promise<Role> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -78,6 +82,7 @@ export class RolesRepository {
     );
     return row!;
   }
+
   async change(
     storeId: string,
     roleId: string,
@@ -93,6 +98,7 @@ export class RolesRepository {
     );
     return row;
   }
+
   async remove(storeId: string, roleId: string): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx.delete(roles).where(and(eq(roles.storeId, storeId), eq(roles.id, roleId))),

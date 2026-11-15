@@ -37,6 +37,7 @@ export class OwnershipTransferController {
   constructor(
     @Inject(OwnershipTransferService) private readonly transfers: OwnershipTransferService,
   ) {}
+
   @Post('code')
   @HttpCode(204)
   @AnyMember()
@@ -48,6 +49,7 @@ export class OwnershipTransferController {
   ): Promise<void> {
     return this.transfers.requestCode(storeId, input.membershipId, userId, request.ip);
   }
+
   @Post()
   @AnyMember()
   start(
@@ -58,6 +60,7 @@ export class OwnershipTransferController {
   ): Promise<OwnershipTransferResponse> {
     return this.transfers.start(storeId, input, userId, request.ip);
   }
+
   @Get()
   @AnyMember()
   current(
@@ -66,6 +69,7 @@ export class OwnershipTransferController {
   ): Promise<CurrentOwnershipTransferResponse> {
     return this.transfers.current(storeId, userId);
   }
+
   @Delete(':transferId')
   @HttpCode(204)
   @AnyMember()
@@ -76,6 +80,7 @@ export class OwnershipTransferController {
   ): Promise<void> {
     return this.transfers.cancel(storeId, transferId, userId);
   }
+
   @Post('accept')
   @HttpCode(200)
   @AnyMember()

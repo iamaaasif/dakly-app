@@ -46,18 +46,21 @@ export class StoresRepository {
       await tx.insert(storeCounters).values({ storeId });
     });
   }
+
   async find(storeId: string): Promise<StoreResponse | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(storeColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
     );
     return row;
   }
+
   async settings(storeId: string): Promise<StoreSettingsResponse | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(settingsColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
     );
     return row;
   }
+
   async changeSettings(
     storeId: string,
     input: ChangeStoreSettingsInput,
@@ -72,6 +75,7 @@ export class StoresRepository {
     );
     return row;
   }
+
   async changeExtensions(
     storeId: string,
     extensions: string[],

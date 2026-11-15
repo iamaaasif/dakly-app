@@ -10,9 +10,11 @@ export class StaffAuditService {
   recordForAccount(userId: string, id: string, entry: TenantStaffAudit) {
     return this.repository.recordForAccount(userId, id, entry);
   }
+
   recordForStore(storeId: string, entry: TenantStaffAudit): Promise<string> {
     return this.repository.recordForStore(storeId, entry);
   }
+
   provisioned(
     staffUserId: string,
     operatorIdentity: string,
@@ -21,6 +23,7 @@ export class StaffAuditService {
   ): Promise<void> {
     return this.repository.provisioned(staffUserId, operatorIdentity, reason, reissued);
   }
+
   record(
     staffUserId: string,
     action:

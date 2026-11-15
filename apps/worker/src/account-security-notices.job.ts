@@ -17,12 +17,14 @@ export class AccountSecurityNoticesJob implements OnApplicationBootstrap, OnAppl
     this.timer = setInterval(() => this.poll(), 30000);
     this.poll();
   }
+
   private poll() {
     if (this.active) return;
     this.active = runWithJobContext(() => this.notices.dispatch()).finally(() => {
       this.active = undefined;
     });
   }
+
   async onApplicationShutdown() {
     clearInterval(this.timer);
     await this.active;

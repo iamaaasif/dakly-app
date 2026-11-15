@@ -30,6 +30,7 @@ export class StaffAuthController {
     @Inject(StaffFactorsService) private readonly factors: StaffFactorsService,
     @Inject(StaffSessionsService) private readonly sessions: StaffSessionsService,
   ) {}
+
   @Post('sign-in')
   @HttpCode(200)
   signIn(
@@ -38,6 +39,7 @@ export class StaffAuthController {
   ) {
     return this.auth.signIn(input, request.staffAccess, request.ip);
   }
+
   @Post('enroll')
   @HttpCode(200)
   enroll(
@@ -46,6 +48,7 @@ export class StaffAuthController {
   ) {
     return this.auth.enroll(input, request.staffAccess, request.ip);
   }
+
   @Post('totp')
   @HttpCode(204)
   async totp(
@@ -55,6 +58,7 @@ export class StaffAuthController {
   ) {
     staffCookie(reply, await this.factors.verifyTotp(input, request.staffAccess, request.ip));
   }
+
   @Post('passkey/register')
   @HttpCode(204)
   async register(
@@ -64,6 +68,7 @@ export class StaffAuthController {
   ) {
     staffCookie(reply, await this.factors.registerPasskey(input, request.staffAccess, request.ip));
   }
+
   @Post('passkey/authenticate')
   @HttpCode(204)
   async authenticate(
@@ -76,11 +81,13 @@ export class StaffAuthController {
       await this.factors.authenticatePasskey(input, request.staffAccess, request.ip),
     );
   }
+
   @Get('session')
   @StaffAccess()
   session(@Req() request: StaffRequest) {
     return request.staff;
   }
+
   @Post('sign-out')
   @StaffAccess()
   @HttpCode(204)

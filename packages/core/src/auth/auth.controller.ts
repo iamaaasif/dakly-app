@@ -49,6 +49,7 @@ export class AuthController {
     }
     setSessionCookie(reply, result.token, input.isRemembered);
   }
+
   @Post('email/code')
   @HttpCode(204)
   requestEmailCode(

@@ -34,11 +34,13 @@ export class StoresService {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+
   async settings(storeId: string): Promise<StoreSettingsResponse> {
     const store = await this.repository.settings(storeId);
     if (!store) throw storeError('STORE_NOT_FOUND');
     return store;
   }
+
   changeSettings(
     storeId: string,
     input: ChangeStoreSettingsInput,
@@ -58,6 +60,7 @@ export class StoresService {
       return store;
     });
   }
+
   changeExtensions(
     storeId: string,
     input: ChangeStoreExtensionsInput,
@@ -75,6 +78,7 @@ export class StoresService {
       return store;
     });
   }
+
   private recordChange(
     storeId: string,
     userId: string,
@@ -89,9 +93,11 @@ export class StoresService {
       after: { changedFields },
     });
   }
+
   async plans(): Promise<PlansResponse> {
     return { plans: await this.billing.publicPlans(), recommendations: { ...recommendedPlans } };
   }
+
   async create(
     userId: string,
     sessionId: string,

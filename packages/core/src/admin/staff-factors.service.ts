@@ -26,6 +26,7 @@ export class StaffFactorsService {
     @Inject(TotpCredentials) private readonly totp: TotpCredentials,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async verifyTotp(input: StaffTotpInput, identity: AccessIdentity, ip: string): Promise<string> {
     await this.auth.checkIp(ip);
     return this.auth.withStaff(identity, ip, async (staff) => {
@@ -50,6 +51,7 @@ export class StaffFactorsService {
       return this.sessions.issue(staff, ip);
     });
   }
+
   private verifySecret(
     staffUserId: string,
     secret: { totpSecretCiphertext: Buffer | null; totpKeyVersion: number | null },
@@ -66,6 +68,7 @@ export class StaffFactorsService {
       plaintext.fill(0);
     }
   }
+
   async registerPasskey(
     input: StaffRegistrationInput,
     identity: AccessIdentity,
@@ -96,6 +99,7 @@ export class StaffFactorsService {
       return this.sessions.issue(staff, ip);
     });
   }
+
   async authenticatePasskey(
     input: StaffAuthenticationInput,
     identity: AccessIdentity,

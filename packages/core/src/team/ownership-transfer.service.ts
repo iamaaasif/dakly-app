@@ -147,10 +147,12 @@ export class OwnershipTransferService {
     const access = await this.team.accessFor(storeId, userId);
     if (!access || !canDo(access, 'ownership.transfer')) throw teamError('TRANSFER_DENIED');
   }
+
   private async assertNoTransfer(storeId: string): Promise<void> {
     if (await this.repository.current(storeId, this.clock.now()))
       throw teamError('TRANSFER_EXISTS');
   }
+
   private async recipient(storeId: string, membershipId: string, ownerId: string) {
     const member = await this.members.find(storeId, membershipId);
     if (!member) throw teamError('MEMBER_NOT_FOUND');
@@ -158,6 +160,7 @@ export class OwnershipTransferService {
       throw teamError('TRANSFER_INVALID');
     return member;
   }
+
   private async openTransfer(storeId: string, transferId: string): Promise<OwnershipTransfer> {
     const transfer = await this.repository.find(storeId, transferId);
     if (!transfer) throw teamError('TRANSFER_NOT_FOUND');
@@ -165,6 +168,7 @@ export class OwnershipTransferService {
       throw teamError('TRANSFER_INVALID');
     return transfer;
   }
+
   private subject(
     storeId: string,
     userId: string,
@@ -188,6 +192,7 @@ export class OwnershipTransferService {
       ]),
     };
   }
+
   private deliveryIdentity(identity: Awaited<ReturnType<UsersService['lockVerifiedIdentity']>>) {
     if (!identity) throw teamError('TRANSFER_IDENTITY_REQUIRED');
     if (identity.email && identity.emailVerifiedAt)
@@ -206,9 +211,11 @@ export class OwnershipTransferService {
       };
     throw teamError('TRANSFER_IDENTITY_REQUIRED');
   }
+
   private response(transfer: OwnershipTransfer): OwnershipTransferResponse {
     return { ...transfer, expiresAt: transfer.expiresAt.toISOString() };
   }
+
   private record(storeId: string, entityId: string, userId: string, action: string): Promise<void> {
     return this.audit.record(storeId, {
       actor: { kind: 'user', userId },
@@ -217,6 +224,7 @@ export class OwnershipTransferService {
       entityId,
     });
   }
+
   private recordRole(storeId: string, entityId: string, userId: string): Promise<void> {
     return this.audit.record(storeId, {
       actor: { kind: 'user', userId },

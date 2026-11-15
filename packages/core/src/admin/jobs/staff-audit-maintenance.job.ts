@@ -24,10 +24,12 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
     @InjectQueue(QUEUES.bulk) private readonly queue: Queue,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
   ) {}
+
   onApplicationBootstrap() {
     this.timer = setInterval(() => this.poll(), 30000);
     this.poll();
   }
+
   private poll() {
     if (this.active) return;
     this.active = runWithJobContext(() =>
@@ -42,11 +44,13 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
       this.active = undefined;
     });
   }
+
   private async tick() {
     const results = await Promise.allSettled([this.history.maintain(), this.enqueue()]);
     if (results.some((result) => result.status === 'rejected'))
       throw new Error('Staff audit maintenance failed');
   }
+
   private async enqueue() {
     const tasks = await this.history.pending();
     for (const task of tasks)
@@ -62,6 +66,7 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
         },
       );
   }
+
   async onApplicationShutdown() {
     clearInterval(this.timer);
     await this.active;

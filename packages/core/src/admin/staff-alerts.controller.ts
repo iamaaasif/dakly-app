@@ -29,6 +29,7 @@ export class StaffAlertsController {
   ) {
     return this.alerts.list(request.staff, query.before);
   }
+
   @Post(':id/retry')
   retry(
     @Req() request: StaffRequest,

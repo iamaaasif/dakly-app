@@ -41,6 +41,7 @@ export class SessionsRepository {
         .limit(100),
     );
   }
+
   async isActive(userId: string, sessionId: string, now: Date): Promise<boolean> {
     return this.account.inTransaction(userId, async (tx) => {
       const rows = await tx

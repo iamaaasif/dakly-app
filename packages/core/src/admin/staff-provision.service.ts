@@ -18,6 +18,7 @@ export class StaffProvisionService {
     @Inject(StaffAuditService) private readonly audit: StaffAuditService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async provision(input: StaffProvisionInput): Promise<{ proof: string; staffUserId: string }> {
     const existingId = await this.repository.findIdentity(input.accessSubject, input.email);
     const staffUserId = existingId ?? newId();

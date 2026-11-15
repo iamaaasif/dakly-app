@@ -15,6 +15,7 @@ export class StaffIdentityRepository {
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
     @Inject(DATABASE) private readonly database: Database,
   ) {}
+
   async recoveryConflict(
     userId: string,
     staffUserId: string,
@@ -55,6 +56,7 @@ export class StaffIdentityRepository {
       ).rows[0]!.conflicts;
     });
   }
+
   async conflicts(storeId: string, staffUserId: string) {
     return this.tenant.forStore(
       storeId,
@@ -66,6 +68,7 @@ export class StaffIdentityRepository {
         ).rows[0]!.conflicts,
     );
   }
+
   async linked(staffUserId: string, userId: string) {
     return (
       (

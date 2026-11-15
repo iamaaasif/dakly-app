@@ -18,6 +18,7 @@ export class SmtpEmailDriver implements EmailDriver {
       debug: false,
     });
   }
+
   async send(message: EmailMessage): Promise<void> {
     try {
       await this.transport.sendMail({ from: this.options.from, ...message });

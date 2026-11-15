@@ -62,6 +62,7 @@ export class TeamService {
   storeContext(userId: string, storeId?: string) {
     return this.repository.storeContext(userId, storeId);
   }
+
   async storesFor(
     userId: string,
     query: UserStorePageQuery = { limit: 50 },

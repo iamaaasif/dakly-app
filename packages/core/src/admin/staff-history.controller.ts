@@ -35,6 +35,7 @@ export class StaffHistoryController {
   ) {
     return this.history.search(request.staff, query);
   }
+
   @Post('exports')
   request(
     @Req() request: StaffRequest,
@@ -43,10 +44,12 @@ export class StaffHistoryController {
   ) {
     return this.history.request(request.staff, input.filter, input.reason, request.ip);
   }
+
   @Get('exports/:id')
   get(@Req() request: StaffRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.history.get(request.staff, id);
   }
+
   @Get('exports/:id/download')
   async download(
     @Req() request: StaffRequest,
@@ -60,6 +63,7 @@ export class StaffHistoryController {
       .type('text/csv; charset=utf-8')
       .send(body);
   }
+
   @Get('verify')
   verify(
     @Req() request: StaffRequest,

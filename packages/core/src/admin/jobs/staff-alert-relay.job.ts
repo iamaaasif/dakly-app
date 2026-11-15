@@ -24,10 +24,12 @@ export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplication
     @InjectQueue(QUEUES.transactional) private readonly queue: Queue,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
   ) {}
+
   onApplicationBootstrap() {
     this.timer = setInterval(() => this.poll(), 30000);
     this.poll();
   }
+
   private poll() {
     if (this.active) return;
     this.active = runWithJobContext(() =>
@@ -42,6 +44,7 @@ export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplication
       this.active = undefined;
     });
   }
+
   private async enqueue() {
     const tasks = await this.alerts.pending();
     for (const task of tasks) {
@@ -60,6 +63,7 @@ export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplication
       );
     }
   }
+
   async onApplicationShutdown() {
     clearInterval(this.timer);
     await this.active;

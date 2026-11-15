@@ -49,6 +49,7 @@ export class SessionsController {
   ) {
     return this.sessions.list(userId, request.sessionId!, query.before);
   }
+
   @Delete('me/sessions/:sessionId')
   @HttpCode(204)
   async revoke(
@@ -60,6 +61,7 @@ export class SessionsController {
     await this.sessions.revoke(userId, sessionId);
     if (request.sessionId === sessionId) clearSessionCookie(reply);
   }
+
   @Post('me/sessions/sign-out-others')
   @HttpCode(204)
   revokeOthers(@CurrentUser() userId: string, @Req() request: StoreRequest) {

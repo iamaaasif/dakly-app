@@ -29,6 +29,7 @@ export class GoogleService {
     @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(SignInFailures) private readonly failures: SignInFailures,
   ) {}
+
   async signIn(input: GoogleSignInInput, request: SignInRequest): Promise<GoogleResult> {
     const unknown = { target: authKey('google-token', input.idToken) };
     await this.failures.assertAllowed(unknown, request.ip);
@@ -64,6 +65,7 @@ export class GoogleService {
     }
     return this.finish(identity, owner?.id, request);
   }
+
   async verifyEmail(input: VerifyGoogleEmailInput, request: SignInRequest): Promise<GoogleResult> {
     const grant = await this.tickets.read(input.verificationTicket, 'email');
     await this.codes.consume(
@@ -83,6 +85,7 @@ export class GoogleService {
       throw authError('AUTH_GOOGLE_TICKET_INVALID');
     return this.finish(grant.identity, owner?.id, request, grant.expectedEmailVerifiedAt, true);
   }
+
   private async finish(
     identity: GoogleIdentity,
     userId: string | undefined,
@@ -102,6 +105,7 @@ export class GoogleService {
     const signupTicket = await this.tickets.issue({ purpose: 'signup', identity });
     return { status: 'signup_required', signupTicket };
   }
+
   private emailSubject(ticket: string, grant: GoogleGrant) {
     return {
       target: grant.identity.email,

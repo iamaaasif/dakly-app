@@ -33,6 +33,7 @@ export class StaffRecoveryController {
   ) {
     return this.recovery.lookup(request.staff, input.identifier);
   }
+
   @Post('preview')
   preview(
     @Req() request: StaffRequest,
@@ -40,6 +41,7 @@ export class StaffRecoveryController {
   ) {
     return this.recovery.preview(request.staff, input);
   }
+
   @Post('code')
   @HttpCode(204)
   code(
@@ -48,6 +50,7 @@ export class StaffRecoveryController {
   ) {
     return this.recovery.requestCode(request.staff, input, request.ip);
   }
+
   @Post()
   recover(
     @Req() request: StaffRequest,
@@ -76,6 +79,7 @@ export class AccountRecoveryHistoryController {
   constructor(
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
   ) {}
+
   @Get()
   @Header('Cache-Control', 'no-store')
   history(

@@ -45,11 +45,13 @@ export class TotpService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(SessionsService) private readonly sessions: SessionsService,
   ) {}
+
   async current(userId: string): Promise<Account> {
     const user = await this.users.lockForSignIn(userId);
     if (!user || user.isDisabled) throw authError('AUTH_TOTP_INVALID');
     return user;
   }
+
   subject(user: Account): SignInSubject {
     return {
       userId: user.id,
@@ -59,6 +61,7 @@ export class TotpService {
       binding: user.id,
     };
   }
+
   async requestSetupProof(userId: string, ip: string) {
     const user = await this.current(userId);
     await this.codes.send(this.subject(user), 'totp_setup', ip, undefined, {
@@ -66,6 +69,7 @@ export class TotpService {
       identifierState: accountCredentialState(user),
     });
   }
+
   async setup(userId: string, sessionId: string, input: TotpSetupInput, ip: string) {
     const user = await this.current(userId);
     const subject = this.subject(user);
@@ -166,6 +170,7 @@ export class TotpService {
       return { backupCodes };
     });
   }
+
   async verify(user: Account, code: string): Promise<boolean> {
     if (!user.totpEnabledAt || !user.totpSecretCiphertext || !user.totpKeyVersion) return false;
     if (/^[a-f0-9]{20}$/.test(code))
@@ -181,6 +186,7 @@ export class TotpService {
       plaintext.fill(0);
     }
   }
+
   async disable(userId: string, code: string, ip: string) {
     const subject = this.subject(await this.current(userId));
     await this.failures.assertAllowed(subject, ip);

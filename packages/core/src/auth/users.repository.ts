@@ -35,6 +35,7 @@ export class UsersRepository {
       .limit(1);
     return user?.id;
   }
+
   async recover(
     userId: string,
     changes: { removeTotp: boolean; newPhone?: string; newEmail?: string },
@@ -89,6 +90,7 @@ export class UsersRepository {
         .limit(1),
     );
   }
+
   async invalidateChallenges(userId: string) {
     await this.database.forUser(userId, (tx) =>
       tx
@@ -344,6 +346,7 @@ export class UsersRepository {
       tx.update(users).set({ lastSignInAt: now, updatedAt: now }).where(eq(users.id, userId)),
     );
   }
+
   async findProfile(userId: string): Promise<AccountProfile | undefined> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx

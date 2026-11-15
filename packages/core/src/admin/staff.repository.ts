@@ -47,6 +47,7 @@ export class StaffRepository {
     @Inject(StaffDatabase) private readonly scope: StaffDatabase,
     @Inject(DATABASE) private readonly database: Database,
   ) {}
+
   async findIdentity(subject: string, email: string) {
     const [row] = await this.database
       .select({ id: staffUsers.id })
@@ -55,6 +56,7 @@ export class StaffRepository {
       .limit(1);
     return row?.id;
   }
+
   async lock(staffUserId: string) {
     return this.scope.forStaff(staffUserId, async (tx) => {
       const [row] = await tx
@@ -65,6 +67,7 @@ export class StaffRepository {
       return row;
     });
   }
+
   async update(
     staffUserId: string,
     values: Partial<
@@ -85,6 +88,7 @@ export class StaffRepository {
       tx.update(staffUsers).set(values).where(eq(staffUsers.id, staffUserId)),
     );
   }
+
   async provision(staffUserId: string, input: StaffProvisionInput): Promise<void> {
     await this.scope.forStaff(staffUserId, async (tx) => {
       await tx.insert(staffUsers).values({
@@ -108,6 +112,7 @@ export class StaffRepository {
       await tx.insert(staffIdentityContacts).values(contacts);
     });
   }
+
   async addChallenge(
     staffUserId: string,
     values: Omit<StaffChallengeRecord, 'staffUserId'>,
@@ -116,6 +121,7 @@ export class StaffRepository {
       tx.insert(staffChallenges).values({ ...values, staffUserId }),
     );
   }
+
   async challenge(staffUserId: string, tokenHash: Buffer) {
     return this.scope.forStaff(staffUserId, async (tx) => {
       const [row] = await tx
@@ -130,6 +136,7 @@ export class StaffRepository {
       return row;
     });
   }
+
   async consume(staffUserId: string, tokenHash: Buffer, now: Date): Promise<void> {
     await this.scope.forStaff(staffUserId, (tx) =>
       tx
@@ -143,6 +150,7 @@ export class StaffRepository {
         ),
     );
   }
+
   async consumeAll(staffUserId: string, now: Date): Promise<void> {
     await this.scope.forStaff(staffUserId, (tx) =>
       tx
@@ -153,6 +161,7 @@ export class StaffRepository {
         ),
     );
   }
+
   async passkeys(staffUserId: string) {
     return this.scope.forStaff(staffUserId, (tx) =>
       tx
@@ -165,6 +174,7 @@ export class StaffRepository {
         .where(eq(staffPasskeys.staffUserId, staffUserId)),
     );
   }
+
   async addPasskey(
     staffUserId: string,
     credential: { id: string; publicKey: Uint8Array; counter: number },
@@ -178,6 +188,7 @@ export class StaffRepository {
       }),
     );
   }
+
   async updateCounter(staffUserId: string, credentialId: string, counter: number): Promise<void> {
     await this.scope.forStaff(staffUserId, (tx) =>
       tx
@@ -191,6 +202,7 @@ export class StaffRepository {
         ),
     );
   }
+
   async revokeSessions(staffUserId: string, now: Date): Promise<void> {
     await this.scope.forStaff(staffUserId, (tx) =>
       tx
@@ -199,6 +211,7 @@ export class StaffRepository {
         .where(and(eq(staffSessions.staffUserId, staffUserId), isNull(staffSessions.revokedAt))),
     );
   }
+
   async createSession(
     staffUserId: string,
     values: Omit<typeof staffSessions.$inferInsert, 'staffUserId'>,
@@ -207,6 +220,7 @@ export class StaffRepository {
       tx.insert(staffSessions).values({ ...values, staffUserId }),
     );
   }
+
   async session(staffUserId: string, sessionId: string, tokenHash: Buffer) {
     return this.scope.forStaff(staffUserId, async (tx) => {
       const [row] = await tx
@@ -227,6 +241,7 @@ export class StaffRepository {
       return row;
     });
   }
+
   async touchSession(staffUserId: string, sessionId: string, now: Date): Promise<void> {
     await this.scope.forStaff(staffUserId, (tx) =>
       tx

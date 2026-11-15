@@ -29,6 +29,7 @@ export class BreakGlassService {
     @Inject(RiskyActionConfirmation) private readonly confirmation: RiskyActionConfirmation,
     @Inject(StaffAlertsService) private readonly alerts: StaffAlertsService,
   ) {}
+
   async previewBreakGlass(staff: Staff, input: BreakGlassRequest) {
     const target = (await this.repository.targets(input.targetId))[0];
     if (!target) throw supportError('SUPPORT_NOT_FOUND');
@@ -51,6 +52,7 @@ export class BreakGlassService {
       return { effect, proof: this.confirmation.sign(effect) };
     });
   }
+
   async openBreakGlass(staff: Staff, input: BreakGlassConfirmation, ip: string) {
     this.confirmation.verify(input.effect, input.proof);
     const effect = input.effect;

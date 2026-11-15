@@ -159,6 +159,7 @@ describe('Sign in', () => {
       postMessage(value: unknown) {
         messages.push(value);
       }
+
       close() {}
     }
     vi.stubGlobal('BroadcastChannel', Channel);

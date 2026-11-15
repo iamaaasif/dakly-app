@@ -14,6 +14,7 @@ export class StaffAttempts {
     @Inject(StaffRepository) private readonly repository: StaffRepository,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async ip(ip: string): Promise<void> {
     const result = await this.limiter.consume(
       `staff:ip:${staffTokenHash(ip).toString('hex')}`,
@@ -22,10 +23,12 @@ export class StaffAttempts {
     );
     if (!result.allowed) throw staffError('STAFF_RATE_LIMITED');
   }
+
   assertAllowed(staff: { blockedUntil: Date | null }): void {
     if (staff.blockedUntil && staff.blockedUntil > this.clock.now())
       throw staffError('STAFF_RATE_LIMITED');
   }
+
   async failed(staff: {
     id: string;
     failedAttempts: number;

@@ -21,6 +21,7 @@ export class StaffGuard implements CanActivate {
     @Inject(StaffAccessService) private readonly access: StaffAccessService,
     @Inject(StaffSessionsService) private readonly sessions: StaffSessionsService,
   ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const rule = this.reflector.getAllAndOverride<AccessRule>(ACCESS_RULE, [
       context.getHandler(),

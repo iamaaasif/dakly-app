@@ -28,9 +28,11 @@ class PublicController {
   health() {
     return { status: 'ok' };
   }
+
   write() {
     return { changed: false };
   }
+
   user(userId: string) {
     return userId;
   }

@@ -23,6 +23,7 @@ export class BreakGlassController {
   ) {
     return this.support.previewBreakGlass(request.staff, input);
   }
+
   @Post()
   confirm(
     @Req() request: StaffRequest,

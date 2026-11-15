@@ -31,6 +31,7 @@ export class InviteDelivery {
         throw teamError('INVITE_RATE_LIMITED');
     }
   }
+
   async send(input: Recipient, token: string): Promise<void> {
     const text = `Join your team on Dakly: ${this.origin}/invites/accept#token=${token}. This link expires in 7 days.`;
     try {

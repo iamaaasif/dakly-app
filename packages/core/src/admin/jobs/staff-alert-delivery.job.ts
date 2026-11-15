@@ -18,6 +18,7 @@ export class StaffAlertDeliveryJob extends WorkerHost {
   ) {
     super();
   }
+
   async process(job: Job) {
     return runWithJobContext(async () => {
       let failed = false;

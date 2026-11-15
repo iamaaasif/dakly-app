@@ -81,6 +81,7 @@ export class TeamRepository {
     );
     return result.rows;
   }
+
   async storeContext(userId: string, storeId?: string) {
     const result = await this.database.execute<{
       hasMemberships: boolean;
@@ -93,6 +94,7 @@ export class TeamRepository {
     );
     return result.rows[0]!;
   }
+
   async storesFor(userId: string, query: UserStorePageQuery): Promise<UserStore[]> {
     const result = await this.database.execute<UserStore>(
       sql`

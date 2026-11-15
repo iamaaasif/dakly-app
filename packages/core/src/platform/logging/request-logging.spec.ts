@@ -32,9 +32,11 @@ class LoggingController {
     );
     return { ok: true };
   }
+
   create() {
     return this.read();
   }
+
   fail() {
     throw new DrizzleQueryError(
       'insert into customers values ($1, $2)',
@@ -42,6 +44,7 @@ class LoggingController {
       new Error('private-error-message'),
     );
   }
+
   business() {
     throw new AppError('STORE_REQUIRED', PLATFORM_ERRORS.STORE_REQUIRED);
   }

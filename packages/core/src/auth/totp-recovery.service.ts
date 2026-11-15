@@ -41,6 +41,7 @@ export class TotpRecoveryService {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   private async account(phone: string) {
     const identity = await this.users.findByPhone(phone);
     if (!identity) throw authError('AUTH_PROOF_REQUIRED');
@@ -49,6 +50,7 @@ export class TotpRecoveryService {
       throw authError('AUTH_PROOF_REQUIRED');
     return user;
   }
+
   private subject(
     user: Awaited<ReturnType<TotpRecoveryService['account']>>,
     method: 'phone' | 'email',
@@ -64,6 +66,7 @@ export class TotpRecoveryService {
       binding: user.id,
     };
   }
+
   async requestCode(input: TotpRecoveryCodeInput, ip: string) {
     const user = await this.account(input.phone);
     await this.codes.send(
@@ -77,6 +80,7 @@ export class TotpRecoveryService {
       },
     );
   }
+
   async start(input: TotpRecoveryInput, ip: string) {
     const user = await this.account(input.phone);
     if ((user.emailVerifiedAt && !input.emailCode) || (user.passwordHash && !input.password))
@@ -132,6 +136,7 @@ export class TotpRecoveryService {
     const recovery = await this.repository.read(user.id, recoveryId);
     return { recoveryId, completionToken, eligibleAt: recovery?.eligibleAt ?? null };
   }
+
   private deliveries(
     current: Awaited<ReturnType<TotpService['current']>>,
     owners: Awaited<ReturnType<TeamService['accountOwnerContacts']>>,
@@ -169,6 +174,7 @@ export class TotpRecoveryService {
     )
       throw authError('AUTH_PROOF_REQUIRED');
   }
+
   async cancelPending(userId: string, ip?: string) {
     const cancelled = await this.repository.cancelPending(userId);
     // A single account has at most one pending request; this also repairs older duplicates.
@@ -183,6 +189,7 @@ export class TotpRecoveryService {
       ),
     );
   }
+
   async cancel(input: TotpRecoveryTokenInput, ip: string) {
     const userId = await this.repository.identify(input.recoveryId);
     if (!userId) throw authError('AUTH_TOTP_INVALID');
@@ -194,6 +201,7 @@ export class TotpRecoveryService {
       if (recovery.status === 'pending') await this.cancelPending(userId, ip);
     });
   }
+
   async complete(input: TotpRecoveryTokenInput, ip: string) {
     const userId = await this.repository.identify(input.recoveryId);
     if (!userId) throw authError('AUTH_TOTP_INVALID');
@@ -220,9 +228,11 @@ export class TotpRecoveryService {
       });
     });
   }
+
   private tokenHash(token: string) {
     return authKey('totp-recovery-token', token);
   }
+
   private matches(token: string, expected: string) {
     return timingSafeEqual(Buffer.from(this.tokenHash(token)), Buffer.from(expected));
   }

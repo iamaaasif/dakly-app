@@ -11,6 +11,7 @@ export class SupportAuditService {
     @Inject(StaffAuditService) private readonly staffAudit: StaffAuditService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+
   async record(
     storeId: string,
     id: string,

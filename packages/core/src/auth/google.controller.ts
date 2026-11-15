@@ -36,6 +36,7 @@ export class GoogleController {
     reply.status(202);
     return result;
   }
+
   @Post('email/verify')
   async verifyEmail(
     @Body(new ZodValidationPipe(verifyGoogleEmailSchema)) input: VerifyGoogleEmailInput,

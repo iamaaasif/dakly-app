@@ -21,6 +21,7 @@ export class StaffSessionsService {
     @Inject(StaffAuditService) private readonly audit: StaffAuditService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async issue(staff: StaffIdentity, ip: string): Promise<string> {
     const now = this.clock.now();
     const id = newId();
@@ -43,6 +44,7 @@ export class StaffSessionsService {
     });
     return token;
   }
+
   async resolve(
     token: string | undefined,
     identity: AccessIdentity,
@@ -70,6 +72,7 @@ export class StaffSessionsService {
       return { id: staff.id, name: staff.name, role: staff.role, sessionId: session.id };
     });
   }
+
   async signOut(staffUserId: string, ip: string): Promise<void> {
     await this.transaction.run(staffUserId, async () => {
       await this.repository.lock(staffUserId);

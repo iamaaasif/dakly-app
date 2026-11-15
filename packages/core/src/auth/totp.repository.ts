@@ -31,6 +31,7 @@ export class TotpRepository {
         .where(eq(users.id, userId)),
     );
   }
+
   async disable(userId: string, now: Date) {
     await this.database.forUser(userId, (tx) =>
       tx
@@ -47,6 +48,7 @@ export class TotpRepository {
         .where(eq(users.id, userId)),
     );
   }
+
   async consumeBackup(userId: string, hash: string): Promise<boolean> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx
@@ -57,6 +59,7 @@ export class TotpRepository {
     );
     return rows.length === 1;
   }
+
   async useStep(userId: string, step: number): Promise<boolean> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx

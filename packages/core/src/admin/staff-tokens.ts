@@ -25,6 +25,7 @@ export class StaffTokens {
       .setExpirationTime(Math.floor(now.getTime() / 1000) + STAFF_SESSION_TTL_MS / 1000)
       .sign(Buffer.from(this.key, 'base64'));
   }
+
   async verify(
     token: string,
     now: Date,

@@ -14,6 +14,7 @@ export class StaffAuditRepository {
     @Inject(StaffDatabase) private readonly scope: StaffDatabase,
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
+
   async recordForAccount(userId: string, id: string, entry: TenantStaffAudit): Promise<string> {
     const { actor, ...values } = entry;
     await this.account.inTransaction(userId, (tx) =>
@@ -28,6 +29,7 @@ export class StaffAuditRepository {
     );
     return id;
   }
+
   async recordForStore(storeId: string, entry: TenantStaffAudit): Promise<string> {
     const { actor, ...values } = entry;
     const rows = await this.tenant.inTransaction(storeId, (tx) =>
@@ -43,6 +45,7 @@ export class StaffAuditRepository {
     );
     return rows[0]!.id;
   }
+
   async provisioned(
     staffUserId: string,
     operatorIdentity: string,
@@ -61,6 +64,7 @@ export class StaffAuditRepository {
       }),
     );
   }
+
   async record(staffUserId: string, action: string, ip: string): Promise<void> {
     await this.scope.inTransaction(staffUserId, (tx) =>
       tx.insert(staffAuditLog).values({
