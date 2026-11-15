@@ -26,6 +26,10 @@ export function SignInScreen({
   const [remember, setRemember] = useState(false);
   const complete = onAuthenticated ?? (() => window.location.replace('/dashboard'));
   const result = (value: GoogleSignInResponse) => (value ? setPending(value) : complete());
+  function returnToSignIn() {
+    setPending(undefined);
+    onNavigate?.('phone');
+  }
   if (pending?.status === 'signup_required')
     return (
       <SignUpScreen
@@ -33,7 +37,7 @@ export function SignInScreen({
         signupTicket={pending.signupTicket}
         isRemembered={remember}
         onAuthenticated={onAuthenticated}
-        onSignIn={navigateTo(onNavigate, 'phone')}
+        onSignIn={onNavigate ? returnToSignIn : undefined}
       />
     );
   if (pending?.status === 'totp_required')

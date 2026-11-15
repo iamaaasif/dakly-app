@@ -1,21 +1,14 @@
 'use client';
 import { type ReactNode, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import type { SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { apiRequest, ApiError } from '@/lib/api-client';
-import { sessionContextKey } from '@/lib/session-context';
 import { useInvitationToken } from '../hooks/use-invitation-token';
+import { useInvitationSession } from '../hooks/use-invitation-session';
 import { InvitationAccept } from './invitation-accept';
 import { InvitationAccepted } from './invitation-accepted';
+import { InvitationAuthentication } from './invitation-authentication';
 export function InvitationGate({ renderAuth }: { renderAuth: (done: () => void) => ReactNode }) {
   const notice = useInvitationToken();
-  const session = useQuery({
-    queryKey: sessionContextKey,
-    queryFn: () => apiRequest<SessionContext>('/me/context'),
-    staleTime: 0,
-    retry: false,
-  });
+  const { session, showAuth, checking, authFailed } = useInvitationSession();
   const [storeId, setStoreId] = useState<string>();
   if (notice.invalid)
     return (
@@ -29,19 +22,17 @@ export function InvitationGate({ renderAuth }: { renderAuth: (done: () => void) 
         page.
       </p>
     );
-  if (session.isPending || session.isFetching) return <p role="status">Checking your account…</p>;
-  if (session.error instanceof ApiError && session.error.code === 'AUTH_REQUIRED')
+  if (showAuth)
     return (
-      <>
-        <p>
-          Sign in or create an account to accept your invitation. Keep this page open; reloading
-          clears the link.
-        </p>
-        {renderAuth(() => {
-          void session.refetch();
-        })}
-      </>
+      <InvitationAuthentication
+        checking={session.isFetching}
+        failed={authFailed}
+        onRetry={() => void session.refetch()}
+      >
+        {renderAuth(() => void session.refetch())}
+      </InvitationAuthentication>
     );
+  if (checking) return <p role="status">Checking your account…</p>;
   if (session.error)
     return (
       <div role="alert">
