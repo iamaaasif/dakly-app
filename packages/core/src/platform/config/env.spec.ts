@@ -148,3 +148,18 @@ describe('API trusted proxy configuration', () => {
     expect(() => loadEnv({ ...base, API_TRUSTED_PROXIES: value })).toThrow();
   });
 });
+
+describe('API listener configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+  it('preserves the production bind default and accepts explicit loopback IPs', () => {
+    expect(loadEnv({ ...base, NODE_ENV: 'production' }).API_HOST).toBe('0.0.0.0');
+    expect(loadEnv({ ...base, API_HOST: '127.0.0.1' }).API_HOST).toBe('127.0.0.1');
+    expect(loadEnv({ ...base, API_HOST: '::1' }).API_HOST).toBe('::1');
+  });
+  it.each(['localhost', 'https://127.0.0.1', '', '127.0.0.1:4000'])(
+    'rejects a non-IP bind address: %s',
+    (host) => {
+      expect(() => loadEnv({ ...base, API_HOST: host })).toThrow();
+    },
+  );
+});

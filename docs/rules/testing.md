@@ -17,7 +17,7 @@ Rules:
 - No snapshot tests for API responses; assert the fields that matter.
 - A bug fix starts with a failing test.
 
-Commands: `pnpm test` (unit), `pnpm test:int` (needs `DATABASE_URL` and `DATABASE_ADMIN_URL`, see README).
+Commands: `pnpm test` (unit), `pnpm test:int` (needs `DATABASE_URL` and `DATABASE_ADMIN_URL`, see README), and `pnpm test:e2e` ([browser setup](../development/browser-tests.md)).
 
 ## Store route isolation
 
