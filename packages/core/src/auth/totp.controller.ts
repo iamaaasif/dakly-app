@@ -13,8 +13,8 @@ import {
 
 import { setSessionCookie } from '../platform/http/session-cookie';
 import { Public, RequireUser } from '../platform/tenancy/access.decorators';
+import { CurrentSession } from '../platform/tenancy/current-session.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { AuthService } from './auth.service';
 import { TotpService } from './totp.service';
@@ -41,7 +41,7 @@ export class TotpController {
   @Post('me/totp/proof')
   @RequireUser()
   @HttpCode(204)
-  proof(@CurrentUser() userId: string, @Req() request: StoreRequest & FastifyRequest) {
+  proof(@CurrentUser() userId: string, @Req() request: FastifyRequest) {
     return this.totp.requestSetupProof(userId, request.ip);
   }
 
@@ -50,10 +50,11 @@ export class TotpController {
   @HttpCode(200)
   setup(
     @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
     @Body(new ZodValidationPipe(totpSetupSchema)) input: TotpSetupInput,
-    @Req() request: StoreRequest & FastifyRequest,
+    @Req() request: FastifyRequest,
   ) {
-    return this.totp.setup(userId, request.sessionId!, input, request.ip);
+    return this.totp.setup(userId, sessionId, input, request.ip);
   }
 
   @Post('me/totp/confirm')
@@ -61,10 +62,11 @@ export class TotpController {
   @HttpCode(200)
   confirm(
     @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
     @Body(new ZodValidationPipe(totpConfirmSchema)) input: TotpConfirmInput,
-    @Req() request: StoreRequest & FastifyRequest,
+    @Req() request: FastifyRequest,
   ) {
-    return this.totp.confirm(userId, request.sessionId!, input, request.ip);
+    return this.totp.confirm(userId, sessionId, input, request.ip);
   }
 
   @Post('me/totp/disable')
@@ -73,7 +75,7 @@ export class TotpController {
   disable(
     @CurrentUser() userId: string,
     @Body(new ZodValidationPipe(totpDisableSchema)) input: { code: string },
-    @Req() request: StoreRequest & FastifyRequest,
+    @Req() request: FastifyRequest,
   ) {
     return this.totp.disable(userId, input.code, request.ip);
   }

@@ -26,10 +26,12 @@ import {
 import { UsersService } from '../auth/users.service';
 import { clearSessionCookie } from '../platform/http/session-cookie';
 import { RequireUser } from '../platform/tenancy/access.decorators';
+import { CurrentSession } from '../platform/tenancy/current-session.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { TeamService } from '../team/team.service';
+import { SkipSessionContextCheck } from './session-context-check.decorator';
 import { SessionsService } from './sessions.service';
 
 @Controller()
@@ -44,10 +46,10 @@ export class SessionsController {
   @Get('me/sessions')
   devices(
     @CurrentUser() userId: string,
-    @Req() request: StoreRequest,
+    @CurrentSession() sessionId: string,
     @Query(new ZodValidationPipe(sessionListSchema)) query: { before?: string },
   ) {
-    return this.sessions.list(userId, request.sessionId!, query.before);
+    return this.sessions.list(userId, sessionId, query.before);
   }
 
   @Delete('me/sessions/:sessionId')
@@ -64,8 +66,8 @@ export class SessionsController {
 
   @Post('me/sessions/sign-out-others')
   @HttpCode(204)
-  revokeOthers(@CurrentUser() userId: string, @Req() request: StoreRequest) {
-    return this.sessions.revokeOthers(userId, request.sessionId!);
+  revokeOthers(@CurrentUser() userId: string, @CurrentSession() sessionId: string) {
+    return this.sessions.revokeOthers(userId, sessionId);
   }
 
   @Get('me')
@@ -74,8 +76,12 @@ export class SessionsController {
   }
 
   @Get('me/context')
-  context(@CurrentUser() userId: string, @Req() request: StoreRequest): Promise<SessionContext> {
-    return this.sessions.context(userId, request.sessionId!, request.storeId, request.access);
+  context(
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @Req() request: StoreRequest,
+  ): Promise<SessionContext> {
+    return this.sessions.context(userId, sessionId, request.storeId, request.access);
   }
 
   @Get('me/stores')
@@ -90,20 +96,21 @@ export class SessionsController {
   @HttpCode(204)
   async activeStore(
     @CurrentUser() userId: string,
-    @Req() request: StoreRequest,
+    @CurrentSession() sessionId: string,
     @Body(new ZodValidationPipe(activeStoreSchema)) input: ActiveStoreInput,
   ): Promise<void> {
-    await this.sessions.setActiveStore(userId, request.sessionId!, input.storeId);
+    await this.sessions.setActiveStore(userId, sessionId, input.storeId);
   }
 
   @Post('auth/sign-out')
   @HttpCode(204)
+  @SkipSessionContextCheck()
   async signOut(
     @CurrentUser() userId: string,
-    @Req() request: StoreRequest,
+    @CurrentSession() sessionId: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    await this.sessions.revoke(userId, request.sessionId!);
+    await this.sessions.revoke(userId, sessionId);
     clearSessionCookie(reply);
   }
 }

@@ -17,7 +17,8 @@ import {
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { AnyMember, RequireUser, StaffAccess } from '../platform/tenancy/access.decorators';
-import type { StoreRequest } from '../platform/tenancy/store-request';
+import { CurrentStore } from '../platform/tenancy/current-store.decorator';
+import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { StaffRecoveryService } from './staff-recovery.service';
 import type { StaffRequest } from './staff.guard';
@@ -66,10 +67,11 @@ export class OwnerRecoveryHistoryController {
   @Get()
   @Header('Cache-Control', 'no-store')
   history(
-    @Req() request: StoreRequest,
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
     @Query(new ZodValidationPipe(accountSecurityHistorySchema)) query: AccountSecurityHistory,
   ) {
-    return this.recovery.history(request.storeId!, request.userId!, query.before);
+    return this.recovery.history(storeId, userId, query.before);
   }
 }
 
@@ -83,9 +85,9 @@ export class AccountRecoveryHistoryController {
   @Get()
   @Header('Cache-Control', 'no-store')
   history(
-    @Req() request: StoreRequest,
+    @CurrentUser() userId: string,
     @Query(new ZodValidationPipe(accountSecurityHistorySchema)) query: AccountSecurityHistory,
   ) {
-    return this.events.history(request.userId!, query.before);
+    return this.events.history(userId, query.before);
   }
 }
