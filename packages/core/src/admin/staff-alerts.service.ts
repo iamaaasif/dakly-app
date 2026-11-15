@@ -1,5 +1,3 @@
-import { performance } from 'node:perf_hooks';
-
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { breakGlassEffectSchema, type StaffAlertPage } from '@dakly/contracts/break-glass';
@@ -13,6 +11,7 @@ import type {
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
+import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { StaffAlertsRepository } from './staff-alerts.repository';
 import { STAFF_IDLE_MS } from './staff-session-policy';
 import { supportError } from './support.errors';
@@ -116,23 +115,12 @@ export class StaffAlertsService {
     }
   }
 
-  private async send(message: StaffAlertMessage, credentials: StaffAlertCredentials) {
-    const started = performance.now();
-    let outcome = 'failure';
-    try {
-      await this.driver.send(message, credentials);
-      outcome = 'success';
-    } finally {
-      new Logger(StaffAlertsService.name).log(
-        {
-          event: 'metric',
-          metric: 'staff_alert_delivery',
-          count: 1,
-          durationMilliseconds: performance.now() - started,
-          outcome,
-        },
-        'Staff alert delivery measured',
-      );
-    }
+  private send(message: StaffAlertMessage, credentials: StaffAlertCredentials) {
+    return measureVendorCall(
+      new Logger(StaffAlertsService.name),
+      'staff_alert_delivery',
+      'Staff alert delivery measured',
+      () => this.driver.send(message, credentials),
+    );
   }
 }
