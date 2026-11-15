@@ -9,7 +9,6 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
@@ -27,12 +26,10 @@ import {
 import { AnyMember } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { OwnershipTransferService } from './ownership-transfer.service';
 
 @Controller('store/ownership-transfer')
-@UseGuards(StoreGuard)
 export class OwnershipTransferController {
   constructor(
     @Inject(OwnershipTransferService) private readonly transfers: OwnershipTransferService,

@@ -15,6 +15,7 @@ import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorat
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { TeamService } from '../team/team.service';
 import { sessionContextTag } from './session-context';
+import { SKIP_SESSION_CONTEXT_CHECK } from './session-context-check.decorator';
 import { sessionError } from './sessions.errors';
 import { SessionsService } from './sessions.service';
 
@@ -52,17 +53,29 @@ export class SessionGuard implements CanActivate {
       request.access = access;
       bindVerifiedStore(this.logger, session.activeStoreId);
     }
-    stampContext(context, request, rule);
+    stampContext(context, request, this.checksContext(context, request, rule));
     if (session.isRemembered)
       setSessionCookie(context.switchToHttp().getResponse<FastifyReply>(), token, true);
     return true;
+  }
+
+  private checksContext(
+    context: ExecutionContext,
+    request: FastifyRequest,
+    rule?: AccessRule,
+  ): boolean {
+    const skips = this.reflector.getAllAndOverride<boolean>(SKIP_SESSION_CONTEXT_CHECK, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    return !skips && requiresContext(request, rule);
   }
 }
 
 function stampContext(
   context: ExecutionContext,
   request: FastifyRequest & StoreRequest,
-  rule?: AccessRule,
+  checksContext: boolean,
 ): void {
   const reply = context.switchToHttp().getResponse<FastifyReply>();
   reply.header('Cache-Control', 'no-store');
@@ -70,7 +83,7 @@ function stampContext(
   reply.header('X-Session-Context', tag);
 
   if (
-    requiresContext(request, rule) &&
+    checksContext &&
     request.headers['x-session-context'] !== undefined &&
     request.headers['x-session-context'] !== tag
   )
@@ -79,11 +92,8 @@ function stampContext(
 
 function requiresContext(request: FastifyRequest, rule?: AccessRule): boolean {
   return (
-    (rule?.kind === 'user' &&
-      !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
-      request.routeOptions.url !== '/auth/sign-out') ||
+    (rule?.kind === 'user' && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) ||
     rule?.kind === 'permission' ||
-    rule?.kind === 'member' ||
-    request.routeOptions.url === '/me/active-store'
+    rule?.kind === 'member'
   );
 }

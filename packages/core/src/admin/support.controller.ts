@@ -30,7 +30,9 @@ import {
   SupportAccess,
   SupportHandoff,
 } from '../platform/tenancy/access.decorators';
-import type { StoreRequest } from '../platform/tenancy/store-request';
+import { CurrentSession } from '../platform/tenancy/current-session.decorator';
+import { CurrentStore } from '../platform/tenancy/current-store.decorator';
+import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import type { StaffRequest } from './staff.guard';
 import { SupportOwnerService } from './support-owner.service';
@@ -80,59 +82,72 @@ export class OwnerSupportController {
   constructor(@Inject(SupportOwnerService) private readonly support: SupportOwnerService) {}
   @Get()
   list(
-    @Req() request: FastifyRequest & StoreRequest,
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
     @Query(new ZodValidationPipe(supportPageSchema)) query: { before?: string },
   ) {
-    return this.support.ownerRequests(
-      request.storeId!,
-      request.userId!,
-      request.sessionId!,
-      query.before,
-    );
+    return this.support.ownerRequests(storeId, userId, sessionId, query.before);
   }
 
   @Post(':id/code')
-  code(@Req() request: FastifyRequest & StoreRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.support.requestCode(request.storeId!, {
-      id,
-      userId: request.userId!,
-      sessionId: request.sessionId!,
-      ip: request.ip,
-    });
+  code(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @Req() request: FastifyRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.support.requestCode(storeId, { id, userId, sessionId, ip: request.ip });
   }
 
   @Post(':id/approve')
   approve(
-    @Req() request: FastifyRequest & StoreRequest,
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @Req() request: FastifyRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(supportDecisionSchema)) input: { code: string },
   ) {
-    return this.support.approve(request.storeId!, {
+    return this.support.approve(storeId, {
       id,
-      userId: request.userId!,
-      sessionId: request.sessionId!,
+      userId,
+      sessionId,
       code: input.code,
       ip: request.ip,
     });
   }
 
   @Post(':id/deny')
-  deny(@Req() request: FastifyRequest & StoreRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.support.end(request.storeId!, {
+  deny(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @Req() request: FastifyRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.support.end(storeId, {
       id,
-      userId: request.userId!,
-      sessionId: request.sessionId!,
+      userId,
+      sessionId,
       decision: 'denied',
       ip: request.ip,
     });
   }
 
   @Post(':id/end')
-  end(@Req() request: FastifyRequest & StoreRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.support.end(request.storeId!, {
+  end(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @Req() request: FastifyRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.support.end(storeId, {
       id,
-      userId: request.userId!,
-      sessionId: request.sessionId!,
+      userId,
+      sessionId,
       decision: 'ended',
       ip: request.ip,
     });

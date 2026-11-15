@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
@@ -24,28 +23,27 @@ import {
   type MemberListResponse,
   type MemberResponse,
   type MemberRoleInput,
+  type StoreAccess,
 } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
+import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import type { StoreRequest } from '../platform/tenancy/store-request';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { MembersService } from './members.service';
 
 @Controller('members')
-@UseGuards(StoreGuard)
 export class MembersController {
   constructor(@Inject(MembersService) private readonly members: MembersService) {}
   @Get()
   @RequirePermission('team.view')
   list(
     @CurrentStore() storeId: string,
-    @Req() request: StoreRequest,
+    @CurrentAccess() access: StoreAccess,
     @Query(new ZodValidationPipe(memberListQuerySchema)) query: MemberListQuery,
   ): Promise<MemberListResponse> {
-    return this.members.list(storeId, query, request.access!);
+    return this.members.list(storeId, query, access);
   }
 
   @Post('invites')
@@ -53,10 +51,11 @@ export class MembersController {
   invite(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
-    @Req() request: FastifyRequest & StoreRequest,
+    @CurrentAccess() access: StoreAccess,
+    @Req() request: FastifyRequest,
     @Body(new ZodValidationPipe(inviteMemberSchema)) input: InviteMemberInput,
   ): Promise<MemberResponse> {
-    return this.members.invite(storeId, input, { userId, access: request.access! }, request.ip);
+    return this.members.invite(storeId, input, { userId, access }, request.ip);
   }
 
   @Post('invites/:membershipId/resend')
@@ -66,14 +65,10 @@ export class MembersController {
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
     @Param('membershipId', ParseUUIDPipe) membershipId: string,
-    @Req() request: FastifyRequest & StoreRequest,
+    @CurrentAccess() access: StoreAccess,
+    @Req() request: FastifyRequest,
   ): Promise<MemberResponse> {
-    return this.members.resend(
-      storeId,
-      membershipId,
-      { userId, access: request.access! },
-      request.ip,
-    );
+    return this.members.resend(storeId, membershipId, { userId, access }, request.ip);
   }
 
   @Patch(':membershipId')
@@ -82,12 +77,12 @@ export class MembersController {
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
     @Param('membershipId', ParseUUIDPipe) membershipId: string,
-    @Req() request: StoreRequest,
+    @CurrentAccess() access: StoreAccess,
     @Body(new ZodValidationPipe(memberRoleSchema)) input: MemberRoleInput,
   ): Promise<MemberResponse> {
     return this.members.changeRole(storeId, membershipId, input, {
       userId,
-      access: request.access!,
+      access,
     });
   }
 
@@ -98,8 +93,8 @@ export class MembersController {
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
     @Param('membershipId', ParseUUIDPipe) membershipId: string,
-    @Req() request: StoreRequest,
+    @CurrentAccess() access: StoreAccess,
   ): Promise<void> {
-    return this.members.remove(storeId, membershipId, { userId, access: request.access! });
+    return this.members.remove(storeId, membershipId, { userId, access });
   }
 }

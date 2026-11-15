@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Inject, Post, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
 import {
@@ -8,8 +8,8 @@ import {
 } from '@dakly/contracts/stores';
 
 import { RequireUser } from '../platform/tenancy/access.decorators';
+import { CurrentSession } from '../platform/tenancy/current-session.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { StoresService } from './stores.service';
 
@@ -20,11 +20,11 @@ export class StoresController {
   @Post()
   async create(
     @CurrentUser() userId: string,
-    @Req() request: StoreRequest,
+    @CurrentSession() sessionId: string,
     @Body(new ZodValidationPipe(createStoreSchema)) input: CreateStoreInput,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<StoreResponse> {
-    const result = await this.stores.create(userId, request.sessionId!, input);
+    const result = await this.stores.create(userId, sessionId, input);
     reply.status(result.isCreated ? 201 : 200);
     return result.store;
   }
