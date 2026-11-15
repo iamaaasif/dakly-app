@@ -17,6 +17,7 @@ import {
   sessionIdSchema,
   activeStoreSchema,
   type ActiveStoreInput,
+  type SessionContext,
 } from '@dakly/contracts/sessions';
 import { UsersService } from '../auth/users.service';
 import { TeamService } from '../team/team.service';
@@ -64,6 +65,11 @@ export class SessionsController {
   @Get('me')
   me(@CurrentUser() userId: string) {
     return this.users.profile(userId);
+  }
+
+  @Get('me/context')
+  context(@CurrentUser() userId: string, @Req() request: StoreRequest): Promise<SessionContext> {
+    return this.sessions.context(userId, request.sessionId!, request.storeId, request.access);
   }
 
   @Get('me/stores')

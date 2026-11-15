@@ -23,3 +23,16 @@ export type AccountProfile = UserProfile & {
   isEmailVerified: boolean;
   isTotpEnabled: boolean;
 };
+
+export type SessionContext = {
+  user: Pick<UserProfile, 'id' | 'name'>;
+  stores: UserStore[];
+  currentStore:
+    | (UserStore & {
+        canViewCustomers: boolean;
+        canCreateCustomer: boolean;
+        canApproveSupport: boolean;
+      })
+    | null;
+  contextTag: string;
+};

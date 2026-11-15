@@ -1,12 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { customRolePermissionsSchema, type StoreAccess } from '@dakly/contracts/team';
+import {
+  customRolePermissionsSchema,
+  type StoreAccess,
+  type PermissionArea,
+  type AccessLevel,
+} from '@dakly/contracts/team';
 import { TeamRepository } from './team.repository';
 import { builtInRoleAccess } from './built-in-roles';
-import { canApproveSupport, canChangeExtensions } from './permissions';
+import { canAccess, canApproveSupport, canChangeExtensions } from './permissions';
 
 @Injectable()
 export class TeamService {
   constructor(@Inject(TeamRepository) private readonly repository: TeamRepository) {}
+
+  canAccess(access: StoreAccess, area: PermissionArea, level: AccessLevel): boolean {
+    return canAccess(access, area, level);
+  }
 
   canApproveSupport(access: StoreAccess) {
     return canApproveSupport(access);
