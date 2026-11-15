@@ -75,14 +75,14 @@ describe('support and recovery filters without RLS assistance', () => {
     await f.tenant.forStore(f.b, () =>
       repository.handoff(f.b, principal(f.b, b), otherHash, new Date(Date.now() + 60000)),
     );
-    expect(await repository.session(f.a, hash, true)).toMatchObject({ grantId: a });
-    expect(await repository.session(f.b, otherHash, true)).toMatchObject({ grantId: b });
-    expect(await repository.session(f.b, hash, true)).toBeUndefined();
+    expect(await repository.handoffSession(f.a, hash)).toMatchObject({ grantId: a });
+    expect(await repository.handoffSession(f.b, otherHash)).toMatchObject({ grantId: b });
+    expect(await repository.handoffSession(f.b, hash)).toBeUndefined();
     await f.tenant.forStore(f.b, () => repository.consume(f.b, hash, token, new Date()));
-    expect(await repository.session(f.a, hash, true)).toMatchObject({ consumedAt: null });
+    expect(await repository.handoffSession(f.a, hash)).toMatchObject({ consumedAt: null });
     await f.tenant.forStore(f.a, () => repository.consume(f.a, hash, token, new Date()));
-    expect(await repository.session(f.a, token, false)).toMatchObject({ grantId: a });
-    expect(await repository.session(f.b, token, false)).toBeUndefined();
+    expect(await repository.session(f.a, token)).toMatchObject({ grantId: a });
+    expect(await repository.session(f.b, token)).toBeUndefined();
     expect(await repository.storeName(f.a)).toBe('রিনার দোকান');
     expect(await repository.storeName(f.b)).toBe('করিমের দোকান');
   });

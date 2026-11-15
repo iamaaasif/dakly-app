@@ -1,4 +1,3 @@
-import { STAFF_IDLE_MS } from './staff-session-policy';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
@@ -6,9 +5,30 @@ import { supportGrants, supportSessions, staffUsers, staffSessions } from '@dakl
 import { sessions, users } from '@dakly/db/schema/auth';
 import { memberships } from '@dakly/db/schema/team';
 import { stores } from '@dakly/db/schema/stores';
+import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
+import { STAFF_IDLE_MS } from './staff-session-policy';
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
+const staffColumns = {
+  id: staffUsers.id,
+  name: staffUsers.name,
+  role: staffUsers.role,
+  status: staffUsers.status,
+  enrolledAt: staffUsers.enrolledAt,
+};
+const parentColumns = {
+  expiresAt: staffSessions.expiresAt,
+  revokedAt: staffSessions.revokedAt,
+  lastSeenAt: staffSessions.lastSeenAt,
+};
+const sessionColumns = {
+  storeId: supportSessions.storeId,
+  grantId: supportSessions.grantId,
+  staffUserId: supportSessions.staffUserId,
+  staffSessionId: supportSessions.staffSessionId,
+  consumedAt: supportSessions.consumedAt,
+  handoffExpiresAt: supportSessions.handoffExpiresAt,
+};
 const grantColumns = {
   id: supportGrants.id,
   storeId: supportGrants.storeId,
@@ -206,13 +226,7 @@ export class SupportRepository {
       async (tx) =>
         (
           await tx
-            .select({
-              id: staffUsers.id,
-              name: staffUsers.name,
-              role: staffUsers.role,
-              status: staffUsers.status,
-              enrolledAt: staffUsers.enrolledAt,
-            })
+            .select(staffColumns)
             .from(staffUsers)
             .where(eq(staffUsers.id, staffUserId))
             .for('update')
@@ -223,18 +237,7 @@ export class SupportRepository {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
-        (
-          await tx
-            .select({
-              id: staffUsers.id,
-              name: staffUsers.name,
-              role: staffUsers.role,
-              status: staffUsers.status,
-              enrolledAt: staffUsers.enrolledAt,
-            })
-            .from(staffUsers)
-            .where(eq(staffUsers.id, staffUserId))
-        )[0],
+        (await tx.select(staffColumns).from(staffUsers).where(eq(staffUsers.id, staffUserId)))[0],
     );
   }
   async parent(storeId: string, staffUserId: string, sessionId: string) {
@@ -243,11 +246,7 @@ export class SupportRepository {
       async (tx) =>
         (
           await tx
-            .select({
-              expiresAt: staffSessions.expiresAt,
-              revokedAt: staffSessions.revokedAt,
-              lastSeenAt: staffSessions.lastSeenAt,
-            })
+            .select(parentColumns)
             .from(staffSessions)
             .where(and(eq(staffSessions.staffUserId, staffUserId), eq(staffSessions.id, sessionId)))
             .for('update')
@@ -260,11 +259,7 @@ export class SupportRepository {
       async (tx) =>
         (
           await tx
-            .select({
-              expiresAt: staffSessions.expiresAt,
-              revokedAt: staffSessions.revokedAt,
-              lastSeenAt: staffSessions.lastSeenAt,
-            })
+            .select(parentColumns)
             .from(staffSessions)
             .where(and(eq(staffSessions.staffUserId, staffUserId), eq(staffSessions.id, sessionId)))
         )[0],
@@ -298,36 +293,42 @@ export class SupportRepository {
         .values({ ...principal, handoffHash: hash, handoffExpiresAt: expiresAt }),
     );
   }
-  async locate(hash: Buffer, handoff: boolean) {
+  async locateSession(hash: Buffer) {
     return (
       await this.database.execute<{ store_id: string | null }>(
-        sql`select support_session_store(${hash},${handoff}) as store_id`,
+        sql`select support_session_store(${hash},false) as store_id`,
       )
     ).rows[0]?.store_id;
   }
-  async session(storeId: string, hash: Buffer, handoff: boolean) {
+  async locateHandoff(hash: Buffer) {
+    return (
+      await this.database.execute<{ store_id: string | null }>(
+        sql`select support_session_store(${hash},true) as store_id`,
+      )
+    ).rows[0]?.store_id;
+  }
+  async session(storeId: string, hash: Buffer) {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
         (
           await tx
-            .select({
-              storeId: supportSessions.storeId,
-              grantId: supportSessions.grantId,
-              staffUserId: supportSessions.staffUserId,
-              staffSessionId: supportSessions.staffSessionId,
-              consumedAt: supportSessions.consumedAt,
-              handoffExpiresAt: supportSessions.handoffExpiresAt,
-            })
+            .select(sessionColumns)
             .from(supportSessions)
-            .where(
-              and(
-                eq(supportSessions.storeId, storeId),
-                handoff
-                  ? eq(supportSessions.handoffHash, hash)
-                  : eq(supportSessions.tokenHash, hash),
-              ),
-            )
+            .where(and(eq(supportSessions.storeId, storeId), eq(supportSessions.tokenHash, hash)))
+            .for('update')
+        )[0],
+    );
+  }
+  async handoffSession(storeId: string, hash: Buffer) {
+    return this.tenant.forStore(
+      storeId,
+      async (tx) =>
+        (
+          await tx
+            .select(sessionColumns)
+            .from(supportSessions)
+            .where(and(eq(supportSessions.storeId, storeId), eq(supportSessions.handoffHash, hash)))
             .for('update')
         )[0],
     );
@@ -338,14 +339,7 @@ export class SupportRepository {
       async (tx) =>
         (
           await tx
-            .select({
-              storeId: supportSessions.storeId,
-              grantId: supportSessions.grantId,
-              staffUserId: supportSessions.staffUserId,
-              staffSessionId: supportSessions.staffSessionId,
-              consumedAt: supportSessions.consumedAt,
-              handoffExpiresAt: supportSessions.handoffExpiresAt,
-            })
+            .select(sessionColumns)
             .from(supportSessions)
             .where(and(eq(supportSessions.storeId, storeId), eq(supportSessions.tokenHash, hash)))
         )[0],

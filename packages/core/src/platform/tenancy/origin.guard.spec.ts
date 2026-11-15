@@ -1,6 +1,6 @@
-import { resetEnvForTests } from '../config/env';
 import type { ExecutionContext } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resetEnvForTests } from '../config/env';
 import { OriginGuard } from './origin.guard';
 
 const context = (method: string, origin?: string) =>

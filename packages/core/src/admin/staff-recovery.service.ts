@@ -1,4 +1,3 @@
-import { isStaffSessionCurrent } from './staff-session-policy';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   staffRecoveryEffectSchema,
@@ -9,6 +8,7 @@ import {
   type StaffRecoveryEffect,
 } from '@dakly/contracts/staff-recovery';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+import { isStaffSessionCurrent } from './staff-session-policy';
 import { UsersService } from '../auth/users.service';
 import { SignInCodes } from '../auth/codes.module';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';

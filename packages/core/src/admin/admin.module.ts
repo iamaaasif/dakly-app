@@ -1,3 +1,5 @@
+import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import {
   StaffRecoveryController,
   OwnerRecoveryHistoryController,
@@ -23,6 +25,7 @@ import { AuditModule } from '../audit/audit.module';
 import { StaffIdentityModule } from './staff-identity.module';
 import { SupportRepository } from './support.repository';
 import { SupportService } from './support.service';
+import { SupportOwnerService } from './support-owner.service';
 import {
   StaffSupportController,
   OwnerSupportController,
@@ -30,8 +33,6 @@ import {
 } from './support.controller';
 import { StaffHistoryModule } from './staff-history.module';
 import { StaffHistoryController } from './staff-history.controller';
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { CacheModule } from '../platform/cache/cache.module';
@@ -83,6 +84,7 @@ import { StaffAuthController } from './staff-auth.controller';
     RiskyActionConfirmation,
     BreakGlassService,
     SupportService,
+    SupportOwnerService,
     SupportAuditService,
     Clock,
     TotpCredentials,

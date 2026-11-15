@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SupportService } from './support.service';
+import { SupportOwnerService } from './support-owner.service';
 import { AppError } from '../platform/errors/app-error';
 import { supportError } from './support.errors';
 
@@ -51,8 +52,15 @@ function service(failure: Error, atSubject = false) {
       },
     },
     {},
-  ] as unknown as ConstructorParameters<typeof SupportService>;
-  return new SupportService(...dependencies);
+  ];
+  const owner = new SupportOwnerService(
+    ...(dependencies.slice(0, 8) as unknown as ConstructorParameters<typeof SupportOwnerService>),
+  );
+  return new SupportService(
+    ...([...dependencies.slice(0, 5), owner, dependencies[8]] as unknown as ConstructorParameters<
+      typeof SupportService
+    >),
+  );
 }
 function request(subject: SupportService) {
   return subject.request(

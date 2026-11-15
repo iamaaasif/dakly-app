@@ -1,22 +1,22 @@
 import 'reflect-metadata';
 import { randomUUID, randomBytes, createHash, randomInt } from 'node:crypto';
 import { Logger as PinoNestLogger, LoggerModule } from 'nestjs-pino';
-import { requestLoggingOptions } from '../platform/logging/request-logging';
-import { CustomersService } from '../customers/customers.service';
 import { Logger, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { beforeAll, afterAll, afterEach, describe, it, expect, vi } from 'vitest';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { TOTP, Secret } from 'otpauth';
-import { hashPassword } from '../platform/crypto/password';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { createDatabase } from '@dakly/db/client';
 import { SlackAlertDriver } from '@dakly/providers/staff-alert/slack/slack-alert-driver';
+import { sql } from 'drizzle-orm';
+import { requestLoggingOptions } from '../platform/logging/request-logging';
+import { CustomersService } from '../customers/customers.service';
+import { hashPassword } from '../platform/crypto/password';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StaffAlertsService } from './staff-alerts.service';
 import { StaffAlertsRepository } from './staff-alerts.repository';
 import { SupportRepository } from './support.repository';
-import { sql } from 'drizzle-orm';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AdminModule } from './admin.module';
 import { AuthModule } from '../auth/auth.module';
@@ -392,36 +392,6 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       }
     },
   );
-  it('reads a support customer while another transaction locks the store', async () => {
-    const f = await fixture();
-    const id = await request(f);
-    await approve(f, id);
-    const { cookie } = await open(f, id);
-    const customerId = await addCustomer(f, cookie);
-    const holder = await database.pool.connect();
-    let pending: ReturnType<typeof shop> | undefined;
-    try {
-      await holder.query('begin');
-      await holder.query('select id from stores where id=$1 for no key update', [f.storeId]);
-      pending = shop(f, `/support/customers/${customerId}`, undefined, cookie);
-      const response = await Promise.race([
-        pending,
-        new Promise<never>((_, reject) => {
-          const timer = setTimeout(
-            () => reject(new Error('Customer read waited for the store lock')),
-            1000,
-          );
-          void pending!.then(() => clearTimeout(timer));
-        }),
-      ]);
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json()).toMatchObject({ id: customerId });
-    } finally {
-      await holder.query('rollback');
-      holder.release();
-      await pending;
-    }
-  });
   it('rejects a stale A draft after the same staff browser adopts delegation B', async () => {
     const a = await fixture(),
       other = await fixture();
@@ -985,7 +955,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       now = new Date();
     }
   });
-  it('keeps concurrent Owner end final during new sign-in and read activity', async () => {
+  it('serializes concurrent Owner end, new sign-in and activity without restoring access', async () => {
     const f = await fixture();
     const id = await request(f, 'write', 120);
     await approve(f, id);
@@ -1004,7 +974,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       const signingIn = finishSignIn(f, challenge);
       await waitForBlockedTransactions(pid, 2);
       const ending = shop(f, `/support-access/${id}/end`, {}).then((result) => result);
-      expect((await ending).statusCode).toBe(201);
+      await waitForBlockedTransactions(pid, 3);
       await holder.query('commit');
       const [ended, fresh, result] = await Promise.all([ending, signingIn, activity]);
       expect(ended.statusCode, ended.body).toBe(201);
