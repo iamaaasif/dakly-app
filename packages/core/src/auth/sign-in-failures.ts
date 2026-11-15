@@ -1,11 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
+import { SmsService } from '../sms/sms.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
-import { SMS_DRIVER } from './sms-provider';
+import { EmailService } from '../email/email.service';
 
-export type SignInSubject = { userId?: string; target: string; phone?: string };
+export type SignInSubject = {
+  userId?: string;
+  target: string;
+  phone?: string;
+  email?: string;
+  binding?: string;
+};
 const RECORD_FAILURE = `
 local failures = redis.call('INCR', KEYS[2])
 if failures == 1 then redis.call('EXPIRE', KEYS[2], 3600) end
@@ -25,7 +31,8 @@ export class SignInFailures {
   private readonly logger = new Logger(SignInFailures.name);
   constructor(
     @Inject(ValkeyClient) private readonly client: ValkeyClient,
-    @Inject(SMS_DRIVER) private readonly sms: SmsDriver,
+    @Inject(SmsService) private readonly sms: SmsService,
+    @Inject(EmailService) private readonly email: EmailService,
   ) {}
 
   async assertAllowed(subject: SignInSubject, ip: string): Promise<void> {
@@ -45,13 +52,14 @@ export class SignInFailures {
       authKey('fail-ip', ip),
       subject.userId ? 'known' : 'unknown',
     );
-    if (newlyLocked === 1 && subject.userId && subject.phone) {
+    if (newlyLocked === 1 && subject.userId && (subject.email || subject.phone)) {
       this.logger.warn({ event: 'security', userId: subject.userId }, 'Sign-in locked');
       try {
-        await this.sms.send({
-          to: subject.phone,
-          text: 'Your Dakly sign-in is locked for 15 minutes after repeated incorrect attempts.',
-        });
+        const text =
+          'Your Dakly sign-in is locked for 15 minutes after repeated incorrect attempts.';
+        if (subject.email)
+          await this.email.send({ to: subject.email, subject: 'Dakly sign-in locked', text });
+        else if (subject.phone) await this.sms.send({ to: subject.phone, text });
       } catch {
         // Delivery failure must never roll back the lock or expose vendor payloads.
         this.logger.error(

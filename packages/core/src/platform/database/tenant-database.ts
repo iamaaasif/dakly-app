@@ -22,8 +22,8 @@ export class TenantDatabase {
     storeId: string,
     work: (tx: Transaction) => Promise<TResult>,
   ): Promise<TResult> {
-    if (transactionKind.getStore() === 'account')
-      throw new Error('Cannot mix account and store transactions');
+    if (transactionKind.getStore() && transactionKind.getStore() !== 'store')
+      throw new Error('Cannot mix staff, account and store transactions');
     const current = this.scope.getStore();
     if (current) {
       if (!current.isActive) throw new Error('Store transaction has already finished');

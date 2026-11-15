@@ -2,6 +2,10 @@ import { Body, Controller, HttpCode, Inject, Post, Req, Res } from '@nestjs/comm
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import {
   requestCodeSchema,
+  requestEmailCodeSchema,
+  verifyEmailCodeSchema,
+  type RequestEmailCodeInput,
+  type VerifyEmailCodeInput,
   verifyCodeSchema,
   type RequestCodeInput,
   type VerifyCodeInput,
@@ -31,12 +35,43 @@ export class AuthController {
     @Body(new ZodValidationPipe(verifyCodeSchema)) input: VerifyCodeInput,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<void> {
+  ) {
     const result = await this.auth.verifyCode(input, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
       isRemembered: input.isRemembered,
     });
+    if ('challengeId' in result) {
+      reply.status(202);
+      return result;
+    }
+    setSessionCookie(reply, result.token, input.isRemembered);
+  }
+  @Post('email/code')
+  @HttpCode(204)
+  requestEmailCode(
+    @Body(new ZodValidationPipe(requestEmailCodeSchema)) input: RequestEmailCodeInput,
+    @Req() request: FastifyRequest,
+  ): Promise<void> {
+    return this.auth.requestEmailCode(input, request.ip);
+  }
+
+  @Post('email/code/verify')
+  @HttpCode(204)
+  async verifyEmailCode(
+    @Body(new ZodValidationPipe(verifyEmailCodeSchema)) input: VerifyEmailCodeInput,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.auth.verifyEmailCode(input, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+      isRemembered: input.isRemembered,
+    });
+    if ('challengeId' in result) {
+      reply.status(202);
+      return result;
+    }
     setSessionCookie(reply, result.token, input.isRemembered);
   }
 }
