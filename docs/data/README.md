@@ -31,9 +31,9 @@ These follow [rules/database.md](../rules/database.md); the column helpers are i
 
 ## Tables
 
-After migration 0017 the schema has 85 tables: 84 planned tables (65 shop-scoped and 19 global), plus the `customers` example. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
+After folded core migration 0024 the schema has 96 tables, including the `customers` example. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
 
-Release 1 is split into one migration per feature area, in dependency order. Each holds its generated tables, then by hand the RLS policies, grants and functions for those tables. A later change is a new migration; a merged one is never edited.
+Release 1 is split into one migration per feature area, in dependency order. The development-only core migrations formerly numbered 0016–0044 are folded into 0016–0024; their final schema and grants are unchanged. The plan catalogue remains a separate data migration because its integration test re-runs it. Each holds its generated tables, then by hand the RLS policies, grants and functions for those tables. A later change is a new migration; a merged one is never edited.
 
 | Migration                             | Schema files                                                                              |
 | ------------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -50,8 +50,15 @@ Release 1 is split into one migration per feature area, in dependency order. Eac
 | `0013_analytics`                      | `analytics`                                                                               |
 | `0014_partitions_and_maintenance`     | Monthly partitions for `audit_log`, `ai_runs`, `tracked_link_visits`; partition functions |
 | `0015_maintenance_store_scan`         | Paginated IDs for all retained stores before retention rollups advance                    |
-| `0016_account_security_events`        | Global account history, append-only app grants and owner-only bounded retention purge     |
-| `0017_account_security_event_details` | Reject JSON nulls in the UUID-only account metadata constraint                            |
+| `0016_account_security_events`        | Final account history constraint, append-only grants and bounded purge                    |
+| `0017_billing_plans_trials`           | Plan trials and coupon duration                                                           |
+| `0018_plans_catalogue`                | Verbatim plan catalogue data migration, replayed by its integration test                  |
+| `0019_auth_identity_recovery_notices` | Verified email identity, TOTP recovery, security notices and locked Owner contacts        |
+| `0020_team_ownership_pagination`      | Ownership transfer and bounded member/store pages                                         |
+| `0021_staff_authentication`           | Staff factors, sessions and disable invalidation                                          |
+| `0022_staff_audit_support`            | Staff identity links, audit/seals and support access                                      |
+| `0023_break_glass_alerts`             | Break-glass alert delivery and final request metadata                                     |
+| `0024_staff_account_recovery`         | Final recovery history and locked recovery snapshot                                       |
 
 `packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
 

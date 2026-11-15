@@ -1,3 +1,8 @@
+import { resolve } from 'node:path';
+import { databaseErrorCode } from '../database/error-code';
+
+const repositoryRoot = `${resolve(__dirname, '../../../../..').replaceAll('\\', '/')}/`;
+
 const errorClasses = new Set([
   'Error',
   'TypeError',
@@ -28,10 +33,9 @@ export function serializeError(error: unknown) {
   const errorClass = errorClasses.has(error.constructor.name)
     ? error.constructor.name
     : 'UnknownError';
+  const driverCode = databaseErrorCode(error);
   const code =
-    'code' in error && typeof error.code === 'string' && databaseCodes.has(error.code)
-      ? error.code
-      : 'INTERNAL_ERROR';
+    typeof driverCode === 'string' && databaseCodes.has(driverCode) ? driverCode : 'INTERNAL_ERROR';
   // Messages can contain newlines and forged frames. Parse only after the full error header.
   const header = `${Error.prototype.toString.call(error)}\n`;
   const stack = error.stack?.startsWith(header)
@@ -40,8 +44,18 @@ export function serializeError(error: unknown) {
         .split('\n')
         .slice(0, 20)
         .flatMap((frame) => {
-          const position = /^\s+at .+:(\d{1,6}):(\d{1,4})\)?$/.exec(frame);
-          return position ? [`at <redacted>:${position[1]}:${position[2]}`] : [];
+          const position = /^\s+at (?:(.+) \()?(.+?):(\d{1,6}):(\d{1,4})\)?$/.exec(frame);
+          if (!position) return [];
+          const [, name, path, line, column] = position;
+          const normalized = path!.replaceAll('\\', '/').replace(/^file:\/\//, '');
+          const relative = normalized.startsWith(repositoryRoot)
+            ? normalized.slice(repositoryRoot.length)
+            : normalized.replace(
+                /^(?:file:\/\/)?(?:[A-Za-z]:)?\/.*?((?:packages|apps|node_modules)\/.*|[^/]+)$/,
+                '$1',
+              );
+          const location = `${relative}:${line}:${column}`;
+          return [name ? `at ${name} (${location})` : `at ${location}`];
         })
         .join('\n')
     : '';

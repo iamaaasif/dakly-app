@@ -1,12 +1,12 @@
 # Account, stores and team
 
-|           |                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------- |
-| Release   | 1                                                                                                     |
-| Status    | Not started                                                                                           |
-| Extension | Core                                                                                                  |
-| Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,store-settings}/` |
-| Tasks     | ACC-1 to ACC-15; build order in [plans/core.md](../plans/core.md)                                     |
+|           |                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| Release   | 1                                                                                                        |
+| Status    | In progress                                                                                              |
+| Extension | Core                                                                                                     |
+| Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,settings,security}/` |
+| Tasks     | ACC-1 to ACC-18; build order in [plans/core.md](../plans/core.md)                                        |
 
 ## Purpose
 
@@ -59,7 +59,7 @@ Get a shop owner from "never heard of Dakly" to a working setup in one sitting, 
 
 1. Step 1 validates fields inline. Mobile must be a valid Bangladeshi number not already registered; if it is, show "This number already has an account. Sign in instead" with a link.
 2. Dakly sends a 6-digit SMS code (valid 10 minutes, max 5 tries, resend after 30 seconds, max 5 sends per number per hour and 20 per IP per hour).
-3. Step 3 saves the store: name, business type, district (prefills Store settings), "how you sell" and size. Size sets the suggested plan (Under 500 → Starter; 500–2,000 → Starter; 2,000–10,000 → Growth; Over 10,000 → Pro), shown with a "Recommended" badge.
+3. Step 3 collects a business draft: name, business type, district (prefills Store settings), "how you sell" and size. Step 4 submits these details with the selected plan and billing cycle in one atomic store-creation request. Size sets the suggested plan (Under 500 → Starter; 500–2,000 → Starter; 2,000–10,000 → Growth; Over 10,000 → Pro), shown with a "Recommended" badge.
 4. Step 4: picking Free starts the Free plan; picking a paid plan starts a trial of it with no payment method, as long as the plan's trial length set in the admin panel (D34; 0 means no trial). The trial banner in Plan and usage says when it ends.
 5. On finish, Dakly turns extensions on from the "how you sell" answers (see rule ACC-R5), shows the toast "Dakly is set up for how you sell. Turned on: …" and lands on the Dashboard with the setup checklist open.
 
@@ -83,7 +83,7 @@ Turning an extension off hides its pages from the menu, stops its background job
 
 **Team**
 
-Invite by mobile number (the invite link goes by SMS or WhatsApp) or by email (D20), choose a role, invite link valid 7 days, resend or cancel. Seats count active members and pending invites. When seats are full, Invite shows the plan limit and an Upgrade button.
+Invite by mobile number (the invite link goes by SMS or WhatsApp) or by email (D20), choose a role, invite link valid 7 days, resend or cancel. Seats count active members and pending invites. When seats are full, Invite shows the actual plan limit and is disabled. Members or unaccepted invitations can be removed to free seats; billing checkout is separate scope.
 
 **Billing**
 
@@ -209,6 +209,22 @@ The entry flow is thorough and local-first (mobile number + OTP, bKash/Nagad mes
 | Account menu         | Name, email, role, links to Stores, Profile, Security, Plan, Invoices, Log out                                                                                                                                                               | Fine.                                                                                                                                                                              |
 | Log out              | Confirm dialog with "Also log out of my 2 other devices"                                                                                                                                                                                     | Needs a device/session list in Security to back this up.                                                                                                                           |
 
+### App shell (WEB-3)
+
+The signed-in shell contains only implemented destinations: Customers for members with view access, Support access for the current owner, and account Security. Customer creation requires edit access. The desktop sidebar collapses to labeled icons; the phone drawer supports keyboard focus containment, Escape and return focus. Store and profile names come from the API. The header signs out through the existing account endpoint, clears the browser query cache and returns to `/sign-in`. The native shop chooser loads bounded pages on request; the full selected name is also shown as text, including when its option is outside the loaded page.
+
+`GET /me/context` requires an account session. It returns the profile id/name, `hasMemberships`, the independently verified current shop with screen capabilities, and `contextTag`. `GET /me/stores?after=<store UUID>&limit=50` returns a bounded `{ items, nextCursor }` picker page; `limit` is 1–50. The picker loads further pages only on request and preserves a selected shop outside loaded pages. There is no account membership cap. The session guard reads the session and membership from primary PostgreSQL once per request; the context service reuses those access results and existing account/team services. It adds no table, column, cross-request permission cache or browser authorization rule. Removed membership leaves the account usable with no current shop.
+
+Normal shell business requests send `X-Session-Context`, an opaque digest of the verified session, selected shop and effective permissions. The guard compares it with fresh primary context before business controllers, including shop selection, and rejects a mismatch with `SESSION_CONTEXT_CHANGED` (409). The header only checks consistency; it never selects a shop or grants access. Existing API clients without the header remain compatible. Responses carry the verified tag and `Cache-Control: no-store`. Account Security validates response tags without requiring a selected shop. Support/staff sessions retain their separate boundaries.
+
+React Query owns session and screen data. A switch unmounts shop content, cancels/removes screen queries and clears mutation state before using the existing authorized selection endpoint. Fresh context is required before reopening content. A failed or network-ambiguous switch leaves content closed with Refresh. Cross-tab notifications and window visibility/focus reverify shared session selection. Ordinary verification hides and disables the mounted shell while preserving drafts, collapse and mutation state when the verified context is unchanged. A changed context, confirmed authentication loss or explicit session transition discards that state. Network uncertainty keeps the shell hidden until Retry or Refresh verifies the context; an open phone drawer closes so it cannot block recovery. Query keys and response tags prevent old-shop or old-account results from appearing under a new header. Already authorized requests may finish, as allowed by the session boundary; their discarded browser results cannot repopulate the new screen.
+
+ACC-8 handoff paths are `/sign-in` and `/setup`. These interim pages explain that the corresponding flow is not available yet; ACC-8 replaces them with the actual forms. Accounts with existing memberships get a working shop chooser. Accounts without a shop can continue to `/setup` and use account Security. `/security` stays account-only, `/support` remains outside this shell, and public `/security/recovery` is reserved outside the authenticated route group. No future feature links, notification counts or metrics are shown.
+
+### Browser regression coverage (WEB-5)
+
+The committed Chromium shell test runs the production Next build and compiled API with real PostgreSQL authentication. It preserves an unfinished customer draft on unchanged focus, discards it on a real shop switch, checks native phone drawer keyboard behavior and proves customer writes belong to the verified shop. An old context receives 409 without extra writes. Testing Library checks the labelled shop chooser separately. See [browser tests](../development/browser-tests.md) for setup, fixture ownership and failure artifacts. ACC-8 adds real Mailpit signup and public recovery-link coverage; this seeded-session flow does not cover onboarding.
+
 ### Design review: Store settings, Team, Integrations, Settings and billing
 
 These admin areas are unusually complete for a prototype. Billing is fully localised: bKash/Nagad/Rocket, SSLCommerz, 15% VAT and Mushak-6.3 invoices, and the VAT maths is correct (৳3,490 + 15% = ৳4,013.50). The two big holes are WhatsApp message costs, which no plan or page explains, and the Orders and Inbox permissions for modules that don't exist.
@@ -302,17 +318,152 @@ Release 1 has five ways in (D20). All of them end at step 5 below.
 1. Phones are normalised to `01XXXXXXXXX` with `bdMobileSchema` from `packages/contracts/src/phone.ts`. Emails are trimmed and lower-cased.
 2. Codes are stored hashed, live 10 minutes and allow 5 tries. Sends are limited to 5 per phone or email and 20 per IP per hour (Valkey counters).
 3. Passwords are hashed with Argon2id. Wrong passwords and codes share the ACC-R2 lockout (D35). "Forgot password" sends a code to the phone or email on the account.
-4. Sign-up commits in stages ([plan](../plans/core.md)): verifying the code creates the user and a session with no store; the business details step then uses `StoreTransaction.runForNewStore` to create the store, Owner membership, subscription and default settings in one transaction. Global user and session writes stay outside that transaction. The active store is saved to the session after store setup commits; a retry after a failed session update finds the existing owned store and resumes. A user who stops in between resumes at business details on their next sign-in. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
+4. Sign-up commits in stages ([plan](../plans/core.md)): verifying the code creates the user and a session with no store; the final plan step submits business details and uses `StoreTransaction.runForNewStore` to create the store, Owner membership, subscription and default settings in one transaction. Global user and session writes stay outside that transaction. The active store is saved to the session after store setup commits; a retry after a failed session update finds the existing owned store and resumes. A user who stops in between resumes at business details on their next sign-in. Sign-in creates nothing. A Google sign-in whose verified email matches an existing user signs that user in; it never creates a second user for the same email.
 5. The API issues an opaque session token (32 random bytes) in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored, with the user, active store, IP, user agent and expiry (30 days sliding with "Keep me signed in", otherwise 12 hours idle; D35).
 6. Session and permission results are not cached across requests. A failed database check rejects access. Revoked sessions fail on the next request, including account routes without a store. Each request loads the session and current membership and role from the primary PostgreSQL database, checks the session is unexpired and not revoked and the membership is active, and sets `request.storeId`, `request.userId` and `request.access` (role, area levels and flags). `StoreGuard` and `@RequirePermission('orders.edit')` read them.
 
 Switching store: the session's active store changes through `POST /me/active-store`. The store id never comes from the client any other way.
 
+ACC-3 provides `GET /me` (only id, name, phone and email), `GET /me/stores`, `POST /me/active-store` and `POST /auth/sign-out`. Switching requires an active membership; a missing store and a store without membership both return `404 STORE_NOT_FOUND`. Signing out revokes the session and records one account event in the same account transaction, then clears the cookie. Sign-in and initial cookie issuance are wired by ACC-2.
+
+Sessions use two access reads on each store request: the token-hash lookup joins the user to reject disabled accounts; the store/user lookup joins the current custom role. The session guard publishes claims only after these checks succeed. Reads use the primary app database connection; writes use the account transaction scope. No session or permission cache exists. Renewal checks expiry again after the read and guards its write against revoked or expired rows. Last-seen and sliding expiry change at most once every five minutes.
+
+`WEB_ORIGINS` is a comma-separated list of exact origins, defaulting to `http://localhost:3000` for local work. Every POST, PUT, PATCH and DELETE checks it, including requests without a session. Missing origins are rejected. There are no provider callback routes or exemptions yet; the signed callback marker is added with its first route. Cookies use `HttpOnly`, `SameSite=Lax` and `Path=/`, with `Secure` outside development. Remembered cookies renew their 30-day browser lifetime; other cookies have no persistent expiry.
+
+Customer routes require `customers.view` or `customers.edit`. Their service requires the caller's phone-access flag and masks all response phones without it, including create responses, as `017XXXXX678`.
+
 Team: an invite is a membership with status `invited` and a hashed token sent by SMS, WhatsApp or email, valid 7 days. Accepting with a phone or email that already has a user adds a membership, not a user. Removing a member commits their new membership status, so the next request reads it and gets 401 for that store; their sessions keep working for their other stores. Revoking an unaccepted invite sets `removed`, records `removed_at`, and clears the invite token hash and expiry in the same transaction; its user ID may remain null. Only `active` memberships require a user. The complete `(store_id, status)` index supports member counts, including removed invites.
+
+ACC-5 serves `GET /members`, `POST /members/invites`,
+`POST /members/invites/:membershipId/resend`, `PATCH /members/:membershipId`,
+`DELETE /members/:membershipId` and the signed-in account route `POST /invites/accept`.
+Team View reads the list; Team Edit manages members. An invite takes exactly one
+normalized `phone` or `email`, and exactly one `builtInRole` or same-store `roleId`.
+No ordinary membership action can invite, remove or change the Owner. Assignments
+must fit the actor's current grants.
+
+The list includes active members and pending invitations, including expired invitations
+that can be resent. It returns `{ items, nextCursor, seats: { used, limit } }`, with
+default `limit=50` and maximum 100. A cursor is the last membership ID; the database
+resolves its exact `(created_at, id)` boundary within this store, preserving timestamp
+precision. Profiles use one bounded UsersService batch. Phones are masked without
+`seeFullPhone`; invite hashes and raw links never appear in API responses.
+
+Seat allocation counts active members plus unexpired pending invites. BillingService
+reads the current plan limit; a missing limit allows no additional seats. Each write
+locks the store row with `FOR NO KEY UPDATE` and records the membership change and
+audit event in the same store transaction. The lock serializes seat allocation without
+blocking foreign-key checks from account actions. An expired resend must reserve a
+seat again; a full store returns `409 TEAM_SEATS_FULL`.
+
+Invite tokens contain 32 random bytes, are stored only as SHA-256 hashes, and expire
+after seven days. Delivery uses SMS for phone invitations and email for email invitations,
+after commit. The link carries its token in the URL fragment. Acceptance locates the
+store through `membership_for_invite`, then rechecks the current token, status and expiry
+under the store lock. Before acquiring that lock, UsersService holds a shared read lock
+on the signed-in user's current verified identity in the same store action. This special
+account read never writes an account or nests an account transaction. A typed unverified
+email or phone cannot accept an invite. Acceptance neither creates a user nor changes an
+existing active membership; re-inviting a removed user restores their existing membership.
+The response identifies the store and membership; switching the active store remains explicit.
+
+Send and resend share a 30-second cooldown and five sends per normalized recipient per
+store per hour, plus twenty sends per IP per hour. Valkey keys contain hashes rather than
+recipient values and use a separate namespace from sign-in. Reservations happen before
+the store transaction and remain consumed on database or vendor failure.
+
+Repeating invite creation for the same pending recipient and role returns that invite
+without another send, audit event or seat. A different role returns `409 INVITE_EXISTS`;
+use the explicit role-change route. An expired invite is also returned unchanged until
+explicitly resent. This recipient-based retry rule does not use `Idempotency-Key`.
+Resend rotates the token, invalidating earlier links. A vendor failure returns
+`503 INVITE_DELIVERY_UNAVAILABLE` while leaving the committed invitation valid because
+delivery may have succeeded before a timeout. Find it with `GET /members`, then resend
+after the cooldown. No queue or automatic retry runs. Cancel and remove are repeat-safe;
+acceptance tokens are single-use. Later requests observe committed access changes; already
+authorized requests may finish.
+
+SmsModule now exports SmsService for authentication and team invitations. Every SMS
+attempt records `sms_delivery` with count, monotonic duration and success/failure through
+Nest/Pino, including sign-in codes and lock notices. Labels contain no recipient, link,
+message text or vendor exception. This closes the earlier SMS metrics gap. Production
+SMS remains fail-closed until ACC-14 supplies a provider; Mailpit checks do not prove
+live SMS or SendGrid delivery.
 
 Roles: four built-in roles live in code, `team/built-in-roles.ts` (Shop counter staff is added in release 2). Custom roles are rows per store. A role maps each area to `none`, `view` or `edit`, plus the flags `seeFullPhone`, `exportLists`, `refund`. One pure function, `team/permissions.ts`, answers "can this member do this", and is unit-tested against the role table.
 
+ACC-17 serves `GET /roles` with Team View, and `POST /roles`,
+`PATCH /roles/:roleId`, `DELETE /roles/:roleId` with Team Edit. Create takes
+`{ name, permissions }`; names are trimmed and limited to 60 characters. A patch
+changes the name, replaces the complete permission object, or both. The resulting
+permissions must fit the actor's grants even for a rename. Custom roles never grant
+Billing Edit or other Owner actions. Ordinary self-assignment is allowed when the
+grant rule permits it; it cannot grant Owner powers.
+
+The role list returns `{ items, nextCursor, builtInRoles }`. Custom items have
+`id`, `name` and `permissions`; the separate built-in metadata has `builtInRole`
+and `permissions`, with no editable database ID. Custom roles are ordered by ID
+using the `(store_id, id)` index, default to 50 per page and accept at most 100.
+The cursor is the last role ID in this store; a missing or foreign cursor returns
+an empty custom page. Built-in metadata accompanies every page.
+
+Role mutations share the membership store lock and commit `role.created`,
+`role.changed` or `role.deleted` audit events in the same transaction. Duplicate
+names within a store return `409 ROLE_NAME_EXISTS`. Missing or foreign roles
+return `404 ROLE_NOT_FOUND`. Deletion returns `409 ROLE_IN_USE` for any membership
+reference, including pending, expired or removed memberships, preserving membership
+history. Editing a role changes every assigned member's access on their next
+request; already authorized requests may finish.
+
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
+
+The permission policy and four built-in roles are implemented (ACC-4). Every built-in role gets Dashboard View; Segments follows Customers. Areas absent from a role grant no access. Only Owner and Admin have the three flags. Unknown roles grant no access. `edit` includes `view`.
+
+`billing.edit`, store closing and ownership transfer always require the Owner. Custom role JSON accepts at most Billing View. Creating, editing or assigning a role must pass `canGrantRole`: every proposed area level and flag must be within the acting member's own access, including Owner authority.
+
+Ownership transfer (ACC-18)
+
+The Owner selects another active member. `POST /store/ownership-transfer/code` takes
+`{ membershipId }` and sends a fresh six-digit code to the Owner's verified email,
+or verified phone when no verified email exists. The code expires after ten minutes
+and shares sign-in send limits, cooldown, failed-attempt limits and account lockout.
+It is bound to the acting Owner, store, proposed member and current verified contact.
+General sign-in codes and codes for other actions cannot start a transfer.
+
+`POST /store/ownership-transfer` takes `{ membershipId, code }` and creates a pending
+transfer valid for 48 hours. There is one pending transfer per store. Expired rows
+stop authorizing acceptance immediately and are marked expired when a new transfer
+starts. `GET /store/ownership-transfer` returns `{ transfer }` for the current Owner
+or named member. It returns `{ transfer: null }` to any active member when none is
+pending; other members receive `403 TRANSFER_DENIED` when one exists. Responses expose
+only transfer and account ids, status and expiry. The Owner cancels with
+`DELETE /store/ownership-transfer/:transferId`.
+
+The named member accepts with `POST /store/ownership-transfer/accept`, taking
+`{ transferId }`. Acceptance requires their active store membership. Q3's current
+one-owned-store limit also applies: a member already owning a store receives
+`409 TRANSFER_STORE_LIMIT`. Membership in other stores remains allowed. The same
+per-user advisory lock used by store creation serializes competing ownership grants.
+
+Code delivery and consumption occur outside store transactions. A consumed code stays
+spent when the database action fails. Starting a transfer rechecks current Owner
+access, member activity and verified identity after consumption. Identity reads hold
+a shared user lock through `UsersService.lockVerifiedIdentity` before the store lock;
+acceptance also takes the ownership advisory lock before the store lock. All reads
+inside these actions reuse the same connection.
+
+Acceptance locks the store row with `FOR NO KEY UPDATE`, then rechecks the pending
+transfer, expiry, named member and current Owner. It changes the previous Owner to
+Admin before promoting the named member to Owner, clears any custom role assignment,
+and records both `member.role_changed` events and the transfer acceptance in the
+same transaction. Audit failure rolls the whole action back. Start and cancellation
+also have atomic audit events. Member removal, role changes and transfer acceptance
+share the store lock; parallel acceptance or removal leaves exactly one Owner.
+Both accounts use their new permissions on their next request through ACC-3.
+
+`TeamModule` exports `PermissionGuard` and its policy evaluator. The guard reads trusted `request.userId`, `request.storeId` and `request.access`. It supports `@RequirePermission`, `@AnyMember`, `@RequireUser` and `@Public`; missing classification or insufficient access returns `403 PERMISSION_DENIED`. Method access rules override controller rules. A signed-in user without a store can use `@RequireUser` routes. A known active member can use `@AnyMember` regardless of area levels. ACC-3 registers the global guards in this order: Origin, Session, User, Store, Permission. User and store checks return `401 AUTH_REQUIRED` and `401 STORE_REQUIRED` before permission evaluation.
+
+API-3 inventories every HTTP handler registered by the production `AppModule`, including imported controllers and inherited methods. The check fails for a missing access rule. An explicit controller or method `StoreGuard` also requires an effective `@RequirePermission` or `@AnyMember` rule. Method rules override controller rules; local guards compose. The global conditional store guard alone does not classify public or user routes as store routes. Fixture controllers verify these failures, and `pnpm test:int` checks the real app.
 
 Password and 2-step: a password is optional (Argon2id). TOTP is optional for everyone in release 1 (D35). Requiring it for Owners before connecting a payment gateway is built with PAY-2.
 
@@ -351,6 +502,168 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 - Given a new number, entering the right code creates the user and a session without a store. Completing business details with an eligible plan creates the store and Owner membership atomically: Free starts immediately; a paid plan with a positive `trial_days` starts that trial; a paid plan without a trial requires checkout (PAY-7).
 - Given a Support agent, when they open Campaigns, then the page says they have no access, and the API returns `403 PERMISSION_DENIED` for campaign routes.
 
+## SMS delivery in development
+
+ACC-1 provides `SmsDriver.send({ to, text })`, returning `{ providerMessageId }`.
+`MailpitSmsDriver` takes SMTP `{ host, port }` options and captures each SMS as an
+email to `<phone>@sms.test`. Its provider message id is Mailpit's queue id,
+so the API and UI can retrieve the captured message. The adapter sets five-second
+SMTP timeouts and returns `SMS_SEND_FAILED` without the raw vendor error. It logs
+neither phone numbers nor message text. `FakeSmsDriver` keeps message copies in
+memory and returns distinct ids for unit tests.
+
+`docker compose` runs Mailpit on localhost: SMTP port 1025 and UI/API port 8025.
+CI uses the same ports and checks readiness before tests. `MAILPIT_SMTP_HOST` and
+`MAILPIT_SMTP_PORT` configure the SMTP connection; `MAILPIT_API_URL` configures
+integration test read-back. The integration test removes only its own message.
+
+`SMS_DRIVER=mailpit` is the only supported selection. SmsModule selects Mailpit in
+development and tests, using the SMTP settings above. Application startup fails in
+production even when `SMS_DRIVER` is omitted: no usable production driver exists
+until ACC-14 supplies the provider account, sender id and adapter. Pure environment
+parsing remains separate from the consumer factory so cookie settings do not
+instantiate an SMS driver. Captured messages do not prove live SMS delivery.
+
+## Code sign-up and sign-in
+
+ACC-2 provides the phone routes. Both require an allowed `Origin`.
+
+- `POST /auth/code`: `purpose: sign_up` takes name, normalized BD phone, optional
+  email and `termsVersion`. An existing phone returns `409 AUTH_ACCOUNT_EXISTS`.
+  `purpose: sign_in` takes a phone; an unknown account returns
+  `404 AUTH_ACCOUNT_NOT_FOUND` without sending a message.
+- `POST /auth/code/verify`: takes the same phone and purpose, a six-digit code and
+  optional `isRemembered` (default false). It returns 204 and sets the session
+  cookie; neither the code nor the session token appears in the response body.
+
+Codes use `crypto.randomInt`, are hashed with their target and purpose, expire in
+10 minutes, and allow five wrong tries. A Valkey script checks and deletes a code
+atomically. A hash-only consumed marker lasts for the original remaining code TTL;
+a correct-code replay is rejected without another failure and cannot extend that
+TTL or authorize a session. New codes avoid these still-retained values. Sign-in
+grants also retain their original user id. Reassigning a phone
+invalidates its old grant; the final account row lock rechecks the current phone,
+disabled flag and TOTP status before issuing a session. Resend waits 30 seconds;
+sends are limited to five per target and twenty per IP in an hour. Concurrent or
+failed delivery attempts can consume capacity without a delivered message. The
+code is saved before SMS delivery, outside any database transaction. An uncertain
+delivery failure retains the code and cooldown and returns `AUTH_SMS_UNAVAILABLE`.
+
+`AuthService.completeSignIn` is the sole production session issuer. It accepts an
+internal identity and plain request context, inserts a pending registration if
+needed, and commits the user and storeless session in one account transaction.
+Sign-up records phone verification and accepted terms; its optional email remains
+unverified. Phone uniqueness protects concurrent sign-ups. Email uniqueness applies
+only to verified addresses, so an optional unverified signup email cannot reserve
+an identity. A consumed code is never restored after database failure: the user
+must request another code. If the database committed but clearing failure state
+fails, the response fails closed; a new sign-in attempt is required.
+
+Phone, email and future password checks share `SignInFailures` by user id. Unknown
+accounts use a hashed target instead. Five consecutive wrong attempts lock the
+identity for 15 minutes; thirty failures from one IP block that IP for an hour.
+Resending does not clear failures. Only completed sign-in clears the identity
+counter, never the IP history. Unknown-target history expires after an hour when
+it has not reached a lock. The atomic transition into an account lock sends one
+notification outside the database transaction, by verified email when available
+and SMS otherwise. Notification failure leaves the lock intact
+and records a security event in logs without the phone or message text.
+
+TOTP-enabled accounts return `202 { status: "totp_required", challengeId }` and get no session.
+Their failure history is retained. The common completion path rechecks the first
+factor and account state before a second factor can issue a session.
+Password and Google sign-in are described in their implementation sections below.
+
+## Email sign-in and identity changes (ACC-9)
+
+`EmailService` uses `EmailDriver.send({ to, subject, text, html? })`. Development
+uses `EMAIL_DRIVER=smtp` (the default) with the Mailpit SMTP settings. Production
+requires explicit `EMAIL_DRIVER=sendgrid`, `SENDGRID_API_KEY` and `EMAIL_FROM`.
+SMTP and fake selections are refused in production. SendGrid uses its HTTPS
+Mail Send endpoint with a five-second timeout and no redirects. Both drivers
+sanitize failures. SendGrid request shapes are tested with fake fetch; live
+SendGrid delivery remains untested until the sending domain is verified.
+The existing production SMS refusal still applies until ACC-14.
+
+Each EmailService call emits one `email_delivery` metric observation through the
+existing JSON logger: count 1, elapsed monotonic milliseconds and success/failure
+outcome. These log-based observations support aggregation; no metrics dashboard
+or exporter is installed by this task. Fields contain no recipient, content,
+credentials or error payload. A failed call retains its original driver error.
+
+`POST /auth/email/code` takes `email`; only a verified address can receive a
+sign-in code. `POST /auth/email/code/verify` takes `email`, `code` and optional
+`isRemembered`; it returns 204 and sets the shared session cookie. Both are public
+browser routes requiring an allowed origin. Email is normalized to lower case.
+Both methods call the same completion gate, including disabled-account and TOTP
+checks, shared account/IP lockouts, and one-use code consumption.
+
+Per D20, phone sign-in sends to the user's verified email when available and to
+SMS otherwise. The grant binds both the entered identifier and its email delivery
+identity. Completion rechecks them under the user lock: changing the email while
+a code is in flight invalidates that code even when the phone stays unchanged.
+Signup codes continue to prove the proposed phone by SMS.
+
+Adding or replacing an email requires a user session and an allowed origin:
+
+1. `POST /me/email/proof` takes the proposed `email` and sends a code to the
+   account's current verified phone. This explicitly proves phone control by SMS,
+   even when normal sign-in prefers email. Purpose `email_change_proof` binds the
+   account, phone and proposed email; a sign-in code cannot authorize this action.
+2. `POST /me/email` takes `email` and either `proofCode` or `currentPassword`. It verifies that proof and sends
+   an `add_email` code to the new address, bound to the account and address. The old
+   verified email remains in place.
+3. `POST /me/email/verify` takes `email` and `code`. It consumes the code and locks
+   the user. Phone proof must still match the phone and verification timestamp;
+   password proof must still match the current password state. The
+   original proof must be less than ten minutes old. The email update and one
+   `email.changed` account event commit together. No vendor call holds a database
+   transaction. Audit failure rolls the email change back.
+
+Consumed proof cannot be reused for a second address or account. Resends and
+successful proof checks do not clear sign-in failures. Password proof uses this
+same flow and has the same ten-minute deadline. It permits email changes for an
+account with a password even when no verified phone is available.
+
+Migration `0020_verified_email_identity` makes email uniqueness conditional on
+`email_verified_at`. Multiple unverified signup values can coexist; they cannot
+sign in, block a verified owner, or link their accounts. Verified lookup uses the
+partial unique index and never selects an unverified row. Concurrent verification
+of one address produces one owner and `409 AUTH_EMAIL_TAKEN` for the loser. Neither
+account is merged or cleared. See [ADR 0009](../adr/0009-verified-email-ownership.md).
+
+## Store creation (ACC-16)
+
+`GET /plans` is public. It returns `{ plans, recommendations }`: public base plans,
+ordered by catalogue position, with both prices in poisha, trial days and limits.
+Customer size recommends Starter for the first two ranges, Growth for 2,000–10,000,
+and Pro above 10,000. Prices and trial lengths come from the catalogue on every read.
+
+`POST /stores` requires a signed-in user and an allowed origin. It takes `name`,
+`businessType`, `district`, `howYouSell`, `customerListSize`, `planCode` and
+`billingCycle` (`monthly` or `yearly`). A new store returns 201 with its `id`, `name`,
+`slug` and `extensions`. The slug is generated from the store UUID. The request
+cannot choose a store id.
+
+Under Q3, an account can own one store. Creation takes a user advisory lock and
+checks `stores_for_user` for an Owner membership inside the new-store transaction,
+before any writes. Store details, counter, Owner, subscription and `store.created`
+audit record commit together. A parallel request or retry returns the owned store
+with 200 and leaves its details and plan unchanged. Being staff in another store
+does not prevent creating an owned store.
+
+Social media enables Sales, Chats and Social Auto Post. Online store enables Sales.
+Shop answers are recorded but do not enable Physical Shop in release 1. Core is
+implicit. Plan selection uses the chosen cycle's catalogue price: zero starts an
+active plan without a trial; a paid price starts a trial for the current trial days.
+A paid plan with zero trial days returns `409 PLAN_NEEDS_PAYMENT` until PAY-7 adds
+checkout. Hidden plans and add-ons cannot be selected.
+
+Session activation is a separate write after commit. If it fails, the store stays
+created. Retrying `POST /stores` or calling `POST /me/active-store` recovers. The retry
+leaves the generated tenant scope before reading the owned store or activating it.
+The onboarding screens and setup checklist remain separate tasks.
+
 ## Open questions
 
 Q3 (extra stores), Q11 (organisation above stores).
@@ -370,3 +683,395 @@ Account `details` accepts only optional `sessionId` and `recoveryId` UUIDs. IP a
 `AccountSecurityEventsService.list(userId, { limit, before? })` reads only that user's events, newest UUID v7 first. `limit` is 1–100 and `before` is an exclusive UUID cursor; both come from the history query contract. A future route must derive `userId` from its verified session, never a query or body. No store or membership is required. Import each audit module to use its exported service; repositories remain private to their feature.
 
 Account events are kept for two years. Their user and staff foreign keys block deletion while history remains. The owner-only bounded purge function is implemented; DB-7 will schedule it daily, as described in [jobs](../data/jobs.md#run-maintenance). Account deletion and staff deletion must honor this retention rather than cascade away history.
+
+## Passwords (ACC-10)
+
+`POST /auth/password` takes `identifier` (a normalized Bangladeshi phone or email),
+`password` and optional `isRemembered`. A wrong password, account without a password,
+or unknown account returns the same `401 AUTH_INVALID_CREDENTIALS`. An unverified
+email returns `403 AUTH_EMAIL_UNVERIFIED`; the existence check uses migration
+`0021_unverified_email_lookup` without choosing an account among repeated unverified
+values. A verified email owner always takes precedence.
+
+Passwords use Argon2id library defaults: 64 MiB memory, three iterations and
+parallelism four. New passwords contain 8–128 characters and an ASCII number;
+whitespace is preserved. Password and code failures use the same user and IP
+counters. Only completed sign-in clears the user counter. Password verification
+runs outside database locks, then `completeSignIn` locks the user and rechecks
+identifier ownership, current password state, disabled status and TOTP. A concurrent
+password replacement invalidates an already-verified old password. TOTP returns a five-minute challenge and never issues a session from the password first factor.
+
+Signup may include `password` in the `sign_up` request to `POST /auth/code/verify`.
+The client retains it until verification; neither the code request nor its Valkey
+grant contains a password. The server consumes phone proof before hashing, then
+creates the user, password audit and session in one account transaction. Code-only
+signup remains valid.
+
+`POST /me/password/proof` accepts an empty object and sends a separate fresh code
+to the verified email, or verified phone by SMS. `POST /me/password` takes the new
+`password` and exactly one of `currentPassword` or `proofCode`. The code purpose is
+`password_change_proof`, bound to the user and current identity. It supports setting
+a first password after code-only signup. The initial signup code cannot be reused.
+Changing a password records `password.changed`; existing sessions remain signed in.
+
+`POST /auth/password-reset` takes `identifier` and sends a `reset_password` code by
+the same email-first delivery rule. `/auth/password-reset/confirm` takes that
+identifier, `code`, new `password` and optional `isRemembered`. It checks the code's
+purpose, account, delivery identity, verification timestamps and password state
+under the account lock. Sign-in and password-change codes cannot reset a password.
+The password update, revocation of every old session and `password.changed` and
+`sessions.revoked` events commit atomically. Audit failure rolls them all back.
+Reset then calls the common sign-in gate; TOTP can refuse session issuance while
+the reset and old-session revocation remain committed. Later account and store
+requests with revoked cookies return 401; requests already authorized may finish.
+
+Email-change and password-code proof stores only domain-separated fingerprints
+of password and identity state, never an encoded password hash or raw password.
+Proof expires after ten minutes and cannot survive a password or relevant identity
+replacement. Account event details contain no credentials or personal values.
+
+## Google sign-in (ACC-11)
+
+`POST /auth/google` accepts `{ idToken, isRemembered? }`. The real driver verifies
+Google's signature, issuer, expiry and the configured `GOOGLE_CLIENT_ID` audience
+with `google-auth-library`. A missing or unverified email is refused. The Google
+subject is the primary identity; its existing account wins even if Google's email
+now differs from the account's email.
+
+For an unmatched subject, verified Gmail or Workspace (`hd`) claims can establish
+email ownership. Other addresses require a fresh mailbox code because Google's
+`email_verified` claim can describe former ownership ([ADR 0010](../adr/0010-google-email-authority.md)).
+The response is 202 `{ status: 'email_verification_required', verificationTicket }`.
+Submit `{ verificationTicket, code, isRemembered? }` to
+`POST /auth/google/email/verify`. The code uses the existing `SignInCodes` limits,
+ten-minute expiry and `google_email` purpose. The opaque challenge binds the exact
+subject, address, verified owner or absence, and verification timestamp. Changed
+ownership or a newly linked subject invalidates it instead of choosing another user.
+
+An eligible verified email owner is linked under its current account lock. Unverified
+local rows are never adopted, even when their email text matches. Existing subject
+links cannot be overwritten. Linking, `google.linked` history and the session commit
+together; history contains no token, subject or email. All successful paths use
+`completeSignIn`, preserve shared failure counters and enforce disabled-account and
+TOTP checks. Enabled TOTP returns a challenge and postpones sign-in and linking until the second factor passes.
+
+Without an eligible existing account, the response is 202
+`{ status: 'signup_required', signupTicket }`, without a session. Request a normal
+`sign_up` phone code, then include `signupTicket` in `POST /auth/code/verify`.
+Only after mobile proof succeeds is the ticket consumed and its server-held subject
+and verified email used for signup. The optional registration email cannot replace
+the ticket email. Successful sessions return 204 with the normal session cookie.
+
+Both ticket kinds contain 32 random bytes, have hashed Valkey keys, expire after
+fifteen minutes and are consumed atomically once. Wrong phone codes do not consume
+signup tickets. Once valid proof is consumed, a later database failure leaves it
+consumed; restart Google sign-in and request new codes, respecting resend limits.
+Parallel signup or newly claimed verified identities cannot create duplicate owners.
+
+`GOOGLE_IDENTITY_DRIVER=fake` is allowed only outside production. Its local token
+format is `fake-google:` followed by JSON containing `sub`, `email`,
+`email_verified: true` and optional `hd`. Production selects `google` and requires
+`GOOGLE_CLIENT_ID`; fake tokens fail real signature verification. Each driver call
+records a `google_identity_verification` metric observation through Nest/Pino with
+count, monotonic duration and success/failure only. Provider errors are sanitized.
+Certificate-fetch failures, verification timeouts and unexpected provider errors
+return `503 AUTH_GOOGLE_UNAVAILABLE` without changing credential-failure counters.
+Invalid identities return `401 AUTH_INVALID_CREDENTIALS` and retain normal failure
+accounting. A pending email challenge also rechecks that its subject remains
+unlinked under the completion lock, even if another flow linked the same owner.
+The real client has a five-second transport timeout and a ten-second total bound.
+Live Google sign-in remains a staging check until an OAuth client is supplied.
+
+## Store settings and extensions (ACC-6)
+
+`GET /store` reads the session's active store with `storeSettings.view`.
+`PATCH /store` requires `storeSettings.edit` and accepts `name`, `legalName`,
+`businessType`, `phone`, `email`, `address`, `district`, `vatBin` and
+`tradeLicenceNumber`. Both return `StoreSettingsResponse`, which adds these
+settings to the existing store identity and extension fields. Signup's
+`StoreResponse` stays unchanged.
+
+Patches preserve omitted fields. Explicit `null` clears any setting except
+`name`; empty strings, empty patches and unknown fields are rejected. Names,
+business type, district, address and trade licence are trimmed. Phones use
+`bdMobileSchema`; BIN is exactly 13 ASCII digits. Name, business type, district
+and trade licence allow 100 characters, legal name 200, address 1,000 and email 254. Store contact details describe the business; the customer phone masking
+flag continues to govern customer records.
+
+`PATCH /store/extensions` replaces the selection with a unique `extensions`
+array containing only `chats`, `sales` and `social_auto_post`. An empty array
+turns all three off. Core is implicit and stays on; `core` and `physical_shop`
+are rejected in release 1. Only Owner and Admin may change extensions, through
+the pure team permission policy exposed by `TeamService`; a custom role with
+settings edit access cannot change them.
+
+Settings and extension changes atomically record `store.settings_changed` and
+`store.extensions_changed` audit entries. These contain field names only,
+without previous or new personal values. Disabling extensions changes only
+the stored selection and retains business data. Background job consumers do
+not exist yet; each feature must check its extension before running work when
+those consumers are built. Menu visibility and hidden-page redirects belong
+to the later web tasks. Store switching already uses ACC-3's account routes.
+
+### Secret encryption boundary (DB-4)
+
+`platform/crypto/EnvelopeEncryption` accepts a typed owner and purpose plus secret
+bytes. It returns `{ ciphertext, keyVersion }` for the existing bytea and smallint
+columns. User TOTP uses `{ owner: 'user', userId, purpose: 'totp' }`; users do not
+belong to one store. Store purposes are `channel-access-token`,
+`payment-gateway-credentials` and `bkash-agreement`. Staff TOTP needs its own
+context when ADM-1 implements it.
+
+Every write generates a random 32-byte data key. AES-256-GCM encrypts the secret
+with that key and wraps the key with the selected master key. Both operations
+authenticate the owner, purpose, format and key version. Changing any byte or
+decrypting with another context, unavailable version or wrong key fails with a
+secret-free error. Previously configured versions remain readable after rotation.
+
+Envelope format 1 is binary: one format byte, 12-byte wrapping nonce, 16-byte
+wrapping tag, 32-byte wrapped key, 12-byte data nonce, 16-byte data tag, then the
+secret ciphertext. Secrets are limited to 16 KiB, giving at most 16,473 stored
+bytes. The master key version is stored separately and authenticated in both
+layers. No key table or schema change is needed.
+
+ACC-7 imports `CryptoModule` in the API and security-notice worker. Both require
+configured encryption keys at startup. Supplied
+configuration is always validated by `loadEnv`, even before a consumer exists.
+See [security rules](../rules/security.md) for configuration and rotation.
+
+## Devices and two-step verification (ACC-7)
+
+`GET /me` includes only the additional non-secret flags `hasPassword`,
+`isPhoneVerified`, `isEmailVerified` and `isTotpEnabled`. Device management is
+account-scoped: `GET /me/sessions` returns up to 100 active sessions with a UUID
+`before` cursor, device label, user agent, IP, last seen and `isCurrent`.
+`DELETE /me/sessions/:sessionId` revokes an owned session immediately;
+`POST /me/sessions/sign-out-others` retains the current session. Missing or foreign
+session deletion changes no credential generation and writes no event.
+
+Enabling TOTP needs a fresh password or a purpose-bound code requested through
+`POST /me/totp/proof`. Setup returns a five-minute setup id and an `otpauth://` URI;
+confirmation accepts a six-digit authenticator code and returns ten random backup
+codes once. Store those codes privately. The account-bound DB-4 envelope protects
+the secret; only SHA-256 hashes of random backup codes are stored. Backup-code
+consumption removes the matching hash in the same guarded update that checks it.
+TOTP uses six digits, 30-second steps and one step of clock drift. A successfully
+used step cannot be replayed. Disabling requires TOTP or a backup code.
+
+Setup publishes its encrypted five-minute cache record after releasing the account transaction. Confirmation checks the code and consumes the one-use record before locking the account; it then rechecks credential state, the bound live session, setup expiry, code age and disabled/enabled state. No Redis operation runs under the account lock. A consumed record is never restored after a database rollback or ambiguous cache reply.
+
+Phone code, email code, password, password-reset completion and every Google path
+use `AuthService.completeSignIn`. A TOTP challenge retains the original first-factor
+binding, account credential fingerprint and remembered-session choice. It lasts
+five minutes and allows five incorrect attempts shared with the existing account
+lockout. Only full sign-in resets failures. The second step rechecks current
+password, verified contact state, Google link, TOTP state, disabled status and the
+account security generation under the account lock. Credential changes and actual
+session revocations invalidate pending challenges. A Redis busy claim prevents
+parallel use; wrong-code attempts release that claim without extending expiry.
+A crash or ambiguous storage failure consumes the challenge, requiring a new first
+factor. Successful session creation needs no Redis acknowledgement afterward.
+Google lockout delivery uses the account's verified contacts, never its subject id.
+
+Lost-authenticator recovery requires a phone code, a separate verified-email code
+when present, and the password when set. Recovery codes have their own purposes
+and bind to current credential state. `POST /auth/totp/recovery` returns a recovery
+id and a completion token once. Keep that token to complete recovery later.
+The database stores only token hashes. Each account receives SMS and verified
+email notices, and each distinct store Owner receives a notice through a verified
+contact. Destinations are deduplicated. Accounts with more than 1000 distinct
+Owners, or an Owner without a verified contact, cannot start self-service recovery;
+this is an operational recovery limit, not a store-membership limit. The recovering account row is locked first; the same account transaction locks its shops in sorted order and rereads current memberships and Owners before the single bulk notice insert. Disabled Owners remain recipients. Membership removals and ownership transfers that commit while a shop lock is queued are reflected in the final recipients.
+
+Each delivery has a separate encrypted notice using the account-owned
+`account-security-notice` encryption purpose. A bounded worker claims up to 20
+notices every 30 seconds with a two-minute lease, retries with backoff capped at an
+hour, and acknowledges only its own lease. Notices are durable across Redis and
+process loss. Vendors run outside database transactions. Delivery is at least
+once, so a timeout or crash may produce duplicate messages. A seven-day
+cancellation window starts only after every required driver accepts its notice;
+delivery failures delay eligibility. Acceptance does not prove the message was
+read. Workers stop polling and await active work on shutdown.
+
+After the deadline, explicitly call `POST /auth/totp/recovery/complete` with the
+separate completion token. This removes TOTP and revokes sessions atomically with
+its audit event; it never signs the person in. Sign in again afterward. Completion
+is rejected early, after cancellation, or after credential/security-state changes.
+Any completed TOTP sign-in cancels a pending request. The cancellation link carries
+its different token in the URL fragment at `/security/recovery`; cancellation is
+an explicit POST, never a GET side effect. The public destination is the ACC-8 `/security/recovery` screen, outside the authenticated shell. Recovery start, cancellation,
+completion and TOTP changes write account security events. Immediate staff recovery
+remains the separate ADM-10 flow.
+
+An unknown user-agent/IP pair produces an encrypted durable new-device alert after
+successful sign-in, by verified email or SMS. The pair is checked under the same
+account lock as session insertion, so simultaneous sign-ins do not enqueue duplicate
+alerts for the same pair. Notice failure never rolls back an issued session.
+
+### Staff recovery history (ADM-10)
+
+Authorized Support and Super admins can recover an eligible shop account immediately
+with checked identity outcomes, a required reason and exact-effect confirmation.
+Replacement contacts require action-bound verification codes. The account ID stays
+the same. Recovery removes selected TOTP and backup codes, replaces selected
+verified contacts, cancels pending self-service recovery, invalidates challenges
+and revokes all sessions in the same transaction as its staff audit, account history,
+shop history mappings and durable security notices. Staff-linked targets and
+own/work-store recovery are prohibited even after contact changes.
+
+The account-only `GET /me/security-history` route returns cursor-paginated safe event
+metadata. The initial `/security` consumer labels staff recovery “Recovered by Dakly
+support” with its date and reason type. It works without an active shop. ACC-8 adds
+the rest of the Security screen; the full Owner audit page remains ACC-13. See the
+[admin feature](12-admin-panel.md#adm-10-implementation) for recovery proof, notification
+and operational bounds.
+
+### Cross-store API coverage
+
+ACC-15 inventories the running Fastify application and requires fixtures for all shop routes,
+including Owner support grants and recovery history. Customers, members, roles, store settings
+and ownership transfers have authorized positive controls, indistinguishable foreign/missing-id
+404 responses, separate list data, and unchanged foreign rows after failed writes. Transfer
+acceptance uses its named recipient. Support customer operations establish an approved grant
+and support session first. Account-only and staff routes remain explicit, separately tested
+boundaries. RLS and repository predicates are tested independently; see
+[the testing rules](../rules/testing.md#store-route-isolation).
+
+### Sign-in and setup screens (ACC-8, first PR)
+
+The public `/sign-in` screen supports phone or email with a password or a code,
+Keep me signed in, Google identity, and the required authenticator or backup-code
+step. `/forgot-password` requests a reset code and confirms the new password;
+accounts with two-step verification finish that step before receiving a session.
+Google email verification and signup tickets stay in component memory.
+
+`/sign-up` has account and SMS verification steps. `/setup` resumes the verified
+account at business details and plan choice. The final `POST /stores` commits the
+business details, Owner membership and subscription together. Reloading before
+verification clears the account draft; after verification, the session can resume
+setup. Business drafts stay in memory and are cleared on reload. A retry after a
+committed store uses the existing backend retry behavior rather than creating a
+second shop. Accounts with existing memberships choose their shop in the shell.
+
+Plans, prices, limits, trial lengths and recommendations come from `GET /plans`.
+A paid plan with no trial requires payment; checkout is not available in this
+slice, so it has no enabled start button. The backend also rejects such a creation
+with `PLAN_NEEDS_PAYMENT` and rolls back all store writes. No payment-required
+subscription or successful payment is invented. `/dashboard` is a minimal real
+landing with verified account/shop identity and working Customers, Security and
+Support access destinations according to current access. Analytics, setup
+checklists and checkout remain separate tasks.
+
+Registration requires `WEB_TERMS_URL`, `WEB_PRIVACY_URL` and `WEB_TERMS_VERSION`.
+The URLs must be published HTTPS documents. Missing configuration disables
+registration while existing-account sign-in remains available. The accepted
+version is sent through the existing signup contract. No legal text or version is
+supplied by default. `WEB_GOOGLE_CLIENT_ID` enables Google's actual Identity
+Services button and must match the API's `GOOGLE_CLIENT_ID` and approved browser
+origins. Missing configuration or an SDK load failure shows an unavailable state.
+The district selector follows the 64 names in migration 0003. The eight business
+labels are presentation choices; the existing contract remains a trimmed string.
+
+`/security/recovery` can request codes and recovery, accept a cancellation notice,
+or complete recovery with the separate saved completion key. Notice fragments
+are validated locally and removed from the address bar, including same-page link
+navigation. Opening a link never changes the account. Cancellation and completion
+require explicit POST actions. Completion issues no session and directs the person
+to sign in again. The recovery receipt explains that its reference and completion
+key must be kept safely before leaving; neither is saved in browser storage.
+Authenticated `/security` combines account management and security history in the final ACC-8 slice below.
+
+## Team web screens (ACC-8, second slice)
+
+`/team?tab=members|roles` checks current Team View on every server page render,
+then uses the verified client context inside the shell. Both lists keep their
+cursor in the URL. Members shows the current plan’s seat use, contact data as
+masked by the API, status and exact last activity and invitation expiry in
+Asia/Dhaka. Team Edit enables phone or email invitations, role changes, resend,
+and named confirmation before removal or invitation cancellation. Owner is never
+an ordinary assignment option. Full seats disable new invitations; there is no
+billing destination until checkout exists.
+
+Roles shows built-in permissions read-only and paginated custom roles. Custom
+forms cover every contract area and the phone, export and refund flags. Billing
+Edit is unavailable for custom roles. The API enforces grant limits, duplicate
+names and membership references on deletion. Role changes affect assigned members
+on their next verified request, including the acting member.
+
+`/team/ownership` is available from shop navigation to every active member,
+including recipients without Team View. Only verified Owner capability enables
+requesting a code and starting a transfer to a named active member. The current
+Owner can cancel; only the named recipient can accept through a confirmation.
+The screen displays the API deadline and the existing one-owned-shop limit.
+Starting a transfer does not send a recipient notification: the Owner is told to
+ask the selected member to open Ownership transfer in their shop. Unrelated
+members receive the API denial without the pending transfer details.
+
+`GET /me/context` now also returns `canViewTeam`, `canEditTeam` and
+`canTransferOwnership`, derived by the existing Team service policy from the
+verified access on that request. There is no role-name authority in the browser
+and no new permission cache. Team shop requests use the opaque `contextTag`,
+including PATCH and DELETE. Successful changes refresh authoritative context and
+announce the existing identifier-free session change event; stale requests still
+fail with 409 before any write. Team dialogs suspend while that verification is
+pending or failed, so Refresh remains usable. Unchanged context restores the same
+form and original focus target; changed context disposes the draft.
+
+`/invites/accept#token=…` is a public entrypoint with no public invitation preview.
+It validates the exact notice fragment locally and removes it on entry and
+same-page notice changes. The token stays only in memory; reload requires opening
+the original notice again. Shared sign-in, Google and second-factor screens keep
+the invitation continuation in the same page. New recipients use shared account
+registration and mobile verification, then return to explicit acceptance without
+creating an owned shop. Authentication and GET never accept an invitation. The
+signed-in recipient explicitly posts acceptance, then explicitly opens the joined
+shop through the existing verified shop selector.
+
+Email invitations require the exact currently verified email. An optional email
+entered during mobile signup does not prove mailbox ownership. The screen directs
+such recipients to account Security, then to reopen the original notice; existing
+verified-email recipients can sign in and accept immediately. Account Security now provides add/verify/change-email management through fresh proof and a separate mailbox code. The same account can then reopen the original invitation notice and explicitly accept it. Typed contact matching never merges identities.
+
+## Store settings and account Security web screens (ACC-8, final slice)
+
+`/settings?tab=store|extensions` reads the current shop through scoped transport.
+Store information supports name, legal name, type, business mobile, email, address,
+district, BIN and trade licence. Saves include only edited fields; clearing an
+optional input sends null. Settings View and Edit come from TeamService's current
+policy. The separate extension capability uses the existing Owner/Admin policy;
+custom settings editors cannot change extensions. Core remains on, with Sales,
+Chats and Social auto-post selectable. Physical Shop is excluded. Saved selection
+is refreshed from the server; current Core destinations remain available. No
+unfinished extension destination or channel integration is exposed.
+
+`/security?tab=profile|devices|two-step|history` remains account-only and works
+without a selected shop. My profile shows existing contact verification and
+password state. Add, verify and change email require current-password proof or
+a purpose-bound code to the existing verified phone, then a separate code to the
+new mailbox. Password changes use the existing current-password or fresh-code
+contract. Name and mobile are read-only because no edit API exists for them.
+
+Devices displays exact last activity, browser, IP and the current-device marker,
+with cursor navigation and explicit confirmation before revoking one device or
+all others. Two-step verification uses fresh proof, a private manual enrollment
+key, a six-digit authenticator confirmation and ten one-use backup codes. The
+backup receipt stays in memory until acknowledged, including ordinary account
+verification and the enabled-profile refresh. It clears on navigation, reload
+or an actual session-context change. Disabling requires an authenticator or
+backup code. Neither enrollment nor backup values enter browser storage or URLs.
+
+The existing account security history is integrated once, retaining staff recovery
+labels, safe reasons, exact dates, cursor and loading/error/empty states. Public
+recovery remains outside the authenticated layout. Account dialogs use the shared
+SessionDialog suspension behavior. Ordinary focus verification preserves drafts;
+changed account, shop or access disposes them.
+
+Authenticated account writes now compare an optional incoming `x-session-context`
+before their controllers, including accounts with no shop. The tag is a concurrency
+precondition, never authority or a shop selector. Legacy untagged requests still
+work. Reads, public authentication, staff/support and intentional sign-out keep
+their existing boundary. Security mutations, authenticated setup and invitation
+acceptance send the available verified tag; responses remain checked before use.
+
+The broader feature remains in progress: billing checkout, setup checklist, full
+audit log, store closing and export are separate tasks.

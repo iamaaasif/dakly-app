@@ -201,7 +201,15 @@ function planRow(code: string, name: string, monthly: number, yearly: number, po
     ai_content: [20, 100, 400, 1_500][position],
     ai_ask: [20, 100, 400, 1_500][position],
   };
-  return { code, name, monthlyPricePoisha: monthly, yearlyPricePoisha: yearly, limits, position };
+  return {
+    code,
+    name,
+    trialDays: code === 'free' ? 0 : 14,
+    monthlyPricePoisha: monthly,
+    yearlyPricePoisha: yearly,
+    limits,
+    position,
+  };
 }
 
 void seed();

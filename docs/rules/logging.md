@@ -5,7 +5,7 @@ Sources: [pino](https://getpino.io) via [nestjs-pino](https://github.com/iamoleg
 ## Rules
 
 1. Use the Nest `Logger` (backed by pino, JSON in production). No `console` (lint enforces it).
-2. Every log line carries `requestId` or `jobId`, and `storeId` when there is one. The logger adds them from context; do not pass them by hand.
+2. Every log line carries `requestId` or `jobId`, and `storeId` when there is one. The logger adds them from context; do not pass them by hand. Verified ordinary sessions and support authorization bind their shop using request-local Pino assignment, including response completion. Input headers never supply that binding.
 3. Log events, not progress. One line when something meaningful happens ("courier booked", "payment verified"), not "entering function", "step 2 done".
 4. Levels: `error` for something a person must look at; `warn` for a handled failure that may need a look (vendor timeout, retry); `log` for business events; `debug` off in production.
 5. Log an error once, where it is handled. Do not log and rethrow.

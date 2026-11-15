@@ -39,6 +39,14 @@ forwards `/api/*` to `http://localhost:4000/*` in local development; production
 routes that prefix to the API through the load balancer. No CORS is needed.
 The customer API still requires a verified store session.
 
+The current customer API masks restricted phone values as `017XXXXX678`, preserving
+the first three and last three digits. This differs from the glossary's target
+`01712-XXX678` mask. WEB-4 does not change that permission policy. The support customer
+read screen uses `formatPhone` to show full values as `01712-345678` and current masked
+values as `017XX-XXX678`, retaining every `X`. The formatter only groups the supplied
+11-character display value; unsupported values pass through unchanged. Input
+normalization remains in the shared phone schema.
+
 ## Product requirements
 
 ### What it is for
