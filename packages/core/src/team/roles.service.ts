@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { builtInRoles } from '@dakly/contracts/stores';
 import {
   accessLevels,
+  customRolePermissionsSchema,
   permissionAreas,
   type ChangeRoleInput,
   type CreateRoleInput,
@@ -68,7 +69,12 @@ export class RolesService {
     actor: Actor,
   ): Promise<RoleResponse> {
     return this.transaction.runLocked(storeId, async () => {
-      const current = this.response(await this.find(storeId, roleId));
+      const stored = await this.find(storeId, roleId);
+      // A rename must not rewrite a stored row the contract rejects: access checks treat that row
+      // as no access, so writing back its readable keys would grant access nobody chose.
+      if (!input.permissions && !hasValidPermissions(stored))
+        throw teamError('ROLE_PERMISSIONS_INVALID');
+      const current = this.response(stored);
       const proposed = {
         name: input.name ?? current.name,
         permissions: input.permissions ?? current.permissions,
@@ -128,6 +134,11 @@ export class RolesService {
       permissions: { areas: knownAreas(areas), seeFullPhone, exportLists, refund },
     };
   }
+}
+
+function hasValidPermissions({ areas, seeFullPhone, exportLists, refund }: Role): boolean {
+  return customRolePermissionsSchema.safeParse({ areas, seeFullPhone, exportLists, refund })
+    .success;
 }
 
 // Input is validated on write; a stored row the contract no longer accepts must not break reads.

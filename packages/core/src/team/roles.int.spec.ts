@@ -186,6 +186,28 @@ describe('custom roles over Fastify and Postgres', () => {
     expect(
       listed.json().items.find((row: { id: string }) => row.id === role!.id).permissions,
     ).toEqual({ areas: { team: 'view' }, seeFullPhone: true, exportLists: false, refund: false });
+    const stored = async () =>
+      (await admin.db.select().from(roles).where(eq(roles.id, role!.id)))[0]!.permissions;
+    const renamed = await request(`/roles/${role!.id}`, { name: 'Renamed' }, owner.cookie, 'PATCH');
+    expect(renamed.statusCode, renamed.body).toBe(409);
+    expect(renamed.json().error.code).toBe('ROLE_PERMISSIONS_INVALID');
+    expect(await stored()).toEqual({ team: 'view', retiredArea: 'edit', orders: 'manage' });
+    const repaired = await request(
+      `/roles/${role!.id}`,
+      {
+        name: 'Repaired',
+        permissions: {
+          areas: { customers: 'view' },
+          seeFullPhone: false,
+          exportLists: false,
+          refund: false,
+        },
+      },
+      owner.cookie,
+      'PATCH',
+    );
+    expect(repaired.statusCode, repaired.body).toBe(200);
+    expect(await stored()).toEqual({ customers: 'view' });
     await request(`/roles/${role!.id}`, {}, owner.cookie, 'DELETE');
   });
   it('hides foreign roles from listing, editing and deletion', async () => {

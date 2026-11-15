@@ -413,7 +413,11 @@ names within a store return `409 ROLE_NAME_EXISTS`. Missing or foreign roles
 return `404 ROLE_NOT_FOUND`. Deletion returns `409 ROLE_IN_USE` for any membership
 reference, including pending, expired or removed memberships, preserving membership
 history. Editing a role changes every assigned member's access on their next
-request; already authorized requests may finish.
+request; already authorized requests may finish. A stored role whose permissions
+the contract no longer accepts still lists, showing only the areas and levels the
+contract knows, while access checks treat it as no access. Renaming such a role
+without sending its permissions returns `409 ROLE_PERMISSIONS_INVALID` and leaves
+the row unchanged; sending full permissions replaces them.
 
 Areas: `dashboard`, `chats`, `customers`, `segments`, `orders`, `products`, `campaigns`, `automations`, `social`, `analytics`, `storeSettings`, `team`, `billing`, `shopSales` (R2), `dueBook` (R2).
 
