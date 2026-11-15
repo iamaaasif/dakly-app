@@ -1,3 +1,4 @@
+import { AccountDatabase } from '../platform/database/account-database';
 import { randomUUID, randomInt } from 'node:crypto';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import { createDatabase } from '@dakly/db/client';
@@ -7,7 +8,11 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 const owner = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const application = createDatabase(process.env.DATABASE_URL!);
 const identity = new StaffIdentityService(
-  new StaffIdentityRepository(new TenantDatabase(application.db), application.db),
+  new StaffIdentityRepository(
+    new AccountDatabase(application.db),
+    new TenantDatabase(application.db),
+    application.db,
+  ),
 );
 const staffId = randomUUID(),
   storeId = randomUUID();

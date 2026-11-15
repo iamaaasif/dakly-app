@@ -103,13 +103,13 @@ export class TotpRecoveryService {
         user.passwordHash,
         await this.passwords.check(this.totp.subject(user), input.password!, ip),
       );
-    const owners = await this.team.accountOwnerContacts(user.id);
-    if (owners.length > 1000) throw authError('AUTH_RECOVERY_OWNER_LIMIT');
     const cancelToken = randomBytes(32).toString('base64url');
     const completionToken = randomBytes(32).toString('base64url');
     const recoveryId = await this.transaction.run(user.id, async () => {
       const current = await this.totp.current(user.id);
       if (accountCredentialState(current) !== state) throw authError('AUTH_PROOF_REQUIRED');
+      const owners = await this.team.accountOwnerContacts(user.id);
+      if (owners.length > 1000) throw authError('AUTH_RECOVERY_OWNER_LIMIT');
       await this.cancelPending(user.id, ip);
       const id = await this.repository.start(user.id, {
         credentialState: state,

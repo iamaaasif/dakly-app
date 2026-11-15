@@ -4,12 +4,15 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { assertRouteAccess } from './route-access';
+import { captureRequestLogs } from './request-log-sink';
 
 describe('API route access rules', () => {
   let app: NestFastifyApplication;
+  let logs: ReturnType<typeof captureRequestLogs>;
+  beforeEach(() => logs.beginTest());
 
   beforeAll(async () => {
     app = await NestFactory.create<NestFastifyApplication>(
@@ -19,12 +22,17 @@ describe('API route access rules', () => {
         logger: false,
       },
     );
+    logs = captureRequestLogs(app);
     await registerSessionCookies(app);
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
   afterAll(async () => {
-    await app?.close();
+    try {
+      await app?.close();
+    } finally {
+      logs?.restore();
+    }
   });
 
   it('keeps health public and shop sessions protected with the bootstrap HTTP server', async () => {

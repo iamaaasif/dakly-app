@@ -1,3 +1,4 @@
+import type { AuditEntry } from '@dakly/contracts/audit';
 import { Inject, Injectable } from '@nestjs/common';
 import { StaffAuditService } from './staff-audit.service';
 import { AuditService } from '../audit/audit.service';
@@ -16,8 +17,9 @@ export class SupportAuditService {
     ip: string,
     details?: Record<string, unknown>,
     entityType = 'support_grant',
+    after?: AuditEntry['after'],
   ) {
-    await this.staffAudit.recordForStore(storeId, {
+    const auditId = await this.staffAudit.recordForStore(storeId, {
       actor,
       action,
       targetType: entityType,
@@ -26,6 +28,7 @@ export class SupportAuditService {
       ip,
       actionDetails: details,
     });
-    await this.audit.record(storeId, { actor, action, entityType, entityId: id, ip });
+    await this.audit.record(storeId, { actor, action, entityType, entityId: id, ip, after });
+    return auditId;
   }
 }

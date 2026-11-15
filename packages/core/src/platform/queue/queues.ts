@@ -1,1 +1,1 @@
-export const QUEUES = { bulk: 'bulk' } as const;
+export const QUEUES = { bulk: 'bulk', transactional: 'transactional' } as const;

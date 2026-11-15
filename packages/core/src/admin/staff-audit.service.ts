@@ -4,7 +4,10 @@ import { StaffAuditRepository } from './staff-audit.repository';
 @Injectable()
 export class StaffAuditService {
   constructor(@Inject(StaffAuditRepository) private readonly repository: StaffAuditRepository) {}
-  recordForStore(storeId: string, entry: TenantStaffAudit): Promise<void> {
+  recordForAccount(userId: string, id: string, entry: TenantStaffAudit) {
+    return this.repository.recordForAccount(userId, id, entry);
+  }
+  recordForStore(storeId: string, entry: TenantStaffAudit): Promise<string> {
     return this.repository.recordForStore(storeId, entry);
   }
   provisioned(

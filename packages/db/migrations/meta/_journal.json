@@ -117,148 +117,64 @@
     {
       "idx": 16,
       "version": "7",
-      "when": 1794573219225,
+      "when": 1794729264545,
       "tag": "0016_account_security_events",
       "breakpoints": true
     },
     {
       "idx": 17,
       "version": "7",
-      "when": 1794573637223,
-      "tag": "0017_account_security_event_details",
+      "when": 1794729265690,
+      "tag": "0017_billing_plans_trials",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
-      "when": 1794624908330,
-      "tag": "0018_plan_trials_and_coupon_duration",
+      "when": 1794729266757,
+      "tag": "0018_plans_catalogue",
       "breakpoints": true
     },
     {
       "idx": 19,
       "version": "7",
-      "when": 1794624922106,
-      "tag": "0019_plans_catalogue",
+      "when": 1794729267814,
+      "tag": "0019_auth_identity_recovery_notices",
       "breakpoints": true
     },
     {
       "idx": 20,
       "version": "7",
-      "when": 1794626892258,
-      "tag": "0020_verified_email_identity",
+      "when": 1794729268893,
+      "tag": "0020_team_ownership_pagination",
       "breakpoints": true
     },
     {
       "idx": 21,
       "version": "7",
-      "when": 1794628212072,
-      "tag": "0021_unverified_email_lookup",
+      "when": 1794729269945,
+      "tag": "0021_staff_authentication",
       "breakpoints": true
     },
     {
       "idx": 22,
       "version": "7",
-      "when": 1794635003820,
-      "tag": "0022_team_member_pagination",
+      "when": 1794729270988,
+      "tag": "0022_staff_audit_support",
       "breakpoints": true
     },
     {
       "idx": 23,
       "version": "7",
-      "when": 1794637694115,
-      "tag": "0023_ownership_transfers",
+      "when": 1794729272037,
+      "tag": "0023_break_glass_alerts",
       "breakpoints": true
     },
     {
       "idx": 24,
       "version": "7",
-      "when": 1794641741125,
-      "tag": "0024_account_totp_recovery",
-      "breakpoints": true
-    },
-    {
-      "idx": 25,
-      "version": "7",
-      "when": 1794642066392,
-      "tag": "0025_owner_security_notice_bound",
-      "breakpoints": true
-    },
-    {
-      "idx": 26,
-      "version": "7",
-      "when": 1794642351801,
-      "tag": "0026_owner_contact_search_path",
-      "breakpoints": true
-    },
-    {
-      "idx": 27,
-      "version": "7",
-      "when": 1794642753852,
-      "tag": "0027_include_disabled_owner_notices",
-      "breakpoints": true
-    },
-    {
-      "idx": 28,
-      "version": "7",
-      "when": 1794649158714,
-      "tag": "0028_staff_authentication",
-      "breakpoints": true
-    },
-    {
-      "idx": 29,
-      "version": "7",
-      "when": 1794649638981,
-      "tag": "0029_staff_operator_audit",
-      "breakpoints": true
-    },
-    {
-      "idx": 30,
-      "version": "7",
-      "when": 1794651068929,
-      "tag": "0030_invalidate_disabled_staff_sessions",
-      "breakpoints": true
-    },
-    {
-      "idx": 31,
-      "version": "7",
-      "when": 1794655289271,
-      "tag": "0031_staff_support_and_audit",
-      "breakpoints": true
-    },
-    {
-      "idx": 32,
-      "version": "7",
-      "when": 1794655614227,
-      "tag": "0032_staff_identity_insert_order",
-      "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1794655855053,
-      "tag": "0033_support_function_hardening",
-      "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "7",
-      "when": 1794656048620,
-      "tag": "0034_support_request_metadata",
-      "breakpoints": true
-    },
-    {
-      "idx": 35,
-      "version": "7",
-      "when": 1794656673430,
-      "tag": "0035_support_scope_constraints",
-      "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "7",
-      "when": 1794659048940,
-      "tag": "0036_support_consent_lifetime",
+      "when": 1794729273086,
+      "tag": "0024_staff_account_recovery",
       "breakpoints": true
     }
   ]

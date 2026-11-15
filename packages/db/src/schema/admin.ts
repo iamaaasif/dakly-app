@@ -357,3 +357,32 @@ export const staffAuditExports = pgTable(
     index('staff_audit_exports_expiry_idx').on(table.expiresAt),
   ],
 );
+
+// Global staff audit delivery state; shop notifications must never use staff IDs as users.
+export const staffAlertDeliveries = pgTable(
+  'staff_alert_deliveries',
+  {
+    auditId: uuid('audit_id')
+      .primaryKey()
+      .references(() => staffAuditLog.id),
+    status: text('status', { enum: ['pending', 'delivered', 'failed'] })
+      .notNull()
+      .default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    leaseId: uuid('lease_id'),
+    leasedUntil: timestamptz('leased_until'),
+    nextAttemptAt: timestamptz('next_attempt_at').notNull().defaultNow(),
+    error: text('error'),
+    deliveredAt: timestamptz('delivered_at'),
+  },
+  (table) => [
+    index('staff_alert_deliveries_pending_idx')
+      .on(table.nextAttemptAt)
+      .where(sql`${table.status} = 'pending'`),
+    check(
+      'staff_alert_deliveries_status',
+      sql`${table.status} in ('pending','delivered','failed')`,
+    ),
+    check('staff_alert_deliveries_attempts', sql`${table.attempts} between 0 and 5`),
+  ],
+);

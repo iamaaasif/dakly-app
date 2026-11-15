@@ -93,12 +93,17 @@ export class StaffRepository {
         accessSubject: input.accessSubject,
       });
       const emails = [...new Set([input.email, ...input.personalEmails])];
-      await tx
-        .insert(staffIdentityContacts)
-        .values([
-          { id: uuidv7(), staffUserId, kind: 'phone', value: input.phone },
-          ...emails.map((value) => ({ id: uuidv7(), staffUserId, kind: 'email' as const, value })),
-        ]);
+      const contacts = [
+        { id: uuidv7(), staffUserId, kind: 'phone' as const, value: input.phone },
+        ...emails.map((value) => ({ id: uuidv7(), staffUserId, kind: 'email' as const, value })),
+      ];
+      // Use the database's contact order before any trigger acquires a user foreign-key lock.
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended('staff-identity:' || kind || ':' || value,0))
+        from unnest(${sql.param(contacts.map((contact) => contact.kind))}::text[],${sql.param(contacts.map((contact) => contact.value))}::text[]) contacts(kind,value)
+        order by kind,value
+      `);
+      await tx.insert(staffIdentityContacts).values(contacts);
     });
   }
   async addChallenge(
