@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
@@ -40,10 +40,7 @@ function SettingsContent({ tab }: { tab: 'store' | 'extensions' }) {
   return (
     <>
       {settings.error ? (
-        <div role="alert">
-          <p>{settings.error.message}</p>
-          <Button onClick={() => void settings.refetch()}>Retry</Button>
-        </div>
+        <QueryError message={settings.error.message} onRetry={() => void settings.refetch()} />
       ) : null}
       {settings.data ? <Form store={settings.data} editable={Boolean(editable)} /> : null}
     </>

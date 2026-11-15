@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { Card } from '@dakly/ui/card';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { formatDateTime } from '@/lib/format-date';
@@ -14,10 +14,7 @@ export function SecurityHistory() {
       <h2 className="text-lg font-semibold">Security history</h2>
       {history.isPending ? <Skeleton className="h-24 w-full" /> : null}
       {history.error ? (
-        <div>
-          <p role="alert">{history.error.message}</p>
-          <Button onClick={() => history.refetch()}>Retry</Button>
-        </div>
+        <QueryError message={history.error.message} onRetry={() => void history.refetch()} />
       ) : null}
       {history.data?.items.length === 0 ? <p>No security events yet.</p> : null}
       {history.data?.items.map((item) => (

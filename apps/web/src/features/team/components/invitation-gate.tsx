@@ -1,6 +1,6 @@
 'use client';
 import { type ReactNode, useState } from 'react';
-import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { useInvitationToken } from '../hooks/use-invitation-token';
 import { useInvitationSession } from '../hooks/use-invitation-session';
 import { InvitationAccept } from './invitation-accept';
@@ -35,10 +35,7 @@ export function InvitationGate({ renderAuth }: { renderAuth: (done: () => void) 
   if (checking) return <p role="status">Checking your account…</p>;
   if (session.error)
     return (
-      <div role="alert">
-        <p>Could not check your account.</p>
-        <Button onClick={() => void session.refetch()}>Retry</Button>
-      </div>
+      <QueryError message="Could not check your account." onRetry={() => void session.refetch()} />
     );
   return (
     <InvitationAccept

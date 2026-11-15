@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { useSessionContext } from '@/lib/session-context';
 import { useCurrentTransfer } from '../api/current-transfer';
 import { TeamLoading } from './team-loading';
@@ -19,10 +19,11 @@ export function OwnershipScreen({ cursor }: { cursor?: string }) {
   if (current.data?.transfer) content = <TransferStatus transfer={current.data.transfer} />;
   if (current.error)
     content = (
-      <div role="alert">
-        <p>{current.error.message}</p>
-        <Button onClick={() => void current.refetch()}>Check again</Button>
-      </div>
+      <QueryError
+        message={current.error.message}
+        onRetry={() => void current.refetch()}
+        retryLabel="Check again"
+      />
     );
   return (
     <main className="space-y-6 p-4 md:p-8">

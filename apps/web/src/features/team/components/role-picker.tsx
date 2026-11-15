@@ -1,6 +1,7 @@
 import type { FieldError } from 'react-hook-form';
 import type { MemberRoleInput } from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { useRoleOptions } from '../api/roles';
 import { RoleOptions } from './role-options';
 type RolePickerProps = {
@@ -13,10 +14,11 @@ export function RolePicker({ value, onChange, error }: RolePickerProps) {
   if (roles.isPending) return <p role="status">Loading roles…</p>;
   if (roles.error)
     return (
-      <div role="alert">
-        <p>{roles.error.message}</p>
-        <Button onClick={() => void roles.refetch()}>Retry roles</Button>
-      </div>
+      <QueryError
+        message={roles.error.message}
+        onRetry={() => void roles.refetch()}
+        retryLabel="Retry roles"
+      />
     );
   const builtInRoles = roles.data.pages[0]?.builtInRoles ?? [];
   const customRoles = roles.data.pages.flatMap((page) => page.items);

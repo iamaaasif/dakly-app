@@ -1,5 +1,6 @@
 'use client';
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { usePlans } from '../api/plans';
 import type { BusinessDraft } from '../auth.types';
@@ -14,12 +15,7 @@ export function PlanPicker({ draft, onBack }: { draft: BusinessDraft; onBack: ()
       </div>
     );
   if (plans.error)
-    return (
-      <div role="alert">
-        <p>Could not load plans.</p>
-        <Button onClick={() => void plans.refetch()}>Retry</Button>
-      </div>
-    );
+    return <QueryError message="Could not load plans." onRetry={() => void plans.refetch()} />;
   if (!plans.data.plans.length)
     return (
       <div className="space-y-4">
