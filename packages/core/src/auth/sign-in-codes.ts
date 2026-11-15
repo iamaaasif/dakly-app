@@ -21,6 +21,13 @@ type CodeGrant = {
   email?: string;
   proof?: FreshProof;
 };
+type CodeRequest = {
+  subject: SignInSubject;
+  purpose: CodePurpose;
+  ip: string;
+  registration?: SignUpInput;
+  proof?: FreshProof;
+};
 
 const SAVE = `
 if redis.call('EXISTS', KEYS[3]) == 1 then return -1 end
@@ -56,13 +63,7 @@ export class SignInCodes {
     @Inject(EmailService) private readonly email: EmailService,
   ) {}
 
-  async send(
-    subject: SignInSubject,
-    purpose: CodePurpose,
-    ip: string,
-    registration?: SignUpInput,
-    proof?: FreshProof,
-  ): Promise<void> {
+  async send({ subject, purpose, ip, registration, proof }: CodeRequest): Promise<void> {
     await this.failures.assertAllowed(subject, ip);
     if (await this.client.connection.exists(authKey('resend', subject.target)))
       throw authError('AUTH_RATE_LIMITED');

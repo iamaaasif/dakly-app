@@ -90,13 +90,12 @@ export class SessionsService {
   ): Promise<{ token: string; session: Session }> {
     const token = randomBytes(32).toString('base64url');
     const now = this.clock.now();
-    const session = await this.repository.insert(
-      userId,
-      hash(token),
+    const session = await this.repository.insert(userId, {
+      tokenHash: hash(token),
       input,
       now,
-      new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
-    );
+      expiresAt: new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
+    });
     return { token, session };
   }
 

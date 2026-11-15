@@ -20,6 +20,14 @@ import { SignInCodes, type PasswordProof } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
 import { UsersRepository } from './users.repository';
 
+type PasswordReplacement = {
+  subject: SignInSubject;
+  proof: PasswordProof;
+  passwordHash: string;
+  ip: string;
+  revoke: boolean;
+};
+
 @Injectable()
 export class PasswordService {
   constructor(
@@ -46,14 +54,14 @@ export class PasswordService {
   async requestReset(input: PasswordIdentifierInput, ip: string): Promise<void> {
     const subject = await this.lookup(input.identifier, ip);
     const user = await this.current(subject.userId);
-    await this.codes.send(subject, 'reset_password', ip, undefined, this.codeProof(user));
+    await this.codes.send({ subject, purpose: 'reset_password', ip, proof: this.codeProof(user) });
   }
 
   async confirmReset(input: ConfirmPasswordResetInput, request: SignInRequest) {
     const subject = await this.lookup(input.identifier, request.ip);
     const proof = await this.consumeProof(subject, 'reset_password', input.code, request.ip);
     const passwordHash = await hashPassword(input.password);
-    await this.replace(subject, proof, passwordHash, request.ip, true);
+    await this.replace({ subject, proof, passwordHash, ip: request.ip, revoke: true });
     return this.auth.completeSignIn(
       {
         ...this.identity(subject),
@@ -66,7 +74,12 @@ export class PasswordService {
   async requestChangeProof(userId: string, ip: string): Promise<void> {
     const user = await this.current(userId);
     const subject = this.changeSubject(user);
-    await this.codes.send(subject, 'password_change_proof', ip, undefined, this.codeProof(user));
+    await this.codes.send({
+      subject,
+      purpose: 'password_change_proof',
+      ip,
+      proof: this.codeProof(user),
+    });
   }
 
   async change(userId: string, input: ChangePasswordInput, ip: string): Promise<void> {
@@ -77,16 +90,16 @@ export class PasswordService {
         ? await this.credentials.check(subject, input.currentPassword, ip)
         : await this.consumeProof(subject, 'password_change_proof', input.proofCode, ip);
     const passwordHash = await hashPassword(input.password);
-    await this.replace(subject, proof, passwordHash, ip, false);
+    await this.replace({ subject, proof, passwordHash, ip, revoke: false });
   }
 
-  private async replace(
-    subject: SignInSubject,
-    proof: PasswordProof,
-    passwordHash: string,
-    ip: string,
-    revoke: boolean,
-  ): Promise<void> {
+  private async replace({
+    subject,
+    proof,
+    passwordHash,
+    ip,
+    revoke,
+  }: PasswordReplacement): Promise<void> {
     await this.transaction.run(subject.userId!, async () => {
       const current = await this.current(subject.userId);
       this.credentials.assertCurrent(current.id, current.passwordHash, proof);

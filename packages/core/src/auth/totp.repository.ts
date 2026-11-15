@@ -6,16 +6,17 @@ import { users } from '@dakly/db/schema/auth';
 import type { EncryptedSecret } from '../platform/crypto/envelope-encryption';
 import { AccountDatabase } from '../platform/database/account-database';
 
+type TotpEnablement = {
+  envelope: EncryptedSecret;
+  backupCodeHashes: string[];
+  step: number;
+  now: Date;
+};
+
 @Injectable()
 export class TotpRepository {
   constructor(@Inject(AccountDatabase) private readonly database: AccountDatabase) {}
-  async enable(
-    userId: string,
-    envelope: EncryptedSecret,
-    backupCodeHashes: string[],
-    step: number,
-    now: Date,
-  ) {
+  async enable(userId: string, { envelope, backupCodeHashes, step, now }: TotpEnablement) {
     await this.database.forUser(userId, (tx) =>
       tx
         .update(users)

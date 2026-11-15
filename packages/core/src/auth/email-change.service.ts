@@ -28,13 +28,12 @@ export class EmailChangeService {
   async requestProof(userId: string, input: RequestEmailCodeInput, ip: string): Promise<void> {
     const proof = await this.phoneProof(userId);
     // This action proves control of the existing phone, even when sign-in prefers email.
-    await this.codes.send(
-      this.proofSubject(userId, input.email, proof.phone),
-      'email_change_proof',
+    await this.codes.send({
+      subject: this.proofSubject(userId, input.email, proof.phone),
+      purpose: 'email_change_proof',
       ip,
-      undefined,
       proof,
-    );
+    });
   }
 
   async requestChange(userId: string, input: ChangeEmailInput, ip: string): Promise<void> {
@@ -42,13 +41,12 @@ export class EmailChangeService {
       'currentPassword' in input
         ? await this.passwords.check({ target: userId, userId }, input.currentPassword, ip)
         : await this.consumePhoneProof(userId, input.email, input.proofCode, ip);
-    await this.codes.send(
-      { target: input.email, email: input.email, userId, binding: userId },
-      'add_email',
+    await this.codes.send({
+      subject: { target: input.email, email: input.email, userId, binding: userId },
+      purpose: 'add_email',
       ip,
-      undefined,
       proof,
-    );
+    });
   }
 
   async verifyChange(userId: string, input: VerifyNewEmailInput, ip: string): Promise<void> {

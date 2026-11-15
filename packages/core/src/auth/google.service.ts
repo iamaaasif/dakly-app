@@ -19,6 +19,13 @@ import { UsersRepository } from './users.repository';
 
 type GoogleResult =
   { status: 'totp_required'; challengeId: string } | GoogleSignInPending | { token: string };
+type GoogleFinish = {
+  identity: GoogleIdentity;
+  userId: string | undefined;
+  request: SignInRequest;
+  expectedEmailVerifiedAt?: string;
+  expectedUnlinked?: true;
+};
 @Injectable()
 export class GoogleService {
   constructor(
@@ -56,14 +63,14 @@ export class GoogleService {
         expectedEmailVerifiedAt: owner?.emailVerifiedAt?.toISOString(),
       };
       const verificationTicket = await this.tickets.issue(grant);
-      await this.codes.send(
-        this.emailSubject(verificationTicket, grant),
-        'google_email',
-        request.ip,
-      );
+      await this.codes.send({
+        subject: this.emailSubject(verificationTicket, grant),
+        purpose: 'google_email',
+        ip: request.ip,
+      });
       return { status: 'email_verification_required', verificationTicket };
     }
-    return this.finish(identity, owner?.id, request);
+    return this.finish({ identity, userId: owner?.id, request });
   }
 
   async verifyEmail(input: VerifyGoogleEmailInput, request: SignInRequest): Promise<GoogleResult> {
@@ -83,16 +90,22 @@ export class GoogleService {
       owner?.emailVerifiedAt?.toISOString() !== grant.expectedEmailVerifiedAt
     )
       throw authError('AUTH_GOOGLE_TICKET_INVALID');
-    return this.finish(grant.identity, owner?.id, request, grant.expectedEmailVerifiedAt, true);
+    return this.finish({
+      identity: grant.identity,
+      userId: owner?.id,
+      request,
+      expectedEmailVerifiedAt: grant.expectedEmailVerifiedAt,
+      expectedUnlinked: true,
+    });
   }
 
-  private async finish(
-    identity: GoogleIdentity,
-    userId: string | undefined,
-    request: SignInRequest,
-    expectedEmailVerifiedAt?: string,
-    expectedUnlinked?: true,
-  ): Promise<GoogleResult> {
+  private async finish({
+    identity,
+    userId,
+    request,
+    expectedEmailVerifiedAt,
+    expectedUnlinked,
+  }: GoogleFinish): Promise<GoogleResult> {
     if (userId)
       return this.auth.completeSignIn(
         {

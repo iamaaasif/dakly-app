@@ -20,6 +20,13 @@ import { canDo } from './permissions';
 import { teamError } from './team.errors';
 import { TeamService } from './team.service';
 
+type TransferParties = {
+  userId: string;
+  newOwnerId: string;
+  membershipId: string;
+  identity: Awaited<ReturnType<UsersService['lockVerifiedIdentity']>>;
+};
+
 @Injectable()
 export class OwnershipTransferService {
   constructor(
@@ -45,10 +52,15 @@ export class OwnershipTransferService {
         await this.assertOwner(storeId, userId);
         await this.assertNoTransfer(storeId);
         const member = await this.recipient(storeId, membershipId, userId);
-        return this.subject(storeId, userId, member.userId!, membershipId, identity);
+        return this.subject(storeId, {
+          userId,
+          newOwnerId: member.userId!,
+          membershipId,
+          identity,
+        });
       });
     });
-    await this.codes.send(subject, 'ownership_transfer', ip);
+    await this.codes.send({ subject, purpose: 'ownership_transfer', ip });
   }
 
   async start(
@@ -60,7 +72,12 @@ export class OwnershipTransferService {
     await this.assertOwner(storeId, userId);
     const member = await this.recipient(storeId, input.membershipId, userId);
     const identity = await this.users.lockVerifiedIdentity(storeId, userId);
-    const subject = this.subject(storeId, userId, member.userId!, input.membershipId, identity);
+    const subject = this.subject(storeId, {
+      userId,
+      newOwnerId: member.userId!,
+      membershipId: input.membershipId,
+      identity,
+    });
     // Consumption is independent of the store transaction: rollback never restores proof.
     const grant = await this.codes.consume(subject, 'ownership_transfer', input.code, ip);
     if (grant.userId !== userId) throw teamError('TRANSFER_PROOF_INVALID');
@@ -69,13 +86,12 @@ export class OwnershipTransferService {
       return this.transaction.runLocked(storeId, async () => {
         await this.assertOwner(storeId, userId);
         const currentMember = await this.recipient(storeId, input.membershipId, userId);
-        const currentSubject = this.subject(
-          storeId,
+        const currentSubject = this.subject(storeId, {
           userId,
-          currentMember.userId!,
-          input.membershipId,
-          currentIdentity,
-        );
+          newOwnerId: currentMember.userId!,
+          membershipId: input.membershipId,
+          identity: currentIdentity,
+        });
         if (currentSubject.binding !== subject.binding) throw teamError('TRANSFER_PROOF_INVALID');
         await this.assertNoTransfer(storeId);
         const now = this.clock.now();
@@ -171,10 +187,7 @@ export class OwnershipTransferService {
 
   private subject(
     storeId: string,
-    userId: string,
-    newOwnerId: string,
-    membershipId: string,
-    identity: Awaited<ReturnType<UsersService['lockVerifiedIdentity']>>,
+    { userId, newOwnerId, membershipId, identity }: TransferParties,
   ): SignInSubject {
     const delivery = this.deliveryIdentity(identity);
     return {

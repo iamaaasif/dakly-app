@@ -14,6 +14,13 @@ import { DATABASE } from '../platform/database/database.tokens';
 import { databaseErrorCode } from '../platform/database/error-code';
 import { TenantDatabase, type Transaction } from '../platform/database/tenant-database';
 
+type NewUser = {
+  input: SignUpInput;
+  now: Date;
+  passwordHash?: string;
+  google?: GoogleIdentity;
+};
+
 @Injectable()
 export class UsersRepository {
   constructor(
@@ -285,13 +292,7 @@ export class UsersRepository {
     );
   }
 
-  async create(
-    userId: string,
-    input: SignUpInput,
-    now: Date,
-    passwordHash?: string,
-    google?: GoogleIdentity,
-  ): Promise<boolean> {
+  async create(userId: string, { input, now, passwordHash, google }: NewUser): Promise<boolean> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx
         .insert(users)

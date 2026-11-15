@@ -69,16 +69,15 @@ export class TotpRecoveryService {
 
   async requestCode(input: TotpRecoveryCodeInput, ip: string) {
     const user = await this.account(input.phone);
-    await this.codes.send(
-      this.subject(user, input.method),
-      input.method === 'phone' ? 'totp_recovery_phone' : 'totp_recovery_email',
+    await this.codes.send({
+      subject: this.subject(user, input.method),
+      purpose: input.method === 'phone' ? 'totp_recovery_phone' : 'totp_recovery_email',
       ip,
-      undefined,
-      {
+      proof: {
         ...this.passwords.proof(user.id, user.passwordHash),
         identifierState: accountCredentialState(user),
       },
-    );
+    });
   }
 
   async start(input: TotpRecoveryInput, ip: string) {

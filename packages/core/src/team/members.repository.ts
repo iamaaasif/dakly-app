@@ -34,6 +34,7 @@ type MemberChange = Partial<
     | 'removedAt'
   >
 >;
+type NewInvite = { input: InviteMemberInput; userId: string; hash: Buffer; expiresAt: Date };
 
 @Injectable()
 export class MembersRepository {
@@ -142,10 +143,7 @@ export class MembersRepository {
 
   async insertInvite(
     storeId: string,
-    input: InviteMemberInput,
-    userId: string,
-    hash: Buffer,
-    expiresAt: Date,
+    { input, userId, hash, expiresAt }: NewInvite,
   ): Promise<Member> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
