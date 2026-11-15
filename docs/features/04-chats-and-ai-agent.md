@@ -19,6 +19,7 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - D17: the AI model is OpenAI through `LlmDriver` and `AiService` tiers, not the Claude API.
 - D21: there is no courier API in release 1. When a customer asks where the parcel is, the AI answers from the courier name and tracking code staff recorded on the order, and hands over when there is none.
 - D7: chats AI replies and drafts orders without approval, within its settings.
+- D37: storing messages, sending, receipts and the 24-hour window are core messaging (`messaging/`, CHAT-1 and CHAT-2), so campaigns and automations work without this extension. The Chats extension is the inbox, assignment, notes, saved replies, comments and the AI agent.
 
 ## Product requirements
 
