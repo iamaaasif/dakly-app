@@ -24,12 +24,16 @@ export class PasswordController {
     @Body(new ZodValidationPipe(passwordSignInSchema)) input: PasswordSignInInput,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<void> {
+  ) {
     const result = await this.passwords.signIn(input, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
       isRemembered: input.isRemembered,
     });
+    if ('challengeId' in result) {
+      reply.status(202);
+      return result;
+    }
     setSessionCookie(reply, result.token, input.isRemembered);
   }
 
@@ -48,12 +52,16 @@ export class PasswordController {
     @Body(new ZodValidationPipe(confirmPasswordResetSchema)) input: ConfirmPasswordResetInput,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<void> {
+  ) {
     const result = await this.passwords.confirmReset(input, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
       isRemembered: input.isRemembered,
     });
+    if ('challengeId' in result) {
+      reply.status(202);
+      return result;
+    }
     setSessionCookie(reply, result.token, input.isRemembered);
   }
 }

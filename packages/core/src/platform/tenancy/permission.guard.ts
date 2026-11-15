@@ -25,6 +25,9 @@ export class PermissionGuard implements CanActivate {
 
   private allows(request: StoreRequest, rule?: AccessRule): boolean {
     switch (rule?.kind) {
+      case 'support':
+      case 'support-handoff':
+      case 'staff':
       case 'public':
         return true;
       case 'user':

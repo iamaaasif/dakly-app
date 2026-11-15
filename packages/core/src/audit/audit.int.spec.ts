@@ -50,6 +50,9 @@ describe('AuditService (Postgres)', () => {
       await audit.record(storeId, entry);
     });
     expect(
+      (await admin.db.execute(sql`select name from stores where id = ${storeId}`)).rows,
+    ).toEqual([{ name: 'নতুন' }]);
+    expect(
       await database.forStore(storeId, (tx) =>
         tx.select({ action: auditLog.action }).from(auditLog),
       ),

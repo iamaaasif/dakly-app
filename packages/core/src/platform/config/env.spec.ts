@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { loadEnv } from './env';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadEnv, loadStaffEnv, resetEnvForTests } from './env';
 
 describe('loadEnv', () => {
   it.each(['https://localhost:6379', 'redis://localhost/-1', 'redis://localhost/1.5'])(
@@ -28,8 +28,10 @@ describe('SMS driver configuration', () => {
     });
   });
 
-  it('parses production environment independently of consumer startup validation', () => {
-    expect(loadEnv({ ...base, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+  it('requires staff Access and session configuration in production', () => {
+    expect(() => loadStaffEnv({ ...base, NODE_ENV: 'production' })).toThrow(
+      'Staff Access and session configuration is required in production',
+    );
   });
 
   it('rejects unsupported driver names', () => {
@@ -87,8 +89,95 @@ describe('encryption configuration', () => {
     { ENCRYPTION_MASTER_KEYS: JSON.stringify({ 1: key, '01': key }) },
     { ENCRYPTION_MASTER_KEYS: JSON.stringify({ 1: key, 32768: key }) },
   ])('rejects invalid key configuration at startup without exposing key material', (invalid) => {
-    expect(() => loadEnv({ ...configured, ...invalid })).toThrow(
+    expect(() => loadStaffEnv({ ...configured, ...invalid })).toThrow(
       'Invalid encryption configuration',
     );
+  });
+});
+
+describe('Staff environment configuration', () => {
+  const configured = {
+    DATABASE_URL: 'postgres://localhost/dakly',
+    REDIS_URL: 'redis://localhost',
+    NODE_ENV: 'production',
+    ADMIN_ORIGIN: 'https://admin.dakly.test',
+    CLOUDFLARE_ACCESS_ISSUER: 'https://dakly.cloudflareaccess.com',
+    CLOUDFLARE_ACCESS_AUDIENCE: 'staff-app',
+    STAFF_SESSION_SIGNING_KEY: randomBytes(32).toString('base64'),
+  };
+  it('accepts configured production verification and rejects development keys', () => {
+    expect(loadStaffEnv(configured).ADMIN_ORIGIN).toBe(configured.ADMIN_ORIGIN);
+    expect(() =>
+      loadStaffEnv({ ...configured, CLOUDFLARE_ACCESS_DEVELOPMENT_JWKS: '{"keys":[]}' }),
+    ).toThrow('Development Access keys are not allowed');
+  });
+  it('rejects an insecure origin or an arbitrary JWKS issuer', () => {
+    expect(() =>
+      loadStaffEnv({ ...configured, ADMIN_ORIGIN: 'http://admin.dakly.test' }),
+    ).toThrow();
+    expect(() =>
+      loadStaffEnv({ ...configured, CLOUDFLARE_ACCESS_ISSUER: 'https://attacker.test' }),
+    ).toThrow();
+  });
+});
+
+describe('API trusted proxy configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+  it('defaults to no trusted peers and accepts explicit IPs and CIDRs', () => {
+    expect(loadEnv(base).API_TRUSTED_PROXIES).toEqual([]);
+    expect(
+      loadEnv({ ...base, API_TRUSTED_PROXIES: '127.0.0.1, 10.42.0.0/24, ::1, fd00::/64' })
+        .API_TRUSTED_PROXIES,
+    ).toEqual(['127.0.0.1', '10.42.0.0/24', '::1', 'fd00::/64']);
+  });
+  it.each([
+    'true',
+    '1',
+    'loopback',
+    'localhost',
+    '*',
+    '0.0.0.0/0',
+    '::/0',
+    '127.0.0.1/33',
+    '::1/129',
+    '10.0.0.1/-1',
+    '127.0.0.1,',
+    'fe80::1%eth0',
+    '10.0.0.1/1.5',
+  ])('refuses ambiguous or unrestricted trust: %s', (value) => {
+    expect(() => loadEnv({ ...base, API_TRUSTED_PROXIES: value })).toThrow();
+  });
+});
+
+describe('API listener configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+  it('preserves the production bind default and accepts explicit loopback IPs', () => {
+    expect(loadEnv({ ...base, NODE_ENV: 'production' }).API_HOST).toBe('0.0.0.0');
+    expect(loadEnv({ ...base, API_HOST: '127.0.0.1' }).API_HOST).toBe('127.0.0.1');
+    expect(loadEnv({ ...base, API_HOST: '::1' }).API_HOST).toBe('::1');
+  });
+  it.each(['localhost', 'https://127.0.0.1', '', '127.0.0.1:4000'])(
+    'rejects a non-IP bind address: %s',
+    (host) => {
+      expect(() => loadEnv({ ...base, API_HOST: host })).toThrow();
+    },
+  );
+});
+
+describe('process environment cache', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEnvForTests();
+  });
+
+  it.each([loadEnv, loadStaffEnv])('parses process.env once until reset', (load) => {
+    vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
+    vi.stubEnv('REDIS_URL', 'redis://localhost');
+    vi.stubEnv('API_PORT', '4000');
+    const first = load();
+    vi.stubEnv('API_PORT', '5000');
+    expect(load()).toBe(first);
+    resetEnvForTests();
+    expect(load().API_PORT).toBe(5000);
   });
 });

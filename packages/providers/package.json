@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:int": "vitest run --config vitest.int.config.ts"
+    "test:int": "vitest run --config vitest.int.config.mts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
@@ -20,7 +20,10 @@
     "vitest": "4.1.12"
   },
   "dependencies": {
+    "@dakly/contracts": "workspace:*",
+    "@simplewebauthn/server": "14.1.0",
     "google-auth-library": "11.3.4",
+    "jose": "6.2.17",
     "nodemailer": "10.4.0"
   }
 }
