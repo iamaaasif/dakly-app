@@ -47,6 +47,6 @@ Dakly copies the good parts of Immich, Twenty, Cal.com, Novu, Documenso, Dub, Bu
 
 ## Limits enforced by lint
 
-`complexity` ≤ 10, `sonarjs/cognitive-complexity` ≤ 15, `max-depth` ≤ 3, functions ≤ 60 lines, files ≤ 400 lines, no nested ternaries, no `any`, no `console`, no TypeScript `enum`, no barrel imports. `pnpm lint:unused` (Knip) finds dead code; `pnpm lint:duplicates` (jscpd) finds copy-paste.
+`complexity` ≤ 10, `sonarjs/cognitive-complexity` ≤ 15, `max-depth` ≤ 3, functions ≤ 60 lines, files ≤ 400 lines, no nested ternaries, no `any`, no `as unknown as` outside tests, no `console`, no TypeScript `enum`, no barrel imports. `pnpm lint:unused` (Knip) finds dead code; `pnpm lint:duplicates` (jscpd) finds copy-paste.
 
 If you hit a limit, split the function. Do not raise the limit or add a disable comment without a reviewer agreeing in the PR.
