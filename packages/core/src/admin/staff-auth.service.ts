@@ -21,10 +21,9 @@ import { staffError } from './admin.errors';
 import { StaffAttempts } from './staff-attempts';
 import { StaffAuditService } from './staff-audit.service';
 import { newStaffProof } from './staff-tokens';
-import { StaffRepository } from './staff.repository';
+import { StaffRepository, type LockedStaff } from './staff.repository';
 
 const STAFF_CHALLENGE_TTL_MS = 5 * MINUTE_MS;
-export type LockedStaff = NonNullable<Awaited<ReturnType<StaffRepository['lock']>>>;
 @Injectable()
 export class StaffAuthService {
   readonly passkeys = new PasskeyDriver(loadEnv().ADMIN_ORIGIN);

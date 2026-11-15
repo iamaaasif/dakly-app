@@ -1096,6 +1096,63 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       (await shop(fresh, '/support/session', undefined, (await open(fresh, id)).cookie)).statusCode,
     ).toBe(200);
   });
+  it('approves once for the requested duration and refuses a revoked Owner or ineligible staff', async () => {
+    const f = await fixture();
+    const id = await request(f, 'read', 120);
+    await approve(f, id);
+    expect(
+      (
+        await database.pool.query(
+          'select status,approved_by_user_id,approved_at,expires_at from support_grants where id=$1',
+          [id],
+        )
+      ).rows,
+    ).toEqual([
+      {
+        status: 'approved',
+        approved_by_user_id: f.userId,
+        approved_at: now,
+        expires_at: new Date(now.getTime() + 120 * 60000),
+      },
+    ]);
+    expect(
+      (
+        await database.pool.query(
+          "select actor_user_id,action_details from staff_audit_log where target_id=$1 and action='support.approved'",
+          [id],
+        )
+      ).rows,
+    ).toEqual([
+      {
+        actor_user_id: f.userId,
+        action_details: {
+          before: { status: 'requested' },
+          after: {
+            status: 'approved',
+            expiresAt: new Date(now.getTime() + 120 * 60000).toISOString(),
+          },
+        },
+      },
+    ]);
+    for (const failure of ['revoked', 'ineligible'] as const) {
+      const g = await fixture();
+      const pending = await request(g);
+      const code = sms.at(-1)!.match(/\b\d{6}\b/)![0];
+      if (failure === 'revoked')
+        await database.pool.query('update sessions set revoked_at=now() where id=$1', [
+          g.sessionId,
+        ]);
+      else
+        await database.pool.query("update staff_users set role='finance' where id=$1", [g.staffId]);
+      const refused = await shop(g, `/support-access/${pending}/approve`, { code });
+      expect(refused.statusCode, refused.body).toBe(failure === 'revoked' ? 401 : 403);
+      if (failure === 'ineligible') expect(refused.json().error.code).toBe('SUPPORT_ENDED');
+      expect(
+        (await database.pool.query('select status from support_grants where id=$1', [pending]))
+          .rows,
+      ).toEqual([{ status: 'requested' }]);
+    }
+  });
   it('rolls customer writes and both audits back if idle expiry passes during audit lock wait', async () => {
     const f = await fixture();
     const id = await request(f, 'write', 120);

@@ -1,7 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 
-import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
+import type { BreakGlassEffect } from '@dakly/contracts/break-glass';
+import type {
+  SupportGrantResponse,
+  SupportRequestInput,
+  SupportPrincipal,
+} from '@dakly/contracts/support';
 import type { Database } from '@dakly/db/client';
 import { supportGrants, supportSessions, staffUsers, staffSessions } from '@dakly/db/schema/admin';
 import { sessions, users } from '@dakly/db/schema/auth';
@@ -47,6 +52,17 @@ const grantColumns = {
   expiresAt: supportGrants.expiresAt,
 };
 export type SupportGrant = typeof supportGrants.$inferSelect;
+export type SupportGrantRow = Pick<
+  SupportGrant,
+  Exclude<keyof typeof grantColumns, 'staffName'>
+> & {
+  staffName: string;
+};
+export type SupportStaff = Pick<typeof staffUsers.$inferSelect, keyof typeof staffColumns>;
+export type StaffParentSession = Pick<
+  typeof staffSessions.$inferSelect,
+  keyof typeof parentColumns
+>;
 type SupportRequest = { id: string; staffUserId: string; input: SupportRequestInput; now: Date };
 
 @Injectable()
@@ -113,7 +129,7 @@ export class SupportRepository {
 
   async staffGrants(staffUserId: string, before?: string) {
     return (
-      await this.database.execute<import('@dakly/contracts/support').SupportGrantResponse>(
+      await this.database.execute<SupportGrantResponse>(
         sql`select * from support_request_metadata(${staffUserId}::uuid,${before ?? null}::uuid)`,
       )
     ).rows;
@@ -121,10 +137,10 @@ export class SupportRepository {
 
   async grantStore(staffUserId: string, id: string) {
     return (
-      await this.database.execute<{ store_id: string }>(
+      await this.database.execute<{ store_id: string | null }>(
         sql`select support_grant_store(${staffUserId}::uuid,${id}::uuid) as store_id`,
       )
-    ).rows.filter((row) => row.store_id)[0];
+    ).rows[0]?.store_id;
   }
 
   async list(storeId: string, before?: string) {
@@ -144,7 +160,7 @@ export class SupportRepository {
     );
   }
 
-  async find(storeId: string, id: string) {
+  async find(storeId: string, id: string): Promise<SupportGrantRow | undefined> {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
@@ -194,11 +210,7 @@ export class SupportRepository {
     );
   }
 
-  async insertBreakGlass(
-    storeId: string,
-    effect: import('@dakly/contracts/break-glass').BreakGlassEffect,
-    now: Date,
-  ) {
+  async insertBreakGlass(storeId: string, effect: BreakGlassEffect, now: Date) {
     await this.tenant.inTransaction(storeId, (tx) =>
       tx.insert(supportGrants).values({
         id: effect.id,
@@ -231,7 +243,7 @@ export class SupportRepository {
     );
   }
 
-  async staff(storeId: string, staffUserId: string) {
+  async staff(storeId: string, staffUserId: string): Promise<SupportStaff | undefined> {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
@@ -245,7 +257,7 @@ export class SupportRepository {
     );
   }
 
-  async readStaff(storeId: string, staffUserId: string) {
+  async readStaff(storeId: string, staffUserId: string): Promise<SupportStaff | undefined> {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
@@ -253,7 +265,11 @@ export class SupportRepository {
     );
   }
 
-  async parent(storeId: string, staffUserId: string, sessionId: string) {
+  async parent(
+    storeId: string,
+    staffUserId: string,
+    sessionId: string,
+  ): Promise<StaffParentSession | undefined> {
     return this.tenant.forStore(
       storeId,
       async (tx) =>
@@ -267,7 +283,11 @@ export class SupportRepository {
     );
   }
 
-  async readParent(storeId: string, staffUserId: string, sessionId: string) {
+  async readParent(
+    storeId: string,
+    staffUserId: string,
+    sessionId: string,
+  ): Promise<StaffParentSession | undefined> {
     return this.tenant.forStore(
       storeId,
       async (tx) =>

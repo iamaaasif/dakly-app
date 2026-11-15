@@ -7,6 +7,7 @@ import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import type {
   StaffAlertDriver,
   StaffAlertCredentials,
+  StaffAlertMessage,
 } from '@dakly/providers/staff-alert/staff-alert-driver';
 
 import { Clock } from '../platform/clock';
@@ -115,10 +116,7 @@ export class StaffAlertsService {
     }
   }
 
-  private async send(
-    message: import('@dakly/providers/staff-alert/staff-alert-driver').StaffAlertMessage,
-    credentials: StaffAlertCredentials,
-  ) {
+  private async send(message: StaffAlertMessage, credentials: StaffAlertCredentials) {
     const started = performance.now();
     let outcome = 'failure';
     try {

@@ -14,6 +14,11 @@ export type RecoveryStores = {
   stores: string[];
   owners: { userId: string; phone: string | null; email: string | null }[];
 };
+export type RecoveryStaff = {
+  staff: Pick<typeof staffUsers.$inferSelect, 'role' | 'status' | 'enrolledAt'> | undefined;
+  session:
+    Pick<typeof staffSessions.$inferSelect, 'revokedAt' | 'expiresAt' | 'lastSeenAt'> | undefined;
+};
 @Injectable()
 export class StaffRecoveryRepository {
   constructor(
@@ -33,7 +38,7 @@ export class StaffRecoveryRepository {
     );
   }
 
-  async staff(userId: string, staffUserId: string, sessionId: string) {
+  async staff(userId: string, staffUserId: string, sessionId: string): Promise<RecoveryStaff> {
     return this.account.inTransaction(userId, async (tx) => {
       const [staff] = await tx
         .select({

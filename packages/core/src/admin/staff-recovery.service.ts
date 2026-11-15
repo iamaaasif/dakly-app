@@ -23,7 +23,11 @@ import { RiskyActionConfirmation, RISKY_ACTION_CONFIRM_MS } from './risky-action
 import { StaffAuditService } from './staff-audit.service';
 import { StaffIdentityService } from './staff-identity.service';
 import { recoveryError } from './staff-recovery.errors';
-import { StaffRecoveryRepository, type RecoveryStores } from './staff-recovery.repository';
+import {
+  StaffRecoveryRepository,
+  type RecoveryStaff,
+  type RecoveryStores,
+} from './staff-recovery.repository';
 import { isStaffSessionCurrent } from './staff-session-policy';
 
 type Staff = StaffIdentity & { sessionId: string };
@@ -148,7 +152,7 @@ export class StaffRecoveryService {
       throw recoveryError('RECOVERY_CHECKS');
   }
 
-  private assertStaff(current: Awaited<ReturnType<StaffRecoveryRepository['staff']>>) {
+  private assertStaff(current: RecoveryStaff) {
     const now = this.clock.now();
     if (
       !current.staff ||
