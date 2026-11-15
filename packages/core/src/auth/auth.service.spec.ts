@@ -7,12 +7,10 @@ import { Clock } from '../platform/clock';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { SessionsService } from '../sessions/sessions.service';
 import { AuthService } from './auth.service';
-import { GoogleTickets } from './google-tickets';
 import { SecurityNoticesService } from './security-notices.service';
-import { SignInCodes } from './sign-in-codes';
 import { SignInFailures } from './sign-in-failures';
 import { TotpChallenges } from './totp-challenges';
-import { TotpRecoveryService } from './totp-recovery.service';
+import { TotpRecoveryFinishService } from './totp-recovery-finish.service';
 import { TotpService } from './totp.service';
 import { UsersRepository } from './users.repository';
 
@@ -38,7 +36,6 @@ const failureState = {
 };
 const service = new AuthService(
   repository as unknown as UsersRepository,
-  {} as SignInCodes,
   failureState as unknown as SignInFailures,
   {
     knownDevice: async () => true,
@@ -50,14 +47,13 @@ const service = new AuthService(
   { run: async (_id: string, work: () => Promise<unknown>) => work() } as AccountTransaction,
   { now: () => now } as Clock,
   {} as AccountSecurityEventsService,
-  {} as GoogleTickets,
   {
     subject: (value: { id: string; phone: string }) => ({ userId: value.id, target: value.phone }),
   } as TotpService,
   {
     issue: async () => ({ status: 'totp_required', challengeId: 'pending-challenge' }),
   } as TotpChallenges,
-  {} as TotpRecoveryService,
+  {} as TotpRecoveryFinishService,
   {} as SecurityNoticesService,
   {} as Queue,
 );

@@ -18,7 +18,6 @@ import { Clock } from '../platform/clock';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { newId } from '../platform/database/new-id';
 import { SessionsService } from '../sessions/sessions.service';
-import { TeamService } from '../team/team.service';
 import { RiskyActionConfirmation, RISKY_ACTION_CONFIRM_MS } from './risky-action-confirmation';
 import { StaffAuditService } from './staff-audit.service';
 import { StaffIdentityService } from './staff-identity.service';
@@ -45,7 +44,6 @@ export class StaffRecoveryService {
     @Inject(StaffAuditService) private readonly audit: StaffAuditService,
     @Inject(StaffIdentityService) private readonly identities: StaffIdentityService,
     @Inject(RiskyActionConfirmation) private readonly confirmation: RiskyActionConfirmation,
-    @Inject(TeamService) private readonly team: TeamService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -245,12 +243,5 @@ export class StaffRecoveryService {
         notices.map((notice) => [`${notice.channel}:${notice.to.toLowerCase()}`, notice]),
       ).values(),
     ];
-  }
-
-  async history(storeId: string, userId: string, before?: string) {
-    const access = await this.team.accessFor(storeId, userId);
-    if (!access || !this.team.canApproveSupport(access)) throw recoveryError('RECOVERY_DENIED');
-    const rows = await this.repository.history(storeId, before);
-    return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null };
   }
 }

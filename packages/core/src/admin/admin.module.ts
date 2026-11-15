@@ -31,6 +31,7 @@ import { StaffFactorsService } from './staff-factors.service';
 import { StaffHistoryController } from './staff-history.controller';
 import { StaffHistoryModule } from './staff-history.module';
 import { StaffIdentityModule } from './staff-identity.module';
+import { StaffRecoveryHistoryService } from './staff-recovery-history.service';
 import { StaffRecoveryController } from './staff-recovery.controller';
 import { StaffRecoveryRepository } from './staff-recovery.repository';
 import { StaffRecoveryService } from './staff-recovery.service';
@@ -76,6 +77,7 @@ import { SupportService } from './support.service';
   ],
   providers: [
     StaffRecoveryService,
+    StaffRecoveryHistoryService,
     StaffRecoveryRepository,
     SupportRepository,
     RiskyActionConfirmation,

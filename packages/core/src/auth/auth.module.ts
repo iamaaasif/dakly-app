@@ -28,7 +28,9 @@ import { PasswordCredentials } from './password-credentials';
 import { PasswordController } from './password.controller';
 import { PasswordService } from './password.service';
 import { SecurityNoticesModule } from './security-notices.module';
+import { SignInCodeFlowService } from './sign-in-code-flow.service';
 import { TotpChallenges } from './totp-challenges';
+import { TotpRecoveryFinishService } from './totp-recovery-finish.service';
 import { TotpRecoveryController } from './totp-recovery.controller';
 import { TotpRecoveryService } from './totp-recovery.service';
 import { TotpController } from './totp.controller';
@@ -66,6 +68,7 @@ import { UsersModule } from './users.module';
   ],
   providers: [
     TotpRecoveryService,
+    TotpRecoveryFinishService,
     TotpService,
     TotpRepository,
     TotpCredentials,
@@ -77,6 +80,7 @@ import { UsersModule } from './users.module';
     PasswordService,
     PasswordCredentials,
     AuthService,
+    SignInCodeFlowService,
     EmailChangeService,
   ],
   exports: [AuthService, CodesModule],
