@@ -31,6 +31,8 @@ jobs:
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
+      # The schema imports @dakly/contracts from dist, so this runs after the build.
+      - run: pnpm db:drift
       - run: pnpm lint:unused
       - run: pnpm lint:duplicates
       - run: pnpm lint:docs

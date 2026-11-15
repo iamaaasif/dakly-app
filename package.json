@@ -16,9 +16,10 @@
     "lint:unused": "knip",
     "lint:duplicates": "jscpd",
     "lint:docs": "node scripts/check-docs.mjs && node scripts/generate-er-diagram.mjs --check",
+    "db:drift": "node scripts/check-migration-drift.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm lint:unused && pnpm lint:duplicates && pnpm lint:docs",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm db:drift && pnpm test && pnpm lint:unused && pnpm lint:duplicates && pnpm lint:docs",
     "db:diagram": "node scripts/generate-er-diagram.mjs",
     "test:e2e": "node scripts/browser-tests.mjs",
     "test:native-forms": "node scripts/native-form-tests.mjs"

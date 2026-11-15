@@ -29,7 +29,8 @@ PostgreSQL 16 with Drizzle ORM ([ADR 0002](../adr/0002-drizzle-orm.md)) and row 
    - Create indexes on big tables with `CREATE INDEX CONCURRENTLY` in their own migration.
    - Rename in steps: add new, write both, move reads, drop old in a later release.
    - No long `ALTER TABLE` on `messages`, `orders` or `contacts` during the day.
-5. Migrations run as the table owner. The app runs as `dakly_app`, which does not own tables, so RLS applies.
+5. `pnpm db:drift` (in `pnpm check` and CI) runs `db:generate` and fails if it changes `packages/db`, so the schema and the committed migrations always agree.
+6. Migrations run as the table owner. The app runs as `dakly_app`, which does not own tables, so RLS applies.
 
 ## Repositories
 
