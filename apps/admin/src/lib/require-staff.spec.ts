@@ -26,7 +26,9 @@ describe('Server-rendered staff session lookup', () => {
         request.headers.cookie === 'dakly_staff=fixture' &&
         request.headers['cf-access-jwt-assertion'] === 'signed-fixture';
       response.writeHead(valid ? 200 : 403);
-      response.end();
+      response.end(
+        JSON.stringify({ id: 'fixture-id', name: 'Staff fixture', role: 'super_admin' }),
+      );
     });
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     const address = server.address();
@@ -36,7 +38,7 @@ describe('Server-rendered staff session lookup', () => {
     vi.stubEnv('CLOUDFLARE_ACCESS_ISSUER', 'https://dakly.cloudflareaccess.com');
     vi.stubEnv('CLOUDFLARE_ACCESS_AUDIENCE', 'staff-app');
     try {
-      await expect(requireStaff()).resolves.toBeUndefined();
+      await expect(requireStaff()).resolves.toMatchObject({ role: 'super_admin' });
     } finally {
       server.closeAllConnections();
       await new Promise<void>((done) => server.close(() => done()));

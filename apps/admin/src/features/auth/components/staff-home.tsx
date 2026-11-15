@@ -12,6 +12,7 @@ export function StaffHome() {
   const router = useRouter();
   return (
     <AuthPanel
+      centered={false}
       title="Staff account"
       description="Your staff session is active for up to eight hours and ends after thirty minutes without activity."
     >
@@ -28,6 +29,21 @@ export function StaffHome() {
       {session.data ? (
         <div className="space-y-4">
           <p className="font-medium">{session.data.name}</p>
+          <nav className="flex flex-wrap gap-4">
+            {['support', 'super_admin'].includes(session.data.role) ? (
+              <Link href="/account-recovery" className="text-action underline">
+                Recover shop account
+              </Link>
+            ) : null}
+            <Link href="/support" className="text-action underline">
+              Support access
+            </Link>
+            {session.data.role === 'super_admin' ? (
+              <Link href="/audit" className="text-action underline">
+                Staff audit history
+              </Link>
+            ) : null}
+          </nav>
           <p className="text-muted">Role: {session.data.role.replaceAll('_', ' ')}</p>
           <Button
             loading={signOut.isPending}

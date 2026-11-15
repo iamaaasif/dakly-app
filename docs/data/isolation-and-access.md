@@ -26,25 +26,26 @@ Foreign-key checks are not filtered by RLS. Tenant-owned parent links therefore 
 
 ## Global tables
 
-24 tables are global (the audit/outbox tables may carry a nullable store reference without being tenant tables): `users`, `sessions`, `account_security_events`, `account_recoveries`, `account_security_notices`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_challenges`, `staff_passkeys`, `staff_identity_contacts`, `staff_audit_log`, `platform_settings`, `maintenance_watermarks`, `staff_audit_log_days`, `abuse_reports`, `gateway_settlement_lines`, `platform_daily_metrics`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only their owning features read them, by indexed keys. Account history is filtered by `user_id` from the authenticated session; it does not use a store or tenant RLS.
+27 tables are global (the audit/outbox tables may carry a nullable store reference without being tenant tables): `users`, `sessions`, `account_security_events`, `account_recoveries`, `account_security_notices`, `push_subscriptions`, `outbox_events`, `webhook_events`, `bd_areas`, `plans`, `coupons`, `invoice_counters`, `staff_users`, `staff_sessions`, `staff_challenges`, `staff_passkeys`, `staff_identity_contacts`, `staff_user_links`, `staff_audit_exports`, `staff_alert_deliveries`, `staff_audit_log`, `platform_settings`, `maintenance_watermarks`, `staff_audit_log_days`, `abuse_reports`, `gateway_settlement_lines`, `platform_daily_metrics`. They hold sign-in records, reference data, the platform's own records, or rows written before the store is known. Only their owning features read them, by indexed keys. Account history is filtered by `user_id` from the authenticated session; it does not use a store or tenant RLS.
 
-`support_grants` holds a `store_id` and has a policy like any shop table: a store can list the grants on itself, and the admin app reads a grant inside `forStore` for that store.
+`support_sessions` and `support_grants` hold a `store_id` and has a policy like any shop table: a store can list the grants on itself, and the admin app reads a grant inside `forStore` for that store.
 
 ## Grants
 
-| Grant                           | Tables                                                                                                                                                                                                                                  | Why                                                                                     |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| No UPDATE or DELETE             | `account_security_events`, `account_recoveries`, `account_security_notices`, `audit_log`, `staff_audit_log`, `payment_events`, `wallet_ledger`, `stock_movements`, `usage_events`, `consents`, `ai_rule_changes`, `tracked_link_visits` | Records of what happened. A correction is a new row.                                    |
-| No DELETE                       | `orders`, `invoices`, `payment_intents`, `refunds`, `automation_versions`, `tracked_link_visit_days`                                                                                                                                    | Money and published workflows. Cancel, void or archive instead.                         |
-| UPDATE only `is_stopped`        | `automation_versions`                                                                                                                                                                                                                   | Graph and publication fields stay immutable; the owner may stop old runs.               |
-| UPDATE only `status`, `paid_at` | `invoices`                                                                                                                                                                                                                              | Settlement may change; document corrections use credit notes.                           |
-| DELETE allowed                  | `order_items`                                                                                                                                                                                                                           | Editable-order removal must adjust stock, totals and audit atomically in OrdersService. |
-| INSERT only                     | `outbox_events`                                                                                                                                                                                                                         | Global table; the relay reads it only through `claim_outbox_events` (must-fix 4).       |
-| No DELETE                       | `webhook_events`                                                                                                                                                                                                                        | Purged by `purge_webhook_events` after 7 days.                                          |
+| Grant                           | Tables                                                                                                                                                                                | Why                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| No UPDATE or DELETE             | `account_security_events`, `audit_log`, `staff_audit_log`, `payment_events`, `wallet_ledger`, `stock_movements`, `usage_events`, `consents`, `ai_rule_changes`, `tracked_link_visits` | Records of what happened. A correction is a new row.                                            |
+| SELECT, INSERT, UPDATE, DELETE  | `account_recoveries`, `account_security_notices`                                                                                                                                      | Mutable recovery workflow, delivery state and leases; account security events remain immutable. |
+| No DELETE                       | `orders`, `invoices`, `payment_intents`, `refunds`, `automation_versions`, `tracked_link_visit_days`                                                                                  | Money and published workflows. Cancel, void or archive instead.                                 |
+| UPDATE only `is_stopped`        | `automation_versions`                                                                                                                                                                 | Graph and publication fields stay immutable; the owner may stop old runs.                       |
+| UPDATE only `status`, `paid_at` | `invoices`                                                                                                                                                                            | Settlement may change; document corrections use credit notes.                                   |
+| DELETE allowed                  | `order_items`                                                                                                                                                                         | Editable-order removal must adjust stock, totals and audit atomically in OrdersService.         |
+| INSERT only                     | `outbox_events`                                                                                                                                                                       | Global table; the relay reads it only through `claim_outbox_events` (must-fix 4).               |
+| No DELETE                       | `webhook_events`                                                                                                                                                                      | Purged by `purge_webhook_events` after 7 days.                                                  |
 
 `purge_account_security_events(batch_limit)` is an owner-only function, with EXECUTE revoked from PUBLIC and `dakly_app`. Each call deletes at most 1–1,000 rows strictly older than two years, using locked batches that skip rows another purge holds. It takes no caller-supplied cutoff. The user and staff foreign keys have no delete cascade, so removing an account cannot erase retained history. DB-7 will schedule these calls in the owner maintenance step.
 
-Retention purges of append-only tables (audit log after 2 years, staff audit log after 7) run in the maintenance job as `dakly`, never through the app role.
+Retention purges run as `dakly`, never through the app role. Staff audit rows and daily seals have a minimum seven-year retention policy; ADM-2 provides no purge, retaining them indefinitely. An eventual purge must preserve enough chain evidence for retained-day verification.
 
 `audit_log`, `ai_runs` and `tracked_link_visits` are partitioned by month ([growth.md](growth.md)). The policy and grants are on the parent, and every query goes through it. Each monthly partition has RLS on and no grants for `dakly_app`, so the app cannot read a partition directly and skip the policy. `store-isolation.int.spec.ts` checks both.
 
@@ -81,6 +82,12 @@ Every definer function sets `search_path = pg_catalog, public, pg_temp`, so temp
 | `due_contact_purges(limit)`                   | contacts deleted more than 30 days ago                                                       | Purge job                                              |
 | `active_store_ids()`                          | stores with status `active`                                                                  | Active-store fan-outs; never retention rollups         |
 | `maintenance_store_ids(after, limit)`         | IDs of all retained stores, including suspended and closing, in UUID order; pages of 1–1,000 | Retention rollups before the global watermark advances |
+| `support_store_targets(search)`               | exact shop ID/name lookup by UUID or slug                                                    | Authenticated support request screen                   |
+| `support_request_metadata(staff, before)`     | fifty requester-owned grant metadata rows in ID order                                        | Staff support screen; no customer content              |
+| `support_grant_store(staff, grant)`           | requester-owned grant's store ID                                                             | Approved handoff                                       |
+| `support_session_store(hash, handoff)`        | token-bound store ID only                                                                    | Support session exchange/resolution                    |
+| `staff_conflicts_with_store(staff, store)`    | whether an established linked user is an active member                                       | Support authorization                                  |
+| `seal_staff_audit_day()`                      | one completed UTC day, or null when caught up                                                | Audit worker; no shop content                          |
 | `admin_store_overview(search, limit)`         | store name, plan, status, member count                                                       | Admin stores list (metadata only)                      |
 | `ensure_monthly_partitions(months_ahead)`     | number of partitions created                                                                 | Maintenance job                                        |
 | `drop_expired_partitions()`                   | number of AI run and link visit months dropped                                               | Maintenance job; never drops audit months              |
@@ -114,3 +121,40 @@ The schema keeps the buyer and the delivery recipient apart, and nothing merges 
 `contact_merges.operation_key` remains unique per store after undo or redaction. Before-images, moved IDs and `after_state` support field-level conflict checks, not blind restoration. Undo preserves later edits and withdrawals, records conflicts and rejects a merge with active dependent merges. Consent history is never reassigned: merge and undo append conservative decisions. `ai_rule_changes` is append-only authoritative undo evidence; `audit_log` records the event timeline rather than duplicating every rule image.
 
 Customer purge requires a privileged, narrowly authorized maintenance path because chat messages, consent and other history cannot be freely erased by the app. It defers the affected reference checks as described above, stops pending work, clears memory, deletes chat dependents and customer-linked records, redacts merge images/conflicts and personal payloads, and preserves the opaque operation key. `evidence_redacted_at` disables merge undo. Audit/outbox/job payloads and stored files need the same erasure treatment. The schema supports detachment and cascades; the purge service and tests for complete erasure remain planned. See the detailed [customer contract](../features/03-customers-and-segments.md).
+
+The restricted `preserve_staff_user_identity()` trigger records verified contact matches in `staff_user_links` on user/contact changes and retains old matches. It is not directly executable by the app. `stamp_staff_audit()` controls insert timestamps; `staff_audit_day_hash(day, previous)` streams one day for sealing and verification. These functions explicitly place `pg_temp` last.
+
+## Break-glass alert delivery
+
+`staff_alert_deliveries` is global delivery state keyed by `staff_audit_log.id`, with no copied shop/customer payload and no invented shop-user identity. Intent joins the active tenant transaction through `recordIntent`; failure rolls back both audits and the grant. The admin-home reader joins authoritative staff audit events, checks a current Super admin session under staff locks, and paginates at 50 rows using the action/time/ID audit index. The pending partial index bounds the relay to twenty due events and terminal crash cleanup to one hundred rows. The app may select/insert/update delivery state; the staff audit remains append-only.
+
+The existing `support_request_metadata` definer additionally returns `isBreakGlass`; its exact staff-ID filter, fifty-row limit, qualified tables, fixed search path and restricted execution remain in force. No new cross-tenant definer or bypass role was added. The alert worker payload contains only the global audit ID, deliberately no fabricated store ID, like existing staff audit exports.
+
+### Staff account recovery
+
+`staff_recovery_history` holds only the shop and canonical staff-audit reference,
+with their pair as its primary key. The safe history projection reads the subject,
+reason type and event time from that immutable audit. It has tenant RLS and
+read-only app grants.
+`staff_recovery_stores` returns a bounded snapshot of at most 100 shops and 1,000
+Owners, locking shops in ID order after the account row is locked. It refreshes
+active memberships after any store-lock wait before deriving conflicts, recipients
+and history mappings. Overflow returns
+a marker before acquiring an unbounded lock set. `record_staff_recovery_history`
+inserts mappings from the persisted account recovery audit and current memberships,
+using the canonical action UUID v7 as the cursor. Both narrow functions set
+`search_path = pg_catalog, public, pg_temp`, revoke PUBLIC execution and grant only
+`dakly_app`. The write joins the active account transaction; it never starts nested
+store actions. Read routes take shop identity only from the authenticated session
+and require the current Owner.
+
+Account security decisions hold `FOR NO KEY UPDATE` on the user. This still
+serializes account writers and conflicts with invitation/store-creation identity
+`FOR SHARE` locks, but permits staff association foreign-key `KEY SHARE` checks.
+Before updating a phone or email, recovery and email change acquire all verified
+old and candidate contact advisory locks in kind/value order. Staff provisioning
+prelocks its normalized contact batch with the same PostgreSQL `ORDER BY kind,value`
+as recovery, auth and the identity trigger, using the database collation. Recovery reads committed
+identity associations after the advisory locks. Stronger contact-update locks thus
+cannot form a cycle with association insertion; the user primary key, foreign keys
+and durable identity triggers remain unchanged.

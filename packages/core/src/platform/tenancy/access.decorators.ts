@@ -5,7 +5,7 @@ import type { AccessLevel, Permission, PermissionArea } from '@dakly/contracts/t
 export const ACCESS_RULE = Symbol('ACCESS_RULE');
 export type AccessRule =
   | { kind: 'staff'; authenticated: boolean; roles: StaffIdentity['role'][] }
-  | { kind: 'public' | 'user' | 'member' }
+  | { kind: 'public' | 'user' | 'member' | 'support' | 'support-handoff' }
   | { kind: 'permission'; area: PermissionArea; level: Exclude<AccessLevel, 'none'> };
 
 export function RequirePermission(permission: Permission) {
@@ -19,3 +19,8 @@ export const Public = () => SetMetadata(ACCESS_RULE, { kind: 'public' } satisfie
 
 export const StaffAccess = (authenticated = true, roles: StaffIdentity['role'][] = []) =>
   SetMetadata(ACCESS_RULE, { kind: 'staff', authenticated, roles } satisfies AccessRule);
+
+export const SupportAccess = () =>
+  SetMetadata(ACCESS_RULE, { kind: 'support' } satisfies AccessRule);
+export const SupportHandoff = () =>
+  SetMetadata(ACCESS_RULE, { kind: 'support-handoff' } satisfies AccessRule);

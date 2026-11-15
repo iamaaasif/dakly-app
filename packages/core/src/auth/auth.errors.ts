@@ -1,6 +1,10 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTH_ERRORS = {
+  AUTH_CONTACT_TAKEN: {
+    status: 409,
+    message: 'The replacement contact belongs to another account',
+  },
   AUTH_RECOVERY_OWNER_LIMIT: {
     status: 409,
     message: 'Self-service recovery supports up to 1000 store owners',

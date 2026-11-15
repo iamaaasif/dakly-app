@@ -1,7 +1,8 @@
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { adminEnvironment } from '../platform/config/env';
-export async function requireStaff(): Promise<void> {
+export async function requireStaff(): Promise<StaffIdentity> {
   const incoming = await headers();
   const env = adminEnvironment();
   const origin = new URL(env.ADMIN_ORIGIN);
@@ -17,4 +18,5 @@ export async function requireStaff(): Promise<void> {
     },
   });
   if (!response.ok) redirect('/sign-in');
+  return response.json();
 }

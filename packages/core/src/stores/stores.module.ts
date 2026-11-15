@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { UsersModule } from '../auth/users.module';
 import { Clock } from '../platform/clock';
 import { AuditModule } from '../audit/audit.module';
 import { BillingModule } from '../billing/billing.module';
@@ -10,7 +11,7 @@ import { StoresController } from './stores.controller';
 import { StoresRepository } from './stores.repository';
 import { StoresService } from './stores.service';
 @Module({
-  imports: [AuditModule, BillingModule, SessionsModule, TeamModule],
+  imports: [UsersModule, AuditModule, BillingModule, SessionsModule, TeamModule],
   controllers: [StoresController, PlansController, StoreSettingsController],
   providers: [StoresService, StoresRepository, Clock],
   exports: [StoresService],

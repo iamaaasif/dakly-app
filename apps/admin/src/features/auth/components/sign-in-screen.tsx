@@ -22,7 +22,11 @@ export function SignInScreen() {
       {signIn.data ? (
         <FactorChallenge signIn={signIn.data} />
       ) : (
-        <form className="space-y-4" onSubmit={form.handleSubmit((input) => signIn.mutate(input))}>
+        <form
+          method="post"
+          className="space-y-4"
+          onSubmit={form.handleSubmit((input) => signIn.mutate(input))}
+        >
           <label className="grid gap-2 font-medium">
             Staff email
             <Input
@@ -49,11 +53,9 @@ export function SignInScreen() {
           <p id="password-error" role="alert" className="text-danger">
             {form.formState.errors.password ? 'Enter your password.' : null}
           </p>
-          {signIn.error ? (
-            <p role="alert" className="text-danger">
-              {signIn.error.message}
-            </p>
-          ) : null}
+          <p role="alert" className="text-danger">
+            {signIn.error?.message}
+          </p>
           <Button type="submit" className="w-full" loading={signIn.isPending}>
             Continue
           </Button>
