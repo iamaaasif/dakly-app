@@ -4,6 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SetupScreen } from './setup-screen';
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/setup',
+  useRouter: () => ({ replace: () => undefined }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
