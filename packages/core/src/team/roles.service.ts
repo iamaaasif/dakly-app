@@ -30,10 +30,11 @@ export class RolesService {
   ) {}
 
   async list(storeId: string, query: RoleListQuery): Promise<RoleListResponse> {
-    const rows =
+    const rows = await this.transaction.run(storeId, async () =>
       query.cursor && !(await this.repository.find(storeId, query.cursor))
         ? []
-        : await this.repository.list(storeId, query);
+        : this.repository.list(storeId, query),
+    );
     const items = rows.slice(0, query.limit).map((role) => this.response(role));
     return {
       items,
