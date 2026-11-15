@@ -13,6 +13,7 @@ import { jobLogBindings, runWithJobContext } from '../../platform/logging/job-co
 import { serializeError } from '../../platform/logging/safe-error';
 import { QUEUES } from '../../platform/queue/queues';
 import { StaffHistoryService } from '../staff-history.service';
+import { STAFF_AUDIT_EXPORT } from './staff-audit-export.job';
 
 @Injectable()
 export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -55,7 +56,7 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
     const tasks = await this.history.pending();
     for (const task of tasks)
       await this.queue.add(
-        'staff-audit-export',
+        STAFF_AUDIT_EXPORT,
         { exportId: task.id },
         {
           jobId: task.id,
