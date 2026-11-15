@@ -1,31 +1,26 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import type {
-  TotpRecoveryCodeInput,
-  TotpRecoveryInput,
-  TotpRecoveryTokenInput,
-} from '@dakly/contracts/totp';
+import type { TotpRecoveryCodeInput, TotpRecoveryInput } from '@dakly/contracts/totp';
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { QUEUES } from '../platform/queue/queues';
-import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
 import { accountCredentialState } from './account-credential-state';
 import { AccountRecoveryRepository } from './account-recovery.repository';
-import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 import { securityNoticeJob } from './jobs/send-security-notice.job';
 import { PasswordCredentials } from './password-credentials';
 import { SecurityNoticesService, type SecurityNotice } from './security-notices.service';
 import { SignInCodes } from './sign-in-codes';
-import { TotpRepository } from './totp.repository';
+import { TotpRecoveryFinishService } from './totp-recovery-finish.service';
+import { recoveryTokenHash } from './totp-recovery-token';
 import { TotpService } from './totp.service';
 import { UsersRepository } from './users.repository';
 
@@ -35,7 +30,6 @@ export class TotpRecoveryService {
   constructor(
     @Inject(UsersRepository) private readonly users: UsersRepository,
     @Inject(TotpService) private readonly totp: TotpService,
-    @Inject(TotpRepository) private readonly totpRepository: TotpRepository,
     @Inject(PasswordCredentials) private readonly passwords: PasswordCredentials,
     @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(AccountRecoveryRepository) private readonly repository: AccountRecoveryRepository,
@@ -43,9 +37,9 @@ export class TotpRecoveryService {
     @Inject(AccountTransaction) private readonly transaction: AccountTransaction,
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
     @Inject(TeamService) private readonly team: TeamService,
-    @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(Clock) private readonly clock: Clock,
     @InjectQueue(QUEUES.transactional) private readonly queue: Queue,
+    @Inject(TotpRecoveryFinishService) private readonly finish: TotpRecoveryFinishService,
   ) {}
 
   private async account(phone: string) {
@@ -123,11 +117,11 @@ export class TotpRecoveryService {
       if (accountCredentialState(current) !== state) throw authError('AUTH_PROOF_REQUIRED');
       const owners = await this.team.accountOwnerContacts(user.id);
       if (owners.length > 1000) throw authError('AUTH_RECOVERY_OWNER_LIMIT');
-      await this.cancelPending(user.id, ip);
+      await this.finish.cancelPending(user.id, ip);
       const id = await this.repository.start(user.id, {
         credentialState: state,
-        cancelHash: this.tokenHash(cancelToken),
-        completionHash: this.tokenHash(completionToken),
+        cancelHash: recoveryTokenHash(cancelToken),
+        completionHash: recoveryTokenHash(completionToken),
       });
       noticeIds = await this.notices.enqueue(
         user.id,
@@ -192,67 +186,5 @@ export class TotpRecoveryService {
       grant.proof.expiresAt <= this.clock.now().getTime()
     )
       throw authError('AUTH_PROOF_REQUIRED');
-  }
-
-  async cancelPending(userId: string, ip?: string) {
-    const cancelled = await this.repository.cancelPending(userId);
-    // A single account has at most one pending request; this also repairs older duplicates.
-    await Promise.all(
-      cancelled.map((row) =>
-        this.events.record(userId, {
-          event: 'recovery.cancelled',
-          actor: { kind: 'user' },
-          ip,
-          details: { recoveryId: row.id },
-        }),
-      ),
-    );
-  }
-
-  async cancel(input: TotpRecoveryTokenInput, ip: string) {
-    const userId = await this.repository.identify(input.recoveryId);
-    if (!userId) throw authError('AUTH_TOTP_INVALID');
-    await this.transaction.run(userId, async () => {
-      await this.users.lockForSignIn(userId);
-      const recovery = await this.repository.read(userId, input.recoveryId);
-      if (!recovery || !this.matches(input.token, recovery.cancelHash))
-        throw authError('AUTH_TOTP_INVALID');
-      if (recovery.status === 'pending') await this.cancelPending(userId, ip);
-    });
-  }
-
-  async complete(input: TotpRecoveryTokenInput, ip: string) {
-    const userId = await this.repository.identify(input.recoveryId);
-    if (!userId) throw authError('AUTH_TOTP_INVALID');
-    await this.transaction.run(userId, async () => {
-      const user = await this.totp.current(userId);
-      const recovery = await this.repository.read(userId, input.recoveryId);
-      if (
-        !recovery ||
-        recovery.status !== 'pending' ||
-        !this.matches(input.token, recovery.completionHash) ||
-        recovery.credentialState !== accountCredentialState(user)
-      )
-        throw authError('AUTH_TOTP_INVALID');
-      if (!recovery.eligibleAt || recovery.eligibleAt > this.clock.now())
-        throw authError('AUTH_RECOVERY_PENDING');
-      await this.totpRepository.disable(userId, this.clock.now());
-      await this.sessions.revokeAll(userId, ip);
-      await this.repository.finish(userId, recovery.id);
-      await this.events.record(userId, {
-        event: 'recovery.completed',
-        actor: { kind: 'user' },
-        ip,
-        details: { recoveryId: recovery.id },
-      });
-    });
-  }
-
-  private tokenHash(token: string) {
-    return authKey('totp-recovery-token', token);
-  }
-
-  private matches(token: string, expected: string) {
-    return timingSafeEqual(Buffer.from(this.tokenHash(token)), Buffer.from(expected));
   }
 }

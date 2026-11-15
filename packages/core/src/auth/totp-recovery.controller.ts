@@ -12,12 +12,17 @@ import {
 
 import { Public } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { TotpRecoveryFinishService } from './totp-recovery-finish.service';
 import { TotpRecoveryService } from './totp-recovery.service';
 
 @Controller('auth/totp/recovery')
 @Public()
 export class TotpRecoveryController {
-  constructor(@Inject(TotpRecoveryService) private readonly recovery: TotpRecoveryService) {}
+  constructor(
+    @Inject(TotpRecoveryService) private readonly recovery: TotpRecoveryService,
+    @Inject(TotpRecoveryFinishService) private readonly finish: TotpRecoveryFinishService,
+  ) {}
+
   @Post('code')
   @HttpCode(204)
   code(
@@ -42,7 +47,7 @@ export class TotpRecoveryController {
     @Body(new ZodValidationPipe(totpRecoveryTokenSchema)) input: TotpRecoveryTokenInput,
     @Req() request: FastifyRequest,
   ) {
-    return this.recovery.cancel(input, request.ip);
+    return this.finish.cancel(input, request.ip);
   }
 
   @Post('complete')
@@ -51,6 +56,6 @@ export class TotpRecoveryController {
     @Body(new ZodValidationPipe(totpRecoveryTokenSchema)) input: TotpRecoveryTokenInput,
     @Req() request: FastifyRequest,
   ) {
-    return this.recovery.complete(input, request.ip);
+    return this.finish.complete(input, request.ip);
   }
 }

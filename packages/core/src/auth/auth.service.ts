@@ -2,31 +2,20 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import type {
-  RequestCodeInput,
-  SignUpInput,
-  VerifyCodeInput,
-  RequestEmailCodeInput,
-  VerifyEmailCodeInput,
-} from '@dakly/contracts/auth';
-
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Clock } from '../platform/clock';
-import { hashPassword } from '../platform/crypto/password';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { SessionsService } from '../sessions/sessions.service';
 import { accountCredentialState } from './account-credential-state';
 import { authError } from './auth.errors';
-import { GoogleTickets } from './google-tickets';
 import { securityNoticeJob } from './jobs/send-security-notice.job';
 import { passwordState } from './password-credentials';
 import { SecurityNoticesService } from './security-notices.service';
-import type { SignInRequest, SignInUser } from './sign-in';
-import { SignInCodes } from './sign-in-codes';
-import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { signInSubject, type SignInRequest, type SignInUser } from './sign-in';
+import { SignInFailures } from './sign-in-failures';
 import { TotpChallenges, type TotpChallenge } from './totp-challenges';
-import { TotpRecoveryService } from './totp-recovery.service';
+import { TotpRecoveryFinishService } from './totp-recovery-finish.service';
 import { TotpService } from './totp.service';
 import { UsersRepository } from './users.repository';
 
@@ -44,102 +33,17 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   constructor(
     @Inject(UsersRepository) private readonly users: UsersRepository,
-    @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(SignInFailures) private readonly failures: SignInFailures,
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AccountTransaction) private readonly transaction: AccountTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
-    @Inject(GoogleTickets) private readonly googleTickets: GoogleTickets,
     @Inject(TotpService) private readonly totp: TotpService,
     @Inject(TotpChallenges) private readonly challenges: TotpChallenges,
-    @Inject(TotpRecoveryService) private readonly recovery: TotpRecoveryService,
+    @Inject(TotpRecoveryFinishService) private readonly recovery: TotpRecoveryFinishService,
     @Inject(SecurityNoticesService) private readonly notices: SecurityNoticesService,
     @InjectQueue(QUEUES.transactional) private readonly queue: Queue,
   ) {}
-
-  async requestCode(input: RequestCodeInput, ip: string): Promise<void> {
-    const user = await this.users.findByPhone(input.phone);
-    if (input.purpose === 'sign_up' && user) throw authError('AUTH_ACCOUNT_EXISTS');
-    if (input.purpose === 'sign_in' && !user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
-    await this.codes.send({
-      subject: this.subject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
-      purpose: input.purpose,
-      ip,
-      registration: input.purpose === 'sign_up' ? input : undefined,
-    });
-  }
-
-  async verifyCode(input: VerifyCodeInput, request: SignInRequest) {
-    const user = await this.users.findByPhone(input.phone);
-    const grant = await this.codes.consume(
-      this.subject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
-      input.purpose,
-      input.code,
-      request.ip,
-    );
-    if (input.purpose === 'sign_up') {
-      if (user) throw authError('AUTH_ACCOUNT_EXISTS');
-      if (!grant.registration) throw authError('AUTH_CODE_INVALID');
-      return this.register(input, grant.registration, request);
-    }
-    if (!user || grant.userId !== user.id) throw authError('AUTH_CODE_INVALID');
-    return this.completeSignIn(
-      { id: user.id, target: input.phone, deliveryEmail: grant.email },
-      request,
-    );
-  }
-
-  async requestEmailCode(input: RequestEmailCodeInput, ip: string): Promise<void> {
-    const user = await this.users.findByVerifiedEmail(input.email);
-    if (!user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
-    await this.codes.send({
-      subject: {
-        target: input.email,
-        userId: user.id,
-        email: input.email,
-        phone: user.phone ?? undefined,
-      },
-      purpose: 'sign_in',
-      ip,
-    });
-  }
-
-  private async register(
-    input: VerifyCodeInput,
-    registration: SignUpInput,
-    request: SignInRequest,
-  ) {
-    const google = input.signupTicket
-      ? await this.googleTickets.read(input.signupTicket, 'signup', true)
-      : undefined;
-    return this.completeSignIn(
-      {
-        id: this.users.allocateId(),
-        target: input.phone,
-        registration,
-        google: google ? { identity: google.identity, mode: 'signup' } : undefined,
-        registrationPasswordHash: input.password ? await hashPassword(input.password) : undefined,
-      },
-      request,
-    );
-  }
-
-  async verifyEmailCode(input: VerifyEmailCodeInput, request: SignInRequest) {
-    const user = await this.users.findByVerifiedEmail(input.email);
-    const grant = await this.codes.consume(
-      { target: input.email, userId: user?.id, email: user ? input.email : undefined },
-      'sign_in',
-      input.code,
-      request.ip,
-    );
-    if (!user || grant.userId !== user.id || grant.email !== input.email)
-      throw authError('AUTH_CODE_INVALID');
-    return this.completeSignIn(
-      { id: user.id, target: input.email, kind: 'email', deliveryEmail: grant.email },
-      request,
-    );
-  }
 
   async verifyTotp(challengeId: string, code: string, ip: string) {
     const grant = await this.challenges.attempt(challengeId);
@@ -148,7 +52,7 @@ export class AuthService {
 
   async completeSignIn(user: SignInUser, request: SignInRequest, secondFactor?: SecondFactor) {
     const account = user.registration ? undefined : await this.users.lockForSignIn(user.id);
-    const subject = account ? this.totp.subject(account) : this.subject(user.target);
+    const subject = account ? this.totp.subject(account) : signInSubject(user.target);
     await this.failures.assertAllowed(subject, request.ip);
     let noticeIds: string[] = [];
     const result = await this.transaction.run(user.id, async () => {
@@ -298,9 +202,5 @@ export class AuthService {
         throw authError('AUTH_GOOGLE_CONFLICT');
     }
     await this.events.record(user.id, { event: 'google.linked', actor: { kind: 'user' }, ip });
-  }
-
-  private subject(target: string, userId?: string, email?: string | null): SignInSubject {
-    return { target, userId, phone: target, email: email?.toLowerCase() };
   }
 }
