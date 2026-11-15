@@ -1,11 +1,15 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
 import { EmailModule } from '../email/email.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
+import { loadEnv } from '../platform/config/env';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { QUEUES } from '../platform/queue/queues';
+import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SmsModule } from '../sms/sms.module';
 import { TeamModule } from '../team/team.module';
@@ -45,6 +49,11 @@ import { UsersModule } from './users.module';
     SmsModule,
     AccountSecurityEventsModule,
     ClockModule,
+    // Sign-in and recovery queue notice delivery for the worker.
+    BullModule.registerQueueAsync({
+      name: QUEUES.transactional,
+      useFactory: () => ({ connection: toRedisConnection(loadEnv().REDIS_URL) }),
+    }),
   ],
   controllers: [
     TotpController,

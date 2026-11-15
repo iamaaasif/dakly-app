@@ -8,6 +8,8 @@ import { StaffAuditExportJob } from '@dakly/core/admin/jobs/staff-audit-export.j
 import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
+import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
+import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -20,17 +22,19 @@ import {
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
 
-import { AccountSecurityNoticesJob } from './account-security-notices.job';
+import { JobSchedulers } from './job-schedulers';
 
 @Module({
   providers: [
-    AccountSecurityNoticesJob,
     BulkJobDispatcher,
     TransactionalJobDispatcher,
     StaffAuditExportJob,
     StaffAuditMaintenanceJob,
     StaffAlertDeliveryJob,
     StaffAlertRelayJob,
+    SendDueSecurityNoticesJob,
+    SendSecurityNoticeJob,
+    JobSchedulers,
   ],
   imports: [
     DiscoveryModule,

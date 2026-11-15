@@ -205,7 +205,8 @@ async function recoveryProof(page: Page, fixture: RecoveryFixture) {
       )
     ).rows[0];
   expect((await state(first.recoveryId)).status).toBe('pending');
-  expect((await state(first.recoveryId)).eligible_at).not.toBeNull();
+  // The worker sets eligibility after it delivers every recovery notice.
+  await expect.poll(async () => (await state(first.recoveryId)).eligible_at).not.toBeNull();
   await page.getByRole('button', { name: 'Cancel this recovery request' }).click();
   await expect(page.getByRole('status')).toContainText('cancelled');
   expect((await state(first.recoveryId)).status).toBe('cancelled');

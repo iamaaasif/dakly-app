@@ -2,10 +2,12 @@ import 'reflect-metadata';
 
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 
-import { Module } from '@nestjs/common';
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
+import { Logger, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { hash } from 'argon2';
+import type { Queue } from 'bullmq';
 import { TOTP, Secret } from 'otpauth';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -22,16 +24,31 @@ import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
+import { QUEUES } from '../platform/queue/queues';
+import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
 import { authKey } from './auth-key';
 import { AuthModule } from './auth.module';
+import { SEND_SECURITY_NOTICE, SendSecurityNoticeJob } from './jobs/send-security-notice.job';
+import { SecurityNoticesModule } from './security-notices.module';
 import { SecurityNoticesRepository } from './security-notices.repository';
 import { SecurityNoticesService } from './security-notices.service';
 import { TotpService } from './totp.service';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, AuthModule] })(TestModule);
+Module({
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    SecurityNoticesModule,
+    BullModule.forRoot({
+      connection: toRedisConnection(loadEnv().REDIS_URL),
+      prefix: `test-${randomUUID()}`,
+    }),
+  ],
+  providers: [SendSecurityNoticeJob],
+})(TestModule);
 const password = 'correct-pass123';
 const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 describe('TOTP account security over Fastify', () => {
@@ -161,6 +178,18 @@ describe('TOTP account security over Fastify', () => {
       await app.get(ValkeyClient).connection.del(key);
     }
   });
+  // Runs the notice jobs the requests queued, as the worker would.
+  const deliverNotices = async () => {
+    const queue = app.get<Queue>(getQueueToken(QUEUES.transactional));
+    for (const job of await queue.getJobs(['waiting'])) {
+      expect(job.name).toBe(SEND_SECURITY_NOTICE);
+      await app.get(SendSecurityNoticeJob).handle(job.data);
+      await job.remove();
+    }
+  };
+  const eligibleAt = async (recoveryId: string) =>
+    (await admin.pool.query('select eligible_at from account_recoveries where id=$1', [recoveryId]))
+      .rows[0].eligible_at as Date | null;
   const codeFor = (to: string) =>
     messages
       .findLast((message) => message.to === to && /Your Dakly code/.test(message.text))!
@@ -176,11 +205,10 @@ describe('TOTP account security over Fastify', () => {
       password,
     });
     expect(started.statusCode, started.body).toBe(202);
-    return started.json() as {
-      recoveryId: string;
-      completionToken: string;
-      eligibleAt: string | null;
-    };
+    const body = started.json() as { recoveryId: string; completionToken: string };
+    expect(started.json().eligibleAt).toBeNull();
+    await deliverNotices();
+    return { ...body, eligibleAt: (await eligibleAt(body.recoveryId))?.toISOString() ?? null };
   };
   it.each(['phone', 'email', 'google-linked', 'google-link', 'google-mailbox'])(
     'requires TOTP after %s first-factor verification',
@@ -359,6 +387,7 @@ describe('TOTP account security over Fastify', () => {
       (await request('/auth/totp/recovery/code', { phone: user.phone, method: 'phone' }))
         .statusCode,
     ).toBe(204);
+    await deliverNotices();
     const failure = vi
       .spyOn(MailpitSmsDriver.prototype, 'send')
       .mockRejectedValueOnce(new Error('unavailable'));
@@ -369,6 +398,8 @@ describe('TOTP account security over Fastify', () => {
     });
     expect(started.statusCode).toBe(202);
     expect(started.json().eligibleAt).toBeNull();
+    await deliverNotices();
+    expect(await eligibleAt(started.json().recoveryId)).toBeNull();
     await admin.pool.query(
       'update account_security_notices set retry_at=clock_timestamp() where user_id=$1',
       [user.id],
@@ -708,13 +739,15 @@ describe('TOTP account security over Fastify', () => {
         await connection.query('commit');
         const result = await pending;
         expect(result.statusCode).toBe(202);
+        expect(result.json().eligibleAt).toBeNull();
+        await deliverNotices();
         const recipients = messages
           .filter((message) => message.text.includes(`recoveryId=${result.json().recoveryId}`))
           .map((message) => message.to);
         expect(recipients.sort()).toEqual(
           (change === 'removal' ? [user.phone] : [user.phone, newOwner.phone]).sort(),
         );
-        expect(new Date(result.json().eligibleAt).getTime()).toBeGreaterThanOrEqual(
+        expect((await eligibleAt(result.json().recoveryId))!.getTime()).toBeGreaterThanOrEqual(
           now.getTime() + 7 * 86400000,
         );
       } finally {
@@ -893,6 +926,91 @@ describe('TOTP account security over Fastify', () => {
       ).rows[0].count,
     ).toBe(1);
   });
+  it('queues a new-device notice without waiting for it and delivers it once by id', async () => {
+    const user = await seed(false);
+    const newDevice = (message: { to: string; text: string }) =>
+      message.to === user.phone && message.text.startsWith('A new device signed in');
+    await deliverNotices();
+    const result = await request('/auth/password', { identifier: user.phone, password });
+    expect(result.statusCode).toBe(204);
+    expect(messages.filter(newDevice)).toEqual([]);
+    const {
+      rows: [notice],
+    } = await admin.pool.query(
+      'select id from account_security_notices where user_id=$1 and delivered_at is null',
+      [user.id],
+    );
+    const queue = app.get<Queue>(getQueueToken(QUEUES.transactional));
+    const [job, ...others] = await queue.getJobs(['waiting']);
+    expect(others).toEqual([]);
+    expect(job!.name).toBe(SEND_SECURITY_NOTICE);
+    expect(job!.data).toEqual({ noticeId: notice.id });
+    await app.get(SendSecurityNoticeJob).handle(job!.data);
+    await app.get(SendSecurityNoticeJob).handle(job!.data);
+    await job!.remove();
+    expect(messages.filter(newDevice)).toHaveLength(1);
+    expect(
+      (
+        await admin.pool.query(
+          'select count(*)::int n from account_security_notices where user_id=$1 and delivered_at is null',
+          [user.id],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+  });
+  it('keeps sign-in successful and the notice stored for the sweep when queueing fails', async () => {
+    const user = await seed(false);
+    await deliverNotices();
+    const queue = app.get<Queue>(getQueueToken(QUEUES.transactional));
+    const errors: unknown[][] = [];
+    const log = vi.spyOn(Logger.prototype, 'error').mockImplementation((...values: unknown[]) => {
+      errors.push(values);
+    });
+    const outage = vi
+      .spyOn(queue, 'addBulk')
+      .mockRejectedValueOnce(new Error('private-queue-outage'));
+    try {
+      const result = await request('/auth/password', { identifier: user.phone, password });
+      expect(result.statusCode).toBe(204);
+      expect(result.headers['set-cookie']).toBeDefined();
+    } finally {
+      outage.mockRestore();
+      log.mockRestore();
+    }
+    expect(errors).toEqual([[{ event: 'security' }, 'Account security notice queueing failed']]);
+    expect(await queue.getWaitingCount()).toBe(0);
+    expect(
+      (
+        await admin.pool.query(
+          'select count(*)::int n from account_security_notices where user_id=$1 and delivered_at is null',
+          [user.id],
+        )
+      ).rows[0].n,
+    ).toBe(1);
+  });
+  it('claims one notice by id under the same lease rules', async () => {
+    const user = await seed(false);
+    const repository = app.get(SecurityNoticesRepository);
+    const [noticeId, otherId] = await app.get(SecurityNoticesService).enqueue(user.id, [
+      { channel: 'sms', to: user.phone, text: 'Account security notice' },
+      { channel: 'sms', to: user.phone, text: 'Account security notice' },
+    ]);
+    const claimed = await repository.claim({ noticeId });
+    expect(claimed.map((notice) => notice.id)).toEqual([noticeId]);
+    expect(await repository.claim({ noticeId })).toEqual([]);
+    expect((await repository.claim({ userId: user.id })).map((notice) => notice.id)).toEqual([
+      otherId,
+    ]);
+    await admin.pool.query(
+      "update account_security_notices set lease_until=clock_timestamp()-interval '1 second' where id=$1",
+      [noticeId],
+    );
+    const reclaimed = await repository.claim({ noticeId });
+    expect(reclaimed[0]!.leaseId).not.toBe(claimed[0]!.leaseId);
+    expect(await repository.delivered(claimed[0]!, now)).toBe(false);
+    expect(await repository.delivered(reclaimed[0]!, now)).toBe(true);
+    expect(await repository.claim({ noticeId })).toEqual([]);
+  });
   it('claims bounded notice batches and rejects an acknowledgement from an expired lease', async () => {
     const user = await seed(false);
     const notices = app.get(SecurityNoticesService);
@@ -905,16 +1023,16 @@ describe('TOTP account security over Fastify', () => {
         text: 'Account security notice',
       })),
     );
-    const first = await repository.claim(user.id);
+    const first = await repository.claim({ userId: user.id });
     expect(first).toHaveLength(20);
-    const next = await repository.claim(user.id);
+    const next = await repository.claim({ userId: user.id });
     expect(next).toHaveLength(1);
-    expect(await repository.claim(user.id)).toHaveLength(0);
+    expect(await repository.claim({ userId: user.id })).toHaveLength(0);
     await admin.pool.query(
       "update account_security_notices set lease_until=clock_timestamp()-interval '1 second' where id=$1",
       [first[0]!.id],
     );
-    const reclaimed = await repository.claim(user.id);
+    const reclaimed = await repository.claim({ userId: user.id });
     expect(reclaimed).toHaveLength(1);
     expect(reclaimed[0]!.leaseId).not.toBe(first[0]!.leaseId);
     expect(await repository.delivered(first[0]!, now)).toBe(false);

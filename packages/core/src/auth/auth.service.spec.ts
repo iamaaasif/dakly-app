@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import type { Queue } from 'bullmq';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
@@ -57,7 +58,8 @@ const service = new AuthService(
     issue: async () => ({ status: 'totp_required', challengeId: 'pending-challenge' }),
   } as TotpChallenges,
   {} as TotpRecoveryService,
-  { dispatch: async () => undefined } as SecurityNoticesService,
+  {} as SecurityNoticesService,
+  {} as Queue,
 );
 
 describe('AuthService completion gate', () => {

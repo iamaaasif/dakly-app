@@ -116,7 +116,15 @@ async function main() {
   try {
     await run(
       'pnpm',
-      ['exec', 'turbo', 'run', 'build', '--filter=@dakly/api', '--filter=@dakly/web'],
+      [
+        'exec',
+        'turbo',
+        'run',
+        'build',
+        '--filter=@dakly/api',
+        '--filter=@dakly/worker',
+        '--filter=@dakly/web',
+      ],
       'build',
       environment,
     );
@@ -127,6 +135,8 @@ async function main() {
     fixture = browserFixture(databaseUrl, mailpit.origin, apiEnv, privateKey);
     await fixture.seed();
     const api = start(process.execPath, [`${root}apps/api/dist/main.js`], 'api', apiEnv);
+    // Security notices from sign-in and recovery are sent by the worker, as in production.
+    const worker = start(process.execPath, [`${root}apps/worker/dist/main.js`], 'worker', apiEnv);
     const next = start(
       process.execPath,
       [
@@ -141,8 +151,8 @@ async function main() {
       { ...environment, NODE_ENV: 'production' },
       web,
     );
-    await waitForHealth(`${apiOrigin}/health`, [api, next], controller.signal);
-    await waitForHealth(`${webOrigin}/api/health`, [api, next], controller.signal);
+    await waitForHealth(`${apiOrigin}/health`, [api, worker, next], controller.signal);
+    await waitForHealth(`${webOrigin}/api/health`, [api, worker, next], controller.signal);
     await run(
       process.execPath,
       [requireWeb.resolve('@playwright/test/cli'), 'test', ...process.argv.slice(2)],

@@ -884,14 +884,16 @@ Owners, or an Owner without a verified contact, cannot start self-service recove
 this is an operational recovery limit, not a store-membership limit. The recovering account row is locked first; the same account transaction locks its shops in sorted order and rereads current memberships and Owners before the single bulk notice insert. Disabled Owners remain recipients. Membership removals and ownership transfers that commit while a shop lock is queued are reflected in the final recipients.
 
 Each delivery has a separate encrypted notice using the account-owned
-`account-security-notice` encryption purpose. A bounded worker claims up to 20
-notices every 30 seconds with a two-minute lease, retries with backoff capped at an
-hour, and acknowledges only its own lease. Notices are durable across Redis and
+`account-security-notice` encryption purpose. After the request's transaction
+commits, it queues one job per notice and returns without waiting for a vendor, so the
+recovery response usually has `eligibleAt: null`. The worker claims that notice with a
+two-minute lease. A scheduled sweep claims up to 20 due notices every 30 seconds,
+retries with backoff capped at an hour, and acknowledges only its own lease. Notices are durable across Redis and
 process loss. Vendors run outside database transactions. Delivery is at least
 once, so a timeout or crash may produce duplicate messages. A seven-day
 cancellation window starts only after every required driver accepts its notice;
 delivery failures delay eligibility. Acceptance does not prove the message was
-read. Workers stop polling and await active work on shutdown.
+read. Workers await the active job on shutdown.
 
 After the deadline, explicitly call `POST /auth/totp/recovery/complete` with the
 separate completion token. This removes TOTP and revokes sessions atomically with
@@ -906,7 +908,8 @@ remains the separate ADM-10 flow.
 An unknown user-agent/IP pair produces an encrypted durable new-device alert after
 successful sign-in, by verified email or SMS. The pair is checked under the same
 account lock as session insertion, so simultaneous sign-ins do not enqueue duplicate
-alerts for the same pair. Notice failure never rolls back an issued session.
+alerts for the same pair. The alert is sent by the worker after sign-in; notice or
+queue failure never rolls back an issued session.
 
 ### Staff recovery history (ADM-10)
 

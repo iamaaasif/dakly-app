@@ -45,19 +45,18 @@ export class SecurityNoticesService {
   }
 
   async dispatch(userId?: string) {
-    try {
-      const notices = await this.repository.claim(userId);
-      const deliveries = await Promise.allSettled(notices.map((notice) => this.deliver(notice)));
-      for (const delivery of deliveries)
-        if (delivery.status === 'rejected') this.reportDispatchError(delivery.reason);
-    } catch (error) {
-      this.reportDispatchError(error);
-    }
+    await this.deliverAll(await this.repository.claim({ userId }));
   }
 
-  private reportDispatchError(error: unknown) {
-    this.reportJobError(error);
-    this.logger.error({ event: 'security' }, 'Account security notice polling failed');
+  async dispatchOne(noticeId: string) {
+    await this.deliverAll(await this.repository.claim({ noticeId }));
+  }
+
+  // Every claimed notice settles before the run fails, so no delivery outlives its job.
+  private async deliverAll(notices: ClaimedNotice[]) {
+    const deliveries = await Promise.allSettled(notices.map((notice) => this.deliver(notice)));
+    const failure = deliveries.find((delivery) => delivery.status === 'rejected');
+    if (failure) throw failure.reason;
   }
 
   private reportJobError(error: unknown) {

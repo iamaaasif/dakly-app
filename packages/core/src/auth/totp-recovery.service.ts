@@ -1,6 +1,8 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 
-import { Inject, Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 
 import type {
   TotpRecoveryCodeInput,
@@ -12,12 +14,14 @@ import { AccountSecurityEventsService } from '../account-security-events/account
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { AccountTransaction } from '../platform/database/account-transaction';
+import { QUEUES } from '../platform/queue/queues';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
 import { accountCredentialState } from './account-credential-state';
 import { AccountRecoveryRepository } from './account-recovery.repository';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import { securityNoticeJob } from './jobs/send-security-notice.job';
 import { PasswordCredentials } from './password-credentials';
 import { SecurityNoticesService, type SecurityNotice } from './security-notices.service';
 import { SignInCodes } from './sign-in-codes';
@@ -27,6 +31,7 @@ import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class TotpRecoveryService {
+  private readonly logger = new Logger(TotpRecoveryService.name);
   constructor(
     @Inject(UsersRepository) private readonly users: UsersRepository,
     @Inject(TotpService) private readonly totp: TotpService,
@@ -40,6 +45,7 @@ export class TotpRecoveryService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(Clock) private readonly clock: Clock,
+    @InjectQueue(QUEUES.transactional) private readonly queue: Queue,
   ) {}
 
   private async account(phone: string) {
@@ -111,6 +117,7 @@ export class TotpRecoveryService {
       );
     const cancelToken = randomBytes(32).toString('base64url');
     const completionToken = randomBytes(32).toString('base64url');
+    let noticeIds: string[] = [];
     const recoveryId = await this.transaction.run(user.id, async () => {
       const current = await this.totp.current(user.id);
       if (accountCredentialState(current) !== state) throw authError('AUTH_PROOF_REQUIRED');
@@ -122,7 +129,11 @@ export class TotpRecoveryService {
         cancelHash: this.tokenHash(cancelToken),
         completionHash: this.tokenHash(completionToken),
       });
-      await this.notices.enqueue(user.id, this.deliveries(current, owners, id, cancelToken), id);
+      noticeIds = await this.notices.enqueue(
+        user.id,
+        this.deliveries(current, owners, id, cancelToken),
+        id,
+      );
       await this.events.record(user.id, {
         event: 'recovery.started',
         actor: { kind: 'user' },
@@ -131,9 +142,18 @@ export class TotpRecoveryService {
       });
       return id;
     });
-    await this.notices.dispatch(user.id);
+    await this.sendNotices(noticeIds);
     const recovery = await this.repository.read(user.id, recoveryId);
     return { recoveryId, completionToken, eligibleAt: recovery?.eligibleAt ?? null };
+  }
+
+  // The notices are already stored, so a queue outage leaves them for the scheduled sweep.
+  private async sendNotices(noticeIds: string[]) {
+    try {
+      await this.queue.addBulk(noticeIds.map(securityNoticeJob));
+    } catch {
+      this.logger.error({ event: 'security' }, 'Account security notice queueing failed');
+    }
   }
 
   private deliveries(
