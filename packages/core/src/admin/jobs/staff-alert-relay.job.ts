@@ -12,6 +12,7 @@ import { ErrorReporter } from '../../platform/logging/error-reporter';
 import { jobLogBindings, runWithJobContext } from '../../platform/logging/job-context';
 import { serializeError } from '../../platform/logging/safe-error';
 import { QUEUES } from '../../platform/queue/queues';
+import { JOB_POLL_INTERVAL_MS } from '../../platform/time';
 import { StaffAlertsService } from '../staff-alerts.service';
 
 @Injectable()
@@ -26,7 +27,7 @@ export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplication
   ) {}
 
   onApplicationBootstrap() {
-    this.timer = setInterval(() => this.poll(), 30000);
+    this.timer = setInterval(() => this.poll(), JOB_POLL_INTERVAL_MS);
     this.poll();
   }
 

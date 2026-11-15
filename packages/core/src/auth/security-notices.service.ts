@@ -7,12 +7,14 @@ import { AccountTransaction } from '../platform/database/account-transaction';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
+import { DAY_MS } from '../platform/time';
 import { SmsService } from '../sms/sms.service';
 import { accountCredentialState } from './account-credential-state';
 import { AccountRecoveryRepository } from './account-recovery.repository';
 import { SecurityNoticesRepository, type ClaimedNotice } from './security-notices.repository';
 import { UsersRepository } from './users.repository';
 
+const RECOVERY_NOTICE_PERIOD_MS = 7 * DAY_MS;
 export type SecurityNotice = { channel: 'sms' | 'email'; to: string; text: string };
 @Injectable()
 export class SecurityNoticesService {
@@ -94,7 +96,7 @@ export class SecurityNoticesService {
             notice.userId,
             notice.recoveryId,
             accountCredentialState(current),
-            new Date(this.clock.now().getTime() + 7 * 86400000),
+            new Date(this.clock.now().getTime() + RECOVERY_NOTICE_PERIOD_MS),
           );
       });
     } catch (error) {

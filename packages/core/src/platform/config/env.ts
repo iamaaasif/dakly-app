@@ -41,6 +41,13 @@ const envSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9+/]{43}=$/)
     .optional(),
+  CODE_HASH_KEY: z
+    .string()
+    .refine((value) => {
+      const key = Buffer.from(value, 'base64');
+      return key.length >= 32 && key.toString('base64') === value;
+    })
+    .optional(),
   API_TRUSTED_PROXIES: trustedProxiesSchema,
   API_HOST: z.union([z.ipv4(), z.ipv6()]).default('0.0.0.0'),
   API_PORT: z.coerce.number().int().positive().default(4000),

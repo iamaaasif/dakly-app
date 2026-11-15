@@ -20,12 +20,12 @@ import { createDatabase } from '@dakly/db/client';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { hashPassword } from '../platform/crypto/password';
+import { hashToken } from '../platform/crypto/token-hash';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { AdminModule } from './admin.module';
-import { staffTokenHash } from './staff-tokens';
 
 class ProxyTestModule {}
 Module({ imports: [DatabaseModule, AdminModule] })(ProxyTestModule);
@@ -201,7 +201,7 @@ describe('Staff requests through the actual Next rewrite', () => {
       // Remove only the two randomized loopback client buckets owned by this fixture.
       await app
         .get(ValkeyClient)
-        .connection.del(...clients.map((ip) => `staff:ip:${staffTokenHash(ip).toString('hex')}`));
+        .connection.del(...clients.map((ip) => `staff:ip:${hashToken(ip).toString('hex')}`));
       await app.close();
     }
     vi.unstubAllEnvs();

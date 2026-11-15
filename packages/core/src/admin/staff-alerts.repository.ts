@@ -13,7 +13,9 @@ import {
 import { DATABASE } from '../platform/database/database.tokens';
 import { StaffDatabase } from '../platform/database/staff-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { MINUTE_MS } from '../platform/time';
 
+const ALERT_DELIVERY_LEASE_MS = MINUTE_MS;
 type AlertRetry = { auditId: string; reason: string; ip: string; now: Date };
 
 type DeliveryResult = {
@@ -163,7 +165,7 @@ export class StaffAlertsRepository {
         update staff_alert_deliveries
         set
           lease_id=${leaseId}::uuid,
-          leased_until=${new Date(now.getTime() + 60000)},
+          leased_until=${new Date(now.getTime() + ALERT_DELIVERY_LEASE_MS)},
           attempts=attempts+1
         where audit_id=${id}::uuid
           and status='pending'

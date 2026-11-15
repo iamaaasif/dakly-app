@@ -10,6 +10,7 @@ import { Clock } from '../platform/clock';
 import { EnvelopeEncryption, type EncryptedSecret } from '../platform/crypto/envelope-encryption';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { AccountTransaction } from '../platform/database/account-transaction';
+import { MINUTE_MS } from '../platform/time';
 import { SessionsService } from '../sessions/sessions.service';
 import { accountCredentialState } from './account-credential-state';
 import { authKey } from './auth-key';
@@ -20,6 +21,7 @@ import { SignInFailures, type SignInSubject } from './sign-in-failures';
 import { TotpRepository } from './totp.repository';
 import { UsersRepository } from './users.repository';
 
+const TOTP_SETUP_TTL_MS = 5 * MINUTE_MS;
 type Account = NonNullable<Awaited<ReturnType<UsersRepository['lockForSignIn']>>>;
 type Setup = {
   state: string;
@@ -106,7 +108,7 @@ export class TotpService {
           userId,
           sessionId,
           state: accountCredentialState(current),
-          expiresAt: this.clock.now().getTime() + 300000,
+          expiresAt: this.clock.now().getTime() + TOTP_SETUP_TTL_MS,
           ciphertext: envelope.ciphertext.toString('base64'),
           keyVersion: envelope.keyVersion,
         } satisfies Setup,

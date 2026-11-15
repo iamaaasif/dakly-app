@@ -7,6 +7,9 @@ import type { CodePurpose, SignUpInput } from '@dakly/contracts/auth';
 import { EmailService } from '../email/email.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { loadEnv } from '../platform/config/env';
+import { hashCode } from '../platform/crypto/code-hash';
+import { MINUTE_MS } from '../platform/time';
 import { SmsService } from '../sms/sms.service';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
@@ -15,6 +18,7 @@ import { SignInFailures, type SignInSubject } from './sign-in-failures';
 export type PhoneProof = { phone: string; verifiedAt: string; expiresAt: number };
 export type PasswordProof = { passwordState: string; expiresAt: number; identifierState?: string };
 export type FreshProof = PhoneProof | PasswordProof;
+export const FRESH_PROOF_TTL_MS = 10 * MINUTE_MS;
 type CodeGrant = {
   userId?: string;
   registration?: SignUpInput;
@@ -150,6 +154,6 @@ export class SignInCodes {
   }
 
   private hash(target: string, purpose: CodePurpose, code: string): string {
-    return authKey('code-hash', JSON.stringify([target, purpose, code]));
+    return `auth:code-hash:${hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify([target, purpose, code]))}`;
   }
 }

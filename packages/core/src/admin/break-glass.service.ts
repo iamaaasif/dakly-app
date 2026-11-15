@@ -10,13 +10,15 @@ import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { MINUTE_MS } from '../platform/time';
+import { RiskyActionConfirmation, RISKY_ACTION_CONFIRM_MS } from './risky-action-confirmation';
 import { StaffAlertsService } from './staff-alerts.service';
 import { SupportAuditService } from './support-audit.service';
 import { supportError } from './support.errors';
 import { SupportRepository } from './support.repository';
 import { SupportService } from './support.service';
 
+const BREAK_GLASS_MINUTES = 30;
 type Staff = StaffIdentity & { sessionId: string };
 @Injectable()
 export class BreakGlassService {
@@ -45,9 +47,9 @@ export class BreakGlassService {
         shopName: await this.repository.storeName(target.id),
         access: 'read',
         scopes: ['customers'],
-        durationMinutes: 30,
-        expiresAt: new Date(now + 1800000).toISOString(),
-        confirmBy: new Date(now + 300000).toISOString(),
+        durationMinutes: BREAK_GLASS_MINUTES,
+        expiresAt: new Date(now + BREAK_GLASS_MINUTES * MINUTE_MS).toISOString(),
+        confirmBy: new Date(now + RISKY_ACTION_CONFIRM_MS).toISOString(),
       });
       return { effect, proof: this.confirmation.sign(effect) };
     });

@@ -15,6 +15,7 @@ import { AuthModule } from '../auth/auth.module';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { hashPassword } from '../platform/crypto/password';
+import { hashToken } from '../platform/crypto/token-hash';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StaffTransaction } from '../platform/database/staff-transaction';
@@ -29,7 +30,6 @@ import { StaffAuditRepository } from './staff-audit.repository';
 import { StaffProvisionModule } from './staff-provision.module';
 import { StaffProvisionService } from './staff-provision.service';
 import { StaffSessionsService } from './staff-sessions.service';
-import { staffTokenHash } from './staff-tokens';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule, AdminModule, StaffProvisionModule] })(TestModule);
@@ -214,7 +214,7 @@ describe('Staff authentication over Fastify and PostgreSQL', () => {
     const proof = randomBytes(32).toString('base64url');
     await database.pool.query(
       "insert into staff_challenges(token_hash,staff_user_id,purpose,expires_at) values($1,$2,'enroll',$3)",
-      [staffTokenHash(proof), staff.id, new Date(now.getTime() + 86400000)],
+      [hashToken(proof), staff.id, new Date(now.getTime() + 86400000)],
     );
     expect(
       (await request(staff.assertion, '/admin/auth/sign-in', { email: staff.email, password }))
@@ -352,7 +352,7 @@ describe('Staff authentication over Fastify and PostgreSQL', () => {
     const authenticator = passkeyFixture();
     await database.pool.query(
       "insert into staff_challenges(token_hash,staff_user_id,purpose,expires_at) values($1,$2,'enroll',$3)",
-      [staffTokenHash(proof), staff.id, new Date(now.getTime() + 86400000)],
+      [hashToken(proof), staff.id, new Date(now.getTime() + 86400000)],
     );
     const begin = await request(staff.assertion, '/admin/auth/enroll', {
       proof,

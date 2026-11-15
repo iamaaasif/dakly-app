@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
@@ -9,6 +9,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { TeamService } from '../team/team.service';
@@ -91,7 +92,7 @@ export class SessionsService {
     const token = randomBytes(32).toString('base64url');
     const now = this.clock.now();
     const session = await this.repository.insert(userId, {
-      tokenHash: hash(token),
+      tokenHash: hashToken(token),
       input,
       now,
       expiresAt: new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
@@ -100,7 +101,7 @@ export class SessionsService {
   }
 
   async resolve(token: string): Promise<Session | undefined> {
-    const session = await this.repository.findByTokenHash(hash(token), this.clock.now());
+    const session = await this.repository.findByTokenHash(hashToken(token), this.clock.now());
     const now = this.clock.now();
     if (!session || session.expiresAt.getTime() <= now.getTime()) return undefined;
     if (session.lastSeenAt.getTime() <= now.getTime() - TOUCH_INTERVAL) {
@@ -156,9 +157,6 @@ export class SessionsService {
   }
 }
 
-function hash(token: string): Buffer {
-  return createHash('sha256').update(token).digest();
-}
 function lifetimeMilliseconds(isRemembered: boolean): number {
   return (isRemembered ? 30 * 24 : 12) * 60 * 60 * 1000;
 }

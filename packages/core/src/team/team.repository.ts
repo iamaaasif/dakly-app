@@ -19,7 +19,9 @@ export class TeamRepository {
 
   async lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {
     return this.tenant.forStore(storeId, async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${userId}, 0))`);
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended('user:' || ${userId}, 0))`,
+      );
       const result = await tx.execute<{ storeId: string }>(
         sql`
           select store_id as "storeId"
