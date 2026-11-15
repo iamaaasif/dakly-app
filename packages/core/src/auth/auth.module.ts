@@ -5,7 +5,7 @@ import { TeamModule } from '../team/team.module';
 import { TotpController } from './totp.controller';
 import { TotpService } from './totp.service';
 import { TotpRepository } from './totp.repository';
-import { TotpCredentials } from './totp-credentials';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { TotpChallenges } from './totp-challenges';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { GoogleService } from './google.service';

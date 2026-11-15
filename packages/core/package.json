@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:int": "vitest run --config vitest.int.config.ts"
+    "test:int": "vitest run --config vitest.int.config.mts"
   },
   "dependencies": {
     "@dakly/contracts": "workspace:*",
@@ -26,13 +26,16 @@
     "drizzle-orm": "^0.45.0",
     "fastify": "5.12.8",
     "ioredis": "5.11.1",
+    "jose": "6.2.17",
     "nestjs-pino": "4.6.1",
     "otpauth": "9.4.1",
     "pino": "9.9.5",
     "pino-http": "10.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "@nestjs/bullmq": "11.0.5",
+    "bullmq": "5.81.5"
   },
   "devDependencies": {
     "@nestjs/platform-fastify": "^11.2.9",

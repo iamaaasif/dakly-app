@@ -5,6 +5,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   AnyMember,
+  StaffAccess,
   Public,
   RequirePermission,
   RequireUser,
@@ -94,6 +95,17 @@ class InheritedRoutes {
 @Controller('inherited')
 class InheritedController extends InheritedRoutes {}
 
+@Controller('admin/unmarked')
+@Public()
+class PublicAdminController {
+  @Get() read() {}
+}
+@Controller('admin/marked')
+@StaffAccess(false)
+class MarkedAdminController {
+  @Get() read() {}
+}
+
 describe('Route access inventory', () => {
   const apps: NestFastifyApplication[] = [];
 
@@ -167,6 +179,13 @@ describe('Route access inventory', () => {
       'AccessOverrideController.public',
       'AccessOverrideController.user',
     ]);
+  });
+
+  it('requires the staff access kind on every admin route', async () => {
+    const unmarked = await fixtureApp(PublicAdminController);
+    expect(() => assertRouteAccess(unmarked)).toThrow('admin route needs StaffAccess');
+    const marked = await fixtureApp(MarkedAdminController);
+    expect(assertRouteAccess(marked)).toEqual(['MarkedAdminController.read']);
   });
 
   it('includes inherited HTTP handlers', async () => {
