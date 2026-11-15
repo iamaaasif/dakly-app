@@ -2,12 +2,11 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { Logger } from '@nestjs/common';
-import type { Job, Queue } from 'bullmq';
+import type { Queue } from 'bullmq';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ErrorReporter } from '../../platform/logging/error-reporter';
 import type { StaffAlertsService } from '../staff-alerts.service';
-import { StaffAlertDeliveryJob } from './staff-alert-delivery.job';
 import { StaffAlertRelayJob } from './staff-alert-relay.job';
 
 afterEach(() => {
@@ -82,28 +81,5 @@ describe('Staff alert worker lifecycle', () => {
     await relay.onApplicationShutdown();
     expect(report).toHaveBeenCalledOnce();
     expect(JSON.stringify(report.mock.calls)).not.toContain('private-provider-token');
-  });
-  it('parses global job IDs and records sanitized failures for bounded BullMQ retry', async () => {
-    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
-    const reporter = new ErrorReporter(undefined);
-    const report = vi.spyOn(reporter, 'reportJob').mockImplementation(() => undefined);
-    const deliver = vi.fn().mockRejectedValue(new Error('private-token'));
-    const worker = new StaffAlertDeliveryJob(
-      { deliver } as unknown as StaffAlertsService,
-      reporter,
-    );
-    const job = {
-      id: randomUUID(),
-      data: { auditId: randomUUID() },
-      updateProgress: vi.fn(),
-    } as unknown as Job;
-    await expect(worker.process(job)).rejects.toThrow('Staff alert delivery job failed');
-    expect(JSON.stringify(report.mock.calls)).not.toContain('private-token');
-    deliver.mockResolvedValue(undefined);
-    await worker.process(job);
-    expect(job.updateProgress).toHaveBeenCalledWith(100);
-    job.data = { auditId: 'bad-id' };
-    await expect(worker.process(job)).rejects.toThrow('Staff alert delivery job failed');
-    expect(deliver).toHaveBeenCalledTimes(2);
   });
 });

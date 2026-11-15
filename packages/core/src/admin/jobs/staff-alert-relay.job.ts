@@ -14,6 +14,7 @@ import { serializeError } from '../../platform/logging/safe-error';
 import { QUEUES } from '../../platform/queue/queues';
 import { JOB_POLL_INTERVAL_MS } from '../../platform/time';
 import { StaffAlertsService } from '../staff-alerts.service';
+import { STAFF_ALERT_DELIVERY } from './staff-alert-delivery.job';
 
 @Injectable()
 export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -52,7 +53,7 @@ export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplication
       const existing = await this.queue.getJob(task.id);
       if (existing && (await existing.getState()) === 'failed') await existing.remove();
       await this.queue.add(
-        'staff-alert-delivery',
+        STAFF_ALERT_DELIVERY,
         { auditId: task.id },
         {
           jobId: task.id,
