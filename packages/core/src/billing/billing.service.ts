@@ -32,7 +32,7 @@ export class BillingService {
   }
 
   async startPlan(storeId: string, code: string, cycle: (typeof billingCycles)[number]) {
-    const plan = await this.repository.findPlan(code);
+    const plan = await this.repository.findPlan(storeId, code);
     if (!plan || plan.kind !== 'plan' || !plan.isPublic) throw billingError('PLAN_NOT_FOUND');
     const price = cycle === 'monthly' ? plan.monthlyPricePoisha : plan.yearlyPricePoisha;
     if (price > 0 && plan.trialDays === 0) throw billingError('PLAN_NEEDS_PAYMENT');

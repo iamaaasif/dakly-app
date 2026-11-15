@@ -50,12 +50,10 @@ export class BillingRepository {
     return rows.map((row) => ({ ...row, limits: planLimitsSchema.parse(row.limits) }));
   }
 
-  async findPlan(code: string): Promise<Plan | undefined> {
-    const [row] = await this.database
-      .select(planColumns)
-      .from(plans)
-      .where(eq(plans.code, code))
-      .limit(1);
+  async findPlan(storeId: string, code: string): Promise<Plan | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select(planColumns).from(plans).where(eq(plans.code, code)).limit(1),
+    );
     return row ? { ...row, limits: planLimitsSchema.parse(row.limits) } : undefined;
   }
 
