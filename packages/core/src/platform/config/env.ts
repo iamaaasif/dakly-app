@@ -110,6 +110,8 @@ function assertStaffEnv(env: Env): void {
       !env.STAFF_SESSION_SIGNING_KEY
     )
       throw new Error('Staff Access and session configuration is required in production');
+    // Without it every sign-in and backup code fails at the first request instead of at startup.
+    if (!env.CODE_HASH_KEY) throw new Error('CODE_HASH_KEY is required in production');
     if (!env.ADMIN_ORIGIN.startsWith('https://'))
       throw new Error('Admin origin must use HTTPS in production');
   }
