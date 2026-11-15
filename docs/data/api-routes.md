@@ -31,6 +31,38 @@ Merge requests carry a stable operation key through all retries, including retri
 | `POST /public/stores/:storeSlug/order-link/:shortCode/confirm`    | Customer confirms an order                                                                     |
 | `GET /l/:code`                                                    | Tracked link redirect, or SMS opt-out page                                                     |
 
+### Account security routes (ACC-7)
+
+All writes require an allowed browser origin. `/me` routes require a verified
+session; `/auth/totp` routes are public and validate their proofs or opaque tokens.
+First-factor sign-in endpoints return 204 with the session cookie after full
+success, or 202 `{ status: "totp_required", challengeId }` without a cookie.
+
+| Route                               | Input and response                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /me/sessions`                  | Optional `before` UUID; `{ items, nextCursor }`, up to 100 active devices                        |
+| `DELETE /me/sessions/:sessionId`    | Owned UUID; 204, clears the cookie when deleting the current session                             |
+| `POST /me/sessions/sign-out-others` | 204; retains only the current session                                                            |
+| `POST /me/totp/proof`               | 204; sends a fresh setup proof code                                                              |
+| `POST /me/totp/setup`               | `{ currentPassword }` or `{ proofCode }`; 200 `{ setupId, uri }`                                 |
+| `POST /me/totp/confirm`             | `{ setupId, code }`; 200 `{ backupCodes }`, ten codes shown once                                 |
+| `POST /me/totp/disable`             | `{ code }`, authenticator or backup code; 204                                                    |
+| `POST /auth/totp`                   | `{ challengeId, code }`; 204 with a session cookie only after verification                       |
+| `POST /auth/totp/recovery/code`     | `{ phone, method: "phone" or "email" }`; 204                                                     |
+| `POST /auth/totp/recovery`          | `{ phone, phoneCode, emailCode?, password? }`; 202 `{ recoveryId, completionToken, eligibleAt }` |
+| `POST /auth/totp/recovery/cancel`   | `{ recoveryId, token }` with the cancel-link token; 204                                          |
+| `POST /auth/totp/recovery/complete` | `{ recoveryId, token }` with the separate completion token; 204, no session                      |
+
+`eligibleAt` is null until required notices are accepted. Completion returns
+`409 AUTH_RECOVERY_PENDING` until seven days after acceptance. The completion token
+is returned once; cancel links never authorize completion. More than 1000 distinct
+store Owners gives `409 AUTH_RECOVERY_OWNER_LIMIT` before recovery state changes;
+an Owner without verified contact gives `409 AUTH_RECOVERY_CONTACT_REQUIRED`.
+The cancellation page at `/security/recovery#recoveryId=…&cancelToken=…` is built
+in ACC-8. It must parse the fragment locally and require an explicit POST action.
+`GET /me` adds `hasPassword`, `isPhoneVerified`, `isEmailVerified` and
+`isTotpEnabled`; hashes, secrets and proof state are never returned.
+
 ## Store and team (01)
 
 | Route                                                                                                                                                          | Permission      |
@@ -56,6 +88,18 @@ resend is explicit. See [account and team](../features/01-account-and-team.md).
 | `POST /channel-connections/:channelConnectionId/reconnect`, `DELETE /channel-connections/:channelConnectionId` | `storeSettings` |
 | `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`         |
 | `GET /sms-sender-ids`, `POST /sms-sender-ids`                                                                  | `storeSettings` |
+
+Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
+requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
+patches preserve omitted fields and clear optional fields with `null`; name
+cannot be cleared. BIN uses `vatBin` (13 digits), and the trade licence uses
+`tradeLicenceNumber`. Empty or unknown input is rejected.
+`PATCH /store/extensions` accepts `{ extensions: [...] }` as the complete
+selection of `chats`, `sales` and `social_auto_post`, including an empty array.
+It returns the updated settings and requires Owner or Admin through the team
+policy; custom settings grants do not permit this action. Core stays implicit,
+and Physical Shop is excluded in release 1. Both writes audit field names
+atomically and retain business data when an extension is disabled.
 
 ## Customers and segments (03)
 

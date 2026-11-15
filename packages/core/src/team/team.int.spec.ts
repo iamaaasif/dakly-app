@@ -5,13 +5,16 @@ import { users } from '@dakly/db/schema/auth';
 import { stores } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { AccountDatabase } from '../platform/database/account-database';
 import { TeamRepository } from './team.repository';
 import { TeamService } from './team.service';
 
 describe('TeamService (Postgres)', () => {
   const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const app = createDatabase(process.env.DATABASE_URL!);
-  const service = new TeamService(new TeamRepository(new TenantDatabase(app.db), app.db));
+  const service = new TeamService(
+    new TeamRepository(new TenantDatabase(app.db), app.db, new AccountDatabase(app.db)),
+  );
   let userId: string;
   let storeId: string;
   let otherStoreId: string;
@@ -46,13 +49,13 @@ describe('TeamService (Postgres)', () => {
       areas: { customers: 'view' },
     });
     expect(await service.accessFor(otherStoreId, userId)).toBeUndefined();
-    expect(await service.storesFor(userId)).toEqual([{ storeId, name: 'Rina shop' }]);
+    expect((await service.storesFor(userId)).items).toEqual([{ storeId, name: 'Rina shop' }]);
     await admin.db
       .update(memberships)
       .set({ status: 'removed' })
       .where(eq(memberships.userId, userId));
     expect(await service.accessFor(storeId, userId)).toBeUndefined();
-    expect(await service.storesFor(userId)).toEqual([]);
+    expect((await service.storesFor(userId)).items).toEqual([]);
   });
   it('loads current custom role flags and areas in the membership query', async () => {
     const [role] = await admin.db

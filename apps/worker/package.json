@@ -6,7 +6,8 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@dakly/core": "workspace:*",
@@ -14,11 +15,14 @@
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "bullmq": "^5.60.0",
+    "nestjs-pino": "4.6.1",
+    "pino": "9.9.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "vitest": "4.1.12"
   }
 }
