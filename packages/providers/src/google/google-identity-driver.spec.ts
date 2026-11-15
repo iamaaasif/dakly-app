@@ -1,6 +1,8 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
+
 import { OAuth2Client } from 'google-auth-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { GoogleTokenDriver } from './google-token-driver';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

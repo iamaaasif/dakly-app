@@ -1,5 +1,6 @@
-import { requireSession } from '@/lib/require-session';
 import { SettingsScreen } from '@/features/settings/components/settings-screen';
+import { requireSession } from '@/lib/require-session';
+
 export default async function SettingsPage({
   searchParams,
 }: {

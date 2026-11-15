@@ -1,7 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { StorePage } from '@/components/store-page';
+
 import { SettingsContent } from './settings-content';
+import { StorePage } from '@/components/store-page';
+
 export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
   return (
     <StorePage permission="canViewStoreSettings">

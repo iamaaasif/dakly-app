@@ -14,6 +14,7 @@ import {
   primaryKey,
   date,
 } from 'drizzle-orm/pg-core';
+
 import {
   campaignChannels,
   campaignPauseReasons,
@@ -26,9 +27,10 @@ import {
   trackedLinkKinds,
   trackedLinkSourceTypes,
 } from '@dakly/contracts/campaigns';
+
+import { uuidv7 } from '../uuid-v7';
 import { users } from './auth';
 import { channelConnections } from './channels';
-import { uuidv7 } from '../uuid-v7';
 import { bytea, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contactIdentities, contacts } from './contacts';
 import { stores } from './stores';

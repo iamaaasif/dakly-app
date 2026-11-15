@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
+
 import { apiRequest } from './api-client';
 
 export const sessionContextKey = ['session-context'] as const;

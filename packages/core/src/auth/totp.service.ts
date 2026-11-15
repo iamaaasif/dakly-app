@@ -1,21 +1,24 @@
-import { SessionsService } from '../sessions/sessions.service';
 import { randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { TotpConfirmInput, TotpSetupInput } from '@dakly/contracts/totp';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { EnvelopeEncryption, type EncryptedSecret } from '../platform/crypto/envelope-encryption';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { UsersRepository } from './users.repository';
-import { TotpRepository } from './totp.repository';
+import { EnvelopeEncryption, type EncryptedSecret } from '../platform/crypto/envelope-encryption';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { PasswordCredentials } from './password-credentials';
-import { SignInCodes } from './sign-in-codes';
-import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
 import { accountCredentialState } from './account-credential-state';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import { PasswordCredentials } from './password-credentials';
+import { SignInCodes } from './sign-in-codes';
+import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { TotpRepository } from './totp.repository';
+import { UsersRepository } from './users.repository';
 
 type Account = NonNullable<Awaited<ReturnType<UsersRepository['lockForSignIn']>>>;
 type Setup = {
@@ -42,11 +45,13 @@ export class TotpService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(SessionsService) private readonly sessions: SessionsService,
   ) {}
+
   async current(userId: string): Promise<Account> {
     const user = await this.users.lockForSignIn(userId);
     if (!user || user.isDisabled) throw authError('AUTH_TOTP_INVALID');
     return user;
   }
+
   subject(user: Account): SignInSubject {
     return {
       userId: user.id,
@@ -56,6 +61,7 @@ export class TotpService {
       binding: user.id,
     };
   }
+
   async requestSetupProof(userId: string, ip: string) {
     const user = await this.current(userId);
     await this.codes.send(this.subject(user), 'totp_setup', ip, undefined, {
@@ -63,6 +69,7 @@ export class TotpService {
       identifierState: accountCredentialState(user),
     });
   }
+
   async setup(userId: string, sessionId: string, input: TotpSetupInput, ip: string) {
     const user = await this.current(userId);
     const subject = this.subject(user);
@@ -163,6 +170,7 @@ export class TotpService {
       return { backupCodes };
     });
   }
+
   async verify(user: Account, code: string): Promise<boolean> {
     if (!user.totpEnabledAt || !user.totpSecretCiphertext || !user.totpKeyVersion) return false;
     if (/^[a-f0-9]{20}$/.test(code))
@@ -178,6 +186,7 @@ export class TotpService {
       plaintext.fill(0);
     }
   }
+
   async disable(userId: string, code: string, ip: string) {
     const subject = this.subject(await this.current(userId));
     await this.failures.assertAllowed(subject, ip);

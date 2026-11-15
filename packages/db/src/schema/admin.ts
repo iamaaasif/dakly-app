@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import {
   abuseReportCategories,
   abuseReportSources,
@@ -23,8 +24,9 @@ import {
   supportGrantAccess,
   supportGrantStatuses,
 } from '@dakly/contracts/admin';
-import { bytea, citext, createdAt, id, inet, isOneOf, timestamptz, updatedAt } from './columns';
+
 import { users } from './auth';
+import { bytea, citext, createdAt, id, inet, isOneOf, timestamptz, updatedAt } from './columns';
 import { stores } from './stores';
 
 // Dakly staff for the admin app. Never shop users (feature 12).

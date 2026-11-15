@@ -1,6 +1,8 @@
 import { permissionAreas } from '@dakly/contracts/team';
+
 import { PermissionAreaField } from './permission-area-field';
 import { PermissionFlagField } from './permission-flag-field';
+
 export function PermissionFields() {
   return (
     <fieldset className="space-y-4">

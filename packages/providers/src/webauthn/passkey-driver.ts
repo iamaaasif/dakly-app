@@ -1,15 +1,17 @@
-import type {
-  PasskeyCreationOptions,
-  PasskeyRequestOptions,
-  StaffRegistrationInput,
-  StaffAuthenticationInput,
-} from '@dakly/contracts/staff-auth';
 import {
   generateRegistrationOptions,
   generateAuthenticationOptions,
   verifyRegistrationResponse,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
+
+import type {
+  PasskeyCreationOptions,
+  PasskeyRequestOptions,
+  StaffRegistrationInput,
+  StaffAuthenticationInput,
+} from '@dakly/contracts/staff-auth';
+
 export class PasskeyDriver {
   constructor(private readonly origin: string) {}
   async registration(staff: { id: string; email: string }): Promise<PasskeyCreationOptions> {
@@ -31,6 +33,7 @@ export class PasskeyDriver {
       attestation: options.attestation,
     };
   }
+
   async authentication(credentials: Array<{ id: string }>): Promise<PasskeyRequestOptions> {
     const options = await generateAuthenticationOptions({
       rpID: new URL(this.origin).hostname,
@@ -44,6 +47,7 @@ export class PasskeyDriver {
       allowCredentials: credentials.map(({ id }) => ({ id, type: 'public-key' })),
     };
   }
+
   async register(response: StaffRegistrationInput['credential'], challenge: string) {
     const result = await verifyRegistrationResponse({
       response,
@@ -57,6 +61,7 @@ export class PasskeyDriver {
       throw new Error('Passkey verification failed');
     return result.registrationInfo.credential;
   }
+
   async authenticate(
     response: StaffAuthenticationInput['credential'],
     challenge: string,

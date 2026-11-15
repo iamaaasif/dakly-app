@@ -1,4 +1,5 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
+
 const STORE_ERRORS = {
   STORE_EXTENSIONS_DENIED: {
     status: 403,

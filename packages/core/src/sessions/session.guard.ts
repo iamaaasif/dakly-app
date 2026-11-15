@@ -1,9 +1,3 @@
-import { bindVerifiedStore } from '../platform/logging/request-logging';
-import { PinoLogger } from 'nestjs-pino';
-import { sessionContextTag } from './session-context';
-import { sessionError } from './sessions.errors';
-import { Reflector } from '@nestjs/core';
-import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
 import {
   type CanActivate,
   type ExecutionContext,
@@ -11,11 +5,18 @@ import {
   Injectable,
   Optional,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { PinoLogger } from 'nestjs-pino';
+
+import { SESSION_COOKIE, setSessionCookie } from '../platform/http/session-cookie';
+import { bindVerifiedStore } from '../platform/logging/request-logging';
+import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { TeamService } from '../team/team.service';
+import { sessionContextTag } from './session-context';
+import { sessionError } from './sessions.errors';
 import { SessionsService } from './sessions.service';
-import { SESSION_COOKIE, setSessionCookie } from '../platform/http/session-cookie';
 
 @Injectable()
 export class SessionGuard implements CanActivate {
@@ -25,6 +26,7 @@ export class SessionGuard implements CanActivate {
     @Inject(TeamService) private readonly team: TeamService,
     @Optional() @Inject(PinoLogger) private readonly logger?: PinoLogger,
   ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<FastifyRequest & StoreRequest>();
     delete request.userId;

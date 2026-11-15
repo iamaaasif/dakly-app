@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
-import { describe, expect, it, vi } from 'vitest';
 import type { Queue } from 'bullmq';
+import { describe, expect, it, vi } from 'vitest';
+
 import type { ErrorReporter } from '../../platform/logging/error-reporter';
 import { jobLogBindings, runWithJobContext } from '../../platform/logging/job-context';
 import type { StaffAlertsService } from '../staff-alerts.service';

@@ -14,11 +14,13 @@ import {
   uuid,
   vector,
 } from 'drizzle-orm/pg-core';
+
 import {
   productStatuses,
   restockRequestStatuses,
   stockMovementKinds,
 } from '@dakly/contracts/products';
+
 import { users } from './auth';
 import { conversations } from './chats';
 import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';

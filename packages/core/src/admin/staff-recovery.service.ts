@@ -1,4 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
+
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import {
   staffRecoveryEffectSchema,
   type StaffRecoveryRequest,
@@ -7,22 +9,23 @@ import {
   type StaffRecoveryConfirmation,
   type StaffRecoveryEffect,
 } from '@dakly/contracts/staff-recovery';
-import type { StaffIdentity } from '@dakly/contracts/staff-auth';
-import { isStaffSessionCurrent } from './staff-session-policy';
-import { UsersService } from '../auth/users.service';
+
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { SignInCodes } from '../auth/codes.module';
 import { SecurityNoticesService, type SecurityNotice } from '../auth/security-notices.service';
-import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { SessionsService } from '../sessions/sessions.service';
-import { AccountTransaction } from '../platform/database/account-transaction';
+import { UsersService } from '../auth/users.service';
 import { Clock } from '../platform/clock';
+import { AccountTransaction } from '../platform/database/account-transaction';
 import { newId } from '../platform/database/new-id';
+import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
+import { RiskyActionConfirmation } from './risky-action-confirmation';
 import { StaffAuditService } from './staff-audit.service';
 import { StaffIdentityService } from './staff-identity.service';
-import { RiskyActionConfirmation } from './risky-action-confirmation';
-import { StaffRecoveryRepository, type RecoveryStores } from './staff-recovery.repository';
 import { recoveryError } from './staff-recovery.errors';
+import { StaffRecoveryRepository, type RecoveryStores } from './staff-recovery.repository';
+import { isStaffSessionCurrent } from './staff-session-policy';
+
 type Staff = StaffIdentity & { sessionId: string };
 type RecoveryAccount = NonNullable<Awaited<ReturnType<UsersService['recoveryState']>>>;
 @Injectable()
@@ -41,6 +44,7 @@ export class StaffRecoveryService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async lookup(staff: Staff, identifier: string) {
     const targetId = await this.users.recoveryTarget(identifier);
     if (!targetId) throw recoveryError('RECOVERY_DENIED');
@@ -49,6 +53,7 @@ export class StaffRecoveryService {
       return { id: user.id, name: user.name };
     });
   }
+
   preview(staff: Staff, input: StaffRecoveryRequest): Promise<StaffRecoveryPreview> {
     return this.transaction.run(input.targetId, async () => {
       const { user, stores } = await this.authorize(staff, input);
@@ -66,6 +71,7 @@ export class StaffRecoveryService {
       return { effect, proof: this.confirmation.sign(effect) };
     });
   }
+
   async requestCode(staff: Staff, input: StaffRecoveryCode, ip: string) {
     this.verify(staff, input);
     await this.transaction.run(input.effect.targetId, async () => {
@@ -79,6 +85,7 @@ export class StaffRecoveryService {
       ip,
     );
   }
+
   async recover(staff: Staff, input: StaffRecoveryConfirmation, ip: string) {
     this.verify(staff, input);
     const effect = input.effect;
@@ -113,6 +120,7 @@ export class StaffRecoveryService {
       return { id: effect.id };
     });
   }
+
   private async authorize(
     staff: Staff,
     input: Pick<StaffRecoveryRequest, 'targetId' | 'newPhone' | 'newEmail'>,
@@ -134,10 +142,12 @@ export class StaffRecoveryService {
       throw recoveryError('RECOVERY_CONTACT');
     return { user, stores };
   }
+
   private assertChecks(input: StaffRecoveryRequest, stores: RecoveryStores) {
     if (stores.stores.length && !input.checks.storeDetailsMatched)
       throw recoveryError('RECOVERY_CHECKS');
   }
+
   private assertStaff(current: Awaited<ReturnType<StaffRecoveryRepository['staff']>>) {
     const now = this.clock.now();
     if (
@@ -150,6 +160,7 @@ export class StaffRecoveryService {
     )
       throw recoveryError('RECOVERY_DENIED');
   }
+
   private verify(staff: Staff, input: StaffRecoveryPreview) {
     this.confirmation.verify(input.effect, input.proof);
     if (
@@ -159,6 +170,7 @@ export class StaffRecoveryService {
     )
       throw recoveryError('RECOVERY_STALE');
   }
+
   private async assertCurrent(effect: StaffRecoveryEffect, user: RecoveryAccount) {
     if (
       new Date(effect.confirmBy) <= this.clock.now() ||
@@ -168,6 +180,7 @@ export class StaffRecoveryService {
     )
       throw recoveryError('RECOVERY_STALE');
   }
+
   private subject(effect: StaffRecoveryEffect, channel: 'phone' | 'email') {
     const target = channel === 'phone' ? effect.newPhone : effect.newEmail;
     if (!target) throw recoveryError('RECOVERY_PROOF');
@@ -185,6 +198,7 @@ export class StaffRecoveryService {
       ]),
     };
   }
+
   private async consume(
     effect: StaffRecoveryEffect,
     channel: 'phone' | 'email',
@@ -201,6 +215,7 @@ export class StaffRecoveryService {
     );
     if (grant.userId !== effect.targetId) throw recoveryError('RECOVERY_PROOF');
   }
+
   private deliveries(
     user: RecoveryAccount,
     stores: RecoveryStores,
@@ -227,6 +242,7 @@ export class StaffRecoveryService {
       ).values(),
     ];
   }
+
   async history(storeId: string, userId: string, before?: string) {
     const access = await this.team.accessFor(storeId, userId);
     if (!access || !this.team.canApproveSupport(access)) throw recoveryError('RECOVERY_DENIED');

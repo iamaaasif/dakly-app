@@ -1,13 +1,15 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import { AppModule } from '../src/app.module';
-import { assertRouteAccess } from './route-access';
 import { captureRequestLogs } from './request-log-sink';
+import { assertRouteAccess } from './route-access';
 
 describe('API route access rules', () => {
   let app: NestFastifyApplication;

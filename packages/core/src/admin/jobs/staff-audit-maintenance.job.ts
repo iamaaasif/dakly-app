@@ -1,7 +1,4 @@
-import { ErrorReporter } from '../../platform/logging/error-reporter';
-import { serializeError } from '../../platform/logging/safe-error';
-import { jobLogBindings } from '../../platform/logging/job-context';
-import { QUEUES } from '../../platform/queue/queues';
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   Inject,
   Injectable,
@@ -9,10 +6,14 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+
+import { ErrorReporter } from '../../platform/logging/error-reporter';
+import { jobLogBindings, runWithJobContext } from '../../platform/logging/job-context';
+import { serializeError } from '../../platform/logging/safe-error';
+import { QUEUES } from '../../platform/queue/queues';
 import { StaffHistoryService } from '../staff-history.service';
-import { runWithJobContext } from '../../platform/logging/job-context';
+
 @Injectable()
 export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(StaffAuditMaintenanceJob.name);
@@ -23,10 +24,12 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
     @InjectQueue(QUEUES.bulk) private readonly queue: Queue,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
   ) {}
+
   onApplicationBootstrap() {
     this.timer = setInterval(() => this.poll(), 30000);
     this.poll();
   }
+
   private poll() {
     if (this.active) return;
     this.active = runWithJobContext(() =>
@@ -41,11 +44,13 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
       this.active = undefined;
     });
   }
+
   private async tick() {
     const results = await Promise.allSettled([this.history.maintain(), this.enqueue()]);
     if (results.some((result) => result.status === 'rejected'))
       throw new Error('Staff audit maintenance failed');
   }
+
   private async enqueue() {
     const tasks = await this.history.pending();
     for (const task of tasks)
@@ -61,6 +66,7 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
         },
       );
   }
+
   async onApplicationShutdown() {
     clearInterval(this.timer);
     await this.active;

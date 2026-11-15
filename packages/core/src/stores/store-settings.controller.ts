@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Inject, Patch, Req, UseGuards } from '@nestjs/common';
+
 import {
   changeStoreSettingsSchema,
   changeStoreExtensionsSchema,
@@ -6,11 +7,12 @@ import {
   type ChangeStoreExtensionsInput,
   type StoreSettingsResponse,
 } from '@dakly/contracts/stores';
+
 import { AnyMember, RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import type { StoreRequest } from '../platform/tenancy/store-request';
+import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { StoresService } from './stores.service';
 

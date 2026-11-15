@@ -1,16 +1,19 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
+
 import { Logger } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import { SmsService } from '../sms/sms.service';
-import { ValkeyClient } from '../platform/cache/valkey-client';
+
+import { EmailService } from '../email/email.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
+import { ValkeyClient } from '../platform/cache/valkey-client';
+import { SmsService } from '../sms/sms.service';
+import { authKey } from './auth-key';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures, type SignInSubject } from './sign-in-failures';
-import { EmailService } from '../email/email.service';
-import { authKey } from './auth-key';
 
 const sms = new FakeSmsDriver();
 const client = new ValkeyClient(process.env.REDIS_URL!);

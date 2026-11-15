@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
-import { useEffect } from 'react';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import {
   QueryClient,
   QueryClientProvider,
   focusManager,
   onlineManager,
 } from '@tanstack/react-query';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useEffect } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
+
 import { InviteEntry } from './invite-entry';
+
 const route = vi.hoisted(() => ({ view: 'phone' }));
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams({ view: route.view }),

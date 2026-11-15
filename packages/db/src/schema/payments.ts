@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import {
   gatewayCredentialStatuses,
   gatewayModes,
@@ -26,10 +27,11 @@ import {
   refundStatuses,
   settlementLineStatuses,
 } from '@dakly/contracts/payments';
+
+import { staffUsers } from './admin';
 import { users } from './auth';
 import { invoices } from './billing';
 import { bytea, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
-import { staffUsers } from './admin';
 import { orders } from './orders';
 import { files } from './platform';
 import { stores } from './stores';

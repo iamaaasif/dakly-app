@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { BillingRepository } from './billing.repository';
+
 describe('plan seat filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new BillingRepository(f.tenant, f.connection.db);

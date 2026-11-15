@@ -1,5 +1,7 @@
 import { z } from 'zod';
+
 import { bdMobileSchema } from './phone';
+
 export const passwordSchema = z.string().min(8).max(128).regex(/[0-9]/);
 
 export const signUpSchema = z.strictObject({

@@ -1,39 +1,44 @@
-import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
-import { newId } from '../platform/database/new-id';
-import { TOTP, Secret } from 'otpauth';
-import { ValkeyClient } from '../platform/cache/valkey-client';
 import 'reflect-metadata';
+
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { sql } from 'drizzle-orm';
-import { createDatabase } from '@dakly/db/client';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { TOTP, Secret } from 'otpauth';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import type { StaffRecoveryPreview, StaffRecoveryRequest } from '@dakly/contracts/staff-recovery';
-import { AdminModule } from './admin.module';
-import { StoresModule } from '../stores/stores.module';
+import { createDatabase } from '@dakly/db/client';
+
 import { AuthModule } from '../auth/auth.module';
+import { SecurityNoticesService } from '../auth/security-notices.service';
+import { UsersService } from '../auth/users.service';
+import { EmailService } from '../email/email.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
+import { Clock } from '../platform/clock';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { AccountDatabase } from '../platform/database/account-database';
 import { DatabaseModule } from '../platform/database/database.module';
-import { StaffRepository } from './staff.repository';
+import { newId } from '../platform/database/new-id';
 import { StaffDatabase } from '../platform/database/staff-database';
 import { StaffTransaction } from '../platform/database/staff-transaction';
-import { AccountDatabase } from '../platform/database/account-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { StaffSessionsService } from './staff-sessions.service';
-import { StaffAuditRepository } from './staff-audit.repository';
-import { StaffRecoveryRepository } from './staff-recovery.repository';
-import { UsersService } from '../auth/users.service';
-import { SessionsService } from '../sessions/sessions.service';
-import { SecurityNoticesService } from '../auth/security-notices.service';
-import { SmsService } from '../sms/sms.service';
-import { EmailService } from '../email/email.service';
-import { Clock } from '../platform/clock';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '../platform/http/session-cookie';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { SessionsService } from '../sessions/sessions.service';
+import { SmsService } from '../sms/sms.service';
+import { StoresModule } from '../stores/stores.module';
+import { AdminModule } from './admin.module';
+import { StaffAuditRepository } from './staff-audit.repository';
+import { StaffRecoveryRepository } from './staff-recovery.repository';
+import { StaffSessionsService } from './staff-sessions.service';
+import { StaffRepository } from './staff.repository';
+
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule, AdminModule, StoresModule] })(TestModule);
 const database = createDatabase(process.env.DATABASE_ADMIN_URL!);

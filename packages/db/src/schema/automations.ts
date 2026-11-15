@@ -14,12 +14,14 @@ import {
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+
 import {
   automationRunStatuses,
   automationStatuses,
   automationStepKinds,
 } from '@dakly/contracts/automations';
 import { recipientSkipReasons } from '@dakly/contracts/campaigns';
+
 import { users } from './auth';
 import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';

@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
+
 import { Card } from '@dakly/ui/card';
+
 export function AuthFrame({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="mx-auto max-w-lg space-y-6 px-4 py-8">

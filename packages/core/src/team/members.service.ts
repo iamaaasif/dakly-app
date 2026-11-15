@@ -1,5 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
+import type { UserProfile } from '@dakly/contracts/sessions';
 import {
   customRolePermissionsSchema,
   type AcceptInviteResponse,
@@ -10,17 +13,17 @@ import {
   type MemberRoleInput,
   type StoreAccess,
 } from '@dakly/contracts/team';
-import type { UserProfile } from '@dakly/contracts/sessions';
+
+import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
 import { BillingService } from '../billing/billing.service';
-import { AuditService } from '../audit/audit.service';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { Clock } from '../platform/clock';
-import { MembersRepository, roleValues, type Member } from './members.repository';
-import { InviteDelivery } from './invite-delivery';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { builtInRoleAccess } from './built-in-roles';
-import { canManageMember, hasSameMemberRole } from './permissions';
+import { InviteDelivery } from './invite-delivery';
 import { assertInviteRecipient, assertOpenInvite } from './invite-policy';
+import { MembersRepository, roleValues, type Member } from './members.repository';
+import { canManageMember, hasSameMemberRole } from './permissions';
 import { teamError } from './team.errors';
 
 type Actor = { userId: string; access: StoreAccess };
@@ -226,6 +229,7 @@ export class MembersService {
     );
     await this.record(storeId, existing?.id ?? invite.id, userId, 'member.joined');
   }
+
   private async roleAccess(
     storeId: string,
     role: { builtInRole: Member['builtInRole']; roleId: string | null },
@@ -238,9 +242,11 @@ export class MembersService {
     if (!parsed.success) throw teamError('ROLE_NOT_FOUND');
     return { role: 'custom', ...parsed.data };
   }
+
   private assertManagement(actor: Actor, current: StoreAccess, proposed?: StoreAccess): void {
     if (!canManageMember(actor.access, current, proposed)) throw teamError('TEAM_ROLE_DENIED');
   }
+
   private async assertSeat(storeId: string): Promise<void> {
     if (
       (await this.repository.countSeats(storeId, this.clock.now())) >=
@@ -248,16 +254,19 @@ export class MembersService {
     )
       throw teamError('TEAM_SEATS_FULL');
   }
+
   private async assertNotActive(storeId: string, input: InviteMemberInput): Promise<void> {
     const identity = await this.users.verifiedRecipient(storeId, input);
     if (identity && (await this.repository.forUser(storeId, identity))?.status === 'active')
       throw teamError('MEMBER_ALREADY_ACTIVE');
   }
+
   private async findMember(storeId: string, membershipId: string): Promise<Member> {
     const member = await this.repository.find(storeId, membershipId);
     if (!member) throw teamError('MEMBER_NOT_FOUND');
     return member;
   }
+
   private existingInvite(
     member: Member,
     input: MemberRoleInput,
@@ -266,9 +275,11 @@ export class MembersService {
     if (!hasSameMemberRole(member, input)) throw teamError('INVITE_EXISTS');
     return this.response(member, seeFullPhone);
   }
+
   private expiry(): Date {
     return new Date(this.clock.now().getTime() + 7 * 86400000);
   }
+
   private record(storeId: string, entityId: string, userId: string, action: string): Promise<void> {
     return this.audit.record(storeId, {
       actor: { kind: 'user', userId },
@@ -277,6 +288,7 @@ export class MembersService {
       entityId,
     });
   }
+
   private response(member: Member, seeFullPhone: boolean, profile?: UserProfile): MemberResponse {
     const identity = profile ?? {
       name: null,

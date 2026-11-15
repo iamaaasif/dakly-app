@@ -1,7 +1,10 @@
-import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { SlackAlertDriver } from './slack-alert-driver';
+
 let origin: string;
 let status = 200;
 let result: unknown = { ok: true };

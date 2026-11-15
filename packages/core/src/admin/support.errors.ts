@@ -1,4 +1,5 @@
 import { AppError } from '../platform/errors/app-error';
+
 const errors = {
   STAFF_ALERT_NOT_CONFIGURED: { status: 503, message: 'Staff alert delivery is not configured' },
   STAFF_ALERT_DELIVERY_FAILED: { status: 503, message: 'Staff alert delivery failed' },

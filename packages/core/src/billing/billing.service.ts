@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { PublicPlan, billingCycles } from '@dakly/contracts/billing';
-import { BillingRepository } from './billing.repository';
-import { billingError } from './billing.errors';
+
 import { Clock } from '../platform/clock';
+import { billingError } from './billing.errors';
+import { BillingRepository } from './billing.repository';
 
 @Injectable()
 export class BillingService {
@@ -10,6 +12,7 @@ export class BillingService {
     @Inject(BillingRepository) private readonly repository: BillingRepository,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async publicPlans(): Promise<PublicPlan[]> {
     return (await this.repository.publicPlans()).map(
       ({ code, name, monthlyPricePoisha, yearlyPricePoisha, trialDays, limits }) => ({
@@ -22,9 +25,11 @@ export class BillingService {
       }),
     );
   }
+
   async seatLimit(storeId: string): Promise<number> {
     return (await this.repository.currentLimits(storeId))?.seats ?? 0;
   }
+
   async startPlan(storeId: string, code: string, cycle: (typeof billingCycles)[number]) {
     const plan = await this.repository.findPlan(storeId, code);
     if (!plan || plan.kind !== 'plan' || !plan.isPublic) throw billingError('PLAN_NOT_FOUND');

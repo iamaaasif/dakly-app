@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
+
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import {
   CloudflareAccessDriver,
   type AccessIdentity,
 } from '@dakly/providers/cloudflare/access-driver';
+
 import { loadStaffEnv } from '../platform/config/env';
 import { staffError } from './admin.errors';
-import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 
 @Injectable()
 export class StaffAccessService {
@@ -20,6 +22,7 @@ export class StaffAccessService {
             : undefined,
         })
       : undefined;
+
   async verify(
     assertion: string | undefined,
     hostname: string,
@@ -36,6 +39,7 @@ export class StaffAccessService {
       throw staffError('STAFF_ACCESS_REQUIRED');
     }
   }
+
   assertRole(staff: StaffIdentity, roles: StaffIdentity['role'][]): void {
     if (!roles.includes(staff.role)) throw staffError('STAFF_PERMISSION_DENIED');
   }

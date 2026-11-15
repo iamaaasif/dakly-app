@@ -1,39 +1,43 @@
 import 'reflect-metadata';
 import { randomUUID, randomBytes, createHash, randomInt } from 'node:crypto';
-import { Logger as PinoNestLogger, LoggerModule } from 'nestjs-pino';
+
 import { Logger, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { beforeAll, afterAll, afterEach, describe, it, expect, vi } from 'vitest';
+import { sql } from 'drizzle-orm';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
+import { Logger as PinoNestLogger, LoggerModule } from 'nestjs-pino';
 import { TOTP, Secret } from 'otpauth';
+import { beforeAll, afterAll, afterEach, describe, it, expect, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { SlackAlertDriver } from '@dakly/providers/staff-alert/slack/slack-alert-driver';
-import { sql } from 'drizzle-orm';
-import { requestLoggingOptions } from '../platform/logging/request-logging';
-import { CustomersService } from '../customers/customers.service';
-import { hashPassword } from '../platform/crypto/password';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
-import { StaffAlertsService } from './staff-alerts.service';
-import { StaffAlertsRepository } from './staff-alerts.repository';
-import { SupportRepository } from './support.repository';
-import { TenantDatabase } from '../platform/database/tenant-database';
-import { AdminModule } from './admin.module';
+
+import { AuditService } from '../audit/audit.service';
 import { AuthModule } from '../auth/auth.module';
+import { CustomersService } from '../customers/customers.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
+import { Clock } from '../platform/clock';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { hashPassword } from '../platform/crypto/password';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StaffTransaction } from '../platform/database/staff-transaction';
-import { StaffSessionsService } from './staff-sessions.service';
-import { StaffRepository } from './staff.repository';
-import { StaffAuditRepository } from './staff-audit.repository';
-import { AuditService } from '../audit/audit.service';
-import { StaffHistoryService } from './staff-history.service';
-import { StaffIdentityService } from './staff-identity.service';
-import { SmsService } from '../sms/sms.service';
-import { Clock } from '../platform/clock';
-import { ValkeyClient } from '../platform/cache/valkey-client';
+import { TenantDatabase } from '../platform/database/tenant-database';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '../platform/http/session-cookie';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { requestLoggingOptions } from '../platform/logging/request-logging';
+import { SmsService } from '../sms/sms.service';
+import { AdminModule } from './admin.module';
+import { StaffAlertsRepository } from './staff-alerts.repository';
+import { StaffAlertsService } from './staff-alerts.service';
+import { StaffAuditRepository } from './staff-audit.repository';
+import { StaffHistoryService } from './staff-history.service';
+import { StaffIdentityService } from './staff-identity.service';
+import { StaffSessionsService } from './staff-sessions.service';
+import { StaffRepository } from './staff.repository';
+import { SupportRepository } from './support.repository';
+
 const logLines: string[] = [];
 class TestModule {}
 Module({

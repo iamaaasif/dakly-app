@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+
 import { QueryError } from '@dakly/ui/query-error';
+
 export function InvitationAuthentication({
   checking,
   failed,

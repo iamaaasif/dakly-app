@@ -1,6 +1,7 @@
 'use client';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import {
   staffRecoveryLookupSchema,
   type StaffRecoveryLookup,
@@ -8,7 +9,9 @@ import {
 } from '@dakly/contracts/staff-recovery';
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
+
 import { useRecoveryLookup } from '../api/recovery';
+
 export function RecoveryLookup({
   onSelect,
 }: {

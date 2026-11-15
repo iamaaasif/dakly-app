@@ -1,5 +1,7 @@
 import type { FastifyReply } from 'fastify';
+
 import { loadEnv } from '../platform/config/env';
+
 export const STAFF_COOKIE = 'dakly_staff';
 export function staffCookie(reply: FastifyReply, token: string): void {
   reply.setCookie(STAFF_COOKIE, token, {

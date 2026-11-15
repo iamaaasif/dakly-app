@@ -1,4 +1,5 @@
 import { type UseFormReturn } from 'react-hook-form';
+
 import { type StaffRecoveryRequest } from '@dakly/contracts/staff-recovery';
 
 export function IdentityChecks({ form }: { form: UseFormReturn<StaffRecoveryRequest> }) {

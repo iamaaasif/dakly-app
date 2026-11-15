@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useStoreRequest } from '@/lib/store-request';
-import { notifySessionChange } from '@/lib/notify-session-change';
+
 import { teamKeys } from '../api/team-keys';
+import { notifySessionChange } from '@/lib/notify-session-change';
+import { useStoreRequest } from '@/lib/store-request';
+
 export function useTeamMutation<Input, Output>(
   mutation: (
     request: ReturnType<typeof useStoreRequest>['request'],

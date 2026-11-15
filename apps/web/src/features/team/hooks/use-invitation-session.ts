@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ApiError } from '@dakly/ui/api-client';
+
 import { apiRequest } from '@/lib/api-client';
 import { sessionContextKey } from '@/lib/session-context';
+
 export function useInvitationSession() {
   const session = useQuery({
     queryKey: sessionContextKey,

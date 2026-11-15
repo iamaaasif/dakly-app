@@ -7,10 +7,12 @@ import {
   Optional,
   Logger,
 } from '@nestjs/common';
+
 import type { ErrorResponse } from '@dakly/contracts/errors';
-import { AppError, PLATFORM_ERRORS } from './app-error';
-import { serializeError } from '../logging/safe-error';
+
 import { ErrorReporter } from '../logging/error-reporter';
+import { serializeError } from '../logging/safe-error';
+import { AppError, PLATFORM_ERRORS } from './app-error';
 
 type HttpResponse = {
   status(code: number): { send(body: ErrorResponse): void };

@@ -1,4 +1,5 @@
 import { Skeleton } from '@dakly/ui/skeleton';
+
 export function TeamLoading() {
   return (
     <div role="status" className="space-y-4 p-6">

@@ -1,5 +1,6 @@
-import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
+
 import { type Env, loadEnv } from '../platform/config/env';
 
 export const SMS_DRIVER = Symbol('SMS_DRIVER');

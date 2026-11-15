@@ -1,27 +1,30 @@
 import 'reflect-metadata';
 import { randomInt } from 'node:crypto';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { eq, inArray, sql } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { users } from '@dakly/db/schema/auth';
 import { stores } from '@dakly/db/schema/stores';
 import { memberships } from '@dakly/db/schema/team';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+
+import { AuditService } from '../audit/audit.service';
 import { AuthModule } from '../auth/auth.module';
 import { SignInCodes } from '../auth/codes.module';
 import { UsersService } from '../auth/users.service';
+import { EmailService } from '../email/email.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { SessionsService } from '../sessions/sessions.service';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
-import { AuditService } from '../audit/audit.service';
-import { EmailService } from '../email/email.service';
+import { SessionsService } from '../sessions/sessions.service';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule] })(TestModule);

@@ -1,8 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { customers } from '@dakly/db/schema/customers';
 import { stores } from '@dakly/db/schema/stores';
+
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { CustomersRepository } from './customers.repository';
 

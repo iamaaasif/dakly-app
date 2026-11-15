@@ -1,10 +1,11 @@
 import { eq } from 'drizzle-orm';
+
 import { createDatabase } from './client';
+import { platformSettings } from './schema/admin';
 import { aiAgentSettings } from './schema/ai';
 import { users } from './schema/auth';
 import { plans, subscriptions } from './schema/billing';
 import { contacts } from './schema/contacts';
-import { platformSettings } from './schema/admin';
 import { deliveryZones } from './schema/orders';
 import { products, productVariants } from './schema/products';
 import { brandProfiles } from './schema/social';

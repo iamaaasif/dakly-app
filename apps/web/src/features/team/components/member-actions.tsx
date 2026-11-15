@@ -1,11 +1,14 @@
 import { useState } from 'react';
+
 import type { MemberResponse } from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
-import { SessionDialog as Dialog } from '@/components/session-dialog';
+
 import { useRemoveMember } from '../api/remove-member';
 import { useResendInvite } from '../api/resend-invite';
 import { MemberRoleForm } from './member-role-form';
 import { TeamError } from './team-error';
+import { SessionDialog as Dialog } from '@/components/session-dialog';
+
 export function MemberActions({ member, name }: { member: MemberResponse; name: string }) {
   const [action, setAction] = useState<'role' | 'remove' | null>(null);
   const remove = useRemoveMember(member.id);

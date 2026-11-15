@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
-import { act, renderHook, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, expect, it, vi } from 'vitest';
+import { act, renderHook, cleanup } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { afterEach, expect, it, vi } from 'vitest';
+
+import { sessionContextKey } from './session-context';
 import { useCreateStore } from '@/features/auth/api/create-store';
 import { useAcceptInvite } from '@/features/team/api/accept-invite';
-import { sessionContextKey } from './session-context';
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

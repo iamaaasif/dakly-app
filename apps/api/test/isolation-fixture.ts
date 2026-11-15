@@ -1,11 +1,13 @@
 import { randomInt, randomUUID } from 'node:crypto';
+
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { createDatabase } from '@dakly/db/client';
-import { SessionsService } from '@dakly/core/sessions/sessions.service';
-import { SupportService } from '@dakly/core/admin/support.service';
-import { StaffSessionsService } from '@dakly/core/admin/staff-sessions.service';
-import { StaffTransaction } from '@dakly/core/platform/database/staff-transaction';
 import { expect } from 'vitest';
+
+import { StaffSessionsService } from '@dakly/core/admin/staff-sessions.service';
+import { SupportService } from '@dakly/core/admin/support.service';
+import { StaffTransaction } from '@dakly/core/platform/database/staff-transaction';
+import { SessionsService } from '@dakly/core/sessions/sessions.service';
+import { createDatabase } from '@dakly/db/client';
 
 export type Actor = { id: string; phone: string; cookie: string };
 export type Shop = {
@@ -42,6 +44,7 @@ export class IsolationFixture {
       remoteAddress: `2001:db8::${randomInt(1, 65535).toString(16)}`,
     });
   }
+
   async account(): Promise<Actor> {
     const id = randomUUID(),
       phone = `017${randomInt(10000000, 99999999)}`;
@@ -53,6 +56,7 @@ export class IsolationFixture {
     const session = await this.app.get(SessionsService).create(id, { isRemembered: false });
     return { id, phone, cookie: `dakly_session=${session.token}` };
   }
+
   async shop(): Promise<Shop> {
     if (!this.planCreated) {
       await this.admin.pool.query(
@@ -82,11 +86,13 @@ export class IsolationFixture {
     }
     return { id, owner, member, membership, ownerMembership };
   }
+
   code(actor: Actor) {
     const message = this.sms.findLast((item) => item.to === actor.phone);
     expect(message).toBeDefined();
     return message!.text.match(/\b\d{6}\b/)![0];
   }
+
   async transfer(shop: Shop) {
     const proof = await this.request(shop.owner, 'POST', '/store/ownership-transfer/code', {
       membershipId: shop.membership,
@@ -99,6 +105,7 @@ export class IsolationFixture {
     expect(result.statusCode, result.body).toBe(201);
     return result.json().id as string;
   }
+
   private async staffUser() {
     const id = randomUUID();
     this.staff.push(id);
@@ -108,6 +115,7 @@ export class IsolationFixture {
     );
     return id;
   }
+
   async grant(shop: Shop, sendCode = true) {
     const id = await this.staffUser();
     await this.app
@@ -143,6 +151,7 @@ export class IsolationFixture {
     expect(grant.codeSent).toBe(true);
     return { id: grant.id, staff };
   }
+
   async support(shop: Shop) {
     const grant = await this.grant(shop);
     const approved = await this.request(shop.owner, 'POST', `/support-access/${grant.id}/approve`, {
@@ -165,12 +174,14 @@ export class IsolationFixture {
     expect(exchange.statusCode, exchange.body).toBe(303);
     return String(exchange.headers['set-cookie']).split(';')[0]!;
   }
+
   async row(table: string, id: string) {
     // Table names are test-owned constants, never request data.
     return (
       await this.admin.pool.query(`select to_jsonb(t) as row from ${table} t where id=$1`, [id])
     ).rows[0]?.row;
   }
+
   async recovery(shop: Shop) {
     const auditId = randomUUID(),
       staffId = await this.staffUser();
@@ -184,6 +195,7 @@ export class IsolationFixture {
     );
     return auditId;
   }
+
   async close() {
     for (const table of [
       'support_sessions',

@@ -3,6 +3,7 @@ import { Controller, Get, Module, UseGuards, type Type } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, describe, expect, it } from 'vitest';
+
 import {
   AnyMember,
   StaffAccess,
@@ -11,6 +12,7 @@ import {
   RequireUser,
 } from '@dakly/core/platform/tenancy/access.decorators';
 import { StoreGuard } from '@dakly/core/platform/tenancy/store.guard';
+
 import { assertRouteAccess } from './route-access';
 
 @Controller('unclassified')

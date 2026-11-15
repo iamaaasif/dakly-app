@@ -1,6 +1,9 @@
 import type { FieldError, UseFormRegisterReturn } from 'react-hook-form';
+
 import { Button } from '@dakly/ui/button';
+
 import { FormField } from '@/components/form-field';
+
 type ProofFieldsProps = {
   password: boolean;
   canUsePassword: boolean;

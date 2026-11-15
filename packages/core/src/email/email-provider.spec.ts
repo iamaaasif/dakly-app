@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { loadEnv } from '../platform/config/env';
-import { createEmailDriver } from './email-provider';
+
 import { SendGridEmailDriver } from '@dakly/providers/email/sendgrid/sendgrid-email-driver';
 import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
+
+import { loadEnv } from '../platform/config/env';
+import { createEmailDriver } from './email-provider';
+
 const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
 describe('Email driver configuration', () => {
   it('uses Mailpit SMTP in development', () => {

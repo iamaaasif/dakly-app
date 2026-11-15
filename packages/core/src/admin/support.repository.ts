@@ -1,14 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+
+import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
 import type { Database } from '@dakly/db/client';
 import { supportGrants, supportSessions, staffUsers, staffSessions } from '@dakly/db/schema/admin';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { memberships } from '@dakly/db/schema/team';
 import { stores } from '@dakly/db/schema/stores';
-import type { SupportRequestInput, SupportPrincipal } from '@dakly/contracts/support';
-import { STAFF_IDLE_MS } from './staff-session-policy';
+import { memberships } from '@dakly/db/schema/team';
+
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { STAFF_IDLE_MS } from './staff-session-policy';
+
 const staffColumns = {
   id: staffUsers.id,
   name: staffUsers.name,
@@ -50,6 +53,7 @@ export class SupportRepository {
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
     @Inject(DATABASE) private readonly database: Database,
   ) {}
+
   async ownerSession(storeId: string, userId: string, sessionId: string, now: Date) {
     return this.tenant.forStore(storeId, async (tx) =>
       Boolean(
@@ -73,6 +77,7 @@ export class SupportRepository {
       ),
     );
   }
+
   async readOwnerSession(storeId: string, userId: string, sessionId: string, now: Date) {
     return this.tenant.forStore(storeId, async (tx) =>
       Boolean(
@@ -95,6 +100,7 @@ export class SupportRepository {
       ),
     );
   }
+
   async targets(query: string) {
     return (
       await this.database.execute<{ id: string; name: string }>(
@@ -102,6 +108,7 @@ export class SupportRepository {
       )
     ).rows;
   }
+
   async staffGrants(staffUserId: string, before?: string) {
     return (
       await this.database.execute<import('@dakly/contracts/support').SupportGrantResponse>(
@@ -109,6 +116,7 @@ export class SupportRepository {
       )
     ).rows;
   }
+
   async grantStore(staffUserId: string, id: string) {
     return (
       await this.database.execute<{ store_id: string }>(
@@ -116,6 +124,7 @@ export class SupportRepository {
       )
     ).rows.filter((row) => row.store_id)[0];
   }
+
   async list(storeId: string, before?: string) {
     return this.tenant.forStore(storeId, (tx) =>
       tx
@@ -132,6 +141,7 @@ export class SupportRepository {
         .limit(50),
     );
   }
+
   async find(storeId: string, id: string) {
     return this.tenant.forStore(
       storeId,
@@ -146,6 +156,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async owner(storeId: string) {
     return this.tenant.forStore(
       storeId,
@@ -165,6 +176,7 @@ export class SupportRepository {
         )[0]?.userId,
     );
   }
+
   async insert(
     storeId: string,
     id: string,
@@ -185,6 +197,7 @@ export class SupportRepository {
       }),
     );
   }
+
   async insertBreakGlass(
     storeId: string,
     effect: import('@dakly/contracts/break-glass').BreakGlassEffect,
@@ -206,6 +219,7 @@ export class SupportRepository {
       }),
     );
   }
+
   async change(
     storeId: string,
     id: string,
@@ -220,6 +234,7 @@ export class SupportRepository {
         .where(and(eq(supportGrants.storeId, storeId), eq(supportGrants.id, id))),
     );
   }
+
   async staff(storeId: string, staffUserId: string) {
     return this.tenant.forStore(
       storeId,
@@ -233,6 +248,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async readStaff(storeId: string, staffUserId: string) {
     return this.tenant.forStore(
       storeId,
@@ -240,6 +256,7 @@ export class SupportRepository {
         (await tx.select(staffColumns).from(staffUsers).where(eq(staffUsers.id, staffUserId)))[0],
     );
   }
+
   async parent(storeId: string, staffUserId: string, sessionId: string) {
     return this.tenant.forStore(
       storeId,
@@ -253,6 +270,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async readParent(storeId: string, staffUserId: string, sessionId: string) {
     return this.tenant.forStore(
       storeId,
@@ -265,6 +283,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async touchParent(storeId: string, principal: SupportPrincipal, now: Date) {
     return this.tenant.inTransaction(
       storeId,
@@ -286,6 +305,7 @@ export class SupportRepository {
         ).length > 0,
     );
   }
+
   async handoff(storeId: string, principal: SupportPrincipal, hash: Buffer, expiresAt: Date) {
     await this.tenant.inTransaction(storeId, (tx) =>
       tx
@@ -293,6 +313,7 @@ export class SupportRepository {
         .values({ ...principal, handoffHash: hash, handoffExpiresAt: expiresAt }),
     );
   }
+
   async locateSession(hash: Buffer) {
     return (
       await this.database.execute<{ store_id: string | null }>(
@@ -300,6 +321,7 @@ export class SupportRepository {
       )
     ).rows[0]?.store_id;
   }
+
   async locateHandoff(hash: Buffer) {
     return (
       await this.database.execute<{ store_id: string | null }>(
@@ -307,6 +329,7 @@ export class SupportRepository {
       )
     ).rows[0]?.store_id;
   }
+
   async session(storeId: string, hash: Buffer) {
     return this.tenant.forStore(
       storeId,
@@ -320,6 +343,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async handoffSession(storeId: string, hash: Buffer) {
     return this.tenant.forStore(
       storeId,
@@ -333,6 +357,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async readSession(storeId: string, hash: Buffer) {
     return this.tenant.forStore(
       storeId,
@@ -345,6 +370,7 @@ export class SupportRepository {
         )[0],
     );
   }
+
   async consume(storeId: string, hash: Buffer, tokenHash: Buffer, now: Date) {
     await this.tenant.inTransaction(storeId, (tx) =>
       tx
@@ -353,6 +379,7 @@ export class SupportRepository {
         .where(and(eq(supportSessions.storeId, storeId), eq(supportSessions.handoffHash, hash))),
     );
   }
+
   async storeName(storeId: string) {
     return this.tenant.forStore(
       storeId,

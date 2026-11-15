@@ -1,11 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
+
 import { totpRecoveryTokenSchema, type TotpRecoveryTokenInput } from '@dakly/contracts/totp';
-import { RecoveryCancel } from './recovery-cancel';
-import { RecoveryNavigation } from './recovery-navigation';
+
 import { AuthFrame } from './auth-frame';
-import { RecoveryRequest } from './recovery-request';
+import { RecoveryCancel } from './recovery-cancel';
 import { RecoveryComplete } from './recovery-complete';
+import { RecoveryNavigation } from './recovery-navigation';
+import { RecoveryRequest } from './recovery-request';
+
 export function RecoveryScreen({ view = 'request' }: { view?: 'request' | 'complete' }) {
   const [notice, setNotice] = useState<TotpRecoveryTokenInput | null>(null);
   const [invalid, setInvalid] = useState(false);

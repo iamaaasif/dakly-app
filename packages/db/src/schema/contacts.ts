@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import { chatChannels } from '@dakly/contracts/channels';
 import {
   consentChannels,
@@ -29,6 +30,7 @@ import {
   matchSuggestionStatuses,
   notCustomerReasons,
 } from '@dakly/contracts/contacts';
+
 import { bdAreas } from './areas';
 import { users } from './auth';
 import { channelConnections } from './channels';

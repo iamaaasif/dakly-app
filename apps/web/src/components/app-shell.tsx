@@ -1,10 +1,12 @@
 'use client';
 import { type ReactNode } from 'react';
+
 import { Skeleton } from '@dakly/ui/skeleton';
-import { useSessionBoundary } from '@/lib/use-session-boundary';
+
+import { SessionInteraction } from './session-interaction';
 import { SessionVerificationStatus } from './session-verification-status';
 import { ShellFrame } from './shell-frame';
-import { SessionInteraction } from './session-interaction';
+import { useSessionBoundary } from '@/lib/use-session-boundary';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const boundary = useSessionBoundary();

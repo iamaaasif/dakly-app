@@ -12,12 +12,14 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import {
   contentKinds,
   contentLanguages,
   postKinds,
   postTargetStatuses,
 } from '@dakly/contracts/social';
+
 import { users } from './auth';
 import { channelConnections } from './channels';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';

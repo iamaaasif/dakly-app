@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { AppErrorFilter } from '../errors/app-error.filter';
 import { ZodValidationPipe } from './zod-validation.pipe';

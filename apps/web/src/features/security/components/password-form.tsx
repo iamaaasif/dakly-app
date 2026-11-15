@@ -1,14 +1,17 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import { changePasswordSchema, type ChangePasswordInput } from '@dakly/contracts/auth';
 import type { AccountProfile } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { FormField } from '@/components/form-field';
-import { securityFormError } from '../security-form-error';
+
 import { useChangePassword } from '../api/change-password';
 import { usePasswordProof } from '../api/password-proof';
+import { securityFormError } from '../security-form-error';
 import { ProofFields } from './proof-fields';
+import { FormField } from '@/components/form-field';
+
 export function PasswordForm({ profile, onDone }: { profile: AccountProfile; onDone: () => void }) {
   const [password, setPassword] = useState(profile.hasPassword);
   const form = useForm<ChangePasswordInput>({

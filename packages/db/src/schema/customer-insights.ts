@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { check, date, index, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+
 import { customerInsightKinds, customerInsightSources } from '@dakly/contracts/contacts';
+
 import { users } from './auth';
 import { createdAt, id, isOneOf, timestamptz } from './columns';
 import { stores } from './stores';

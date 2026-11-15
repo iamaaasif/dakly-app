@@ -1,4 +1,5 @@
 import { type StaffRecoveryPreview } from '@dakly/contracts/staff-recovery';
+
 import { formatDate } from '@/lib/format-date';
 
 export function RecoveryEffect({ effect }: { effect: StaffRecoveryPreview['effect'] }) {

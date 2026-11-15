@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
-import { sessionContextKey } from '@/lib/session-context';
+
 import { EmailForm } from './email-form';
 import { PasswordForm } from './password-form';
-import { TotpSetup } from './totp-setup';
 import { SecurityScreen } from './security-screen';
+import { TotpSetup } from './totp-setup';
+import { sessionContextKey } from '@/lib/session-context';
+
 const profile = {
   id: 'account',
   name: 'Rina',

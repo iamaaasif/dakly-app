@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 export const staffAuditSearchSchema = z.strictObject({
   action: z.string().trim().max(80).optional(),
   staffUserId: z.uuid().optional(),

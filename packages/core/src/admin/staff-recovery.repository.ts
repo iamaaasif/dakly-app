@@ -1,11 +1,14 @@
-import { accountRecoveryReasons } from '@dakly/contracts/account-security-events';
 import { Inject, Injectable } from '@nestjs/common';
-import type { StoreRecoveryHistory } from '@dakly/contracts/staff-recovery';
 import { and, desc, eq, inArray, isNotNull, lt, sql } from 'drizzle-orm';
+
+import { accountRecoveryReasons } from '@dakly/contracts/account-security-events';
+import type { StoreRecoveryHistory } from '@dakly/contracts/staff-recovery';
 import { staffSessions, staffUsers, staffAuditLog } from '@dakly/db/schema/admin';
 import { staffRecoveryHistory } from '@dakly/db/schema/staff-recovery';
+
 import { AccountDatabase } from '../platform/database/account-database';
 import { TenantDatabase } from '../platform/database/tenant-database';
+
 export type RecoveryStores = {
   overflow: boolean;
   stores: string[];
@@ -17,6 +20,7 @@ export class StaffRecoveryRepository {
     @Inject(AccountDatabase) private readonly account: AccountDatabase,
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
+
   async stores(userId: string): Promise<RecoveryStores> {
     return this.account.inTransaction(
       userId,
@@ -28,6 +32,7 @@ export class StaffRecoveryRepository {
         ).rows[0]!.snapshot,
     );
   }
+
   async staff(userId: string, staffUserId: string, sessionId: string) {
     return this.account.inTransaction(userId, async (tx) => {
       const [staff] = await tx
@@ -51,6 +56,7 @@ export class StaffRecoveryRepository {
       return { staff, session };
     });
   }
+
   async used(userId: string, actionId: string) {
     return this.account.inTransaction(
       userId,
@@ -64,6 +70,7 @@ export class StaffRecoveryRepository {
         ).length > 0,
     );
   }
+
   async recordHistory(userId: string, auditId: string, stores: string[]) {
     await this.account.inTransaction(userId, (tx) =>
       tx.execute(
@@ -71,6 +78,7 @@ export class StaffRecoveryRepository {
       ),
     );
   }
+
   history(storeId: string, before?: string) {
     return this.tenant.forStore(storeId, (tx) =>
       tx

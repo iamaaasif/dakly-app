@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+
 import type { CurrentOwnershipTransferResponse } from '@dakly/contracts/team';
-import { useStoreRequest } from '@/lib/store-request';
+
 import { teamKeys } from './team-keys';
+import { useStoreRequest } from '@/lib/store-request';
+
 export function useCurrentTransfer() {
   const { request, contextTag } = useStoreRequest();
   return useQuery({

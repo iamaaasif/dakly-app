@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
+
 import { SecurityContent } from './security-content';
+
 const sections = [
   ['profile', 'My profile'],
   ['devices', 'Devices'],

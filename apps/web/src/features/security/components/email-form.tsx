@@ -1,15 +1,18 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import { changeEmailSchema, type ChangeEmailInput } from '@dakly/contracts/auth';
 import type { AccountProfile } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { FormField } from '@/components/form-field';
-import { securityFormError } from '../security-form-error';
+
 import { useChangeEmail } from '../api/change-email';
 import { useEmailProof } from '../api/email-proof';
-import { ProofFields } from './proof-fields';
+import { securityFormError } from '../security-form-error';
 import { EmailVerify } from './email-verify';
+import { ProofFields } from './proof-fields';
+import { FormField } from '@/components/form-field';
+
 export function EmailForm({ profile, onDone }: { profile: AccountProfile; onDone: () => void }) {
   const [email, setEmail] = useState<string>();
   const [password, setPassword] = useState(profile.hasPassword);

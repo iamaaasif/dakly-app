@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+
+import type { OnApplicationShutdown } from '@nestjs/common';
 import {
   ServerRuntimeClient,
   createTransport,
   type ServerRuntimeClientOptions,
 } from '@sentry/core';
-import type { OnApplicationShutdown } from '@nestjs/common';
+
 import type { serializeError } from './safe-error';
 
 type Transport = ServerRuntimeClientOptions['transport'];

@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
-import { SmsService } from '../sms/sms.service';
+
 import { EmailService } from '../email/email.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
+import { SmsService } from '../sms/sms.service';
 import { teamError } from './team.errors';
 
 export const INVITE_ORIGIN = Symbol('INVITE_ORIGIN');
@@ -29,6 +31,7 @@ export class InviteDelivery {
         throw teamError('INVITE_RATE_LIMITED');
     }
   }
+
   async send(input: Recipient, token: string): Promise<void> {
     const text = `Join your team on Dakly: ${this.origin}/invites/accept#token=${token}. This link expires in 7 days.`;
     try {

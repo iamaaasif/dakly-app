@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, smallint, text, uuid } from 'drizzle-orm/pg-core';
+
 import { users } from './auth';
 import { bytea, createdAt, id, timestamptz } from './columns';
 

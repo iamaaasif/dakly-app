@@ -1,32 +1,35 @@
 import 'reflect-metadata';
-import { passkeyFixture } from '../../test/staff-passkey-fixture';
 import { randomUUID, randomBytes, randomInt } from 'node:crypto';
+
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { generateKeyPair, exportJWK, SignJWT } from 'jose';
 import { TOTP, Secret } from 'otpauth';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
-import { StaffProvisionModule } from './staff-provision.module';
-import { SessionsService } from '../sessions/sessions.service';
-import { StaffSessionsService } from './staff-sessions.service';
-import { StaffAccessService } from './staff-access.service';
-import { StaffProvisionService } from './staff-provision.service';
-import { AdminModule } from './admin.module';
+
+import { passkeyFixture } from '../../test/staff-passkey-fixture';
 import { AuthModule } from '../auth/auth.module';
+import { Clock } from '../platform/clock';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { hashPassword } from '../platform/crypto/password';
+import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StaffTransaction } from '../platform/database/staff-transaction';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
-import { Clock } from '../platform/clock';
-import { hashPassword } from '../platform/crypto/password';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
-import { staffTokenHash } from './staff-tokens';
+import { SessionsService } from '../sessions/sessions.service';
+import { AdminModule } from './admin.module';
+import { StaffAccessService } from './staff-access.service';
 import { StaffAuditRepository } from './staff-audit.repository';
-import { StaffTransaction } from '../platform/database/staff-transaction';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { StoreTransaction } from '../platform/database/store-transaction';
+import { StaffProvisionModule } from './staff-provision.module';
+import { StaffProvisionService } from './staff-provision.service';
+import { StaffSessionsService } from './staff-sessions.service';
+import { staffTokenHash } from './staff-tokens';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AuthModule, AdminModule, StaffProvisionModule] })(TestModule);

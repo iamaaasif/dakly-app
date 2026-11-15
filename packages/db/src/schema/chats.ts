@@ -14,6 +14,7 @@ import {
   smallint,
   type PgTableExtraConfigValue,
 } from 'drizzle-orm/pg-core';
+
 import { chatChannels } from '@dakly/contracts/channels';
 import {
   aiRatings,
@@ -31,6 +32,7 @@ import {
   smsMessagePurposes,
   smsMessageStatuses,
 } from '@dakly/contracts/chats';
+
 import { users } from './auth';
 import { channelConnections, smsSenderIds } from './channels';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';

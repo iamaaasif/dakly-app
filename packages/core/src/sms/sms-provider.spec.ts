@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+
 import { loadEnv } from '../platform/config/env';
 import { createSmsDriver } from './sms-provider';
 

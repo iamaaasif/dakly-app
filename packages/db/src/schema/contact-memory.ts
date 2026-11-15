@@ -10,6 +10,7 @@ import {
   text,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import { users } from './auth';
 import { createdAt, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';

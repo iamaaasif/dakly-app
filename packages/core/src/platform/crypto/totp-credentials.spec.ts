@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { TOTP, Secret } from 'otpauth';
+import { describe, expect, it } from 'vitest';
+
 import { TotpCredentials } from './totp-credentials';
 
 const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';

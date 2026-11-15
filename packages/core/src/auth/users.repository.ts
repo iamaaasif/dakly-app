@@ -1,15 +1,17 @@
-import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
-import { uuidv7 } from '@dakly/db/uuid-v7';
-import type { Database } from '@dakly/db/client';
+
 import type { SignUpInput } from '@dakly/contracts/auth';
+import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
+import type { Database } from '@dakly/db/client';
 import { accountRecoveries } from '@dakly/db/schema/account-recovery';
 import { users } from '@dakly/db/schema/auth';
-import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
-import { databaseErrorCode } from '../platform/database/error-code';
-import { DATABASE } from '../platform/database/database.tokens';
+import { uuidv7 } from '@dakly/db/uuid-v7';
+import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
 import { AccountDatabase } from '../platform/database/account-database';
+import { DATABASE } from '../platform/database/database.tokens';
+import { databaseErrorCode } from '../platform/database/error-code';
 import { TenantDatabase, type Transaction } from '../platform/database/tenant-database';
 
 @Injectable()
@@ -33,6 +35,7 @@ export class UsersRepository {
       .limit(1);
     return user?.id;
   }
+
   async recover(
     userId: string,
     changes: { removeTotp: boolean; newPhone?: string; newEmail?: string },
@@ -87,6 +90,7 @@ export class UsersRepository {
         .limit(1),
     );
   }
+
   async invalidateChallenges(userId: string) {
     await this.database.forUser(userId, (tx) =>
       tx
@@ -252,13 +256,21 @@ export class UsersRepository {
   ) {
     // Contact UPDATE upgrades the user lock; take all trigger keys while FK checks can still finish.
     await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended('staff-identity:' || kind || ':' || value,0))
-      from (select distinct kind,value from users u cross join lateral (values
-        ('phone',case when u.phone_verified_at is not null then u.phone end),
-        ('email',case when u.email_verified_at is not null then lower(u.email::text) end),
-        ('phone',${phone ?? null}::text),('email',${email ?? null}::text)
-      ) contacts(kind,value) where u.id=${userId}::uuid and value is not null) identities
-      order by kind,value
+      select pg_advisory_xact_lock(hashtextextended('staff-identity:' || kind || ':' || value, 0))
+      from (
+        select distinct kind, value
+        from users u
+        cross join lateral (
+          values
+            ('phone', case when u.phone_verified_at is not null then u.phone end),
+            ('email', case when u.email_verified_at is not null then lower(u.email::text) end),
+            ('phone', ${phone ?? null}::text),
+            ('email', ${email ?? null}::text)
+        ) contacts(kind, value)
+        where u.id=${userId}::uuid
+          and value is not null
+      ) identities
+      order by kind, value
     `);
   }
 
@@ -334,6 +346,7 @@ export class UsersRepository {
       tx.update(users).set({ lastSignInAt: now, updatedAt: now }).where(eq(users.id, userId)),
     );
   }
+
   async findProfile(userId: string): Promise<AccountProfile | undefined> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx

@@ -1,9 +1,11 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { contacts } from '@dakly/db/schema/contacts';
 import { outboxEvents } from '@dakly/db/schema/platform';
 import { stores } from '@dakly/db/schema/stores';
+
 import { TenantDatabase } from './tenant-database';
 
 // Guards the rules in docs/data/isolation-and-access.md for every table, including tables added

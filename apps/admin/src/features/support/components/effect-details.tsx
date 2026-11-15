@@ -1,4 +1,5 @@
 import { type BreakGlassPreview } from '@dakly/contracts/break-glass';
+
 import { formatDate } from '@/lib/format-date';
 
 export function EffectDetails({ effect }: { effect: BreakGlassPreview['effect'] }) {

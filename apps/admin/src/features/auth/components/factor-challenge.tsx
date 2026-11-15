@@ -1,9 +1,12 @@
 'use client';
 import { useRouter } from 'next/navigation';
+
 import type { StaffChallenge, StaffEnrollment } from '@dakly/contracts/staff-auth';
 import { Button } from '@dakly/ui/button';
+
 import { useStaffPasskey } from '../api/passkey';
 import { TotpForm } from './totp-form';
+
 type FactorChallengeProps = { enrollment: StaffEnrollment } | { signIn: StaffChallenge };
 export function FactorChallenge(props: FactorChallengeProps) {
   const router = useRouter();

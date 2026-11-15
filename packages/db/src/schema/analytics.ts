@@ -1,6 +1,7 @@
 import { bigint, date, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core';
-import { stores } from './stores';
+
 import { updatedAt } from './columns';
+import { stores } from './stores';
 
 // Daily totals per store in store-local days, written by the analytics jobs so report pages
 // never scan raw orders or messages. One row per (day, metric, dimension); the metric names are

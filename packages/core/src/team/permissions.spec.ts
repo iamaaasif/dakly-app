@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import type { AccessLevel, PermissionArea, StoreAccess } from '@dakly/contracts/team';
+
 import { builtInRoleAccess } from './built-in-roles';
 import {
   canAccess,

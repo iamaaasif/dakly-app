@@ -1,9 +1,12 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
+
 import type { StaffRecoveryTarget } from '@dakly/contracts/staff-recovery';
-import { RecoveryLookup } from './recovery-lookup';
+
 import { RecoveryForm } from './recovery-form';
+import { RecoveryLookup } from './recovery-lookup';
+
 export function RecoveryScreen() {
   const [target, setTarget] = useState<StaffRecoveryTarget>();
   return (

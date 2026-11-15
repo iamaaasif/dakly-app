@@ -1,11 +1,13 @@
 import { Body, Controller, HttpCode, Inject, Post } from '@nestjs/common';
+
 import {
   acceptInviteSchema,
   type AcceptInviteInput,
   type AcceptInviteResponse,
 } from '@dakly/contracts/team';
-import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+
 import { RequireUser } from '../platform/tenancy/access.decorators';
+import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { MembersService } from './members.service';
 

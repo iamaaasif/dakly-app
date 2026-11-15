@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { trustedProxiesSchema } from './trusted-proxies';
-import { parseEncryptionConfiguration, type EncryptionConfiguration } from './encryption-config';
+
 import { redisUrlSchema } from '../queue/redis-connection';
+import { parseEncryptionConfiguration, type EncryptionConfiguration } from './encryption-config';
+import { trustedProxiesSchema } from './trusted-proxies';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

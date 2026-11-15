@@ -1,5 +1,7 @@
 import { useFormContext } from 'react-hook-form';
+
 import type { AuthConfig } from '../auth.types';
+
 export function SignUpConsent({ legal }: { legal: NonNullable<AuthConfig['legal']> }) {
   const form = useFormContext<{ consent: boolean }>();
   const errors = form.formState.errors;

@@ -1,5 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
+
 import { notifySessionChange } from '@/lib/notify-session-change';
+
 export function useSecurityRefresh() {
   const client = useQueryClient();
   return async () => {

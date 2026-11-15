@@ -1,4 +1,5 @@
 import { AppError } from '../platform/errors/app-error';
+
 const errors = {
   RECOVERY_DENIED: { status: 403, message: 'Account recovery is not allowed for this identity' },
   RECOVERY_STALE: { status: 409, message: 'Recovery has changed or expired. Review it again' },

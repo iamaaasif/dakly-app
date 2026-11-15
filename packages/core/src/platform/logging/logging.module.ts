@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+
 import { loadEnv } from '../config/env';
 import { AppErrorFilter } from '../errors/app-error.filter';
 import { ErrorReporter } from './error-reporter';

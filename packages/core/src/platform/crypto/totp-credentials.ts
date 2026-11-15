@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto';
+
 import { Injectable } from '@nestjs/common';
 import { Secret, TOTP } from 'otpauth';
 
@@ -13,6 +14,7 @@ export class TotpCredentials {
     });
     return delta === null ? null : Math.floor(timestamp / 30000) + delta;
   }
+
   generate(label: string) {
     const secret = new Secret({ size: 20 });
     return {
@@ -21,6 +23,7 @@ export class TotpCredentials {
       backupCodes: Array.from({ length: 10 }, () => randomBytes(10).toString('hex')),
     };
   }
+
   hashBackup(userId: string, code: string): string {
     return createHash('sha256').update(`${userId}:${code}`).digest('hex');
   }

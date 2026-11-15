@@ -1,11 +1,14 @@
 'use client';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import { totpRecoveryTokenSchema } from '@dakly/contracts/totp';
 import { Button } from '@dakly/ui/button';
+
 import { useCompleteRecovery } from '../api/complete-recovery';
-import { formError } from '@/lib/form-error';
 import { FormField as AuthField } from '@/components/form-field';
+import { formError } from '@/lib/form-error';
+
 export function RecoveryComplete() {
   const form = useForm({
     resolver: zodResolver(totpRecoveryTokenSchema),

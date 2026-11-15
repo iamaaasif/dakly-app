@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+
 import {
   ownershipTransferCodeSchema,
   startOwnershipTransferSchema,
@@ -22,9 +23,10 @@ import {
   type OwnershipTransferResponse,
   type CurrentOwnershipTransferResponse,
 } from '@dakly/contracts/team';
+
+import { AnyMember } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import { AnyMember } from '../platform/tenancy/access.decorators';
 import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { OwnershipTransferService } from './ownership-transfer.service';
@@ -35,6 +37,7 @@ export class OwnershipTransferController {
   constructor(
     @Inject(OwnershipTransferService) private readonly transfers: OwnershipTransferService,
   ) {}
+
   @Post('code')
   @HttpCode(204)
   @AnyMember()
@@ -46,6 +49,7 @@ export class OwnershipTransferController {
   ): Promise<void> {
     return this.transfers.requestCode(storeId, input.membershipId, userId, request.ip);
   }
+
   @Post()
   @AnyMember()
   start(
@@ -56,6 +60,7 @@ export class OwnershipTransferController {
   ): Promise<OwnershipTransferResponse> {
     return this.transfers.start(storeId, input, userId, request.ip);
   }
+
   @Get()
   @AnyMember()
   current(
@@ -64,6 +69,7 @@ export class OwnershipTransferController {
   ): Promise<CurrentOwnershipTransferResponse> {
     return this.transfers.current(storeId, userId);
   }
+
   @Delete(':transferId')
   @HttpCode(204)
   @AnyMember()
@@ -74,6 +80,7 @@ export class OwnershipTransferController {
   ): Promise<void> {
     return this.transfers.cancel(storeId, transferId, userId);
   }
+
   @Post('accept')
   @HttpCode(200)
   @AnyMember()

@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+
 import { beforeAll, afterAll, it, expect } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
+
 const owner = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const application = createDatabase(process.env.DATABASE_URL!);
 const schema = `seal_${randomUUID().replaceAll('-', '')}`;

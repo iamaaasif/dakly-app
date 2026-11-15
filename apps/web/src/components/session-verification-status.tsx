@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import { Button } from '@dakly/ui/button';
+
 import { ApiError } from '@dakly/ui/api-client';
+import { Button } from '@dakly/ui/button';
 
 type SessionVerificationStatusProps = {
   failure: string;

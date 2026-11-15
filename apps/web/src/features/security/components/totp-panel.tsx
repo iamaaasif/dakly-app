@@ -1,11 +1,14 @@
-import { BackupCodes } from './backup-codes';
 import { useState } from 'react';
+
 import type { AccountProfile } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { SessionDialog } from '@/components/session-dialog';
+
 import { useSecurityRefresh } from '../hooks/use-security-refresh';
-import { TotpSetup } from './totp-setup';
+import { BackupCodes } from './backup-codes';
 import { TotpDisable } from './totp-disable';
+import { TotpSetup } from './totp-setup';
+import { SessionDialog } from '@/components/session-dialog';
+
 export function TotpPanel({ profile }: { profile: AccountProfile }) {
   const [editing, setEditing] = useState<'setup' | 'disable'>();
   const [codes, setCodes] = useState<string[]>();

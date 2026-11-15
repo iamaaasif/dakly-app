@@ -14,6 +14,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
+
 import {
   attributionSourceTypes,
   cancelReasons,
@@ -27,6 +28,7 @@ import {
   orderSources,
   orderStages,
 } from '@dakly/contracts/orders';
+
 import { bdAreas } from './areas';
 import { users } from './auth';
 import { conversations } from './chats';

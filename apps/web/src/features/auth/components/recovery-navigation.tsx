@@ -1,4 +1,5 @@
 import Link from 'next/link';
+
 export function RecoveryNavigation({ onNavigate }: { onNavigate: () => void }) {
   return (
     <nav aria-label="Recovery options" className="mt-6 flex flex-wrap gap-4">

@@ -1,6 +1,7 @@
 import type { EmailDriver } from '@dakly/providers/email/email-driver';
-import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
 import { SendGridEmailDriver } from '@dakly/providers/email/sendgrid/sendgrid-email-driver';
+import { SmtpEmailDriver } from '@dakly/providers/email/smtp/smtp-email-driver';
+
 import { type Env, loadEnv } from '../platform/config/env';
 
 export const EMAIL_DRIVER = Symbol('EMAIL_DRIVER');

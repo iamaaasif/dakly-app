@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BillingService } from './billing.service';
-import type { BillingRepository, Plan } from './billing.repository';
+
 import { Clock } from '../platform/clock';
+import type { BillingRepository, Plan } from './billing.repository';
+import { BillingService } from './billing.service';
 
 const now = new Date('2028-01-31T10:00:00Z');
 const plan: Plan = {

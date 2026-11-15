@@ -1,9 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
+
 import { apiPost, apiRequest } from '@/lib/api-client';
 import { notifySessionChange } from '@/lib/notify-session-change';
 import { sessionContextKey } from '@/lib/session-context';
+
 export function InvitationAccepted({ storeId }: { storeId: string }) {
   const client = useQueryClient();
   const choose = useMutation({

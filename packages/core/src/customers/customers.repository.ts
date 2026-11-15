@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { customers } from '@dakly/db/schema/customers';
+
 import type { CreateCustomerInput } from '@dakly/contracts/customers';
+import { customers } from '@dakly/db/schema/customers';
+
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Customer = {

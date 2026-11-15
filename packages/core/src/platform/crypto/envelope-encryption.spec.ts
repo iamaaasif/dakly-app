@@ -1,5 +1,7 @@
 import { createDecipheriv, randomBytes } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
+
 import { loadEnv } from '../config/env';
 import { EnvelopeEncryption, type EncryptionContext } from './envelope-encryption';
 

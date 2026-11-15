@@ -1,6 +1,8 @@
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { describe, expect, it } from 'vitest';
+
 import { IsolationInventory } from './isolation-inventory';
+
 describe('isolation route inventory', () => {
   it('rejects a genuinely new route until it has a fixture', async () => {
     const server = new FastifyAdapter().getInstance(),

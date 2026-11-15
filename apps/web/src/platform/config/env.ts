@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 const apiOrigin = z.url().refine((value) => {
   const parsed = new URL(value);
   return parsed.origin === value && ['http:', 'https:'].includes(parsed.protocol);

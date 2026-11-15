@@ -1,11 +1,14 @@
 'use client';
 import { useState } from 'react';
-import { AuthLink } from './auth-link';
+
 import type { SignUpInput } from '@dakly/contracts/auth';
+
 import type { AuthConfig } from '../auth.types';
 import { AuthFrame } from './auth-frame';
+import { AuthLink } from './auth-link';
 import { SignUpAccount } from './sign-up-account';
 import { SignUpVerify } from './sign-up-verify';
+
 export function SignUpScreen({
   config,
   signupTicket,

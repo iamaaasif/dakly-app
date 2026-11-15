@@ -1,7 +1,10 @@
 import { useId } from 'react';
 import { useFormContext } from 'react-hook-form';
+
 import type { CreateRoleInput, PermissionArea } from '@dakly/contracts/team';
+
 import { permissionLabels } from '../permission-labels';
+
 export function PermissionAreaField({ area }: { area: PermissionArea }) {
   const {
     register,

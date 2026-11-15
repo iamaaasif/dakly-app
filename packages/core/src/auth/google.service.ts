@@ -1,19 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
 import type {
   GoogleSignInInput,
   GoogleSignInPending,
   VerifyGoogleEmailInput,
 } from '@dakly/contracts/auth';
+import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+
+import { AppError } from '../platform/errors/app-error';
+import { authKey } from './auth-key';
+import { authError } from './auth.errors';
 import { AuthService, type SignInRequest } from './auth.service';
-import { UsersRepository } from './users.repository';
 import { GoogleIdentityService } from './google-identity.service';
 import { GoogleTickets, type GoogleGrant } from './google-tickets';
 import { SignInCodes } from './sign-in-codes';
 import { SignInFailures } from './sign-in-failures';
-import { authError } from './auth.errors';
-import { authKey } from './auth-key';
-import { AppError } from '../platform/errors/app-error';
+import { UsersRepository } from './users.repository';
 
 type GoogleResult =
   { status: 'totp_required'; challengeId: string } | GoogleSignInPending | { token: string };
@@ -27,6 +29,7 @@ export class GoogleService {
     @Inject(SignInCodes) private readonly codes: SignInCodes,
     @Inject(SignInFailures) private readonly failures: SignInFailures,
   ) {}
+
   async signIn(input: GoogleSignInInput, request: SignInRequest): Promise<GoogleResult> {
     const unknown = { target: authKey('google-token', input.idToken) };
     await this.failures.assertAllowed(unknown, request.ip);
@@ -62,6 +65,7 @@ export class GoogleService {
     }
     return this.finish(identity, owner?.id, request);
   }
+
   async verifyEmail(input: VerifyGoogleEmailInput, request: SignInRequest): Promise<GoogleResult> {
     const grant = await this.tickets.read(input.verificationTicket, 'email');
     await this.codes.consume(
@@ -81,6 +85,7 @@ export class GoogleService {
       throw authError('AUTH_GOOGLE_TICKET_INVALID');
     return this.finish(grant.identity, owner?.id, request, grant.expectedEmailVerifiedAt, true);
   }
+
   private async finish(
     identity: GoogleIdentity,
     userId: string | undefined,
@@ -100,6 +105,7 @@ export class GoogleService {
     const signupTicket = await this.tickets.issue({ purpose: 'signup', identity });
     return { status: 'signup_required', signupTicket };
   }
+
   private emailSubject(ticket: string, grant: GoogleGrant) {
     return {
       target: grant.identity.email,

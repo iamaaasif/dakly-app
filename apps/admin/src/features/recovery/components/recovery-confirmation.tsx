@@ -1,16 +1,19 @@
 'use client';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import {
   staffRecoveryConfirmationSchema,
   type StaffRecoveryPreview,
   type StaffRecoveryConfirmation,
 } from '@dakly/contracts/staff-recovery';
+
 import { useRecoveryCode, useRecoverAccount } from '../api/recovery';
-import { RecoveryEffect } from './recovery-effect';
-import { RecoveryContacts } from './recovery-contacts';
 import { RecoveryActions } from './recovery-actions';
+import { RecoveryContacts } from './recovery-contacts';
+import { RecoveryEffect } from './recovery-effect';
+
 export function RecoveryConfirmation({
   preview,
   onClose,

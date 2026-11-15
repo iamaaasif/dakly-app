@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, gt, inArray, or, sql } from 'drizzle-orm';
+
+import type { InviteMemberInput, MemberListQuery, MemberRoleInput } from '@dakly/contracts/team';
 import type { Database } from '@dakly/db/client';
 import { memberships, roles } from '@dakly/db/schema/team';
-import type { InviteMemberInput, MemberListQuery, MemberRoleInput } from '@dakly/contracts/team';
+
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -50,6 +52,7 @@ export class MembersRepository {
     );
     return row;
   }
+
   async findRecipient(
     storeId: string,
     input: Pick<InviteMemberInput, 'phone' | 'email'>,
@@ -71,6 +74,7 @@ export class MembersRepository {
     );
     return row;
   }
+
   async forUser(storeId: string, userId: string): Promise<Member | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
@@ -81,6 +85,7 @@ export class MembersRepository {
     );
     return row;
   }
+
   async list(storeId: string, query: MemberListQuery): Promise<Member[]> {
     return this.tenant.forStore(storeId, (tx) =>
       tx
@@ -100,6 +105,7 @@ export class MembersRepository {
         .limit(query.limit + 1),
     );
   }
+
   async countSeats(storeId: string, now: Date): Promise<number> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
@@ -117,6 +123,7 @@ export class MembersRepository {
     );
     return row!.total;
   }
+
   async findRole(storeId: string, roleId: string) {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
@@ -132,6 +139,7 @@ export class MembersRepository {
     );
     return row;
   }
+
   async insertInvite(
     storeId: string,
     input: InviteMemberInput,
@@ -156,6 +164,7 @@ export class MembersRepository {
     );
     return row!;
   }
+
   async change(
     storeId: string,
     membershipId: string,
@@ -171,12 +180,14 @@ export class MembersRepository {
     );
     return row!;
   }
+
   async locateInvite(hash: Buffer): Promise<{ storeId: string; membershipId: string } | undefined> {
     const result = await this.database.execute<{ storeId: string; membershipId: string }>(
       sql`select store_id as "storeId", membership_id as "membershipId" from membership_for_invite(${hash})`,
     );
     return result.rows[0];
   }
+
   async matchesToken(storeId: string, membershipId: string, hash: Buffer): Promise<boolean> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx

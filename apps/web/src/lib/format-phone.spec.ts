@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { formatPhone } from './format-phone';
 
 describe('formatPhone', () => {

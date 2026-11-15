@@ -1,5 +1,5 @@
-import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 import type { SignUpInput } from '@dakly/contracts/auth';
+import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 
 export type SignInRequest = { ip: string; userAgent?: string; isRemembered: boolean };
 // A pending registration is inserted in the same account transaction as its first session.

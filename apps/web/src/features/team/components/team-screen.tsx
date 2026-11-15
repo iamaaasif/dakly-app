@@ -1,7 +1,9 @@
 import Link from 'next/link';
-import { StorePage } from '@/components/store-page';
+
 import { MembersScreen } from './members-screen';
 import { RolesScreen } from './roles-screen';
+import { StorePage } from '@/components/store-page';
+
 export function TeamScreen({ tab, cursor }: { tab: 'members' | 'roles'; cursor?: string }) {
   return (
     <StorePage permission="canViewTeam">

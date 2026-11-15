@@ -1,5 +1,7 @@
 import type { TotpRecoveryResponse } from '@dakly/contracts/totp';
+
 import { formatDateTime } from '@/lib/format-date';
+
 export function RecoveryProof({ proof }: { proof: TotpRecoveryResponse }) {
   return (
     <div className="space-y-4">

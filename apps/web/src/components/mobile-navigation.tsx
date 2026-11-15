@@ -1,8 +1,10 @@
 'use client';
-import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { Menu, X } from 'lucide-react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
+
 import { ShellNavigation } from './shell-navigation';
 
 export function MobileNavigation({

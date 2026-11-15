@@ -1,9 +1,11 @@
 import { inspect } from 'node:util';
+
 import { type ArgumentsHost, ConsoleLogger, Logger, type LoggerService } from '@nestjs/common';
-import { afterEach, describe, expect, it } from 'vitest';
 import { DrizzleQueryError } from 'drizzle-orm/errors';
-import { AppErrorFilter } from './app-error.filter';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { ErrorReporter } from '../logging/error-reporter';
+import { AppErrorFilter } from './app-error.filter';
 
 // Capturing the logger sink preserves the real filter and Nest logger boundary.
 describe('AppErrorFilter', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { uuidv7 } from './uuid-v7';
 
 describe('uuidv7', () => {

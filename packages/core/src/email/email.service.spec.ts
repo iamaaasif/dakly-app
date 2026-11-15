@@ -1,10 +1,13 @@
 import 'reflect-metadata';
 import { performance } from 'node:perf_hooks';
+
 import { Logger, Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { EmailDriver } from '@dakly/providers/email/email-driver';
+
 import { requestLoggingOptions } from '../platform/logging/request-logging';
 import { EMAIL_DRIVER } from './email-provider';
 import { EmailService } from './email.service';

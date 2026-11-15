@@ -9,12 +9,14 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import {
   customerListSizes,
   extensions,
   howYouSellOptions,
   storeStatuses,
 } from '@dakly/contracts/stores';
+
 import { allOneOf, citext, createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
 
 // The tenant. Settings the database never filters on (working hours, quiet hours, daily limits,

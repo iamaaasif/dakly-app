@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useRef } from 'react';
+
 import { type BreakGlassPreview } from '@dakly/contracts/break-glass';
 import { Button } from '@dakly/ui/button';
+
 import { useConfirmBreakGlass } from '../api/break-glass';
 import { EffectDetails } from './effect-details';
 

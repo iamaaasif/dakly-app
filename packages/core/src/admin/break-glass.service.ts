@@ -1,19 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import {
   breakGlassEffectSchema,
   type BreakGlassRequest,
   type BreakGlassConfirmation,
 } from '@dakly/contracts/break-glass';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+
 import { Clock } from '../platform/clock';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { newId } from '../platform/database/new-id';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { StaffAlertsService } from './staff-alerts.service';
+import { SupportAuditService } from './support-audit.service';
+import { supportError } from './support.errors';
 import { SupportRepository } from './support.repository';
 import { SupportService } from './support.service';
-import { SupportAuditService } from './support-audit.service';
-import { StaffAlertsService } from './staff-alerts.service';
-import { RiskyActionConfirmation } from './risky-action-confirmation';
-import { supportError } from './support.errors';
+
 type Staff = StaffIdentity & { sessionId: string };
 @Injectable()
 export class BreakGlassService {
@@ -26,6 +29,7 @@ export class BreakGlassService {
     @Inject(RiskyActionConfirmation) private readonly confirmation: RiskyActionConfirmation,
     @Inject(StaffAlertsService) private readonly alerts: StaffAlertsService,
   ) {}
+
   async previewBreakGlass(staff: Staff, input: BreakGlassRequest) {
     const target = (await this.repository.targets(input.targetId))[0];
     if (!target) throw supportError('SUPPORT_NOT_FOUND');
@@ -48,6 +52,7 @@ export class BreakGlassService {
       return { effect, proof: this.confirmation.sign(effect) };
     });
   }
+
   async openBreakGlass(staff: Staff, input: BreakGlassConfirmation, ip: string) {
     this.confirmation.verify(input.effect, input.proof);
     const effect = input.effect;

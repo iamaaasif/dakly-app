@@ -1,7 +1,10 @@
 import type { UseFormReturn } from 'react-hook-form';
 import type { z } from 'zod';
+
 import type { inviteMemberSchema, InviteMemberInput } from '@dakly/contracts/team';
+
 import { TeamField } from './team-field';
+
 type InviteRecipientProps = {
   channel: 'phone' | 'email';
   onChange: (next: 'phone' | 'email') => void;

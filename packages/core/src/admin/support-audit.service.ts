@@ -1,13 +1,17 @@
-import type { AuditEntry } from '@dakly/contracts/audit';
 import { Inject, Injectable } from '@nestjs/common';
-import { StaffAuditService } from './staff-audit.service';
+
+import type { AuditEntry } from '@dakly/contracts/audit';
+
 import { AuditService } from '../audit/audit.service';
+import { StaffAuditService } from './staff-audit.service';
+
 @Injectable()
 export class SupportAuditService {
   constructor(
     @Inject(StaffAuditService) private readonly staffAudit: StaffAuditService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+
   async record(
     storeId: string,
     id: string,

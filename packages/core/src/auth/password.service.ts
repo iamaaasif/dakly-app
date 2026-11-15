@@ -1,22 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { hashPassword } from '../platform/crypto/password';
+
 import type {
   ChangePasswordInput,
   ConfirmPasswordResetInput,
   PasswordIdentifierInput,
   PasswordSignInInput,
 } from '@dakly/contracts/auth';
-import { AccountTransaction } from '../platform/database/account-transaction';
+
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
-import { SessionsService } from '../sessions/sessions.service';
 import { Clock } from '../platform/clock';
-import { AuthService, type SignInRequest, type SignInUser } from './auth.service';
-import { UsersRepository } from './users.repository';
-import { SignInCodes, type PasswordProof } from './sign-in-codes';
-import { SignInFailures, type SignInSubject } from './sign-in-failures';
-import { PasswordCredentials } from './password-credentials';
+import { hashPassword } from '../platform/crypto/password';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
+import { AuthService, type SignInRequest, type SignInUser } from './auth.service';
+import { PasswordCredentials } from './password-credentials';
+import { SignInCodes, type PasswordProof } from './sign-in-codes';
+import { SignInFailures, type SignInSubject } from './sign-in-failures';
+import { UsersRepository } from './users.repository';
 
 @Injectable()
 export class PasswordService {

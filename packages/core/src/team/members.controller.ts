@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+
 import {
   inviteMemberSchema,
   memberListQuerySchema,
@@ -24,11 +25,12 @@ import {
   type MemberResponse,
   type MemberRoleInput,
 } from '@dakly/contracts/team';
+
+import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import { RequirePermission } from '../platform/tenancy/access.decorators';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import type { StoreRequest } from '../platform/tenancy/store-request';
+import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { MembersService } from './members.service';
 
@@ -45,6 +47,7 @@ export class MembersController {
   ): Promise<MemberListResponse> {
     return this.members.list(storeId, query, request.access!);
   }
+
   @Post('invites')
   @RequirePermission('team.edit')
   invite(
@@ -55,6 +58,7 @@ export class MembersController {
   ): Promise<MemberResponse> {
     return this.members.invite(storeId, input, { userId, access: request.access! }, request.ip);
   }
+
   @Post('invites/:membershipId/resend')
   @HttpCode(200)
   @RequirePermission('team.edit')
@@ -71,6 +75,7 @@ export class MembersController {
       request.ip,
     );
   }
+
   @Patch(':membershipId')
   @RequirePermission('team.edit')
   changeRole(
@@ -85,6 +90,7 @@ export class MembersController {
       access: request.access!,
     });
   }
+
   @Delete(':membershipId')
   @HttpCode(204)
   @RequirePermission('team.edit')

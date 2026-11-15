@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { toRedisConnection } from './redis-connection';
 
 describe('toRedisConnection', () => {

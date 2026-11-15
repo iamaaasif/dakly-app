@@ -1,6 +1,8 @@
-import type { CustomerResponse } from './customers';
 import { z } from 'zod';
+
 import { supportGrantAccess, type supportGrantStatuses } from './admin';
+import type { CustomerResponse } from './customers';
+
 export const supportScopes = ['customers'] as const;
 export const supportReasonSchema = z.string().trim().min(10).max(1000);
 export const supportRequestSchema = z.strictObject({

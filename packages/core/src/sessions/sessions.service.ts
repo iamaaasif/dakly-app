@@ -1,16 +1,19 @@
-import type { StoreAccess } from '@dakly/contracts/team';
-import { sessionContextTag } from './session-context';
-import type { AccountSecurityEvent } from '@dakly/contracts/account-security-events';
-import { UsersService } from '../auth/users.service';
-import { TeamService } from '../team/team.service';
-import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
-import { sessionError } from './sessions.errors';
 import { createHash, randomBytes } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
+
+import type { AccountSecurityEvent } from '@dakly/contracts/account-security-events';
 import type { CreateSessionInput, Session, SessionContext } from '@dakly/contracts/sessions';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { Clock } from '../platform/clock';
+import type { StoreAccess } from '@dakly/contracts/team';
+
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import { UsersService } from '../auth/users.service';
+import { Clock } from '../platform/clock';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { TeamService } from '../team/team.service';
+import { sessionContextTag } from './session-context';
+import { sessionError } from './sessions.errors';
 import { SessionsRepository } from './sessions.repository';
 
 const TOUCH_INTERVAL = 5 * 60 * 1000;
@@ -72,6 +75,7 @@ export class SessionsService {
       nextCursor: rows.length === 100 ? rows.at(-1)!.id : null,
     };
   }
+
   isActive(userId: string, sessionId: string) {
     return this.repository.isActive(userId, sessionId, this.clock.now());
   }

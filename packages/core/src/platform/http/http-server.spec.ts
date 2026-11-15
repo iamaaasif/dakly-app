@@ -1,5 +1,6 @@
-import { createHttpServer } from './http-server';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { createHttpServer } from './http-server';
 
 const servers: ReturnType<typeof createHttpServer>[] = [];
 afterEach(async () => {

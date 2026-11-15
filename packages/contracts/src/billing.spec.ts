@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import * as billing from './billing';
 
 describe('plan trial length', () => {

@@ -1,15 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { StoreTransaction } from '../platform/database/store-transaction';
-import { Clock } from '../platform/clock';
+
 import { SignInCodes, type SignInSubject } from '../auth/codes.module';
 import { UsersService } from '../auth/users.service';
+import { Clock } from '../platform/clock';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { TeamService } from '../team/team.service';
-import { SupportAuditService } from './support-audit.service';
-import { SupportRepository } from './support.repository';
 import { StaffIdentityService } from './staff-identity.service';
-import { supportError } from './support.errors';
+import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { supportRoles } from './support-roles';
+import { supportError } from './support.errors';
+import { SupportRepository } from './support.repository';
 
 @Injectable()
 export class SupportOwnerService {
@@ -23,6 +24,7 @@ export class SupportOwnerService {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(SignInCodes) private readonly codes: SignInCodes,
   ) {}
+
   async ownerRequests(storeId: string, userId: string, sessionId: string, before?: string) {
     return this.transaction.run(storeId, async () => {
       await this.assertOwnerCanRead(storeId, userId, sessionId);
@@ -32,6 +34,7 @@ export class SupportOwnerService {
       return { items, nextCursor: items.length === 50 ? items.at(-1)!.id : null };
     });
   }
+
   async requestCode(
     storeId: string,
     id: string,
@@ -42,6 +45,7 @@ export class SupportOwnerService {
     const subject = await this.requestSubject(storeId, id, userId, sessionId);
     await this.codes.send(subject, 'support_approval', ip);
   }
+
   private async requestSubject(storeId: string, id: string, userId: string, sessionId?: string) {
     return this.transaction.run(storeId, async () => {
       const identity = await this.users.lockVerifiedIdentity(storeId, userId);
@@ -70,6 +74,7 @@ export class SupportOwnerService {
       });
     });
   }
+
   async approve(
     storeId: string,
     id: string,
@@ -110,6 +115,7 @@ export class SupportOwnerService {
       });
     });
   }
+
   async end(
     storeId: string,
     id: string,
@@ -138,6 +144,7 @@ export class SupportOwnerService {
       await this.repository.change(storeId, id, { status: decision, endedAt: this.clock.now() });
     });
   }
+
   private ownerAction<T>(
     storeId: string,
     userId: string,
@@ -152,6 +159,7 @@ export class SupportOwnerService {
       });
     });
   }
+
   private async assertOwner(storeId: string, userId: string, sessionId: string) {
     const access = await this.team.accessFor(storeId, userId);
     if (
@@ -161,17 +169,20 @@ export class SupportOwnerService {
     )
       throw supportError('SUPPORT_DENIED');
   }
+
   private async requireGrant(storeId: string, id: string) {
     const grant = await this.repository.find(storeId, id);
     if (!grant) throw supportError('SUPPORT_NOT_FOUND');
     return grant;
   }
+
   private async pending(storeId: string, id: string) {
     const grant = await this.requireGrant(storeId, id);
     if (supportGrantStatus(grant, this.clock.now()) !== 'requested')
       throw supportError('SUPPORT_INVALID');
     return grant;
   }
+
   private async assertOwnerCanRead(storeId: string, userId: string, sessionId: string) {
     const access = await this.team.accessFor(storeId, userId);
     if (
@@ -181,6 +192,7 @@ export class SupportOwnerService {
     )
       throw supportError('SUPPORT_DENIED');
   }
+
   private async assertStaff(storeId: string, staffUserId: string) {
     const staff = await this.repository.staff(storeId, staffUserId);
     if (

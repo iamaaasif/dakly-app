@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+
 import {
   totpRecoveryCodeSchema,
   totpRecoverySchema,
@@ -8,9 +9,11 @@ import {
   type TotpRecoveryInput,
   type TotpRecoveryTokenInput,
 } from '@dakly/contracts/totp';
+
 import { Public } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { TotpRecoveryService } from './totp-recovery.service';
+
 @Controller('auth/totp/recovery')
 @Public()
 export class TotpRecoveryController {
@@ -23,6 +26,7 @@ export class TotpRecoveryController {
   ) {
     return this.recovery.requestCode(input, request.ip);
   }
+
   @Post()
   @HttpCode(202)
   start(
@@ -31,6 +35,7 @@ export class TotpRecoveryController {
   ) {
     return this.recovery.start(input, request.ip);
   }
+
   @Post('cancel')
   @HttpCode(204)
   cancel(
@@ -39,6 +44,7 @@ export class TotpRecoveryController {
   ) {
     return this.recovery.cancel(input, request.ip);
   }
+
   @Post('complete')
   @HttpCode(204)
   complete(

@@ -1,7 +1,8 @@
-import { Reflector } from '@nestjs/core';
-import { ACCESS_RULE, type AccessRule } from './access.decorators';
 import { type CanActivate, type ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
+import { ACCESS_RULE, type AccessRule } from './access.decorators';
 import type { StoreRequest } from './store-request';
 
 @Injectable()

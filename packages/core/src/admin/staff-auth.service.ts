@@ -1,23 +1,25 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
-import { PasskeyDriver } from '@dakly/providers/webauthn/passkey-driver';
+
 import type {
   StaffSignInInput,
   StaffEnrollmentInput,
   StaffEnrollment,
   StaffChallenge,
 } from '@dakly/contracts/staff-auth';
-import { hashPassword, verifyPassword } from '../platform/crypto/password';
-import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
-import { StaffTransaction } from '../platform/database/staff-transaction';
+import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+import { PasskeyDriver } from '@dakly/providers/webauthn/passkey-driver';
+
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
-import { StaffRepository } from './staff.repository';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { hashPassword, verifyPassword } from '../platform/crypto/password';
+import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { StaffTransaction } from '../platform/database/staff-transaction';
+import { staffError } from './admin.errors';
 import { StaffAttempts } from './staff-attempts';
 import { StaffAuditService } from './staff-audit.service';
 import { newStaffProof, staffTokenHash } from './staff-tokens';
-import { staffError } from './admin.errors';
+import { StaffRepository } from './staff.repository';
 
 export type LockedStaff = NonNullable<Awaited<ReturnType<StaffRepository['lock']>>>;
 @Injectable()
@@ -32,6 +34,7 @@ export class StaffAuthService {
     @Inject(StaffAuditService) private readonly audit: StaffAuditService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async withStaff<T>(
     identity: AccessIdentity,
     ip: string,
@@ -59,9 +62,11 @@ export class StaffAuthService {
     if (result === undefined) throw staffError('STAFF_INVALID_CREDENTIALS');
     return result;
   }
+
   checkIp(ip: string): Promise<void> {
     return this.attempts.ip(ip);
   }
+
   async signIn(
     input: StaffSignInInput,
     identity: AccessIdentity,
@@ -100,6 +105,7 @@ export class StaffAuthService {
       return { challenge, factors, passkey };
     });
   }
+
   async enroll(
     input: StaffEnrollmentInput,
     identity: AccessIdentity,
@@ -143,6 +149,7 @@ export class StaffAuthService {
       return response;
     });
   }
+
   async challenge(staff: LockedStaff, token: string) {
     const challenge = await this.repository.challenge(staff.id, staffTokenHash(token));
     if (!challenge || challenge.consumedAt || challenge.expiresAt <= this.clock.now())
@@ -154,6 +161,7 @@ export class StaffAuthService {
       return undefined;
     return challenge;
   }
+
   private expiry() {
     return new Date(this.clock.now().getTime() + 300000);
   }

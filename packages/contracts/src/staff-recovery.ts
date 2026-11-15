@@ -1,6 +1,8 @@
 import { z } from 'zod';
-import { bdMobileSchema } from './phone';
+
 import { accountRecoveryReasons } from './account-security-events';
+import { bdMobileSchema } from './phone';
+
 export const staffRecoveryLookupSchema = z.strictObject({
   identifier: z.union([
     bdMobileSchema,

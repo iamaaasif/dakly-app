@@ -3,6 +3,7 @@ import type {
   StaffAlertMessage,
   StaffAlertCredentials,
 } from '../staff-alert-driver';
+
 export class SlackAlertDriver implements StaffAlertDriver {
   constructor(private readonly request: typeof fetch = fetch) {}
   async send(message: StaffAlertMessage, credentials: StaffAlertCredentials): Promise<void> {

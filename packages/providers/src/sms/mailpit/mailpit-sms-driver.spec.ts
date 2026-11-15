@@ -1,6 +1,8 @@
-import { createServer } from 'node:net';
 import { once } from 'node:events';
+import { createServer } from 'node:net';
+
 import { describe, expect, it } from 'vitest';
+
 import { MailpitSmsDriver } from './mailpit-sms-driver';
 
 describe('MailpitSmsDriver', () => {

@@ -12,13 +12,15 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import {
   channelConnectionKinds,
   channelConnectionStatuses,
   smsSenderIdStatuses,
 } from '@dakly/contracts/channels';
-import { bytea, createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
+
 import { users } from './auth';
+import { bytea, createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
 import { files } from './platform';
 import { stores } from './stores';
 

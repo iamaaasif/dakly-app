@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { bdMobileSchema } from './phone';
 
 export const campaignChannels = ['whatsapp', 'sms', 'messenger'] as const;

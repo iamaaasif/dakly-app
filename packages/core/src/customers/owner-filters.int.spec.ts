@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { CustomersRepository } from './customers.repository';
+
 describe('customer filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new CustomersRepository(f.tenant);

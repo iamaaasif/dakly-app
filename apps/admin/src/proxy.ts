@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
+
 import { CloudflareAccessDriver } from '@dakly/providers/cloudflare/access-driver';
+
 import { adminEnvironment } from './platform/config/env';
+
 let driver: CloudflareAccessDriver | undefined;
 export async function proxy(request: NextRequest) {
   try {

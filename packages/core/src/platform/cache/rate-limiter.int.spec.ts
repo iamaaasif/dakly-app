@@ -1,9 +1,11 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
+
 import { type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { CacheModule } from './cache.module';
 import { RateLimiter } from './rate-limiter';
 import { ValkeyClient } from './valkey-client';

@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { SecurityNoticesService } from '@dakly/core/auth/security-notices.service';
 import { jobLogBindings } from '@dakly/core/platform/logging/job-context';
+
 import { AccountSecurityNoticesJob } from '../src/account-security-notices.job';
 
 describe('Account security notice polling', () => {

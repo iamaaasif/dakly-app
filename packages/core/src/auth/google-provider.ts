@@ -1,6 +1,7 @@
-import type { GoogleIdentityDriver } from '@dakly/providers/google/google-identity-driver';
 import { FakeGoogleIdentityDriver } from '@dakly/providers/google/fake-google-identity-driver';
+import type { GoogleIdentityDriver } from '@dakly/providers/google/google-identity-driver';
 import { GoogleTokenDriver } from '@dakly/providers/google/google-token-driver';
+
 import { loadEnv, type Env } from '../platform/config/env';
 
 export const GOOGLE_IDENTITY_DRIVER = Symbol('GOOGLE_IDENTITY_DRIVER');

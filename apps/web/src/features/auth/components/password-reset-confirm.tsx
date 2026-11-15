@@ -1,14 +1,17 @@
 'use client';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import { confirmPasswordResetSchema, passwordSchema } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
+
 import { useConfirmReset } from '../api/confirm-reset';
-import { formError } from '@/lib/form-error';
-import { FormField as AuthField } from '@/components/form-field';
 import { TotpStep } from './totp-step';
+import { FormField as AuthField } from '@/components/form-field';
+import { formError } from '@/lib/form-error';
+
 const resetSchema = confirmPasswordResetSchema
   .extend({ confirmation: passwordSchema })
   .refine((value) => value.password === value.confirmation, {

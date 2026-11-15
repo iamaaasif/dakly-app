@@ -1,11 +1,12 @@
 import 'reflect-metadata';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { hash } from 'argon2';
-import { PasswordCredentials } from './password-credentials';
-import { UsersRepository } from './users.repository';
-import { SignInFailures } from './sign-in-failures';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
 import { Clock } from '../platform/clock';
 import { authError } from './auth.errors';
+import { PasswordCredentials } from './password-credentials';
+import { SignInFailures } from './sign-in-failures';
+import { UsersRepository } from './users.repository';
 
 const userId = '019a76de-f000-7000-8000-000000000001';
 const subject = { target: '01712345678', userId };

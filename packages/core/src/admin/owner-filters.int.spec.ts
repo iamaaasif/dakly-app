@@ -1,9 +1,12 @@
 import { randomUUID, randomBytes } from 'node:crypto';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { AccountDatabase } from '../platform/database/account-database';
-import { SupportRepository } from './support.repository';
 import { StaffRecoveryRepository } from './staff-recovery.repository';
+import { SupportRepository } from './support.repository';
+
 describe('support and recovery filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new SupportRepository(f.tenant, f.connection.db);

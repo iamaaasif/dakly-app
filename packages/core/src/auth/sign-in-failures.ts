@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { SmsService } from '../sms/sms.service';
+
+import { EmailService } from '../email/email.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { SmsService } from '../sms/sms.service';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
-import { EmailService } from '../email/email.service';
 
 export type SignInSubject = {
   userId?: string;

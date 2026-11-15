@@ -1,7 +1,9 @@
 import { useState, type ComponentProps } from 'react';
 import type { UseFormRegisterReturn, FieldError } from 'react-hook-form';
-import { Input } from '@dakly/ui/input';
+
 import { Button } from '@dakly/ui/button';
+import { Input } from '@dakly/ui/input';
+
 type FormFieldProps = {
   label: string;
   field: UseFormRegisterReturn;

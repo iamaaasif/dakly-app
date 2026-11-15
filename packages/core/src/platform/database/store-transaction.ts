@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { uuidv7 } from '@dakly/db/uuid-v7';
-import { TenantDatabase } from './tenant-database';
 import { eq } from 'drizzle-orm';
+
 import { stores } from '@dakly/db/schema/stores';
+import { uuidv7 } from '@dakly/db/uuid-v7';
+
+import { TenantDatabase } from './tenant-database';
 
 @Injectable()
 export class StoreTransaction {

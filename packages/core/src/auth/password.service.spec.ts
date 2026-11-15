@@ -1,17 +1,18 @@
 import 'reflect-metadata';
-import { beforeEach, describe, expect, it } from 'vitest';
 import { verify } from 'argon2';
-import { PasswordService } from './password.service';
-import { PasswordCredentials } from './password-credentials';
-import { UsersRepository } from './users.repository';
-import { SignInCodes, type PasswordProof } from './sign-in-codes';
-import { SignInFailures } from './sign-in-failures';
-import { AuthService } from './auth.service';
-import { AccountTransaction } from '../platform/database/account-transaction';
-import { SessionsService } from '../sessions/sessions.service';
+import { beforeEach, describe, expect, it } from 'vitest';
+
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Clock } from '../platform/clock';
+import { AccountTransaction } from '../platform/database/account-transaction';
+import { SessionsService } from '../sessions/sessions.service';
 import { authError } from './auth.errors';
+import { AuthService } from './auth.service';
+import { PasswordCredentials } from './password-credentials';
+import { PasswordService } from './password.service';
+import { SignInCodes, type PasswordProof } from './sign-in-codes';
+import { SignInFailures } from './sign-in-failures';
+import { UsersRepository } from './users.repository';
 
 const userId = '019a76de-f000-7000-8000-000000000001';
 const phone = '01712345678';

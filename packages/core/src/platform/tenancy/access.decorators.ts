@@ -1,5 +1,6 @@
-import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import { SetMetadata } from '@nestjs/common';
+
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import type { AccessLevel, Permission, PermissionArea } from '@dakly/contracts/team';
 
 export const ACCESS_RULE = Symbol('ACCESS_RULE');

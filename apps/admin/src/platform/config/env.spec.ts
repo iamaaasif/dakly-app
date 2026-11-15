@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { adminEnvironment } from './env';
+
 describe('Admin origin configuration', () => {
   afterEach(() => vi.unstubAllEnvs());
   it('requires explicit Access verification configuration', () => {

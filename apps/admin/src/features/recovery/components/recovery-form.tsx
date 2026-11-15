@@ -1,13 +1,12 @@
 'use client';
-import type { StaffRecoveryTarget } from '@dakly/contracts/staff-recovery';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  staffRecoveryRequestSchema,
-  type StaffRecoveryRequest,
-} from '@dakly/contracts/staff-recovery';
+import { useForm } from 'react-hook-form';
+
+import type { StaffRecoveryTarget, StaffRecoveryRequest } from '@dakly/contracts/staff-recovery';
+import { staffRecoveryRequestSchema } from '@dakly/contracts/staff-recovery';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
+
 import { useRecoveryPreview } from '../api/recovery';
 import { RecoveryConfirmation } from './recovery-confirmation';
 import { RecoveryFields } from './recovery-fields';

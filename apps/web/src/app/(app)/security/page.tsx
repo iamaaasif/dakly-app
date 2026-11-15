@@ -1,7 +1,10 @@
 import { Suspense } from 'react';
+
 import { sessionListSchema } from '@dakly/contracts/sessions';
-import { requireSession } from '@/lib/require-session';
+
 import { SecurityScreen } from '@/features/security/components/security-screen';
+import { requireSession } from '@/lib/require-session';
+
 export default async function Page({
   searchParams,
 }: {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { passwordSchema } from './auth';
+
 import { staffRoles } from './admin';
+import { passwordSchema } from './auth';
 import { bdMobileSchema } from './phone';
 
 const email = z

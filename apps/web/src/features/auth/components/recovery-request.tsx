@@ -1,10 +1,13 @@
 'use client';
 import { FormProvider } from 'react-hook-form';
+
 import { Button } from '@dakly/ui/button';
-import { FormField as AuthField } from '@/components/form-field';
+
+import { useRecoveryRequest } from '../hooks/use-recovery-request';
 import { RecoveryProof } from './recovery-proof';
 import { RecoveryProofFields } from './recovery-proof-fields';
-import { useRecoveryRequest } from '../hooks/use-recovery-request';
+import { FormField as AuthField } from '@/components/form-field';
+
 export function RecoveryRequest() {
   const { form, proof, sent, errors, send, submit, pending } = useRecoveryRequest();
   if (proof) return <RecoveryProof proof={proof} />;

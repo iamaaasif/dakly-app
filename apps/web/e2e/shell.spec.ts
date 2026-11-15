@@ -1,7 +1,9 @@
 import { randomInt } from 'node:crypto';
+
 import { test, expect, type Page } from '@playwright/test';
-import { createDatabase } from '@dakly/db/client';
+
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { createDatabase } from '@dakly/db/client';
 
 async function verifyOnFocus(page: Page) {
   const response = page.waitForResponse((item) => item.url().endsWith('/api/me/context'));

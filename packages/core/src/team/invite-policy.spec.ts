@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { assertInviteRecipient, assertOpenInvite } from './invite-policy';
 
 const now = new Date('2026-11-14T00:00:00Z');

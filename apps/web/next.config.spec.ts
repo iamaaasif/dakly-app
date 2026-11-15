@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import nextConfig from './next.config';
 import { webApiUrl } from './src/platform/config/env';
+
 afterEach(() => vi.unstubAllEnvs());
 describe('shop API routing', () => {
   it('keeps support transport under its cookie path and points all routes at configured API origin', async () => {

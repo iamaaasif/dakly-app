@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { bdMobileSchema } from './phone';
 
 export const createCustomerSchema = z.object({

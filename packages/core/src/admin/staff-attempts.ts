@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Clock } from '../platform/clock';
+
 import { RateLimiter } from '../platform/cache/rate-limiter';
-import { StaffRepository } from './staff.repository';
-import { staffTokenHash } from './staff-tokens';
+import { Clock } from '../platform/clock';
 import { staffError } from './admin.errors';
+import { staffTokenHash } from './staff-tokens';
+import { StaffRepository } from './staff.repository';
+
 @Injectable()
 export class StaffAttempts {
   private readonly logger = new Logger(StaffAttempts.name);
@@ -12,6 +14,7 @@ export class StaffAttempts {
     @Inject(StaffRepository) private readonly repository: StaffRepository,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async ip(ip: string): Promise<void> {
     const result = await this.limiter.consume(
       `staff:ip:${staffTokenHash(ip).toString('hex')}`,
@@ -20,10 +23,12 @@ export class StaffAttempts {
     );
     if (!result.allowed) throw staffError('STAFF_RATE_LIMITED');
   }
+
   assertAllowed(staff: { blockedUntil: Date | null }): void {
     if (staff.blockedUntil && staff.blockedUntil > this.clock.now())
       throw staffError('STAFF_RATE_LIMITED');
   }
+
   async failed(staff: {
     id: string;
     failedAttempts: number;

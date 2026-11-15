@@ -1,11 +1,14 @@
 'use client';
 import Link from 'next/link';
+
 import { QueryError } from '@dakly/ui/query-error';
-import { useSessionContext } from '@/lib/session-context';
+
 import { useCurrentTransfer } from '../api/current-transfer';
+import { OwnershipEmpty } from './ownership-empty';
 import { TeamLoading } from './team-loading';
 import { TransferStatus } from './transfer-status';
-import { OwnershipEmpty } from './ownership-empty';
+import { useSessionContext } from '@/lib/session-context';
+
 export function OwnershipScreen({ cursor }: { cursor?: string }) {
   const session = useSessionContext();
   const current = useCurrentTransfer();

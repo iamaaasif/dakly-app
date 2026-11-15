@@ -1,4 +1,5 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
+
 const SESSION_ERRORS = {
   SESSION_CONTEXT_CHANGED: {
     status: 409,

@@ -1,5 +1,7 @@
 import { permissionAreas, type RolePermissions } from '@dakly/contracts/team';
+
 import { permissionLabels, flagLabels } from '../permission-labels';
+
 export function PermissionSummary({ permissions }: { permissions: RolePermissions }) {
   return (
     <details>

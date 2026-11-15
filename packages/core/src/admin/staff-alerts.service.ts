@@ -1,16 +1,20 @@
 import { performance } from 'node:perf_hooks';
+
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+
 import { breakGlassEffectSchema, type StaffAlertPage } from '@dakly/contracts/break-glass';
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import type {
   StaffAlertDriver,
   StaffAlertCredentials,
 } from '@dakly/providers/staff-alert/staff-alert-driver';
-import { StaffTransaction } from '../platform/database/staff-transaction';
+
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
+import { StaffTransaction } from '../platform/database/staff-transaction';
 import { StaffAlertsRepository } from './staff-alerts.repository';
 import { supportError } from './support.errors';
+
 export const STAFF_ALERT_DRIVER = Symbol('STAFF_ALERT_DRIVER');
 export const STAFF_ALERT_CREDENTIALS = Symbol('STAFF_ALERT_CREDENTIALS');
 type Staff = StaffIdentity & { sessionId: string };
@@ -23,9 +27,11 @@ export class StaffAlertsService {
     @Inject(STAFF_ALERT_DRIVER) private readonly driver: StaffAlertDriver,
     @Inject(STAFF_ALERT_CREDENTIALS) private readonly credentials: StaffAlertCredentials | null,
   ) {}
+
   recordIntent(storeId: string, auditId: string) {
     return this.repository.recordIntent(storeId, auditId, this.clock.now());
   }
+
   async list(staff: Staff, before?: string): Promise<StaffAlertPage> {
     return this.transaction.run(staff.id, async () => {
       await this.assertStaff(staff);
@@ -33,6 +39,7 @@ export class StaffAlertsService {
       return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null };
     });
   }
+
   async retry(staff: Staff, id: string, reason: string, ip: string) {
     await this.transaction.run(staff.id, async () => {
       await this.assertStaff(staff);
@@ -43,6 +50,7 @@ export class StaffAlertsService {
       await this.repository.retry(staff.id, id, reason, ip, now);
     });
   }
+
   private async assertStaff(staff: Staff) {
     const current = await this.repository.currentStaff(staff.id, staff.sessionId);
     const now = this.clock.now();
@@ -58,9 +66,11 @@ export class StaffAlertsService {
     )
       throw supportError('SUPPORT_DENIED');
   }
+
   pending() {
     return this.repository.pending(this.clock.now());
   }
+
   async deliver(id: string) {
     const leaseId = newId();
     const task = await this.repository.claim(id, leaseId, this.clock.now());
@@ -96,6 +106,7 @@ export class StaffAlertsService {
       throw supportError('STAFF_ALERT_DELIVERY_FAILED');
     }
   }
+
   private async send(
     message: import('@dakly/providers/staff-alert/staff-alert-driver').StaffAlertMessage,
     credentials: StaffAlertCredentials,

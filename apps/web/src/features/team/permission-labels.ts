@@ -1,4 +1,5 @@
 import type { PermissionArea } from '@dakly/contracts/team';
+
 export const permissionLabels: Record<PermissionArea, string> = {
   dashboard: 'Dashboard',
   chats: 'Chats',

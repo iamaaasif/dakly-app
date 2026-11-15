@@ -1,11 +1,14 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
 import { Button } from '@dakly/ui/button';
 import { Skeleton } from '@dakly/ui/skeleton';
+
 import { useStaffSession } from '../api/session';
 import { useStaffSignOut } from '../api/sign-out';
 import { AuthPanel } from './auth-panel';
+
 export function StaffHome() {
   const session = useStaffSession();
   const signOut = useStaffSignOut();

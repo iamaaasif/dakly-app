@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { SupportService } from './support.service';
-import { SupportOwnerService } from './support-owner.service';
+
 import { AppError } from '../platform/errors/app-error';
+import { SupportOwnerService } from './support-owner.service';
 import { supportError } from './support.errors';
+import { SupportService } from './support.service';
 
 const now = new Date('2026-11-15T00:00:00Z');
 function service(failure: Error, atSubject = false) {

@@ -1,5 +1,6 @@
-import { Public } from '@dakly/core/platform/tenancy/access.decorators';
 import { Controller, Get } from '@nestjs/common';
+
+import { Public } from '@dakly/core/platform/tenancy/access.decorators';
 
 @Controller('health')
 @Public()

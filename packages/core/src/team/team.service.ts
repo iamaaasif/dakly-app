@@ -1,14 +1,16 @@
-import type { UserStorePageQuery, UserStorePage } from '@dakly/contracts/sessions';
 import { Inject, Injectable } from '@nestjs/common';
+
+import type { UserStorePageQuery, UserStorePage } from '@dakly/contracts/sessions';
 import {
   customRolePermissionsSchema,
   type StoreAccess,
   type PermissionArea,
   type AccessLevel,
 } from '@dakly/contracts/team';
-import { TeamRepository } from './team.repository';
+
 import { builtInRoleAccess } from './built-in-roles';
 import { canAccess, canApproveSupport, canChangeExtensions, canDo } from './permissions';
+import { TeamRepository } from './team.repository';
 
 @Injectable()
 export class TeamService {
@@ -60,6 +62,7 @@ export class TeamService {
   storeContext(userId: string, storeId?: string) {
     return this.repository.storeContext(userId, storeId);
   }
+
   async storesFor(
     userId: string,
     query: UserStorePageQuery = { limit: 50 },

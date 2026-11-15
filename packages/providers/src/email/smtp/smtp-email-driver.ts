@@ -1,4 +1,5 @@
 import { createTransport } from 'nodemailer';
+
 import type { EmailDriver, EmailMessage } from '../email-driver';
 
 export class SmtpEmailDriver implements EmailDriver {
@@ -17,6 +18,7 @@ export class SmtpEmailDriver implements EmailDriver {
       debug: false,
     });
   }
+
   async send(message: EmailMessage): Promise<void> {
     try {
       await this.transport.sendMail({ from: this.options.from, ...message });

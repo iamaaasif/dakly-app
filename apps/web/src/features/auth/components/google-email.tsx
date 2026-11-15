@@ -1,11 +1,14 @@
 'use client';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import { verifyGoogleEmailSchema, type GoogleSignInResponse } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
+
 import { useVerifyGoogleEmail } from '../api/verify-google-email';
-import { formError } from '@/lib/form-error';
 import { FormField as AuthField } from '@/components/form-field';
+import { formError } from '@/lib/form-error';
+
 export function GoogleEmail({
   verificationTicket,
   isRemembered,

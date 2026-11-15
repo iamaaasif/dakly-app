@@ -12,6 +12,7 @@ import {
   uuid,
   primaryKey,
 } from 'drizzle-orm/pg-core';
+
 import {
   actorTypes,
   filePurposes,
@@ -22,10 +23,11 @@ import {
   webhookEventStatuses,
   webhookProviders,
 } from '@dakly/contracts/platform';
+
 import { uuidv7 } from '../uuid-v7';
-import { bytea, createdAt, id, inet, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { staffUsers } from './admin';
 import { users } from './auth';
+import { bytea, createdAt, id, inet, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { stores } from './stores';
 
 // Append-only history of changes to consent, roles, billing, AI settings and orders. It is

@@ -1,7 +1,8 @@
 'use client';
-import { formatDateTime } from '@/lib/format-date';
 import { useSupportSession } from '../api/support';
 import { SupportCustomers } from './support-customers';
+import { formatDateTime } from '@/lib/format-date';
+
 export function SupportSession() {
   const session = useSupportSession();
   return (

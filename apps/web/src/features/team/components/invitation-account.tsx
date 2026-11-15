@@ -1,7 +1,10 @@
 import { useMutation } from '@tanstack/react-query';
+
 import { Button } from '@dakly/ui/button';
+
 import { apiPost } from '@/lib/api-client';
 import { notifySessionChange } from '@/lib/notify-session-change';
+
 export function InvitationAccount({
   name,
   onSignedOut,

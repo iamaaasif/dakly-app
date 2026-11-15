@@ -1,10 +1,11 @@
 'use client';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
-import { useSessionContext } from '@/lib/session-context';
+
 import { useStoreSettings } from '../api/store-settings';
-import { StoreForm } from './store-form';
 import { ExtensionsForm } from './extensions-form';
+import { StoreForm } from './store-form';
+import { useSessionContext } from '@/lib/session-context';
 
 export function SettingsContent({ tab }: { tab: 'store' | 'extensions' }) {
   const settings = useStoreSettings();

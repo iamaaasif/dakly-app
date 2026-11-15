@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+
 import type { BusinessDraft } from '../auth.types';
 import { BusinessDetails } from './business-details';
 import { PlanPicker } from './plan-picker';
+
 export function SetupScreen() {
   const [draft, setDraft] = useState<BusinessDraft>();
   const [planning, setPlanning] = useState(false);

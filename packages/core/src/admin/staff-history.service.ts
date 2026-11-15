@@ -1,11 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
+
 import type { StaffAuditSearch, StaffAuditPage, StaffAuditRow } from '@dakly/contracts/staff-audit';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
-import { StaffTransaction } from '../platform/database/staff-transaction';
+
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
+import { StaffTransaction } from '../platform/database/staff-transaction';
 import { StaffHistoryRepository } from './staff-history.repository';
 import { supportError } from './support.errors';
+
 @Injectable()
 export class StaffHistoryService {
   constructor(
@@ -13,6 +16,7 @@ export class StaffHistoryService {
     @Inject(StaffTransaction) private readonly transaction: StaffTransaction,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async search(
     staff: StaffIdentity & { sessionId: string },
     filter: StaffAuditSearch,
@@ -24,6 +28,7 @@ export class StaffHistoryService {
     const last = page.at(-1);
     return { rows: page, cursor: more && last ? `${last.createdAt}|${last.id}` : null };
   }
+
   async request(
     staff: StaffIdentity & { sessionId: string },
     filter: StaffAuditSearch,
@@ -46,9 +51,11 @@ export class StaffHistoryService {
     );
     return { id };
   }
+
   pending() {
     return this.repository.pending();
   }
+
   async build(id: string) {
     const leaseId = newId();
     const task = await this.repository.claim(id, leaseId);
@@ -79,6 +86,7 @@ export class StaffHistoryService {
       throw error;
     }
   }
+
   async get(staff: StaffIdentity & { sessionId: string }, id: string) {
     const result = await this.authorized(staff, id);
     return {
@@ -89,6 +97,7 @@ export class StaffHistoryService {
       error: result.error,
     };
   }
+
   async download(staff: StaffIdentity & { sessionId: string }, id: string, ip: string) {
     const result = await this.authorized(staff, id);
     if (result.status !== 'ready' || !result.contents)
@@ -96,6 +105,7 @@ export class StaffHistoryService {
     await this.transaction.run(staff.id, () => this.repository.downloadAudit(staff.id, id, ip));
     return result.contents;
   }
+
   private async authorized(staff: StaffIdentity & { sessionId: string }, id: string) {
     await this.assertStaff(staff);
     const result = await this.repository.get(staff.id, id);
@@ -103,14 +113,17 @@ export class StaffHistoryService {
       throw supportError('AUDIT_EXPORT_UNAVAILABLE');
     return result;
   }
+
   async maintain() {
     await this.repository.maintain();
     for (let days = 0; days < 7; days++) if (!(await this.repository.seal())) break;
   }
+
   async verify(staff: StaffIdentity & { sessionId: string }, from: string) {
     await this.assertStaff(staff);
     return this.repository.verify(from);
   }
+
   private async assertStaff(staff: StaffIdentity & { sessionId: string }) {
     if (
       staff.role !== 'super_admin' ||

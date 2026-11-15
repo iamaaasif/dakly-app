@@ -13,6 +13,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+
 import {
   createRoleSchema,
   changeRoleSchema,
@@ -23,11 +24,12 @@ import {
   type RoleListResponse,
   type RoleResponse,
 } from '@dakly/contracts/team';
+
+import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
-import { RequirePermission } from '../platform/tenancy/access.decorators';
-import { StoreGuard } from '../platform/tenancy/store.guard';
 import type { StoreRequest } from '../platform/tenancy/store-request';
+import { StoreGuard } from '../platform/tenancy/store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { RolesService } from './roles.service';
 
@@ -43,6 +45,7 @@ export class RolesController {
   ): Promise<RoleListResponse> {
     return this.roles.list(storeId, query);
   }
+
   @Post()
   @RequirePermission('team.edit')
   create(
@@ -53,6 +56,7 @@ export class RolesController {
   ): Promise<RoleResponse> {
     return this.roles.create(storeId, input, { userId, access: request.access! });
   }
+
   @Patch(':roleId')
   @RequirePermission('team.edit')
   change(
@@ -64,6 +68,7 @@ export class RolesController {
   ): Promise<RoleResponse> {
     return this.roles.change(storeId, roleId, input, { userId, access: request.access! });
   }
+
   @Delete(':roleId')
   @HttpCode(204)
   @RequirePermission('team.edit')

@@ -1,8 +1,9 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
+
+import type { UserStorePage, SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
+
 import { apiRequest } from '@/lib/api-client';
-import type { UserStorePage } from '@dakly/contracts/sessions';
-import type { SessionContext } from '@dakly/contracts/sessions';
 
 type StoreSwitcherProps = { session: SessionContext; onSwitch: (storeId: string) => Promise<void> };
 export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {

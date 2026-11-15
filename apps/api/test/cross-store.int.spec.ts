@@ -1,16 +1,19 @@
 import 'reflect-metadata';
 import { randomBytes, randomUUID, randomInt } from 'node:crypto';
+
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { createHttpServer } from '@dakly/core/platform/http/http-server';
-import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
+import { createHttpServer } from '@dakly/core/platform/http/http-server';
+import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
 import { SmsService } from '@dakly/core/sms/sms.service';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { AppModule } from '../src/app.module';
-import { IsolationFixture, type Shop } from './isolation-fixture';
 import { isolationBoundaries } from './isolation-boundaries';
+import { IsolationFixture, type Shop } from './isolation-fixture';
 import { IsolationInventory } from './isolation-inventory';
 import { captureRequestLogs } from './request-log-sink';
 

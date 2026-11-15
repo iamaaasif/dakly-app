@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { MailpitSmsDriver } from './mailpit-sms-driver';
 
 describe('MailpitSmsDriver (SMTP and API)', () => {

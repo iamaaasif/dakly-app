@@ -1,15 +1,18 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import {
   changeStoreSettingsSchema,
   type ChangeStoreSettingsInput,
   type StoreSettingsResponse,
 } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
+
+import { useChangeSettings } from '../api/change-settings';
 import { StoreFields, storeDefaults } from './store-fields';
 import { formError } from '@/lib/form-error';
-import { useChangeSettings } from '../api/change-settings';
+
 export function StoreForm({
   store,
   editable,

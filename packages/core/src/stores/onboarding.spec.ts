@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { onboardingExtensions, recommendedPlans } from './onboarding';
 
 describe('onboarding', () => {

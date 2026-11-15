@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { UsersService } from '../auth/users.service';
-import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+
+import type { PlansResponse } from '@dakly/contracts/billing';
 import type {
   CreateStoreInput,
   StoreResponse,
@@ -9,16 +9,19 @@ import type {
   StoreSettingsResponse,
 } from '@dakly/contracts/stores';
 import type { StoreAccess } from '@dakly/contracts/team';
-import { Clock } from '../platform/clock';
-import type { PlansResponse } from '@dakly/contracts/billing';
-import { StoreTransaction } from '../platform/database/store-transaction';
-import { TeamService } from '../team/team.service';
-import { BillingService } from '../billing/billing.service';
-import { SessionsService } from '../sessions/sessions.service';
+
 import { AuditService } from '../audit/audit.service';
-import { StoresRepository } from './stores.repository';
+import { UsersService } from '../auth/users.service';
+import { BillingService } from '../billing/billing.service';
+import { Clock } from '../platform/clock';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { SessionsService } from '../sessions/sessions.service';
+import { TeamService } from '../team/team.service';
 import { onboardingExtensions, recommendedPlans } from './onboarding';
 import { storeError } from './stores.errors';
+import { StoresRepository } from './stores.repository';
+
 @Injectable()
 export class StoresService {
   constructor(
@@ -31,11 +34,13 @@ export class StoresService {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
+
   async settings(storeId: string): Promise<StoreSettingsResponse> {
     const store = await this.repository.settings(storeId);
     if (!store) throw storeError('STORE_NOT_FOUND');
     return store;
   }
+
   changeSettings(
     storeId: string,
     input: ChangeStoreSettingsInput,
@@ -55,6 +60,7 @@ export class StoresService {
       return store;
     });
   }
+
   changeExtensions(
     storeId: string,
     input: ChangeStoreExtensionsInput,
@@ -72,6 +78,7 @@ export class StoresService {
       return store;
     });
   }
+
   private recordChange(
     storeId: string,
     userId: string,
@@ -86,9 +93,11 @@ export class StoresService {
       after: { changedFields },
     });
   }
+
   async plans(): Promise<PlansResponse> {
     return { plans: await this.billing.publicPlans(), recommendations: { ...recommendedPlans } };
   }
+
   async create(
     userId: string,
     sessionId: string,

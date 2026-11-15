@@ -1,6 +1,8 @@
 'use client';
 import { useSearchParams, useRouter } from 'next/navigation';
+
 import { Button } from '@dakly/ui/button';
+
 import { useStaffAlerts } from '../api/alerts';
 import { AlertCard } from './alert-card';
 

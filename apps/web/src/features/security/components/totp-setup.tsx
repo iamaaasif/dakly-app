@@ -1,18 +1,21 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
+import type { AccountProfile } from '@dakly/contracts/sessions';
 import {
   totpSetupSchema,
   type TotpSetupInput,
   type TotpSetupResponse,
 } from '@dakly/contracts/totp';
-import type { AccountProfile } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { securityFormError } from '../security-form-error';
+
 import { useSetupTotp } from '../api/setup-totp';
 import { useTotpProof } from '../api/totp-proof';
+import { securityFormError } from '../security-form-error';
 import { ProofFields } from './proof-fields';
 import { TotpConfirm } from './totp-confirm';
+
 export function TotpSetup({
   profile,
   onConfirmed,

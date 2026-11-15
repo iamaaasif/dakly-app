@@ -1,7 +1,10 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+
 import type { RoleListResponse } from '@dakly/contracts/team';
-import { useStoreRequest } from '@/lib/store-request';
+
 import { teamKeys } from './team-keys';
+import { useStoreRequest } from '@/lib/store-request';
+
 export function useRoles(cursor?: string) {
   const { request, contextTag } = useStoreRequest();
   return useQuery({

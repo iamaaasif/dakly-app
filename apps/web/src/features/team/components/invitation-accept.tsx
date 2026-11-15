@@ -1,6 +1,8 @@
 import { Button } from '@dakly/ui/button';
+
 import { useAcceptInvite } from '../api/accept-invite';
 import { InvitationAccount } from './invitation-account';
+
 export function InvitationAccept({
   name,
   token,

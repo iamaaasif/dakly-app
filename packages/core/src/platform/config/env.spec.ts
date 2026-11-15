@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { loadEnv, loadStaffEnv, resetEnvForTests } from './env';
 
 describe('loadEnv', () => {

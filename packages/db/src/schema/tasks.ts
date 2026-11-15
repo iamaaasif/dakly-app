@@ -7,7 +7,9 @@ import {
   text,
   uuid,
 } from 'drizzle-orm/pg-core';
+
 import { taskSources, taskStatuses } from '@dakly/contracts/platform';
+
 import { users } from './auth';
 import { conversations } from './chats';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';

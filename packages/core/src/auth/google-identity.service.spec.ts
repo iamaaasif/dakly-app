@@ -1,16 +1,19 @@
 import 'reflect-metadata';
 import { performance } from 'node:perf_hooks';
+
 import { Logger, Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   GoogleIdentityError,
   type GoogleIdentityDriver,
 } from '@dakly/providers/google/google-identity-driver';
+
 import { requestLoggingOptions } from '../platform/logging/request-logging';
-import { GOOGLE_IDENTITY_DRIVER } from './google-provider';
 import { GoogleIdentityService } from './google-identity.service';
+import { GOOGLE_IDENTITY_DRIVER } from './google-provider';
 
 const idToken = 'private-token';
 

@@ -17,6 +17,7 @@ import {
   type AnyPgColumn,
   primaryKey,
 } from 'drizzle-orm/pg-core';
+
 import {
   aiRunOutcomes,
   aiRunPurposes,
@@ -28,11 +29,12 @@ import {
   aiRuleChangeSources,
   aiRuleTargets,
 } from '@dakly/contracts/ai';
+
+import { uuidv7 } from '../uuid-v7';
 import { users } from './auth';
 import { createdAt, id, isOneOf, poisha, updatedAt } from './columns';
 import { files } from './platform';
 import { stores } from './stores';
-import { uuidv7 } from '../uuid-v7';
 
 // One row per store. Switches, hand-over rules, testers and test questions are jsonb validated
 // by the contracts schema. version guards concurrent saves; undo history is ai_rule_changes.

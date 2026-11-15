@@ -1,6 +1,9 @@
 import type { UseFormReturn } from 'react-hook-form';
+
 import type { ChangeStoreSettingsInput, StoreSettingsResponse } from '@dakly/contracts/stores';
+
 import { FormField } from '@/components/form-field';
+
 const fields = [
   ['name', 'Store name'],
   ['legalName', 'Legal name'],

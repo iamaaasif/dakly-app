@@ -3,9 +3,10 @@ import { Controller, Get, Logger, Module, Post } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 import { Logger as PinoLogger, LoggerModule } from 'nestjs-pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DrizzleQueryError } from 'drizzle-orm/errors';
+
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { AppErrorFilter } from '../errors/app-error.filter';
 import { ErrorReporter } from './error-reporter';
@@ -31,9 +32,11 @@ class LoggingController {
     );
     return { ok: true };
   }
+
   create() {
     return this.read();
   }
+
   fail() {
     throw new DrizzleQueryError(
       'insert into customers values ($1, $2)',
@@ -41,6 +44,7 @@ class LoggingController {
       new Error('private-error-message'),
     );
   }
+
   business() {
     throw new AppError('STORE_REQUIRED', PLATFORM_ERRORS.STORE_REQUIRED);
   }

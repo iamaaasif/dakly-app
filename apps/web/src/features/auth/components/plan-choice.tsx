@@ -1,8 +1,10 @@
 import type { PublicPlan } from '@dakly/contracts/billing';
+import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
-import { Badge } from '@dakly/ui/badge';
+
 import { formatMoney } from '@/lib/format-money';
+
 export function PlanChoice({
   plan,
   cycle,

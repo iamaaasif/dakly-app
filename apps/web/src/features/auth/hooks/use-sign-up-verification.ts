@@ -1,11 +1,14 @@
 'use client';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+
 import { verifyCodeSchema, type SignUpInput } from '@dakly/contracts/auth';
-import { useVerifyCode } from '../api/verify-code';
+
 import { useRequestCode } from '../api/request-code';
+import { useVerifyCode } from '../api/verify-code';
 import { formError } from '@/lib/form-error';
+
 export function useSignUpVerification(
   account: { registration: SignUpInput; password: string },
   signupTicket: string | undefined,

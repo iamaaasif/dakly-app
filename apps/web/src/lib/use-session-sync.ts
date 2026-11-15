@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+
 export function useSessionSync({
   close,
   pause,

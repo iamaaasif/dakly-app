@@ -1,7 +1,9 @@
 import type { DeviceSession } from '@dakly/contracts/sessions';
-import { Card } from '@dakly/ui/card';
 import { Button } from '@dakly/ui/button';
+import { Card } from '@dakly/ui/card';
+
 import { formatDateTime } from '@/lib/format-date';
+
 export function DeviceCard({
   device,
   onSelect,

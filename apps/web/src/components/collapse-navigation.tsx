@@ -1,5 +1,7 @@
 import { PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+
 import { Button } from '@dakly/ui/button';
+
 export function CollapseNavigation({
   collapsed,
   onCollapse,

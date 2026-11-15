@@ -4,31 +4,35 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createDatabase } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { memberships, roles } from '@dakly/db/schema/team';
-import { stores } from '@dakly/db/schema/stores';
 import { customers } from '@dakly/db/schema/customers';
-import { TenantDatabase } from '../platform/database/tenant-database';
-import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
-import { DatabaseModule } from '../platform/database/database.module';
-import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { stores } from '@dakly/db/schema/stores';
+import { memberships, roles } from '@dakly/db/schema/team';
+
 import { CustomersModule } from '../customers/customers.module';
-import { TeamService } from '../team/team.service';
+import { DatabaseModule } from '../platform/database/database.module';
+import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
+import { TenantDatabase } from '../platform/database/tenant-database';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { registerSessionCookies } from '../platform/http/session-cookie';
 import { Public } from '../platform/tenancy/access.decorators';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+import { TeamService } from '../team/team.service';
 import { SessionsModule } from './sessions.module';
-import { SessionsService } from './sessions.service';
 import { SessionsRepository } from './sessions.repository';
-import { registerSessionCookies } from '../platform/http/session-cookie';
+import { SessionsService } from './sessions.service';
 
 class PublicController {
   health() {
     return { status: 'ok' };
   }
+
   write() {
     return { changed: false };
   }
+
   user(userId: string) {
     return userId;
   }

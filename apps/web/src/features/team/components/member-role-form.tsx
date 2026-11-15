@@ -1,11 +1,14 @@
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+
 import { memberRoleSchema, type MemberResponse } from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
-import { formError } from '@/lib/form-error';
+
 import { useChangeMember } from '../api/change-member';
 import { RolePicker } from './role-picker';
 import { TeamError } from './team-error';
+import { formError } from '@/lib/form-error';
+
 export function MemberRoleForm({ member, onDone }: { member: MemberResponse; onDone: () => void }) {
   const form = useForm({
     resolver: zodResolver(memberRoleSchema),

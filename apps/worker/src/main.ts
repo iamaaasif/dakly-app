@@ -1,8 +1,10 @@
-import { Logger as PinoLogger } from 'nestjs-pino';
-import { runWithJobContext } from '@dakly/core/platform/logging/job-context';
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { Logger as PinoLogger } from 'nestjs-pino';
+
+import { runWithJobContext } from '@dakly/core/platform/logging/job-context';
+
 import { WorkerModule } from './worker.module';
 
 // Same core modules as the API, no HTTP server. Job processors are registered by

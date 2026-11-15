@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+
 import { loadEnv } from '../config/env';
 import { EnvelopeEncryption } from './envelope-encryption';
 

@@ -1,6 +1,8 @@
 import { memberListQuerySchema } from '@dakly/contracts/team';
-import { requireSession } from '@/lib/require-session';
+
 import { OwnershipScreen } from '@/features/team/components/ownership-screen';
+import { requireSession } from '@/lib/require-session';
+
 export default async function OwnershipPage({
   searchParams,
 }: {

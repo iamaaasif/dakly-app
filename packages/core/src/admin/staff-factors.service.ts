@@ -1,17 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
 import type {
   StaffTotpInput,
   StaffRegistrationInput,
   StaffAuthenticationInput,
 } from '@dakly/contracts/staff-auth';
+import type { AccessIdentity } from '@dakly/providers/cloudflare/access-driver';
+
+import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
-import { Clock } from '../platform/clock';
-import { StaffAuthService } from './staff-auth.service';
-import { StaffRepository } from './staff.repository';
-import { StaffSessionsService } from './staff-sessions.service';
 import { StaffAuditService } from './staff-audit.service';
+import { StaffAuthService } from './staff-auth.service';
+import { StaffSessionsService } from './staff-sessions.service';
+import { StaffRepository } from './staff.repository';
 
 @Injectable()
 export class StaffFactorsService {
@@ -24,6 +26,7 @@ export class StaffFactorsService {
     @Inject(TotpCredentials) private readonly totp: TotpCredentials,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
   async verifyTotp(input: StaffTotpInput, identity: AccessIdentity, ip: string): Promise<string> {
     await this.auth.checkIp(ip);
     return this.auth.withStaff(identity, ip, async (staff) => {
@@ -48,6 +51,7 @@ export class StaffFactorsService {
       return this.sessions.issue(staff, ip);
     });
   }
+
   private verifySecret(
     staffUserId: string,
     secret: { totpSecretCiphertext: Buffer | null; totpKeyVersion: number | null },
@@ -64,6 +68,7 @@ export class StaffFactorsService {
       plaintext.fill(0);
     }
   }
+
   async registerPasskey(
     input: StaffRegistrationInput,
     identity: AccessIdentity,
@@ -94,6 +99,7 @@ export class StaffFactorsService {
       return this.sessions.issue(staff, ip);
     });
   }
+
   async authenticatePasskey(
     input: StaffAuthenticationInput,
     identity: AccessIdentity,

@@ -1,7 +1,10 @@
-import { notifySessionChange } from '@/lib/notify-session-change';
 import { useMutation } from '@tanstack/react-query';
+
 import type { ConfirmPasswordResetInput, SignInResponse } from '@dakly/contracts/auth';
+
 import { apiPost } from '@/lib/api-client';
+import { notifySessionChange } from '@/lib/notify-session-change';
+
 export function useConfirmReset() {
   return useMutation({
     mutationFn: (input: ConfirmPasswordResetInput) =>

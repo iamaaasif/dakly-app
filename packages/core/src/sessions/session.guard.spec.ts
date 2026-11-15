@@ -1,11 +1,12 @@
 import 'reflect-metadata';
-import { Reflector } from '@nestjs/core';
 import type { ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
+
 import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
 import type { TeamService } from '../team/team.service';
-import type { SessionsService } from './sessions.service';
 import { SessionGuard } from './session.guard';
+import type { SessionsService } from './sessions.service';
 
 describe('SessionGuard separate trust domains', () => {
   it.each(['staff', 'support', 'support-handoff'] as const)(
