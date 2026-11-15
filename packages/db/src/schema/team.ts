@@ -84,6 +84,7 @@ export const memberships = pgTable(
       .where(sql`${table.builtInRole} = 'owner' and ${table.status} = 'active'`),
     uniqueIndex('memberships_invite_token_hash_key').on(table.inviteTokenHash),
     index('memberships_store_id_status_idx').on(table.storeId, table.status),
+    index('memberships_store_id_created_at_id_idx').on(table.storeId, table.createdAt, table.id),
     index('memberships_user_id_idx').on(table.userId),
     index('memberships_role_id_idx').on(table.roleId),
     index('memberships_invited_by_user_id_idx').on(table.invitedByUserId),
@@ -97,6 +98,42 @@ export const memberships = pgTable(
     check(
       'memberships_invite_has_address',
       sql`${table.status} <> 'invited' or ${table.invitePhone} is not null or ${table.inviteEmail} is not null`,
+    ),
+  ],
+);
+
+export const ownershipTransfers = pgTable(
+  'ownership_transfers',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id),
+    newOwnerUserId: uuid('new_owner_user_id')
+      .notNull()
+      .references(() => users.id),
+    status: text('status', { enum: ['pending', 'accepted', 'cancelled', 'expired'] }).notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('ownership_transfers_one_pending_key')
+      .on(table.storeId)
+      .where(sql`${table.status} = 'pending'`),
+    index('ownership_transfers_store_id_idx').on(table.storeId),
+    index('ownership_transfers_owner_user_id_idx').on(table.ownerUserId),
+    index('ownership_transfers_new_owner_user_id_idx').on(table.newOwnerUserId),
+    check(
+      'ownership_transfers_status',
+      isOneOf(table.status, ['pending', 'accepted', 'cancelled', 'expired']),
+    ),
+    check(
+      'ownership_transfers_distinct_users',
+      sql`${table.ownerUserId} <> ${table.newOwnerUserId}`,
     ),
   ],
 );

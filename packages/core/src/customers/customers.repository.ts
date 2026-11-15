@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { customers } from '@dakly/db/schema/customers';
 import type { CreateCustomerInput } from '@dakly/contracts/customers';
@@ -20,7 +20,7 @@ const customerColumns = {
 
 @Injectable()
 export class CustomersRepository {
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async findById(storeId: string, id: string): Promise<Customer | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>

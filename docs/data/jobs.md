@@ -128,6 +128,7 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 3. `drop_expired_partitions()`: drop AI run and link visit months older than 13 months. It skips any month past the watermark, so a failed step 2 delays deletion instead of losing data.
 4. Archive: export each `audit_log` month older than 24 months to R2 as gzipped JSON lines, check the row count, then drop it as the owner role. Export messages older than 12 months the same way, grouped by conversation and month, whether or not the chat is still active, then delete them in batches.
 5. Purge in batches of 5,000: published outbox events and webhook events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
+6. Account history: as the owner, call `SELECT public.purge_account_security_events(1000)` in separate short transactions until it returns zero. The SQL exists in migration 0016; the daily runner remains DB-7. It deletes rows strictly older than two years and rejects limits outside 1–1,000. Retrying cannot remove newer events; it needs no store scan. No R2 archive is required for account events.
 
 ## Send-time and financial gates
 
@@ -136,3 +137,9 @@ Immediately before calling the provider, recheck consent, block status, channel 
 Refund jobs consume a reservation made under the common payment-intent lock. Requested/pending capacity stays reserved until a confirmed result; succeeded and recorded-manually refunds consume captured capacity. Reconciliation, failure release and success accounting use the same intent lock and permanent key. Wallet jobs assign the next per-wallet revision under the shared advisory lock and read balances by revision. The schema bounds amounts and enforces uniqueness; these service protocols require concurrency tests before feature release.
 
 Purge transactions use `SET CONSTRAINTS ALL DEFERRED` before dependent deletion and restore `ALL IMMEDIATE` before commit. This lets SET NULL actions finish before their supplemental NO ACTION tenant-reference checks validate final state. Supplemental CASCADE keys match the original action and ordinary cascading deletes do not require deferral. A failed final check rolls back the purge.
+
+## Account security notices
+
+ACC-7 adds a narrow global-account worker in `apps/worker/src/account-security-notices.job.ts`. It polls persistent encrypted notices every 30 seconds, with batches of 20, two-minute leases and retry backoff capped at one hour. Payload ownership is `userId`, not `storeId`: these are global account notices. The worker calls `SecurityNoticesService`, makes no vendor call under a database lock, acknowledges only its lease and waits for active work at shutdown. Recovery eligibility begins seven days after all required notices are accepted. Duplicate delivery after uncertain vendor outcomes is possible. This does not implement the general DB-2 event relay.
+
+The worker uses the same JSON/Pino configuration as the API. A generated poll `jobId` is stored in an asynchronous context and added by the logger to service and vendor metrics. Parallel polls have separate context; immediate HTTP dispatch retains `requestId`. Worker errors use the existing sanitized Sentry payload with `jobId`; polling failures are logged once by the notice service.

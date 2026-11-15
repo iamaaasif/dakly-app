@@ -6,10 +6,10 @@ The full flow is in [features/01-account-and-team.md](../features/01-account-and
 
 1. The session is an opaque random token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. Only its SHA-256 hash is stored. No JWTs for shop sessions: they cannot be revoked when a member is removed.
 2. The store, user and permissions come from the session only, through `@CurrentStore()`, `@CurrentUser()` and `request.access`. Never from the body, query, path or a header.
-3. Every store route has `StoreGuard` and either `@RequirePermission('<area>.<view|edit>')` or `@AnyMember()` for access shared by all active members. Every other route declares `@RequireUser()` or `@Public()`. A test lists all routes and fails if one lacks its access rule.
+3. Every store route has `StoreGuard` and either `@RequirePermission('<area>.<view|edit>')` or `@AnyMember()` for access shared by all active members. Staff routes declare `@StaffAccess()` or `@StaffAccess(false)` for enrollment and sign-in that still require Access. Other routes declare `@RequireUser()` or `@Public()`. A test lists all routes and fails if one lacks its access rule.
 4. Permission checks use one pure function (`team/permissions.ts`). No `if (role === 'owner')` anywhere else.
 5. Flags (`seeFullPhone`, `exportLists`, `refund`) are checked in the service, because a job or an export can reach the same data without a controller.
-6. Phone masking is applied in the service response for members without `seeFullPhone`. The web app never receives the full number to hide it.
+6. Customer and team contact phone numbers are masked in the service response for members without `seeFullPhone`; the web app never receives those full numbers to hide them. Reads of the user's own account contact details are governed by account access, and reads of the store's business contact details by `storeSettings` access. The customer privacy flag does not restrict these own-account or business contact reads.
 7. A 404 for another store's row looks exactly like a 404 for a missing row.
 8. State-changing browser requests check the `Origin` header against the app's origins, on top of `SameSite=Lax`; missing origins are rejected. Only signed provider callbacks marked `@ProviderCallback()` skip the origin check and must verify their provider signature.
 9. Sign-in codes, invites and password checks are rate limited per phone and per IP in Valkey.

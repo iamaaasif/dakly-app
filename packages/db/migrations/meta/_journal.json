@@ -113,6 +113,69 @@
       "when": 1794559538397,
       "tag": "0015_maintenance_store_scan",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794729264545,
+      "tag": "0016_account_security_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794729265690,
+      "tag": "0017_billing_plans_trials",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794729266757,
+      "tag": "0018_plans_catalogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794729267814,
+      "tag": "0019_auth_identity_recovery_notices",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794729268893,
+      "tag": "0020_team_ownership_pagination",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794729269945,
+      "tag": "0021_staff_authentication",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794729270988,
+      "tag": "0022_staff_audit_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794729272037,
+      "tag": "0023_break_glass_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794729273086,
+      "tag": "0024_staff_account_recovery",
+      "breakpoints": true
     }
   ]
 }
