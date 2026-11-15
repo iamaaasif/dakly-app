@@ -41,17 +41,6 @@ jobs:
   unit:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    services:
-      # team.module.spec.ts connects ValkeyClient when the module starts.
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
