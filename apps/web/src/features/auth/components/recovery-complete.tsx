@@ -5,7 +5,7 @@ import { totpRecoveryTokenSchema } from '@dakly/contracts/totp';
 import { Button } from '@dakly/ui/button';
 import { useCompleteRecovery } from '../api/complete-recovery';
 import { formError } from '@/lib/form-error';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 export function RecoveryComplete() {
   const form = useForm({
     resolver: zodResolver(totpRecoveryTokenSchema),

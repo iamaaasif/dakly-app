@@ -10,11 +10,8 @@ export function SecurityHistory() {
   const before = useSearchParams().get('before') ?? '';
   const history = useSecurityHistory(before);
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-4 md:p-8">
-      <Link href="/" className="text-action underline">
-        Home
-      </Link>
-      <h1 className="text-2xl font-semibold">Security history</h1>
+    <section className="space-y-4">
+      <h2 className="text-lg font-semibold">Security history</h2>
       {history.isPending ? <Skeleton className="h-24 w-full" /> : null}
       {history.error ? (
         <div>
@@ -37,16 +34,16 @@ export function SecurityHistory() {
       {history.data?.nextCursor ? (
         <Link
           className="text-action underline"
-          href={'/security?before=' + history.data.nextCursor}
+          href={'/security?tab=history&before=' + history.data.nextCursor}
         >
           Older events
         </Link>
       ) : null}
       {before ? (
-        <Link className="text-action underline" href="/security">
+        <Link className="text-action underline" href="/security?tab=history">
           Latest events
         </Link>
       ) : null}
-    </main>
+    </section>
   );
 }

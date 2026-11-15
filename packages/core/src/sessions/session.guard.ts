@@ -56,14 +56,22 @@ function stampContext(
   reply.header('Cache-Control', 'no-store');
   const tag = sessionContextTag(request.sessionId!, request.storeId, request.access);
   reply.header('X-Session-Context', tag);
-  const isShopRequest =
-    rule?.kind === 'permission' ||
-    rule?.kind === 'member' ||
-    request.routeOptions.url === '/me/active-store';
+
   if (
-    isShopRequest &&
+    requiresContext(request, rule) &&
     request.headers['x-session-context'] !== undefined &&
     request.headers['x-session-context'] !== tag
   )
     throw sessionError('SESSION_CONTEXT_CHANGED');
+}
+
+function requiresContext(request: FastifyRequest, rule?: AccessRule): boolean {
+  return (
+    (rule?.kind === 'user' &&
+      !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+      request.routeOptions.url !== '/auth/sign-out') ||
+    rule?.kind === 'permission' ||
+    rule?.kind === 'member' ||
+    request.routeOptions.url === '/me/active-store'
+  );
 }

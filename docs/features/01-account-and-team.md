@@ -1,12 +1,12 @@
 # Account, stores and team
 
-|           |                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------- |
-| Release   | 1                                                                                                     |
-| Status    | Not started                                                                                           |
-| Extension | Core                                                                                                  |
-| Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,store-settings}/` |
-| Tasks     | ACC-1 to ACC-15; build order in [plans/core.md](../plans/core.md)                                     |
+|           |                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| Release   | 1                                                                                                        |
+| Status    | In progress                                                                                              |
+| Extension | Core                                                                                                     |
+| Code      | `packages/core/src/{auth,stores,team,sessions}/`, `apps/web/src/features/{auth,team,settings,security}/` |
+| Tasks     | ACC-1 to ACC-18; build order in [plans/core.md](../plans/core.md)                                        |
 
 ## Purpose
 
@@ -977,8 +977,7 @@ navigation. Opening a link never changes the account. Cancellation and completio
 require explicit POST actions. Completion issues no session and directs the person
 to sign in again. The recovery receipt explains that its reference and completion
 key must be kept safely before leaving; neither is saved in browser storage.
-Authenticated `/security` history is unchanged. Authenticated settings
-management remains the final ACC-8 PR.
+Authenticated `/security` combines account management and security history in the final ACC-8 slice below.
 
 ## Team web screens (ACC-8, second slice)
 
@@ -1029,7 +1028,48 @@ shop through the existing verified shop selector.
 Email invitations require the exact currently verified email. An optional email
 entered during mobile signup does not prove mailbox ownership. The screen directs
 such recipients to account Security, then to reopen the original notice; existing
-verified-email recipients can sign in and accept immediately. The final ACC-8
-settings slice must add actual add/verify/change-email management to `/security`,
-while retaining its existing account-only history. That integration remains
-required before the whole ACC-8 task is complete.
+verified-email recipients can sign in and accept immediately. Account Security now provides add/verify/change-email management through fresh proof and a separate mailbox code. The same account can then reopen the original invitation notice and explicitly accept it. Typed contact matching never merges identities.
+
+## Store settings and account Security web screens (ACC-8, final slice)
+
+`/settings?tab=store|extensions` reads the current shop through scoped transport.
+Store information supports name, legal name, type, business mobile, email, address,
+district, BIN and trade licence. Saves include only edited fields; clearing an
+optional input sends null. Settings View and Edit come from TeamService's current
+policy. The separate extension capability uses the existing Owner/Admin policy;
+custom settings editors cannot change extensions. Core remains on, with Sales,
+Chats and Social auto-post selectable. Physical Shop is excluded. Saved selection
+is refreshed from the server; current Core destinations remain available. No
+unfinished extension destination or channel integration is exposed.
+
+`/security?tab=profile|devices|two-step|history` remains account-only and works
+without a selected shop. My profile shows existing contact verification and
+password state. Add, verify and change email require current-password proof or
+a purpose-bound code to the existing verified phone, then a separate code to the
+new mailbox. Password changes use the existing current-password or fresh-code
+contract. Name and mobile are read-only because no edit API exists for them.
+
+Devices displays exact last activity, browser, IP and the current-device marker,
+with cursor navigation and explicit confirmation before revoking one device or
+all others. Two-step verification uses fresh proof, a private manual enrollment
+key, a six-digit authenticator confirmation and ten one-use backup codes. The
+backup receipt stays in memory until acknowledged, including ordinary account
+verification and the enabled-profile refresh. It clears on navigation, reload
+or an actual session-context change. Disabling requires an authenticator or
+backup code. Neither enrollment nor backup values enter browser storage or URLs.
+
+The existing account security history is integrated once, retaining staff recovery
+labels, safe reasons, exact dates, cursor and loading/error/empty states. Public
+recovery remains outside the authenticated layout. Account dialogs use the shared
+SessionDialog suspension behavior. Ordinary focus verification preserves drafts;
+changed account, shop or access disposes them.
+
+Authenticated account writes now compare an optional incoming `x-session-context`
+before their controllers, including accounts with no shop. The tag is a concurrency
+precondition, never authority or a shop selector. Legacy untagged requests still
+work. Reads, public authentication, staff/support and intentional sign-out keep
+their existing boundary. Security mutations, authenticated setup and invitation
+acceptance send the available verified tag; responses remain checked before use.
+
+The broader feature remains in progress: billing checkout, setup checklist, full
+audit log, store closing and export are separate tasks.

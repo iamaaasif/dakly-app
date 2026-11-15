@@ -38,3 +38,7 @@ export type TotpRecoveryResponse = {
   completionToken: string;
   eligibleAt: string | null;
 };
+
+export type TotpDisableInput = z.infer<typeof totpDisableSchema>;
+export type TotpSetupResponse = { setupId: string; uri: string };
+export type TotpConfirmResponse = { backupCodes: string[] };

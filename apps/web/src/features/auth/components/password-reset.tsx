@@ -7,7 +7,7 @@ import { Button } from '@dakly/ui/button';
 import { useRequestReset } from '../api/request-reset';
 import { formError } from '@/lib/form-error';
 import { AuthFrame } from './auth-frame';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { PasswordResetConfirm } from './password-reset-confirm';
 export function PasswordReset() {
   const [identifier, setIdentifier] = useState<string>();

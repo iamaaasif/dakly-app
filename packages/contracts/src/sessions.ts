@@ -32,6 +32,9 @@ export type SessionContext = {
         canViewCustomers: boolean;
         canCreateCustomer: boolean;
         canApproveSupport: boolean;
+        canViewStoreSettings: boolean;
+        canEditStoreSettings: boolean;
+        canChangeExtensions: boolean;
         canViewTeam: boolean;
         canEditTeam: boolean;
         canTransferOwnership: boolean;
@@ -39,3 +42,15 @@ export type SessionContext = {
     | null;
   contextTag: string;
 };
+
+export type DeviceSession = {
+  id: string;
+  isRemembered: boolean;
+  lastSeenAt: string;
+  expiresAt: string;
+  ip: string | null;
+  userAgent: string | null;
+  device: string;
+  isCurrent: boolean;
+};
+export type DeviceSessionPage = { items: DeviceSession[]; nextCursor: string | null };

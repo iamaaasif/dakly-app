@@ -1,7 +1,7 @@
 'use client';
 import { FormProvider } from 'react-hook-form';
 import { Button } from '@dakly/ui/button';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { RecoveryProof } from './recovery-proof';
 import { RecoveryProofFields } from './recovery-proof-fields';
 import { useRecoveryRequest } from '../hooks/use-recovery-request';

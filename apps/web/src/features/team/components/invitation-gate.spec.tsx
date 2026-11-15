@@ -24,7 +24,10 @@ describe('Invitation entry', () => {
     vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
       requests.push({ path, body: init.body as string | undefined });
       if (path === '/api/invites/accept')
-        return Response.json({ storeId: 'shop', membershipId: 'member' });
+        return Response.json(
+          { storeId: 'shop', membershipId: 'member' },
+          { headers: { 'x-session-context': 'verified' } },
+        );
       return signedIn
         ? Response.json({
             user: { id: 'recipient', name: 'Rina' },

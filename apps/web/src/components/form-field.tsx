@@ -2,13 +2,13 @@ import { useState, type ComponentProps } from 'react';
 import type { UseFormRegisterReturn, FieldError } from 'react-hook-form';
 import { Input } from '@dakly/ui/input';
 import { Button } from '@dakly/ui/button';
-type AuthFieldProps = {
+type FormFieldProps = {
   label: string;
   field: UseFormRegisterReturn;
   error?: FieldError;
   hint?: string;
 } & Omit<ComponentProps<'input'>, 'name'>;
-export function AuthField({ label, field, error, hint, type, ...props }: AuthFieldProps) {
+export function FormField({ label, field, error, hint, type, ...props }: FormFieldProps) {
   const [shown, setShown] = useState(false);
   const id = field.name;
   const description = hint ? `${id}-hint` : undefined;

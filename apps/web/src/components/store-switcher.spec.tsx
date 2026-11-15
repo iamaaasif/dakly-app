@@ -41,6 +41,9 @@ describe('StoreSwitcher', () => {
             canViewTeam: false,
             canEditTeam: false,
             canTransferOwnership: false,
+            canViewStoreSettings: false,
+            canEditStoreSettings: false,
+            canChangeExtensions: false,
           },
         }}
         onSwitch={onSwitch}

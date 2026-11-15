@@ -6,7 +6,7 @@ import { Button } from '@dakly/ui/button';
 import { useVerifyCode } from '../api/verify-code';
 import { useVerifyEmailCode } from '../api/verify-email-code';
 import { formError } from '@/lib/form-error';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 const codeSchema = verifyEmailCodeSchema.pick({ code: true });
 type SignInCodeProps = {
   target: { identifier: string; isRemembered: boolean };

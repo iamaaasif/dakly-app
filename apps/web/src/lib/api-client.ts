@@ -24,7 +24,7 @@ export async function apiRequest<TResponse>(
   const response = await fetch(`/api${path}`, {
     method: requestMethod(options),
     headers: {
-      'Content-Type': 'application/json',
+      ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(options.contextTag ? { 'X-Session-Context': options.contextTag } : {}),
     },
     credentials: 'include',

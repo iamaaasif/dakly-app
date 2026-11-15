@@ -1,6 +1,6 @@
 import { useFormContext } from 'react-hook-form';
 import type { PasswordSignInInput } from '@dakly/contracts/auth';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 export function SignInFields({
   method,
   onRemember,

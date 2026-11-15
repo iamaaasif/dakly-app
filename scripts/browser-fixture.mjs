@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { browserRegistration } from './browser-registration.mjs';
 import { browserTeam } from './browser-team.mjs';
+import { browserSecurity } from './browser-security.mjs';
 
 const requireWeb = createRequire(new URL('../apps/web/package.json', import.meta.url));
 
@@ -10,14 +11,22 @@ export function browserFixture(databaseUrl, mailpitUrl) {
   const database = createDatabase(databaseUrl);
   const registration = browserRegistration(database, mailpitUrl);
   const team = browserTeam(database, mailpitUrl);
+  const security = browserSecurity(database, mailpitUrl);
   const userIds = [randomUUID(), randomUUID()];
   const storeIds = [randomUUID(), randomUUID()];
   const token = randomBytes(32).toString('base64url');
   return {
-    browser: { token, storeIds, registration: registration.browser, team: team.browser },
+    browser: {
+      token,
+      storeIds,
+      registration: registration.browser,
+      team: team.browser,
+      security: security.browser,
+    },
     async seed() {
       await registration.seed();
       await team.seed();
+      await security.seed();
       const client = await database.pool.connect();
       try {
         await client.query('begin');
@@ -57,6 +66,7 @@ export function browserFixture(databaseUrl, mailpitUrl) {
         const results = await Promise.allSettled([
           registration.close(),
           team.close(),
+          security.close(),
           (async () => {
             for (const table of ['customers', 'audit_log', 'memberships'])
               await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [

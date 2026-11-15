@@ -1,7 +1,7 @@
 'use client';
 import type { SignUpInput } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { TotpStep } from './totp-step';
 import { useSignUpVerification } from '../hooks/use-sign-up-verification';
 export function SignUpVerify({

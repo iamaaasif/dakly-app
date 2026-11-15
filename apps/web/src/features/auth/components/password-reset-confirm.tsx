@@ -7,7 +7,7 @@ import { confirmPasswordResetSchema, passwordSchema } from '@dakly/contracts/aut
 import { Button } from '@dakly/ui/button';
 import { useConfirmReset } from '../api/confirm-reset';
 import { formError } from '@/lib/form-error';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { TotpStep } from './totp-step';
 const resetSchema = confirmPasswordResetSchema
   .extend({ confirmation: passwordSchema })
