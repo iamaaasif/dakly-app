@@ -90,8 +90,8 @@ export class SupportService {
 
   async requested(staff: Staff, before?: string) {
     this.assertRole(staff);
-    const items = await this.repository.staffGrants(staff.id, before);
-    return { items, nextCursor: items.length === 50 ? items.at(-1)!.id : null };
+    const rows = await this.repository.staffGrants(staff.id, before);
+    return { items: rows.slice(0, 50), nextCursor: rows.length > 50 ? rows[49]!.id : null };
   }
 
   async issueHandoff(staff: Staff, id: string, ip: string) {

@@ -27,7 +27,8 @@ export class AppErrorFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<HttpResponse>();
     const { status, body } = this.toResponse(exception);
-    if (!(exception instanceof AppError) && !(exception instanceof HttpException)) {
+    // A server-side failure needs a look whatever its class, including an AppError with 5xx.
+    if (status >= 500) {
       const error = serializeError(exception);
       this.logger.error({ error }, 'Request failed');
       const request = host.switchToHttp().getRequest<{ raw: { id: string } }>();

@@ -10,6 +10,7 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { EmailService } from '../email/email.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { DAY_MS } from '../platform/time';
 import { SmsService } from '../sms/sms.service';
 import { authKey } from './auth-key';
 import { SignInCodes } from './sign-in-codes';
@@ -170,6 +171,28 @@ describe('Sign-in codes and failures in Valkey', () => {
     await expect(failures.recordFailure(subject, ip)).rejects.toMatchObject({
       code: 'AUTH_LOCKED',
     });
+  });
+
+  it('forgets account failures a day after the latest one, and still locks for 15 minutes', async () => {
+    const userId = randomUUID();
+    const { subject, ip } = fixture(userId);
+    const key = authKey('fail-user', userId);
+    for (let attempt = 0; attempt < 3; attempt++) await failures.recordFailure(subject, ip);
+    expect(await client.connection.ttl(key)).toBeGreaterThanOrEqual(DAY_MS / 1000 - 1);
+    await client.connection.expire(key, 60);
+    await failures.recordFailure(subject, ip);
+    expect(await client.connection.ttl(key)).toBeGreaterThanOrEqual(DAY_MS / 1000 - 1);
+    // A day with no failure: the four old failures are gone, so one typo does not lock.
+    await client.connection.pexpire(key, 1);
+    await setTimeout(10);
+    await failures.recordFailure(subject, ip);
+    expect(await client.connection.get(key)).toBe('1');
+    for (let attempt = 0; attempt < 3; attempt++) await failures.recordFailure(subject, ip);
+    await expect(failures.recordFailure(subject, ip)).rejects.toMatchObject({
+      code: 'AUTH_LOCKED',
+    });
+    expect(await client.connection.ttl(key)).toBeLessThanOrEqual(900);
+    expect(await client.connection.ttl(key)).toBeGreaterThanOrEqual(899);
   });
 
   it('limits unknown identities by target and hourly IP failures without clearing IP history on success', async () => {

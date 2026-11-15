@@ -564,7 +564,8 @@ accounts use a hashed target instead. Five consecutive wrong attempts lock the
 identity for 15 minutes; thirty failures from one IP block that IP for an hour.
 Resending does not clear failures. Only completed sign-in clears the identity
 counter, never the IP history. Unknown-target history expires after an hour when
-it has not reached a lock. The atomic transition into an account lock sends one
+it has not reached a lock. A known account's history expires 24 hours after its
+latest failure. The atomic transition into an account lock sends one
 notification outside the database transaction, by verified email when available
 and SMS otherwise. Notification failure leaves the lock intact
 and records a security event in logs without the phone or message text.
@@ -909,7 +910,8 @@ An unknown user-agent/IP pair produces an encrypted durable new-device alert aft
 successful sign-in, by verified email or SMS. The pair is checked under the same
 account lock as session insertion, so simultaneous sign-ins do not enqueue duplicate
 alerts for the same pair. The alert is sent by the worker after sign-in; notice or
-queue failure never rolls back an issued session.
+queue failure never rolls back an issued session. Sign-up sends no alert, because a
+new account has no earlier device.
 
 ### Staff recovery history (ADM-10)
 

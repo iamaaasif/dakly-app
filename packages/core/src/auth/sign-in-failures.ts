@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { EmailService } from '../email/email.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { DAY_MS } from '../platform/time';
 import { SmsService } from '../sms/sms.service';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
@@ -19,7 +20,11 @@ if failures == 1 then redis.call('EXPIRE', KEYS[2], 3600) end
 local count = tonumber(redis.call('GET', KEYS[1]) or '0')
 if count >= 5 then return 0 end
 count = redis.call('INCR', KEYS[1])
-if count == 1 and ARGV[1] == 'unknown' then redis.call('EXPIRE', KEYS[1], 3600) end
+if ARGV[1] == 'unknown' then
+  if count == 1 then redis.call('EXPIRE', KEYS[1], 3600) end
+else
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
 if count == 5 then
   redis.call('EXPIRE', KEYS[1], 900)
   return 1
@@ -52,6 +57,8 @@ export class SignInFailures {
       this.key(subject),
       authKey('fail-ip', ip),
       subject.userId ? 'known' : 'unknown',
+      // Old failures expire, so months-old typos never add up to a lock.
+      DAY_MS / 1000,
     );
     if (newlyLocked === 1 && subject.userId && (subject.email || subject.phone)) {
       this.logger.warn({ event: 'security', userId: subject.userId }, 'Sign-in locked');

@@ -59,6 +59,8 @@ Release 1 is split into one migration per feature area, in dependency order. The
 | `0022_staff_audit_support`            | Staff identity links, audit/seals and support access                                      |
 | `0023_break_glass_alerts`             | Break-glass alert delivery and final request metadata                                     |
 | `0024_staff_account_recovery`         | Final recovery history and locked recovery snapshot                                       |
+| `0025_app_role_table_grants`          | App role grants on every earlier table, with no default privileges                        |
+| `0026_support_requests_next_page`     | Support request metadata returns one row past the page                                    |
 
 `packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
 
