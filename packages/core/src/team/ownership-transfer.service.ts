@@ -108,11 +108,13 @@ export class OwnershipTransferService {
     });
   }
 
-  async current(storeId: string, userId: string): Promise<CurrentOwnershipTransferResponse> {
-    const transfer = await this.repository.current(storeId, this.clock.now());
-    if (!transfer) return { transfer: null };
-    if (transfer.newOwnerUserId !== userId) await this.assertOwner(storeId, userId);
-    return { transfer: this.response(transfer) };
+  current(storeId: string, userId: string): Promise<CurrentOwnershipTransferResponse> {
+    return this.transaction.run(storeId, async () => {
+      const transfer = await this.repository.current(storeId, this.clock.now());
+      if (!transfer) return { transfer: null };
+      if (transfer.newOwnerUserId !== userId) await this.assertOwner(storeId, userId);
+      return { transfer: this.response(transfer) };
+    });
   }
 
   async cancel(storeId: string, transferId: string, userId: string): Promise<void> {

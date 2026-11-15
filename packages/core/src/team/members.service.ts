@@ -49,8 +49,15 @@ export class MembersService {
     query: MemberListQuery,
     access: StoreAccess,
   ): Promise<MemberListResponse> {
-    const rows = await this.repository.list(storeId, query);
+    const { rows, seats } = await this.transaction.run(storeId, async () => ({
+      rows: await this.repository.list(storeId, query),
+      seats: {
+        used: await this.repository.countSeats(storeId, this.clock.now()),
+        limit: await this.billing.seatLimit(storeId),
+      },
+    }));
     const page = rows.slice(0, query.limit);
+    // Profiles use the shared pool, so read them after the store connection is released.
     const profiles = await this.users.profiles(
       page.flatMap((row) => (row.userId ? [row.userId] : [])),
     );
@@ -60,10 +67,7 @@ export class MembersService {
         this.response(row, access.seeFullPhone, row.userId ? byId.get(row.userId) : undefined),
       ),
       nextCursor: rows.length > query.limit ? page.at(-1)!.id : null,
-      seats: {
-        used: await this.repository.countSeats(storeId, this.clock.now()),
-        limit: await this.billing.seatLimit(storeId),
-      },
+      seats,
     };
   }
 
