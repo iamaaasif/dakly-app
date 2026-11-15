@@ -13,14 +13,17 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { hashPassword, verifyPassword } from '../platform/crypto/password';
+import { hashToken } from '../platform/crypto/token-hash';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { StaffTransaction } from '../platform/database/staff-transaction';
+import { MINUTE_MS } from '../platform/time';
 import { staffError } from './admin.errors';
 import { StaffAttempts } from './staff-attempts';
 import { StaffAuditService } from './staff-audit.service';
-import { newStaffProof, staffTokenHash } from './staff-tokens';
+import { newStaffProof } from './staff-tokens';
 import { StaffRepository } from './staff.repository';
 
+const STAFF_CHALLENGE_TTL_MS = 5 * MINUTE_MS;
 export type LockedStaff = NonNullable<Awaited<ReturnType<StaffRepository['lock']>>>;
 @Injectable()
 export class StaffAuthService {
@@ -96,9 +99,9 @@ export class StaffAuthService {
       if (!factors.length) return undefined;
       const challenge = newStaffProof();
       await this.repository.addChallenge(staff.id, {
-        tokenHash: staffTokenHash(challenge),
+        tokenHash: hashToken(challenge),
         purpose: 'signin',
-        passwordState: staffTokenHash(staff.passwordHash!).toString('hex'),
+        passwordState: hashToken(staff.passwordHash!).toString('hex'),
         webauthnChallenge: passkey?.challenge,
         expiresAt: this.expiry(),
       });
@@ -119,7 +122,7 @@ export class StaffAuthService {
       const challenge = newStaffProof();
       const response: StaffEnrollment = { challenge };
       const values = {
-        tokenHash: staffTokenHash(challenge),
+        tokenHash: hashToken(challenge),
         passwordHash,
         expiresAt: this.expiry(),
       };
@@ -145,24 +148,24 @@ export class StaffAuthService {
         });
       }
       await this.audit.record(staff.id, 'staff.enrollment_started', ip);
-      await this.repository.consume(staff.id, staffTokenHash(input.proof), this.clock.now());
+      await this.repository.consume(staff.id, hashToken(input.proof), this.clock.now());
       return response;
     });
   }
 
   async challenge(staff: LockedStaff, token: string) {
-    const challenge = await this.repository.challenge(staff.id, staffTokenHash(token));
+    const challenge = await this.repository.challenge(staff.id, hashToken(token));
     if (!challenge || challenge.consumedAt || challenge.expiresAt <= this.clock.now())
       return undefined;
     if (
       challenge.purpose === 'signin' &&
-      challenge.passwordState !== staffTokenHash(staff.passwordHash ?? '').toString('hex')
+      challenge.passwordState !== hashToken(staff.passwordHash ?? '').toString('hex')
     )
       return undefined;
     return challenge;
   }
 
   private expiry() {
-    return new Date(this.clock.now().getTime() + 300000);
+    return new Date(this.clock.now().getTime() + STAFF_CHALLENGE_TTL_MS);
   }
 }

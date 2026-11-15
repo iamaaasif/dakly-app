@@ -41,6 +41,13 @@ const envSchema = z.object({
     .string()
     .regex(/^[A-Za-z0-9+/]{43}=$/)
     .optional(),
+  CODE_HASH_KEY: z
+    .string()
+    .refine((value) => {
+      const key = Buffer.from(value, 'base64');
+      return key.length >= 32 && key.toString('base64') === value;
+    })
+    .optional(),
   API_TRUSTED_PROXIES: trustedProxiesSchema,
   API_HOST: z.union([z.ipv4(), z.ipv6()]).default('0.0.0.0'),
   API_PORT: z.coerce.number().int().positive().default(4000),
@@ -103,6 +110,8 @@ function assertStaffEnv(env: Env): void {
       !env.STAFF_SESSION_SIGNING_KEY
     )
       throw new Error('Staff Access and session configuration is required in production');
+    // Without it every sign-in and backup code fails at the first request instead of at startup.
+    if (!env.CODE_HASH_KEY) throw new Error('CODE_HASH_KEY is required in production');
     if (!env.ADMIN_ORIGIN.startsWith('https://'))
       throw new Error('Admin origin must use HTTPS in production');
   }

@@ -21,3 +21,9 @@ if (!keys) {
     mode: 0o600,
   });
 }
+if (!/^\s*(?:export\s+)?CODE_HASH_KEY=/m.test(existing)) {
+  if (!isCi && existsSync(target)) chmodSync(target, 0o600);
+  const key = randomBytes(32).toString('base64');
+  if (isCi) process.stdout.write(`::add-mask::${key}\n`);
+  appendFileSync(target, `\nCODE_HASH_KEY=${key}\n`, { mode: 0o600 });
+}

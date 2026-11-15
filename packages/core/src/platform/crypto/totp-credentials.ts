@@ -1,7 +1,10 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
 import { Secret, TOTP } from 'otpauth';
+
+import { loadEnv } from '../config/env';
+import { hashCode } from './code-hash';
 
 @Injectable()
 export class TotpCredentials {
@@ -25,6 +28,6 @@ export class TotpCredentials {
   }
 
   hashBackup(userId: string, code: string): string {
-    return createHash('sha256').update(`${userId}:${code}`).digest('hex');
+    return hashCode(loadEnv().CODE_HASH_KEY, `${userId}:${code}`);
   }
 }

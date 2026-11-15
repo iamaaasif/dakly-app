@@ -1,3 +1,5 @@
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export function formatDateTime(value: string): string {
   const formatted = new Intl.DateTimeFormat('en-GB', {
     dateStyle: 'medium',
@@ -67,5 +69,5 @@ function calendarDate(instant: number, timeZone: string) {
   const day = Number(parts.find((part) => part.type === 'day')!.value);
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
-  return { year, day: date.getTime() / 86_400_000 };
+  return { year, day: date.getTime() / DAY_MS };
 }

@@ -13,6 +13,7 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
 import { StaffAlertsRepository } from './staff-alerts.repository';
+import { STAFF_IDLE_MS } from './staff-session-policy';
 import { supportError } from './support.errors';
 
 export const STAFF_ALERT_DRIVER = Symbol('STAFF_ALERT_DRIVER');
@@ -62,7 +63,7 @@ export class StaffAlertsService {
       current.session.revokedAt ||
       current.session.expiresAt <= now ||
       !current.session.lastSeenAt ||
-      current.session.lastSeenAt.getTime() + 1800000 <= now.getTime()
+      current.session.lastSeenAt.getTime() + STAFF_IDLE_MS <= now.getTime()
     )
       throw supportError('SUPPORT_DENIED');
   }

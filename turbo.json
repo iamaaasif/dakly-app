@@ -23,7 +23,8 @@
         "MAILPIT_SMTP_PORT",
         "MAILPIT_API_URL",
         "ENCRYPTION_CURRENT_KEY_VERSION",
-        "ENCRYPTION_MASTER_KEYS"
+        "ENCRYPTION_MASTER_KEYS",
+        "CODE_HASH_KEY"
       ]
     },
     "dev": {

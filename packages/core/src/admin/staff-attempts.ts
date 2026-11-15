@@ -2,8 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { staffError } from './admin.errors';
-import { staffTokenHash } from './staff-tokens';
 import { StaffRepository } from './staff.repository';
 
 @Injectable()
@@ -17,7 +17,7 @@ export class StaffAttempts {
 
   async ip(ip: string): Promise<void> {
     const result = await this.limiter.consume(
-      `staff:ip:${staffTokenHash(ip).toString('hex')}`,
+      `staff:ip:${hashToken(ip).toString('hex')}`,
       30,
       3600,
     );

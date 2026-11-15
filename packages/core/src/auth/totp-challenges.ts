@@ -4,10 +4,12 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
+import { MINUTE_MS } from '../platform/time';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 import type { SignInRequest, SignInUser } from './sign-in';
 
+const TOTP_CHALLENGE_TTL_MS = 5 * MINUTE_MS;
 export type TotpChallenge = {
   user: SignInUser;
   request: SignInRequest;
@@ -45,7 +47,7 @@ export class TotpChallenges {
           user,
           request,
           state,
-          expiresAt: this.clock.now().getTime() + 300000,
+          expiresAt: this.clock.now().getTime() + TOTP_CHALLENGE_TTL_MS,
         } satisfies TotpChallenge),
         'tries',
         0,

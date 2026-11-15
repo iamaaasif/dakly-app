@@ -72,6 +72,7 @@ function apiEnvironment(environment, publicKey) {
     }),
     ENCRYPTION_CURRENT_KEY_VERSION: '1',
     ENCRYPTION_MASTER_KEYS: JSON.stringify({ 1: randomBytes(32).toString('base64') }),
+    CODE_HASH_KEY: randomBytes(32).toString('base64'),
     SMS_DRIVER: 'mailpit',
     EMAIL_DRIVER: 'smtp',
     EMAIL_FROM: 'browser@example.test',
