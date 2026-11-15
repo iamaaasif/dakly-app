@@ -1,1 +1,0 @@
-CREATE INDEX "memberships_store_id_created_at_id_idx" ON "memberships" USING btree ("store_id","created_at","id");
