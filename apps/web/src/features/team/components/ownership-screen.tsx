@@ -4,8 +4,8 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useSessionContext } from '@/lib/session-context';
 import { useCurrentTransfer } from '../api/current-transfer';
 import { TeamLoading } from './team-loading';
-import { TransferRequest } from './transfer-request';
 import { TransferStatus } from './transfer-status';
+import { OwnershipEmpty } from './ownership-empty';
 export function OwnershipScreen({ cursor }: { cursor?: string }) {
   const session = useSessionContext();
   const current = useCurrentTransfer();
@@ -35,19 +35,5 @@ export function OwnershipScreen({ cursor }: { cursor?: string }) {
       ) : null}
       {content}
     </main>
-  );
-}
-function OwnershipEmpty({ canTransfer, cursor }: { canTransfer: boolean; cursor?: string }) {
-  return (
-    <section className="space-y-4">
-      <p role="status">No pending ownership transfer.</p>
-      {canTransfer ? (
-        <TransferRequest cursor={cursor} />
-      ) : (
-        <p>
-          Only the current Owner can start a transfer. If you are selected, return here to accept.
-        </p>
-      )}
-    </section>
   );
 }

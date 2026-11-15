@@ -1,18 +1,13 @@
 'use client';
 import Link from 'next/link';
-import { QueryError } from '@dakly/ui/query-error';
-import { Skeleton } from '@dakly/ui/skeleton';
-import { useProfile } from '../api/profile';
-import { ProfilePanel } from './profile-panel';
-import { TotpPanel } from './totp-panel';
-import { DevicesPanel } from './devices-panel';
-import { SecurityHistory } from './security-history';
+import { SecurityContent } from './security-content';
 const sections = [
   ['profile', 'My profile'],
   ['devices', 'Devices'],
   ['two-step', 'Two-step verification'],
   ['history', 'Security history'],
 ] as const;
+
 export function SecurityScreen({ tab, before }: { tab: string; before?: string }) {
   return (
     <main className="max-w-3xl space-y-6 p-4 md:p-8">
@@ -32,21 +27,5 @@ export function SecurityScreen({ tab, before }: { tab: string; before?: string }
       </nav>
       <SecurityContent tab={tab} before={before} />
     </main>
-  );
-}
-
-function SecurityContent({ tab, before }: { tab: string; before?: string }) {
-  const profile = useProfile();
-  if (tab === 'history') return <SecurityHistory />;
-  if (tab === 'devices') return <DevicesPanel before={before} />;
-  if (profile.isPending) return <Skeleton className="h-48 w-full" />;
-  const Panel = tab === 'two-step' ? TotpPanel : ProfilePanel;
-  return (
-    <>
-      {profile.error ? (
-        <QueryError message={profile.error.message} onRetry={() => void profile.refetch()} />
-      ) : null}
-      {profile.data ? <Panel profile={profile.data} /> : null}
-    </>
   );
 }
