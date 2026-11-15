@@ -3,7 +3,7 @@ import { type SupportGrantResponse } from '@dakly/contracts/support';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 
-import { useOwnerDecision } from '../api/support';
+import { useOwnerDecision } from '../api/owner-decision';
 import { ApprovalCode } from './approval-code';
 import { formatDateTime } from '@/lib/format-date';
 

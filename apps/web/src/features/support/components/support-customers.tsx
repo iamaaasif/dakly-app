@@ -8,7 +8,8 @@ import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { Input } from '@dakly/ui/input';
 
-import { useSupportCustomer, useSupportCreate } from '../api/support';
+import { useSupportCreate } from '../api/create-support-customer';
+import { useSupportCustomer } from '../api/support-customer';
 import { formatPhone } from '@/lib/format-phone';
 
 type SupportCustomersProps = { writable: boolean; contextTag: string };

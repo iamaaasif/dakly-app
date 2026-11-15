@@ -3,7 +3,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 
 import { Button } from '@dakly/ui/button';
 
-import { useOwnerSupport } from '../api/support';
+import { useOwnerSupport } from '../api/owner-requests';
 import { OwnerRequest } from './owner-request';
 
 export function OwnerSupport() {

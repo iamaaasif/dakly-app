@@ -6,7 +6,7 @@ import { supportDecisionSchema, type SupportGrantResponse } from '@dakly/contrac
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
 
-import { type useOwnerDecision } from '../api/support';
+import { type useOwnerDecision } from '../api/owner-decision';
 
 export function ApprovalCode({
   grant,
