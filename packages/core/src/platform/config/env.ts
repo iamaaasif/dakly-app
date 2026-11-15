@@ -41,13 +41,29 @@ const envSchema = z.object({
     .regex(/^[A-Za-z0-9+/]{43}=$/)
     .optional(),
   API_TRUSTED_PROXIES: trustedProxiesSchema,
+  API_HOST: z.union([z.ipv4(), z.ipv6()]).default('0.0.0.0'),
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 
 export type Env = z.infer<typeof envSchema> & { encryption: EncryptionConfiguration | undefined };
 
+let cachedEnv: Env | undefined;
+let cachedStaffEnv: Env | undefined;
+
+export function resetEnvForTests(): void {
+  cachedEnv = undefined;
+  cachedStaffEnv = undefined;
+}
+
 // Fails at startup, not at the first request, when a variable is missing.
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  if (source === process.env && cachedEnv) return cachedEnv;
+  const env = parseEnv(source);
+  if (source === process.env) cachedEnv = env;
+  return env;
+}
+
+function parseEnv(source: NodeJS.ProcessEnv): Env {
   const env = envSchema.parse(source);
   if (env.NODE_ENV === 'production' && env.SMS_DRIVER === 'mailpit') {
     throw new Error('SMS_DRIVER=mailpit is not allowed in production');
@@ -68,7 +84,14 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 }
 
 export function loadStaffEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  if (source === process.env && cachedStaffEnv) return cachedStaffEnv;
   const env = loadEnv(source);
+  assertStaffEnv(env);
+  if (source === process.env) cachedStaffEnv = env;
+  return env;
+}
+
+function assertStaffEnv(env: Env): void {
   if (env.WEB_ORIGINS.includes(env.ADMIN_ORIGIN))
     throw new Error('Admin and shop origins must differ');
 
@@ -82,5 +105,4 @@ export function loadStaffEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (!env.ADMIN_ORIGIN.startsWith('https://'))
       throw new Error('Admin origin must use HTTPS in production');
   }
-  return env;
 }

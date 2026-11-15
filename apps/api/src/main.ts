@@ -20,8 +20,8 @@ async function bootstrap(): Promise<void> {
   await registerSessionCookies(app);
   app.useLogger(app.get(Logger));
   app.enableShutdownHooks();
-  // Fastify listens on localhost only unless told otherwise; the Droplet needs all interfaces.
-  await app.listen(env.API_PORT, '0.0.0.0');
+  // Deployments default to all interfaces; local browser fixtures explicitly bind loopback.
+  await app.listen(env.API_PORT, env.API_HOST);
 }
 
 void bootstrap();

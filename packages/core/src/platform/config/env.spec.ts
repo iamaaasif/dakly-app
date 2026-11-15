@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { loadEnv, loadStaffEnv } from './env';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadEnv, loadStaffEnv, resetEnvForTests } from './env';
 
 describe('loadEnv', () => {
   it.each(['https://localhost:6379', 'redis://localhost/-1', 'redis://localhost/1.5'])(
@@ -146,5 +146,38 @@ describe('API trusted proxy configuration', () => {
     '10.0.0.1/1.5',
   ])('refuses ambiguous or unrestricted trust: %s', (value) => {
     expect(() => loadEnv({ ...base, API_TRUSTED_PROXIES: value })).toThrow();
+  });
+});
+
+describe('API listener configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+  it('preserves the production bind default and accepts explicit loopback IPs', () => {
+    expect(loadEnv({ ...base, NODE_ENV: 'production' }).API_HOST).toBe('0.0.0.0');
+    expect(loadEnv({ ...base, API_HOST: '127.0.0.1' }).API_HOST).toBe('127.0.0.1');
+    expect(loadEnv({ ...base, API_HOST: '::1' }).API_HOST).toBe('::1');
+  });
+  it.each(['localhost', 'https://127.0.0.1', '', '127.0.0.1:4000'])(
+    'rejects a non-IP bind address: %s',
+    (host) => {
+      expect(() => loadEnv({ ...base, API_HOST: host })).toThrow();
+    },
+  );
+});
+
+describe('process environment cache', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEnvForTests();
+  });
+
+  it.each([loadEnv, loadStaffEnv])('parses process.env once until reset', (load) => {
+    vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
+    vi.stubEnv('REDIS_URL', 'redis://localhost');
+    vi.stubEnv('API_PORT', '4000');
+    const first = load();
+    vi.stubEnv('API_PORT', '5000');
+    expect(load()).toBe(first);
+    resetEnvForTests();
+    expect(load().API_PORT).toBe(5000);
   });
 });

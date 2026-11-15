@@ -1,12 +1,12 @@
 # Admin panel
 
-|           |                                                                                               |
-| --------- | --------------------------------------------------------------------------------------------- |
-| Release   | 1 (lean core)                                                                                 |
-| Status    | Not started                                                                                   |
-| Extension | Internal, staff only                                                                          |
-| Code      | `apps/admin` (Next.js), `packages/core/src/admin/` mounted under `/admin` on its own hostname |
-| Tasks     | ADM-1 to ADM-5                                                                                |
+|           |                                                                                                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Release   | 1 (lean core)                                                                                                                     |
+| Status    | In progress                                                                                                                       |
+| Extension | Internal, staff only                                                                                                              |
+| Code      | `apps/admin` (Next.js), `packages/core/src/admin/` under `/admin` on the staff hostname; shop `/support` for approved delegations |
+| Tasks     | ADM-1 to ADM-6; support, audit, break-glass and account recovery implemented; ADM-3 to ADM-5 remain planned                       |
 
 ## Purpose
 
@@ -91,6 +91,8 @@ It is a separate app at `admin.dakly.app`, with its own sign-in, its own staff a
 - During access, the admin opens the shop app in a separate session marked by a red bar: "Dakly support (Rahim) is viewing this store. Read-only. Ends 15:40." The owner also sees a banner that support is in their store, with an End now button.
 - Messages, orders and customer data are visible only inside this granted session. Outside it, admin screens show counts and metadata, never message bodies or customer phone numbers.
 - Break-glass: a super admin can open read-only access without consent during a security incident or legal request. It needs a written reason, alerts the other super admins, and is listed in the shop's activity log.
+
+Support session checks and Owner request lists read current rows without explicit row locks. Customer reads return full phone numbers and remain serialized with the Owner ending access. The support banner checks its session every 30 seconds while visible. Customer reads and writes keep their authorization locks and record audit and activity. Code-delivery failures and temporary send limits leave consent pending; unexpected failures reach the error handler.
 
 #### Plans and pricing
 
@@ -284,7 +286,7 @@ The staff app now provides Access-protected password sign-in, real passkey or TO
 
 Staff can find a target by its exact shop slug or ID, then request read-only or read-and-write customer access for 30 minutes to 24 hours. The reason needs at least ten characters. The Owner sees the request at `/support-access` and receives a request-bound SMS code. Approval checks the current Owner, verified phone state, current shop session and one-use code. Codes expire after ten minutes; unanswered requests expire after thirty minutes. Delivery happens after the request commits; if it fails, the saved request remains visible and the Owner can resend. Denial and End now are Owner-only. Consent records the Owner as the actor in both audits.
 
-Staff open an approved grant from the admin support screen. A sixty-second, one-use form POST transfers it to the fixed shop `/support/exchange` path. Its token stays out of URLs. The shop uses a separate host-only HttpOnly cookie restricted to `/support`; ordinary shop sessions remain intact. Every operation checks the current staff account, parent session, grant, expiry, conflict and feature scope. Approval belongs to the staff identity until its own expiry or end. After fresh authenticated sign-in, a new handoff can use the remaining approval; old tokens remain bound to their revoked or expired parent. Disabling staff permanently ends outstanding grants. Successful audited customer work refreshes the thirty-minute idle window without extending the eight-hour absolute session limit. A five-second authorization-status heartbeat displays ended access within ten seconds on an active, connected page and does not extend staff idle time. Browser throttling or offline pages cannot guarantee repaint timing; the API still revokes access on the next request.
+Staff open an approved grant from the admin support screen. A sixty-second, one-use form POST transfers it to the fixed shop `/support/exchange` path. Its token stays out of URLs. The shop uses a separate host-only HttpOnly cookie restricted to `/support`; ordinary shop sessions remain intact. Every operation checks the current staff account, parent session, grant, expiry, conflict and feature scope. The verified support response carries an opaque delegation context; customer requests send it as a consistency precondition, never as authority or a shop selector. Replacing the support cookie in another tab rejects the old draft before effects. Customer responses are stamped and checked, queries are scoped and cancelled by delegation, and changing delegation disposes the old form and results. Approval belongs to the staff identity until its own expiry or end. After fresh authenticated sign-in, a new handoff can use the remaining approval; old tokens remain bound to their revoked or expired parent. Disabling staff permanently ends outstanding grants. Successful audited customer work refreshes the thirty-minute idle window without extending the eight-hour absolute session limit. A five-second authorization-status heartbeat displays ended access within ten seconds on an active, connected page and does not extend staff idle time. Browser throttling or offline pages cannot guarantee repaint timing; the API still revokes access on the next request.
 
 The supported customer operations call the existing customer service in a short store transaction and write both audits in that transaction. Read-only write attempts are denied and logged. Support never receives Owner-only account, team, ownership or billing authority. Trusted staff contact matches to verified users persist as identity links, so changed phone/email details cannot erase an established own-store conflict. No customer accounts are merged.
 

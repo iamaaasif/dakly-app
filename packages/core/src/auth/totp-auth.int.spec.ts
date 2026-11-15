@@ -1,3 +1,5 @@
+import { TotpService } from './totp.service';
+import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { SecurityNoticesRepository } from './security-notices.repository';
 import { TeamService } from '../team/team.service';
 import 'reflect-metadata';
@@ -469,6 +471,148 @@ describe('TOTP account security over Fastify', () => {
     );
     expect(events.rows.map((row) => row.event)).toEqual(['totp.enabled', 'totp.disabled']);
   });
+  it.each(['setup', 'confirm'] as const)(
+    'releases the account lock before %s waits for Redis',
+    async (action) => {
+      const user = await seed(false);
+      const session = await app.get(SessionsService).create(user.id, { isRemembered: false });
+      const cookie = `dakly_session=${session.token}`;
+      const cache = app.get(ValkeyClient).connection;
+      let input: object = { currentPassword: password };
+      if (action === 'confirm') {
+        const setup = await request('/me/totp/setup', input, cookie);
+        const setupSecret = new URL(setup.json().uri).searchParams.get('secret')!;
+        input = {
+          setupId: setup.json().setupId,
+          code: new TOTP({ secret: Secret.fromBase32(setupSecret) }).generate({
+            timestamp: now.getTime(),
+          }),
+        };
+      }
+      let entered!: () => void;
+      let release!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const resume = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const originalSet = cache.set.bind(cache);
+      const originalDel = cache.del.bind(cache);
+      const stall = async (key: unknown) => {
+        if (String(key).startsWith('auth:totp-setup:')) {
+          entered();
+          await resume;
+        }
+      };
+      const spy =
+        action === 'setup'
+          ? vi.spyOn(cache, 'set').mockImplementation(async (...args) => {
+              await stall(args[0]);
+              return originalSet(...args);
+            })
+          : vi.spyOn(cache, 'del').mockImplementation(async (...args) => {
+              await stall(args[0]);
+              return originalDel(...args);
+            });
+      const pending = request(`/me/totp/${action}`, input, cookie).then((result) => result);
+      const independent = await admin.pool.connect();
+      try {
+        await waiting;
+        await independent.query('begin');
+        await independent.query("set local lock_timeout='200ms'");
+        await independent.query('select id from users where id=$1 for update', [user.id]);
+        await independent.query('commit');
+      } finally {
+        await independent.query('rollback');
+        independent.release();
+        release();
+        await pending;
+        spy.mockRestore();
+      }
+      expect((await pending).statusCode).toBe(200);
+    },
+  );
+
+  it.each([
+    'parallel',
+    'revoked',
+    'expired',
+    'code-expired',
+    'credentials',
+    'rollback',
+    'cache-error',
+  ] as const)(
+    'fails closed for enrollment %s after one-use proof consumption',
+    async (scenario) => {
+      const user = await seed(false);
+      const session = await app.get(SessionsService).create(user.id, { isRemembered: false });
+      const service = app.get(TotpService);
+      const prepared = await service.setup(
+        user.id,
+        session.session.id,
+        { currentPassword: password },
+        '192.0.2.55',
+      );
+      const code = new TOTP({
+        secret: Secret.fromBase32(new URL(prepared.uri).searchParams.get('secret')!),
+      }).generate({ timestamp: now.getTime() });
+      const input = { setupId: prepared.setupId, code };
+      const cache = app.get(ValkeyClient).connection;
+      const original = cache.del.bind(cache);
+      const previous = now;
+      const eventSpy =
+        scenario === 'rollback'
+          ? vi
+              .spyOn(app.get(AccountSecurityEventsService), 'record')
+              .mockRejectedValueOnce(new Error('Database action failed'))
+          : undefined;
+      const cacheSpy = vi.spyOn(cache, 'del').mockImplementation(async (...args) => {
+        const result = await original(...args);
+        if (String(args[0]) !== authKey('totp-setup', prepared.setupId)) return result;
+        if (scenario === 'revoked')
+          await admin.pool.query('update sessions set revoked_at=now() where id=$1', [
+            session.session.id,
+          ]);
+        if (scenario === 'code-expired') now = new Date(now.getTime() + 90001);
+        if (scenario === 'expired') now = new Date(now.getTime() + 300001);
+        if (scenario === 'credentials')
+          await admin.pool.query(
+            'update users set security_version=security_version+1 where id=$1',
+            [user.id],
+          );
+        if (scenario === 'cache-error') throw new Error('Ambiguous cache reply');
+        return result;
+      });
+      try {
+        const results = await Promise.allSettled(
+          Array.from({ length: scenario === 'parallel' ? 2 : 1 }, () =>
+            service.confirm(user.id, session.session.id, input, '192.0.2.55'),
+          ),
+        );
+        expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(
+          scenario === 'parallel' ? 1 : 0,
+        );
+        expect(await cache.exists(authKey('totp-setup', prepared.setupId))).toBe(0);
+        expect(
+          (
+            await admin.pool.query(
+              'select totp_enabled_at is not null as enabled from users where id=$1',
+              [user.id],
+            )
+          ).rows[0].enabled,
+        ).toBe(scenario === 'parallel');
+        await expect(
+          service.confirm(user.id, session.session.id, input, '192.0.2.55'),
+        ).rejects.toMatchObject({ code: 'AUTH_TOTP_INVALID' });
+      } finally {
+        now = previous;
+        cacheSpy.mockRestore();
+        eventSpy?.mockRestore();
+      }
+    },
+  );
+
   it('accepts a cancellation link token but never uses it to complete recovery', async () => {
     const user = await seed();
     const started = await recovery(user);
@@ -501,6 +645,84 @@ describe('TOTP account security over Fastify', () => {
       true,
     );
   });
+  it.each(['removal', 'transfer'] as const)(
+    'uses current Owner recipients after %s commits while recovery waits',
+    async (change) => {
+      const user = await seed(),
+        oldOwner = await seed(),
+        newOwner = await seed();
+      const storeId = randomUUID();
+      await admin.pool.query('insert into stores(id,name) values($1,$2)', [
+        storeId,
+        'Recovery snapshot shop',
+      ]);
+      await admin.pool.query(
+        "insert into memberships(id,store_id,user_id,built_in_role,status) values(gen_random_uuid(),$1,$2,'owner','active'),(gen_random_uuid(),$1,$3,'admin','active'),(gen_random_uuid(),$1,$4,'admin','active')",
+        [storeId, oldOwner.id, user.id, newOwner.id],
+      );
+      await request('/auth/totp/recovery/code', { phone: user.phone, method: 'phone' });
+      const connection = await admin.pool.connect();
+      let pending: ReturnType<typeof request> | undefined;
+      try {
+        await connection.query('begin');
+        const {
+          rows: [{ pid }],
+        } = await connection.query('select pg_backend_pid() as pid');
+        await connection.query('select id from stores where id=$1 for no key update', [storeId]);
+        pending = request('/auth/totp/recovery', {
+          phone: user.phone,
+          phoneCode: codeFor(user.phone),
+          password,
+        }).then((response) => response);
+        await expect
+          .poll(
+            async () =>
+              (
+                await admin.pool.query(
+                  'select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',
+                  [pid],
+                )
+              ).rows[0].blocked,
+            { timeout: 1000 },
+          )
+          .toBe(true);
+        if (change === 'removal')
+          await connection.query(
+            "update memberships set status='removed' where store_id=$1 and user_id=$2",
+            [storeId, user.id],
+          );
+        else {
+          await connection.query(
+            "update memberships set built_in_role='admin' where store_id=$1 and user_id=$2",
+            [storeId, oldOwner.id],
+          );
+          await connection.query(
+            "update memberships set built_in_role='owner' where store_id=$1 and user_id=$2",
+            [storeId, newOwner.id],
+          );
+        }
+        await connection.query('commit');
+        const result = await pending;
+        expect(result.statusCode).toBe(202);
+        const recipients = messages
+          .filter((message) => message.text.includes(`recoveryId=${result.json().recoveryId}`))
+          .map((message) => message.to);
+        expect(recipients.sort()).toEqual(
+          (change === 'removal' ? [user.phone] : [user.phone, newOwner.phone]).sort(),
+        );
+        expect(new Date(result.json().eligibleAt).getTime()).toBeGreaterThanOrEqual(
+          now.getTime() + 7 * 86400000,
+        );
+      } finally {
+        await connection.query('rollback');
+        connection.release();
+        await pending;
+        await admin.pool.query('delete from memberships where store_id=$1', [storeId]);
+        await admin.pool.query('delete from stores where id=$1', [storeId]);
+      }
+    },
+  );
+
   it('rejects recovery completion after credential state changes', async () => {
     const user = await seed();
     const started = await recovery(user);

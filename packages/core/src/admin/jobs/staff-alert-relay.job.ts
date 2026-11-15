@@ -29,17 +29,17 @@ export class StaffAlertRelayJob implements OnApplicationBootstrap, OnApplication
   }
   private poll() {
     if (this.active) return;
-    this.active = runWithJobContext(() => this.enqueue())
-      .catch((error) => {
+    this.active = runWithJobContext(() =>
+      this.enqueue().catch((error) => {
         this.reporter.reportJob(
           serializeError(error),
           jobLogBindings().jobId ?? 'staff-alert-relay',
         );
         this.logger.error({ event: 'security' }, 'Staff alert relay failed');
-      })
-      .finally(() => {
-        this.active = undefined;
-      });
+      }),
+    ).finally(() => {
+      this.active = undefined;
+    });
   }
   private async enqueue() {
     const tasks = await this.alerts.pending();

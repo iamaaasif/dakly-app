@@ -1,5 +1,5 @@
 'use client';
-import { formatDate } from '@/lib/format-date';
+import { formatDateTime } from '@/lib/format-date';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -51,7 +51,7 @@ function OwnerRequest({ grant }: { grant: SupportGrantResponse }) {
           {grant.durationMinutes} minutes
         </p>
         <p>{grant.status === 'approved' ? 'Active support access' : `Status: ${grant.status}`}</p>
-        {grant.expiresAt ? <p>Ends {formatDate(grant.expiresAt)}</p> : null}
+        {grant.expiresAt ? <p>Ends {formatDateTime(grant.expiresAt)}</p> : null}
         {grant.status === 'requested' ? (
           <>
             <Button
@@ -96,6 +96,7 @@ function ApprovalCode({
   const form = useForm<{ code: string }>({ resolver: zodResolver(supportDecisionSchema) });
   return (
     <form
+      method="post"
       className="space-y-3"
       onSubmit={form.handleSubmit((input) =>
         action.mutate({ id: grant.id, action: 'approve', code: input.code }),

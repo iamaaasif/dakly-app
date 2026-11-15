@@ -32,14 +32,15 @@ export class SessionsService {
     storeId?: string,
     access?: StoreAccess,
   ): Promise<SessionContext> {
-    const [profile, stores] = await Promise.all([
+    const [profile, metadata] = await Promise.all([
       this.users.profile(userId),
-      this.team.storesFor(userId),
+      this.team.storeContext(userId, storeId),
     ]);
-    const selected = stores.find((store) => store.storeId === storeId);
+    const selected =
+      metadata.storeId && metadata.name ? { storeId: metadata.storeId, name: metadata.name } : null;
     return {
       user: { id: profile.id, name: profile.name },
-      stores,
+      hasMemberships: metadata.hasMemberships,
       currentStore:
         selected && access
           ? {
@@ -47,6 +48,12 @@ export class SessionsService {
               canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
               canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
               canApproveSupport: this.team.canApproveSupport(access),
+              canViewStoreSettings: this.team.canAccess(access, 'storeSettings', 'view'),
+              canEditStoreSettings: this.team.canAccess(access, 'storeSettings', 'edit'),
+              canChangeExtensions: this.team.canChangeExtensions(access),
+              canViewTeam: this.team.canAccess(access, 'team', 'view'),
+              canEditTeam: this.team.canAccess(access, 'team', 'edit'),
+              canTransferOwnership: this.team.canTransferOwnership(access),
             }
           : null,
       contextTag: sessionContextTag(sessionId, storeId, access),
@@ -65,6 +72,10 @@ export class SessionsService {
       nextCursor: rows.length === 100 ? rows.at(-1)!.id : null,
     };
   }
+  isActive(userId: string, sessionId: string) {
+    return this.repository.isActive(userId, sessionId, this.clock.now());
+  }
+
   knownDevice(userId: string, ip: string, userAgent?: string) {
     return this.repository.knownDevice(userId, ip, userAgent);
   }
