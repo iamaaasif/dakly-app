@@ -56,7 +56,6 @@ A controller method reads params and body, checks permission, calls one service 
 
 ```ts
 @Controller('orders')
-@UseGuards(StoreGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
@@ -66,14 +65,28 @@ export class OrdersController {
   confirm(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
     @Param('orderId', ParseUUIDPipe) orderId: string,
   ): Promise<OrderResponse> {
-    return this.ordersService.confirm(storeId, orderId, { kind: 'user', userId });
+    return this.ordersService.confirm(storeId, orderId, { userId, access });
+  }
+}
+
+@Controller('me/sessions')
+@RequireUser()
+export class SessionsController {
+  constructor(private readonly sessions: SessionsService) {}
+
+  @Post('sign-out-others')
+  @HttpCode(204)
+  revokeOthers(@CurrentUser() userId: string, @CurrentSession() sessionId: string): Promise<void> {
+    return this.sessions.revokeOthers(userId, sessionId);
   }
 }
 ```
 
-- Every route in a store controller has `StoreGuard` (class level) and `@RequirePermission(...)` (method level). A route without a permission decorator fails a test that walks all routes.
+- `StoreGuard` runs globally. `@RequirePermission(...)` or `@AnyMember()` makes a route a store route, and the guard then rejects it without an active store. Do not add `@UseGuards(StoreGuard)`. A route without an access rule fails a test that walks all routes.
+- Read the session through `@CurrentStore()`, `@CurrentUser()`, `@CurrentAccess()` and `@CurrentSession()`, never `request.storeId!` and the like. They throw when the guard did not set the value.
 - Bodies and queries go through `ZodValidationPipe` with the contracts schema. No class-validator, no DTO classes with decorators.
 - No `@Res()`, no `reply.send()`; return the value (see [http-fastify.md](http-fastify.md)).
 - No try/catch in controllers. `AppErrorFilter` handles errors.
