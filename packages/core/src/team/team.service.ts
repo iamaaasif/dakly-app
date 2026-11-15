@@ -1,3 +1,4 @@
+import type { UserStorePageQuery, UserStorePage } from '@dakly/contracts/sessions';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   customRolePermissionsSchema,
@@ -56,7 +57,15 @@ export class TeamService {
     return this.repository.accountOwnerContacts(userId);
   }
 
-  storesFor(userId: string) {
-    return this.repository.storesFor(userId);
+  storeContext(userId: string, storeId?: string) {
+    return this.repository.storeContext(userId, storeId);
+  }
+  async storesFor(
+    userId: string,
+    query: UserStorePageQuery = { limit: 50 },
+  ): Promise<UserStorePage> {
+    const rows = await this.repository.storesFor(userId, query);
+    const items = rows.slice(0, query.limit);
+    return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.storeId : null };
   }
 }

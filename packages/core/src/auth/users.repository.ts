@@ -4,10 +4,11 @@ import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { uuidv7 } from '@dakly/db/uuid-v7';
 import type { Database } from '@dakly/db/client';
 import type { SignUpInput } from '@dakly/contracts/auth';
-import { DATABASE } from '../platform/database/database.tokens';
 import { accountRecoveries } from '@dakly/db/schema/account-recovery';
 import { users } from '@dakly/db/schema/auth';
 import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
+import { databaseErrorCode } from '../platform/database/error-code';
+import { DATABASE } from '../platform/database/database.tokens';
 import { AccountDatabase } from '../platform/database/account-database';
 import { TenantDatabase, type Transaction } from '../platform/database/tenant-database';
 
@@ -266,8 +267,7 @@ export class UsersRepository {
     return (
       typeof cause === 'object' &&
       cause !== null &&
-      'code' in cause &&
-      cause.code === '23505' &&
+      databaseErrorCode(error) === '23505' &&
       'constraint' in cause &&
       cause.constraint === constraint
     );

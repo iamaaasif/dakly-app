@@ -28,6 +28,7 @@ export function PasswordResetConfirm({ identifier }: PasswordResetConfirmProps) 
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={() => setDone(true)} />;
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async ({ confirmation: _confirmation, ...input }) => {
         try {

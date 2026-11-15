@@ -32,6 +32,7 @@ export function TotpSetup({
   if (setup) return <TotpConfirm setup={setup} onConfirmed={onConfirmed} />;
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

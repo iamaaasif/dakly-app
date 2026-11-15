@@ -20,6 +20,7 @@ export function PasswordForm({ profile, onDone }: { profile: AccountProfile; onD
   const proofName = password ? 'currentPassword' : 'proofCode';
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

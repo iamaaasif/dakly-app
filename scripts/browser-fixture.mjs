@@ -2,13 +2,15 @@ import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { browserRegistration } from './browser-registration.mjs';
 import { browserTeam } from './browser-team.mjs';
+import { browserReview } from './browser-review.mjs';
 import { browserSecurity } from './browser-security.mjs';
 
 const requireWeb = createRequire(new URL('../apps/web/package.json', import.meta.url));
 
-export function browserFixture(databaseUrl, mailpitUrl) {
+export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) {
   const { createDatabase } = requireWeb('@dakly/db/client');
   const database = createDatabase(databaseUrl);
+  const review = browserReview(database, environment, accessKey);
   const registration = browserRegistration(database, mailpitUrl);
   const team = browserTeam(database, mailpitUrl);
   const security = browserSecurity(database, mailpitUrl);
@@ -19,11 +21,13 @@ export function browserFixture(databaseUrl, mailpitUrl) {
     browser: {
       token,
       storeIds,
+      review: review.browser,
       registration: registration.browser,
       team: team.browser,
       security: security.browser,
     },
     async seed() {
+      await review.seed();
       await registration.seed();
       await team.seed();
       await security.seed();
@@ -64,6 +68,7 @@ export function browserFixture(databaseUrl, mailpitUrl) {
     async close() {
       try {
         const results = await Promise.allSettled([
+          review.close(),
           registration.close(),
           team.close(),
           security.close(),

@@ -37,6 +37,7 @@ export function SignUpAccount({
   return (
     <FormProvider {...form}>
       <form
+        method="post"
         className="space-y-4"
         onSubmit={form.handleSubmit(async ({ password, consent: _consent, ...registration }) => {
           try {

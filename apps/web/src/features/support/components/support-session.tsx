@@ -40,17 +40,21 @@ export function SupportSession() {
             <p>Access expires {formatDateTime(session.data.expiresAt!)}</p>
             <p>The Owner can end this session at any time.</p>
           </section>
-          <SupportCustomers writable={session.data.access === 'write'} />
+          <SupportCustomers
+            key={session.data.contextTag}
+            contextTag={session.data.contextTag}
+            writable={session.data.access === 'write'}
+          />
         </>
       ) : null}
     </main>
   );
 }
-function SupportCustomers({ writable }: { writable: boolean }) {
+function SupportCustomers({ writable, contextTag }: { writable: boolean; contextTag: string }) {
   const [id, setId] = useState('');
   const [selected, setSelected] = useState('');
-  const customer = useSupportCustomer(selected);
-  const create = useSupportCreate();
+  const customer = useSupportCustomer(selected, contextTag);
+  const create = useSupportCreate(contextTag);
   const form = useForm<CreateCustomerInput>({ resolver: zodResolver(createCustomerSchema) });
   return (
     <>

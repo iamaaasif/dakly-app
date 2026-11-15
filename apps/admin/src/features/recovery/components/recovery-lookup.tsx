@@ -21,6 +21,7 @@ export function RecoveryLookup({
   });
   return (
     <form
+      method="post"
       className="space-y-3"
       onSubmit={form.handleSubmit((input) => {
         onSelect(undefined);

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
-import { loadEnv, loadStaffEnv } from './env';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadEnv, loadStaffEnv, resetEnvForTests } from './env';
 
 describe('loadEnv', () => {
   it.each(['https://localhost:6379', 'redis://localhost/-1', 'redis://localhost/1.5'])(
@@ -162,4 +162,22 @@ describe('API listener configuration', () => {
       expect(() => loadEnv({ ...base, API_HOST: host })).toThrow();
     },
   );
+});
+
+describe('process environment cache', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetEnvForTests();
+  });
+
+  it.each([loadEnv, loadStaffEnv])('parses process.env once until reset', (load) => {
+    vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
+    vi.stubEnv('REDIS_URL', 'redis://localhost');
+    vi.stubEnv('API_PORT', '4000');
+    const first = load();
+    vi.stubEnv('API_PORT', '5000');
+    expect(load()).toBe(first);
+    resetEnvForTests();
+    expect(load().API_PORT).toBe(5000);
+  });
 });

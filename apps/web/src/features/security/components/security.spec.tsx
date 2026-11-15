@@ -24,7 +24,7 @@ function show(child: React.ReactNode) {
     contextTag: 'account-only',
     currentStore: null,
     user: { id: 'account', name: 'Rina' },
-    stores: [],
+    hasMemberships: false,
   });
   render(<QueryClientProvider client={client}>{child}</QueryClientProvider>);
 }

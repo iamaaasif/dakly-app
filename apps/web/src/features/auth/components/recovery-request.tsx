@@ -10,7 +10,7 @@ export function RecoveryRequest() {
   if (proof) return <RecoveryProof proof={proof} />;
   return (
     <FormProvider {...form}>
-      <form className="space-y-4" onSubmit={submit}>
+      <form method="post" className="space-y-4" onSubmit={submit}>
         <p>
           Use this if you have lost your authenticator and backup codes. Verify your mobile, your
           verified email if you have one, and your password if you set one. Recovery waits at least
