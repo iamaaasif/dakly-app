@@ -28,6 +28,16 @@ Dependencies point one way: `apps → core → (db, contracts, providers)`. `pla
 5. Repositories run queries inside `TenantDatabase.forStore`, so Postgres RLS limits every query to that store.
 6. Errors are `AppError`s, turned into `{ error: { code, message } }` by `AppErrorFilter`.
 
+## Store transactions
+
+Services inject `StoreTransaction` from the global `DatabaseModule` and call `run(storeId, work)` around one atomic action. They call other features through their exported services; every participating repository still uses `TenantDatabase.forStore`. Nested calls for the same store share the open transaction. A different store throws; an error that escapes the action rolls back all its writes. There are no nested savepoints.
+
+`runForNewStore(work)` generates a UUID v7 and passes it to `work` as the store id, so the store and its dependent rows can be created together. Both methods return the action's result without exposing Drizzle to services. Standalone repository calls still open their own transaction.
+
+Await all work inside the action and keep vendor calls outside it. Each asynchronous request has its own scope, including concurrent requests for the same store. A scope closes when its action settles; delayed callbacks inherited from that scope are rejected rather than using a released connection or committing extra writes.
+
+Global `users` and `sessions` use their own database operations outside the store action. They do not join it or roll back with it. Account creation commits the user and initial session first; ACC-16 then commits store setup and updates the session afterwards. If setup fails, the user resumes business details. If the session update fails, a retry finds the owned store rather than creating another ([account flow](features/01-account-and-team.md)).
+
 ## Runtime
 
 Beta runs on one DigitalOcean Droplet; managed PostgreSQL and managed Valkey (Redis); Cloudflare R2 for files; Cloudflare in front. The API and worker scale out separately when needed. See ADR 0001 for when parts split out of the monolith.
@@ -126,6 +136,10 @@ Initial import runs as a `bulk` job in pages; after that, store webhooks (verifi
 ### 6. Attribution
 
 On `order.created`, the analytics worker looks back over the store's window (1, 3 or 7 days) for the customer's latest eligible touch and records the attribution (pending review: on the order row instead of an `attributions` table); cancellations remove it and returns reduce its money. Roll-up tables are updated in the same job.
+
+## Valkey rate limiting
+
+`platform/cache/CacheModule` exports one `ValkeyClient` and the shared `RateLimiter`. The client uses `REDIS_URL` through the queue connection parser, including TLS and database selection, and closes on application shutdown. One Valkey script atomically counts attempts and sets the expiry for a fixed window. The limiter returns an allowed flag and retry-after in whole seconds; blocked attempts do not extend the window. Features choose namespaced keys and import the module when they need it. Auth-specific limits arrive with ACC-2.
 
 ## Environments
 

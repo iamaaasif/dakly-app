@@ -12,7 +12,18 @@ const snapshot = JSON.parse(readFileSync(resolve(metadataDirectory, snapshotName
 const tables = Object.values(snapshot.tables);
 const byName = new Map(tables.map((table) => [table.name, table]));
 const groups = [
-  ['Stores, accounts and team', ['stores', 'auth', 'team', 'admin']],
+  [
+    'Stores, accounts and team',
+    [
+      'stores',
+      'auth',
+      'account-security-events',
+      'account-recovery',
+      'team',
+      'admin',
+      'staff-recovery',
+    ],
+  ],
   [
     'Channels, customers and chats',
     ['areas', 'channels', 'contacts', 'contact-memory', 'customer-insights', 'chats', 'customers'],

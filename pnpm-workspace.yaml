@@ -7,3 +7,8 @@ onlyBuiltDependencies:
 # New package versions wait 3 days (in minutes) before install, so a hijacked
 # release is usually caught and pulled before it reaches us. See ADR 0004.
 minimumReleaseAge: 4320
+# The cookie plugin augments Fastify types but declares Fastify only as a dev dependency.
+packageExtensions:
+  '@fastify/cookie@11.0.2':
+    peerDependencies:
+      fastify: ^5.0.0

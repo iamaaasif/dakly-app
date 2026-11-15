@@ -2,6 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
+      "env": ["ADMIN_API_URL", "WEB_API_URL"],
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
@@ -14,7 +15,16 @@
     "test:int": {
       "dependsOn": ["^build"],
       "cache": false,
-      "passThroughEnv": ["DATABASE_URL", "DATABASE_ADMIN_URL"]
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "DATABASE_ADMIN_URL",
+        "REDIS_URL",
+        "MAILPIT_SMTP_HOST",
+        "MAILPIT_SMTP_PORT",
+        "MAILPIT_API_URL",
+        "ENCRYPTION_CURRENT_KEY_VERSION",
+        "ENCRYPTION_MASTER_KEYS"
+      ]
     },
     "dev": {
       "dependsOn": ["^build"],

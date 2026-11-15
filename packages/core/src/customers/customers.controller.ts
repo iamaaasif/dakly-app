@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { RequirePermission } from '../platform/tenancy/access.decorators';
+import type { StoreRequest } from '../platform/tenancy/store-request';
+import {
+  Body,
+  Inject,
+  Req,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   type CreateCustomerInput,
   type CustomerResponse,
@@ -12,21 +24,25 @@ import { CustomersService } from './customers.service';
 @Controller('customers')
 @UseGuards(StoreGuard)
 export class CustomersController {
-  constructor(private readonly customersService: CustomersService) {}
+  constructor(@Inject(CustomersService) private readonly customersService: CustomersService) {}
 
   @Post()
+  @RequirePermission('customers.edit')
   create(
     @CurrentStore() storeId: string,
+    @Req() request: StoreRequest,
     @Body(new ZodValidationPipe(createCustomerSchema)) input: CreateCustomerInput,
   ): Promise<CustomerResponse> {
-    return this.customersService.create(storeId, input);
+    return this.customersService.create(storeId, input, request.access!);
   }
 
   @Get(':id')
+  @RequirePermission('customers.view')
   getById(
     @CurrentStore() storeId: string,
+    @Req() request: StoreRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<CustomerResponse> {
-    return this.customersService.getById(storeId, id);
+    return this.customersService.getById(storeId, id, request.access!);
   }
 }
