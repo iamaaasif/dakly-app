@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
+import { maskPhone } from '@dakly/contracts/phone';
 import type { UserProfile } from '@dakly/contracts/sessions';
 import {
   customRolePermissionsSchema,
@@ -306,7 +307,7 @@ export class MembersService {
       id: member.id,
       userId: member.userId,
       name: identity.name,
-      phone: phone && !seeFullPhone ? `${phone.slice(0, 3)}XXXXX${phone.slice(-3)}` : phone,
+      phone: phone && !seeFullPhone ? maskPhone(phone) : phone,
       email: identity.email,
       builtInRole: member.builtInRole,
       roleId: member.roleId,

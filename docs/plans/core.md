@@ -120,7 +120,7 @@ Branch: `feat/acc-3-sessions`
   - `UserGuard` for `@RequireUser()` routes: no valid session gives `401 AUTH_REQUIRED`. `@CurrentUser()` throws the same if it ever runs without a user.
   - `OriginGuard`: for POST, PUT, PATCH and DELETE, `Origin` must be in `WEB_ORIGINS`, else `403 ORIGIN_REJECTED`. Only routes marked `@ProviderCallback()` (signed webhooks, added with their first route) skip it; a missing `Origin` is never accepted otherwise.
   - Routes: `POST /auth/sign-out`, `GET /me`, `GET /me/stores` (`stores_for_user`), `POST /me/active-store` ( refuses a store without an active membership with the same 404 as a missing store).
-  - The existing customers routes become reachable here, so they get `@RequirePermission('customers.view' | 'customers.edit')`, and `CustomersService` masks the phone (`017XXXXX678`) in every response for a member without `seeFullPhone`.
+  - The existing customers routes become reachable here, so they get `@RequirePermission('customers.view' | 'customers.edit')`, and `CustomersService` masks the phone (`01712-XXX678`) in every response for a member without `seeFullPhone`.
 - Rules: auth rules 1, 2, 6, 7, 8, 10. Never a JWT.
 - Tests:
   - Integration for session storage and for `accessFor` after removal returning nothing. `app.inject()`: no cookie on a store route gives `401 STORE_REQUIRED` and on `/me` gives `401 AUTH_REQUIRED`; an expired, revoked or unknown token gives the same. A write from another origin or with no origin gives 403; switching to a store you are not in gives 404. A removed member's next request to this store gives 401 while their other store still works. A Support agent reads a customer with the phone masked.

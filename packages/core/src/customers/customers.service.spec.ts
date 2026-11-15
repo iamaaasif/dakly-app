@@ -48,9 +48,9 @@ describe('CustomersService', () => {
           { seeFullPhone: false },
         )
       ).phone,
-    ).toBe('017XXXXX678');
+    ).toBe('01712-XXX678');
     expect((await service.getById(STORE_ID, customer.id, { seeFullPhone: false })).phone).toBe(
-      '017XXXXX678',
+      '01712-XXX678',
     );
   });
 

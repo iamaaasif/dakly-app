@@ -59,7 +59,7 @@ describe('Team screens', () => {
             userId: 'actor',
             roleId: null,
             name: 'Rina',
-            phone: '017XXXXX678',
+            phone: '01712-XXX678',
             email: null,
             builtInRole: 'owner',
             status: 'active',
@@ -72,7 +72,7 @@ describe('Team screens', () => {
     );
     show(<MembersScreen />);
     await screen.findByRole('heading', { name: 'Rina' });
-    expect(screen.getByText('017XX-XXX678')).toBeTruthy();
+    expect(screen.getByText('01712-XXX678')).toBeTruthy();
     expect(screen.getByText('10 Jan 2026, 15:30 (Asia/Dhaka)')).toBeTruthy();
     expect(screen.getByRole('meter').getAttribute('value')).toBe('1');
     expect(screen.queryByRole('button', { name: 'Invite member' })).toBeNull();

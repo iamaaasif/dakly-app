@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bdMobileSchema } from './phone';
+import { bdMobileSchema, maskPhone } from './phone';
 
 describe('bdMobileSchema', () => {
   it.each([
@@ -25,4 +25,11 @@ describe('bdMobileSchema', () => {
       expect(bdMobileSchema.safeParse(input).success).toBe(false);
     },
   );
+});
+
+describe('maskPhone', () => {
+  it('keeps the operator prefix and last three digits', () => {
+    expect(maskPhone('01712345678')).toBe('01712-XXX678');
+    expect(maskPhone('01987654321')).toBe('01987-XXX321');
+  });
 });

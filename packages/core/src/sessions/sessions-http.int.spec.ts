@@ -185,7 +185,7 @@ describe('Session boundary over Fastify and Postgres', () => {
     expect(shops.json().items).toHaveLength(2);
     const customer = await getCustomer();
     expect(customer.statusCode).toBe(200);
-    expect(customer.json().phone).toBe('017XXXXX678');
+    expect(customer.json().phone).toBe('01712-XXX678');
   });
   it('keeps selected metadata independent of bounded membership pages and rechecks removal', async () => {
     const extra = Array.from({ length: 55 }, () => crypto.randomUUID()).sort();
