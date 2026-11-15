@@ -41,6 +41,7 @@ const challengeColumns = {
   consumedAt: staffChallenges.consumedAt,
 };
 export type StaffChallengeRecord = typeof staffChallenges.$inferInsert;
+export type LockedStaff = Pick<typeof staffUsers.$inferSelect, keyof typeof staffColumns>;
 @Injectable()
 export class StaffRepository {
   constructor(
@@ -57,7 +58,7 @@ export class StaffRepository {
     return row?.id;
   }
 
-  async lock(staffUserId: string) {
+  async lock(staffUserId: string): Promise<LockedStaff | undefined> {
     return this.scope.forStaff(staffUserId, async (tx) => {
       const [row] = await tx
         .select(staffColumns)

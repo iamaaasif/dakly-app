@@ -9,11 +9,13 @@ import { TeamService } from '../team/team.service';
 import { StaffIdentityService } from './staff-identity.service';
 import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
-import { supportRoles } from './support-roles';
+import { assertSupportStaff } from './support-staff-checks';
 import { supportError } from './support.errors';
 import { SupportRepository } from './support.repository';
 
-type SupportCodeRequest = { id: string; userId: string; sessionId?: string; ip: string };
+type SupportCodeRequest = { id: string; userId: string; sessionId: string; ip: string };
+
+type StaffCodeRequest = { id: string; userId: string; ip: string };
 
 type SupportApproval = { id: string; userId: string; sessionId: string; code: string; ip: string };
 
@@ -40,7 +42,9 @@ export class SupportOwnerService {
 
   async ownerRequests(storeId: string, userId: string, sessionId: string, before?: string) {
     return this.transaction.run(storeId, async () => {
-      await this.assertOwnerCanRead(storeId, userId, sessionId);
+      await this.assertOwner(storeId, userId, (now) =>
+        this.repository.readOwnerSession(storeId, userId, sessionId, now),
+      );
       const items = (await this.repository.list(storeId, before)).map((grant) =>
         supportGrantResponse(grant, this.clock.now()),
       );
@@ -49,21 +53,33 @@ export class SupportOwnerService {
   }
 
   async requestCode(storeId: string, { id, userId, sessionId, ip }: SupportCodeRequest) {
-    const subject = await this.requestSubject(storeId, id, userId, sessionId);
+    const { subject } = await this.lockSubject(storeId, id, userId, () =>
+      this.assertOwnerSession(storeId, userId, sessionId),
+    );
     await this.codes.send({ subject, purpose: 'support_approval', ip });
   }
 
-  private async requestSubject(storeId: string, id: string, userId: string, sessionId?: string) {
+  async sendRequestCode(storeId: string, { id, userId, ip }: StaffCodeRequest) {
+    const { subject } = await this.lockSubject(storeId, id, userId, async () => {
+      if ((await this.repository.owner(storeId)) !== userId) throw supportError('SUPPORT_DENIED');
+    });
+    await this.codes.send({ subject, purpose: 'support_approval', ip });
+  }
+
+  private lockSubject(
+    storeId: string,
+    id: string,
+    userId: string,
+    assertRequester: () => Promise<void>,
+  ) {
     return this.transaction.run(storeId, async () => {
       const identity = await this.users.lockVerifiedIdentity(storeId, userId);
       return this.transaction.runLocked(storeId, async () => {
-        if (sessionId) await this.assertOwner(storeId, userId, sessionId);
-        else if ((await this.repository.owner(storeId)) !== userId)
-          throw supportError('SUPPORT_DENIED');
+        await assertRequester();
         const grant = await this.pending(storeId, id);
         if (!identity?.phone || !identity.phoneVerifiedAt)
           throw supportError('SUPPORT_PHONE_REQUIRED');
-        return {
+        const subject = {
           userId,
           target: identity.phone,
           phone: identity.phone,
@@ -78,19 +94,23 @@ export class SupportOwnerService {
             grant.durationMinutes,
           ]),
         } satisfies SignInSubject;
+        return { subject, grant };
       });
     });
   }
 
   async approve(storeId: string, { id, userId, sessionId, code, ip }: SupportApproval) {
-    const subject = await this.requestSubject(storeId, id, userId, sessionId);
-    const proof = await this.codes.consume(subject, 'support_approval', code, ip);
-    if (proof.userId !== userId) throw supportError('SUPPORT_DENIED');
-    return this.transaction.run(storeId, async () => {
-      const current = await this.requestSubject(storeId, id, userId, sessionId);
-      if (current.binding !== subject.binding) throw supportError('SUPPORT_DENIED');
-      const requested = await this.pending(storeId, id);
-      await this.assertStaff(storeId, requested.staffUserId);
+    await this.transaction.run(storeId, async () => {
+      const { subject, grant: requested } = await this.lockSubject(storeId, id, userId, () =>
+        this.assertOwnerSession(storeId, userId, sessionId),
+      );
+      const proof = await this.codes.consume(subject, 'support_approval', code, ip);
+      if (proof.userId !== userId) throw supportError('SUPPORT_DENIED');
+      await assertSupportStaff(await this.repository.staff(storeId, requested.staffUserId), {
+        storeId,
+        clock: this.clock,
+        identities: this.identities,
+      });
       // Disable can end the request while this action waits for the staff lock.
       const grant = await this.pending(storeId, id);
       const now = this.clock.now();
@@ -145,19 +165,25 @@ export class SupportOwnerService {
     return this.transaction.run(storeId, async () => {
       await this.users.lockVerifiedIdentity(storeId, userId);
       return this.transaction.runLocked(storeId, async () => {
-        await this.assertOwner(storeId, userId, sessionId);
+        await this.assertOwnerSession(storeId, userId, sessionId);
         return work();
       });
     });
   }
 
-  private async assertOwner(storeId: string, userId: string, sessionId: string) {
+  private assertOwnerSession(storeId: string, userId: string, sessionId: string) {
+    return this.assertOwner(storeId, userId, (now) =>
+      this.repository.ownerSession(storeId, userId, sessionId, now),
+    );
+  }
+
+  private async assertOwner(
+    storeId: string,
+    userId: string,
+    findSession: (now: Date) => Promise<boolean>,
+  ) {
     const access = await this.team.accessFor(storeId, userId);
-    if (
-      !access ||
-      !this.team.canApproveSupport(access) ||
-      !(await this.repository.ownerSession(storeId, userId, sessionId, this.clock.now()))
-    )
+    if (!access || !this.team.canApproveSupport(access) || !(await findSession(this.clock.now())))
       throw supportError('SUPPORT_DENIED');
   }
 
@@ -172,29 +198,5 @@ export class SupportOwnerService {
     if (supportGrantStatus(grant, this.clock.now()) !== 'requested')
       throw supportError('SUPPORT_INVALID');
     return grant;
-  }
-
-  private async assertOwnerCanRead(storeId: string, userId: string, sessionId: string) {
-    const access = await this.team.accessFor(storeId, userId);
-    if (
-      !access ||
-      !this.team.canApproveSupport(access) ||
-      !(await this.repository.readOwnerSession(storeId, userId, sessionId, this.clock.now()))
-    )
-      throw supportError('SUPPORT_DENIED');
-  }
-
-  private async assertStaff(storeId: string, staffUserId: string) {
-    const staff = await this.repository.staff(storeId, staffUserId);
-    if (
-      !staff ||
-      staff.status !== 'active' ||
-      !staff.enrolledAt ||
-      !supportRoles.includes(staff.role)
-    )
-      throw supportError('SUPPORT_ENDED');
-    if (await this.identities.conflictsWithStore(storeId, staffUserId))
-      throw supportError('SUPPORT_DENIED');
-    return staff;
   }
 }
