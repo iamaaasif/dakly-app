@@ -15,7 +15,8 @@ import { authError } from './auth.errors';
 import { authKey } from './auth-key';
 import { AppError } from '../platform/errors/app-error';
 
-type GoogleResult = GoogleSignInPending | { token: string };
+type GoogleResult =
+  { status: 'totp_required'; challengeId: string } | GoogleSignInPending | { token: string };
 @Injectable()
 export class GoogleService {
   constructor(

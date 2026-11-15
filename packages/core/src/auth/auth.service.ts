@@ -1,6 +1,10 @@
-import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
+import { TotpRecoveryService } from './totp-recovery.service';
+import { SecurityNoticesService } from './security-notices.service';
+import { TotpService } from './totp.service';
+import { TotpChallenges, type TotpChallenge } from './totp-challenges';
+import { accountCredentialState } from './account-credential-state';
 import { GoogleTickets } from './google-tickets';
-import { hash, argon2id } from 'argon2';
+import { hashPassword } from '../platform/crypto/password';
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { Inject, Injectable } from '@nestjs/common';
 import type {
@@ -19,22 +23,14 @@ import { SignInFailures, type SignInSubject } from './sign-in-failures';
 import { passwordState } from './password-credentials';
 import { authError } from './auth.errors';
 
-export type SignInRequest = { ip: string; userAgent?: string; isRemembered: boolean };
-// A pending registration is inserted in the same account transaction as its first session.
-export type SignInUser = {
-  id: string;
-  target: string;
-  kind?: 'email';
-  deliveryEmail?: string;
-  passwordState?: string;
-  registration?: SignUpInput;
-  registrationPasswordHash?: string;
-  google?: {
-    identity: GoogleIdentity;
-    mode: 'subject' | 'link' | 'signup';
-    expectedEmailVerifiedAt?: string;
-    expectedUnlinked?: true;
-  };
+export type { SignInRequest, SignInUser } from './sign-in';
+import type { SignInRequest, SignInUser } from './sign-in';
+
+type Account = NonNullable<Awaited<ReturnType<UsersRepository['lockForSignIn']>>>;
+type SecondFactor = {
+  challengeId: string;
+  grant: TotpChallenge & { attemptId: string };
+  code: string;
 };
 
 @Injectable()
@@ -48,6 +44,10 @@ export class AuthService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(AccountSecurityEventsService) private readonly events: AccountSecurityEventsService,
     @Inject(GoogleTickets) private readonly googleTickets: GoogleTickets,
+    @Inject(TotpService) private readonly totp: TotpService,
+    @Inject(TotpChallenges) private readonly challenges: TotpChallenges,
+    @Inject(TotpRecoveryService) private readonly recovery: TotpRecoveryService,
+    @Inject(SecurityNoticesService) private readonly notices: SecurityNoticesService,
   ) {}
 
   async requestCode(input: RequestCodeInput, ip: string): Promise<void> {
@@ -106,9 +106,7 @@ export class AuthService {
         target: input.phone,
         registration,
         google: google ? { identity: google.identity, mode: 'signup' } : undefined,
-        registrationPasswordHash: input.password
-          ? await hash(input.password, { type: argon2id })
-          : undefined,
+        registrationPasswordHash: input.password ? await hashPassword(input.password) : undefined,
       },
       request,
     );
@@ -130,24 +128,25 @@ export class AuthService {
     );
   }
 
-  async completeSignIn(user: SignInUser, request: SignInRequest) {
-    const subject = this.subject(user.target, user.registration ? undefined : user.id);
+  async verifyTotp(challengeId: string, code: string, ip: string) {
+    const grant = await this.challenges.attempt(challengeId);
+    return this.completeSignIn(grant.user, { ...grant.request, ip }, { challengeId, grant, code });
+  }
+
+  async completeSignIn(user: SignInUser, request: SignInRequest, secondFactor?: SecondFactor) {
+    const account = user.registration ? undefined : await this.users.lockForSignIn(user.id);
+    const subject = account ? this.totp.subject(account) : this.subject(user.target);
     await this.failures.assertAllowed(subject, request.ip);
     const result = await this.transaction.run(user.id, async () => {
-      await this.createRegistration(user);
-      const current = await this.users.lockForSignIn(user.id);
-      if (!current)
-        throw authError(user.passwordState ? 'AUTH_INVALID_CREDENTIALS' : 'AUTH_CODE_INVALID');
-      this.assertIdentity(user, current);
-      if (
-        user.passwordState &&
-        user.passwordState !== passwordState(current.id, current.passwordHash)
-      )
-        throw authError('AUTH_INVALID_CREDENTIALS');
-      if (current.isDisabled) throw authError('AUTH_DISABLED');
-      // ACC-7 replaces this refusal with the challenge; no first factor may bypass it.
-      if (current.totpEnabledAt) throw authError('AUTH_SECOND_FACTOR_REQUIRED');
+      const current = await this.lockCurrent(user, secondFactor);
+      if (secondFactor) {
+        if (!(await this.totp.verify(current, secondFactor.code))) return undefined;
+      } else if (current.totpEnabledAt) {
+        return { pending: accountCredentialState(current) };
+      }
+      if (secondFactor) await this.recovery.cancelPending(user.id, request.ip);
       await this.completeGoogleLink(user, current.googleSubject, request.ip);
+      await this.notifyNewDevice(current, request);
       if (user.registrationPasswordHash)
         await this.events.record(user.id, {
           event: 'password.changed',
@@ -157,8 +156,54 @@ export class AuthService {
       await this.users.signedIn(user.id, this.clock.now());
       return this.sessions.create(user.id, request);
     });
+    if (!result) {
+      await this.challenges.release(secondFactor!.challengeId, secondFactor!.grant.attemptId);
+      await this.failures.recordFailure(subject, request.ip);
+      throw authError('AUTH_TOTP_INVALID');
+    }
+    if ('pending' in result) return this.challenges.issue(user, request, result.pending);
     await this.failures.reset(subject);
+    await this.notices.dispatch(user.id);
     return result;
+  }
+
+  private async lockCurrent(user: SignInUser, secondFactor?: SecondFactor): Promise<Account> {
+    await this.createRegistration(user);
+    const current = await this.users.lockForSignIn(user.id);
+    if (!current)
+      throw authError(user.passwordState ? 'AUTH_INVALID_CREDENTIALS' : 'AUTH_CODE_INVALID');
+    if (
+      secondFactor &&
+      (secondFactor.grant.state !== accountCredentialState(current) ||
+        secondFactor.grant.expiresAt <= this.clock.now().getTime())
+    )
+      throw authError('AUTH_TOTP_INVALID');
+    this.assertCurrentCredentials(user, current);
+    return current;
+  }
+
+  private assertCurrentCredentials(user: SignInUser, current: Account) {
+    this.assertIdentity(user, current);
+    if (
+      user.passwordState &&
+      user.passwordState !== passwordState(current.id, current.passwordHash)
+    )
+      throw authError('AUTH_INVALID_CREDENTIALS');
+    if (current.isDisabled) throw authError('AUTH_DISABLED');
+  }
+
+  private async notifyNewDevice(current: Account, request: SignInRequest) {
+    if (await this.sessions.knownDevice(current.id, request.ip, request.userAgent)) return;
+    const contact = this.totp.subject(current);
+    const to = contact.email ?? contact.phone;
+    if (to)
+      await this.notices.enqueue(current.id, [
+        {
+          channel: contact.email ? 'email' : 'sms',
+          to,
+          text: 'A new device signed in to your Dakly account. Review devices in Security and sign out any you do not recognize.',
+        },
+      ]);
   }
 
   private assertIdentity(

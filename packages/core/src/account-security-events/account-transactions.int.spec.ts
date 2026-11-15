@@ -50,13 +50,13 @@ describe('AccountSecurityEventsService (Postgres)', () => {
   it('commits a user change and an event without any store, then scopes history to that user', async () => {
     await transaction.run(userId, async () => {
       await database.forUser(userId, (tx) =>
-        tx.execute(sql`update users set password_hash = 'hashed' where id = ${userId}`),
+        tx.execute(sql`update users set password_hash = 'committed-password' where id = ${userId}`),
       );
       await service.record(userId, event);
     });
     expect(
       (await admin.db.execute(sql`select password_hash from users where id = ${userId}`)).rows,
-    ).toEqual([{ password_hash: 'hashed' }]);
+    ).toEqual([{ password_hash: 'committed-password' }]);
     expect(await service.list(userId, { limit: 10 })).toMatchObject([
       { event: 'password.changed', actorType: 'user' },
     ]);
@@ -171,10 +171,10 @@ describe('AccountSecurityEventsService (Postgres)', () => {
     );
     await expect(
       stores.run(randomUUID(), () => transaction.run(userId, async () => undefined)),
-    ).rejects.toThrow('Cannot mix account and store transactions');
+    ).rejects.toThrow('Cannot mix staff, account and store transactions');
     await expect(
       transaction.run(userId, () => stores.run(randomUUID(), async () => undefined)),
-    ).rejects.toThrow('Cannot mix account and store transactions');
+    ).rejects.toThrow('Cannot mix staff, account and store transactions');
   });
   it('rejects inherited work after its account action has finished', async () => {
     let finish!: () => void;
