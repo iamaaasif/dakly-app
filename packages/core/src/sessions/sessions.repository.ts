@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, sql, desc, lt } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
 import type { CreateSessionInput, Session } from '@dakly/contracts/sessions';
@@ -21,6 +21,58 @@ export class SessionsRepository {
     @Inject(DATABASE) private readonly database: Database,
     @Inject(AccountDatabase) private readonly account: AccountDatabase,
   ) {}
+
+  async list(userId: string, now: Date, before?: string) {
+    return this.account.forUser(userId, (tx) =>
+      tx
+        .select({ ...columns, ip: sessions.ip, userAgent: sessions.userAgent })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.userId, userId),
+            isNull(sessions.revokedAt),
+            gt(sessions.expiresAt, now),
+            before ? lt(sessions.id, before) : undefined,
+          ),
+        )
+        .orderBy(desc(sessions.id))
+        .limit(100),
+    );
+  }
+  async isActive(userId: string, sessionId: string, now: Date): Promise<boolean> {
+    return this.account.inTransaction(userId, async (tx) => {
+      const rows = await tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.userId, userId),
+            eq(sessions.id, sessionId),
+            isNull(sessions.revokedAt),
+            gt(sessions.expiresAt, now),
+          ),
+        )
+        .limit(1);
+      return rows.length === 1;
+    });
+  }
+
+  async knownDevice(userId: string, ip: string, userAgent?: string): Promise<boolean> {
+    const rows = await this.account.forUser(userId, (tx) =>
+      tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.userId, userId),
+            eq(sessions.ip, ip),
+            userAgent ? eq(sessions.userAgent, userAgent) : isNull(sessions.userAgent),
+          ),
+        )
+        .limit(1),
+    );
+    return rows.length > 0;
+  }
 
   async findByTokenHash(tokenHash: Buffer, now: Date): Promise<Session | undefined> {
     // The identity is unknown until this indexed read; no account or tenant scope exists yet.
@@ -107,6 +159,15 @@ export class SessionsRepository {
         .returning({ id: sessions.id }),
     );
     return rows.length > 0;
+  }
+
+  async revokeAll(userId: string, now: Date): Promise<void> {
+    await this.account.forUser(userId, (tx) =>
+      tx
+        .update(sessions)
+        .set({ revokedAt: now })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt))),
+    );
   }
 
   async setActiveStore(userId: string, id: string, storeId: string, now: Date): Promise<boolean> {
