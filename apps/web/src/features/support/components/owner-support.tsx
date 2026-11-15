@@ -2,6 +2,7 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 
 import { Button } from '@dakly/ui/button';
+import { QueryError } from '@dakly/ui/query-error';
 
 import { useOwnerSupport } from '../api/owner-requests';
 import { OwnerRequest } from './owner-request';
@@ -19,7 +20,13 @@ export function OwnerSupport() {
       </p>
       <Button onClick={() => list.refetch()}>Refresh requests</Button>
       {list.isPending ? <p role="status">Loading requests…</p> : null}
-      {list.error ? <p role="alert">{list.error.message}</p> : null}
+      {list.error ? (
+        <QueryError
+          message={list.error.message}
+          onRetry={() => void list.refetch()}
+          retryLabel="Retry requests"
+        />
+      ) : null}
       {list.data?.items.length === 0 ? <p>No support requests.</p> : null}
       {list.data?.nextCursor ? (
         <Button onClick={() => router.push(`/support-access?before=${list.data!.nextCursor!}`)}>

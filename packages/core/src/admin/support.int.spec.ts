@@ -606,6 +606,9 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       f.userId,
     ]);
     expect((await shop(f, `/support-access/${id}/code`, {})).statusCode).toBe(403);
+    const list = await shop(f, '/support-access');
+    expect(list.statusCode).toBe(403);
+    expect(list.json().error.code).toBe('SUPPORT_DENIED');
     await database.pool.query("update memberships set built_in_role='owner' where user_id=$1", [
       f.userId,
     ]);
