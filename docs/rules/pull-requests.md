@@ -1,12 +1,22 @@
 # Pull requests
 
-- One purpose per PR, under about 500 changed lines (lock files and generated migrations excluded). Split by layer when needed: schema + migration, then service, then UI.
-- Branch names say what the branch does: `<type>/<task-id>-<what-it-does>`, lower case, words joined by hyphens, under about 50 characters. The type matches the commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`). Example: `feat/acc-3-sessions`, `fix/rev-3-foundation-review-fixes`. Work outside a task drops the id: `fix/order-total-rounding`. Never `codex/...`, `patch-1`, `update`, `wip` or a date; rename such a branch before opening the PR. When a plan in [plans/](../plans/core.md) names the branch, use that name.
-- Commit messages: conventional (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
+- One purpose per PR, under about 500 changed lines. Split by layer when needed: schema + migration, then service, then UI.
+- Branch names say what the branch does: `<type>/<task-id>-<what-it-does>`, lower case, words joined by hyphens, at most 50 characters. The type matches the commit type (`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`). Example: `feat/acc-3-sessions`, `fix/rev-3-foundation-review-fixes`. Work outside a task drops the id: `fix/order-total-rounding`. Never `codex/...`, `patch-1`, `update`, `wip` or a date; rename such a branch before opening the PR. When a plan in [plans/](../plans/core.md) names the branch, use that name.
+- PR titles and commit subjects: `<type>(<task-id>): <summary>`, starting the summary in lower case, such as `feat(acc-7): add staff roles`. The scope is optional for work outside a task: `fix: round order totals`.
 - `pnpm check` passes locally before you push.
 - The author has read every line of the diff, including AI-written lines.
 - The PR names its task id from [tasks.md](../tasks.md), updates that row, and updates the feature doc when behaviour changes.
 - Fix small issues in the same PR. "Follow-up PR" for a rename usually never happens.
+
+## Checks
+
+The `pr-rules` job runs `scripts/check-pull-request.mjs` on every pull request. It fails when:
+
+- The branch name does not match `^(feat|fix|refactor|perf|docs|test|chore)/[a-z0-9]+(-[a-z0-9]+)*$` or is over 50 characters.
+- The PR title or a commit subject does not match `^(feat|fix|refactor|perf|docs|test|chore)(\([a-z0-9-]+\))?: [a-z].+`. Merge commits from updating the branch are skipped.
+- The PR changes more than 800 lines.
+
+Changed lines are added plus deleted lines from `git diff --numstat base...head`, not counting `pnpm-lock.yaml`, `docs/`, Markdown files, `*.spec.ts`, `*.spec.tsx`, `test/` folders, `apps/web/e2e/`, `packages/db/migrations/meta/` and `.sql` files in `packages/db/migrations/`. Over 500 lines prints a warning. A PR labelled `mechanical-change` only gets the warning above 800 lines; use the label only for changes made entirely by a formatter or autofix.
 
 Reviewers reject a PR that:
 

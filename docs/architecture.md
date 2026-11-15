@@ -28,6 +28,8 @@ Dependencies point one way: `apps → core → (db, contracts, providers)`. `pla
 5. Repositories run queries inside `TenantDatabase.forStore`, so Postgres RLS limits every query to that store.
 6. Errors are `AppError`s, turned into `{ error: { code, message } }` by `AppErrorFilter`.
 
+`apps/admin` forwards the client's `X-Forwarded-For` to the API (`apps/admin/src/lib/require-staff.ts`), so the API reads the staff member's address, not the admin server's. This is safe only if the admin server's address is in `API_TRUSTED_PROXIES` and Cloudflare's addresses are not.
+
 ## Store transactions
 
 Services inject `StoreTransaction` from the global `DatabaseModule` and call `run(storeId, work)` around one atomic action. They call other features through their exported services; every participating repository still uses `TenantDatabase.forStore`. Nested calls for the same store share the open transaction. A different store throws; an error that escapes the action rolls back all its writes. There are no nested savepoints.

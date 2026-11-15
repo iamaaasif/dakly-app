@@ -1,0 +1,15 @@
+name: Setup
+description: Install pnpm, Node and dependencies, and generate ephemeral encryption keys.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4.4.0
+    - uses: actions/setup-node@v5
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    - name: Generate ephemeral encryption keys
+      shell: bash
+      run: node scripts/development-encryption.mjs --ci
+    - shell: bash
+      run: pnpm install --frozen-lockfile

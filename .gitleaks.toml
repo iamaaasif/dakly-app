@@ -1,0 +1,21 @@
+[extend]
+useDefault = true
+
+# Only the exact fixture values gitleaks reported, and only in spec files; any other value is scanned.
+[[allowlists]]
+description = "Test fixtures: the RFC 6238 test secret and a fake password"
+condition = "AND"
+regexTarget = "match"
+regexes = [
+  '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''',
+  '''correct-pass123''',
+]
+paths = ['''\.spec\.ts$''']
+
+# The generic-api-key rule reads "escaping, expiry/revocation" in a review table as a key.
+# Allowed only in the commit that added it, so a later edit to that file is scanned again.
+[[allowlists]]
+description = "Prose false positive in a review document"
+condition = "AND"
+commits = ["674ab62c4fdf70e771aa4f8873addb5ed2b87ce2"]
+paths = ['''^docs/reviews/features-08-13\.md$''']
