@@ -72,3 +72,17 @@ A separate layout case checks the Roles list and complete permission form at
 360 px and 1280 px without sending codes or saving a role. Team cleanup removes
 only its generated identities, shop, subscription, plan, and recipient-owned
 Mailpit messages, regardless of which member ends as Owner.
+
+The final core review cases use two approved support grants with a current signed
+staff session and the real handoff/exchange guards. Replacing the shared support
+cookie rejects a stale draft before writes; the refreshed delegation accepts a
+new draft and late old customer responses stay hidden. A separate fixture has
+55 memberships and a selected shop beyond page one. It checks explicit page
+loading, removal, switching and readable shop identity with a long account name
+at 360 px and 1280 px. Only the synthetic header is captured.
+
+The runner also executes `scripts/native-form-tests.mjs` unconditionally. It renders
+actual public and staff source without hydration and submits fake passwords,
+proofs and recovery tokens in a JavaScript-disabled Chromium context. Every
+request is intercepted locally; Enter and submit buttons must produce POST
+without query fields. It retains no browser artifacts.

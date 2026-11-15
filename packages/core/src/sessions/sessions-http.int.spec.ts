@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Controller, Get, Module } from '@nestjs/common';
+import { Controller, Get, Post, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { eq, sql } from 'drizzle-orm';
@@ -26,6 +26,9 @@ class PublicController {
   health() {
     return { status: 'ok' };
   }
+  write() {
+    return { changed: false };
+  }
   user(userId: string) {
     return userId;
   }
@@ -39,6 +42,11 @@ for (const method of ['health', 'user'] as const) {
     Object.getOwnPropertyDescriptor(PublicController.prototype, method)!,
   );
 }
+Post('write')(
+  PublicController.prototype,
+  'write',
+  Object.getOwnPropertyDescriptor(PublicController.prototype, 'write')!,
+);
 CurrentUser()(PublicController.prototype, 'user', 0);
 class TestModule {}
 Module({
@@ -170,17 +178,80 @@ describe('Session boundary over Fastify and Postgres', () => {
       'phone',
     ]);
     const shops = await app.inject({ url: '/me/stores', headers: { cookie: cookie() } });
-    expect(shops.json()).toHaveLength(2);
+    expect(shops.json().items).toHaveLength(2);
     const customer = await getCustomer();
     expect(customer.statusCode).toBe(200);
     expect(customer.json().phone).toBe('017XXXXX678');
   });
+  it('keeps selected metadata independent of bounded membership pages and rechecks removal', async () => {
+    const extra = Array.from({ length: 55 }, () => crypto.randomUUID()).sort();
+    const selected = extra.at(-1)!;
+    const created = await service.create(userId, { isRemembered: false });
+    const headers = { cookie: `dakly_session=${created.token}` };
+    try {
+      await admin.pool.query(
+        "insert into stores(id,name) select id,'Paged shop' from unnest($1::uuid[]) id",
+        [extra],
+      );
+      await admin.pool.query(
+        "insert into memberships(id,store_id,user_id,built_in_role,status) select gen_random_uuid(),id,$2,'admin','active' from unnest($1::uuid[]) id",
+        [extra, userId],
+      );
+      await service.setActiveStore(userId, created.session.id, selected);
+      const context = (await app.inject({ url: '/me/context', headers })).json();
+      expect(context.stores).toBeUndefined();
+      expect(context.hasMemberships).toBe(true);
+      expect(context.currentStore.storeId).toBe(selected);
+      const first = (await app.inject({ url: '/me/stores?limit=10', headers })).json();
+      expect(first.items).toHaveLength(10);
+      expect(first.items.some((shop: { storeId: string }) => shop.storeId === selected)).toBe(
+        false,
+      );
+      const second = (
+        await app.inject({ url: `/me/stores?limit=50&after=${first.nextCursor}`, headers })
+      ).json();
+      expect(second.items).toHaveLength(47);
+      expect(second.nextCursor).toBeNull();
+      expect(new Set([...first.items, ...second.items].map((shop) => shop.storeId)).size).toBe(57);
+      expect((await app.inject({ url: '/me/stores?limit=51', headers })).statusCode).toBe(400);
+      await admin.pool.query(
+        "update memberships set status='removed' where store_id=$1 and user_id=$2",
+        [selected, userId],
+      );
+      expect((await app.inject({ url: '/me/context', headers })).json().currentStore).toBeNull();
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/me/active-store',
+            headers: { ...headers, origin },
+            payload: { storeId: selected },
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/me/active-store',
+            headers: { ...headers, origin },
+            payload: { storeId },
+          })
+        ).statusCode,
+      ).toBe(204);
+    } finally {
+      await admin.pool.query('delete from sessions where id=$1', [created.session.id]);
+      await admin.pool.query('delete from memberships where store_id=any($1::uuid[])', [extra]);
+      await admin.pool.query('delete from stores where id=any($1::uuid[])', [extra]);
+    }
+  });
+
   it('returns verified shell context and rejects stale store preconditions before writes', async () => {
     const context = await app.inject({ url: '/me/context', headers: { cookie: cookie() } });
     expect(context.statusCode).toBe(200);
     const shell = context.json();
     expect(shell.user).toEqual({ id: userId, name: 'Rina' });
-    expect(shell.stores).toHaveLength(2);
+    expect(shell.hasMemberships).toBe(true);
     expect(shell.currentStore).toEqual({
       storeId,
       name: 'Rina shop',
@@ -190,6 +261,9 @@ describe('Session boundary over Fastify and Postgres', () => {
       canViewTeam: false,
       canEditTeam: false,
       canTransferOwnership: false,
+      canViewStoreSettings: false,
+      canEditStoreSettings: false,
+      canChangeExtensions: false,
     });
     expect(shell.contextTag).toMatch(/^[a-f0-9]{64}$/);
     expect(context.headers['cache-control']).toBe('no-store');
@@ -218,13 +292,109 @@ describe('Session boundary over Fastify and Postgres', () => {
 
     await service.setActiveStore(userId, sessionId, storeId);
   });
+  it.each([false, true])(
+    'rejects an old account tag before revoking another account devices (selected store: %s)',
+    async (selected) => {
+      const [other] = await admin.db
+        .insert(users)
+        .values({ name: 'Account boundary', email: crypto.randomUUID() + '@example.test' })
+        .returning({ id: users.id });
+      const secondId = other!.id;
+      try {
+        const current = await service.create(secondId, { isRemembered: false });
+        const another = await service.create(secondId, { isRemembered: false });
+        if (selected) {
+          await admin.db
+            .insert(memberships)
+            .values({ userId: secondId, storeId, builtInRole: 'support_agent', status: 'active' });
+          await service.setActiveStore(secondId, current.session.id, storeId);
+        }
+        const headers = { cookie: `dakly_session=${current.token}`, origin };
+        const staleTag = (
+          await app.inject({ url: '/me/context', headers: { cookie: cookie() } })
+        ).json().contextTag;
+        const context = (await app.inject({ url: '/me/context', headers })).json();
+        expect(context.currentStore?.storeId ?? null).toBe(selected ? storeId : null);
+        const read = await app.inject({
+          url: '/me',
+          headers: { ...headers, 'x-session-context': staleTag },
+        });
+        expect(read.statusCode).toBe(200);
+        expect(read.headers['x-session-context']).toBe(context.contextTag);
+        const [before] = await admin.db.select().from(users).where(eq(users.id, secondId));
+        const rejected = await app.inject({
+          method: 'POST',
+          url: '/me/sessions/sign-out-others',
+          headers: { ...headers, 'x-session-context': staleTag },
+        });
+        expect(rejected.statusCode).toBe(409);
+        expect(rejected.json().error.code).toBe('SESSION_CONTEXT_CHANGED');
+        expect(await service.resolve(another.token)).toBeDefined();
+        const [after] = await admin.db.select().from(users).where(eq(users.id, secondId));
+        expect(after).toEqual(before);
+        const events = await admin.db.execute(
+          sql`select id from account_security_events where user_id = ${secondId}`,
+        );
+        expect(events.rows).toHaveLength(0);
+        expect(
+          (
+            await app.inject({
+              method: 'POST',
+              url: '/me/sessions/sign-out-others',
+              headers: { ...headers, 'x-session-context': context.contextTag },
+            })
+          ).statusCode,
+        ).toBe(204);
+        expect(await service.resolve(another.token)).toBeUndefined();
+        const legacy = await service.create(secondId, { isRemembered: false });
+        expect(
+          (await app.inject({ method: 'POST', url: '/me/sessions/sign-out-others', headers }))
+            .statusCode,
+        ).toBe(204);
+        expect(await service.resolve(legacy.token)).toBeUndefined();
+        expect(
+          (
+            await app.inject({
+              url: '/public/health',
+              headers: { ...headers, 'x-session-context': staleTag },
+            })
+          ).statusCode,
+        ).toBe(200);
+        expect(
+          (
+            await app.inject({
+              method: 'POST',
+              url: '/public/write',
+              headers: { ...headers, 'x-session-context': staleTag },
+            })
+          ).statusCode,
+        ).toBe(201);
+        expect(
+          (
+            await app.inject({
+              method: 'POST',
+              url: '/auth/sign-out',
+              headers: { ...headers, 'x-session-context': staleTag },
+            })
+          ).statusCode,
+        ).toBe(204);
+        expect(await service.resolve(current.token)).toBeUndefined();
+      } finally {
+        await admin.db.execute(
+          sql`delete from account_security_events where user_id = ${secondId}`,
+        );
+        await admin.db.delete(memberships).where(eq(memberships.userId, secondId));
+        await admin.db.delete(users).where(eq(users.id, secondId));
+      }
+    },
+  );
   it('keeps account-only context usable and drops selected access after removal', async () => {
     const created = await service.create(userId, { isRemembered: false });
     const headers = { cookie: `dakly_session=${created.token}` };
     const account = await app.inject({ url: '/me/context', headers });
     expect(account.statusCode).toBe(200);
     expect(account.json().currentStore).toBeNull();
-    expect(account.json().stores).toHaveLength(2);
+    expect(account.json().hasMemberships).toBe(true);
     await service.setActiveStore(userId, created.session.id, storeId);
     const selected = await app.inject({ url: '/me/context', headers });
     await admin.db
@@ -235,7 +405,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       const revoked = await app.inject({ url: '/me/context', headers });
       expect(revoked.statusCode).toBe(200);
       expect(revoked.json().currentStore).toBeNull();
-      expect(revoked.json().stores).toHaveLength(1);
+      expect(revoked.json().hasMemberships).toBe(true);
       expect(revoked.json().contextTag).not.toBe(selected.json().contextTag);
       expect((await app.inject({ url: '/me', headers })).statusCode).toBe(200);
     } finally {
@@ -260,6 +430,9 @@ describe('Session boundary over Fastify and Postgres', () => {
       expect(changed.currentStore.canEditTeam).toBe(true);
       expect(changed.currentStore.canTransferOwnership).toBe(true);
       expect(changed.currentStore.canCreateCustomer).toBe(true);
+      expect(changed.currentStore.canViewStoreSettings).toBe(true);
+      expect(changed.currentStore.canEditStoreSettings).toBe(true);
+      expect(changed.currentStore.canChangeExtensions).toBe(true);
     } finally {
       await admin.db
         .update(memberships)
@@ -270,7 +443,11 @@ describe('Session boundary over Fastify and Postgres', () => {
   it('derives Team capabilities from fresh custom grants without granting ownership', async () => {
     const [role] = await admin.db
       .insert(roles)
-      .values({ storeId, name: 'Team context reader', permissions: { team: 'view' } })
+      .values({
+        storeId,
+        name: 'Team context reader',
+        permissions: { team: 'view', storeSettings: 'view' },
+      })
       .returning({ id: roles.id });
     await admin.db
       .update(memberships)
@@ -280,16 +457,22 @@ describe('Session boundary over Fastify and Postgres', () => {
       const headers = { cookie: cookie() };
       const before = (await app.inject({ url: '/me/context', headers })).json();
       expect(before.currentStore).toMatchObject({
+        canViewStoreSettings: true,
+        canEditStoreSettings: false,
+        canChangeExtensions: false,
         canViewTeam: true,
         canEditTeam: false,
         canTransferOwnership: false,
       });
       await admin.db
         .update(roles)
-        .set({ permissions: { team: 'edit' } })
+        .set({ permissions: { team: 'edit', storeSettings: 'edit' } })
         .where(eq(roles.id, role!.id));
       const after = (await app.inject({ url: '/me/context', headers })).json();
       expect(after.currentStore).toMatchObject({
+        canViewStoreSettings: true,
+        canEditStoreSettings: true,
+        canChangeExtensions: false,
         canViewTeam: true,
         canEditTeam: true,
         canTransferOwnership: false,

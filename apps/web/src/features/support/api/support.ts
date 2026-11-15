@@ -1,21 +1,38 @@
+import { useEffect } from 'react';
+import { ApiError } from '@/lib/api-client';
 import { useStoreRequest } from '@/lib/store-request';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { SupportGrantPage, SupportSessionResponse } from '@dakly/contracts/support';
-import type { CreateCustomerInput, CustomerResponse } from '@dakly/contracts/customers';
-async function request<T>(url: string, body?: unknown): Promise<T> {
+import type {
+  SupportGrantPage,
+  SupportSessionResponse,
+  SupportCustomerResponse,
+} from '@dakly/contracts/support';
+import type { CreateCustomerInput } from '@dakly/contracts/customers';
+async function request<T>(
+  url: string,
+  options: { body?: unknown; contextTag?: string; signal?: AbortSignal } = {},
+): Promise<T> {
   const response = await fetch(url, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: options.body === undefined ? 'GET' : 'POST',
     credentials: 'include',
     cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: {
+      ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(options.contextTag ? { 'X-Support-Context': options.contextTag } : {}),
+    },
+    signal: options.signal,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
-  if (!response.ok) {
-    const payload = await response.json();
-    throw new Error(payload.error?.message ?? 'Request failed');
+  if (!response.ok) await rejectSupportResponse(response);
+  const payload = await response.json();
+  if (options.contextTag && payload.contextTag !== options.contextTag) {
+    window.dispatchEvent(new Event('dakly-support-changed'));
+    throw new ApiError(
+      'SUPPORT_CONTEXT_CHANGED',
+      'Your support access changed. Refresh before continuing.',
+    );
   }
-  const text = await response.text();
-  return text ? JSON.parse(text) : (undefined as T);
+  return payload as T;
 }
 export function useOwnerSupport(before: string) {
   const store = useStoreRequest();
@@ -44,25 +61,52 @@ export function useOwnerDecision() {
   });
 }
 export function useSupportSession() {
+  const client = useQueryClient();
+  useEffect(() => {
+    const changed = () => {
+      void client.invalidateQueries({ queryKey: ['support-session'] });
+    };
+    window.addEventListener('dakly-support-changed', changed);
+    return () => window.removeEventListener('dakly-support-changed', changed);
+  }, [client]);
   return useQuery({
     queryKey: ['support-session'],
-    queryFn: () => request<SupportSessionResponse>('/support/api/session'),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    queryFn: ({ signal }) => request<SupportSessionResponse>('/support/api/session', { signal }),
+    refetchInterval: 30000,
     retry: false,
   });
 }
-export function useSupportCustomer(id: string) {
+export function useSupportCustomer(id: string, contextTag: string) {
+  const client = useQueryClient();
+  useEffect(
+    () => () => {
+      void client.cancelQueries({ queryKey: ['support-customer', contextTag] });
+      client.removeQueries({ queryKey: ['support-customer', contextTag] });
+    },
+    [client, contextTag],
+  );
+
   return useQuery({
-    queryKey: ['support-customer', id],
-    queryFn: () => request<CustomerResponse>(`/support/api/customers/${id}`),
+    queryKey: ['support-customer', contextTag, id],
+    queryFn: ({ signal }) =>
+      request<SupportCustomerResponse>(`/support/api/customers/${id}`, { contextTag, signal }),
     enabled: Boolean(id),
     retry: false,
   });
 }
-export function useSupportCreate() {
+export function useSupportCreate(contextTag: string) {
   return useMutation({
     mutationFn: (input: CreateCustomerInput) =>
-      request<CustomerResponse>('/support/api/customers', input),
+      request<SupportCustomerResponse>('/support/api/customers', { body: input, contextTag }),
   });
+}
+
+async function rejectSupportResponse(response: Response): Promise<never> {
+  const payload = await response.json();
+  if (payload.error?.code === 'SUPPORT_CONTEXT_CHANGED')
+    window.dispatchEvent(new Event('dakly-support-changed'));
+  throw new ApiError(
+    payload.error?.code ?? 'REQUEST_FAILED',
+    payload.error?.message ?? 'Request failed',
+  );
 }

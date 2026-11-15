@@ -20,6 +20,7 @@ export function TransferCodeForm({
   const start = useStartTransfer();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

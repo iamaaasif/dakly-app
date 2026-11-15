@@ -31,10 +31,12 @@ import type { StoreRequest } from '../platform/tenancy/store-request';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { loadEnv } from '../platform/config/env';
 import { SupportService } from './support.service';
+import { SupportOwnerService } from './support-owner.service';
+import { supportRoles } from './support-roles';
 import type { StaffRequest } from './staff.guard';
 const cookie = 'dakly_support';
 @Controller('admin/support')
-@StaffAccess(true, ['super_admin', 'support', 'trust_safety'])
+@StaffAccess(true, supportRoles)
 export class StaffSupportController {
   constructor(@Inject(SupportService) private readonly support: SupportService) {}
   @Get('targets') targets(
@@ -68,7 +70,7 @@ export class StaffSupportController {
 @Controller('support-access')
 @AnyMember()
 export class OwnerSupportController {
-  constructor(@Inject(SupportService) private readonly support: SupportService) {}
+  constructor(@Inject(SupportOwnerService) private readonly support: SupportOwnerService) {}
   @Get() list(
     @Req() request: FastifyRequest & StoreRequest,
     @Query(new ZodValidationPipe(supportPageSchema)) query: { before?: string },
@@ -165,7 +167,12 @@ export class SupportController {
   @Get('customers/:id')
   @Header('Cache-Control', 'no-store')
   customer(@Req() request: FastifyRequest, @Param('id', ParseUUIDPipe) id: string) {
-    return this.support.customer(request.cookies[cookie], id, request.ip);
+    return this.support.customer(
+      request.cookies[cookie],
+      id,
+      request.ip,
+      request.headers['x-support-context'],
+    );
   }
   @Post('customers')
   @Header('Cache-Control', 'no-store')
@@ -173,6 +180,11 @@ export class SupportController {
     @Req() request: FastifyRequest,
     @Body(new ZodValidationPipe(createCustomerSchema)) input: CreateCustomerInput,
   ) {
-    return this.support.createCustomer(request.cookies[cookie], input, request.ip);
+    return this.support.createCustomer(
+      request.cookies[cookie],
+      input,
+      request.ip,
+      request.headers['x-support-context'],
+    );
   }
 }

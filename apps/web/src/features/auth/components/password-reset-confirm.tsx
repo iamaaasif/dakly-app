@@ -7,7 +7,7 @@ import { confirmPasswordResetSchema, passwordSchema } from '@dakly/contracts/aut
 import { Button } from '@dakly/ui/button';
 import { useConfirmReset } from '../api/confirm-reset';
 import { formError } from '@/lib/form-error';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { TotpStep } from './totp-step';
 const resetSchema = confirmPasswordResetSchema
   .extend({ confirmation: passwordSchema })
@@ -28,6 +28,7 @@ export function PasswordResetConfirm({ identifier }: PasswordResetConfirmProps) 
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={() => setDone(true)} />;
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async ({ confirmation: _confirmation, ...input }) => {
         try {

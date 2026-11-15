@@ -25,7 +25,7 @@ export function BusinessDetails({
   });
   return (
     <FormProvider {...form}>
-      <form className="space-y-6" onSubmit={form.handleSubmit(onNext)}>
+      <form method="post" className="space-y-6" onSubmit={form.handleSubmit(onNext)}>
         <BusinessFields />
         <Button type="submit">Choose a plan</Button>
       </form>

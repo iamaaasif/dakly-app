@@ -6,7 +6,7 @@ import { Button } from '@dakly/ui/button';
 import { useVerifyCode } from '../api/verify-code';
 import { useVerifyEmailCode } from '../api/verify-email-code';
 import { formError } from '@/lib/form-error';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 const codeSchema = verifyEmailCodeSchema.pick({ code: true });
 type SignInCodeProps = {
   target: { identifier: string; isRemembered: boolean };
@@ -20,6 +20,7 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
   const email = useVerifyEmailCode();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async ({ code }) => {
         try {

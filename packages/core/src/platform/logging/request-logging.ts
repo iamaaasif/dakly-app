@@ -1,3 +1,4 @@
+import type { PinoLogger } from 'nestjs-pino';
 import { jobLogBindings } from './job-context';
 import { randomUUID } from 'node:crypto';
 import type { Options } from 'pino-http';
@@ -56,4 +57,8 @@ export function requestLoggingOptions(): Options {
     customSuccessMessage: () => 'Request completed',
     customErrorMessage: () => 'Request completed',
   };
+}
+
+export function bindVerifiedStore(logger: PinoLogger | undefined, storeId: string): void {
+  if (logger?.logger.bindings().requestId) logger.assign({ storeId });
 }

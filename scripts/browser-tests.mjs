@@ -55,8 +55,7 @@ async function run(command, args, name, env, cwd) {
   if (code !== 0) throw new Error(`${name} failed; inspect apps/web/e2e-artifacts/${name}.log`);
 }
 
-function apiEnvironment(environment) {
-  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+function apiEnvironment(environment, publicKey) {
   return {
     ...environment,
     NODE_ENV: 'test',
@@ -121,14 +120,12 @@ async function main() {
       environment,
     );
     await Promise.all([requireFreePort(4015), requireFreePort(3015)]);
-    fixture = browserFixture(databaseUrl, mailpit.origin);
+    await run('pnpm', ['test:native-forms'], 'native-forms', environment);
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const apiEnv = apiEnvironment(environment, publicKey);
+    fixture = browserFixture(databaseUrl, mailpit.origin, apiEnv, privateKey);
     await fixture.seed();
-    const api = start(
-      process.execPath,
-      [`${root}apps/api/dist/main.js`],
-      'api',
-      apiEnvironment(environment),
-    );
+    const api = start(process.execPath, [`${root}apps/api/dist/main.js`], 'api', apiEnv);
     const next = start(
       process.execPath,
       [

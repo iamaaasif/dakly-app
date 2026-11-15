@@ -13,6 +13,12 @@ export type Session = {
 export type CreateSessionInput = { isRemembered: boolean; ip?: string; userAgent?: string };
 export type UserProfile = { id: string; name: string; phone: string | null; email: string | null };
 export type UserStore = { storeId: string; name: string };
+export const userStorePageSchema = z.strictObject({
+  after: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(50),
+});
+export type UserStorePageQuery = z.infer<typeof userStorePageSchema>;
+export type UserStorePage = { items: UserStore[]; nextCursor: string | null };
 
 export const sessionListSchema = z.strictObject({ before: z.uuid().optional() });
 export const sessionIdSchema = z.uuid();
@@ -26,12 +32,15 @@ export type AccountProfile = UserProfile & {
 
 export type SessionContext = {
   user: Pick<UserProfile, 'id' | 'name'>;
-  stores: UserStore[];
+  hasMemberships: boolean;
   currentStore:
     | (UserStore & {
         canViewCustomers: boolean;
         canCreateCustomer: boolean;
         canApproveSupport: boolean;
+        canViewStoreSettings: boolean;
+        canEditStoreSettings: boolean;
+        canChangeExtensions: boolean;
         canViewTeam: boolean;
         canEditTeam: boolean;
         canTransferOwnership: boolean;
@@ -39,3 +48,15 @@ export type SessionContext = {
     | null;
   contextTag: string;
 };
+
+export type DeviceSession = {
+  id: string;
+  isRemembered: boolean;
+  lastSeenAt: string;
+  expiresAt: string;
+  ip: string | null;
+  userAgent: string | null;
+  device: string;
+  isCurrent: boolean;
+};
+export type DeviceSessionPage = { items: DeviceSession[]; nextCursor: string | null };

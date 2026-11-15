@@ -2,7 +2,7 @@ import { useFormContext } from 'react-hook-form';
 import { howYouSellOptions, customerListSizes } from '@dakly/contracts/stores';
 import type { BusinessDraft } from '../auth.types';
 import { businessTypes, districts, salesLabels, sizeLabels } from '../business-options';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 import { BusinessSelect } from './business-select';
 export function BusinessFields() {
   const {

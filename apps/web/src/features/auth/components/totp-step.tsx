@@ -6,7 +6,7 @@ import { totpSignInSchema } from '@dakly/contracts/totp';
 import { Button } from '@dakly/ui/button';
 import { useVerifyTotp } from '../api/verify-totp';
 import { formError } from '@/lib/form-error';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 export function TotpStep({
   challengeId,
   onSuccess,
@@ -21,6 +21,7 @@ export function TotpStep({
   const verify = useVerifyTotp();
   return (
     <form
+      method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async (input) => {
         try {

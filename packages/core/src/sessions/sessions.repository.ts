@@ -39,6 +39,24 @@ export class SessionsRepository {
         .limit(100),
     );
   }
+  async isActive(userId: string, sessionId: string, now: Date): Promise<boolean> {
+    return this.account.inTransaction(userId, async (tx) => {
+      const rows = await tx
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.userId, userId),
+            eq(sessions.id, sessionId),
+            isNull(sessions.revokedAt),
+            gt(sessions.expiresAt, now),
+          ),
+        )
+        .limit(1);
+      return rows.length === 1;
+    });
+  }
+
   async knownDevice(userId: string, ip: string, userAgent?: string): Promise<boolean> {
     const rows = await this.account.forUser(userId, (tx) =>
       tx

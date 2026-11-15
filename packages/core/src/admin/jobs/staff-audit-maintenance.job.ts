@@ -29,17 +29,17 @@ export class StaffAuditMaintenanceJob implements OnApplicationBootstrap, OnAppli
   }
   private poll() {
     if (this.active) return;
-    this.active = runWithJobContext(() => this.tick())
-      .catch((error) => {
+    this.active = runWithJobContext(() =>
+      this.tick().catch((error) => {
         this.reporter.reportJob(
           serializeError(error),
           jobLogBindings().jobId ?? 'staff-audit-maintenance',
         );
         this.logger.error({ event: 'security' }, 'Staff audit maintenance failed');
-      })
-      .finally(() => {
-        this.active = undefined;
-      });
+      }),
+    ).finally(() => {
+      this.active = undefined;
+    });
   }
   private async tick() {
     const results = await Promise.allSettled([this.history.maintain(), this.enqueue()]);

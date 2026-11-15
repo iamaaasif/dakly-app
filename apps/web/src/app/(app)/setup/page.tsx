@@ -3,7 +3,7 @@ import { requireSession } from '@/lib/require-session';
 import { SetupScreen } from '@/features/auth/components/setup-screen';
 export default async function SetupPage() {
   const session = await requireSession();
-  if (session.stores.length)
+  if (session.hasMemberships)
     return (
       <main className="space-y-4 p-6">
         <h1 className="text-xl font-bold">Your shops</h1>

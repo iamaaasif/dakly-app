@@ -31,6 +31,7 @@ export function PlanForm({ draft, onBack, plans }: PlanFormProps) {
   }
   return (
     <form
+      method="post"
       className="space-y-6"
       onSubmit={form.handleSubmit(async (input) => {
         try {

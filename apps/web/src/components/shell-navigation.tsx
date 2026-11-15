@@ -77,6 +77,12 @@ function navigationLinks(session: SessionContext) {
       icon: ShieldCheck,
       visible: Boolean(session.currentStore),
     },
+    {
+      href: '/settings',
+      label: 'Store settings',
+      icon: ShieldCheck,
+      visible: session.currentStore?.canViewStoreSettings,
+    },
     { href: '/security', label: 'Security', icon: ShieldCheck, visible: true },
   ];
 }

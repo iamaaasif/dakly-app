@@ -26,9 +26,12 @@ function show(child: ReactNode, edit = false) {
       canCreateCustomer: false,
       canApproveSupport: false,
       canTransferOwnership: false,
+      canViewStoreSettings: false,
+      canEditStoreSettings: false,
+      canChangeExtensions: false,
     },
     contextTag: 'verified',
-    stores: [{ storeId: 'shop', name: 'Shop' }],
+    hasMemberships: true,
   };
   client.setQueryData(sessionContextKey, context);
   return render(child, {

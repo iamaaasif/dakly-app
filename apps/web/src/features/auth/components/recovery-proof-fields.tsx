@@ -1,6 +1,6 @@
 import { useFormContext } from 'react-hook-form';
 import type { TotpRecoveryInput } from '@dakly/contracts/totp';
-import { AuthField } from './auth-field';
+import { FormField as AuthField } from '@/components/form-field';
 export function RecoveryProofFields() {
   const form = useFormContext<TotpRecoveryInput>();
   const errors = form.formState.errors;

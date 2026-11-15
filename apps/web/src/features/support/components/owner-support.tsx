@@ -96,6 +96,7 @@ function ApprovalCode({
   const form = useForm<{ code: string }>({ resolver: zodResolver(supportDecisionSchema) });
   return (
     <form
+      method="post"
       className="space-y-3"
       onSubmit={form.handleSubmit((input) =>
         action.mutate({ id: grant.id, action: 'approve', code: input.code }),

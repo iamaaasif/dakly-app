@@ -79,7 +79,7 @@ function transport() {
       return signedIn
         ? Response.json({
             user: { id: 'recipient', name: 'Rina' },
-            stores: [],
+            hasMemberships: false,
             currentStore: null,
             contextTag: 'verified',
           })
@@ -97,7 +97,10 @@ function transport() {
       );
     if (path === '/api/invites/accept') {
       accepted.push(JSON.parse(String(options.body)));
-      return Response.json({ storeId: 'shop', membershipId: 'member' });
+      return Response.json(
+        { storeId: 'shop', membershipId: 'member' },
+        { headers: { 'x-session-context': 'verified' } },
+      );
     }
     if (path === '/api/auth/totp' || path === '/api/auth/password') signedIn = true;
     return new Response(null, { status: 204 });

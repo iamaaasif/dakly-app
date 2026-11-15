@@ -7,7 +7,7 @@ import { ErrorReporter } from './error-reporter';
 import { requestLoggingOptions } from './request-logging';
 
 @Module({
-  imports: [LoggerModule.forRoot({ pinoHttp: requestLoggingOptions() })],
+  imports: [LoggerModule.forRoot({ assignResponse: true, pinoHttp: requestLoggingOptions() })],
   providers: [
     { provide: ErrorReporter, useFactory: () => new ErrorReporter(loadEnv().SENTRY_DSN) },
     { provide: APP_FILTER, useClass: AppErrorFilter },
