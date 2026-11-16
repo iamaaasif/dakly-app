@@ -322,6 +322,7 @@ The audience is every contact in any include segment and in no exclude segment, 
 - While the sending setting `onlyOwnersAndAdminsApprove` is on (the default), only an Owner or Admin approves; anyone else gets `CAMPAIGN_APPROVAL_DENIED` (403). Only an Owner or Admin may change the setting itself through `PATCH /store` (`STORE_APPROVAL_SETTING_DENIED`), so a custom role with settings edit cannot turn it off.
 - A quiet-hours defer is frozen as `queued`, and the sender waits for the allowed time. During quiet hours the cap is therefore not shown at approval; the sender's own check applies it.
 - The estimate counts the message text as written. The opt-out link that CAMP-R4 adds is not counted yet.
+- An audience over 20,000 contacts (`MAX_CAMPAIGN_AUDIENCE`) is refused with `CAMPAIGN_AUDIENCE_TOO_LARGE` (409) by both the estimate and the approval, before any send check or recipient row. The cap counts the audience, before skips, because that is the number of contacts approval reads and writes in the request. It is temporary: CAMP-13 makes approval a job with progress and removes it.
 
 ### Edit, cancel, pause and resume (CAMP-2)
 

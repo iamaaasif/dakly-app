@@ -46,6 +46,8 @@ const STATUS_CHANGES = {
   string,
   { from: CampaignStatus; to: CampaignStatus; refused: CampaignErrorCode }
 >;
+// Approval runs in one request until CAMP-13 makes it a job; this bounds that work.
+export const MAX_CAMPAIGN_AUDIENCE = 20_000;
 // CAMP-R7: a scheduled campaign can be edited or cancelled until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
@@ -257,6 +259,8 @@ export class CampaignsService {
 
   private async checkAudience(storeId: string, campaign: Campaign): Promise<FrozenRecipient[]> {
     const contactIds = await this.audienceIds(storeId, campaign);
+    if (contactIds.length > MAX_CAMPAIGN_AUDIENCE)
+      throw campaignError('CAMPAIGN_AUDIENCE_TOO_LARGE');
     const at = campaign.scheduledFor ?? this.clock.now();
     const decisions: AudienceDecision[] = [];
     for (let start = 0; start < contactIds.length; start += AUDIENCE_PAGE_SIZE)

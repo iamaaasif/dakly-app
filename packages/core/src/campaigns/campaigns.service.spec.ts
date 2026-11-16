@@ -26,7 +26,7 @@ import type {
   CampaignStatusChange,
   FrozenRecipient,
 } from './campaigns.repository';
-import { CampaignsService } from './campaigns.service';
+import { CampaignsService, MAX_CAMPAIGN_AUDIENCE } from './campaigns.service';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const actor = { kind: 'user', userId: 'c5a0f0e4-0b55-4b7e-8d0e-6f3c3b7f1e21' } as const;
@@ -531,4 +531,31 @@ describe('CampaignsService', () => {
       expect(repository.rows.get(campaign.id)?.status).toBe(status);
     },
   );
+
+  it('refuses an estimate and an approval for an audience over the cap, before freezing', async () => {
+    // One of the ids is excluded, so the audience is one over the cap.
+    const { campaign, ids } = audienceDraft(MAX_CAMPAIGN_AUDIENCE + 2);
+    decisions.set(ids[0]!, { action: 'skip', reason: 'no_consent' });
+
+    await expect(service.estimate(STORE_ID, campaign.id)).rejects.toMatchObject({
+      code: 'CAMPAIGN_AUDIENCE_TOO_LARGE',
+      status: 409,
+    });
+    await expect(approve(campaign.id)).rejects.toMatchObject({
+      code: 'CAMPAIGN_AUDIENCE_TOO_LARGE',
+    });
+    expect(repository.recipients).toEqual([]);
+    expect(reserved).toEqual([]);
+    expect(repository.rows.get(campaign.id)?.status).toBe('draft');
+  });
+
+  it('allows an audience of exactly the cap, counted before skips', async () => {
+    const { campaign, ids } = audienceDraft(MAX_CAMPAIGN_AUDIENCE + 1);
+    decisions.set(ids[0]!, { action: 'skip', reason: 'no_consent' });
+
+    expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
+      audienceCount: MAX_CAMPAIGN_AUDIENCE,
+      recipientsCount: MAX_CAMPAIGN_AUDIENCE - 1,
+    });
+  });
 });
