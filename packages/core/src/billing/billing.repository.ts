@@ -75,4 +75,18 @@ export class BillingRepository {
     );
     return row ? planLimitsSchema.parse(row.limits) : undefined;
   }
+
+  async currentPeriod(
+    storeId: string,
+  ): Promise<{ limits: Record<string, number>; currentPeriodStart: Date } | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ limits: plans.limits, currentPeriodStart: subscriptions.currentPeriodStart })
+        .from(subscriptions)
+        .innerJoin(plans, eq(plans.id, subscriptions.planId))
+        .where(eq(subscriptions.storeId, storeId))
+        .limit(1),
+    );
+    return row ? { ...row, limits: planLimitsSchema.parse(row.limits) } : undefined;
+  }
 }

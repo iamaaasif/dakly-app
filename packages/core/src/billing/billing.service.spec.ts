@@ -84,4 +84,30 @@ describe('BillingService', () => {
       code: 'PLAN_NOT_FOUND',
     });
   });
+  it('reads the unit allowance and current period start, with 0 for a unit the plan omits', async () => {
+    const currentPeriodStart = new Date('2028-01-15T04:00:00Z');
+    const billing = new BillingService(
+      {
+        currentPeriod: async () => ({ limits: { ai_ask: 100 }, currentPeriodStart }),
+      } as unknown as BillingRepository,
+      new Clock(),
+    );
+    expect(await billing.currentAllowance('store-id', 'ai_ask')).toEqual({
+      allowance: 100,
+      periodStart: currentPeriodStart,
+    });
+    expect(await billing.currentAllowance('store-id', 'ai_content')).toMatchObject({
+      allowance: 0,
+    });
+  });
+  it('refuses an allowance read for a store with no subscription', async () => {
+    const billing = new BillingService(
+      { currentPeriod: async () => undefined } as unknown as BillingRepository,
+      new Clock(),
+    );
+    await expect(billing.currentAllowance('store-id', 'ai_ask')).rejects.toMatchObject({
+      code: 'SUBSCRIPTION_NOT_FOUND',
+      status: 404,
+    });
+  });
 });
