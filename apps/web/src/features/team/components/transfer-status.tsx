@@ -28,7 +28,7 @@ export function TransferStatus({ transfer }: { transfer: OwnershipTransferRespon
       ) : (
         <>
           <p>Ask the selected member to open Ownership transfer from their shop’s navigation.</p>
-          <p className="text-sm break-all">Recipient account: {transfer.newOwnerUserId}</p>
+          <p className="break-words">Transfer to {recipientLabel(transfer)}</p>
         </>
       )}
       {data?.currentStore?.canTransferOwnership ? (
@@ -46,4 +46,8 @@ export function TransferStatus({ transfer }: { transfer: OwnershipTransferRespon
       ) : null}
     </section>
   );
+}
+
+function recipientLabel({ recipientName, recipientContact }: OwnershipTransferResponse) {
+  return recipientContact ? `${recipientName} (${recipientContact})` : recipientName;
 }

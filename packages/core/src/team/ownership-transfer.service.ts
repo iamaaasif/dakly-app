@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { maskPhone } from '@dakly/contracts/phone';
 import type {
   CurrentOwnershipTransferResponse,
   OwnershipTransferResponse,
@@ -227,8 +228,16 @@ export class OwnershipTransferService {
     throw teamError('TRANSFER_IDENTITY_REQUIRED');
   }
 
-  private response(transfer: OwnershipTransfer): OwnershipTransferResponse {
-    return { ...transfer, expiresAt: transfer.expiresAt.toISOString() };
+  private response({
+    recipientPhone,
+    expiresAt,
+    ...transfer
+  }: OwnershipTransfer): OwnershipTransferResponse {
+    return {
+      ...transfer,
+      recipientContact: recipientPhone ? maskPhone(recipientPhone) : null,
+      expiresAt: expiresAt.toISOString(),
+    };
   }
 
   private record(storeId: string, entityId: string, userId: string, action: string): Promise<void> {

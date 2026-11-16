@@ -440,7 +440,10 @@ stop authorizing acceptance immediately and are marked expired when a new transf
 starts. `GET /store/ownership-transfer` returns `{ transfer }` for the current Owner
 or named member. It returns `{ transfer: null }` to any active member when none is
 pending; other members receive `403 TRANSFER_DENIED` when one exists. Responses expose
-only transfer and account ids, status and expiry. The Owner cancels with
+transfer and account ids, status, expiry, the recipient's account name
+(`recipientName`) and `recipientContact`: their phone masked as `01712-XXX678`, or
+null when the account has only an email. The raw phone and email are never sent.
+The name and phone are read in the same statement as the transfer. The Owner cancels with
 `DELETE /store/ownership-transfer/:transferId`.
 
 The named member accepts with `POST /store/ownership-transfer/accept`, taking
@@ -1011,7 +1014,9 @@ on their next verified request, including the acting member.
 including recipients without Team View. Only verified Owner capability enables
 requesting a code and starting a transfer to a named active member. The current
 Owner can cancel; only the named recipient can accept through a confirmation.
-The screen displays the API deadline and the existing one-owned-shop limit.
+The screen displays the API deadline and the existing one-owned-shop limit. While
+a transfer is pending, the Owner sees "Transfer to <name> (<masked phone>)" instead
+of the recipient's account id.
 Starting a transfer does not send a recipient notification: the Owner is told to
 ask the selected member to open Ownership transfer in their shop. Unrelated
 members receive the API denial without the pending transfer details.

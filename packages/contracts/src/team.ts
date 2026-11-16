@@ -111,11 +111,18 @@ export const acceptOwnershipTransferSchema = z.strictObject({ transferId: z.uuid
 export type OwnershipTransferCodeInput = z.infer<typeof ownershipTransferCodeSchema>;
 export type StartOwnershipTransferInput = z.infer<typeof startOwnershipTransferSchema>;
 export type AcceptOwnershipTransferInput = z.infer<typeof acceptOwnershipTransferSchema>;
-export type OwnershipTransferResponse = {
-  id: string;
-  ownerUserId: string;
-  newOwnerUserId: string;
-  expiresAt: string;
-  status: 'pending' | 'accepted' | 'cancelled' | 'expired';
-};
+// The recipient's contact is a masked phone; an email-only account sends no contact at all.
+export const ownershipTransferResponseSchema = z.strictObject({
+  id: z.uuid(),
+  ownerUserId: z.uuid(),
+  newOwnerUserId: z.uuid(),
+  recipientName: z.string(),
+  recipientContact: z
+    .string()
+    .regex(/^01\d{3}-XXX\d{3}$/)
+    .nullable(),
+  expiresAt: z.iso.datetime(),
+  status: z.enum(['pending', 'accepted', 'cancelled', 'expired']),
+});
+export type OwnershipTransferResponse = z.infer<typeof ownershipTransferResponseSchema>;
 export type CurrentOwnershipTransferResponse = { transfer: OwnershipTransferResponse | null };
