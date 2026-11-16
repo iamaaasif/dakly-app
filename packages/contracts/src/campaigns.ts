@@ -52,7 +52,12 @@ export const templateStatuses = [
   'disabled',
 ] as const;
 export const trackedLinkKinds = ['redirect', 'sms_opt_out'] as const;
+export type TrackedLinkKind = (typeof trackedLinkKinds)[number];
 export const trackedLinkSourceTypes = ['campaign', 'automation', 'post', 'chat', 'order'] as const;
+export type TrackedLinkSourceType = (typeof trackedLinkSourceTypes)[number];
+
+// Eight base62 characters: about 47 bits, short enough for an SMS and too many to guess.
+export const trackedLinkCodeSchema = z.string().regex(/^[0-9A-Za-z]{8}$/);
 
 // Validate a sendable frozen destination; skipped no-address recipients have no route.
 export const campaignRecipientRouteSchema = z.discriminatedUnion('channel', [

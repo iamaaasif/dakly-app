@@ -18,6 +18,10 @@ export const AnyMember = () => SetMetadata(ACCESS_RULE, { kind: 'member' } satis
 export const RequireUser = () => SetMetadata(ACCESS_RULE, { kind: 'user' } satisfies AccessRule);
 export const Public = () => SetMetadata(ACCESS_RULE, { kind: 'public' } satisfies AccessRule);
 
+// Only the SMS opt-out post comes from a page on the short link domain.
+export const SHORT_LINK_ORIGIN = Symbol('SHORT_LINK_ORIGIN');
+export const AllowShortLinkOrigin = () => SetMetadata(SHORT_LINK_ORIGIN, true);
+
 export const StaffAccess = (authenticated = true, roles: StaffIdentity['role'][] = []) =>
   SetMetadata(ACCESS_RULE, { kind: 'staff', authenticated, roles } satisfies AccessRule);
 
