@@ -200,6 +200,8 @@ atomically and retain business data when an extension is disabled.
 | `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                | `automations` |
 | `GET /automations/:automationId/runs`                                                                                                       | `automations` |
 
+`POST /campaigns/:campaignId/approve` takes no `Idempotency-Key` header: the draft row lock, `CAMPAIGN_NOT_DRAFT` (409) on a repeat and the wallet reservation key make a retry safe. A send-now route outside approval (CAMP-3) takes a real key.
+
 ## Dashboard, notifications and assistant (10)
 
 | Route                                                                                             | Permission                                               |
