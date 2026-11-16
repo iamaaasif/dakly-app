@@ -24,7 +24,7 @@ export class IsolationFixture {
   private planCreated = false;
   readonly users: string[] = [];
   readonly staff: string[] = [];
-  readonly sms: { to: string; text: string }[] = [];
+  readonly sms: { to: string; text: string; sender?: string }[] = [];
   constructor(readonly app: NestFastifyApplication) {}
   request(
     actor: Actor | string,
@@ -203,6 +203,7 @@ export class IsolationFixture {
       'staff_recovery_history',
       'ownership_transfers',
       'contacts',
+      'sms_sender_ids',
       'notifications',
       'outbox_events',
       'audit_log',

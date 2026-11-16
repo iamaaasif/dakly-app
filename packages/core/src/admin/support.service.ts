@@ -49,6 +49,11 @@ export class SupportService {
     if (!walletCreditRoles.includes(current.role)) throw supportError('SUPPORT_DENIED');
   }
 
+  // Live staff status, session and conflict of interest, checked inside the store's transaction.
+  async authorizeStoreReview(storeId: string, staff: Staff) {
+    await this.lockStaff(storeId, staff.id, staff.sessionId);
+  }
+
   targets(staff: Staff, query: string) {
     this.assertRole(staff);
     return this.repository.targets(query);

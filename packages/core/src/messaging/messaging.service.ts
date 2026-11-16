@@ -5,6 +5,7 @@ import { countSmsParts } from '@dakly/contracts/sms';
 import { ContactsService } from '../contacts/contacts.service';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { SmsService } from '../sms/sms.service';
+import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { messagingError } from './messaging.errors';
 
 export type OutgoingMessage = {
@@ -21,6 +22,7 @@ export class MessagingService {
   constructor(
     @Inject(ContactsService) private readonly contactsService: ContactsService,
     @Inject(SmsService) private readonly smsService: SmsService,
+    @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
@@ -33,10 +35,12 @@ export class MessagingService {
     });
     if (!contact.phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
     const parts = countSmsParts(message.body);
+    const sender = await this.smsSenders.approvedSenderName(storeId);
     const { providerMessageId } = await this.smsService.send({
       to: contact.phone,
       text: message.body,
       idempotencyKey: message.operationKey,
+      sender,
     });
     // One SMS credit pays for one part (glossary: message cost).
     return { providerMessageId, parts, credits: parts };
