@@ -1,4 +1,4 @@
-# Local development only: Postgres (with pgvector), Redis and Mailpit. Production uses DigitalOcean managed services.
+# Local development only: Postgres (with pgvector), Valkey and Mailpit. Production uses DigitalOcean managed services.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -11,8 +11,8 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./packages/db/local-init.sql:/docker-entrypoint-initdb.d/local-init.sql:ro
-  redis:
-    image: redis:7
+  valkey:
+    image: valkey/valkey:8
     ports:
       - '6379:6379'
   mailpit:

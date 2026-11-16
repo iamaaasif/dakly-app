@@ -2,7 +2,7 @@
 
 Dakly is a SaaS for Bangladeshi online shops: one inbox for Messenger, Instagram and WhatsApp with AI replies, orders and COD, products, and social auto-post. This repo is the production codebase. The old prototype in `iamaaasif/dakly` is reference only; do not copy code from it.
 
-Stack: NestJS modular monolith (`apps/api`, `apps/worker`), Next.js (`apps/web`), PostgreSQL with row level security, Redis + BullMQ, Drizzle, zod, pnpm + Turborepo.
+Stack: NestJS modular monolith (`apps/api`, `apps/worker`), Next.js (`apps/web`), PostgreSQL with row level security, Valkey + BullMQ, Drizzle, zod, pnpm + Turborepo.
 
 ## Before you write code
 
@@ -40,7 +40,7 @@ Stack: NestJS modular monolith (`apps/api`, `apps/worker`), Next.js (`apps/web`)
 
 ```bash
 pnpm install
-docker compose up -d                 # Postgres 16 + Redis 7
+docker compose up -d                 # Postgres 16 + Valkey 8
 pnpm build                           # builds packages first, then apps
 pnpm --filter @dakly/db db:migrate   # needs DATABASE_ADMIN_URL
 pnpm dev                             # api :4000, web :3000, worker
