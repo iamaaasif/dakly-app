@@ -41,6 +41,12 @@ export class ContactsService {
     }
     return toContactResponse(contact, access.seeFullPhone);
   }
+
+  async assertContactExists(storeId: string, id: string): Promise<void> {
+    if (!(await this.contactsRepository.findById(storeId, id))) {
+      throw contactError('CONTACT_NOT_FOUND');
+    }
+  }
 }
 
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {
