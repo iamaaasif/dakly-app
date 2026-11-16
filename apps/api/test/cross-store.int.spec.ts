@@ -282,6 +282,54 @@ for (const [method, action, status, expected] of [
     );
     expect(await f.row('automations', foreign)).toEqual(before);
   });
+async function campaign(shop: Shop) {
+  const input = { name: 'ঈদের অফার', channel: 'sms', content: { text: 'ঈদে ২০% ছাড়' } };
+  return (await success(shop, 'POST', '/campaigns', 201, input)).json().id as string;
+}
+fixture('GET /campaigns', async () => {
+  const { a, b } = await pair(),
+    aId = await campaign(a),
+    bId = await campaign(b);
+  const ids = (await success(b, 'GET', '/campaigns', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/campaigns', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /campaigns', async () => {
+  const { a, b } = await pair(),
+    id = await campaign(a),
+    before = await f.row('campaigns', id);
+  const own = await campaign(b);
+  expect((await f.row('campaigns', own)).store_id).toBe(b.id);
+  expect(await f.row('campaigns', id)).toEqual(before);
+});
+fixture('GET /campaigns/:campaignId', async () => {
+  const { a, b } = await pair(),
+    id = await campaign(a);
+  expect((await success(a, 'GET', `/campaigns/${id}`, 200)).json().id).toBe(id);
+  await hidden(b, 'GET', (value) => `/campaigns/${value}`, id);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /campaigns/:campaignId`, async () => {
+    const { a, b } = await pair(),
+      own = await campaign(b),
+      foreign = await campaign(a);
+    const payload = method === 'PATCH' ? { name: 'শীতের অফার' } : undefined;
+    await success(b, method, `/campaigns/${own}`, method === 'DELETE' ? 204 : 200, payload);
+    const changed = await f.row('campaigns', own);
+    if (method === 'DELETE') expect(changed).toBeUndefined();
+    else expect(changed).toMatchObject({ name: 'শীতের অফার' });
+    const before = await f.row('campaigns', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/campaigns/${id}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('campaigns', foreign)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -783,6 +831,7 @@ describe('every production shop route isolates its data', () => {
       ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
       ['segments', 'id', await segment(a), await segment(b)],
+      ['campaigns', 'id', await campaign(a), await campaign(b)],
       ['ownership_transfers', 'id', await f.transfer(a), await f.transfer(b)],
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
