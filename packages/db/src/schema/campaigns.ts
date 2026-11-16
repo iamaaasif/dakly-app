@@ -16,12 +16,14 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import {
+  type CampaignGoal,
   campaignChannels,
   campaignPauseReasons,
   campaignStatuses,
   messageCategories,
   recipientSkipReasons,
   recipientStatuses,
+  type SmsCampaignContent,
   templateStatuses,
   whatsappQualityRatings,
   trackedLinkKinds,
@@ -97,13 +99,13 @@ export const campaigns = pgTable(
       .notNull()
       .references(() => stores.id),
     name: text('name').notNull(),
-    goal: text('goal'),
+    goal: text('goal').$type<CampaignGoal>(),
     channel: text('channel', { enum: campaignChannels }).notNull(),
     // Frozen at approval; SMS uses the platform sender and has no channel connection.
     channelConnectionId: uuid('channel_connection_id').references(() => channelConnections.id),
     category: text('category', { enum: messageCategories }).notNull().default('marketing'),
     whatsappTemplateId: uuid('whatsapp_template_id').references(() => whatsappTemplates.id),
-    content: jsonb('content').notNull(),
+    content: jsonb('content').$type<SmsCampaignContent>().notNull(),
     includeSegmentIds: uuid('include_segment_ids')
       .array()
       .notNull()
