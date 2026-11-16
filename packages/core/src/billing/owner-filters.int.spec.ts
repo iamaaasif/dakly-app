@@ -40,5 +40,7 @@ describe('plan seat filters without RLS assistance', () => {
       });
     expect(await repository.currentLimits(f.a)).toEqual({ seats: 3 });
     expect(await repository.currentLimits(f.b)).toEqual({ seats: 7 });
+    expect((await repository.currentPeriod(f.a))?.limits).toEqual({ seats: 3 });
+    expect((await repository.currentPeriod(f.b))?.limits).toEqual({ seats: 7 });
   });
 });
