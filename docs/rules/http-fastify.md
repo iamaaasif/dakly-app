@@ -47,6 +47,8 @@ const response = await app.inject({ method: 'GET', url: '/health' });
 expect(response.statusCode).toBe(200);
 ```
 
+A Server-Sent Events route needs a real socket, so its tests listen on `127.0.0.1` port 0 and read with `fetch`; every other route test uses `inject`.
+
 ## Reviewing AI-written HTTP code
 
 Before you accept a suggestion, check its imports. Anything from `express`, `multer` or `@nestjs/platform-express` was written for Express, so rewrite it with the right-hand column above. `pnpm lint` fails on those imports.

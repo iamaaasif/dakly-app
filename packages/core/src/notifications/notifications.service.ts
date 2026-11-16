@@ -30,6 +30,9 @@ export type NotifyInput = {
 
 type StatusChange = 'seen' | 'done' | 'snoozed';
 
+// A reconnecting stream gets at most this many missed rows; the list has the rest.
+const REPLAY_LIMIT = 100;
+
 // Seen is a read receipt, so it only moves a new card. A done card stays done.
 const movesFrom: Record<StatusChange, NotificationStatus[]> = {
   seen: ['new'],
@@ -72,6 +75,21 @@ export class NotificationsService {
     const rows = await this.repository.list(storeId, userId, query);
     const items = rows.slice(0, query.limit).map(toNotificationResponse);
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  async findForUser(storeId: string, userId: string, notificationId: string) {
+    const row = await this.repository.findForUser(storeId, userId, notificationId);
+    return row && toNotificationResponse(row);
+  }
+
+  async listCreatedAfter(storeId: string, userId: string, notificationId: string) {
+    const rows = await this.repository.listCreatedAfter(
+      storeId,
+      userId,
+      notificationId,
+      REPLAY_LIMIT,
+    );
+    return rows.map(toNotificationResponse);
   }
 
   markSeen(storeId: string, userId: string, notificationId: string) {
