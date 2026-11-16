@@ -78,6 +78,14 @@ describe('team filters without RLS assistance', () => {
     expect(await team.findAccess(f.a, f.userA)).toBeDefined();
     expect(await team.findAccess(f.b, f.userA)).toBeUndefined();
   });
+  it('adds an owner only to the requested store', async () => {
+    await team.addOwner(f.b, f.userA);
+    const owners = await f.connection.pool.query(
+      "select store_id from memberships where user_id=$1 and built_in_role='owner'",
+      [f.userA],
+    );
+    expect(owners.rows).toEqual([{ store_id: f.b }]);
+  });
   it('filters pending transfers, id lookups, completion and expiry', async () => {
     const now = new Date(),
       expiry = new Date(now.getTime() + 60000);

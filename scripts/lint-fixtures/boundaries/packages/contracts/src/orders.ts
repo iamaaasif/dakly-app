@@ -1,0 +1,1 @@
+export { phoneLength } from './phone';
