@@ -381,6 +381,8 @@ Shipped means staff moved the order to With courier (D21). Lifecycle stages come
 
 Templates are in [`automations/templates.ts`](../../packages/contracts/src/automations/templates.ts). This catalogue holds the templates that run before Orders; each has a trigger, steps, goal, category and prerequisites. Templates that need Orders, store sync or the tracking script are added with their source ([plan](../plans/campaigns-and-automations.md#waiting-on-other-work)). Categories are the library types: transactional, abandoned, welcome, post-purchase, win back and special occasion; AUTO-R2 ranks transactional, then abandoned, then welcome, then the rest. Re-entry defaults to once every 30 days; welcome runs once ever and back in stock every time.
 
+Festival greetings are campaigns, not workflows (Asif, 16 Nov): a shop sends them as an ordinary campaign and picks the send date in the builder, so there is no festival or date-reached trigger.
+
 | Template                | Trigger                                   | Steps (default)                                                         | Goal         | Category         | Needs     |
 | ----------------------- | ----------------------------------------- | ----------------------------------------------------------------------- | ------------ | ---------------- | --------- |
 | Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                         | Placed order | Welcome          |           |
