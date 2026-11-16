@@ -1,20 +1,22 @@
 # Next build plan: segments, campaigns and automations
 
-The order to build segments ([feature 03](../features/03-customers-and-segments.md)), campaigns and the workflow builder ([feature 09](../features/09-campaigns-and-automations.md)), split into tasks of one PR each. Segments, campaigns and automations are core: every shop gets them, with or without the Chats extension (D37). They are built as milestone M3b in [build-order.md](../development/build-order.md), after channels, contacts and core messaging (M3) and before the Chats inbox (M4) and Products (M5). They never depend on the Chats extension: they send through core messaging, `MessagingService` in `messaging/`, which Chats also uses. Order confirmation then becomes a workflow template when Orders arrives, instead of separate code that the engine would replace. Status lives in [tasks.md](../tasks.md); this file holds what each task must do. Delete a task's section once it is Done and the feature doc describes it.
+The order to build segments ([feature 03](../features/03-customers-and-segments.md)), campaigns and the workflow builder ([feature 09](../features/09-campaigns-and-automations.md)), split into tasks of one PR each. Segments, campaigns and automations are core: every shop gets them, with or without the Chats extension (D37). They are built as milestone M3b in [build-order.md](../development/build-order.md), before channel connections, with SMS as the first channel (D40), and before the Chats inbox (M4) and Products (M5). They never depend on the Chats extension: they send through core messaging, `MessagingService` in `messaging/`, which Chats also uses. Order confirmation then becomes a workflow template when Orders arrives, instead of separate code that the engine would replace. Status lives in [tasks.md](../tasks.md); this file holds what each task must do. Delete a task's section once it is Done and the feature doc describes it.
 
 Read with: [CLAUDE.md](../../CLAUDE.md), [feature 09](../features/09-campaigns-and-automations.md) (the Engineering section is the spec), [plumbing-channels-contacts.md](plumbing-channels-contacts.md) (the plan before this one), [jobs.md](../data/jobs.md), [state-machines.md](../data/state-machines.md), [growth.md](../data/growth.md), the [market study](https://claude.ai/artifact/E8kkbJNVxeZx6G8a3E57UQ), D7, D23, D24 and D31 in [decisions.md](../product/decisions.md).
 
 ## What must exist first
 
-| Needed                                                    | From                         |
-| --------------------------------------------------------- | ---------------------------- |
-| Outbox events and `@HandlesEvent`                         | DB-2                         |
-| Notifications for pauses, approvals and failures          | HOME-1                       |
-| Contacts, identities, consent and contact stats           | CUS-1, CUS-2, CUS-3          |
-| SMS credits and WhatsApp balance with reserve and release | PAY-11                       |
-| Messenger connection and SMS sender                       | CHN-2, CHN-6                 |
-| Core messaging: send, delivery and read receipts, window  | CHAT-1, CHAT-2 (core, M3)    |
-| Order data, order triggers and money attribution          | ORD-1 and ANA-2, added later |
+| Needed                                                    | From                                                              |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
+| Outbox events and `@HandlesEvent`                         | DB-2 (done)                                                       |
+| Notifications for pauses, approvals and failures          | HOME-1                                                            |
+| Contacts and consent                                      | CUS-1, CUS-2                                                      |
+| SMS credits and WhatsApp balance with reserve and release | PAY-11                                                            |
+| Shared UI components                                      | WEB-2                                                             |
+| Core send step for SMS                                    | MSG-1                                                             |
+| SMS sender identity                                       | CHN-6                                                             |
+| Messenger connection, inbound messages and receipts       | CHN-2, CHAT-1, CHAT-2: needed only for CAMP-7 and Messenger steps |
+| Order data, order triggers and money attribution          | ORD-1 and ANA-2, added later                                      |
 
 Until Orders exists, segments, triggers and results have no order fields. Each task below names the order part it leaves for later, so the engine is complete for Dakly's own data and Orders only adds triggers, fields and templates.
 
@@ -31,7 +33,7 @@ Until Orders exists, segments, triggers and results have no order fields. Each t
 
 ## Tasks
 
-Each task is one PR under about 500 lines, in this order, on the branch named under its heading. Groups 1 and 3 can start in parallel; group 2 needs CAMP-9. "Tests" lists what the reviewer looks for. Every PR also sets its row in [tasks.md](../tasks.md) and updates the feature doc when behaviour changes.
+Each task is one PR under about 500 lines, in this order, on the branch named under its heading. The order of work is in [customers-to-automations.md](customers-to-automations.md). "Tests" lists what the reviewer looks for. Every PR also sets its row in [tasks.md](../tasks.md) and updates the feature doc when behaviour changes.
 
 ### Group 1: who to send to
 
@@ -58,6 +60,13 @@ Branch: `feat/cus-8-customer-import`
 
 ### Group 2: campaigns
 
+### MSG-1 · Core send step for SMS
+
+Branch: `feat/msg-1-sms-send-step`
+
+- Scope: D37, D40. `messaging/` feature with `MessagingService.send(storeId, { channel: 'sms', contactId, body, operationKey })`. It reads the contact's phone through `ContactsService`, counts SMS parts and credits (GSM-7 and Unicode limits from feature 09; reuse the `sms/` feature's counter if one exists), and calls the SMS driver outside any transaction with the operation key as the provider idempotency key where the driver supports it. It returns the provider message id, parts and credits; the caller (campaign recipient or workflow step) owns status, cost and retries, as `campaign_recipients` and `automation_run_steps` hold `provider_message_id`. Messages go from Dakly's shared sender until CHN-6 adds the store's approved sender. Delivery receipts wait for the provider driver (ACC-14); the Mailpit driver reports accepted as delivered. CHAT-2 later adds Messenger and Instagram to the same method.
+- Tests (integration, Mailpit driver): Bangla text counts Unicode parts; a 161-character English text is two parts; the same operation key twice reaches the driver once where the driver supports it; no transaction is open during the driver call; a contact with no phone is refused with an AppError.
+
 ### CAMP-9 · Final send checks
 
 Branch: `feat/camp-9-send-policy`
@@ -67,7 +76,7 @@ Branch: `feat/camp-9-send-policy`
 
 #### The final send gate
 
-The gate runs once for each message, inside the short store transaction in which the `send-message` job (CHAT-2) moves the message from `queued` to sending. That transaction commits before the provider call ([jobs.md](../data/jobs.md#send-time-and-financial-gates)). Campaigns may run the same checks at approval to show skips, but only the run inside the send transaction decides. A skip writes its reason and releases any reserved cost in the same transaction; a defer leaves the message queued until the next allowed time. The checks run top to bottom and stop at the first one that fails.
+The gate runs once for each message, inside the short store transaction in which the sending job moves the message from `queued` to sending: the campaign batch or workflow step job for SMS (MSG-1), and `send-message` (CHAT-2) for Messenger. That transaction commits before the provider call ([jobs.md](../data/jobs.md#send-time-and-financial-gates)). Campaigns may run the same checks at approval to show skips, but only the run inside the send transaction decides. A skip writes its reason and releases any reserved cost in the same transaction; a defer leaves the message queued until the next allowed time. The checks run top to bottom and stop at the first one that fails.
 
 Staff replies, typed by a person in the Chats inbox:
 
@@ -121,7 +130,7 @@ Branch: `feat/camp-2-campaigns`
 
 Branch: `feat/camp-3-campaign-sender`
 
-- Scope: `send-campaign-batch` job: claim up to 200 queued recipients through a `SECURITY DEFINER` due-work function, run `SendPolicyService` again right before each send, create tracked links, call `MessagingService.send` with operation key `campaign:<recipientId>`, write status and settle cost per recipient (`charge` on delivered, `release` on skipped or failed). Restartable: a recipient in `sending` with an expired claim is reconciled by provider message id before any resend. Delivery, read and failure callbacks from core messaging (CHAT-2) update recipients. Roll-up counts on `campaigns` refresh from recipients at most every 10 seconds. A short balance mid-send pauses the campaign and notifies the Owner (resumes after top-up). Emit `campaign.sent` when the last recipient settles.
+- Scope: `send-campaign-batch` job: claim up to 200 queued recipients through a `SECURITY DEFINER` due-work function, run `SendPolicyService` again right before each send, create tracked links, call `MessagingService.send` (MSG-1 for SMS) with operation key `campaign-<recipientId>`, write status and settle cost per recipient (`charge` on delivered, `release` on skipped or failed). Restartable: a recipient in `sending` with an expired claim is reconciled by provider message id before any resend. Delivery, read and failure callbacks from core messaging (CHAT-2) update recipients. Roll-up counts on `campaigns` refresh from recipients at most every 10 seconds. A short balance mid-send pauses the campaign and notifies the Owner (resumes after top-up). Emit `campaign.sent` when the last recipient settles.
 - Tests (integration): a crash after the provider call and before the status write sends once; two workers never send to the same recipient; a consent withdrawal between approval and send skips and releases cost once; quiet hours defer the rest to 09:00; a failed SMS is refunded; the counts match the recipient rows.
 
 ### CAMP-7 · Messenger campaigns to open windows
