@@ -44,10 +44,6 @@ Branch: `docs/rev-7-event-catalogue`
 
 ### Group 2: notifications and usage (M2)
 
-### HOME-2 · Web: notification bell and list
-
-- Left: once WEB-2 is in main, the notification sheet uses its Sheet and Tabs instead of `SessionDialog` and the `aria-pressed` buttons.
-
 ### PAY-1 · Usage service
 
 Branch: `feat/pay-1-usage-service`

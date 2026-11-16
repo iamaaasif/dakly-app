@@ -25,7 +25,7 @@ test('shows a stored notification in the bell and list and marks it done', async
     await page.goto('/dashboard');
     await page.getByRole('button', { name: 'Open notifications, 1 unread' }).click();
     await expect(page).toHaveURL(/notifications=all/);
-    await page.getByRole('button', { name: 'Fix now' }).click();
+    await page.getByRole('tab', { name: 'Fix now' }).click();
     await expect(page).toHaveURL(/notifications=fix_now/);
     const sheet = page.getByRole('dialog', { name: 'Notifications' });
     await expect(sheet.getByText('Reconnect your Facebook page')).toBeVisible();
@@ -38,7 +38,9 @@ test('shows a stored notification in the bell and list and marks it done', async
     );
     await sheet.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(sheet.getByText('Done', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open notifications, 0 unread' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Open notifications, 0 unread', includeHidden: true }),
+    ).toBeVisible();
     const stored = await database.pool.query('select status from notifications where id=$1', [
       notificationId,
     ]);
@@ -92,7 +94,9 @@ test('a notification created through the API appears in the open page without a 
       client.release();
     }
     await expect(sheet.getByText('Reconnect your Instagram account')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open notifications, 1 unread' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Open notifications, 1 unread', includeHidden: true }),
+    ).toBeVisible();
     expect(loads).toBe(0);
   } finally {
     await database.pool.query('delete from notifications where id=$1', [notificationId]);

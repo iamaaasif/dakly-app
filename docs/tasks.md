@@ -69,7 +69,7 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 | ID     | Task                                                    | Status | Depends     | PR            | Notes                                                                |
 | ------ | ------------------------------------------------------- | ------ | ----------- | ------------- | -------------------------------------------------------------------- |
 | HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Done   | DB-2, ACC-3 | #83, #87, #90 | Q10                                                                  |
-| HOME-2 | Web: notification bell and list                         | Done   | HOME-1      | #85, #PR      | follows: swap the sheet to WEB-2 Sheet and Tabs                      |
+| HOME-2 | Web: notification bell and list                         | Done   | HOME-1      | #85, #PR      |                                                                      |
 | PAY-1  | Usage service: units, allowances, usage events          | Done   | ACC-3       | #84           | AI top-ups not drawn yet                                             |
 | PAY-11 | Wallets: reserve, release, charge and staff credit      | Done   | ADM-6       | #82, #86      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
 
