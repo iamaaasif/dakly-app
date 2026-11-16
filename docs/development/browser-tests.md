@@ -7,7 +7,7 @@ pnpm install --frozen-lockfile
 pnpm --filter @dakly/web exec playwright install --with-deps chromium
 ```
 
-Start the normal PostgreSQL 16, Redis 7 and Mailpit services. Use a dedicated local test database, with the `dakly_app` RLS role for `DATABASE_URL` and the migration owner for `DATABASE_ADMIN_URL`. Both database URLs and `REDIS_URL` must point to loopback hosts and contain no URL query options. Export them from your private test environment without printing their values. `MAILPIT_SMTP_HOST` must also be loopback; `MAILPIT_SMTP_PORT` and `MAILPIT_API_URL` follow the normal local service configuration. Prepare a fresh database using the same commands as CI:
+Start the normal PostgreSQL 16, Valkey 8 and Mailpit services. Use a dedicated local test database, with the `dakly_app` RLS role for `DATABASE_URL` and the migration owner for `DATABASE_ADMIN_URL`. Both database URLs and `REDIS_URL` must point to loopback hosts and contain no URL query options. Export them from your private test environment without printing their values. `MAILPIT_SMTP_HOST` must also be loopback; `MAILPIT_SMTP_PORT` and `MAILPIT_API_URL` follow the normal local service configuration. Prepare a fresh database using the same commands as CI:
 
 ```bash
 psql "$DATABASE_ADMIN_URL" -f packages/db/local-init.sql
