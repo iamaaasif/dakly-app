@@ -201,4 +201,32 @@ describe('ConsentService (Postgres)', () => {
       expect.objectContaining({ status: 'granted' }),
     ]);
   });
+
+  it('saves a staff answer as a manual consent with the note as evidence', async () => {
+    const id = await contact(storeA);
+    const note = 'দোকানে এসে মৌখিকভাবে রাজি হয়েছেন';
+    const consent = await service.recordStaffAnswer(
+      storeA,
+      id,
+      { channel: 'sms', status: 'granted', note },
+      staff,
+    );
+
+    expect(consent).toMatchObject({ contactId: id, channel: 'sms', source: 'manual' });
+    const rows = await admin.pool.query('select source, evidence from consents where id=$1', [
+      consent.id,
+    ]);
+    expect(rows.rows).toEqual([{ source: 'manual', evidence: note }]);
+  });
+
+  it('reads current consent for at most 100 contacts at a time', async () => {
+    const id = await contact(storeA);
+    await service.record(storeA, granted(id), staff);
+    const hundred = [id, ...Array.from({ length: 99 }, () => randomUUID())];
+
+    expect(await service.current(storeA, hundred, 'whatsapp')).toHaveLength(1);
+    expect(() => service.current(storeA, [...hundred, randomUUID()], 'whatsapp')).toThrow(
+      expect.objectContaining({ code: 'CONSENT_CONTACTS_TOO_MANY', status: 400 }),
+    );
+  });
 });

@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 
 import type { ConsentChannel, ConsentSource, ConsentStatus } from '@dakly/contracts/contacts';
-import { contactConsentCurrent } from '@dakly/db/schema/consent-current';
+import { contactConsentCurrent } from '@dakly/db/schema/consents';
 import { consents } from '@dakly/db/schema/contacts';
 
 import { TenantDatabase } from '../platform/database/tenant-database';

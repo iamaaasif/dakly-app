@@ -46,11 +46,12 @@ changes or deletes a row; its role has no UPDATE or DELETE on the table. The con
 in the store, checked through `ContactsService`. `ConsentService.current(storeId, contactIds,
 channel)` reads only the `contact_consent_current` view, where the latest row per contact and
 channel wins, so a new opt-in after a withdrawal reads as granted. A contact that never answered
-on a channel has no row there.
+on a channel has no row there. `current` takes at most 100 contact ids per call; more fails
+with `400 CONSENT_CONTACTS_TOO_MANY`.
 
-- `POST /contacts/:contactId/consents` (`customers.edit`) records a staff answer with
-  `channel`, `status` and a required `note` saying how the customer agreed or refused. It saves
-  with source `manual` and the note as evidence. Email is not accepted (D20). A contact that is
+- `POST /contacts/:contactId/consents` (`customers.edit`) records a staff answer through
+  `ConsentService.recordStaffAnswer` with `channel`, `status` and a required `note` saying how
+  the customer agreed or refused. It saves with source `manual` and the note as evidence. Email is not accepted (D20). A contact that is
   missing or in another store returns `404 CONTACT_NOT_FOUND`.
 - STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
   `ConsentService.record` when it receives them.

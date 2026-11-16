@@ -1,12 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type { ConsentChannel, ConsentResponse } from '@dakly/contracts/contacts';
+import type {
+  ConsentChannel,
+  ConsentResponse,
+  RecordConsentInput,
+} from '@dakly/contracts/contacts';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { consentError, MAX_CONSENT_CONTACTS } from './consents.errors';
 import { type Consent, ConsentsRepository, type NewConsent } from './consents.repository';
 
 type RecordConsentChange = Pick<
@@ -54,8 +59,23 @@ export class ConsentService {
     });
   }
 
+  // Staff type how the customer agreed or refused; that note is the evidence.
+  recordStaffAnswer(
+    storeId: string,
+    contactId: string,
+    { channel, status, note }: RecordConsentInput,
+    actor: AuditEntry['actor'],
+  ): Promise<ConsentResponse> {
+    return this.record(
+      storeId,
+      { contactId, channel, status, source: 'manual', evidence: note },
+      actor,
+    );
+  }
+
   // A contact with no row has never answered on this channel and is not in the result.
   current(storeId: string, contactIds: string[], channel: ConsentChannel) {
+    if (contactIds.length > MAX_CONSENT_CONTACTS) throw consentError('CONSENT_CONTACTS_TOO_MANY');
     return this.repository.listCurrent(storeId, contactIds, channel);
   }
 }

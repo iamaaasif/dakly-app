@@ -4,8 +4,7 @@ import { consentChannels, consentSources, consentStatuses } from '@dakly/contrac
 
 import { timestamptz } from './columns';
 
-// The latest consent row per contact and channel. Migration 0006 creates it with security_invoker,
-// so RLS applies; `existing()` keeps drizzle-kit from generating it again.
+// Migration 0006 creates this view; `existing()` keeps drizzle-kit from generating it again.
 export const contactConsentCurrent = pgView('contact_consent_current', {
   storeId: uuid('store_id').notNull(),
   contactId: uuid('contact_id').notNull(),

@@ -22,12 +22,11 @@ export class ConsentsController {
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
     @Param('contactId', ParseUUIDPipe) contactId: string,
-    @Body(new ZodValidationPipe(recordConsentSchema)) { channel, status, note }: RecordConsentInput,
+    @Body(new ZodValidationPipe(recordConsentSchema)) input: RecordConsentInput,
   ): Promise<ConsentResponse> {
-    return this.consentService.record(
-      storeId,
-      { contactId, channel, status, source: 'manual', evidence: note },
-      { kind: 'user', userId },
-    );
+    return this.consentService.recordStaffAnswer(storeId, contactId, input, {
+      kind: 'user',
+      userId,
+    });
   }
 }
