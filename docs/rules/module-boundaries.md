@@ -32,6 +32,6 @@ When feature A must react to something in feature B (order paid → send WhatsAp
 
 ## Read-only reads across features
 
-| Reader     | Tables                                                                                       | Why                                                                    | Who owns writes              |
-| ---------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------- |
-| `sending/` | `campaign_recipients`, `campaigns`, `automation_run_steps`, `automation_runs`, `automations` | The frequency cap counts campaign and workflow sends together (A1, A2) | `campaigns/`, `automations/` |
+| Reader    | Tables                                                                                       | Why                                                                    | Who owns writes            |
+| --------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------- |
+| `sending` | `campaign_recipients`, `campaigns`, `automation_run_steps`, `automation_runs`, `automations` | The frequency cap counts campaign and workflow sends together (A1, A2) | `campaigns`, `automations` |
