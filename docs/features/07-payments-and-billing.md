@@ -357,7 +357,7 @@ Usage (PAY-1): every billable AI action goes through `UsageService.consume(store
 - The allowance is the base plan's `limits` entry for the unit, read through `BillingService.currentAllowance`; a unit the plan omits has 0. Add-ons add no allowance yet. A store with no subscription gets `404 SUBSCRIPTION_NOT_FOUND`.
 - The period is the subscription's current period. `usage_events.period_start` holds the UTC date of `current_period_start`, because billing counts periods in UTC calendar days. A new period starts at zero.
 - One store transaction takes an advisory lock on (store, unit), so two consumes of the last unit cannot both pass. A reference already used for that unit returns its first row and writes nothing. Otherwise, when the period's total plus the quantity passes the allowance, it refuses with `409 USAGE_ALLOWANCE_EXCEEDED`; if not, it writes one row with source `allowance`.
-- Top-ups are not drawn yet. The AI top-up wallet (`ai_conversations`) has no service until PAY-11.
+- Top-ups are not drawn yet. The AI top-up wallet (`ai_conversations`) has no service yet; PAY-11 serves only the SMS and WhatsApp wallets.
 - A consume that crosses 80% or 100% of the allowance notifies members with `billing.view` (Owner, Admin and custom roles that view billing, the roles that can top up) in the `billing` category, with dedupe key `usage-<percent>:<unit>:<period start>`, so each notice goes once per period. The `usage.threshold_reached` event is not emitted yet.
 
 ### Rules
