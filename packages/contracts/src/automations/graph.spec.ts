@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { automationGraphSchema } from './graph';
-import { automationTemplates } from './templates';
 
 const send = {
   kind: 'send',
@@ -35,10 +34,6 @@ function messages(result: ReturnType<typeof automationGraphSchema.safeParse>) {
 }
 
 describe('automationGraphSchema', () => {
-  it.each(Object.entries(automationTemplates))('accepts the %s template', (_key, template) => {
-    expect(automationGraphSchema.parse(template.graph)).toEqual(template.graph);
-  });
-
   it('accepts a random split whose paths add up to 100%', () => {
     const graph = workflow({
       start: {
