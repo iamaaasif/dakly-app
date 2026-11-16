@@ -63,6 +63,7 @@ class FakeEventSource extends EventTarget {
     super();
     FakeEventSource.opened.push(this);
   }
+
   close() {
     this.readyState = FakeEventSource.CLOSED;
   }

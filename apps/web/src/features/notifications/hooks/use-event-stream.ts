@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { notificationsKeys } from '../api/notifications-keys';
 import { useSessionContext } from '@/lib/session-context';
 
-export const STREAM_FALLBACK_POLL_MS = 60_000;
+const STREAM_FALLBACK_POLL_MS = 60_000;
 
 // One stream per page, opened again when the session's shop or access changes. While it is
 // down the notification queries are polled instead.
