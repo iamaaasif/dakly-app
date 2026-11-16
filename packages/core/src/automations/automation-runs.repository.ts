@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 
 import type {
   AutomationRunStatus,
@@ -97,6 +97,22 @@ export class AutomationRunsRepository {
         .limit(1),
     );
     return row;
+  }
+
+  async listTappedStepKeys(storeId: string, runId: string): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ stepKey: automationRunSteps.stepKey })
+        .from(automationRunSteps)
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.runId, runId),
+            isNotNull(automationRunSteps.tappedAt),
+          ),
+        ),
+    );
+    return rows.map((row) => row.stepKey);
   }
 
   // Moves nothing when another worker has claimed the run since, or it left this step.

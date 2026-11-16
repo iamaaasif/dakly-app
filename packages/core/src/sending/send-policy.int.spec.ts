@@ -77,12 +77,12 @@ async function workflowSend(
   storeId: string,
   contactId: string,
   sentAt: Date,
-  { channel = 'sms', isTransactional = false } = {},
+  { channel = 'sms', category = 'marketing', outcome = 'sent' } = {},
 ) {
   const [automationId, versionId, runId] = [randomUUID(), randomUUID(), randomUUID()];
   await admin.pool.query(
-    "insert into automations(id,store_id,name,trigger_type,draft_graph,is_transactional) values($1,$2,'ফিরে আসুন','consent_given','{}',$3)",
-    [automationId, storeId, isTransactional],
+    "insert into automations(id,store_id,name,trigger_type,draft_graph) values($1,$2,'ফিরে আসুন','consent_given','{}')",
+    [automationId, storeId],
   );
   await admin.pool.query(
     "insert into automation_versions(id,store_id,automation_id,version,graph) values($1,$2,$3,1,'{}')",
@@ -93,8 +93,8 @@ async function workflowSend(
     [runId, storeId, automationId, versionId, contactId],
   );
   await admin.pool.query(
-    "insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,channel,sent_at) values($1,$2,$3,$4,'send','send','sent',$5,$6)",
-    [randomUUID(), storeId, runId, contactId, channel, sentAt],
+    "insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,channel,category,sent_at) values($1,$2,$3,$4,'send','send',$5,$6,$7,$8)",
+    [randomUUID(), storeId, runId, contactId, outcome, channel, category, sentAt],
   );
 }
 
@@ -183,7 +183,8 @@ describe('SendPolicyService (Postgres)', () => {
     const contactId = await consentedContact(storeA);
     await campaignSend(storeA, contactId, hoursBefore(1), { status: 'failed' });
     await campaignSend(storeA, contactId, hoursBefore(1), { category: 'utility' });
-    await workflowSend(storeA, contactId, hoursBefore(1), { isTransactional: true });
+    await workflowSend(storeA, contactId, hoursBefore(1), { category: 'transactional' });
+    await workflowSend(storeA, contactId, hoursBefore(1), { outcome: 'failed' });
     await campaignSend(storeA, contactId, hoursBefore(8 * 24));
     await workflowSend(storeA, contactId, hoursBefore(-1));
 
@@ -232,6 +233,16 @@ describe('SendPolicyService (Postgres)', () => {
       action: 'defer',
       until: new Date('2026-11-17T02:00:00Z'),
     });
+  });
+
+  it('reads the cap from the step category, not the workflow flag', async () => {
+    const contactId = await consentedContact(storeA);
+    await workflowSend(storeA, contactId, hoursBefore(1), { outcome: 'sending' });
+    await admin.pool.query('update automations set is_transactional=true where store_id=$1', [
+      storeA,
+    ]);
+
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
   });
 
   it('counts a recipient still in sending as a send now', async () => {

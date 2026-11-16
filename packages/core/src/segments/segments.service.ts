@@ -52,6 +52,12 @@ export class SegmentsService {
     return this.contacts.listIdsMatching(storeId, segment.rules, page);
   }
 
+  // A deleted segment holds no one.
+  async hasContact(storeId: string, segmentId: string, contactId: string): Promise<boolean> {
+    const segment = await this.repository.find(storeId, segmentId);
+    return segment ? this.contacts.isMatching(storeId, contactId, segment.rules) : false;
+  }
+
   // The store lock makes the 200-segment limit hold under concurrent saves.
   async create(storeId: string, input: CreateSegmentInput, actor: Actor): Promise<SegmentResponse> {
     return this.transaction.runLocked(storeId, async () => {

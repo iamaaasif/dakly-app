@@ -205,6 +205,7 @@ export class AutomationsService {
 // The graph schema already refused a path with no end or a loop. These checks need to know what
 // the store can use today.
 function checkPublishable(graph: AutomationGraph) {
+  checkRunnable(graph);
   if (!isTriggerAvailable(graph.trigger.key))
     throw automationError('AUTOMATION_TRIGGER_UNAVAILABLE', [
       { path: 'trigger.key', message: `${graph.trigger.key} is not available yet` },
@@ -222,6 +223,41 @@ function checkPublishable(graph: AutomationGraph) {
         throw automationError('AUTOMATION_SPLIT_TOO_SOON', [
           { path: `steps.${key}`, message: `Less than 2 hours after ${sendKey}` },
         ]);
+  }
+}
+
+type ActionKind = Extract<AutomationStep, { kind: 'action' }>['action']['action'];
+// The runner's actions; the others wait for the feature that owns them.
+const RUNNABLE_ACTIONS: readonly ActionKind[] = ['add_tag', 'remove_tag'];
+
+// What the runner cannot do yet: taps on workflow messages are not recorded, the review list does
+// not exist, and only tag actions have an owning service.
+function checkRunnable({ goal, exitConditions, workflowFilters, steps }: AutomationGraph) {
+  if ([goal, ...exitConditions].some((exit) => exit?.kind === 'tapped_link'))
+    throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
+      { path: 'exitConditions', message: 'A tap exit is not available yet' },
+    ]);
+  if (workflowFilters.some((filter) => filter.kind === 'tapped'))
+    throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
+      { path: 'workflowFilters', message: 'A tap filter is not available yet' },
+    ]);
+  for (const [key, step] of Object.entries(steps)) {
+    const path = `steps.${key}`;
+    if (
+      step.kind === 'condition' &&
+      step.paths.some(({ condition }) => condition.kind === 'tapped')
+    )
+      throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
+        { path, message: 'A tap condition is not available yet' },
+      ]);
+    if (step.kind === 'send' && step.reviewBeforeSending)
+      throw automationError('AUTOMATION_REVIEW_UNAVAILABLE', [
+        { path, message: 'Review before sending is not available yet' },
+      ]);
+    if (step.kind === 'action' && !RUNNABLE_ACTIONS.includes(step.action.action))
+      throw automationError('AUTOMATION_ACTION_UNAVAILABLE', [
+        { path, message: `${step.action.action} is not available yet` },
+      ]);
   }
 }
 

@@ -35,6 +35,19 @@ describe('contact filters without RLS assistance', () => {
       hasPhone: true,
     });
     expect(await repository.findRecipient(f.b, a!.id)).toBeUndefined();
+    await repository.changeTag(f.b, a!.id, { tag: 'vip', change: 'add' }, 50);
+    expect(await repository.findTags(f.a, a!.id)).toEqual([]);
+    await repository.changeTag(f.a, a!.id, { tag: 'vip', change: 'add' }, 50);
+    await repository.changeTag(f.a, a!.id, { tag: 'vip', change: 'add' }, 50);
+    expect(await repository.findTags(f.b, a!.id)).toEqual([]);
+    expect(await repository.findTags(f.a, a!.id)).toEqual(['vip']);
+    // At the limit a new tag is not added.
+    await repository.changeTag(f.a, a!.id, { tag: 'gold', change: 'add' }, 1);
+    expect(await repository.findTags(f.a, a!.id)).toEqual(['vip']);
+    await repository.changeTag(f.b, a!.id, { tag: 'vip', change: 'remove' }, 50);
+    expect(await repository.findTags(f.a, a!.id)).toEqual(['vip']);
+    await repository.changeTag(f.a, a!.id, { tag: 'vip', change: 'remove' }, 50);
+    expect(await repository.findTags(f.a, a!.id)).toEqual([]);
     expect(await repository.findRecipients(f.b, [a!.id, b!.id])).toEqual([
       {
         id: b!.id,
@@ -98,5 +111,8 @@ describe('contact filters without RLS assistance', () => {
 
     expect(await repository.countMatching(f.b, rules)).toBe(1);
     expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
+    expect(await repository.isMatching(f.b, b!.id, rules)).toBe(true);
+    expect(await repository.isMatching(f.b, a!.id, rules)).toBe(false);
+    expect(await repository.isMatching(f.a, a!.id, rules)).toBe(true);
   });
 });

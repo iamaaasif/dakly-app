@@ -2,11 +2,14 @@ import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { AutomationStep } from '@dakly/contracts/automations/graph';
+import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
+import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { MINUTE_MS } from '../platform/time';
+import { SegmentsService } from '../segments/segments.service';
+import { SendPolicyService } from '../sending/send-policy.service';
+import { StoresService } from '../stores/stores.service';
 import {
   AutomationRunsRepository,
   type ClaimedRun,
@@ -15,17 +18,34 @@ import {
   type RunChange,
   type RunClaim,
 } from './automation-runs.repository';
+import { wakeTime } from './automation-waits';
 
 const CLAIM_BATCH_SIZE = 100;
 // One sweep claims at most this many batches, so a backlog spreads over the next ticks.
 const CLAIM_BATCHES_PER_SWEEP = 10;
 // Claims without a committed step, counted by due_automation_runs: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
+const system = { kind: 'system' } as const;
 
-type Wait = Extract<AutomationStep, { kind: 'wait' }>['wait'];
-// The run's next state and the row that records the step, written together under the claim, and
-// the next step's claim when the run goes straight on.
-type StepResult = { run: RunChange; step?: NewRunStep; next?: Omit<RunClaim, 'runId'> };
+type Condition = AutomationGraph['workflowFilters'][number];
+type ExitCondition = AutomationGraph['exitConditions'][number];
+// What the person has done in this run so far, read once per step.
+type RunFacts = {
+  storeId: string;
+  runId: string;
+  contactId: string;
+  tags: string[];
+  tappedStepKeys: string[];
+};
+type PathChoice = { outcome: string; next: string };
+// The run's next state, the step row and a tag change, written together under the claim, and the
+// next step's claim when the run goes straight on.
+type StepResult = {
+  run: RunChange;
+  step?: NewRunStep;
+  tagChange?: Parameters<ContactsService['changeTag']>[2];
+  next?: Omit<RunClaim, 'runId'>;
+};
 
 @Injectable()
 export class AutomationRunsService {
@@ -33,6 +53,10 @@ export class AutomationRunsService {
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(SegmentsService) private readonly segments: SegmentsService,
+    @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
+    @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
@@ -49,31 +73,63 @@ export class AutomationRunsService {
   async continueRun(storeId: string, claim: RunClaim): Promise<RunClaim | undefined> {
     const run = await this.repository.findRun(storeId, claim.runId);
     if (!run || !holdsClaim(run, claim)) return undefined;
-    const result = await this.runStep(claim, run);
+    const result = await this.runStep(storeId, claim, run);
     // Every committed step starts the count of claims without progress again.
     const change = { attempts: 0, lastError: null, ...result.run };
     const isMoved = await this.transaction.run(storeId, async () => {
       if (!(await this.repository.moveRun(storeId, claim, change))) return false;
       if (result.step)
         await this.repository.insertStep(storeId, claim.runId, run.contactId, result.step);
+      if (result.tagChange)
+        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, system);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
   }
 
-  private async runStep(claim: RunClaim, run: ClaimedRun): Promise<StepResult> {
+  private async runStep(storeId: string, claim: RunClaim, run: ClaimedRun): Promise<StepResult> {
     const now = this.clock.now();
     const held = holdOrEnd(run, now);
     if (held) return held;
+    const facts: RunFacts = {
+      storeId,
+      runId: claim.runId,
+      contactId: run.contactId,
+      tags: await this.contacts.findTags(storeId, run.contactId),
+      tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
+    };
+    const exitReason = await this.exitReason(run.graph, facts, now);
+    if (exitReason) return exited(exitReason, now);
+    return this.runKind(claim, run.graph.steps[claim.stepKey]!, facts, now);
+  }
+
+  private async runKind(
+    claim: RunClaim,
+    step: AutomationStep,
+    facts: RunFacts,
+    now: Date,
+  ): Promise<StepResult> {
     const { stepKey } = claim;
-    const step = run.graph.steps[stepKey]!;
     switch (step.kind) {
       case 'wait': {
-        const wakeAt = wakeTime(step.wait, now);
-        if (!wakeAt) return failed('This step cannot run yet', now);
+        const timeZone = (await this.stores.sendingSettings(facts.storeId)).timeZone;
         return {
-          run: { status: 'waiting', currentStepKey: step.next, wakeAt },
+          run: {
+            status: 'waiting',
+            currentStepKey: step.next,
+            wakeAt: wakeTime(step.wait, now, timeZone),
+          },
           step: { stepKey, kind: 'wait', outcome: 'scheduled' },
+        };
+      }
+      case 'condition': {
+        const choice = (await this.firstHoldingPath(step.paths, facts, now)) ?? {
+          outcome: 'else',
+          next: step.elseNext,
+        };
+        return {
+          ...goOn(choice.next, now),
+          step: { stepKey, kind: 'condition', outcome: choice.outcome },
         };
       }
       case 'random_split': {
@@ -83,17 +139,93 @@ export class AutomationRunsService {
           step: { stepKey, kind: 'random_split', outcome: choice.outcome },
         };
       }
+      case 'send':
+        return failed('This step cannot run yet', now);
+      case 'action':
+        return runAction(stepKey, step, now);
       case 'exit':
         return {
           run: { status: 'done', finishedAt: now },
           step: { stepKey, kind: 'exit', outcome: 'done' },
         };
-      case 'condition':
-      case 'send':
-      case 'action':
-        return failed('This step cannot run yet', now);
     }
   }
+
+  // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
+  // filters.
+  private async exitReason(graph: AutomationGraph, facts: RunFacts, at: Date) {
+    const { goal, exitConditions, workflowFilters } = graph;
+    if (goal && hasHappened(goal, facts)) return 'goal';
+    if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';
+    for (const filter of workflowFilters)
+      if (!(await this.holds(filter, facts, at))) return 'workflow_filter';
+    return undefined;
+  }
+
+  private async firstHoldingPath(
+    paths: { condition: Condition; next: string }[],
+    facts: RunFacts,
+    at: Date,
+  ): Promise<PathChoice | undefined> {
+    for (const [index, path] of paths.entries())
+      if (await this.holds(path.condition, facts, at))
+        return { outcome: `path_${index + 1}`, next: path.next };
+    return undefined;
+  }
+
+  private async holds(condition: Condition, facts: RunFacts, at: Date): Promise<boolean> {
+    const { storeId, contactId } = facts;
+    switch (condition.kind) {
+      // Publish refuses tap conditions until taps on workflow messages are recorded.
+      case 'tapped':
+        return facts.tappedStepKeys.includes(condition.stepKey);
+      case 'has_tag':
+        return facts.tags.includes(condition.tag);
+      case 'in_segment':
+        return this.segments.hasContact(storeId, condition.segmentId, contactId);
+      // Reachable means the contact has an address and an open window on the channel; consent is
+      // the send step's own check.
+      case 'reachable': {
+        const request = {
+          contactId,
+          channel: condition.channel,
+          category: 'transactional',
+          at,
+        } as const;
+        return (await this.sendPolicy.check(storeId, request)).action === 'send';
+      }
+      // Replies arrive with CHAT-2 (SMS cannot receive them), and orders with ORD-1.
+      case 'replied':
+      case 'placed_order':
+        return false;
+    }
+  }
+}
+
+// Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
+// publish refuses them. The tag change is written with the step, under the claim.
+function runAction(
+  stepKey: string,
+  { action, next }: Extract<AutomationStep, { kind: 'action' }>,
+  now: Date,
+): StepResult {
+  if (action.action !== 'add_tag' && action.action !== 'remove_tag')
+    return failed('This action is not available yet', now);
+  const change = action.action === 'add_tag' ? 'add' : 'remove';
+  return {
+    ...goOn(next, now),
+    step: { stepKey, kind: 'action', outcome: 'done' },
+    tagChange: { tag: action.tag, change },
+  };
+}
+
+// Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish
+// refuses the tap exit until taps on workflow messages are recorded. Tags carry no time, so a tag
+// the person already had counts as got.
+function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
+  if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
+  if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
+  return false;
 }
 
 // Checked before every step.
@@ -140,21 +272,4 @@ function randomPath(runId: string, stepKey: string, paths: { percent: number; ne
   let upTo = 0;
   const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
   return { outcome: `path_${index + 1}`, next: paths[index]!.next };
-}
-
-// Waits are not quiet hours: a send at the end of one defers on its own. Waking on a reply or tap
-// and on the Messenger window come with CHAT-2, so an event wait lasts its timeout and a window
-// wait has no open window to wait for.
-function wakeTime(wait: Wait, now: Date): Date | undefined {
-  switch (wait.until) {
-    case 'duration':
-      return new Date(now.getTime() + wait.minutes * MINUTE_MS);
-    case 'event':
-      return new Date(now.getTime() + wait.timeoutMinutes * MINUTE_MS);
-    case 'window_closing':
-      return now;
-    case 'time_of_day':
-    case 'weekday':
-      return undefined;
-  }
 }

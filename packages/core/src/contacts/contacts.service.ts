@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type {
-  ContactDetailResponse,
-  ContactListQuery,
-  ContactListResponse,
-  ContactResponse,
-  CreateContactInput,
-  UpdateContactInput,
+import {
+  type ContactDetailResponse,
+  type ContactListQuery,
+  type ContactListResponse,
+  type ContactResponse,
+  type CreateContactInput,
+  MAX_CONTACT_TAGS,
+  type UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
@@ -23,6 +24,7 @@ import {
   type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
+  type TagChange,
 } from './contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
@@ -104,6 +106,15 @@ export class ContactsService {
     return toContactResponse(updated, editor.access.seeFullPhone);
   }
 
+  findTags(storeId: string, contactId: string): Promise<string[]> {
+    return this.contactsRepository.findTags(storeId, contactId);
+  }
+
+  // A workflow's tag action. A deleted contact is left as it is.
+  changeTag(storeId: string, contactId: string, change: TagChange, _actor: Actor): Promise<void> {
+    return this.contactsRepository.changeTag(storeId, contactId, change, MAX_CONTACT_TAGS);
+  }
+
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');
@@ -127,6 +138,10 @@ export class ContactsService {
 
   countMatching(storeId: string, rules: SegmentRules): Promise<number> {
     return this.contactsRepository.countMatching(storeId, rules);
+  }
+
+  isMatching(storeId: string, contactId: string, rules: SegmentRules): Promise<boolean> {
+    return this.contactsRepository.isMatching(storeId, contactId, rules);
   }
 
   listIdsMatching(
