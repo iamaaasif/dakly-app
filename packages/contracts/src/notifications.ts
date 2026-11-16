@@ -9,7 +9,6 @@ export const notificationListQuerySchema = z.strictObject({
   status: z.enum(notificationStatuses).optional(),
 });
 export const snoozeNotificationSchema = z.strictObject({ until: z.iso.datetime() });
-export const lastEventIdSchema = z.uuid().optional();
 
 export type NotificationCategory = (typeof notificationCategories)[number];
 export type NotificationStatus = (typeof notificationStatuses)[number];

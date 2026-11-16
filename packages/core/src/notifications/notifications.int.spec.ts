@@ -1,22 +1,18 @@
 import 'reflect-metadata';
 import { randomInt, randomUUID } from 'node:crypto';
-import { setTimeout } from 'node:timers/promises';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 
-import { ValkeyClient } from '../platform/cache/valkey-client';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SessionsService } from '../sessions/sessions.service';
-import { StreamNotificationOnCreated } from './jobs/stream-notification-on-created.job';
-import { NotificationStreamService, STREAM_HEARTBEAT_MS } from './notification-stream.service';
 import { NotificationsModule } from './notifications.module';
 import { type NotifyInput, NotificationsService } from './notifications.service';
 
@@ -31,8 +27,6 @@ const storeIds: string[] = [];
 const userIds: string[] = [];
 let app: NestFastifyApplication;
 let service: NotificationsService;
-let job: StreamNotificationOnCreated;
-let baseUrl: string;
 
 const handedOver = (dedupeKey = randomUUID()): NotifyInput => ({
   type: 'conversation.handed_over',
@@ -106,60 +100,7 @@ async function events(storeId: string) {
   return result.rows;
 }
 
-// Runs the subscriber job the outbox relay would queue for each event.
-async function relay(storeId: string, except: string[] = []) {
-  for (const event of await events(storeId))
-    if (!except.includes(event.payload.notificationId))
-      await job.handle({
-        id: event.id,
-        storeId,
-        type: event.type,
-        payload: event.payload,
-        occurredAt: event.occurred_at.toISOString(),
-      });
-}
-
-async function until(condition: () => boolean | Promise<boolean>) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (await condition()) return;
-    await setTimeout(25);
-  }
-  throw new Error('Condition not reached');
-}
-
-async function subscribers(storeId: string) {
-  const reply = await app.get(ValkeyClient).connection.pubsub('NUMSUB', `notifications:${storeId}`);
-  return (reply as [string, number])[1];
-}
-
-// light-my-request's mock socket lacks the socket methods Nest's SSE stream calls, so streams
-// go over a real loopback connection.
-async function openStream(viewer: Member, storeId: string, lastEventId?: string) {
-  const abort = new AbortController();
-  const response = await fetch(`${baseUrl}/events/stream`, {
-    headers: { cookie: viewer.cookie, ...(lastEventId && { 'last-event-id': lastEventId }) },
-    signal: abort.signal,
-  });
-  expect(response.status).toBe(200);
-  expect(response.headers.get('content-type')).toBe('text/event-stream');
-  let text = '';
-  let isEnded = false;
-  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
-  void (async () => {
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read())
-      text += chunk.value;
-    isEnded = true;
-  })().catch(() => (isEnded = true));
-  await until(async () => (await subscribers(storeId)) > 0);
-  return {
-    ids: () => [...text.matchAll(/^id: (.+)$/gm)].map((match) => match[1]),
-    text: () => text,
-    isEnded: () => isEnded,
-    close: () => abort.abort(),
-  };
-}
-
-describe('NotificationsService and the event stream', () => {
+describe('NotificationsService and its routes', () => {
   beforeAll(async () => {
     app = await NestFactory.create<NestFastifyApplication>(TestModule, new FastifyAdapter(), {
       logger: false,
@@ -167,12 +108,9 @@ describe('NotificationsService and the event stream', () => {
     await registerSessionCookies(app);
     app.useGlobalFilters(new AppErrorFilter());
     await app.init();
-    await app.listen(0, '127.0.0.1');
-    baseUrl = await app.getUrl();
+    await app.getHttpAdapter().getInstance().ready();
     service = app.get(NotificationsService);
-    job = new StreamNotificationOnCreated(app.get(NotificationStreamService));
   });
-  afterEach(() => vi.useRealTimers());
   afterAll(async () => {
     try {
       await app?.close();
@@ -274,89 +212,5 @@ describe('NotificationsService and the event stream', () => {
     const agentRows = (await request(a.agent, 'GET', '/notifications')).json().items;
     expect(agentRows.map((item: { status: string }) => item.status)).toEqual(['new', 'new']);
     expect(agentRows.map((item: { id: string }) => item.id)).not.toContain(first.id);
-  });
-
-  it('streams a notification only to its own user in its own store', async () => {
-    const [a, b] = [await shop(), await shop()];
-    const ownerA = await openStream(a.owner, a.id);
-    const agentA = await openStream(a.agent, a.id);
-    const marketerA = await openStream(a.marketer, a.id);
-    const ownerB = await openStream(b.owner, b.id);
-    await service.notify(a.id, handedOver());
-    await relay(a.id);
-    const created = await rows(a.id);
-    const ownRow = (viewer: Member) => created.find((row) => row.user_id === viewer.userId)!.id;
-    await until(() => ownerA.ids().length === 1 && agentA.ids().length === 1);
-    await setTimeout(100);
-    expect(ownerA.ids()).toEqual([ownRow(a.owner)]);
-    expect(agentA.ids()).toEqual([ownRow(a.agent)]);
-    expect(ownerA.text()).toContain('"title":"A chat needs a person"');
-    expect(ownerA.text()).not.toContain(a.owner.userId);
-    expect(marketerA.ids()).toEqual([]);
-    expect(ownerB.ids()).toEqual([]);
-  });
-
-  it('sends the rows created while disconnected once each, then live ones', async () => {
-    const a = await shop();
-    await service.notify(a.id, handedOver());
-    const [seen] = (await rows(a.id)).filter((row) => row.user_id === a.owner.userId);
-    await service.notify(a.id, handedOver());
-    await service.notify(a.id, handedOver());
-    const missed = (await rows(a.id))
-      .filter((row) => row.user_id === a.owner.userId && row.id !== seen!.id)
-      .map((row) => row.id)
-      .sort();
-    const stream = await openStream(a.owner, a.id, seen!.id);
-    await until(() => stream.ids().length === 2);
-    await relay(a.id, [seen!.id]);
-    await service.notify(a.id, handedOver());
-    await relay(a.id, [seen!.id]);
-    await until(() => stream.ids().length === 3);
-    await setTimeout(100);
-    const ids = stream.ids();
-    expect(ids.slice(0, 2)).toEqual(missed);
-    expect(new Set(ids).size).toBe(3);
-    expect(ids).not.toContain(seen!.id);
-  });
-
-  it('closes a stream at the next heartbeat once its session is revoked or its membership ends', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    const a = await shop();
-    const revoked = await openStream(a.owner, a.id);
-    const removed = await openStream(a.agent, a.id);
-    const active = await openStream(a.chatRole, a.id);
-    await app.get(SessionsService).revoke(a.owner.userId, a.owner.sessionId);
-    await admin.pool.query(
-      "update memberships set status='removed' where store_id=$1 and user_id=$2",
-      [a.id, a.agent.userId],
-    );
-    await vi.advanceTimersByTimeAsync(STREAM_HEARTBEAT_MS);
-    await until(
-      () => revoked.isEnded() && removed.isEnded() && active.text().includes(': heartbeat'),
-    );
-    expect(active.isEnded()).toBe(false);
-    for (const stream of [revoked, removed, active]) expect(stream.text()).not.toContain('error');
-  });
-
-  it('rejects a stream without a session or with a malformed Last-Event-ID', async () => {
-    const a = await shop();
-    const anonymous = await fetch(`${baseUrl}/events/stream`);
-    expect(anonymous.status).toBe(401);
-    const malformed = await fetch(`${baseUrl}/events/stream`, {
-      headers: { cookie: a.owner.cookie, 'last-event-id': '42' },
-    });
-    expect(malformed.status).toBe(400);
-    expect((await malformed.json()).error.code).toBe('VALIDATION_FAILED');
-  });
-
-  it('leaves the store channel once the last stream of that store closes', async () => {
-    const a = await shop();
-    const first = await openStream(a.owner, a.id);
-    const second = await openStream(a.agent, a.id);
-    first.close();
-    await setTimeout(100);
-    expect(await subscribers(a.id)).toBe(1);
-    second.close();
-    await until(async () => (await subscribers(a.id)) === 0);
   });
 });

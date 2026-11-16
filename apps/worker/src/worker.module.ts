@@ -11,8 +11,6 @@ import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
-import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
-import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
@@ -39,7 +37,6 @@ import { JobSchedulers } from './job-schedulers';
     SendDueSecurityNoticesJob,
     SendSecurityNoticeJob,
     RelayOutboxJob,
-    StreamNotificationOnCreated,
     JobSchedulers,
   ],
   imports: [
@@ -53,7 +50,6 @@ import { JobSchedulers } from './job-schedulers';
     DatabaseModule,
     SecurityNoticesModule,
     OutboxRelayModule,
-    NotificationsModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
