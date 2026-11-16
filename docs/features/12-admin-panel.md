@@ -177,7 +177,7 @@ Support session checks and Owner request lists read current rows without explici
 - **ADM-R8** Balance adjustments are ledger entries with a type (credit, debit, refund, goodwill), never edits of a balance number.
 - **ADM-R9** A suspended shop keeps all its data and can still sign in to export it and see the reason for suspension.
 - **ADM-R10** Price changes for existing subscribers need 30 days' notice to the shop by SMS, WhatsApp and in-app.
-- **ADM-R11** The audit log is kept for at least 7 years (financial records), stored append-only with a daily hash chain so tampering can be detected.
+- **ADM-R11** The staff audit log (`staff_audit_log`) is kept for at least 7 years (financial records, D39), stored append-only with a daily hash chain so tampering can be detected. The shop's own `audit_log` follows D31.
 - **ADM-R12** Admin exports containing personal data are watermarked with the staff member's name, expire after 24 hours and are logged.
 
 ### Roles and permissions

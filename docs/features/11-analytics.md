@@ -100,7 +100,7 @@ CSV per tab, UTF-8 with BOM so Excel shows Bangla correctly. File name `dakly-an
 - **ANA-R5:** The funnel's Ordered step equals Orders from marketing.
 - **ANA-R6:** Walk-in shop sales count in the Sales tab but never in marketing attribution.
 - **ANA-R7:** Social post reach and reactions come from Meta and can lag up to 48 hours; the tab says "Facebook updates these numbers for up to 2 days".
-- **ANA-R8:** Periods longer than 12 months are not offered in release 1; data is kept for 24 months.
+- **ANA-R8:** Periods longer than 12 months are not offered in release 1. Reports read daily rollups (`store_daily_metrics`), kept 24 months; raw rows follow the retention in D31 (D39).
 
 ### States and edge cases
 

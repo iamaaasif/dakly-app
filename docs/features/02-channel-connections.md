@@ -149,7 +149,7 @@ Token health: a daily job checks tokens and warns 7 days before expiry. A send t
 2. Connecting and disconnecting needs Owner or Admin.
 3. Disconnecting keeps all chats and messages.
 4. Webhook handlers never do work inline; Meta retries if we answer slowly.
-5. Raw webhook payloads are kept 7 days (pending review), then deleted.
+5. Raw webhook payloads are kept 7 days, then deleted. Each payload is cleared as soon as its event is processed (D39).
 
 ### Events
 
