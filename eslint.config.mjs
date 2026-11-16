@@ -69,6 +69,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       '**/next-env.d.ts',
+      // Broken on purpose; scripts/lint-rules.spec.mjs lints them with this config.
+      'scripts/lint-fixtures/**',
     ],
   },
   js.configs.recommended,

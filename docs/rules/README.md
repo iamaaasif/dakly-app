@@ -55,4 +55,6 @@ One file per topic. Each rule is short, says why, names the open-source projects
 | `pnpm db:drift`        | The Drizzle schema and the committed migrations agree                                                                                                                                                                                                                                                                                                                             |
 | `pnpm check`           | `format:check`, `build`, `lint`, `typecheck`, `db:drift`, unit tests, `lint:unused`, `lint:duplicates` and `lint:docs`                                                                                                                                                                                                                                                            |
 
+`scripts/lint-rules.spec.mjs`, part of `pnpm test`, lints a broken fixture for each ESLint and dependency-cruiser rule above and expects that rule to fail; the fixtures are in `scripts/lint-fixtures/`.
+
 CI runs everything in `pnpm check` and also `pnpm audit --prod --audit-level high`, `pnpm test:int`, `pnpm test:e2e`, a gitleaks secret scan and the pr-rules check on branch name, titles and size ([pull-requests.md](pull-requests.md)).
