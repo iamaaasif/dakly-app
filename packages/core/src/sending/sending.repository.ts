@@ -1,17 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNotNull, lte, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, lte } from 'drizzle-orm';
 
 import { automationRunSteps, automationRuns, automations } from '@dakly/db/schema/automations';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
-export type MarketingSend = { channel: string; sentAt: Date };
-
-// The where clauses rule out null channels and send times.
-function sentAt(column: typeof campaignRecipients.sentAt | typeof automationRunSteps.sentAt) {
-  return sql<Date>`${column}`.mapWith(column);
-}
+export type MarketingSend = { channel: string | null; sentAt: Date | null };
 
 // Read-only: the frequency cap counts campaign and workflow sends together from Postgres (A2).
 // The campaigns and automations features that own these tables are not built yet.
@@ -27,7 +22,7 @@ export class SendingRepository {
   ): Promise<MarketingSend[]> {
     return this.database.forStore(storeId, async (tx) => {
       const fromCampaigns = await tx
-        .select({ channel: campaigns.channel, sentAt: sentAt(campaignRecipients.sentAt) })
+        .select({ channel: campaigns.channel, sentAt: campaignRecipients.sentAt })
         .from(campaignRecipients)
         .innerJoin(
           campaigns,
@@ -47,10 +42,7 @@ export class SendingRepository {
           ),
         );
       const fromWorkflows = await tx
-        .select({
-          channel: sql<string>`${automationRunSteps.channel}`,
-          sentAt: sentAt(automationRunSteps.sentAt),
-        })
+        .select({ channel: automationRunSteps.channel, sentAt: automationRunSteps.sentAt })
         .from(automationRunSteps)
         .innerJoin(
           automationRuns,

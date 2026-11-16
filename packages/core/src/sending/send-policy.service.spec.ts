@@ -4,7 +4,7 @@ import type { ConsentService } from '../consents/consent.service';
 import type { ContactsService } from '../contacts/contacts.service';
 import type { StoresService } from '../stores/stores.service';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
-import type { MarketingSend, SendingRepository } from './sending.repository';
+import type { SendingRepository } from './sending.repository';
 
 const STORE_ID = '0193a3c4-5d1e-7b8f-9a0b-1c2d3e4f5a6b';
 const CONTACT_ID = '0193a3c4-5d1e-7b8f-9a0b-2c3d4e5f6a7b';
@@ -12,6 +12,7 @@ const CONTACT_ID = '0193a3c4-5d1e-7b8f-9a0b-2c3d4e5f6a7b';
 const NOON_DHAKA = new Date('2026-11-16T06:00:00Z');
 const HOUR = 60 * 60 * 1000;
 
+type MarketingSend = { channel: string; sentAt: Date };
 type Contact = {
   kind: 'customer' | 'lead' | 'not_customer';
   isBlocked: boolean;
@@ -56,8 +57,6 @@ describe('SendPolicyService', () => {
     return {
       contactId: CONTACT_ID,
       channel: 'sms',
-      connectionId: null,
-      identityId: null,
       category: 'marketing',
       at: NOON_DHAKA,
       ...change,

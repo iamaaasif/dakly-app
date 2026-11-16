@@ -94,8 +94,6 @@ function check(storeId: string, contactId: string, change: Partial<SendRequest> 
   return policy.check(storeId, {
     contactId,
     channel: 'sms',
-    connectionId: null,
-    identityId: null,
     category: 'marketing',
     at: noon,
     ...change,

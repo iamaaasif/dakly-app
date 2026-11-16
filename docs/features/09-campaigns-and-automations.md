@@ -308,7 +308,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 
 ### Send gate (CAMP-9)
 
-`SendPolicyService.check(storeId, { contactId, channel, connectionId, identityId, category, at })` in `packages/core/src/sending/` is the one place that decides consent, block, kind, window, quiet hours and the frequency cap (A1 in the [plan](../plans/campaigns-and-automations.md)). The sending job calls it inside the short transaction that moves a message to sending. It returns `send`, `defer` with the time quiet hours end, or `skip` with a recipient skip reason, and reads time only from `at`. Checks run in this order and stop at the first that fails:
+`SendPolicyService.check(storeId, { contactId, channel, category, at })` in `packages/core/src/sending/` is the one place that decides consent, block, kind, window, quiet hours and the frequency cap (A1 in the [plan](../plans/campaigns-and-automations.md)). The sending job calls it inside the short transaction that moves a message to sending. It returns `send`, `defer` with the time quiet hours end, or `skip` with a recipient skip reason, and reads time only from `at`. CHN-2 adds the sending identity on the frozen connection. Checks run in this order and stop at the first that fails:
 
 1. Contact: a deleted contact is `no_address`; a blocked contact is `blocked` for every category.
 2. Marketing only: a Not a customer contact is `not_customer`; a channel consent that is not `granted` in `contact_consent_current` is `no_consent`, so a withdrawal after approval skips.
@@ -316,6 +316,8 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 4. Window: SMS has none. Messenger, Instagram and WhatsApp skip as `window_closed` until CHAT-2 stores inbound message times and CHN-3 adds WhatsApp templates.
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
 6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time from workflows that are not transactional, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
+
+   A campaign recipient counts once it is `sent`, `delivered` or `read`. A workflow step counts once it has `sent_at`: `automation_run_steps.outcome` is free text with no fixed values yet, so a failed outcome cannot be excluded until CAMP-5 defines them. Sends still in flight (`sending`) are not counted, so two sends to one person at the same moment can both pass; closing that race waits for CAMP-3 and CAMP-5.
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 

@@ -16,8 +16,6 @@ export type SkipReason = (typeof recipientSkipReasons)[number];
 export type SendRequest = {
   contactId: string;
   channel: SendChannel;
-  connectionId: string | null;
-  identityId: string | null;
   category: SendCategory;
   at: Date;
 };
@@ -85,7 +83,7 @@ export class SendPolicyService {
       at,
     );
     const onChannelToday = sends.filter(
-      (send) => send.channel === channel && send.sentAt > dayStart,
+      (send) => send.channel === channel && send.sentAt !== null && send.sentAt > dayStart,
     ).length;
     const { perChannelPerDay, perSevenDays } = settings.frequencyCap;
     if (onChannelToday >= perChannelPerDay || sends.length >= perSevenDays)
@@ -94,7 +92,7 @@ export class SendPolicyService {
   }
 }
 
-// Returns the end of quiet hours when `at` falls inside them. Quiet hours always span midnight.
+// Quiet hours always span midnight.
 function quietHoursEnd(
   at: Date,
   { startHour, endHour }: SendingSettings['quietHours'],

@@ -25,7 +25,7 @@ Until Orders exists, segments, triggers and results have no order fields. Each t
 | #   | Question                          | Working answer                                                                                                                                                                                                                                                                                                            |
 | --- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A1  | Where the final send checks live  | One `sending/` feature with `SendPolicyService`. Campaigns, workflows and, later, Chats staff replies all call it right before `MessagingService.send`. Nothing else decides consent, window, block, quiet hours or frequency.                                                                                            |
-| A2  | How the frequency cap counts      | From Postgres: marketing sends to the contact in `campaign_recipients` and `automation_run_steps` (sent, delivered or read) in the last 24 hours per channel and 7 days across channels. Add the indexes these queries need in CAMP-9's migration. No Valkey counter that could drift.                                    |
+| A2  | How the frequency cap counts      | From Postgres: marketing sends to the contact in `campaign_recipients` and `automation_run_steps` (sent, delivered or read) in the last 24 hours per channel and 7 days across channels. CAMP-9 uses the existing `(store_id, contact_id, sent_at)` indexes on both tables. No Valkey counter that could drift.           |
 | A3  | Channels before WhatsApp is ready | SMS and Messenger (open window only, D24) ship first. WhatsApp sends, templates and the Stop offers button wait for CHN-3 and CAMP-1, both blocked on Q2. The code takes a channel list, so WhatsApp adds a driver and templates, not a new path.                                                                         |
 | A4  | Short link domain                 | Tracked links use a short domain set by `SHORT_LINK_BASE_URL` (the docs use `dkly.co`). Local and CI use the API origin with `/l/`. Buying the domain is outside the code.                                                                                                                                                |
 | A5  | Workflow graph format             | A zod schema in `packages/contracts/src/automations/graph.ts`: steps keyed by a stable `stepKey`, each with a kind (`wait`, `condition`, `random_split`, `send`, `action`, `exit`) and typed settings, plus `next` edges. Templates in code and the canvas both produce this format. The engine never reads untyped JSON. |
@@ -77,7 +77,9 @@ Branch: `feat/camp-9-send-policy`
   - The extension checks for staff replies and transactional sends, and the campaign and run state checks: the gate has no skip reason for them and takes no campaign or run id yet.
   - AUTO-R2 priority between two workflows on the same day: it needs the waiting runs, with CAMP-5.
   - `do_not_call`, `daily_reach_limit` and `meta_user_limit` come from the SMS provider and Meta, with ACC-14 and CHN-3.
-  - The settings route and screen that edit `stores.settings.sending`.
+  - `over_plan_limit` for contacts past the plan's customer limit (ACC-R8): feature 09 repeats a plan check before every send, and the CAMP-9 scope did not list it.
+  - What a short balance does for a transactional send (CAMP-3 for its sending job) and for a workflow step (CAMP-5).
+  - The settings route and screen that edit `stores.settings.sending`. Features 01 and 02 show quiet hours under SMS settings and WhatsApp settings; the gate holds one store-wide setting, so that screen settles whether quiet hours are per channel.
 
 #### The final send gate
 
@@ -99,7 +101,7 @@ Transactional sends, such as order confirmation, shipping update, payment receip
 3. Consent and STOP: marketing consent is not needed (CAMP-R2), and a STOP does not stop order updates. The send needs a phone for SMS and WhatsApp, or the contact's identity on the sending connection for Messenger; without it the message is skipped.
 4. Window: Messenger only inside the 24-hour window. Meta has rejected the `POST_PURCHASE_UPDATE`, `CONFIRMED_EVENT_UPDATE` and `ACCOUNT_UPDATE` tags since 27 Apr 2026, so no tag can carry an order update. Outside the window the message is skipped as `window_closed`, and a workflow's channel order tries the next channel. WhatsApp outside the window needs an approved utility template with no offer. SMS has no window.
 5. Frequency cap and quiet hours: exempt.
-6. Wallet: SMS reserves SMS credits and WhatsApp reserves the utility rate through `WalletService.reserve` in this transaction; Messenger is free. If the reserve is refused, nothing is sent. Feature 09 defines a short balance only for campaigns, so CAMP-9 settles what a transactional send does then.
+6. Wallet: not part of `SendPolicyService.check`. The sending job reserves SMS credits, or the WhatsApp utility rate, through `WalletService.reserve` around the gate in the same transaction, or releases on a skip; Messenger is free. If the reserve is refused, nothing is sent. What a short balance does for a transactional send is still to build.
 
 Marketing sends, from campaigns and workflows:
 
@@ -109,7 +111,7 @@ Marketing sends, from campaigns and workflows:
 4. Window: Messenger only when the contact's last inbound message on the sending Page is under 23 hours old at send time (D24, CAMP-R6), otherwise `window_closed`. No message tag carries marketing. WhatsApp needs an approved marketing template (CAMP-1, waits for Q2). SMS has no window.
 5. Quiet hours: inside the store's quiet hours (default 21:00 to 09:00 Asia/Dhaka) the send defers to the next allowed time. Quiet hours are checked before the frequency cap, as in feature 09.
 6. Frequency cap: at most 1 marketing message per store per channel per day and 3 per 7 days across campaigns and workflows (CAMP-R3), counted from Postgres (A2); over the cap is skipped as `frequency_cap`. When two workflows fire the same day, only the higher priority message sends (AUTO-R2).
-7. Wallet: a campaign recipient's cost was reserved at approval (CAMP-2) and must still be held; a workflow send reserves its cost here. A campaign with a short balance pauses and notifies the Owner (feature 09). Feature 09 says nothing for a workflow step, so CAMP-9 settles it.
+7. Wallet: not part of `SendPolicyService.check`. A campaign recipient's cost was reserved at approval (CAMP-2) and must still be held; a workflow step's job reserves its cost around the gate in the same transaction, and a skip releases it there. A campaign with a short balance pauses and notifies the Owner (feature 09); what a workflow step does then is still to build.
 
 Where the feature docs disagree, the gate follows these:
 
