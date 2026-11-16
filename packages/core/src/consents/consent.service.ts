@@ -62,7 +62,7 @@ export class ConsentService {
   }
 
   // Staff type how the customer agreed or refused; that note is the evidence.
-  recordStaffAnswer(
+  async recordStaffAnswer(
     storeId: string,
     contactId: string,
     { channel, status, note }: RecordConsentInput,
