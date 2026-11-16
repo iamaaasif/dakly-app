@@ -31,13 +31,35 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 
 - `POST /contacts` (`customers.edit`) adds a contact with a name and phone. A staff
   add is an intentional customer, so it saves with source `manual` and kind `customer`.
-- `GET /contacts/:contactId` (`customers.view`) returns one contact. A deleted contact
+  The create publishes `contact.created` (the contact id only) in the same store
+  transaction, so the event and the contact commit or roll back together.
+- `GET /contacts` (`customers.view`) lists the store's contacts, newest first, with
+  `cursor` and `limit` (default 50, at most 100). Filters: `kind`, one `tag`, and
+  `search`. Deleted contacts are never listed.
+- `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
+  identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
-- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`.
-  The error never names or links the other contact, because the member may not be
-  allowed to see who has the number.
+- `PATCH /contacts/:contactId` (`customers.edit`) changes the name, phone or tags. A
+  changed phone clears its WhatsApp verification, because a typed phone proves nothing.
+- `DELETE /contacts/:contactId` (`customers.edit`) soft deletes the contact: it is
+  gone from the list and the profile, and its phone can be saved on another contact.
+- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`,
+  on create and on edit. The error never names or links the other contact, because the
+  member may not be allowed to see who has the number.
 - A contact without a phone returns `phone: null`.
 - The support read and create screens call `ContactsService`, with full phones as before.
+
+Search rules:
+
+- A name matches anywhere in the contact's name, for every member.
+- A name search needs at least 3 characters (`CONTACT_SEARCH_TOO_SHORT`, 400). Digits
+  are a phone search and have no minimum.
+- A full phone number, in any form the phone schema accepts, finds the contact with
+  that exact number, for every member. Results stay masked without "See full phone
+  numbers".
+- Partial phone search needs "See full phone numbers": for those members, digits that
+  are not a full number match the start of stored numbers. For anyone else a partial
+  number finds nothing, and only an exact full number finds the contact.
 
 The `consents/` feature owns the `consents` table. `ConsentService.record(storeId, change, actor)`
 appends one row per answer, with its channel, status, source, evidence and the member who

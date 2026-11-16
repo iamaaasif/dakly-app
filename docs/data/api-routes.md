@@ -106,7 +106,7 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                      | Permission                                                       |
 | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `GET /contacts`, `GET /contacts/:contactId`                                                                | `customers` (phones masked unless "See full phone numbers")      |
-| `POST /contacts` (idem), `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                       | `customers`                                                      |
+| `POST /contacts`, `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                              | `customers`                                                      |
 | `GET /contacts/:contactId/timeline`                                                                        | `customers`                                                      |
 | `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory` | View with `customers.view`; edit and clear with `customers.edit` |
 | `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                            | `customers`                                                      |
@@ -115,8 +115,8 @@ atomically and retain business data when an extension is disabled.
 | `POST /contacts/:contactId/consents`                                                                       | `customers`                                                      |
 | `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`     | `customers`                                                      |
 | `POST /contacts/exports`                                                                                   | `customers` + "Download customer lists"                          |
-| `GET /segments`, `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`             | `customers`                                                      |
-| `POST /segments/preview` (count only)                                                                      | `segments.view`                                                  |
+| `GET /segments`, `POST /segments/preview` (count only)                                                     | `segments.view`                                                  |
+| `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`                              | `segments.edit`                                                  |
 | `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                        | `customers`                                                      |
 
 ## Chats and AI agent (04)

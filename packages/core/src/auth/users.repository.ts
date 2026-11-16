@@ -11,7 +11,7 @@ import type { GoogleIdentity } from '@dakly/providers/google/google-identity-dri
 
 import { AccountDatabase } from '../platform/database/account-database';
 import { DATABASE } from '../platform/database/database.tokens';
-import { databaseErrorCode } from '../platform/database/error-code';
+import { isConstraintViolation } from '../platform/database/error-code';
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -80,8 +80,8 @@ export class UsersRepository {
       return true;
     } catch (error) {
       if (
-        this.isUniqueConflict(error, 'users_phone_key') ||
-        this.isUniqueConflict(error, 'users_email_key')
+        isConstraintViolation(error, '23505', 'users_phone_key') ||
+        isConstraintViolation(error, '23505', 'users_email_key')
       )
         return false;
       throw error;
@@ -211,7 +211,7 @@ export class UsersRepository {
       );
       return true;
     } catch (error) {
-      if (this.isUniqueConflict(error, 'users_google_subject_key')) return false;
+      if (isConstraintViolation(error, '23505', 'users_google_subject_key')) return false;
       throw error;
     }
   }
@@ -251,7 +251,7 @@ export class UsersRepository {
       return true;
     } catch (error) {
       // The caller maps this known constraint conflict and rolls back the account action.
-      if (this.isUniqueConflict(error, 'users_email_key')) return false;
+      if (isConstraintViolation(error, '23505', 'users_email_key')) return false;
       throw error;
     }
   }
@@ -280,17 +280,6 @@ export class UsersRepository {
       ) identities
       order by kind, value
     `);
-  }
-
-  private isUniqueConflict(error: unknown, constraint: string): boolean {
-    const cause = error instanceof Error && error.cause ? error.cause : error;
-    return (
-      typeof cause === 'object' &&
-      cause !== null &&
-      databaseErrorCode(error) === '23505' &&
-      'constraint' in cause &&
-      cause.constraint === constraint
-    );
   }
 
   async create(userId: string, { input, now, passwordHash, google }: NewUser): Promise<boolean> {
