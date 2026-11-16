@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '@dakly/db/client';
 import { users, sessions } from '@dakly/db/schema/auth';
 import { plans, subscriptions } from '@dakly/db/schema/billing';
-import { customers } from '@dakly/db/schema/customers';
+import { contacts } from '@dakly/db/schema/contacts';
 import { auditLog } from '@dakly/db/schema/platform';
 import { stores, storeCounters } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
@@ -92,7 +92,7 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     await admin.db.delete(subscriptions).where(inArray(subscriptions.storeId, storeIds));
     await admin.db.delete(memberships).where(inArray(memberships.userId, userIds));
     await admin.db.delete(roles).where(inArray(roles.storeId, storeIds));
-    await admin.db.delete(customers).where(inArray(customers.storeId, storeIds));
+    await admin.db.delete(contacts).where(inArray(contacts.storeId, storeIds));
     await admin.db.delete(storeCounters).where(inArray(storeCounters.storeId, storeIds));
     await admin.db.delete(stores).where(inArray(stores.id, storeIds));
     await admin.db.delete(users).where(inArray(users.id, userIds));
@@ -548,17 +548,17 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
   it('keeps business data when extensions are disabled and records names only', async () => {
     const { cookie, storeId } = await settingsStore();
     const [customer] = await admin.db
-      .insert(customers)
-      .values({ storeId, name: 'রিনা', phone: '01712345678' })
-      .returning({ id: customers.id });
+      .insert(contacts)
+      .values({ storeId, name: 'রিনা', phone: '01712345678', source: 'manual', kind: 'customer' })
+      .returning({ id: contacts.id });
     expect(
       (await patch(cookie, { extensions: [] }, '/store/extensions')).json().extensions,
     ).toEqual([]);
     expect(
       await admin.db
-        .select({ id: customers.id })
-        .from(customers)
-        .where(eq(customers.storeId, storeId)),
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(eq(contacts.storeId, storeId)),
     ).toEqual([{ id: customer!.id }]);
     expect(
       (

@@ -1,12 +1,12 @@
 import { useId } from 'react';
 import type { FieldErrors, UseFormRegister } from 'react-hook-form';
 
-import type { CreateCustomerInput } from '@dakly/contracts/customers';
+import type { CreateContactInput } from '@dakly/contracts/contacts';
 import { Input } from '@dakly/ui/input';
 
 type NewCustomerFieldsProps = {
-  register: UseFormRegister<CreateCustomerInput>;
-  errors: FieldErrors<CreateCustomerInput>;
+  register: UseFormRegister<CreateContactInput>;
+  errors: FieldErrors<CreateContactInput>;
 };
 
 export function NewCustomerFields({ register, errors }: NewCustomerFieldsProps) {

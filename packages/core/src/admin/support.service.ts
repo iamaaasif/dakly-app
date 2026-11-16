@@ -3,11 +3,11 @@ import { randomBytes } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 
-import type { CreateCustomerInput } from '@dakly/contracts/customers';
+import type { CreateContactInput } from '@dakly/contracts/contacts';
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 import type { SupportPrincipal, SupportRequestInput } from '@dakly/contracts/support';
 
-import { CustomersService } from '../customers/customers.service';
+import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { hashToken } from '../platform/crypto/token-hash';
 import { newId } from '../platform/database/new-id';
@@ -35,7 +35,7 @@ export class SupportService {
     @Inject(StaffIdentityService) private readonly identities: StaffIdentityService,
     @Inject(SupportAuditService) private readonly audit: SupportAuditService,
     @Inject(SupportOwnerService) private readonly owner: SupportOwnerService,
-    @Inject(CustomersService) private readonly customers: CustomersService,
+    @Inject(ContactsService) private readonly contacts: ContactsService,
     @Optional() @Inject(PinoLogger) private readonly logger?: PinoLogger,
   ) {}
 
@@ -181,7 +181,7 @@ export class SupportService {
       const grant = await this.authorize(principal);
       assertSupportContext(expectedContext, contextTag);
       if (!grant.scopes.includes('customers')) return this.denied(principal, ip);
-      const result = await this.customers.getById(principal.storeId, id, { seeFullPhone: true });
+      const result = await this.contacts.getById(principal.storeId, id, { seeFullPhone: true });
       await this.audit.record(principal.storeId, {
         id,
         actor: { kind: 'staff', staffUserId: principal.staffUserId },
@@ -198,7 +198,7 @@ export class SupportService {
 
   async createCustomer(
     token: string | undefined,
-    input: CreateCustomerInput,
+    input: CreateContactInput,
     ip: string,
     expectedContext?: string | string[],
   ) {
@@ -207,7 +207,7 @@ export class SupportService {
       assertSupportContext(expectedContext, contextTag);
       if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
         return this.denied(principal, ip);
-      const result = await this.customers.create(principal.storeId, input, { seeFullPhone: true });
+      const result = await this.contacts.create(principal.storeId, input, { seeFullPhone: true });
       await this.audit.record(principal.storeId, {
         id: result.id,
         actor: { kind: 'staff', staffUserId: principal.staffUserId },

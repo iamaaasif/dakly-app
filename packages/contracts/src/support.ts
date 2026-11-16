@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { supportGrantAccess, type supportGrantStatuses } from './admin';
-import type { CustomerResponse } from './customers';
+import type { ContactResponse } from './contacts';
 
 export const supportScopes = ['customers'] as const;
 export const supportReasonSchema = z.string().trim().min(10).max(1000);
@@ -48,4 +48,4 @@ export const supportPageSchema = z.strictObject({ before: z.uuid().optional() })
 export type SupportPageQuery = z.infer<typeof supportPageSchema>;
 export type SupportGrantPage = { items: SupportGrantResponse[]; nextCursor: string | null };
 
-export type SupportCustomerResponse = CustomerResponse & { contextTag: string };
+export type SupportCustomerResponse = ContactResponse & { contextTag: string };

@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { createCustomerSchema, type CreateCustomerInput } from '@dakly/contracts/customers';
+import { createContactSchema, type CreateContactInput } from '@dakly/contracts/contacts';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { Input } from '@dakly/ui/input';
@@ -19,7 +19,7 @@ export function SupportCustomers({ writable, contextTag }: SupportCustomersProps
   const [selected, setSelected] = useState('');
   const customer = useSupportCustomer(selected, contextTag);
   const create = useSupportCreate(contextTag);
-  const form = useForm<CreateCustomerInput>({ resolver: zodResolver(createCustomerSchema) });
+  const form = useForm<CreateContactInput>({ resolver: zodResolver(createContactSchema) });
   return (
     <>
       <Card>
@@ -39,7 +39,8 @@ export function SupportCustomers({ writable, contextTag }: SupportCustomersProps
         {customer.error ? <p role="alert">{customer.error.message}</p> : null}
         {customer.data ? (
           <p>
-            {customer.data.name} · {formatPhone(customer.data.phone)}
+            {customer.data.name} ·{' '}
+            {customer.data.phone ? formatPhone(customer.data.phone) : 'No phone yet'}
           </p>
         ) : null}
       </Card>

@@ -2,18 +2,18 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
-import { customers } from '@dakly/db/schema/customers';
+import { contacts } from '@dakly/db/schema/contacts';
 import { stores } from '@dakly/db/schema/stores';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { CustomersRepository } from './customers.repository';
+import { ContactsRepository } from './contacts.repository';
 
 // Proves the RLS policies, not just the WHERE clauses: store B must never see store A's rows.
-describe('CustomersRepository (Postgres)', () => {
+describe('ContactsRepository (Postgres)', () => {
   const admin = createDatabase(requireEnv('DATABASE_ADMIN_URL'));
   const app = createDatabase(requireEnv('DATABASE_URL'));
   const database = new TenantDatabase(app.db);
-  const repository = new CustomersRepository(database);
+  const repository = new ContactsRepository(database);
   let storeA: string;
   let storeB: string;
 
@@ -27,34 +27,46 @@ describe('CustomersRepository (Postgres)', () => {
   });
 
   afterAll(async () => {
-    await admin.db.execute(sql`delete from customers where store_id in (${storeA}, ${storeB})`);
+    await admin.db.execute(sql`delete from contacts where store_id in (${storeA}, ${storeB})`);
     await admin.db.execute(sql`delete from stores where id in (${storeA}, ${storeB})`);
     await Promise.all([admin.pool.end(), app.pool.end()]);
   });
 
-  it('finds a customer only inside its own store', async () => {
-    const customer = await repository.insert(storeA, { name: 'Rahim', phone: '01712345678' });
+  it('finds a contact only inside its own store', async () => {
+    const contact = await repository.insert(storeA, { name: 'Rahim', phone: '01712345678' });
 
-    expect(await repository.findById(storeA, customer!.id)).toMatchObject({ name: 'Rahim' });
-    expect(await repository.findById(storeB, customer!.id)).toBeUndefined();
+    expect(await repository.findById(storeA, contact!.id)).toMatchObject({ name: 'Rahim' });
+    expect(await repository.findById(storeB, contact!.id)).toBeUndefined();
   });
 
   it('hides other stores even when a query has no store filter', async () => {
-    const [customer] = await admin.db
-      .insert(customers)
-      .values({ storeId: storeA, name: 'Rina', phone: '01612345678' })
-      .returning({ id: customers.id });
-    const ownRows = await database.forStore(storeA, (tx) => tx.select().from(customers));
-    expect(ownRows.map((row) => row.id)).toContain(customer!.id);
+    const [contact] = await admin.db
+      .insert(contacts)
+      .values({
+        storeId: storeA,
+        name: 'Rina',
+        phone: '01612345678',
+        source: 'manual',
+        kind: 'lead',
+      })
+      .returning({ id: contacts.id });
+    const ownRows = await database.forStore(storeA, (tx) => tx.select().from(contacts));
+    expect(ownRows.map((row) => row.id)).toContain(contact!.id);
 
-    const rows = await database.forStore(storeB, (tx) => tx.select().from(customers));
+    const rows = await database.forStore(storeB, (tx) => tx.select().from(contacts));
 
     expect(rows).toEqual([]);
   });
 
   it('refuses to write a row into another store', async () => {
     const write = database.forStore(storeB, (tx) =>
-      tx.insert(customers).values({ storeId: storeA, name: 'Karim', phone: '01812345678' }),
+      tx.insert(contacts).values({
+        storeId: storeA,
+        name: 'Karim',
+        phone: '01812345678',
+        source: 'manual',
+        kind: 'lead',
+      }),
     );
 
     await expect(write).rejects.toThrow();

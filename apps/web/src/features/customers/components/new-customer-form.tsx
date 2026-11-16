@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 
-import { type CreateCustomerInput, createCustomerSchema } from '@dakly/contracts/customers';
+import { type CreateContactInput, createContactSchema } from '@dakly/contracts/contacts';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
@@ -12,8 +12,8 @@ import { useCreateCustomer } from '../api/create-customer';
 import { NewCustomerFields } from './new-customer-fields';
 
 export function NewCustomerForm() {
-  const { register, handleSubmit, reset, formState } = useForm<CreateCustomerInput>({
-    resolver: zodResolver(createCustomerSchema),
+  const { register, handleSubmit, reset, formState } = useForm<CreateContactInput>({
+    resolver: zodResolver(createContactSchema),
   });
   const createCustomer = useCreateCustomer();
 

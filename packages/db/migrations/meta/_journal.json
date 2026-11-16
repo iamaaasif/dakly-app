@@ -204,6 +204,20 @@
       "when": 1794803483421,
       "tag": "0028_outbox_claim_returns_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794818925005,
+      "tag": "0029_move_customers_to_contacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794818930527,
+      "tag": "0030_drop_customers",
+      "breakpoints": true
     }
   ]
 }

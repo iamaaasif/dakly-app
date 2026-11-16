@@ -86,7 +86,7 @@ export function browserReview(database, environment, accessKey) {
           );
         }
         await client.query(
-          "insert into customers(id,store_id,name,phone) values($1,$2,'Private A customer','01712345678')",
+          "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Private A customer','01712345678','manual','customer')",
           [customerId, storeIds[0]],
         );
         await client.query('commit');
@@ -101,7 +101,7 @@ export function browserReview(database, environment, accessKey) {
       for (const table of [
         'support_sessions',
         'support_grants',
-        'customers',
+        'contacts',
         'audit_log',
         'memberships',
       ])

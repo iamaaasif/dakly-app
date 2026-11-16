@@ -1,39 +1,39 @@
 import { Body, Inject, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 
 import {
-  type CreateCustomerInput,
-  type CustomerResponse,
-  createCustomerSchema,
-} from '@dakly/contracts/customers';
+  type ContactResponse,
+  type CreateContactInput,
+  createContactSchema,
+} from '@dakly/contracts/contacts';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { CustomersService } from './customers.service';
+import { ContactsService } from './contacts.service';
 
-@Controller('customers')
-export class CustomersController {
-  constructor(@Inject(CustomersService) private readonly customersService: CustomersService) {}
+@Controller('contacts')
+export class ContactsController {
+  constructor(@Inject(ContactsService) private readonly contactsService: ContactsService) {}
 
   @Post()
   @RequirePermission('customers.edit')
   create(
     @CurrentStore() storeId: string,
     @CurrentAccess() access: StoreAccess,
-    @Body(new ZodValidationPipe(createCustomerSchema)) input: CreateCustomerInput,
-  ): Promise<CustomerResponse> {
-    return this.customersService.create(storeId, input, access);
+    @Body(new ZodValidationPipe(createContactSchema)) input: CreateContactInput,
+  ): Promise<ContactResponse> {
+    return this.contactsService.create(storeId, input, access);
   }
 
-  @Get(':id')
+  @Get(':contactId')
   @RequirePermission('customers.view')
   getById(
     @CurrentStore() storeId: string,
     @CurrentAccess() access: StoreAccess,
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<CustomerResponse> {
-    return this.customersService.getById(storeId, id, access);
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ): Promise<ContactResponse> {
+    return this.contactsService.getById(storeId, contactId, access);
   }
 }

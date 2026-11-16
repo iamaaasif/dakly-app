@@ -31,7 +31,7 @@ These follow [rules/database.md](../rules/database.md); the column helpers are i
 
 ## Tables
 
-After folded core migration 0024 the schema has 96 tables, including the `customers` example. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
+After migration 0030 the schema has 95 tables. Column, index and FK counts are taken from the latest snapshot in [er-diagram.md](er-diagram.md).
 
 Release 1 is split into one migration per feature area, in dependency order. The development-only core migrations formerly numbered 0016–0044 are folded into 0016–0024; their final schema and grants are unchanged. The plan catalogue remains a separate data migration because its integration test re-runs it. Each holds its generated tables, then by hand the RLS policies, grants and functions for those tables. A later change is a new migration; a merged one is never edited.
 
@@ -61,8 +61,10 @@ Release 1 is split into one migration per feature area, in dependency order. The
 | `0024_staff_account_recovery`         | Final recovery history and locked recovery snapshot                                       |
 | `0025_app_role_table_grants`          | App role grants on every earlier table, with no default privileges                        |
 | `0026_support_requests_next_page`     | Support request metadata returns one row past the page                                    |
+| `0029_move_customers_to_contacts`     | Copies the example `customers` rows into `contacts`, keeping their ids                    |
+| `0030_drop_customers`                 | Drops the example `customers` table                                                       |
 
-`packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table. The `customers` table from the example feature stays until CUS-1 moves the example to `contacts` and drops it.
+`packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table.
 
 | Schema file                        | Tables                                                                                                                                                                                                                           | Owner feature (`packages/core/src/`) |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
@@ -138,6 +140,6 @@ Other changes from the review, each small:
 
 ## Table and column review
 
-The reviewed tables each map to a named product responsibility; no second customer model is needed. CUS-1 must migrate the example `customers` rows into `contacts` and remove that transitional table. Do not remove buyer and recipient snapshots, order-line prices/costs, issued invoice contents, subscription prices or published workflow graphs merely because current values can be joined elsewhere: those records preserve historical facts.
+The reviewed tables each map to a named product responsibility; no second customer model is needed. CUS-1 moved the example `customers` rows into `contacts` and dropped that table. Do not remove buyer and recipient snapshots, order-line prices/costs, issued invoice contents, subscription prices or published workflow graphs merely because current values can be joined elsewhere: those records preserve historical facts.
 
 Derived contact stats, conversation previews and dashboard summaries are useful read models only with one owning writer and a rebuild path. External IDs identify provider records; operation keys identify our requests. They serve different purposes. Optional counters and integration placeholders need a named consumer before feature implementation; their presence is not evidence that synchronization, search latency or provider behavior is ready. JSON is reserved for bounded structures that are not independently filtered. The schema, contracts, migrations and [review resolution](review-fixes.md) must stay consistent.
