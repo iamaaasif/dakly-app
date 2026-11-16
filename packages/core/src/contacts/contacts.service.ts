@@ -18,7 +18,12 @@ export class ContactsService {
     input: CreateContactInput,
     access: Pick<StoreAccess, 'seeFullPhone'>,
   ): Promise<ContactResponse> {
-    const contact = await this.contactsRepository.insert(storeId, input);
+    // A staff add is an intentional customer under the glossary, whatever its orders.
+    const contact = await this.contactsRepository.insert(storeId, {
+      ...input,
+      source: 'manual',
+      kind: 'customer',
+    });
     if (!contact) {
       throw contactError('CONTACT_PHONE_TAKEN');
     }

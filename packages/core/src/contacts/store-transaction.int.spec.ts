@@ -13,6 +13,9 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { ContactsRepository } from './contacts.repository';
 
 // The second repository stays in the test until segments has its own feature.
+// A staff add, as ContactsService.create saves it.
+const manualCustomer = { source: 'manual', kind: 'customer' } as const;
+
 class SegmentsRepository {
   constructor(private readonly database: TenantDatabase) {}
 
@@ -55,7 +58,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
   it('rolls back both repositories when the second action fails', async () => {
     await expect(
       transaction.run(storeA, async () => {
-        await repository.insert(storeA, { name: 'Rahim', phone: '01711000001' });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rahim',
+          phone: '01711000001',
+        });
         await segmentRepository.insert(storeA, 'রিনার তালিকা');
       }),
     ).rejects.toThrow('Segment action failed');
@@ -93,8 +100,16 @@ describe('TenantDatabase transactions (Postgres)', () => {
   it('rejects another store inside the scope and rolls back the outer write', async () => {
     await expect(
       database.forStore(storeA, async () => {
-        await repository.insert(storeA, { name: 'Sumi', phone: '01711000003' });
-        await repository.insert(storeB, { name: 'Karim', phone: '01711000003' });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Sumi',
+          phone: '01711000003',
+        });
+        await repository.insert(storeB, {
+          ...manualCustomer,
+          name: 'Karim',
+          phone: '01711000003',
+        });
       }),
     ).rejects.toThrow();
 
@@ -112,6 +127,7 @@ describe('TenantDatabase transactions (Postgres)', () => {
       });
 
     const contact = await repository.insert(storeB, {
+      ...manualCustomer,
       name: 'Farhana',
       phone: outcome === 'commit' ? '01711000004' : '01711000005',
     });
@@ -132,16 +148,28 @@ describe('TenantDatabase transactions (Postgres)', () => {
       const entered = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
       const first = database.forStore(storeA, async () => {
-        await repository.insert(storeA, { name: 'Rahim', phone: firstPhone });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rahim',
+          phone: firstPhone,
+        });
         entered.resolve();
         await release.promise;
-        await repository.insert(storeA, { name: 'Rahim', phone: resumedPhone });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rahim',
+          phone: resumedPhone,
+        });
         throw new Error('First request failed');
       });
       const rejected = expect(first).rejects.toThrow('First request failed');
       await entered.promise;
       try {
-        await repository.insert(secondStore, { name: 'Rina', phone: secondPhone });
+        await repository.insert(secondStore, {
+          ...manualCustomer,
+          name: 'Rina',
+          phone: secondPhone,
+        });
       } finally {
         release.resolve();
       }
@@ -162,6 +190,7 @@ describe('TenantDatabase transactions (Postgres)', () => {
         .forStore(storeA, async () => {
           detached = release.promise.then(() =>
             repository.insert(storeA, {
+              ...manualCustomer,
               name: 'Detached',
               phone: outcome === 'commit' ? '01711000007' : '01711000008',
             }),
@@ -201,7 +230,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
 
     await expect(
       database.forStore(storeA, async () => {
-        await repository.insert(storeA, { name: 'Farhana', phone: '01711000009' });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Farhana',
+          phone: '01711000009',
+        });
         throw new Error('Store setup failed');
       }),
     ).rejects.toThrow('Store setup failed');
@@ -218,7 +251,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
   it('returns the result from a service action and joins a nested facade call', async () => {
     const result = await transaction.run(storeA, () =>
       transaction.run(storeA, async () => {
-        const contact = await repository.insert(storeA, { name: 'Rina', phone: '01711000010' });
+        const contact = await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rina',
+          phone: '01711000010',
+        });
         return contact!.id;
       }),
     );
@@ -234,7 +271,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
       await database.forStore(storeId, (tx) =>
         tx.insert(stores).values({ id: storeId, name: 'New store' }),
       );
-      await repository.insert(storeId, { name: 'Sumi', phone: '01711000011' });
+      await repository.insert(storeId, {
+        ...manualCustomer,
+        name: 'Sumi',
+        phone: '01711000011',
+      });
       return storeId;
     });
 
@@ -254,7 +295,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
         await database.forStore(storeId, (tx) =>
           tx.insert(stores).values({ id: storeId, name: 'Failed store' }),
         );
-        await repository.insert(storeId, { name: 'Sumi', phone: '01711000012' });
+        await repository.insert(storeId, {
+          ...manualCustomer,
+          name: 'Sumi',
+          phone: '01711000012',
+        });
         throw new Error('Setup failed');
       }),
     ).rejects.toThrow('Setup failed');

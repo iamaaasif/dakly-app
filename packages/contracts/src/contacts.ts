@@ -97,6 +97,7 @@ export const createContactSchema = z.object({
 
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type ContactKind = (typeof contactKinds)[number];
+export type ContactSource = (typeof contactSources)[number];
 
 export type ContactResponse = {
   id: string;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ContactsRepository } from './contacts.repository';
+import type { ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
@@ -22,8 +22,24 @@ describe('ContactsService', () => {
     service = new ContactsService(repository as unknown as ContactsRepository);
   });
 
-  it('creates a contact in the given store', async () => {
-    repository.insert.mockResolvedValue(contact);
+  it('creates a staff add as a customer in the given store', async () => {
+    const saved = new Map<string, NewContact & { storeId: string }>();
+    repository.insert.mockImplementation(async (storeId: string, input: NewContact) => {
+      saved.set(contact.id, { ...input, storeId });
+      return {
+        id: contact.id,
+        name: input.name,
+        phone: input.phone,
+        kind: input.kind,
+        createdAt: contact.createdAt,
+      };
+    });
+    repository.findById.mockImplementation(async (storeId: string, id: string) => {
+      const row = saved.get(id);
+      return row?.storeId === storeId
+        ? { ...contact, name: row.name, phone: row.phone, kind: row.kind }
+        : undefined;
+    });
 
     const result = await service.create(
       STORE_ID,
@@ -32,10 +48,14 @@ describe('ContactsService', () => {
     );
 
     expect(result).toEqual({ ...contact, createdAt: '2026-11-12T10:00:00.000Z' });
-    expect(repository.insert).toHaveBeenCalledWith(STORE_ID, {
+    expect(saved.get(contact.id)).toEqual({
+      storeId: STORE_ID,
       name: 'Rahim',
       phone: '01712345678',
+      source: 'manual',
+      kind: 'customer',
     });
+    expect(await service.getById(STORE_ID, contact.id, { seeFullPhone: true })).toEqual(result);
   });
 
   it('masks phone numbers on both reads and creation without the flag', async () => {

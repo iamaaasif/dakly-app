@@ -9,6 +9,9 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { ContactsRepository } from './contacts.repository';
 
 // Proves the RLS policies, not just the WHERE clauses: store B must never see store A's rows.
+// A staff add, as ContactsService.create saves it.
+const manualCustomer = { source: 'manual', kind: 'customer' } as const;
+
 describe('ContactsRepository (Postgres)', () => {
   const admin = createDatabase(requireEnv('DATABASE_ADMIN_URL'));
   const app = createDatabase(requireEnv('DATABASE_URL'));
@@ -33,9 +36,16 @@ describe('ContactsRepository (Postgres)', () => {
   });
 
   it('finds a contact only inside its own store', async () => {
-    const contact = await repository.insert(storeA, { name: 'Rahim', phone: '01712345678' });
+    const contact = await repository.insert(storeA, {
+      ...manualCustomer,
+      name: 'Rahim',
+      phone: '01712345678',
+    });
 
-    expect(await repository.findById(storeA, contact!.id)).toMatchObject({ name: 'Rahim' });
+    expect(await repository.findById(storeA, contact!.id)).toMatchObject({
+      name: 'Rahim',
+      kind: 'customer',
+    });
     expect(await repository.findById(storeB, contact!.id)).toBeUndefined();
   });
 
@@ -73,10 +83,18 @@ describe('ContactsRepository (Postgres)', () => {
   });
 
   it('returns undefined for a duplicate phone in the same store', async () => {
-    await repository.insert(storeA, { name: 'Sumi', phone: '01912345678' });
+    await repository.insert(storeA, {
+      ...manualCustomer,
+      name: 'Sumi',
+      phone: '01912345678',
+    });
 
     expect(
-      await repository.insert(storeA, { name: 'Sumi 2', phone: '01912345678' }),
+      await repository.insert(storeA, {
+        ...manualCustomer,
+        name: 'Sumi 2',
+        phone: '01912345678',
+      }),
     ).toBeUndefined();
   });
 });

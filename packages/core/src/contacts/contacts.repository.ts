@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 
-import type { ContactKind, CreateContactInput } from '@dakly/contracts/contacts';
+import type { ContactKind, ContactSource, CreateContactInput } from '@dakly/contracts/contacts';
 import { contacts } from '@dakly/db/schema/contacts';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -13,6 +13,8 @@ export type Contact = {
   kind: ContactKind;
   createdAt: Date;
 };
+
+export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
 const contactColumns = {
   id: contacts.id,
@@ -37,19 +39,12 @@ export class ContactsRepository {
     return rows[0];
   }
 
-  // Returns undefined when the phone already exists in this store. A staff add is an
-  // intentional customer under the glossary.
-  async insert(storeId: string, input: CreateContactInput): Promise<Contact | undefined> {
+  // Returns undefined when the phone already exists in this store.
+  async insert(storeId: string, contact: NewContact): Promise<Contact | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .insert(contacts)
-        .values({
-          storeId,
-          name: input.name,
-          phone: input.phone,
-          source: 'manual',
-          kind: 'customer',
-        })
+        .values({ storeId, ...contact })
         .onConflictDoNothing()
         .returning(contactColumns),
     );
