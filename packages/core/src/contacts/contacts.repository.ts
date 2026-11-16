@@ -46,6 +46,14 @@ export type Contact = {
   createdAt: Date;
 };
 
+// What the send gate needs; the phone itself stays here.
+export type ContactRecipient = {
+  kind: ContactKind;
+  isBlocked: boolean;
+  isOverPlanLimit: boolean;
+  hasPhone: boolean;
+};
+
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
@@ -74,6 +82,22 @@ export class ContactsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select(contactColumns)
+        .from(contacts)
+        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt)))
+        .limit(1),
+    );
+    return rows[0];
+  }
+
+  async findRecipient(storeId: string, id: string): Promise<ContactRecipient | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          kind: contacts.kind,
+          isBlocked: contacts.isBlocked,
+          isOverPlanLimit: contacts.isOverPlanLimit,
+          hasPhone: sql<boolean>`${contacts.phone} is not null`,
+        })
         .from(contacts)
         .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt)))
         .limit(1),
