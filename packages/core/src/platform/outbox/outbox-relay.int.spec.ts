@@ -190,15 +190,6 @@ describe('OutboxRelayService', () => {
     });
   });
 
-  it('rejects an event for another store than the open transaction', async () => {
-    const storeId = randomUUID();
-    const event = contactCreated(randomUUID());
-    await expect(
-      storeTransaction.run(storeId, () => outbox.publish(storeId, event)),
-    ).rejects.toMatchObject({ code: 'EVENT_STORE_MISMATCH' });
-    expect(await outboxRow(contactIdOf(event))).toEqual([]);
-  });
-
   it('queues each subscriber job once when two relays run at the same time', async () => {
     const events = [await publishCommitted(), await publishCommitted(), await publishCommitted()];
     // Both relays reach the claim before either runs it.
