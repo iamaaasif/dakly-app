@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { type TriggerKey } from './automations/catalogue';
 import { type AutomationGraph, automationGraphSchema } from './automations/graph';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
@@ -17,7 +16,6 @@ export const automationStepKinds = [
 ] as const;
 export type AutomationStatus = (typeof automationStatuses)[number];
 
-// Feature 09 limits.
 export const MAX_AUTOMATIONS_PER_STORE = 100;
 
 const automationNameSchema = z.string().trim().min(1).max(80);
@@ -43,7 +41,6 @@ export type AutomationResponse = {
   id: string;
   name: string;
   status: AutomationStatus;
-  triggerKey: TriggerKey;
   graph: AutomationGraph;
   publishedVersionId: string | null;
   createdAt: string;

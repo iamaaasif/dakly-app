@@ -19,6 +19,7 @@ describe('automation filters without RLS assistance', () => {
     const automation = await repository.insert(storeId, {
       name: 'নতুন গ্রাহককে স্বাগতম',
       graph,
+      triggerType: 'consent_given',
       createdByUserId: userId,
     });
     return { automation };
