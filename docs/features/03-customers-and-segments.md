@@ -80,6 +80,24 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
 - STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
   `ConsentService.record` when it receives them.
 
+The web app has two customer screens.
+
+- All customers (`/customers`) lists the store's contacts, 50 a page, with First page and
+  Next page links. Tabs filter by kind (All, Customer, Lead, Chat only, Not a customer). A
+  search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
+  tag and page live in the URL. A name search under 3 letters shows the API's message on the
+  search field. Rows link to the profile and become cards on a phone. Members with Edit
+  Customers add a customer with the form beside the list; a phone the store already has shows
+  its error on the phone field.
+- The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
+  chat channels the contact wrote from, read only. A deleted contact, or one from another
+  store, reads as not found.
+- Both screens show the phone as the API sent it: full for members with "See full phone
+  numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
+- Not built yet, because no route gives the data: header totals and tab counts, sort, columns,
+  export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
+  tabs, and the current consent answer per channel.
+
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
 `01XXXXXXXXX` format before API or form validation finishes.
