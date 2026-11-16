@@ -1,12 +1,12 @@
 # Campaigns and automations
 
-|           |                                                                                                          |
-| --------- | -------------------------------------------------------------------------------------------------------- |
-| Release   | 1                                                                                                        |
-| Status    | Not started                                                                                              |
-| Extension | Core                                                                                                     |
-| Code      | `packages/core/src/{campaigns,automations,templates}/`, `apps/web/src/features/{campaigns,automations}/` |
-| Tasks     | CAMP-1 to CAMP-12, plan in [campaigns-and-automations.md](../plans/campaigns-and-automations.md)         |
+|           |                                                                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Release   | 1                                                                                                                                               |
+| Status    | Not started                                                                                                                                     |
+| Extension | Core                                                                                                                                            |
+| Code      | `packages/core/src/{campaigns,automations,templates}/`, `packages/contracts/src/automations/`, `apps/web/src/features/{campaigns,automations}/` |
+| Tasks     | CAMP-1 to CAMP-12, plan in [campaigns-and-automations.md](../plans/campaigns-and-automations.md)                                                |
 
 ## Purpose
 
@@ -71,36 +71,15 @@ Every WhatsApp campaign uses a template. Ready-made templates are pre-approved p
 
 **Automations**
 
-Triggers available: Subscribes to marketing; Places an order; Pays for an order; Has their order shipped; Has their order canceled; Abandons their cart; Abandons checkout; Views a product without buying; Hasn't ordered for N days; Has a birthday; Enters a segment; Gets a tag; Clicks a link in a message. Trigger filters: order total, product, collection, payment method, delivery city; cart value; signup source; channel. Exit rules: places an order, cancels an order, enters a segment, clicks a link in this workflow, gets a tag. Frequency: once per person ever, once per N days, every time.
+Triggers, their filters and the sources they need are in [Workflow catalogue](#workflow-catalogue). Exit rules: places an order, cancels an order, enters a segment, clicks a link in this workflow, gets a tag. Frequency: once per person ever, once per N days, every time.
 
 Steps run per person: a delay waits (minutes, hours, days, weeks, or until a time of day); a message step sends inside quiet hours rules; a condition split checks (clicked a link in a previous step, replied on WhatsApp, customer field, segment) and branches yes or no. Built-in checks warn, for example "Wait before checking opens or clicks: add a 2–24 hour delay before the split" or a message step with no consent channel.
 
-Triggers depend on connected sources, and workflows without a source are hidden:
-
-| Trigger                         | Needs                                       |
-| ------------------------------- | ------------------------------------------- |
-| Places, pays, shipped, canceled | Sales extension, Shopify or WooCommerce     |
-| Abandons cart or checkout       | Shopify or WooCommerce webhooks             |
-| Views a product                 | Dakly tracking script on the shop's website |
-| Birthday                        | Birthday on the customer                    |
-| Others                          | Dakly data only                             |
+Triggers depend on connected sources; a template whose source the store lacks shows what it needs instead of Use.
 
 **Ready-made workflows**
 
-| Workflow                    | Trigger                        | Steps (default)                                                                    |
-| --------------------------- | ------------------------------ | ---------------------------------------------------------------------------------- |
-| Welcome new subscribers     | Subscribes to marketing        | WhatsApp welcome now; 2 days later SMS with best sellers if no order               |
-| Order confirmation          | Places an order                | WhatsApp utility template with order summary (transactional)                       |
-| Shipping update             | Has their order shipped        | WhatsApp or SMS with courier and tracking link (transactional)                     |
-| Thank you after first order | Places first order             | Thank-you now; 7 days later "how was it?"; 14 days later small reason to come back |
-| Abandoned cart              | Abandons cart                  | 1 hour later WhatsApp; if no order, 1 day later SMS                                |
-| Abandoned checkout          | Abandons checkout              | 30 minutes later WhatsApp with checkout link                                       |
-| Browse abandonment          | Views a product without buying | 4 hours later WhatsApp with that product                                           |
-| Cancellation follow-up      | Has their order canceled       | Ask the reason, offer help                                                         |
-| Cross-sell                  | Delivered 10 days ago          | Matching category suggestion                                                       |
-| Review request              | Delivered 3 days ago           | Ask for a review                                                                   |
-| Win back 60-day inactive    | Hasn't ordered for 60 days     | WhatsApp offer; 5 days later SMS reminder                                          |
-| Birthday                    | Has a birthday                 | Greeting on the day at 10:00 with a small offer                                    |
+The release 1 templates are in [Workflow catalogue](#workflow-catalogue).
 
 **Editing a live workflow**
 
@@ -166,18 +145,18 @@ Omnisend and Klaviyo are the reference products for e-commerce automation. Dakly
 
 #### Building blocks
 
-| Block              | Behaviour in Dakly                                                                                                                                                                                                                                                                                       | Reference                                    |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Trigger            | One event starts the workflow: order placed, order delivered, order returned, first order, chat started, comment on a post, lead captured, consent given, product back in stock, price drop, due added, date property (birthday, last order + N days), joined a segment, tag added, custom event by API. | Omnisend real-time and custom-event triggers |
-| Trigger filter     | Conditions checked once at entry (for example "order total over ৳2,000" or "source is chats").                                                                                                                                                                                                           | Klaviyo trigger filters                      |
-| Workflow filter    | Conditions checked before every step (for example "has not ordered since entering"). If false, the person exits.                                                                                                                                                                                         | Klaviyo flow filters                         |
-| Delay              | Wait N minutes, hours or days; wait until a time of day; wait until a weekday. Delays respect quiet hours.                                                                                                                                                                                               | Omnisend delay and timing controls           |
-| Condition split    | Yes/No path on any customer field, event in a time window ("tapped the last message", "ordered in the last 3 days") or channel reachability.                                                                                                                                                             | Omnisend conditional split                   |
-| Channel branch     | Send on the best reachable channel in order the owner sets: for example WhatsApp if consented and on WhatsApp, else Messenger if inside the 24-hour window or opted in, else SMS.                                                                                                                        | Omnisend channel branching                   |
-| Random split (A/B) | Split people by percentage to test text, offer or timing; report each path; owner picks the winner or Dakly picks after a set number of days.                                                                                                                                                            | Omnisend and Klaviyo A/B in flows            |
-| Send message       | WhatsApp template, SMS, Messenger. Dynamic fields (name, last product, order number, due amount, tracking link) and a product recommender block (bought together, same category, back in stock).                                                                                                         | Omnisend product recommender                 |
-| Actions            | Add or remove tag, update a field, create a task for staff, notify the team, hand the chat to a person, add to Due reminder, give a coupon code.                                                                                                                                                         | Klaviyo and respond.io actions               |
-| Exit conditions    | Leave the workflow when a goal happens (for example ordered, replied, opted out, order cancelled). Each workflow has a goal; reaching it exits and counts as a conversion.                                                                                                                               | Omnisend exit conditions                     |
+| Block              | Behaviour in Dakly                                                                                                                                                                               | Reference                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| Trigger            | One event or a daily date check starts the workflow. The release 1 triggers are in [Workflow catalogue](#workflow-catalogue).                                                                    | Omnisend real-time and custom-event triggers |
+| Trigger filter     | Conditions checked once at entry (for example "order total over ৳2,000" or "source is chats").                                                                                                   | Klaviyo trigger filters                      |
+| Workflow filter    | Conditions checked before every step (for example "has not ordered since entering"). If false, the person exits.                                                                                 | Klaviyo flow filters                         |
+| Delay              | Wait N minutes, hours or days; wait until a time of day; wait until a weekday. Delays respect quiet hours.                                                                                       | Omnisend delay and timing controls           |
+| Condition split    | Yes/No path on any customer field, event in a time window ("tapped the last message", "ordered in the last 3 days") or channel reachability.                                                     | Omnisend conditional split                   |
+| Channel branch     | Send on the best reachable channel in order the owner sets: for example WhatsApp if consented and on WhatsApp, else Messenger if inside the 24-hour window or opted in, else SMS.                | Omnisend channel branching                   |
+| Random split (A/B) | Split people by percentage to test text, offer or timing; report each path; owner picks the winner or Dakly picks after a set number of days.                                                    | Omnisend and Klaviyo A/B in flows            |
+| Send message       | WhatsApp template, SMS, Messenger. Dynamic fields (name, last product, order number, due amount, tracking link) and a product recommender block (bought together, same category, back in stock). | Omnisend product recommender                 |
+| Actions            | Add or remove tag, update a field, create a task for staff, notify the team, hand the chat to a person, add to Due reminder, give a coupon code.                                                 | Klaviyo and respond.io actions               |
+| Exit conditions    | Leave the workflow when a goal happens (for example ordered, replied, opted out, order cancelled). Each workflow has a goal; reaching it exits and counts as a conversion.                       | Omnisend exit conditions                     |
 
 #### Entry and frequency rules
 
@@ -191,19 +170,7 @@ Omnisend and Klaviyo are the reference products for e-commerce automation. Dakly
 
 #### Pre-built workflows (release 1)
 
-| Workflow                     | Trigger                                                  | Steps (default)                                                                                                                           | Goal                 |
-| ---------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| COD order confirmation       | Order placed, COD                                        | WhatsApp utility template with Confirm and Cancel buttons; if no reply in 2 hours, SMS; if still none in 12 hours, task for staff to call | Order confirmed      |
-| Welcome new lead             | Lead captured in chat or comment, no order               | Wait 1 hour, message with bestsellers; wait 2 days, offer if no order                                                                     | First order          |
-| Order-link abandoned         | Opened order link, entered phone, didn't submit          | Wait 30 minutes, reminder with link; wait 1 day, second reminder                                                                          | Order placed         |
-| Shipped and tracking         | Order moved to With courier (by staff in release 1, D21) | Utility message with tracking link                                                                                                        | None (transactional) |
-| Delivery feedback and review | Order delivered                                          | Wait 2 days, ask for rating; 4–5 stars: ask for a Facebook review; 1–3: task for staff                                                    | Reply                |
-| Cross-sell                   | Order delivered                                          | Wait 7 days, product recommender message                                                                                                  | Second order         |
-| Reorder reminder             | Usual gap between orders minus 3 days                    | Reminder with last product                                                                                                                | Order placed         |
-| Back in stock                | Variant restocked, person on waiting list                | Message with order link                                                                                                                   | Order placed         |
-| Winback                      | Entered "Slipping away" stage                            | Message; wait 5 days; offer if no order; wait 10 days; exit                                                                               | Order placed         |
-| Birthday                     | Birthday date                                            | Greeting with offer at 10 am                                                                                                              | Order in 7 days      |
-| Due reminder (release 2)     | Baki older than 30 days                                  | Polite reminder; repeat every 7 days up to 3 times                                                                                        | Due paid             |
+The release 1 templates, with trigger, steps and goal, are in [Workflow catalogue](#workflow-catalogue).
 
 #### Reporting per workflow and per step
 
@@ -355,19 +322,89 @@ Window first: a send step tries a free-form message on the channel where the cus
 
 ### Workflow builder (D23)
 
-A workflow is a graph of steps: trigger (one event, filters checked once), wait (duration, time of day, or until an event with a timeout), condition split (up to 10 paths plus Else), random split (up to 4 paths), send (ordered channel list), action (tag, task for staff, hand to a person, coupon) and goal or exit. Workflow filters, exit conditions and consent are checked before every step and again at send time.
+A workflow is a graph: a trigger (one event or daily date check, filters checked once), a re-entry rule, workflow filters, a goal, up to 5 exit conditions, and steps keyed by a stable `stepKey`. Step kinds: `wait` (duration, time of day, weekday, until a reply or tap with a timeout, or before the Messenger window closes), `condition` (up to 10 paths plus Else), `random_split` (2 to 4 paths adding up to 100%), `send` (category, ordered channel list, text and up to 3 reply buttons, if not reachable skip or exit, review before sending), `action` and `exit`. The goal is an exit condition that counts as a conversion. Workflow filters, exit conditions and consent are checked before every step and again at send time.
 
 Build in two stages so templates can ship if the canvas slips: (1) engine, versions, runs and the template library with settings forms; (2) the canvas.
 
-Template library: complete graphs shipped in code, copied into the store as a draft on Use template. Release 1 templates: COD confirmation, advance not paid, shipped, delivery feedback (these four are transactional and also listed in Orders settings), chat follow-up (inside the window only), order link not finished, back in stock, reorder or cross-sell, win back, first-order thank you, cancellation follow-up, and Eid ul-Fitr, Eid ul-Adha, Durga Puja and Pohela Boishakh greetings. Templates whose trigger source the store lacks (abandoned cart and checkout, browse abandonment, birthday) show what they need instead of Use.
+Template library: complete graphs shipped in code, copied into the store as a draft on Use template. The templates are in [Workflow catalogue](#workflow-catalogue). Templates whose prerequisites the store lacks show what they need instead of Use.
 
-Limits: 50 steps a workflow, 90 days of waiting in total, 5 exit conditions, 100 workflows a store; warn when more than 10 active workflows share a trigger.
+Limits: 50 steps a workflow, 90 days of waiting on any path, 5 exit conditions, 10 condition paths plus Else, 4 random paths, 100 workflows a store; warn when more than 10 active workflows share a trigger.
 
 Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.
 
 Versions: Publish writes an `automation_versions` row whose graph and publication metadata are immutable. The app may update only `is_stopped` for owner stop control. Runs keep the version they entered; the owner may choose "Stop the old version". Moving runs to a new version is allowed only where step keys match.
 
 Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Running claims are leases: the sweep also reclaims expired `claimed_at` values, including a crash between claiming and queueing. A worker guards writes with its claim generation/time, and provider sends use a stable `(run, step)` operation key; an uncertain provider result must be reconciled before resending. A stale worker cannot advance a newly claimed run. No row lock spans a provider call. Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept until 372 days after the run finishes (365-day rebuild plus 7-day lookback), for per-step numbers, attribution and the per-person history. Active runs retain their evidence.
+
+### Workflow catalogue
+
+The graph schema is [`automations/graph.ts`](../../packages/contracts/src/automations/graph.ts) in `packages/contracts` (A5 in the [plan](../plans/campaigns-and-automations.md)). It rejects a path that loops, a step that leads to a missing step, a graph over the limits above, an unknown step kind, a trigger filter the trigger does not take, and a condition or wait that reads replies or taps from a step that is not a send step. The publish checks that need store data (reachable channel, approved template, wait before a split, missing source) belong to the service.
+
+Triggers and actions are in [`automations/catalogue.ts`](../../packages/contracts/src/automations/catalogue.ts). "Ready before" follows the build order (D40): Channels means it works with Dakly data and SMS alone, before channel connections and Orders; Orders means it works before Orders but needs channels or products; a dash means it waits for Orders or a later source. A source marked "not yet" is an event no task emits yet; the task that builds the source adds it to `packages/contracts/src/events/`.
+
+| Trigger                   | Source                               | Filters (required in bold)                                           | Needs           | Ready before |
+| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- | --------------- | ------------ |
+| `consent_given`           | `consent.changed`                    | channel, consent source                                              |                 | Channels     |
+| `tag_added`               | `contact.tag_added`, not yet         | **tag**                                                              |                 | Channels     |
+| `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          |                 | Channels     |
+| `link_tapped`             | `message.tapped`, not yet (CAMP-10)  | channel                                                              |                 | Channels     |
+| `birthday`                | Daily job in store time              | segment                                                              | Birthdays       | Channels     |
+| `festival`                | Daily job in store time              | **festival**, segment                                                |                 | Channels     |
+| `chat_started`            | `conversation.started`               | channel                                                              | Channels        | Orders       |
+| `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels        | Orders       |
+| `lead_captured`           | `chat.lead_saved`, not yet           | channel                                                              | Channels        | Orders       |
+| `back_in_stock`           | `variant.restocked`, not yet         | product                                                              | Products        | Orders       |
+| `price_dropped`           | `product.price_dropped`, not yet     | product                                                              | Products        | Orders       |
+| `order_placed`            | `order.created`, not yet             | order total, product, payment status, delivery district, first order | Orders          |              |
+| `order_paid`              | `payment.succeeded`, not yet         | order total                                                          | Orders          |              |
+| `order_shipped`           | `order.stage_changed`, not yet       | order total, delivery district                                       | Orders          |              |
+| `order_delivered`         | `order.stage_changed`, not yet       | order total, product                                                 | Orders          |              |
+| `order_cancelled`         | `order.stage_changed`, not yet       | order total                                                          | Orders          |              |
+| `order_returned`          | `order.stage_changed`, not yet       | order total                                                          | Orders          |              |
+| `order_link_abandoned`    | `order_link.abandoned`, not yet      | product                                                              | Orders          |              |
+| `lifecycle_stage_entered` | `contact.stage_changed`, not yet     | **lifecycle stage**                                                  | Orders          |              |
+| `days_since_last_order`   | Daily job in store time              | **days**                                                             | Orders          |              |
+| `reorder_due`             | Daily job, days before the usual gap | **days**, product                                                    | Orders          |              |
+| `cart_abandoned`          | `cart.abandoned`, not yet            | cart total                                                           | Store sync, Q13 |              |
+| `checkout_abandoned`      | `checkout.abandoned`, not yet        | cart total                                                           | Store sync, Q13 |              |
+| `product_viewed`          | `product.viewed`, not yet            | product                                                              | Tracking script |              |
+
+Shipped means staff moved the order to With courier (D21). Lifecycle stages come from orders, so every contact is in no stage until Orders exists. Festival dates come from Dakly, not from the shop. A custom event by API, "update a field" and "add to Due reminder" are not release 1: Dakly has no public API in release 1, no editable contact field is named for workflows, and Due is release 2.
+
+| Action           | Settings                                                        | Needs           | Ready before |
+| ---------------- | --------------------------------------------------------------- | --------------- | ------------ |
+| `add_tag`        | tag                                                             |                 | Channels     |
+| `remove_tag`     | tag                                                             |                 | Channels     |
+| `create_task`    | title                                                           |                 | Channels     |
+| `notify_team`    | text                                                            |                 | Channels     |
+| `hand_to_person` | none                                                            | Chats extension | Orders       |
+| `give_coupon`    | percent, amount in poisha or free delivery; valid for 1–90 days | Orders          |              |
+
+Templates are in [`automations/templates.ts`](../../packages/contracts/src/automations/templates.ts) and [`automations/order-templates.ts`](../../packages/contracts/src/automations/order-templates.ts). Each has a trigger, steps, goal, category and prerequisites. Categories are the library types: transactional, abandoned, welcome, post-purchase, win back and special occasion; AUTO-R2 ranks transactional, then abandoned, then welcome, then the rest. Transactional templates run for every order; cart, checkout and order-link reminders allow once a day; the rest default to once every 30 days, and welcome and first-order thank you run once ever.
+
+| Template                    | Trigger                                                         | Steps (default)                                                                                                                                 | Goal            | Category         | Needs            |
+| --------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ---------------- | ---------------- |
+| Welcome new subscribers     | Consent given                                                   | Welcome now; wait 2 days; SMS with best sellers                                                                                                 | Placed order    | Welcome          |                  |
+| Welcome new lead            | Lead captured                                                   | Wait 1 hour; best sellers; wait 2 days; coupon and offer                                                                                        | Placed order    | Welcome          | Channels, Orders |
+| Chat follow-up              | Chat started on Messenger                                       | Wait 2 hours; Messenger follow-up inside the window; exit if they reply                                                                         | Placed order    | Abandoned        | Channels         |
+| Back in stock               | Variant restocked, person on waiting list                       | Message with the product and order link                                                                                                         | Placed order    | Abandoned        | Products         |
+| Birthday                    | Birthday                                                        | Greeting at 10:00; wait 7 days                                                                                                                  | Placed order    | Special occasion | Birthdays        |
+| Festival greetings          | Festival: Eid ul-Fitr, Eid ul-Adha, Durga Puja, Pohela Boishakh | Greeting at 10:00 on the day; one template each                                                                                                 | Placed order    | Special occasion |                  |
+| Abandoned cart              | Cart abandoned                                                  | Wait 1 hour; reminder; wait 1 day; SMS reminder                                                                                                 | Placed order    | Abandoned        | Store sync       |
+| Abandoned checkout          | Checkout abandoned                                              | Wait 30 minutes; reminder with checkout link                                                                                                    | Placed order    | Abandoned        | Store sync       |
+| Browse abandonment          | Product viewed                                                  | Wait 4 hours; message with that product                                                                                                         | Placed order    | Abandoned        | Tracking script  |
+| COD order confirmation      | Order placed, COD pending                                       | WhatsApp with Confirm and Cancel; wait 2 hours; SMS with confirm link; wait 12 hours; task for staff to call; exit if cancelled                 | Order confirmed | Transactional    | Orders           |
+| Advance not paid            | Order placed, advance requested                                 | Wait 6 hours (feature 07); reminder with payment link; exit if cancelled                                                                        | Order paid      | Transactional    | Orders           |
+| Shipped and tracking        | Order shipped                                                   | Message with courier and tracking link                                                                                                          | None            | Transactional    | Orders           |
+| Delivery feedback           | Order delivered                                                 | Wait 2 days; ask how it was (3 answers); wait up to 2 days for the reply; best answer: ask for a Facebook review; other answers: task for staff | None            | Transactional    | Orders           |
+| Order link not finished     | Order link abandoned                                            | Wait 30 minutes; reminder with link; wait 1 day; second reminder                                                                                | Placed order    | Abandoned        | Orders           |
+| Thank you after first order | Order placed, first order                                       | Thank you now; wait 7 days; how was it; wait 14 days; coupon and reason to come back                                                            | Placed order    | Post-purchase    | Orders           |
+| Cross-sell                  | Order delivered                                                 | Wait 7 days; product suggestion                                                                                                                 | Placed order    | Post-purchase    | Orders           |
+| Reorder reminder            | 3 days before the usual gap between orders                      | Reminder with the last product                                                                                                                  | Placed order    | Post-purchase    | Orders           |
+| Win back                    | Entered Slipping away                                           | Message; wait 5 days; coupon and offer; wait 10 days                                                                                            | Placed order    | Win back         | Orders           |
+| Cancellation follow-up      | Order cancelled                                                 | Ask the reason, offer help                                                                                                                      | None            | Post-purchase    | Orders           |
+
+WhatsApp allows 3 reply buttons, so the delivery feedback rating has three answers (very good, okay, not good) in place of 1 to 5 stars. It has no goal: a reply goal would exit the run before the answer is read. "If no order" in a template is its goal: placing an order exits the run before the next step.
 
 ### Rules
 
