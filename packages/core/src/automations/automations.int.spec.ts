@@ -8,10 +8,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
+import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
-import { builtInRoleAccess } from '../team/built-in-roles';
 import { AutomationsModule } from './automations.module';
 import { AutomationsService } from './automations.service';
 
@@ -24,7 +24,14 @@ const storeA = randomUUID();
 const storeB = randomUUID();
 const userId = randomUUID();
 const staff = { kind: 'user', userId } as const;
-const owner = { access: builtInRoleAccess.owner, actor: staff };
+const access = (role: 'owner' | 'marketer'): StoreAccess => ({
+  role,
+  areas: { automations: 'edit' },
+  seeFullPhone: false,
+  exportLists: false,
+  refund: false,
+});
+const owner = { access: access('owner'), actor: staff };
 let app: INestApplicationContext;
 let service: AutomationsService;
 
@@ -179,7 +186,7 @@ describe('AutomationsService (Postgres)', () => {
 
   it('refuses a Marketer’s publish and enable while only owners and admins approve sends', async () => {
     const automation = await draft();
-    const marketer = { access: builtInRoleAccess.marketer, actor: staff };
+    const marketer = { access: access('marketer'), actor: staff };
 
     await expect(service.publish(storeA, automation.id, marketer)).rejects.toMatchObject({
       code: 'AUTOMATION_APPROVAL_DENIED',

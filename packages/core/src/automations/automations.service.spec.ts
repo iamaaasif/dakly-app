@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { AutomationStatus } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { StoresService } from '../stores/stores.service';
-import { builtInRoleAccess } from '../team/built-in-roles';
 import type { TeamService } from '../team/team.service';
 import type { Automation, AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
@@ -15,7 +15,14 @@ import { AutomationsService } from './automations.service';
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const AUTOMATION_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a6b';
 const staff = { kind: 'user', userId: 'c5a0f0e4-0b55-4b7e-8d0e-6f3c3b7f1e21' } as const;
-const owner = { access: builtInRoleAccess.owner, actor: staff };
+const access = (role: 'owner' | 'marketer'): StoreAccess => ({
+  role,
+  areas: { automations: 'edit' },
+  seeFullPhone: false,
+  exportLists: false,
+  refund: false,
+});
+const owner = { access: access('owner'), actor: staff };
 const now = new Date('2026-11-16T05:00:00Z');
 const welcome = automationTemplates.welcome_new_subscriber.graph;
 
