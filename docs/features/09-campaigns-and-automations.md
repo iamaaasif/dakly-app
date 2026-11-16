@@ -321,7 +321,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
-Quiet hours and the cap are the `sending` section of `stores.settings`, parsed by `sendingSettingsSchema` in `packages/contracts/src/stores.ts`: `quietHours` with `startHour` 20 to 22 and `endHour` 8 to 10, and `frequencyCap` with `perChannelPerDay` 1 to 3 and `perSevenDays` 1 to 10. `PATCH /store` with `storeSettings.edit` saves the whole section (a part left out returns to its default) and `GET /store` returns it. A store that never saved the section gets the defaults.
+Quiet hours and the cap are the `sending` section of `stores.settings`, parsed by `sendingSettingsSchema` in `packages/contracts/src/stores.ts`: `quietHours` with `startHour` 20 to 22 and `endHour` 8 to 10, and `frequencyCap` with `perChannelPerDay` 1 to 3 and `perSevenDays` 1 to 10. `PATCH /store` with `storeSettings.edit` takes the whole section, as `GET /store` returns it, so a save never resets a part to its default. A store that never saved the section gets the defaults.
 
 The gate does not reserve cost: the campaign reserves at approval (CAMP-2) and the sending job reserves or releases around the gate in the same transaction (CAMP-3, CAMP-5).
 

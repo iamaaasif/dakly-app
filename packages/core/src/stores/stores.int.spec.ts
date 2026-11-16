@@ -38,6 +38,14 @@ const input = {
   billingCycle: 'yearly',
 };
 
+function sendingWith(change: object) {
+  return {
+    quietHours: { startHour: 21, endHour: 9 },
+    frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+    ...change,
+  };
+}
+
 describe('Store onboarding and settings (Fastify and Postgres)', () => {
   const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const userIds: string[] = [];
@@ -476,20 +484,23 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     expect(JSON.stringify(entry)).not.toContain('shop@example.test');
     expect(entry!.before).toBeNull();
   });
-  it('saves the sending section whole, with defaults for a part left out', async () => {
+  it('reads the sending defaults and saves the whole section', async () => {
     const { cookie } = await settingsStore();
     expect((await settings(cookie)).json().sending).toEqual({
       quietHours: { startHour: 21, endHour: 9 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
     });
-    await patch(cookie, { sending: { frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 } } });
-    const changed = await patch(cookie, { sending: { quietHours: { startHour: 22, endHour: 8 } } });
-
-    expect(changed.json().sending).toEqual({
+    const sending = {
       quietHours: { startHour: 22, endHour: 8 },
-      frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
-    });
-    expect((await settings(cookie)).json().sending).toEqual(changed.json().sending);
+      frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+    };
+    const changed = await patch(cookie, { sending });
+
+    expect(changed.json().sending).toEqual(sending);
+    expect((await settings(cookie)).json().sending).toEqual(sending);
+    expect((await patch(cookie, { sending: { quietHours: sending.quietHours } })).statusCode).toBe(
+      400,
+    );
   });
   it('rejects invalid settings and release 2 extensions at the HTTP edge', async () => {
     const { cookie } = await settingsStore();
@@ -498,9 +509,9 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
       { name: null },
       { vatBin: '123' },
       { storeId: randomUUID(), name: 'Forged' },
-      { sending: { quietHours: { startHour: 19, endHour: 9 } } },
-      { sending: { frequencyCap: { perChannelPerDay: 4, perSevenDays: 3 } } },
-      { sending: { frequencyCap: { perChannelPerDay: 1, perSevenDays: 11 } } },
+      { sending: sendingWith({ quietHours: { startHour: 19, endHour: 9 } }) },
+      { sending: sendingWith({ frequencyCap: { perChannelPerDay: 4, perSevenDays: 3 } }) },
+      { sending: sendingWith({ frequencyCap: { perChannelPerDay: 1, perSevenDays: 11 } }) },
     ])
       expect((await patch(cookie, payload)).statusCode).toBe(400);
     for (const extensions of [['physical_shop'], ['core'], ['chats', 'chats']])

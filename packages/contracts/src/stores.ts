@@ -78,8 +78,8 @@ export const changeStoreSettingsSchema = z
       .nullable()
       .optional(),
     tradeLicenceNumber: z.string().trim().min(1).max(100).nullable().optional(),
-    // Replaces the whole section; a part left out returns to its default.
-    sending: sendingSettingsSchema.optional(),
+    // The whole section, as GET /store returns it, so a save never resets a part to its default.
+    sending: sendingSettingsSchema.required().optional(),
   })
   .refine(
     (input) => Object.values(input).some((value) => value !== undefined),
