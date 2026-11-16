@@ -15,6 +15,7 @@ type ClaimedOutboxEvent = {
   type: string;
   payload: unknown;
   occurredAt: string;
+  attempts: number;
 };
 
 // The outbox is global: the app may only insert, and the relay reads and marks rows through
@@ -41,7 +42,8 @@ export class OutboxRepository {
           store_id as "storeId",
           type,
           payload,
-          to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "occurredAt"
+          to_char(occurred_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "occurredAt",
+          attempts
         from claim_outbox_events(${limit})
         order by id`)
     ).rows;

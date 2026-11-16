@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
-import { Module, type INestApplicationContext } from '@nestjs/common';
+import { Logger, Module, type INestApplicationContext } from '@nestjs/common';
 import { DiscoveryModule, NestFactory } from '@nestjs/core';
 import { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -284,14 +284,20 @@ describe('OutboxRelayService', () => {
   });
 
   it('stops claiming a row that failed to relay ten times', async () => {
-    const { contactId } = await publishCommitted();
+    const { storeId, contactId } = await publishCommitted();
     const addBulk = vi
       .spyOn(Queue.prototype, 'addBulk')
       .mockRejectedValue(new Error('Valkey unavailable'));
-    for (let failure = 0; failure < 10; failure += 1) {
+    const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    for (let failure = 1; failure < 10; failure += 1) {
       await expect(relay.relay()).rejects.toThrow('Valkey unavailable');
       await expireClaim(contactId);
     }
+    await expect(relay.relay()).rejects.toMatchObject({ code: 'OUTBOX_EVENTS_PARKED' });
+    expect(log).toHaveBeenCalledOnce();
+    expect(JSON.stringify(log.mock.calls)).toContain('contact.created');
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(new RegExp(`${contactId}|${storeId}`));
+    await expireClaim(contactId);
     addBulk.mockRestore();
 
     await relay.relay();

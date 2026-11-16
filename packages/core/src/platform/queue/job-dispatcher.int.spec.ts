@@ -9,6 +9,7 @@ import type { Job, JobsOptions, Queue } from 'bullmq';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../config/env';
+import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { ErrorReporter } from '../logging/error-reporter';
 import { TransactionalJobDispatcher } from './job-dispatcher';
 import { HandlesJob, type JobHandler } from './job-handler';
@@ -37,6 +38,12 @@ class FlakyHandler implements JobHandler {
   }
 }
 
+class ParkedHandler implements JobHandler {
+  async handle() {
+    throw new AppError('OUTBOX_EVENTS_PARKED', PLATFORM_ERRORS.OUTBOX_EVENTS_PARKED);
+  }
+}
+
 class DuplicateFirstHandler implements JobHandler {
   async handle() {}
 }
@@ -44,6 +51,7 @@ class DuplicateFirstHandler implements JobHandler {
 HandlesJob({ queue: QUEUES.transactional, name: 'first-test-job' })(FirstHandler);
 HandlesJob({ queue: QUEUES.transactional, name: 'second-test-job' })(SecondHandler);
 HandlesJob({ queue: QUEUES.transactional, name: 'flaky-test-job' })(FlakyHandler);
+HandlesJob({ queue: QUEUES.transactional, name: 'parked-test-job' })(ParkedHandler);
 HandlesJob({ queue: QUEUES.transactional, name: 'first-test-job' })(DuplicateFirstHandler);
 
 const reporter = new ErrorReporter(undefined);
@@ -123,6 +131,17 @@ describe('Job dispatcher (Valkey)', () => {
     expect(report).toHaveBeenCalledOnce();
     expect(report).toHaveBeenCalledWith(expect.objectContaining({ errorClass: 'Error' }), job.id);
     expect(JSON.stringify(report.mock.calls)).not.toContain('private-first-attempt');
+  });
+
+  it('reports the code of an AppError a handler throws', async () => {
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const report = vi.spyOn(reporter, 'reportJob').mockImplementation(() => undefined);
+    const queue = await start([ParkedHandler]);
+    const job = await settle(queue, 'parked-test-job', {});
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'OUTBOX_EVENTS_PARKED' }),
+      job.id,
+    );
   });
 
   it('refuses to start when two handlers claim the same queue and name', async () => {
