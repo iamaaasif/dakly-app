@@ -97,13 +97,16 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  if (sentIds.length)
-    await fetch(`${mailpitApi}/api/v1/messages`, {
+  if (sentIds.length) {
+    // A repeated send returns the same id; Mailpit 1.27 hangs on a delete that lists an id twice.
+    const response = await fetch(`${mailpitApi}/api/v1/messages`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ IDs: sentIds }),
+      body: JSON.stringify({ IDs: [...new Set(sentIds)] }),
       signal: AbortSignal.timeout(5000),
     });
+    expect(response.ok).toBe(true);
+  }
   await admin.db.execute(sql`delete from outbox_events where store_id in (${storeA}, ${storeB})`);
   await admin.db.execute(sql`delete from contacts where store_id in (${storeA}, ${storeB})`);
   await admin.db.execute(sql`delete from stores where id in (${storeA}, ${storeB})`);
