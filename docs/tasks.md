@@ -66,33 +66,56 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M2. Shared plumbing
 
-| ID     | Task                                                    | Status | Depends     | PR  | Notes |
-| ------ | ------------------------------------------------------- | ------ | ----------- | --- | ----- |
-| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Todo   | DB-2, ACC-3 |     | Q10   |
-| HOME-2 | Web: notification bell and list                         | Todo   | HOME-1      |     |       |
-| PAY-1  | Usage service: units, allowances, usage events          | Todo   | ACC-3       |     |       |
+| ID     | Task                                                    | Status | Depends      | PR  | Notes                                                                |
+| ------ | ------------------------------------------------------- | ------ | ------------ | --- | -------------------------------------------------------------------- |
+| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Todo   | DB-2, ACC-3  |     | Q10                                                                  |
+| HOME-2 | Web: notification bell and list                         | Todo   | HOME-1       |     |                                                                      |
+| PAY-1  | Usage service: units, allowances, usage events          | Todo   | ACC-3        |     |                                                                      |
+| PAY-11 | Wallets: reserve, release, charge and staff credit      | Todo   | PAY-1, ADM-6 |     | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
 
 ## M3. Channels and customers
 
-| ID    | Task                                                                   | Status  | Depends      | PR  | Notes                                                |
-| ----- | ---------------------------------------------------------------------- | ------- | ------------ | --- | ---------------------------------------------------- |
-| CUS-1 | Rename customers to contacts; add channel identities and contact kinds | Todo    | ACC-3        |     | Q10                                                  |
-| CUS-2 | Consent: append-only rows, current-consent view, STOP keywords         | Todo    | CUS-1        |     |                                                      |
-| CUS-3 | Contact stats table and refresh jobs                                   | Todo    | CUS-1        |     |                                                      |
-| CUS-4 | Own-phone capture, possible matches and identity merge                 | Todo    | CUS-1        |     | Q10 must-fix; D27 own-phone save is not verification |
-| CHN-1 | Meta webhook intake: signature, `webhook_events`, enqueue              | Todo    | DB-1         |     |                                                      |
-| CHN-2 | Messenger and Instagram connect (Facebook Login for Business)          | Todo    | DB-4, ACC-4  |     |                                                      |
-| CHN-3 | WhatsApp connect (Embedded Signup)                                     | Blocked | CHN-2        |     | Q2 BSP                                               |
-| CHN-4 | Store lookup function for webhooks; token health job                   | Todo    | CHN-1        |     |                                                      |
-| CHN-5 | Web: Integrations page                                                 | Todo    | CHN-2, WEB-3 |     |                                                      |
-| CUS-5 | Web: All customers list and profile                                    | Todo    | CUS-3, WEB-2 |     |                                                      |
+| ID     | Task                                                                                             | Status  | Depends             | PR  | Notes                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------ | ------- | ------------------- | --- | ----------------------------------------------------------------------------------------- |
+| CUS-1  | Rename customers to contacts; add channel identities and contact kinds                           | Todo    | ACC-3               |     | Q10                                                                                       |
+| CUS-2  | Consent: append-only rows, current-consent view, STOP keywords                                   | Todo    | CUS-1               |     |                                                                                           |
+| CUS-3  | Contact stats table and refresh jobs                                                             | Todo    | CUS-1               |     |                                                                                           |
+| CUS-4  | Own-phone capture, possible matches and identity merge                                           | Todo    | CUS-1               |     | Q10 must-fix; D27 own-phone save is not verification                                      |
+| CHN-1  | Meta webhook intake: signature, `webhook_events`, enqueue                                        | Todo    | DB-1                |     |                                                                                           |
+| CHN-2  | Messenger and Instagram connect (Facebook Login for Business)                                    | Todo    | DB-4, ACC-4         |     |                                                                                           |
+| CHN-3  | WhatsApp connect (Embedded Signup)                                                               | Blocked | CHN-2               |     | Q2 BSP                                                                                    |
+| CHN-4  | Store lookup function for webhooks; token health job                                             | Todo    | CHN-1               |     |                                                                                           |
+| CHN-5  | Web: Integrations page                                                                           | Todo    | CHN-2, WEB-3        |     |                                                                                           |
+| CUS-5  | Web: All customers list and profile                                                              | Todo    | CUS-3, WEB-2        |     |                                                                                           |
+| CHAT-1 | Core messaging: conversations and messages, `receiveInboundMessage`, window state, STOP keywords | Todo    | CHN-1, CUS-1, CUS-2 |     | Core, not the Chats extension: `messaging/` ([plan](plans/plumbing-channels-contacts.md)) |
+| CHAT-2 | Core messaging: `MessagingService.send`, outbound send job, delivery and read receipts           | Todo    | CHAT-1              |     | Core, not the Chats extension; used by Chats, campaigns and workflows                     |
+
+## M3b. Segments, campaigns and automations
+
+Core, built after channels and contacts and before the Chats extension (D37). Campaigns and segments do not need the Chats extension; they send through core messaging (CHAT-1, CHAT-2). See the [plan](plans/campaigns-and-automations.md).
+
+| ID      | Task                                                                         | Status  | Depends                 | PR  | Notes                                               |
+| ------- | ---------------------------------------------------------------------------- | ------- | ----------------------- | --- | --------------------------------------------------- |
+| CUS-6   | Segments: condition tree, compiler, counts                                   | Todo    | CUS-3                   |     | Order fields unlock with ORD-1                      |
+| CUS-7   | Web: Segments list and builder                                               | Todo    | CUS-6, WEB-2            |     |                                                     |
+| CUS-8   | Customer CSV/XLSX import with mapping, consent evidence, row errors and undo | Todo    | CUS-1, CUS-2            |     | Review duplicate-phone policy before implementation |
+| CAMP-9  | Final send checks: consent, window, block, quiet hours, frequency cap        | Todo    | CUS-2, CHAT-2           |     | [plan](plans/campaigns-and-automations.md)          |
+| CAMP-10 | Tracked links and the SMS opt-out page                                       | Todo    | CUS-2, DB-2             |     | D31 visitor hash only                               |
+| CAMP-2  | Campaigns: draft, approval, frozen recipients, cost estimate                 | Todo    | CUS-6, CAMP-9, PAY-11   |     |                                                     |
+| CAMP-3  | Campaign sender job, callbacks and results counts                            | Todo    | CAMP-2, CAMP-10, CHAT-2 |     |                                                     |
+| CAMP-7  | Messenger campaigns to people with an open window                            | Todo    | CAMP-3                  |     | D24                                                 |
+| CAMP-4  | Web: campaign list, builder, results                                         | Todo    | CAMP-3, WEB-2           |     | Results page design needed                          |
+| CAMP-8  | Release 1 workflow catalogue and typed graph contracts                       | Todo    | REV-7                   |     | Splits CAMP-5; trigger list per source              |
+| CAMP-5  | Workflow engine: versions, runs and steps                                    | Todo    | CAMP-8, CAMP-9, CAMP-10 |     | D23; two PRs                                        |
+| CAMP-11 | Workflow triggers and entry rules                                            | Todo    | CAMP-5, DB-2            |     | Order triggers added by ORD-4                       |
+| CAMP-12 | Web: automations list, template library and settings forms                   | Todo    | CAMP-11, WEB-2          |     | Builder stage 1                                     |
+| CAMP-6  | Web: workflow canvas                                                         | Todo    | CAMP-12                 |     | Builder stage 2                                     |
+| CAMP-1  | WhatsApp templates sync and submit                                           | Blocked | CHN-3                   |     | Q2                                                  |
 
 ## M4. Chats inbox (people only)
 
 | ID     | Task                                                     | Status | Depends       | PR  | Notes |
 | ------ | -------------------------------------------------------- | ------ | ------------- | --- | ----- |
-| CHAT-1 | Conversations and messages; `receiveInboundMessage`      | Todo   | CHN-1, CUS-1  |     |       |
-| CHAT-2 | Outbound send job, delivery and read receipts            | Todo   | CHAT-1        |     |       |
 | CHAT-3 | Status, responder, assignment, take over, internal notes | Todo   | CHAT-1        |     |       |
 | CHAT-4 | Saved replies                                            | Todo   | CHAT-1        |     |       |
 | CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo   | CHAT-3, WEB-2 |     |       |
@@ -109,15 +132,15 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M6. Orders
 
-| ID    | Task                                                                         | Status | Depends       | PR  | Notes                                                                         |
-| ----- | ---------------------------------------------------------------------------- | ------ | ------------- | --- | ----------------------------------------------------------------------------- |
-| ORD-1 | Orders, items, stage table, stage events, order numbers                      | Todo   | PROD-2, CUS-1 |     | Q7                                                                            |
-| ORD-2 | Delivery zones, areas and charges                                            | Todo   | ACC-3         |     |                                                                               |
-| ORD-3 | Create order from chat and from staff                                        | Todo   | ORD-1, ORD-2  |     | D26/D27: buyer and recipient snapshot; self phone save; conflicts allow order |
-| ORD-4 | Order confirmation with channel-supported response handling                  | Todo   | ORD-3, CHAT-2 |     |                                                                               |
-| ORD-5 | Web: orders pipeline and order detail                                        | Todo   | ORD-3, WEB-2  |     |                                                                               |
-| ORD-6 | Public order link page and endpoint (Turnstile, limits)                      | Todo   | ORD-3         |     | Design needed                                                                 |
-| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording | Todo   | ORD-3         |     | D21; item quantities and money checks required                                |
+| ID    | Task                                                                             | Status | Depends        | PR  | Notes                                                                         |
+| ----- | -------------------------------------------------------------------------------- | ------ | -------------- | --- | ----------------------------------------------------------------------------- |
+| ORD-1 | Orders, items, stage table, stage events, order numbers                          | Todo   | PROD-2, CUS-1  |     | Q7                                                                            |
+| ORD-2 | Delivery zones, areas and charges                                                | Todo   | ACC-3          |     |                                                                               |
+| ORD-3 | Create order from chat and from staff                                            | Todo   | ORD-1, ORD-2   |     | D26/D27: buyer and recipient snapshot; self phone save; conflicts allow order |
+| ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo   | ORD-3, CAMP-11 |     | Was a separate confirmation sender; now runs on the workflow engine           |
+| ORD-5 | Web: orders pipeline and order detail                                            | Todo   | ORD-3, WEB-2   |     |                                                                               |
+| ORD-6 | Public order link page and endpoint (Turnstile, limits)                          | Todo   | ORD-3          |     | Design needed                                                                 |
+| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | Todo   | ORD-3          |     | D21; item quantities and money checks required                                |
 
 ## M7. AI layer
 
@@ -162,24 +185,15 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 | SOC-4 | Content Studio: brand profile, caption generation | Todo   | AI-2, SOC-1 |     |       |
 | SOC-5 | Web: Social hub, My posts, Content Studio         | Todo   | SOC-4       |     |       |
 
-## M11. Campaigns, automations, insights
+## M11. Analytics and insights
 
-| ID     | Task                                                             | Status  | Depends       | PR  | Notes                      |
-| ------ | ---------------------------------------------------------------- | ------- | ------------- | --- | -------------------------- |
-| CUS-6  | Segments: condition tree, compiler, counts                       | Todo    | CUS-3         |     |                            |
-| CUS-7  | Web: Segments list and builder                                   | Todo    | CUS-6         |     |                            |
-| CAMP-1 | WhatsApp templates sync and submit                               | Blocked | CHN-3         |     | Q2                         |
-| CAMP-2 | Campaigns: draft, approval, frozen recipients, cost estimate     | Todo    | CUS-6, PAY-8  |     |                            |
-| CAMP-3 | Sender job, quiet hours, frequency cap, tracked links, callbacks | Todo    | CAMP-2        |     |                            |
-| CAMP-4 | Web: campaign list, builder, results                             | Todo    | CAMP-3        |     | Results page design needed |
-| CAMP-5 | Workflow engine, versions, runs and template library             | Todo    | CAMP-3        |     | D23                        |
-| CAMP-6 | Web: automations list, template library and builder canvas       | Todo    | CAMP-5        |     |                            |
-| CAMP-7 | Messenger campaigns to people with an open window                | Todo    | CAMP-3        |     | D24                        |
-| ANA-1  | Glossary report functions and daily summary tables               | Todo    | ORD-3         |     |                            |
-| ANA-2  | Attribution of orders to messages and posts                      | Todo    | ANA-1, CAMP-3 |     |                            |
-| ANA-3  | Web: Analytics tabs                                              | Todo    | ANA-2         |     |                            |
-| HOME-3 | Web: Dashboard cards                                             | Todo    | ANA-1         |     |                            |
-| HOME-4 | Ask Dakly AI with read-only report tools                         | Todo    | ANA-1, AI-2   |     |                            |
+| ID     | Task                                               | Status | Depends       | PR  | Notes |
+| ------ | -------------------------------------------------- | ------ | ------------- | --- | ----- |
+| ANA-1  | Glossary report functions and daily summary tables | Todo   | ORD-3         |     |       |
+| ANA-2  | Attribution of orders to messages and posts        | Todo   | ANA-1, CAMP-3 |     |       |
+| ANA-3  | Web: Analytics tabs                                | Todo   | ANA-2         |     |       |
+| HOME-3 | Web: Dashboard cards                               | Todo   | ANA-1         |     |       |
+| HOME-4 | Ask Dakly AI with read-only report tools           | Todo   | ANA-1, AI-2   |     |       |
 
 ## M12. Admin panel
 
@@ -206,7 +220,6 @@ Evidence and acceptance criteria: [development readiness review](reviews/develop
 | REV-7  | Define event names, final send gates, real-time recovery and AI latency measurements              | Todo        | REV-1                |                                                                                                                   | Required before messaging, workflows and analytics integration                                      |
 | REV-8  | Correct final core integration review findings                                                    | Done        | ACC-8                | #41                                                                                                               | Support context, recovery concurrency, enrollment locks, membership pages and logging; blockers #42 |
 | REV-9  | Core review merge blockers, cleanup and repository checks                                         | In progress | REV-8                | #42, #43, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53, #54, #56, #57, #59, #60, #61, #62, #63, #64, #65, #68 | Items from docs review of core PRs 8-41                                                             |
-| CUS-8  | Customer CSV/XLSX import with mapping, consent evidence, row errors and undo                      | Todo        | CUS-1, CUS-2         |                                                                                                                   | Review duplicate-phone policy before implementation                                                 |
 | CUS-9  | POS sales CSV import and reconciliation                                                           | Todo        | CUS-8, ORD-1         |                                                                                                                   | D6; separate from release 2 POS connectors                                                          |
 | CUS-10 | Voice customer entry with review, confidence and usage accounting                                 | Todo        | CUS-1, PAY-1         |                                                                                                                   | Define speech provider contract and confirmation before save                                        |
 | CUS-11 | Customer export, erasure and derived-data cleanup                                                 | Todo        | CUS-1, ACC-4         |                                                                                                                   | Permissions, formula escaping, retention and audit acceptance                                       |
@@ -225,7 +238,6 @@ Evidence and acceptance criteria: [development readiness review](reviews/develop
 | OPS-4  | Upload scanning, image re-encoding and export safety                                              | Todo        | PROD-3               |                                                                                                                   | Shared file pipeline for chat, knowledge and imports too                                            |
 | OPS-5  | Load, browser, accessibility and provider sandbox release checks                                  | Todo        | WEB-5, OPS-1         |                                                                                                                   | Separate launch targets from later scale targets                                                    |
 | SOC-6  | Weekly content plans, festival suggestions, photo tools and shared ideas                          | Todo        | SOC-4                |                                                                                                                   | Settle private/shared drafts, usage and approval revisions                                          |
-| CAMP-8 | Release 1 workflow catalogue and typed action contracts                                           | Todo        | REV-2, REV-7         |                                                                                                                   | Assign each template a trigger, prerequisites, actions and exit; split CAMP-5 before build          |
 | HOME-5 | Notification preferences, push, digests and recipient lifecycle                                   | Todo        | HOME-1, ACC-9        |                                                                                                                   | Per-user dedupe, escalation policy and retry charging                                               |
 | HOME-6 | Ask Dakly private conversation history and action review                                          | Todo        | HOME-4               |                                                                                                                   | User/store scope, retention, revoked permissions and charging                                       |
 | ANA-4  | Profit, AI agent reports and company metric definitions                                           | Todo        | ANA-1                |                                                                                                                   | Cost basis, delayed attribution and denominator acceptance                                          |
