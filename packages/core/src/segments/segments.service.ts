@@ -52,16 +52,16 @@ export class SegmentsService {
     return this.contacts.listIdsMatching(storeId, segment.rules, page);
   }
 
-  // The store lock makes the name check and the 200-segment limit hold under concurrent saves.
+  // The store lock makes the 200-segment limit hold under concurrent saves.
   async create(storeId: string, input: CreateSegmentInput, actor: Actor): Promise<SegmentResponse> {
     return this.transaction.runLocked(storeId, async () => {
       if ((await this.repository.countSaved(storeId)) >= MAX_SEGMENTS_PER_STORE)
         throw segmentError('SEGMENT_LIMIT_REACHED');
-      await this.assertNameFree(storeId, input.name);
       const segment = await this.repository.insert(storeId, {
         ...input,
         createdByUserId: actor.kind === 'user' ? actor.userId : null,
       });
+      if (segment === 'name_taken') throw segmentError('SEGMENT_NAME_TAKEN');
       await this.publishSaved(storeId, segment.id, segment.updatedAt);
       return toSegmentResponse(segment);
     });
@@ -97,10 +97,6 @@ export class SegmentsService {
     const segment = await this.repository.find(storeId, segmentId);
     if (!segment) throw segmentError('SEGMENT_NOT_FOUND');
     return segment;
-  }
-
-  private async assertNameFree(storeId: string, name: string): Promise<void> {
-    if (await this.repository.findIdByName(storeId, name)) throw segmentError('SEGMENT_NAME_TAKEN');
   }
 
   private async publishSaved(storeId: string, segmentId: string, at: Date) {

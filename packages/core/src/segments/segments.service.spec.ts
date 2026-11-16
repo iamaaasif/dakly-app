@@ -27,8 +27,8 @@ class FakeSegmentsRepository {
     return this.rows.size;
   }
 
-  async findIdByName(_storeId: string, name: string) {
-    return [...this.rows.values()].find((row) => row.name === name)?.id;
+  private hasName(name: string) {
+    return [...this.rows.values()].some((row) => row.name === name);
   }
 
   async find(_storeId: string, id: string) {
@@ -36,6 +36,7 @@ class FakeSegmentsRepository {
   }
 
   async insert(_storeId: string, input: Pick<Segment, 'name' | 'rules'>) {
+    if (this.hasName(input.name)) return 'name_taken' as const;
     const row = { id: randomUUID(), ...input, createdAt: now, updatedAt: now };
     this.rows.set(row.id, row);
     return row;
@@ -44,7 +45,7 @@ class FakeSegmentsRepository {
   async change(_storeId: string, id: string, change: Partial<Segment>) {
     const row = this.rows.get(id);
     if (!row) return undefined;
-    if (change.name && change.name !== row.name && (await this.findIdByName(STORE_ID, change.name)))
+    if (change.name && change.name !== row.name && this.hasName(change.name))
       return 'name_taken' as const;
     const changed = { ...row, ...change };
     this.rows.set(id, changed);

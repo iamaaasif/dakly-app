@@ -54,17 +54,6 @@ export class SegmentsRepository {
     return row;
   }
 
-  async findIdByName(storeId: string, name: string): Promise<string | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: segments.id })
-        .from(segments)
-        .where(and(eq(segments.storeId, storeId), eq(segments.name, name)))
-        .limit(1),
-    );
-    return row?.id;
-  }
-
   async countSaved(storeId: string): Promise<number> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx.select({ count: count() }).from(segments).where(eq(segments.storeId, storeId)),
@@ -75,18 +64,23 @@ export class SegmentsRepository {
   async insert(
     storeId: string,
     segment: Pick<Segment, 'name' | 'rules'> & { createdByUserId: string | null },
-  ): Promise<Segment> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .insert(segments)
-        .values({ storeId, ...segment })
-        .returning(segmentColumns),
-    );
-    return row!;
+  ): Promise<Segment | 'name_taken'> {
+    try {
+      const [row] = await this.database.forStore(storeId, (tx) =>
+        tx
+          .insert(segments)
+          .values({ storeId, ...segment })
+          .returning(segmentColumns),
+      );
+      return row!;
+    } catch (error) {
+      if (isConstraintViolation(error, '23505', 'segments_store_id_name_key')) return 'name_taken';
+      throw error;
+    }
   }
 
-  // A rename onto another segment's name is refused by the unique index, so concurrent renames
-  // need no lock. The caller's transaction is then aborted and must roll back.
+  // A name another segment has is refused by the unique index, so saves need no name lock. The
+  // caller's transaction is then aborted and must roll back.
   async change(
     storeId: string,
     id: string,

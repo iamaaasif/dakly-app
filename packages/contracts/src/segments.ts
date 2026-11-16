@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { consentChannels, contactKinds, contactSources } from './contacts';
-import { memberListQuerySchema } from './team';
 
 // Feature 03: at most 20 conditions, in a top group with one level of groups inside it.
 export const MAX_SEGMENT_CONDITIONS = 20;
@@ -72,7 +71,10 @@ export const changeSegmentSchema = createSegmentSchema
   .partial()
   .refine((input) => input.name !== undefined || input.rules !== undefined, 'Nothing to change');
 export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
-export const segmentListQuerySchema = z.strictObject(memberListQuerySchema.shape);
+export const segmentListQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
 
 export type CreateSegmentInput = z.infer<typeof createSegmentSchema>;
 export type ChangeSegmentInput = z.infer<typeof changeSegmentSchema>;
