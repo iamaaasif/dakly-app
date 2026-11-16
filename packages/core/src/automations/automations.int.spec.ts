@@ -228,6 +228,40 @@ describe('AutomationsService (Postgres)', () => {
     ]);
   });
 
+  it('checks the graph it publishes when a draft edit commits while publish waits', async () => {
+    const automation = await draft();
+    const unavailable = { ...welcome, trigger: { key: 'chat_started', filters: [] } };
+    const editor = await admin.pool.connect();
+    try {
+      await editor.query('begin');
+      await editor.query('select id from automations where id=$1 for update', [automation.id]);
+      const publishing = service.publish(storeA, automation.id, staff);
+      // Wait until publish is blocked on the row lock, then commit an edit under it.
+      let isBlocked = false;
+      for (let waited = 0; waited < 100 && !isBlocked; waited += 1) {
+        const blocked = await admin.pool.query(
+          "select 1 from pg_stat_activity where wait_event_type='Lock' and query like 'update \"automations\"%'",
+        );
+        isBlocked = Boolean(blocked.rowCount);
+        if (!isBlocked) await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(isBlocked).toBe(true);
+      await editor.query('update automations set draft_graph=$2 where id=$1', [
+        automation.id,
+        JSON.stringify(unavailable),
+      ]);
+      await editor.query('commit');
+
+      await expect(publishing).rejects.toMatchObject({ code: 'AUTOMATION_TRIGGER_UNAVAILABLE' });
+    } finally {
+      editor.release();
+    }
+    expect(await service.get(storeA, automation.id)).toMatchObject({
+      status: 'draft',
+      versions: [],
+    });
+  });
+
   it('changes the live trigger only on publish', async () => {
     const automation = await draft();
     await service.publish(storeA, automation.id, staff);

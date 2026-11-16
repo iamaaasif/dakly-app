@@ -11,7 +11,7 @@ import {
   type CreateAutomationInput,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
-import { automationTriggers, type TriggerKey } from '@dakly/contracts/automations/catalogue';
+import { automationTriggers } from '@dakly/contracts/automations/catalogue';
 import {
   type AutomationGraph,
   type AutomationStep,
@@ -109,19 +109,19 @@ export class AutomationsService {
   // Runs already in the workflow keep the version they entered (feature 09).
   async publish(storeId: string, automationId: string, actor: Actor): Promise<AutomationResponse> {
     return this.transaction.run(storeId, async () => {
-      const automation = await this.findVisible(storeId, automationId);
-      checkPublishable(automation.graph);
-      // The status update locks the row first, so a second publish waits for this one. The live
-      // trigger becomes the published graph's.
-      await this.move(storeId, automationId, 'publish', automation.graph.trigger.key);
+      // The status update locks the row first, so a second publish or a draft edit waits, and
+      // the checks run on the graph that is published. A refusal rolls the status back.
+      const locked = await this.move(storeId, automationId, 'publish');
+      checkPublishable(locked.graph);
       const now = this.clock.now();
       const version = await this.repository.insertVersion(storeId, automationId, {
-        graph: automation.graph,
+        graph: locked.graph,
         publishedByUserId: actor.kind === 'user' ? actor.userId : null,
         publishedAt: now,
       });
       const published = await this.repository.change(storeId, automationId, ['active'], {
         publishedVersionId: version.id,
+        triggerType: locked.graph.trigger.key,
         updatedAt: now,
       });
       return toAutomationResponse(published!);
@@ -159,12 +159,10 @@ export class AutomationsService {
     storeId: string,
     automationId: string,
     move: StatusMove,
-    triggerType?: TriggerKey,
   ): Promise<AutomationResponse> {
     const { from, to } = STATUS_MOVES[move];
     const automation = await this.repository.change(storeId, automationId, from, {
       status: to,
-      triggerType,
       updatedAt: this.clock.now(),
     });
     if (automation) return toAutomationResponse(automation);
