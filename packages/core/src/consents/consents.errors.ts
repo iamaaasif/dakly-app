@@ -8,6 +8,10 @@ const CONSENT_ERRORS = {
     status: 400,
     message: `Read consent for at most ${MAX_CONSENT_CONTACTS} contacts at a time`,
   },
+  CONSENT_OPT_IN_NEEDS_CUSTOMER: {
+    status: 400,
+    message: 'A Messenger or Instagram opt-in has to come from the customer',
+  },
 } as const satisfies ErrorCatalog;
 
 export function consentError(code: keyof typeof CONSENT_ERRORS): AppError {

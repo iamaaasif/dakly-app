@@ -51,7 +51,9 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
 
 - `POST /contacts/:contactId/consents` (`customers.edit`) records a staff answer through
   `ConsentService.recordStaffAnswer` with `channel`, `status` and a required `note` saying how
-  the customer agreed or refused. It saves with source `manual` and the note as evidence. Email is not accepted (D20). A contact that is
+  the customer agreed or refused. It saves with source `manual` and the note as evidence. Staff may record an opt-in only for WhatsApp and SMS; a
+  Messenger or Instagram opt-in has to come from the customer, so `granted` there fails with
+  `400 CONSENT_OPT_IN_NEEDS_CUSTOMER`. A withdrawal is accepted on every channel except email. Email is not accepted (D20). A contact that is
   missing or in another store returns `404 CONTACT_NOT_FOUND`.
 - STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
   `ConsentService.record` when it receives them.

@@ -19,6 +19,8 @@ type RecordConsentChange = Pick<
   'contactId' | 'channel' | 'status' | 'source' | 'evidence'
 >;
 
+const STAFF_OPT_IN_CHANNELS: ConsentChannel[] = ['whatsapp', 'sms'];
+
 @Injectable()
 export class ConsentService {
   constructor(
@@ -66,6 +68,9 @@ export class ConsentService {
     { channel, status, note }: RecordConsentInput,
     actor: AuditEntry['actor'],
   ): Promise<ConsentResponse> {
+    // A Messenger or Instagram opt-in must come from the customer, so a staff note cannot grant it.
+    if (status === 'granted' && !STAFF_OPT_IN_CHANNELS.includes(channel))
+      throw consentError('CONSENT_OPT_IN_NEEDS_CUSTOMER');
     return this.record(
       storeId,
       { contactId, channel, status, source: 'manual', evidence: note },

@@ -229,4 +229,29 @@ describe('ConsentService (Postgres)', () => {
       expect.objectContaining({ code: 'CONSENT_CONTACTS_TOO_MANY', status: 400 }),
     );
   });
+
+  it('refuses a staff opt-in on Messenger and accepts a staff withdrawal there', async () => {
+    const id = await contact(storeA);
+    const note = 'পেজে মেসেজ দিয়ে আর বার্তা চান না বলেছেন';
+
+    await expect(
+      service.recordStaffAnswer(
+        storeA,
+        id,
+        { channel: 'messenger', status: 'granted', note },
+        staff,
+      ),
+    ).rejects.toMatchObject({ code: 'CONSENT_OPT_IN_NEEDS_CUSTOMER', status: 400 });
+    expect(await service.current(storeA, [id], 'messenger')).toEqual([]);
+
+    await service.recordStaffAnswer(
+      storeA,
+      id,
+      { channel: 'messenger', status: 'withdrawn', note },
+      staff,
+    );
+    expect(await service.current(storeA, [id], 'messenger')).toEqual([
+      expect.objectContaining({ status: 'withdrawn', source: 'manual' }),
+    ]);
+  });
 });
