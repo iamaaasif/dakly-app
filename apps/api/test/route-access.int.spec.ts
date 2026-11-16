@@ -81,6 +81,7 @@ describe('API route access rules', () => {
         'CustomersController.getById',
         'StoresController.create',
         'PlansController.list',
+        'WalletsController.balances',
       ]),
     );
   });
