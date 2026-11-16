@@ -96,6 +96,12 @@ describe('automation filters without RLS assistance', () => {
     expect((await f.row('automation_runs', runId)).status).toBe('running');
 
     await runs.insertStep(f.a, runId, contactId, step);
+    await f.connection.pool.query(
+      'update automation_run_steps set tapped_at=now() where run_id=$1',
+      [runId],
+    );
+    expect(await runs.listTappedStepKeys(f.b, runId)).toEqual([]);
+    expect(await runs.listTappedStepKeys(f.a, runId)).toEqual(['welcome']);
     expect(await runs.findRun(f.a, runId)).toMatchObject({
       contactId,
       claimedAt,
