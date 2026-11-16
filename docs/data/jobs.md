@@ -27,15 +27,16 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## transactional
 
-| Job                       | Started by                                 | Payload                                | Makes a rerun harmless                             |
-| ------------------------- | ------------------------------------------ | -------------------------------------- | -------------------------------------------------- |
-| `send-sign-in-code`       | Sign-in or sign-up request                 | `userId` or target, code id (no store) | Code id in Valkey; sent once                       |
-| `send-team-invite`        | Invite created                             | `storeId`, `membershipId`              | Sender idempotency key = invite token hash         |
-| `send-order-confirmation` | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                   | Outbound message idempotency key = order id + kind |
-| `send-payment-link`       | Advance requested                          | `storeId`, `paymentIntentId`           | Event `sent` recorded once                         |
-| `send-notification`       | Outbox event a notification rule matches   | `storeId`, `notificationId`            | Unique `(store_id, user_id, dedupe_key)`           |
-| `send-push`               | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`            | Notification status checked                        |
-| `send-invoice-email`      | Invoice paid                               | `storeId`, `invoiceId`                 | Sender idempotency key = invoice id                |
+| Job                       | Started by                                 | Payload                                | Makes a rerun harmless                                                  |
+| ------------------------- | ------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------- |
+| `send-sign-in-code`       | Sign-in or sign-up request                 | `userId` or target, code id (no store) | Code id in Valkey; sent once                                            |
+| `send-team-invite`        | Invite created                             | `storeId`, `membershipId`              | Sender idempotency key = invite token hash                              |
+| `send-order-confirmation` | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                   | Outbound message idempotency key = order id + kind                      |
+| `send-payment-link`       | Advance requested                          | `storeId`, `paymentIntentId`           | Event `sent` recorded once                                              |
+| `send-notification`       | Outbox event a notification rule matches   | `storeId`, `notificationId`            | Unique `(store_id, user_id, dedupe_key)`                                |
+| `send-push`               | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`            | Notification status checked                                             |
+| `send-invoice-email`      | Invoice paid                               | `storeId`, `invoiceId`                 | Sender idempotency key = invoice id                                     |
+| `relay-outbox`            | Job scheduler, every second                | none (sweep)                           | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published |
 
 ## outbound
 
@@ -66,7 +67,6 @@ Per-store cap: one running campaign batch per store.
 
 | Job                         | Started by                                              | Payload                          | Makes a rerun harmless                                               |
 | --------------------------- | ------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------- |
-| `relay-outbox`              | Every second                                            | none (sweep)                     | `claim_outbox_events`, then mark published                           |
 | `refresh-post-metrics`      | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                   |
 | `check-channel-token`       | Sweep `channel_connections_expiring_before`, daily      | `storeId`, `channelConnectionId` | Status only set, notification deduped                                |
 | `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                            |

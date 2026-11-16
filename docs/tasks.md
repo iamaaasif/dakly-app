@@ -24,7 +24,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security          | Done      | FND-3       | #3  |                                                                  |
 | FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules         | Done      | FND-4       | #4  |                                                                  |
 | DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done      |             | #6  | Done in DB-5; `customers` goes with CUS-1                        |
-| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Todo      | DB-5        |     | Table in DB-5; relay and helper left                             |
+| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | In review | DB-5        | #76 | Staff alert after 10 failures left                               |
 | DB-3  | Store and account audit services                                                         | Done      | DB-5, REV-4 | #12 | Atomic audit writes and account retention; [plan](plans/core.md) |
 | DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Done      |             | #27 | Needed by ACC-7; [plan](plans/core.md)                           |
 | DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done      |             | #6  | Schema #6; core migration fold #43; [data/](data/README.md)      |

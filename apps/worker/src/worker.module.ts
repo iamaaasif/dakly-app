@@ -15,6 +15,8 @@ import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
+import { RelayOutboxJob } from '@dakly/core/platform/outbox/jobs/relay-outbox.job';
+import { OutboxRelayModule } from '@dakly/core/platform/outbox/outbox-relay.module';
 import {
   BulkJobDispatcher,
   TransactionalJobDispatcher,
@@ -34,6 +36,7 @@ import { JobSchedulers } from './job-schedulers';
     StaffAlertRelayJob,
     SendDueSecurityNoticesJob,
     SendSecurityNoticeJob,
+    RelayOutboxJob,
     JobSchedulers,
   ],
   imports: [
@@ -46,6 +49,7 @@ import { JobSchedulers } from './job-schedulers';
     BullModule.registerQueue({ name: QUEUES.bulk }),
     DatabaseModule,
     SecurityNoticesModule,
+    OutboxRelayModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();

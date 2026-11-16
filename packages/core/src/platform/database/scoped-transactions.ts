@@ -59,6 +59,10 @@ export class ScopedTransactions {
     });
   }
 
+  isOpen(): boolean {
+    return this.scope.getStore()?.isActive === true;
+  }
+
   async join<TResult>(
     ownerId: string,
     work: (tx: Transaction) => Promise<TResult>,

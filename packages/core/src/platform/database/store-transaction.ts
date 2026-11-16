@@ -14,6 +14,10 @@ export class StoreTransaction {
     return this.database.forStore(storeId, () => work());
   }
 
+  isOpen(): boolean {
+    return this.database.isOpen();
+  }
+
   runLocked<TResult>(storeId: string, work: () => Promise<TResult>): Promise<TResult> {
     return this.database.forStore(storeId, async (tx) => {
       // Serialize store decisions without blocking foreign-key checks from account actions.

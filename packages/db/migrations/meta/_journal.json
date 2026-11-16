@@ -190,6 +190,13 @@
       "when": 1794769099489,
       "tag": "0026_support_requests_next_page",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794798398237,
+      "tag": "0027_outbox_claim_attempts",
+      "breakpoints": true
     }
   ]
 }
