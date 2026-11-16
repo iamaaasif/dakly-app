@@ -224,6 +224,7 @@ beforeAll(async () => {
   await app.getHttpAdapter().getInstance().ready();
   vi.spyOn(SmsService.prototype, 'send').mockImplementation(async (message) => {
     delivered.push(message);
+    return { providerMessageId: 'test-sms' };
   });
   vi.spyOn(EmailService.prototype, 'send').mockImplementation(async (message) => {
     delivered.push(message);

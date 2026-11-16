@@ -521,6 +521,7 @@ describe('every production shop route isolates its data', () => {
     f = new IsolationFixture(app);
     vi.spyOn(app.get(SmsService), 'send').mockImplementation(async (message) => {
       f.sms.push(message);
+      return { providerMessageId: 'test-sms' };
     });
     await registerSessionCookies(app);
     await app.init();

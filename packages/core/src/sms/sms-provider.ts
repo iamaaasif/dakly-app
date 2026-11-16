@@ -9,5 +9,9 @@ export function createSmsDriver(env: Env = loadEnv()): SmsDriver {
   if (env.NODE_ENV === 'production') {
     throw new Error('A usable production SMS driver is required; configure it when ACC-14 ships');
   }
-  return new MailpitSmsDriver({ host: env.MAILPIT_SMTP_HOST, port: env.MAILPIT_SMTP_PORT });
+  return new MailpitSmsDriver({
+    host: env.MAILPIT_SMTP_HOST,
+    port: env.MAILPIT_SMTP_PORT,
+    apiUrl: env.MAILPIT_API_URL,
+  });
 }

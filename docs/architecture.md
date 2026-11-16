@@ -10,7 +10,7 @@ apps/
   admin/      Next.js staff app at admin.dakly.app (not built yet).
 packages/
   ui/         Generic UI components and theme tokens for web and admin (not built yet).
-  core/       Features (contacts/, later chats/, orders/, products/, social/, ai/, billing/)
+  core/       Features (contacts/, messaging/, later chats/, orders/, products/, social/, ai/, billing/)
               and platform/ (config, errors, tenancy, database, queue).
   contracts/  zod schemas and response types shared by api and web.
   db/         Drizzle schema, migrations, RLS policies.

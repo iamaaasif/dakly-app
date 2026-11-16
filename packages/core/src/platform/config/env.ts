@@ -18,6 +18,7 @@ const envSchema = z.object({
   SMS_DRIVER: z.literal('mailpit').optional(),
   MAILPIT_SMTP_HOST: z.string().min(1).default('127.0.0.1'),
   MAILPIT_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
+  MAILPIT_API_URL: z.url().default('http://127.0.0.1:8025'),
   SENTRY_DSN: z.url().optional(),
   SLACK_BOT_TOKEN: z.string().min(1).optional(),
   SLACK_CHANNEL_ID: z
