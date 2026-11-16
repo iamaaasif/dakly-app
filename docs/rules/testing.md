@@ -37,6 +37,9 @@ that the session chooses the store for reads and writes.
 
 The API uses `dakly_app` with RLS. Direct reads without store predicates prove the policies;
 a disposable relation proves the assertions reject both extra foreign rows and missing own rows.
+`store-isolation.int.spec.ts` covers every relation with `store_id` found in the catalog: inside a
+rolled back transaction it seeds one bare row per store and reads each relation as `dakly_app`
+with no store filter, and a probe table without RLS must fail the same check.
 Each feature's `owner-filters.int.spec.ts` separately uses `DATABASE_ADMIN_URL` to test repository
 predicates without RLS assistance. Only fixture rows are cleaned up. CI runs both through the
 existing `pnpm test:int` command.

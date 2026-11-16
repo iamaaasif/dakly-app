@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import type * as ReactQuery from '@tanstack/react-query';
 import { QueryClient } from '@tanstack/react-query';
-import type * as React from 'react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useSessionVerification } from './use-session-verification';
@@ -9,13 +10,6 @@ const { getClient } = vi.hoisted(() => ({ getClient: vi.fn() }));
 vi.mock('@tanstack/react-query', async (original) => ({
   ...(await original<typeof ReactQuery>()),
   useQueryClient: getClient,
-}));
-// Minimal hook bindings isolate the source lifecycle; query publication and disposal use real caches.
-vi.mock('react', async (original) => ({
-  ...(await original<typeof React>()),
-  useCallback: (callback: unknown) => callback,
-  useRef: (current: unknown) => ({ current }),
-  useState: (initial: unknown) => [initial, vi.fn()],
 }));
 vi.mock('./session-context', () => ({
   sessionContextKey: ['session-context'],
@@ -32,8 +26,8 @@ async function acceptedAccount() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   getClient.mockReturnValue(client);
   client.setQueryDefaults(contextKey, { queryFn: async () => accountA });
-  const verification = useSessionVerification();
-  await verification.verify();
+  const { result: verification } = renderHook(() => useSessionVerification());
+  await act(() => verification.current.verify());
   client.setQueryData(historyKey, { privateHistory: 'Account A' });
   await client
     .getMutationCache()
@@ -47,7 +41,7 @@ describe('session verification cache disposal', () => {
 
   it('retains feature queries and mutation results when the accepted context is unchanged', async () => {
     const verification = await acceptedAccount();
-    await verification.verify();
+    await act(() => verification.current.verify());
     expect(client.getQueryData(historyKey)).toEqual({ privateHistory: 'Account A' });
     expect(
       client
@@ -70,14 +64,16 @@ describe('session verification cache disposal', () => {
           return next;
         },
       });
-      const pending = verification.verify();
+      const pending = verification.current.verify();
       await started.promise;
-      verification.pause();
+      act(() => {
+        verification.current.pause();
+      });
       release.resolve();
-      await pending;
+      await act(() => pending);
       expect(client.getQueryData(contextKey)).toEqual(next);
       expect(client.getQueryData(historyKey)).toEqual({ privateHistory: 'Account A' });
-      await verification.verify();
+      await act(() => verification.current.verify());
       if (next.contextTag === accountA.contextTag) {
         expect(client.getQueryData(historyKey)).toEqual({ privateHistory: 'Account A' });
         expect(client.getMutationCache().getAll()).toHaveLength(1);
