@@ -18,7 +18,7 @@ import { StaffIdentityService } from './staff-identity.service';
 import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { SupportOwnerService } from './support-owner.service';
-import { supportRoles } from './support-roles';
+import { supportRoles, walletCreditRoles } from './support-roles';
 import { supportContextTag, assertSupportContext } from './support-session';
 import { assertSupportStaff } from './support-staff-checks';
 import { supportError, isSupportCodeUnavailable } from './support.errors';
@@ -42,6 +42,11 @@ export class SupportService {
   async authorizeBreakGlass(storeId: string, staff: Staff) {
     const current = await this.lockStaff(storeId, staff.id, staff.sessionId);
     if (current.role !== 'super_admin') throw supportError('SUPPORT_DENIED');
+  }
+
+  async authorizeWalletCredit(storeId: string, staff: Staff) {
+    const current = await this.lockStaff(storeId, staff.id, staff.sessionId);
+    if (!walletCreditRoles.includes(current.role)) throw supportError('SUPPORT_DENIED');
   }
 
   targets(staff: Staff, query: string) {
