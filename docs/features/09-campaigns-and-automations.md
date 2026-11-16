@@ -113,7 +113,7 @@ View Campaigns or Automations: see lists and results. Edit: create, edit, approv
 
 ### Events
 
-campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, workflow.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
+campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, automation.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
 
 ### Acceptance criteria
 
@@ -407,9 +407,19 @@ Limits: 50 steps a workflow, 90 days of waiting on any path, 5 exit conditions, 
 
 Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.
 
-Drafts: `GET /automations` lists a store's workflows that are not archived, oldest first, 50 to a page; `GET /automations/:automationId` returns one with its draft graph; `POST /automations` and `PATCH /automations/:automationId` save the name and draft graph; `POST /automations/:automationId/archive` archives it. Reads need `automations.view` and writes `automations.edit`. Saving a draft refuses a path with no end or a loop (the graph schema). `automations.trigger_type`, the trigger the runner matches, is set from the first draft on create; editing the draft never changes it. The draft can be edited in any status but archived. An archived workflow is gone from the list and every route answers 404. A store has at most 100 workflows that are not archived.
+Drafts: `GET /automations` lists a store's workflows that are not archived, oldest first, 50 to a page; `GET /automations/:automationId` returns one with its draft graph; `POST /automations` and `PATCH /automations/:automationId` save the name and draft graph; `POST /automations/:automationId/archive` archives it. Reads need `automations.view` and writes `automations.edit`. Saving a draft refuses a path with no end or a loop (the graph schema). `automations.trigger_type`, the trigger the runner matches, is set from the first draft on create; editing the draft never changes it. The draft can be edited in any status but archived. An archived workflow is gone from the list and every route answers 404. A store has at most 100 workflows that are not archived. While "Only owners and admins can approve sends" is on, Publish and Enable need an Owner or Admin (`AUTOMATION_APPROVAL_DENIED` otherwise); pause, archive and Stop the old version need only `automations.edit`.
+
+Publish refuses these, with the step in the error's `fields`:
+
+- `AUTOMATION_TRIGGER_UNAVAILABLE`: the catalogue does not mark the trigger ready before Channels, or its source is a planned event that nothing emits. Birthday passes, because birthdays live on contacts.
+- `AUTOMATION_CHANNEL_UNREACHABLE`: a send step lists no SMS. SMS is the only channel that sends; Messenger and WhatsApp steps, and WhatsApp's approved template check, are not available.
+- `AUTOMATION_SPLIT_TOO_SOON`: under 120 minutes of wait on the shortest path from the send step a condition reads. Only a duration and a wait-for-reply-or-tap timeout count; a wait for a time of day, a weekday or the window closing may end a minute later.
+
+Publish shows no warnings.
 
 Versions: Publish writes an `automation_versions` row whose graph and publication metadata are immutable. The app may update only `is_stopped` for owner stop control. Runs keep the version they entered; the owner may choose "Stop the old version". Moving runs to a new version is allowed only where step keys match.
+
+Statuses follow [state-machines.md](../data/state-machines.md#workflow). Publish sets `active` from `draft`, `active` or `paused`, copies the draft into the next version number and points the workflow at it. Its status update locks the workflow row first, so two publishes at the same moment get versions 1 and 2. Each publish also sets `automations.trigger_type` from the published graph. Disable on the list is pause (`active` to `paused`), and Enable is `paused` to `active`. Delete is archive; an archived workflow's versions stay for the runs on them. "Stop the old version" sets `is_stopped` on a version that is no longer the published one; the published version is stopped by pausing. Enable does not repeat the publish checks: nothing a store can change before channel connections alters their result.
 
 Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Running claims are leases: the sweep also reclaims expired `claimed_at` values, including a crash between claiming and queueing. A worker guards writes with its claim generation/time, and provider sends use a stable `(run, step)` operation key; an uncertain provider result must be reconciled before resending. A stale worker cannot advance a newly claimed run. No row lock spans a provider call. Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept until 372 days after the run finishes (365-day rebuild plus 7-day lookback), for per-step numbers, attribution and the per-person history. Active runs retain their evidence.
 

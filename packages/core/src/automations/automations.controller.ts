@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 
 import {
+  type AutomationDetailResponse,
   type AutomationListQuery,
   automationListQuerySchema,
   type AutomationListResponse,
@@ -21,8 +22,10 @@ import {
   type CreateAutomationInput,
   createAutomationSchema,
 } from '@dakly/contracts/automations';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
+import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
@@ -46,7 +49,7 @@ export class AutomationsController {
   get(
     @CurrentStore() storeId: string,
     @Param('automationId', ParseUUIDPipe) automationId: string,
-  ): Promise<AutomationResponse> {
+  ): Promise<AutomationDetailResponse> {
     return this.automations.get(storeId, automationId);
   }
 
@@ -71,6 +74,47 @@ export class AutomationsController {
     return this.automations.change(storeId, automationId, input, { kind: 'user', userId });
   }
 
+  @Post(':automationId/publish')
+  @HttpCode(200)
+  @RequirePermission('automations.edit')
+  publish(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('automationId', ParseUUIDPipe) automationId: string,
+  ): Promise<AutomationResponse> {
+    return this.automations.publish(storeId, automationId, {
+      access,
+      actor: { kind: 'user', userId },
+    });
+  }
+
+  @Post(':automationId/enable')
+  @HttpCode(200)
+  @RequirePermission('automations.edit')
+  enable(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('automationId', ParseUUIDPipe) automationId: string,
+  ): Promise<AutomationResponse> {
+    return this.automations.enable(storeId, automationId, {
+      access,
+      actor: { kind: 'user', userId },
+    });
+  }
+
+  @Post(':automationId/pause')
+  @HttpCode(200)
+  @RequirePermission('automations.edit')
+  pause(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('automationId', ParseUUIDPipe) automationId: string,
+  ): Promise<AutomationResponse> {
+    return this.automations.pause(storeId, automationId, { kind: 'user', userId });
+  }
+
   @Post(':automationId/archive')
   @HttpCode(204)
   @RequirePermission('automations.edit')
@@ -80,5 +124,20 @@ export class AutomationsController {
     @Param('automationId', ParseUUIDPipe) automationId: string,
   ): Promise<void> {
     return this.automations.archive(storeId, automationId, { kind: 'user', userId });
+  }
+
+  @Post(':automationId/versions/:versionId/stop')
+  @HttpCode(204)
+  @RequirePermission('automations.edit')
+  stopVersion(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('automationId', ParseUUIDPipe) automationId: string,
+    @Param('versionId', ParseUUIDPipe) versionId: string,
+  ): Promise<void> {
+    return this.automations.stopVersion(storeId, automationId, versionId, {
+      kind: 'user',
+      userId,
+    });
   }
 }
