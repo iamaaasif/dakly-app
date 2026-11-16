@@ -5,5 +5,6 @@ export default defineConfig({
   test: {
     include: ['src/**/*.int.spec.ts'],
     fileParallelism: false,
+    globalSetup: ['./test/queue-prefix.ts'],
   },
 });

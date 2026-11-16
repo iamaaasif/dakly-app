@@ -81,7 +81,7 @@ afterEach(async () => {
 
 describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queueName) => {
   it('runs one job per interval across two workers, each in its own job context', async () => {
-    const prefix = `test-${randomUUID()}`;
+    const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
     const first = await start(queueName, prefix);
     const second = await start(queueName, prefix);
     await Promise.all([
@@ -111,7 +111,10 @@ describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queue
       finish = resolve;
     });
     work = () => pending;
-    const { application, queue } = await start(queueName, `test-${randomUUID()}`);
+    const { application, queue } = await start(
+      queueName,
+      `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
+    );
     await scheduleJob(queue, SCHEDULED);
     await until(() => runs.length === 1);
     await until(async () => (await queue.getDelayedCount()) === 1);
@@ -138,7 +141,7 @@ describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queue
     work = async () => {
       throw new Error('private-scheduled-failure');
     };
-    const { queue } = await start(queueName, `test-${randomUUID()}`);
+    const { queue } = await start(queueName, `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`);
     await scheduleJob(queue, SCHEDULED);
     await until(() => runs.length === 1);
     const jobId = runs[0]!;

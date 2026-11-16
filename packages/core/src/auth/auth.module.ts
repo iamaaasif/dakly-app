@@ -54,7 +54,10 @@ import { UsersModule } from './users.module';
     // Sign-in and recovery queue notice delivery for the worker.
     BullModule.registerQueueAsync({
       name: QUEUES.transactional,
-      useFactory: () => ({ connection: toRedisConnection(loadEnv().REDIS_URL) }),
+      useFactory: () => {
+        const env = loadEnv();
+        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+      },
     }),
   ],
   controllers: [

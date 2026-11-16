@@ -44,7 +44,7 @@ Module({
     SecurityNoticesModule,
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),
-      prefix: `test-${randomUUID()}`,
+      prefix: `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
     }),
   ],
   providers: [SendSecurityNoticeJob],

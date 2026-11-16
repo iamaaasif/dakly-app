@@ -19,6 +19,8 @@ Rules:
 
 Commands: `pnpm test` (unit), `pnpm test:int` (needs `DATABASE_URL` and `DATABASE_ADMIN_URL`, see README), and `pnpm test:e2e` ([browser setup](../development/browser-tests.md)).
 
+Each `pnpm test:int` run sets `QUEUE_PREFIX` to a prefix of its own and removes its keys at the end. A test that needs an empty queue uses `` `${loadEnv().QUEUE_PREFIX}-${randomUUID()}` `` as its BullMQ prefix, so its queue goes too.
+
 ## Store route isolation
 
 `apps/api/test/cross-store.int.spec.ts` boots the production API module with its full guard chain.
