@@ -24,7 +24,7 @@ export class IsolationFixture {
   private planCreated = false;
   readonly users: string[] = [];
   readonly staff: string[] = [];
-  readonly sms: { to: string; text: string }[] = [];
+  readonly sms: { to: string; text: string; sender?: string }[] = [];
   constructor(readonly app: NestFastifyApplication) {}
   request(
     actor: Actor | string,
@@ -197,12 +197,23 @@ export class IsolationFixture {
   }
 
   async close() {
+    // Versions and workflows point at each other.
+    await this.admin.pool.query(
+      'update automations set published_version_id=null where store_id=any($1::uuid[])',
+      [this.stores],
+    );
     for (const table of [
+      'automation_runs',
+      'automation_versions',
+      'automations',
       'support_sessions',
       'support_grants',
       'staff_recovery_history',
       'ownership_transfers',
+      'campaigns',
+      'segments',
       'contacts',
+      'sms_sender_ids',
       'notifications',
       'outbox_events',
       'audit_log',

@@ -298,6 +298,21 @@ WhatsApp templates: every WhatsApp campaign uses a template. Edited or new templ
 
 Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0.
 
+### Tracked links and the SMS opt-out page
+
+`links/` owns `tracked_links` and `tracked_link_visits`. A sender calls `LinksService.create(storeId, links)` with the source (campaign, automation, post, chat or order), its id, the contact and, for a redirect, the stored URL. Each link gets an 8-character base62 code, unique across stores, because the short link names no store. Links read `SHORT_LINK_BASE_URL` (A4): `dkly.co/<code>` for a redirect and `dkly.co/s/<code>` for an opt-out once the domain is bought; until then the API serves them at `/l/<code>` and `/l/s/<code>`.
+
+The public routes take no session. They find the store and link from the code through `tracked_link_for_code`, then work inside that store. A code that never existed, a deleted link and a code on the wrong path all give the same 404. The three routes share one limit of 120 requests a minute per address, counted under a hash of the address, because mobile carriers put many customers behind one address.
+
+- Redirect (`GET /l/:code`): every tap adds a visit and raises `tap_count`, and the redirect goes only to the link's stored URL. The first tap sets `first_tapped_at` and emits `message.tapped`; later taps are visits only. A visit keeps the time, an event key and `visitor_hash` (D31): an HMAC-SHA256 of the store id, address and user agent under a random salt made for each Asia/Dhaka day and kept in Valkey for two days. The address and user agent are never stored, the same visitor hashes the same only within a day, and a day's hashes cannot be recomputed once its salt has expired.
+- SMS opt-out (CAMP-R4): opening `GET /l/s/:code` shows a Bangla and English page and changes nothing, because phones fetch links to draw previews. Its one button posts to the same address, which writes an SMS withdrawal through `ConsentService.record` with source `opt_out_link` and emits `message.opted_out`. A tap when the current SMS consent is already withdrawn writes nothing, and two taps at once write one withdrawal. Order updates still go out (CAMP-R2). The page posts from the short link origin, which the origin check allows only on this opt-out route (`@AllowShortLinkOrigin()`).
+
+### Campaign drafts (CAMP-2)
+
+`CampaignsService` in `packages/core/src/campaigns/` keeps drafts, so the builder can save on every step. `POST /campaigns` takes a name and the channel; goal, content, include and exclude segment ids (up to 10 each) and `scheduledFor` are optional, and a later `PATCH /campaigns/:campaignId` changes only the fields it sends. An empty `scheduledFor` means send on approval. `GET /campaigns` lists the newest first with a cursor, and `DELETE /campaigns/:campaignId` removes a draft. Reads need `campaigns.view` and writes `campaigns.edit`. Change and delete apply only to a `draft`; anything later is refused with `CAMPAIGN_NOT_DRAFT`.
+
+SMS is the only channel a draft accepts: its content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content (text, image and buttons) comes with CAMP-7, and WhatsApp templates with CAMP-1. A draft does not check that its segment ids exist; approval is to check them. The estimate, approval with frozen recipients and reserved cost, and the scheduled edit, cancel, pause and resume rules are still to build.
+
 ### Frozen destinations and final send checks
 
 At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each sendable recipient's `contact_identity_id` under that connection and freeze its address. A Messenger id is Page-scoped: a contact on two Pages must use the identity on the selected Page. Resolve or create a WhatsApp identity from the contact's own consented WhatsApp address under the selected business connection; this does not verify or merge a profile. The chosen template must belong to that connection. SMS stores a normalized phone and has no channel connection or channel identity. A skipped recipient with no address may have no identity.
@@ -346,7 +361,7 @@ Campaigns and workflows send through `MessagingService.send(storeId, { channel, 
 - It reads the contact's phone through `ContactsService`. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone goes only to the SMS driver; it is never logged or returned.
 - It counts parts with `countSmsParts` in `packages/contracts/src/sms.ts`, where the web app can use the same counter. One part holds 160 GSM-7 or 70 Unicode characters; a longer text splits into parts of 153 or 67, because each part carries a header. One Bangla character makes the whole text Unicode, and `^ { } \ [ ] ~ | €` take two GSM-7 characters each. One part costs one SMS credit.
 - It calls the driver with no store transaction open and refuses to run inside one (`MESSAGING_INSIDE_TRANSACTION`). It returns the provider message id, parts and credits. The caller, a campaign recipient or a workflow step, records status and cost and decides retries; `messaging/` writes no rows.
-- Every SMS goes from Dakly's shared sender until CHN-6 adds the store's approved sender. Delivery receipts come with the provider driver (ACC-14); Mailpit, used in development and tests, sends none, so an accepted message counts as delivered.
+- Every SMS goes from Dakly's shared sender until the store's own sender name is approved ([feature 02](02-channel-connections.md)); then it goes from that name. Delivery receipts come with the provider driver (ACC-14); Mailpit, used in development and tests, sends none, so an accepted message counts as delivered.
 - The operation key goes to the driver as its idempotency key: the same key again sends nothing and returns the first provider message id. The fake driver remembers keys in memory. The Mailpit driver sets the key as the Message-ID and searches Mailpit for it before sending; that check-then-act lookup stands in until a real aggregator's client reference (ACC-14).
 
 ### Workflow builder (D23)
@@ -360,6 +375,8 @@ Template library: complete graphs shipped in code, copied into the store as a dr
 Limits: 50 steps a workflow, 90 days of waiting on any path, 5 exit conditions, 10 condition paths plus Else, 4 random paths, 100 workflows a store; warn when more than 10 active workflows share a trigger.
 
 Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.
+
+Drafts: `GET /automations` lists a store's workflows that are not archived, oldest first, 50 to a page; `GET /automations/:automationId` returns one with its draft graph; `POST /automations` and `PATCH /automations/:automationId` save the name and draft graph; `POST /automations/:automationId/archive` archives it. Reads need `automations.view` and writes `automations.edit`. Saving a draft refuses a path with no end or a loop (the graph schema). `automations.trigger_type`, the trigger the runner matches, is set from the first draft on create; editing the draft never changes it. The draft can be edited in any status but archived. An archived workflow is gone from the list and every route answers 404. A store has at most 100 workflows that are not archived.
 
 Versions: Publish writes an `automation_versions` row whose graph and publication metadata are immutable. The app may update only `is_stopped` for owner stop control. Runs keep the version they entered; the owner may choose "Stop the old version". Moving runs to a new version is allowed only where step keys match.
 
@@ -376,7 +393,7 @@ Triggers and actions are in [`automations/catalogue.ts`](../../packages/contract
 | `consent_given`           | `consent.changed`                    | channel, consent source                                              |                           | Channels     |
 | `tag_added`               | `contact.tag_added`, not yet         | **tag**                                                              |                           | Channels     |
 | `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          | Stored segment membership |              |
-| `link_tapped`             | `message.tapped`, not yet (CAMP-10)  | channel                                                              |                           | Channels     |
+| `link_tapped`             | `message.tapped`                     | channel                                                              |                           | Channels     |
 | `birthday`                | Daily job in store time              | segment                                                              | Birthdays                 | Channels     |
 | `chat_started`            | `conversation.started`               | channel                                                              | Channels                  | Orders       |
 | `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels                  | Orders       |

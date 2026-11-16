@@ -10,6 +10,7 @@ import type {
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
+import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { Clock } from '../platform/clock';
@@ -116,6 +117,18 @@ export class ContactsService {
     if (!(await this.contactsRepository.findById(storeId, id))) {
       throw contactError('CONTACT_NOT_FOUND');
     }
+  }
+
+  countMatching(storeId: string, rules: SegmentRules): Promise<number> {
+    return this.contactsRepository.countMatching(storeId, rules);
+  }
+
+  listIdsMatching(
+    storeId: string,
+    rules: SegmentRules,
+    page: { cursor?: string; limit: number },
+  ): Promise<string[]> {
+    return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }
 }
 

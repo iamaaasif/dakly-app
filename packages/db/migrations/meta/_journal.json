@@ -225,6 +225,13 @@
       "when": 1794821995522,
       "tag": "0031_drop_customers",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794843920200,
+      "tag": "0032_sms_sender_review",
+      "breakpoints": true
     }
   ]
 }

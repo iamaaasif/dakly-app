@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { trackedLinkSourceTypes } from '../campaigns';
 import { chatChannels } from '../channels';
 
 const messagePayloadSchema = z.strictObject({
@@ -47,4 +48,26 @@ export const messageFailedEventSchema = z.strictObject({
   storeId: z.uuid(),
   occurredAt: z.iso.datetime(),
   payload: messagePayloadSchema,
+});
+
+const trackedLinkPayloadSchema = z.strictObject({
+  trackedLinkId: z.uuid(),
+  contactId: z.uuid().nullable(),
+  sourceType: z.enum(trackedLinkSourceTypes),
+  sourceId: z.uuid().nullable(),
+});
+
+// Only the first tap on a link; later taps are visits on the same link.
+export const messageTappedEventSchema = z.strictObject({
+  type: z.literal('message.tapped'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: trackedLinkPayloadSchema,
+});
+
+export const messageOptedOutEventSchema = z.strictObject({
+  type: z.literal('message.opted_out'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: trackedLinkPayloadSchema.extend({ contactId: z.uuid() }),
 });

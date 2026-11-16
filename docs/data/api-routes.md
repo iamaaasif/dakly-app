@@ -29,7 +29,8 @@ Merge requests carry a stable operation key through all retries, including retri
 | `GET /payments/callback/:gateway`                                 | Customer returns from the gateway                                                              |
 | `GET /public/stores/:storeSlug/order-link/:shortCode`             | Order and payment page for the customer                                                        |
 | `POST /public/stores/:storeSlug/order-link/:shortCode/confirm`    | Customer confirms an order                                                                     |
-| `GET /l/:code`                                                    | Tracked link redirect, or SMS opt-out page                                                     |
+| `GET /l/:code`                                                    | Tracked link redirect                                                                          |
+| `GET /l/s/:code`, `POST /l/s/:code`                               | SMS opt-out page, and the tap that withdraws SMS consent                                       |
 
 ### Account security routes (ACC-7)
 
@@ -87,7 +88,7 @@ resend is explicit. See [account and team](../features/01-account-and-team.md).
 | `POST /channel-connections/meta`, `POST /channel-connections/whatsapp`                                         | `storeSettings` |
 | `POST /channel-connections/:channelConnectionId/reconnect`, `DELETE /channel-connections/:channelConnectionId` | `storeSettings` |
 | `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`         |
-| `GET /sms-sender-ids`, `POST /sms-sender-ids`                                                                  | `storeSettings` |
+| `GET /sms-sender-ids`, `POST /sms-sender-ids`, `POST /sms-sender-ids/:smsSenderIdId/test`                      | `storeSettings` |
 
 Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
 requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
@@ -103,20 +104,21 @@ atomically and retain business data when an extension is disabled.
 
 ## Customers and segments (03)
 
-| Route                                                                                                                    | Permission                                                       |
-| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `GET /contacts`, `GET /contacts/:contactId`                                                                              | `customers` (phones masked unless "See full phone numbers")      |
-| `POST /contacts`, `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                                            | `customers`                                                      |
-| `GET /contacts/:contactId/timeline`                                                                                      | `customers`                                                      |
-| `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory`               | View with `customers.view`; edit and clear with `customers.edit` |
-| `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                                          | `customers`                                                      |
-| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                  | `customers`                                                      |
-| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                | `customers`                                                      |
-| `POST /contacts/:contactId/consents`                                                                                     | `customers`                                                      |
-| `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`                   | `customers`                                                      |
-| `POST /contacts/exports`                                                                                                 | `customers` + "Download customer lists"                          |
-| `GET /segments`, `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`, `POST /segments/preview` | `customers`                                                      |
-| `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                                      | `customers`                                                      |
+| Route                                                                                                      | Permission                                                       |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /contacts`, `GET /contacts/:contactId`                                                                | `customers` (phones masked unless "See full phone numbers")      |
+| `POST /contacts`, `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                              | `customers`                                                      |
+| `GET /contacts/:contactId/timeline`                                                                        | `customers`                                                      |
+| `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory` | View with `customers.view`; edit and clear with `customers.edit` |
+| `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                            | `customers`                                                      |
+| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                    | `customers`                                                      |
+| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                  | `customers`                                                      |
+| `POST /contacts/:contactId/consents`                                                                       | `customers`                                                      |
+| `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`     | `customers`                                                      |
+| `POST /contacts/exports`                                                                                   | `customers` + "Download customer lists"                          |
+| `GET /segments`, `POST /segments/preview` (count only)                                                     | `segments.view`                                                  |
+| `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`                              | `segments.edit`                                                  |
+| `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                        | `customers`                                                      |
 
 ## Chats and AI agent (04)
 
@@ -188,7 +190,7 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                                                                                                           | Permission    |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/recipients`                                                                                                         | `campaigns`   |
-| `POST /campaigns` (idem), `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                                                          | `campaigns`   |
+| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                                                                 | `campaigns`   |
 | `POST /campaigns/:campaignId/audience-preview`, `POST /campaigns/:campaignId/cost-estimate`                                                                                                     | `campaigns`   |
 | `POST /campaigns/:campaignId/schedule`, `POST /campaigns/:campaignId/send-now`, `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel` | `campaigns`   |
 | `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                                                                            | `campaigns`   |
@@ -224,6 +226,8 @@ On the admin hostname, staff session, passkey or TOTP required. Each route names
 | `GET /admin/stores/:storeId/*` (store data)                                        | support, with an approved support grant |
 | `POST /admin/stores/:storeId/support-grants`                                       | support                                 |
 | `POST /admin/stores/:storeId/suspend`, `POST /admin/stores/:storeId/restore`       | ops                                     |
+| `GET /admin/sms-sender-ids` (`open_sms_sender_ids`)                                | super_admin, ops                        |
+| `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve`, `.../reject`  | super_admin, ops                        |
 | `GET /admin/plans`, `PUT /admin/plans/:planCode`                                   | finance                                 |
 | `GET /admin/coupons`, `POST /admin/coupons`, `PATCH /admin/coupons/:couponId`      | finance                                 |
 | `GET /admin/settings`, `PUT /admin/settings/:key`                                  | super_admin                             |

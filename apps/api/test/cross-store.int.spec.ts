@@ -153,6 +153,183 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+const dhaka = {
+  match: 'all',
+  conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
+};
+async function segment(shop: Shop) {
+  const input = { name: `ঢাকা ${randomUUID()}`, rules: dhaka };
+  return (await success(shop, 'POST', '/segments', 201, input)).json().id as string;
+}
+async function dhakaContact(shop: Shop) {
+  const id = await contact(shop);
+  await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [id]);
+}
+fixture('GET /segments', async () => {
+  const { a, b } = await pair(),
+    aId = await segment(a),
+    bId = await segment(b);
+  const ids = (await success(b, 'GET', '/segments', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/segments', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /segments', async () => {
+  const { a, b } = await pair(),
+    id = await segment(a),
+    before = await f.row('segments', id);
+  const own = await segment(b);
+  expect((await f.row('segments', own)).store_id).toBe(b.id);
+  expect(await f.row('segments', id)).toEqual(before);
+});
+fixture('POST /segments/preview', async () => {
+  const { a, b } = await pair();
+  await dhakaContact(a);
+  await dhakaContact(a);
+  await dhakaContact(b);
+  const count = async (shop: Shop) =>
+    (await success(shop, 'POST', '/segments/preview', 200, { rules: dhaka })).json().count;
+  expect(await count(a)).toBe(2);
+  expect(await count(b)).toBe(1);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /segments/:segmentId`, async () => {
+    const { a, b } = await pair(),
+      own = await segment(b),
+      foreign = await segment(a);
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/segments/${own}`, method === 'DELETE' ? 204 : 200, payload);
+    const changed = await f.row('segments', own);
+    if (method === 'DELETE') expect(changed).toBeUndefined();
+    else expect(changed).toMatchObject({ name: 'নতুন নাম' });
+    const before = await f.row('segments', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/segments/${id}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('segments', foreign)).toEqual(before);
+  });
+const welcome = {
+  trigger: { key: 'consent_given', filters: [] },
+  reEntry: { rule: 'once' },
+  workflowFilters: [],
+  goal: { kind: 'placed_order' },
+  exitConditions: [],
+  firstStepKey: 'welcome',
+  steps: {
+    welcome: {
+      kind: 'send',
+      category: 'marketing',
+      channels: ['sms'],
+      message: { text: 'আমাদের সাথে থাকার জন্য ধন্যবাদ!', buttons: [] },
+      ifNotReachable: 'skip',
+      reviewBeforeSending: false,
+      next: 'end',
+    },
+    end: { kind: 'exit' },
+  },
+};
+async function automation(shop: Shop) {
+  const input = { name: `স্বাগতম ${randomUUID()}`, graph: welcome };
+  return (await success(shop, 'POST', '/automations', 201, input)).json().id as string;
+}
+fixture('GET /automations', async () => {
+  const { a, b } = await pair(),
+    aId = await automation(a),
+    bId = await automation(b);
+  const ids = (await success(b, 'GET', '/automations', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/automations', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /automations', async () => {
+  const { a, b } = await pair(),
+    id = await automation(a),
+    before = await f.row('automations', id);
+  const own = await automation(b);
+  expect((await f.row('automations', own)).store_id).toBe(b.id);
+  expect(await f.row('automations', id)).toEqual(before);
+});
+fixture('GET /automations/:automationId', async () => {
+  const { a, b } = await pair(),
+    id = await automation(a);
+  expect((await success(a, 'GET', `/automations/${id}`, 200)).json().id).toBe(id);
+  await hidden(b, 'GET', (value) => `/automations/${value}`, id);
+});
+for (const [method, action, status, expected] of [
+  ['PATCH', '', 200, { name: 'নতুন নাম' }],
+  ['POST', '/archive', 204, { status: 'archived' }],
+] as const)
+  fixture(`${method} /automations/:automationId${action}`, async () => {
+    const { a, b } = await pair(),
+      own = await automation(b),
+      foreign = await automation(a);
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/automations/${own}${action}`, status, payload);
+    expect(await f.row('automations', own)).toMatchObject(expected);
+    const before = await f.row('automations', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/automations/${id}${action}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('automations', foreign)).toEqual(before);
+  });
+async function campaign(shop: Shop) {
+  const input = { name: 'ঈদের অফার', channel: 'sms', content: { text: 'ঈদে ২০% ছাড়' } };
+  return (await success(shop, 'POST', '/campaigns', 201, input)).json().id as string;
+}
+fixture('GET /campaigns', async () => {
+  const { a, b } = await pair(),
+    aId = await campaign(a),
+    bId = await campaign(b);
+  const ids = (await success(b, 'GET', '/campaigns', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/campaigns', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /campaigns', async () => {
+  const { a, b } = await pair(),
+    id = await campaign(a),
+    before = await f.row('campaigns', id);
+  const own = await campaign(b);
+  expect((await f.row('campaigns', own)).store_id).toBe(b.id);
+  expect(await f.row('campaigns', id)).toEqual(before);
+});
+fixture('GET /campaigns/:campaignId', async () => {
+  const { a, b } = await pair(),
+    id = await campaign(a);
+  expect((await success(a, 'GET', `/campaigns/${id}`, 200)).json().id).toBe(id);
+  await hidden(b, 'GET', (value) => `/campaigns/${value}`, id);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /campaigns/:campaignId`, async () => {
+    const { a, b } = await pair(),
+      own = await campaign(b),
+      foreign = await campaign(a);
+    const payload = method === 'PATCH' ? { name: 'শীতের অফার' } : undefined;
+    await success(b, method, `/campaigns/${own}`, method === 'DELETE' ? 204 : 200, payload);
+    const changed = await f.row('campaigns', own);
+    if (method === 'DELETE') expect(changed).toBeUndefined();
+    else expect(changed).toMatchObject({ name: 'শীতের অফার' });
+    const before = await f.row('campaigns', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/campaigns/${id}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('campaigns', foreign)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -498,6 +675,53 @@ fixture('GET /wallets', async () => {
   });
   expect((await f.request(a.member, 'GET', '/wallets')).statusCode).toBe(403);
 });
+async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'requested') {
+  const id = (
+    await success(shop, 'POST', '/sms-sender-ids', 201, { senderName: 'Rina Shop' })
+  ).json().id as string;
+  if (status === 'approved')
+    await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
+  return id;
+}
+fixture('GET /sms-sender-ids', async () => {
+  const { a, b } = await pair(),
+    aId = await smsSender(a),
+    bId = await smsSender(b);
+  for (const [shop, own] of [
+    [a, aId],
+    [b, bId],
+  ] as const)
+    expect(
+      (await success(shop, 'GET', '/sms-sender-ids', 200))
+        .json()
+        .items.map((item: { id: string }) => item.id),
+    ).toEqual([own]);
+  expect((await f.request(a.member, 'GET', '/sms-sender-ids')).statusCode).toBe(403);
+});
+fixture('POST /sms-sender-ids', async () => {
+  const { a, b } = await pair(),
+    id = await smsSender(a),
+    before = await f.row('sms_sender_ids', id);
+  // A pending request in shop A does not block shop B.
+  const own = await smsSender(b);
+  expect((await f.row('sms_sender_ids', own)).store_id).toBe(b.id);
+  expect(await f.row('sms_sender_ids', id)).toEqual(before);
+});
+fixture('POST /sms-sender-ids/:smsSenderIdId/test', async () => {
+  const { a, b } = await pair(),
+    id = await smsSender(a, 'approved');
+  await success(a, 'POST', `/sms-sender-ids/${id}/test`, 204, {});
+  expect(f.sms.at(-1)).toMatchObject({ to: a.owner.phone, sender: 'Rina Shop' });
+  const sent = f.sms.length;
+  await hidden(
+    b,
+    'POST',
+    (value) => `/sms-sender-ids/${value}/test`,
+    id,
+    () => ({}),
+  );
+  expect(f.sms).toHaveLength(sent);
+});
 // Nest's SSE stream needs a real socket, which app.inject does not provide.
 fixture('GET /events/stream', async () => {
   const { a, b } = await pair();
@@ -606,10 +830,13 @@ describe('every production shop route isolates its data', () => {
       ['memberships', 'id', a.membership, b.membership],
       ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
+      ['segments', 'id', await segment(a), await segment(b)],
+      ['campaigns', 'id', await campaign(a), await campaign(b)],
       ['ownership_transfers', 'id', await f.transfer(a), await f.transfer(b)],
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
       ['wallet_ledger', 'id', await smsCredits(a, 10), await smsCredits(b, 20)],
+      ['sms_sender_ids', 'id', await smsSender(a), await smsSender(b)],
     ];
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const client = await connection.pool.connect();

@@ -9,6 +9,12 @@ const messageId = '019c01ea-cf15-7d31-a7f5-d73d66007ada';
 const connectionId = '019c01ea-cf15-7d31-a7f5-d73d66007adb';
 const occurredAt = '2026-11-16T04:30:00.000Z';
 const message = { messageId, conversationId, contactId, channel: 'messenger' } as const;
+const trackedLink = {
+  trackedLinkId: '019c01ea-cf15-7d31-a7f5-d73d66007adf',
+  contactId,
+  sourceType: 'campaign',
+  sourceId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0',
+} as const;
 
 const examples: DaklyEvent[] = [
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
@@ -25,6 +31,12 @@ const examples: DaklyEvent[] = [
     },
   },
   {
+    type: 'segment.saved',
+    storeId,
+    occurredAt,
+    payload: { segmentId: '019c01ea-cf15-7d31-a7f5-d73d66007adf' },
+  },
+  {
     type: 'conversation.started',
     storeId,
     occurredAt,
@@ -34,6 +46,8 @@ const examples: DaklyEvent[] = [
   { type: 'message.delivered', storeId, occurredAt, payload: message },
   { type: 'message.read', storeId, occurredAt, payload: message },
   { type: 'message.failed', storeId, occurredAt, payload: message },
+  { type: 'message.tapped', storeId, occurredAt, payload: { ...trackedLink, contactId: null } },
+  { type: 'message.opted_out', storeId, occurredAt, payload: trackedLink },
   {
     type: 'notification.created',
     storeId,

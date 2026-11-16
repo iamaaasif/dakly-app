@@ -81,13 +81,6 @@ Branch: `feat/chn-5-integrations-page`
 - Scope: cards for Messenger, Instagram, WhatsApp (shows "Waiting for setup", CHN-3 blocked on Q2) and SMS sender; connect, reconnect and disconnect with confirmation.
 - Tests: component states; Playwright with the fake driver connects a Page.
 
-### CHN-6 · SMS sender identity
-
-Branch: `feat/chn-6-sms-sender`
-
-- Scope: `sms_sender_ids`: request a masking sender name, staff approve or reject it from the admin app with a reason, test send to the owner's own phone, status on the Integrations page. Until approved, SMS goes from Dakly's shared sender.
-- Tests (integration): only one active sender per store; a rejected request shows the reason; staff approval writes a staff audit row.
-
 ### CHAT-1 · Core messaging: receive and store
 
 Branch: `feat/chat-1-core-messaging-inbound`
@@ -115,13 +108,6 @@ Branch: `feat/cus-4-phone-matches`
 
 - Scope: D27: save a buyer's own phone on the profile; if another contact has it, keep it on the record and create a `contact_match_suggestions` row for staff instead of merging. Merge with the 7-day undo is CUS-14.
 - Tests: the D26 and D27 edge cases listed in feature 03.
-
-### CUS-5 · Web: customers list and profile
-
-Branch: `feat/cus-5-customers-web`
-
-- Scope: list with filters in the URL, profile with identities, consent per channel, tags, notes, masked phone unless `seeFullPhone`.
-- Tests: component states; a Support agent sees `01712-XXX678`.
 
 ## Out of this plan
 
