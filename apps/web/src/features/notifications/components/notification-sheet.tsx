@@ -1,9 +1,12 @@
 'use client';
-import { cn } from '@dakly/ui/cn';
+import { useContext } from 'react';
+
+import { Sheet } from '@dakly/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { type NotificationTab, notificationTabs } from '../hooks/use-notification-tab';
 import { NotificationList } from './notification-list';
-import { SessionDialog } from '@/components/session-dialog';
+import { SessionInteraction } from '@/components/session-interaction';
 
 const tabLabels: Record<NotificationTab, string> = {
   all: 'All',
@@ -20,27 +23,27 @@ type NotificationSheetProps = {
   onClose: () => void;
 };
 export function NotificationSheet({ tab, onTab, onClose }: NotificationSheetProps) {
+  // The sheet renders outside the hidden shell, so it hides itself while the session is checked.
+  const isBlocked = useContext(SessionInteraction);
   return (
-    <SessionDialog open title="Notifications" onClose={onClose}>
-      <nav aria-label="Notification categories" className="mb-4 flex flex-wrap gap-2">
-        {notificationTabs.map((item) => (
-          <button
-            key={item}
-            type="button"
-            aria-pressed={tab === item}
-            onClick={() => onTab(item)}
-            className={cn(
-              'min-h-10 rounded-md px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-              tab === item
-                ? 'bg-primary-soft font-semibold text-action-hover'
-                : 'hover:bg-surface-muted',
-            )}
-          >
-            {tabLabels[item]}
-          </button>
-        ))}
-      </nav>
-      <NotificationList category={tab === 'all' ? undefined : tab} />
-    </SessionDialog>
+    <Sheet open={!isBlocked} side="right" title="Notifications" onClose={onClose}>
+      {/* Manual, so moving focus with the arrow keys does not load each category on the way. */}
+      <Tabs
+        value={tab}
+        activationMode="manual"
+        onValueChange={(value) => onTab(value as NotificationTab)}
+      >
+        <TabsList aria-label="Notification categories">
+          {notificationTabs.map((item) => (
+            <TabsTrigger key={item} value={item}>
+              {tabLabels[item]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value={tab}>
+          <NotificationList category={tab === 'all' ? undefined : tab} />
+        </TabsContent>
+      </Tabs>
+    </Sheet>
   );
 }
