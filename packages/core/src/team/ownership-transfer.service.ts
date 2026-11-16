@@ -82,7 +82,7 @@ export class OwnershipTransferService {
     // Consumption is independent of the store transaction: rollback never restores proof.
     const grant = await this.codes.consume(subject, 'ownership_transfer', input.code, ip);
     if (grant.userId !== userId) throw teamError('TRANSFER_PROOF_INVALID');
-    return this.transaction.run(storeId, async () => {
+    const transfer = await this.transaction.run(storeId, async () => {
       const currentIdentity = await this.users.lockVerifiedIdentity(storeId, userId);
       return this.transaction.runLocked(storeId, async () => {
         await this.assertOwner(storeId, userId);
@@ -104,18 +104,19 @@ export class OwnershipTransferService {
           new Date(now.getTime() + 48 * 3600000),
         );
         await this.record(storeId, transfer.id, userId, 'ownership_transfer.started');
-        return this.response(transfer);
+        return transfer;
       });
     });
+    return this.response(transfer);
   }
 
-  current(storeId: string, userId: string): Promise<CurrentOwnershipTransferResponse> {
-    return this.transaction.run(storeId, async () => {
-      const transfer = await this.repository.current(storeId, this.clock.now());
-      if (!transfer) return { transfer: null };
-      if (transfer.newOwnerUserId !== userId) await this.assertOwner(storeId, userId);
-      return { transfer: this.response(transfer) };
+  async current(storeId: string, userId: string): Promise<CurrentOwnershipTransferResponse> {
+    const transfer = await this.transaction.run(storeId, async () => {
+      const pending = await this.repository.current(storeId, this.clock.now());
+      if (pending && pending.newOwnerUserId !== userId) await this.assertOwner(storeId, userId);
+      return pending;
     });
+    return { transfer: transfer ? await this.response(transfer) : null };
   }
 
   async cancel(storeId: string, transferId: string, userId: string): Promise<void> {
@@ -132,7 +133,7 @@ export class OwnershipTransferService {
     transferId: string,
     userId: string,
   ): Promise<OwnershipTransferResponse> {
-    return this.transaction.run(storeId, async () => {
+    const accepted = await this.transaction.run(storeId, async () => {
       // User reads and the ownership advisory lock precede the shared store mutation lock.
       const identity = await this.users.lockVerifiedIdentity(storeId, userId);
       if (!identity) throw teamError('TRANSFER_DENIED');
@@ -157,9 +158,10 @@ export class OwnershipTransferService {
         await this.recordRole(storeId, next.id, userId);
         const accepted = await this.repository.finish(storeId, transferId, 'accepted', now);
         await this.record(storeId, transferId, userId, 'ownership_transfer.accepted');
-        return this.response(accepted);
+        return accepted;
       });
     });
+    return this.response(accepted);
   }
 
   private async assertOwner(storeId: string, userId: string): Promise<void> {
@@ -228,15 +230,14 @@ export class OwnershipTransferService {
     throw teamError('TRANSFER_IDENTITY_REQUIRED');
   }
 
-  private response({
-    recipientPhone,
-    expiresAt,
-    ...transfer
-  }: OwnershipTransfer): OwnershipTransferResponse {
+  // Profiles use the shared pool, so read them after the store connection is released.
+  private async response(transfer: OwnershipTransfer): Promise<OwnershipTransferResponse> {
+    const { name, phone } = (await this.users.profiles([transfer.newOwnerUserId]))[0]!;
     return {
       ...transfer,
-      recipientContact: recipientPhone ? maskPhone(recipientPhone) : null,
-      expiresAt: expiresAt.toISOString(),
+      recipientName: name,
+      recipientContact: phone ? maskPhone(phone) : null,
+      expiresAt: transfer.expiresAt.toISOString(),
     };
   }
 

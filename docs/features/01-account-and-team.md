@@ -443,7 +443,7 @@ pending; other members receive `403 TRANSFER_DENIED` when one exists. Responses 
 transfer and account ids, status, expiry, the recipient's account name
 (`recipientName`) and `recipientContact`: their phone masked as `01712-XXX678`, or
 null when the account has only an email. The raw phone and email are never sent.
-The name and phone are read in the same statement as the transfer. The Owner cancels with
+The name and phone come from `UsersService` after the store transaction commits. The Owner cancels with
 `DELETE /store/ownership-transfer/:transferId`.
 
 The named member accepts with `POST /store/ownership-transfer/accept`, taking
