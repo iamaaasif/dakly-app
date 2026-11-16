@@ -203,10 +203,13 @@ export class IsolationFixture {
       'staff_recovery_history',
       'ownership_transfers',
       'customers',
+      'notifications',
+      'outbox_events',
       'audit_log',
       'memberships',
       'roles',
       'subscriptions',
+      'wallet_ledger',
     ])
       await this.admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         this.stores,

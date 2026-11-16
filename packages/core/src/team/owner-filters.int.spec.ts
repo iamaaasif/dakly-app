@@ -77,6 +77,9 @@ describe('team filters without RLS assistance', () => {
   it('filters current membership access independently of RLS', async () => {
     expect(await team.findAccess(f.a, f.userA)).toBeDefined();
     expect(await team.findAccess(f.b, f.userA)).toBeUndefined();
+    const storeBUsers = (await team.findActiveAccess(f.b)).map((row) => row.userId);
+    expect(storeBUsers).toContain(f.userB);
+    expect(storeBUsers).not.toContain(f.userA);
   });
   it('adds an owner only to the requested store', async () => {
     await team.addOwner(f.b, f.userA);

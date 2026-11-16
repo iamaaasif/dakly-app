@@ -17,6 +17,7 @@ type ShellFrameProps = {
   generation: number;
   onSwitch: (id: string) => Promise<void>;
   onSignOut: () => Promise<void>;
+  bell: ReactNode;
   children: ReactNode;
 };
 export function ShellFrame({
@@ -25,6 +26,7 @@ export function ShellFrame({
   generation,
   onSwitch,
   onSignOut,
+  bell,
   children,
 }: ShellFrameProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -55,6 +57,7 @@ export function ShellFrame({
           <MobileNavigation session={data} blocked={blocked} />
           <StoreSwitcher session={data} onSwitch={onSwitch} />
           <p className="min-w-0 text-sm break-words text-text-muted md:ml-auto">{data.user.name}</p>
+          {bell}
           <Button variant="secondary" onClick={() => void onSignOut()}>
             Sign out
           </Button>

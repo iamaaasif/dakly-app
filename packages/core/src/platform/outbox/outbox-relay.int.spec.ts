@@ -197,6 +197,19 @@ describe('OutboxRelayService', () => {
     ).rejects.toThrow('Cannot change stores inside a transaction');
   });
 
+  it('publishes several events of one store together and rejects a mix of stores', async () => {
+    const storeId = randomUUID();
+    storeIds.push(storeId);
+    const events = [contactCreated(storeId), contactCreated(storeId)];
+    await storeTransaction.run(storeId, () => outbox.publishAll(events));
+    for (const event of events) expect(await outboxRow(contactIdOf(event))).toHaveLength(1);
+    const mixed = [contactCreated(storeId), contactCreated(randomUUID())];
+    await expect(
+      storeTransaction.run(storeId, () => outbox.publishAll(mixed)),
+    ).rejects.toMatchObject({ code: 'OUTBOX_STORE_MISMATCH' });
+    for (const event of mixed) expect(await outboxRow(contactIdOf(event))).toEqual([]);
+  });
+
   it('queues each subscriber job once when two relays run at the same time', async () => {
     const events = [await publishCommitted(), await publishCommitted(), await publishCommitted()];
     // Both relays reach the claim before either runs it.

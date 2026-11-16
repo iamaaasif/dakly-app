@@ -8,7 +8,7 @@ import { SessionVerificationStatus } from './session-verification-status';
 import { ShellFrame } from './shell-frame';
 import { useSessionBoundary } from '@/lib/use-session-boundary';
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ bell, children }: { bell: ReactNode; children: ReactNode }) {
   const boundary = useSessionBoundary();
   const { data, error, isPending } = boundary.session;
   if (isPending && !boundary.available)
@@ -39,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               generation={boundary.generation}
               onSwitch={boundary.switchStore}
               onSignOut={boundary.signOut}
+              bell={bell}
             >
               {children}
             </ShellFrame>
