@@ -1,0 +1,110 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { and, eq, sql } from 'drizzle-orm';
+
+import type { TrackedLinkKind, TrackedLinkSourceType } from '@dakly/contracts/campaigns';
+import type { Database } from '@dakly/db/client';
+import { trackedLinks, trackedLinkVisits } from '@dakly/db/schema/campaigns';
+
+import { DATABASE } from '../platform/database/database.tokens';
+import { TenantDatabase } from '../platform/database/tenant-database';
+
+type LinkSource = {
+  contactId: string | null;
+  sourceType: TrackedLinkSourceType;
+  sourceId: string | null;
+};
+
+export type NewTrackedLinkRow = LinkSource & {
+  id: string;
+  code: string;
+  kind: TrackedLinkKind;
+  targetUrl: string | null;
+};
+
+export type RedirectTap = LinkSource & { targetUrl: string; tapCount: number };
+export type OptOutLink = LinkSource & { contactId: string };
+export type Visit = { eventKey: string; occurredAt: Date; visitorHash: Buffer };
+
+// The schema's kind checks make target_url set on every redirect and contact_id on every opt-out.
+const sourceColumns = {
+  contactId: trackedLinks.contactId,
+  sourceType: trackedLinks.sourceType,
+  sourceId: trackedLinks.sourceId,
+};
+
+@Injectable()
+export class LinksRepository {
+  constructor(
+    @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
+    @Inject(DATABASE) private readonly database: Database,
+  ) {}
+
+  // A public link names no store, so a SECURITY DEFINER function finds it by its code.
+  async locate(code: string): Promise<{ storeId: string; trackedLinkId: string } | undefined> {
+    const result = await this.database.execute<{ storeId: string; trackedLinkId: string }>(
+      sql`select store_id as "storeId", tracked_link_id as "trackedLinkId" from tracked_link_for_code(${code})`,
+    );
+    return result.rows[0];
+  }
+
+  // A code taken by another link is skipped, so the caller sees which rows it must retry.
+  async insert(storeId: string, links: NewTrackedLinkRow[]): Promise<string[]> {
+    const rows = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .insert(trackedLinks)
+        .values(links.map((link) => ({ ...link, storeId })))
+        .onConflictDoNothing({ target: trackedLinks.code })
+        .returning({ id: trackedLinks.id }),
+    );
+    return rows.map((row) => row.id);
+  }
+
+  async recordRedirectTap(
+    storeId: string,
+    trackedLinkId: string,
+    visit: Visit,
+  ): Promise<RedirectTap | undefined> {
+    return this.tenant.forStore(storeId, async (tx) => {
+      const [tap] = await tx
+        .update(trackedLinks)
+        .set({
+          tapCount: sql`${trackedLinks.tapCount} + 1`,
+          firstTappedAt: sql`coalesce(${trackedLinks.firstTappedAt}, ${visit.occurredAt})`,
+          lastTappedAt: visit.occurredAt,
+        })
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.id, trackedLinkId),
+            eq(trackedLinks.kind, 'redirect'),
+          ),
+        )
+        .returning({
+          ...sourceColumns,
+          targetUrl: sql<string>`${trackedLinks.targetUrl}`,
+          tapCount: trackedLinks.tapCount,
+        });
+      if (!tap) return undefined;
+      await tx.insert(trackedLinkVisits).values({ storeId, trackedLinkId, ...visit });
+      return tap;
+    });
+  }
+
+  // The row lock makes a second tap on the same link wait until the first one has committed.
+  async lockOptOutLink(storeId: string, trackedLinkId: string): Promise<OptOutLink | undefined> {
+    const [link] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ ...sourceColumns, contactId: sql<string>`${trackedLinks.contactId}` })
+        .from(trackedLinks)
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.id, trackedLinkId),
+            eq(trackedLinks.kind, 'sms_opt_out'),
+          ),
+        )
+        .for('update'),
+    );
+    return link;
+  }
+}

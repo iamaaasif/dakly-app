@@ -2,11 +2,12 @@ import type { ExecutionContext } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resetEnvForTests } from '../config/env';
+import { Public } from './access.decorators';
 import { OriginGuard } from './origin.guard';
 
-const context = (method: string, origin?: string) =>
+const context = (method: string, origin?: string, handler = function handler() {}) =>
   ({
-    getHandler: () => function handler() {},
+    getHandler: () => handler,
     getClass: () => class Controller {},
     switchToHttp: () => ({ getRequest: () => ({ method, headers: { origin } }) }),
   }) as ExecutionContext;
@@ -35,6 +36,19 @@ describe('OriginGuard', () => {
       expect(originGuard.canActivate(context(method, 'https://preview.dakly.test'))).toBe(true);
     },
   );
+  it('accepts the short link origin on public routes only', () => {
+    vi.stubEnv('SHORT_LINK_BASE_URL', 'https://links.dakly.test/l');
+    const originGuard = guard();
+    const publicHandler = function optOut() {};
+    Public()(publicHandler, 'optOut', { value: publicHandler });
+
+    expect(
+      originGuard.canActivate(context('POST', 'https://links.dakly.test', publicHandler)),
+    ).toBe(true);
+    expect(() => originGuard.canActivate(context('POST', 'https://links.dakly.test'))).toThrow(
+      expect.objectContaining({ code: 'ORIGIN_REJECTED' }),
+    );
+  });
   it('allows reads without an Origin', () => {
     expect(guard().canActivate(context('GET'))).toBe(true);
   });

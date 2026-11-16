@@ -4,6 +4,7 @@ import { AdminModule } from '@dakly/core/admin/admin.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
+import { LinksModule } from '@dakly/core/links/links.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
@@ -22,6 +23,7 @@ import { HealthController } from './health.controller';
     SessionsModule,
     ContactsModule,
     ConsentsModule,
+    LinksModule,
     StoresModule,
     NotificationsModule,
     WalletsModule,

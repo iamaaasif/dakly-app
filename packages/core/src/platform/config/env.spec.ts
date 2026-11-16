@@ -14,6 +14,15 @@ describe('loadEnv', () => {
     },
   );
 
+  it('serves short links from the API until the short domain is set', () => {
+    const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+    expect(loadEnv(base).SHORT_LINK_BASE_URL).toBe('http://localhost:4000/l');
+    expect(loadEnv({ ...base, SHORT_LINK_BASE_URL: 'https://dkly.test' }).SHORT_LINK_BASE_URL).toBe(
+      'https://dkly.test',
+    );
+    expect(() => loadEnv({ ...base, SHORT_LINK_BASE_URL: 'https://dkly.test/' })).toThrow();
+  });
+
   it("keeps BullMQ's queue prefix unless a test run sets its own", () => {
     const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
     expect(loadEnv(base).QUEUE_PREFIX).toBe('bull');
