@@ -111,6 +111,10 @@ function check(storeId: string, contactId: string, change: Partial<SendRequest> 
   );
 }
 
+function audienceOf(contactIds: string[], at = noon) {
+  return { contactIds, channel: 'sms', category: 'marketing', at } as const;
+}
+
 async function waitForBlockedAdvisoryLock() {
   for (let attempt = 0; attempt < 100; attempt++) {
     const waiting = await admin.pool.query(
@@ -267,5 +271,53 @@ describe('SendPolicyService (Postgres)', () => {
 
     expect(await first).toEqual({ action: 'send' });
     expect(await second).toEqual({ action: 'skip', reason: 'frequency_cap' });
+  });
+
+  it('decides an audience page by page as check does for each contact', async () => {
+    const consented = await consentedContact(storeA);
+    const capped = await consentedContact(storeA);
+    await campaignSend(storeA, capped, hoursBefore(2));
+    const blocked = await consentedContact(storeA);
+    await admin.pool.query('update contacts set is_blocked=true where id=$1', [blocked]);
+    const withdrawn = await consentedContact(storeA);
+    await app.get(ConsentService).record(
+      storeA,
+      {
+        contactId: withdrawn,
+        channel: 'sms',
+        status: 'withdrawn',
+        source: 'opt_out_link',
+        evidence: null,
+      },
+      system,
+    );
+    const contactIds = [consented, capped, blocked, withdrawn, randomUUID()];
+
+    for (const at of [noon, evening]) {
+      const audience = [];
+      for (let start = 0; start < contactIds.length; start += 2)
+        audience.push(
+          ...(await policy.checkAudience(
+            storeA,
+            audienceOf(contactIds.slice(start, start + 2), at),
+          )),
+        );
+
+      const decisions = [];
+      for (const contactId of contactIds) decisions.push(await check(storeA, contactId, { at }));
+      expect(audience.map((entry) => entry.decision)).toEqual(decisions);
+      expect(audience.map((entry) => entry.contactId)).toEqual(contactIds);
+    }
+    const [first] = await policy.checkAudience(storeA, audienceOf([consented]));
+    expect(first!.phone).toMatch(/^0171\d{7}$/);
+  });
+
+  it('reads an audience page of up to 500 contacts', async () => {
+    const ids = Array.from({ length: 500 }, () => randomUUID());
+
+    expect(await policy.checkAudience(storeA, audienceOf(ids))).toHaveLength(500);
+    await expect(
+      policy.checkAudience(storeA, audienceOf([...ids, randomUUID()])),
+    ).rejects.toMatchObject({ code: 'CONSENT_CONTACTS_TOO_MANY' });
   });
 });

@@ -11,7 +11,11 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { consentError, MAX_CONSENT_CONTACTS } from './consents.errors';
+import {
+  consentError,
+  MAX_AUDIENCE_CONSENT_CONTACTS,
+  MAX_CONSENT_CONTACTS,
+} from './consents.errors';
 import { type Consent, ConsentsRepository, type NewConsent } from './consents.repository';
 
 type RecordConsentChange = Pick<
@@ -81,6 +85,12 @@ export class ConsentService {
   // A contact with no row has never answered on this channel and is not in the result.
   current(storeId: string, contactIds: string[], channel: ConsentChannel) {
     if (contactIds.length > MAX_CONSENT_CONTACTS) throw consentError('CONSENT_CONTACTS_TOO_MANY');
+    return this.repository.listCurrent(storeId, contactIds, channel);
+  }
+
+  currentForAudience(storeId: string, contactIds: string[], channel: ConsentChannel) {
+    if (contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
+      throw consentError('CONSENT_CONTACTS_TOO_MANY');
     return this.repository.listCurrent(storeId, contactIds, channel);
   }
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { campaignApprovedEventSchema } from './campaigns';
 import {
   consentChangedEventSchema,
   contactCreatedEventSchema,
@@ -20,6 +21,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   contactCreatedEventSchema,
   consentChangedEventSchema,
   segmentSavedEventSchema,
+  campaignApprovedEventSchema,
   conversationStartedEventSchema,
   messageReceivedEventSchema,
   messageDeliveredEventSchema,

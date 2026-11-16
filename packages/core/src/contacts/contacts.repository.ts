@@ -54,6 +54,9 @@ export type ContactRecipient = {
   hasPhone: boolean;
 };
 
+// An audience check also freezes the phone as each recipient's SMS destination.
+export type AudienceRecipient = ContactRecipient & { id: string; phone: string | null };
+
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
@@ -103,6 +106,24 @@ export class ContactsRepository {
         .limit(1),
     );
     return rows[0];
+  }
+
+  findRecipients(storeId: string, ids: string[]): Promise<AudienceRecipient[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: contacts.id,
+          kind: contacts.kind,
+          isBlocked: contacts.isBlocked,
+          isOverPlanLimit: contacts.isOverPlanLimit,
+          hasPhone: sql<boolean>`${contacts.phone} is not null`,
+          phone: contacts.phone,
+        })
+        .from(contacts)
+        .where(
+          and(eq(contacts.storeId, storeId), inArray(contacts.id, ids), isNull(contacts.deletedAt)),
+        ),
+    );
   }
 
   list(storeId: string, filter: ContactFilter): Promise<Contact[]> {

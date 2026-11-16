@@ -42,6 +42,7 @@ function sendingWith(change: object) {
   return {
     quietHours: { startHour: 21, endHour: 9 },
     frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+    onlyOwnersAndAdminsApprove: true,
     ...change,
   };
 }
@@ -489,10 +490,12 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     expect((await settings(cookie)).json().sending).toEqual({
       quietHours: { startHour: 21, endHour: 9 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+      onlyOwnersAndAdminsApprove: true,
     });
     const sending = {
       quietHours: { startHour: 22, endHour: 8 },
       frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+      onlyOwnersAndAdminsApprove: false,
     };
     const changed = await patch(cookie, { sending });
 
@@ -512,6 +515,7 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
       { sending: sendingWith({ quietHours: { startHour: 19, endHour: 9 } }) },
       { sending: sendingWith({ frequencyCap: { perChannelPerDay: 4, perSevenDays: 3 } }) },
       { sending: sendingWith({ frequencyCap: { perChannelPerDay: 1, perSevenDays: 11 } }) },
+      { sending: sendingWith({ onlyOwnersAndAdminsApprove: 'yes' }) },
     ])
       expect((await patch(cookie, payload)).statusCode).toBe(400);
     for (const extensions of [['physical_shop'], ['core'], ['chats', 'chats']])

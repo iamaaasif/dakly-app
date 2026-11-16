@@ -18,6 +18,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { contactError } from './contacts.errors';
 import {
+  type AudienceRecipient,
   type Contact,
   type ContactFilter,
   type ContactRecipient,
@@ -111,6 +112,11 @@ export class ContactsService {
   // A deleted contact reads as undefined.
   findRecipient(storeId: string, id: string): Promise<ContactRecipient | undefined> {
     return this.contactsRepository.findRecipient(storeId, id);
+  }
+
+  // Deleted contacts are left out. The phone goes only to the frozen campaign destination.
+  findRecipients(storeId: string, ids: string[]): Promise<AudienceRecipient[]> {
+    return this.contactsRepository.findRecipients(storeId, ids);
   }
 
   async assertContactExists(storeId: string, id: string): Promise<void> {
