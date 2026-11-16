@@ -15,29 +15,50 @@ describe('automation filters without RLS assistance', () => {
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
-  async function saved(storeId: string, userId: string) {
+  async function published(storeId: string, userId: string) {
     const automation = await repository.insert(storeId, {
       name: 'নতুন গ্রাহককে স্বাগতম',
       graph,
       createdByUserId: userId,
     });
-    return { automation };
+    const version = await repository.insertVersion(storeId, automation.id, {
+      graph,
+      publishedByUserId: userId,
+      publishedAt: now,
+    });
+    if (version === 'version_taken') throw new Error('Fixture version already taken');
+    return { automation, version };
   }
 
   it('saves into the selected store and reads and changes only its workflows', async () => {
-    const a = await saved(f.a, f.userA);
-    const b = await saved(f.b, f.userB);
+    const a = await published(f.a, f.userA);
+    const b = await published(f.b, f.userB);
 
     expect((await f.row('automations', b.automation.id)).store_id).toBe(f.b);
+    expect((await f.row('automation_versions', b.version.id)).store_id).toBe(f.b);
+    expect(b.version.version).toBe(1);
     expect(await repository.find(f.b, a.automation.id)).toBeUndefined();
     expect((await repository.list(f.b, visible, { limit: 100 })).map((row) => row.id)).toEqual([
       b.automation.id,
     ]);
     expect(await repository.countWithStatus(f.b, visible)).toBe(1);
+    expect(await repository.listVersions(f.b, a.automation.id)).toEqual([]);
 
     expect(
       await repository.change(f.b, a.automation.id, visible, { name: 'চুরি', updatedAt: now }),
     ).toBeUndefined();
+    expect(await repository.stopVersion(f.b, a.automation.id, a.version.id)).toBe(false);
+    // Store B sees no versions of A's workflow, so it picks 1, which A's version already holds.
+    expect(
+      await repository.insertVersion(f.b, a.automation.id, {
+        graph,
+        publishedByUserId: f.userB,
+        publishedAt: now,
+      }),
+    ).toBe('version_taken');
+    expect(await repository.listVersions(f.a, a.automation.id)).toEqual([
+      expect.objectContaining({ id: a.version.id, isStopped: false }),
+    ]);
     expect(await repository.find(f.a, a.automation.id)).toMatchObject({ name: a.automation.name });
   });
 });

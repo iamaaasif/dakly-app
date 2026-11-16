@@ -220,7 +220,7 @@ function checkTriggerFilters({ key, filters }: GraphShape['trigger'], context: C
   }
 }
 
-function nextStepKeys(step: AutomationStep): string[] {
+export function nextStepKeys(step: AutomationStep): string[] {
   if (step.kind === 'exit') return [];
   if (step.kind === 'condition') return [...step.paths.map((path) => path.next), step.elseNext];
   if (step.kind === 'random_split') return step.paths.map((path) => path.next);

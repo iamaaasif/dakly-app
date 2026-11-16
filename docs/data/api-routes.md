@@ -195,7 +195,8 @@ atomically and retain business data when an extension is disabled.
 | `POST /campaigns/:campaignId/schedule`, `POST /campaigns/:campaignId/send-now`, `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel` | `campaigns`   |
 | `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                                                                            | `campaigns`   |
 | `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                                                                   | `automations` |
-| `POST /automations/:automationId/publish`, `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                                                                   | `automations` |
+| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable`, `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                         | `automations` |
+| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                                                               | `automations` |
 | `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                                                                    | `automations` |
 | `GET /automations/:automationId/runs`                                                                                                                                                           | `automations` |
 

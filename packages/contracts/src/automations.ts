@@ -49,4 +49,13 @@ export type AutomationResponse = {
   createdAt: string;
   updatedAt: string;
 };
+export type AutomationVersionResponse = {
+  id: string;
+  version: number;
+  isStopped: boolean;
+  publishedAt: string;
+};
+export type AutomationDetailResponse = AutomationResponse & {
+  versions: AutomationVersionResponse[];
+};
 export type AutomationListResponse = { items: AutomationResponse[]; nextCursor: string | null };
