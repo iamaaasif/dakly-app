@@ -352,7 +352,7 @@ Coupons carry `duration` (`once`, `months`, `forever`). `duration_months` is req
 
 Coupon billing rules for PAY-7: once discounts the first paid invoice, then detaches. Months discounts each paid invoice whose period starts before redemption time plus N calendar months (`coupon_ends_at`). A yearly plan with a three-month coupon gets one discounted year. A failed and retried invoice remains one invoice and one redemption. PAY-10 adds storage and contracts only; redemption, expiry and invoice consumers (PAY-7) remain planned.
 
-Usage: every billable thing goes through `UsageService.consume(storeId, unit, quantity, reference)`, which checks the allowance, then top-ups, and writes a usage event unique on reference. Units: `ai_conversation`, `ai_content`, `ai_ask`, `sms_credit`, `whatsapp_poisha`. 80% and 100% thresholds notify once per period.
+Usage: every billable thing goes through `UsageService.consume(storeId, unit, quantity, reference)`, which checks the allowance, then top-ups, and writes a usage event unique on reference. Units are the AI allowances the schema allows: `ai_conversation`, `ai_content`, `ai_ask`. SMS credits and WhatsApp money are wallets in `wallet_ledger` (PAY-11), not usage units. 80% and 100% thresholds notify once per period.
 
 ### Rules
 
