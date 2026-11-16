@@ -20,20 +20,27 @@ const restrictedSyntax = {
   money: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
   hexColour: 'Use a theme token, not a hex colour. See docs/rules/frontend-styling.md.',
   hexClass: 'Use a theme token, not an arbitrary hex class. See docs/rules/frontend-styling.md.',
+  express: 'Express-only. Use the Fastify equivalent; see docs/rules/http-fastify.md.',
+  indexFile: 'Name the file for what it holds. Barrel files are not used in this repo.',
 };
 
 // Files not listed must lint clean: they are the allowed side of a rule.
 const expectedLintErrors = {
+  'apps/api/src/express-dynamic-import.ts': [restrictedSyntax.express, restrictedSyntax.express],
   'apps/api/src/express-import.ts': ['no-restricted-imports'],
   'apps/web/src/components/conditional-hook.tsx': ['react-hooks/rules-of-hooks'],
   'apps/web/src/components/default-export.tsx': [restrictedSyntax.defaultExport],
   'apps/web/src/components/double-assertion.tsx': [restrictedSyntax.doubleAssertion],
+  'apps/web/src/components/hex-class-template.tsx': [restrictedSyntax.hexClass],
   'apps/web/src/components/hex-class.tsx': [restrictedSyntax.hexClass],
+  'apps/web/src/components/hex-colour-template.tsx': [restrictedSyntax.hexColour],
   'apps/web/src/components/hex-colour.tsx': [restrictedSyntax.hexColour],
   'apps/web/src/components/missing-dependency.tsx': ['react-hooks/exhaustive-deps'],
+  'apps/web/src/components/money-intl-call.tsx': [restrictedSyntax.money],
   'apps/web/src/components/money-intl.tsx': [restrictedSyntax.money],
   'apps/web/src/components/money-locale.tsx': [restrictedSyntax.money],
   'apps/web/src/lib/many-params.ts': ['max-params'],
+  'packages/contracts/src/angle-double-assertion.ts': [restrictedSyntax.doubleAssertion],
   'packages/contracts/src/any-type.ts': ['@typescript-eslint/no-explicit-any'],
   'packages/contracts/src/double-assertion.ts': [restrictedSyntax.doubleAssertion],
   'packages/contracts/src/enum.ts': [restrictedSyntax.enum],
@@ -42,11 +49,13 @@ const expectedLintErrors = {
   'packages/core/src/orders/cognitive-complexity.ts': ['sonarjs/cognitive-complexity'],
   'packages/core/src/orders/complexity.ts': ['complexity'],
   'packages/core/src/orders/console.ts': ['no-console'],
+  'packages/core/src/orders/index.ts': [restrictedSyntax.indexFile],
   'packages/core/src/orders/long-file.ts': ['max-lines'],
   'packages/core/src/orders/long-function.ts': ['max-lines-per-function'],
   'packages/core/src/orders/many-params.ts': [restrictedSyntax.objectParameter],
   'packages/core/src/orders/max-depth.ts': ['max-depth'],
   'packages/core/src/orders/nested-ternary.ts': ['no-nested-ternary'],
+  'packages/ui/src/hex-class-template.tsx': [restrictedSyntax.hexClass],
   'packages/ui/src/hex-colour.tsx': [restrictedSyntax.hexColour],
 };
 
@@ -64,6 +73,7 @@ const expectedBoundaryViolations = {
   ],
   // dependency-cruiser reports a cycle once, from the first module it reaches.
   'packages/core/src/orders/order-lines.ts': ['no-circular'],
+  'packages/core/src/orders/order-status.ts': ['no-barrel-imports'],
   'packages/core/src/orders/orders.service.ts': ['no-cross-feature-internals'],
   'packages/core/src/platform/clock.ts': ['platform-does-not-know-features'],
   'packages/providers/src/sms-driver.ts': ['providers-do-not-know-core'],
