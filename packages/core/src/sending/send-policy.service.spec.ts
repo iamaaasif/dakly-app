@@ -33,9 +33,18 @@ describe('SendPolicyService', () => {
     isTransactionOpen = true;
     consent = 'granted';
     sends = [];
-    const contacts = { findRecipient: async () => contact };
+    // The batch reads answer the same for every contact id they are given.
+    const contacts = {
+      findRecipient: async () => contact,
+      findRecipients: async (_storeId: string, ids: string[]) =>
+        contact
+          ? ids.map((id) => ({ ...contact!, id, phone: contact!.hasPhone ? '01712345678' : null }))
+          : [],
+    };
     const consents = {
       current: async () => (consent ? [{ contactId: CONTACT_ID, status: consent }] : []),
+      currentForAudience: async (_storeId: string, ids: string[]) =>
+        consent ? ids.map((contactId) => ({ contactId, status: consent })) : [],
     };
     const stores = {
       sendingSettings: async () => ({
@@ -47,8 +56,12 @@ describe('SendPolicyService', () => {
     // Mirrors the repository's window: after the first date, up to and including the second.
     const repository = {
       lockContact: async () => undefined,
-      listMarketingSends: async (_storeId: string, _contactId: string, after: Date, until: Date) =>
-        sends.filter((send) => send.sentAt > after && send.sentAt <= until),
+      listMarketingSends: async (_storeId: string, ids: string[], after: Date, until: Date) =>
+        ids.flatMap((contactId) =>
+          sends
+            .filter((send) => send.sentAt > after && send.sentAt <= until)
+            .map((send) => ({ ...send, contactId })),
+        ),
     };
     service = new SendPolicyService(
       contacts as unknown as ContactsService,
@@ -77,7 +90,7 @@ describe('SendPolicyService', () => {
     expect(await service.check(STORE_ID, request())).toEqual({ action: 'send' });
   });
 
-  it.each([
+  const skipCases = [
     ['no_address', 'a deleted contact', () => (contact = undefined), {}],
     ['no_address', 'an SMS to a contact with no phone', () => (contact!.hasPhone = false), {}],
     ['blocked', 'a blocked contact', () => (contact!.isBlocked = true), {}],
@@ -104,10 +117,60 @@ describe('SendPolicyService', () => {
       () => sends.push(sentBefore(30), sentBefore(60, 'whatsapp'), sentBefore(100, 'messenger')),
       {},
     ],
-  ] as const)('skips as %s for %s', async (reason, _case, arrange, change) => {
+  ] as const;
+
+  it.each(skipCases)('skips as %s for %s', async (reason, _case, arrange, change) => {
     arrange();
 
     expect(await service.check(STORE_ID, request(change))).toEqual({ action: 'skip', reason });
+  });
+
+  it.each([
+    ...skipCases,
+    ['send', 'a consented customer', () => {}, {}],
+    [
+      'send',
+      'a transactional SMS without consent',
+      () => (consent = undefined),
+      { category: 'transactional' },
+    ],
+    ['defer', 'marketing in quiet hours', () => {}, { at: new Date('2026-11-16T16:00:00Z') }],
+  ] as const)(
+    'decides an audience as check does: %s for %s',
+    async (_result, _case, arrange, change) => {
+      arrange();
+      const { channel, category, at } = request(change);
+      const ids = [CONTACT_ID, '0193a3c4-5d1e-7b8f-9a0b-3c4d5e6f7a8b'];
+
+      const audience = await service.checkAudience(STORE_ID, {
+        contactIds: ids,
+        channel,
+        category,
+        at,
+      });
+
+      const decision = await service.check(STORE_ID, request(change));
+      expect(audience).toEqual(
+        ids.map((contactId) => ({
+          contactId,
+          phone: contact?.hasPhone ? '01712345678' : null,
+          decision,
+        })),
+      );
+    },
+  );
+
+  it('checks an audience outside a store transaction', async () => {
+    isTransactionOpen = false;
+
+    expect(
+      await service.checkAudience(STORE_ID, {
+        contactIds: [CONTACT_ID],
+        channel: 'sms',
+        category: 'marketing',
+        at: NOON_DHAKA,
+      }),
+    ).toEqual([{ contactId: CONTACT_ID, phone: '01712345678', decision: { action: 'send' } }]);
   });
 
   it('sends again once the last SMS is 24 hours old and the week has room', async () => {

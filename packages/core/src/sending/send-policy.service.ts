@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { recipientSkipReasons } from '@dakly/contracts/campaigns';
-import type { ConsentChannel, ContactKind } from '@dakly/contracts/contacts';
+import type { ConsentChannel, ConsentStatus, ContactKind } from '@dakly/contracts/contacts';
 import type { SendingSettings } from '@dakly/contracts/stores';
 
 import { ConsentService } from '../consents/consent.service';
@@ -9,7 +9,7 @@ import { ContactsService } from '../contacts/contacts.service';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { StoresService } from '../stores/stores.service';
-import { SendingRepository } from './sending.repository';
+import { type MarketingSend, SendingRepository } from './sending.repository';
 
 export type SendCategory = 'staff_reply' | 'transactional' | 'marketing';
 export type SendChannel = Exclude<ConsentChannel, 'email'>;
@@ -25,7 +25,16 @@ export type SendRequest = {
 export type SendDecision =
   { action: 'send' } | { action: 'defer'; until: Date } | { action: 'skip'; reason: SkipReason };
 
+export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
+// The phone is frozen as the SMS destination of a campaign recipient.
+export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
+
+// The most contacts one checkAudience call takes: its consent read's limit.
+export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
+
 const HOUR = 60 * 60 * 1000;
+
+const SEND: SendDecision = { action: 'send' };
 
 function skip(reason: SkipReason): SendDecision {
   return { action: 'skip', reason };
@@ -46,18 +55,49 @@ export class SendPolicyService {
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
     this.requireTransactionForMarketing(request.category);
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
-    if (!contact) return skip('no_address');
-    if (contact.isBlocked) return skip('blocked');
-    if (request.category === 'marketing') {
-      const reason = await this.audienceSkip(storeId, contact, request);
-      if (reason) return skip(reason);
-    }
-    if (request.channel === 'sms' && !contact.hasPhone) return skip('no_address');
-    // SMS has no window. Other channels have no inbound message times or templates until CHAT-2
-    // and CHN-3, so no window can be shown open.
-    if (request.channel !== 'sms') return skip('window_closed');
-    if (request.category !== 'marketing') return { action: 'send' };
-    return this.marketingLimits(storeId, request);
+    const [consent] =
+      contact && request.category === 'marketing'
+        ? await this.consents.current(storeId, [request.contactId], request.channel)
+        : [];
+    const reason = recipientSkip(contact, consent?.status, request);
+    if (reason) return skip(reason);
+    if (request.category !== 'marketing') return SEND;
+
+    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
+    const settings = await this.stores.sendingSettings(storeId);
+    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
+    if (quietUntil) return { action: 'defer', until: quietUntil };
+    await this.repository.lockContact(storeId, request.contactId);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
+  }
+
+  // Approval freezes these skips with the same rules, a page at a time and with no lock. The
+  // check inside the send transaction can still skip a queued recipient, never send a skipped one.
+  async checkAudience(
+    storeId: string,
+    { contactIds, channel, category, at }: AudienceRequest,
+  ): Promise<AudienceDecision[]> {
+    const contacts = new Map(
+      (await this.contacts.findRecipients(storeId, contactIds)).map((row) => [
+        row.id,
+        { ...row, hasPhone: row.phone !== null },
+      ]),
+    );
+    const isMarketing = category === 'marketing';
+    const consents = isMarketing
+      ? await this.consents.currentForAudience(storeId, contactIds, channel)
+      : [];
+    const consentOf = new Map(consents.map((row) => [row.contactId, row.status]));
+    const limits = isMarketing
+      ? await this.audienceLimits(storeId, contactIds, channel, at)
+      : undefined;
+    return contactIds.map((contactId) => {
+      const contact = contacts.get(contactId);
+      const reason = recipientSkip(contact, consentOf.get(contactId), { channel, category });
+      const decision = reason ? skip(reason) : (limits?.(contactId) ?? SEND);
+      return { contactId, phone: contact?.phone ?? null, decision };
+    });
   }
 
   // The cap lock must last until the caller marks the message sending and commits.
@@ -66,42 +106,69 @@ export class SendPolicyService {
       throw new AppError('STORE_TRANSACTION_REQUIRED', PLATFORM_ERRORS.STORE_TRANSACTION_REQUIRED);
   }
 
-  private async audienceSkip(
+  private async audienceLimits(
     storeId: string,
-    contact: { kind: ContactKind; isOverPlanLimit: boolean },
-    { contactId, channel }: SendRequest,
-  ): Promise<SkipReason | undefined> {
-    if (contact.kind === 'not_customer') return 'not_customer';
-    if (contact.isOverPlanLimit) return 'over_plan_limit';
-    const [consent] = await this.consents.current(storeId, [contactId], channel);
-    return consent?.status === 'granted' ? undefined : 'no_consent';
-  }
-
-  // Quiet hours come before the cap, so a deferred message is counted when it is sent.
-  private async marketingLimits(
-    storeId: string,
-    { contactId, channel, at }: SendRequest,
-  ): Promise<SendDecision> {
+    contactIds: string[],
+    channel: SendChannel,
+    at: Date,
+  ): Promise<(contactId: string) => SendDecision> {
     const settings = await this.stores.sendingSettings(storeId);
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
-    if (quietUntil) return { action: 'defer', until: quietUntil };
+    if (quietUntil) return () => ({ action: 'defer', until: quietUntil });
+    const sendsOf = new Map<string, MarketingSend[]>();
+    for (const send of await this.listWeekOfSends(storeId, contactIds, at)) {
+      const own = sendsOf.get(send.contactId);
+      if (own) own.push(send);
+      else sendsOf.set(send.contactId, [send]);
+    }
+    return (contactId) =>
+      capReached(sendsOf.get(contactId) ?? [], { channel, at }, settings.frequencyCap)
+        ? skip('frequency_cap')
+        : SEND;
+  }
 
-    await this.repository.lockContact(storeId, contactId);
-    const dayStart = new Date(at.getTime() - 24 * HOUR);
-    const sends = await this.repository.listMarketingSends(
+  private listWeekOfSends(storeId: string, contactIds: string[], at: Date) {
+    return this.repository.listMarketingSends(
       storeId,
-      contactId,
+      contactIds,
       new Date(at.getTime() - 7 * 24 * HOUR),
       at,
     );
-    const onChannelToday = sends.filter(
-      (send) => send.channel === channel && send.sentAt > dayStart,
-    ).length;
-    const { perChannelPerDay, perSevenDays } = settings.frequencyCap;
-    if (onChannelToday >= perChannelPerDay || sends.length >= perSevenDays)
-      return skip('frequency_cap');
-    return { action: 'send' };
   }
+}
+
+// Checks 1 to 4 in feature 09, in order: what the contact, its consent and the channel decide.
+function recipientSkip(
+  contact:
+    | { kind: ContactKind; isBlocked: boolean; isOverPlanLimit: boolean; hasPhone: boolean }
+    | undefined,
+  consent: ConsentStatus | undefined,
+  { channel, category }: Pick<SendRequest, 'channel' | 'category'>,
+): SkipReason | undefined {
+  if (!contact) return 'no_address';
+  if (contact.isBlocked) return 'blocked';
+  if (category === 'marketing') {
+    if (contact.kind === 'not_customer') return 'not_customer';
+    if (contact.isOverPlanLimit) return 'over_plan_limit';
+    if (consent !== 'granted') return 'no_consent';
+  }
+  if (channel === 'sms' && !contact.hasPhone) return 'no_address';
+  // SMS has no window. Other channels have no inbound message times or templates until CHAT-2
+  // and CHN-3, so no window can be shown open.
+  if (channel !== 'sms') return 'window_closed';
+  return undefined;
+}
+
+function capReached(
+  sends: MarketingSend[],
+  { channel, at }: Pick<SendRequest, 'channel' | 'at'>,
+  { perChannelPerDay, perSevenDays }: SendingSettings['frequencyCap'],
+): boolean {
+  const dayStart = new Date(at.getTime() - 24 * HOUR);
+  const onChannelToday = sends.filter(
+    (send) => send.channel === channel && send.sentAt > dayStart,
+  ).length;
+  return onChannelToday >= perChannelPerDay || sends.length >= perSevenDays;
 }
 
 // Quiet hours always span midnight.

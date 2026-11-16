@@ -48,6 +48,8 @@ export const sendingSettingsSchema = z.strictObject({
       perSevenDays: z.number().int().min(1).max(10),
     })
     .default({ perChannelPerDay: 1, perSevenDays: 3 }),
+  // Feature 09: while on, only an Owner or Admin approves a campaign.
+  onlyOwnersAndAdminsApprove: z.boolean().default(true),
 });
 export type SendingSettings = z.infer<typeof sendingSettingsSchema>;
 

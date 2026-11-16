@@ -156,3 +156,12 @@ export type CampaignResponse = {
   updatedAt: string;
 };
 export type CampaignListResponse = { items: CampaignResponse[]; nextCursor: string | null };
+// SMS is counted in credits, one per part, and has no poisha rate yet, so costPoisha is 0.
+export type CampaignEstimateResponse = {
+  audienceCount: number;
+  skippedByReason: Partial<Record<(typeof recipientSkipReasons)[number], number>>;
+  recipientsCount: number;
+  smsParts: number;
+  smsCredits: number;
+  costPoisha: number;
+};

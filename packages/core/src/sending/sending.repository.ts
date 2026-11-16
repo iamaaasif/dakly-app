@@ -8,9 +8,13 @@ import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
-export type MarketingSend = { channel: (typeof campaignChannels)[number]; sentAt: Date };
+export type MarketingSend = {
+  contactId: string;
+  channel: (typeof campaignChannels)[number];
+  sentAt: Date;
+};
 
-type SendWindow = { storeId: string; contactId: string; after: Date; until: Date };
+type SendWindow = { storeId: string; contactIds: string[]; after: Date; until: Date };
 
 // Read-only: the frequency cap counts campaign and workflow sends together from Postgres (A2).
 // The campaigns and automations features that own these tables are not built yet.
@@ -30,16 +34,17 @@ export class SendingRepository {
 
   listMarketingSends(
     storeId: string,
-    contactId: string,
+    contactIds: string[],
     after: Date,
     until: Date,
   ): Promise<MarketingSend[]> {
-    const window = { storeId, contactId, after, until };
+    const window = { storeId, contactIds, after, until };
     return this.database.forStore(storeId, async (tx) => {
       const sends = [...(await campaignSends(tx, window)), ...(await workflowSends(tx, window))];
       // A recipient still in sending is a send happening now. Workflow steps always have a
       // channel and send time here; the where clause filters the nulls.
       return sends.map((send) => ({
+        contactId: send.contactId,
         channel: send.channel as MarketingSend['channel'],
         sentAt: send.sentAt ?? until,
       }));
@@ -47,9 +52,13 @@ export class SendingRepository {
   }
 }
 
-function campaignSends(tx: Transaction, { storeId, contactId, after, until }: SendWindow) {
+function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
   return tx
-    .select({ channel: campaigns.channel, sentAt: campaignRecipients.sentAt })
+    .select({
+      contactId: campaignRecipients.contactId,
+      channel: campaigns.channel,
+      sentAt: campaignRecipients.sentAt,
+    })
     .from(campaignRecipients)
     .innerJoin(
       campaigns,
@@ -61,7 +70,7 @@ function campaignSends(tx: Transaction, { storeId, contactId, after, until }: Se
     .where(
       and(
         eq(campaignRecipients.storeId, storeId),
-        eq(campaignRecipients.contactId, contactId),
+        inArray(campaignRecipients.contactId, contactIds),
         or(
           eq(campaignRecipients.status, 'sending'),
           and(
@@ -75,9 +84,13 @@ function campaignSends(tx: Transaction, { storeId, contactId, after, until }: Se
     );
 }
 
-function workflowSends(tx: Transaction, { storeId, contactId, after, until }: SendWindow) {
+function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
   return tx
-    .select({ channel: automationRunSteps.channel, sentAt: automationRunSteps.sentAt })
+    .select({
+      contactId: automationRunSteps.contactId,
+      channel: automationRunSteps.channel,
+      sentAt: automationRunSteps.sentAt,
+    })
     .from(automationRunSteps)
     .innerJoin(
       automationRuns,
@@ -96,7 +109,7 @@ function workflowSends(tx: Transaction, { storeId, contactId, after, until }: Se
     .where(
       and(
         eq(automationRunSteps.storeId, storeId),
-        eq(automationRunSteps.contactId, contactId),
+        inArray(automationRunSteps.contactId, contactIds),
         gt(automationRunSteps.sentAt, after),
         lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),

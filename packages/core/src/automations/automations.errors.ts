@@ -5,6 +5,10 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AUTOMATION_ERRORS = {
   AUTOMATION_NOT_FOUND: { status: 404, message: 'Workflow not found' },
+  AUTOMATION_APPROVAL_DENIED: {
+    status: 403,
+    message: 'Only an owner or admin can publish or enable workflows in this shop',
+  },
   AUTOMATION_VERSION_NOT_FOUND: { status: 404, message: 'Workflow version not found' },
   AUTOMATION_LIMIT_REACHED: {
     status: 409,

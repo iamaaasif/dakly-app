@@ -22,8 +22,10 @@ import {
   type CreateAutomationInput,
   createAutomationSchema,
 } from '@dakly/contracts/automations';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
+import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
@@ -78,9 +80,13 @@ export class AutomationsController {
   publish(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
     @Param('automationId', ParseUUIDPipe) automationId: string,
   ): Promise<AutomationResponse> {
-    return this.automations.publish(storeId, automationId, { kind: 'user', userId });
+    return this.automations.publish(storeId, automationId, {
+      access,
+      actor: { kind: 'user', userId },
+    });
   }
 
   @Post(':automationId/enable')
@@ -89,9 +95,13 @@ export class AutomationsController {
   enable(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
     @Param('automationId', ParseUUIDPipe) automationId: string,
   ): Promise<AutomationResponse> {
-    return this.automations.enable(storeId, automationId, { kind: 'user', userId });
+    return this.automations.enable(storeId, automationId, {
+      access,
+      actor: { kind: 'user', userId },
+    });
   }
 
   @Post(':automationId/pause')

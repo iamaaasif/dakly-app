@@ -11,21 +11,25 @@ import {
   type CreateAutomationInput,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
-import { automationTriggers, type TriggerKey } from '@dakly/contracts/automations/catalogue';
+import { automationTriggers } from '@dakly/contracts/automations/catalogue';
 import {
   type AutomationGraph,
   type AutomationStep,
   nextStepKeys,
 } from '@dakly/contracts/automations/graph';
 import type { campaignChannels } from '@dakly/contracts/campaigns';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { StoresService } from '../stores/stores.service';
+import { TeamService } from '../team/team.service';
 import { automationError } from './automations.errors';
 import { type Automation, AutomationsRepository } from './automations.repository';
 
 // Writes take the actor (services.md); nothing records it for automations yet.
 type Actor = AuditEntry['actor'];
+type Approver = { access: StoreAccess; actor: Actor };
 
 // Feature 09 and state-machines.md. Disable on the list is pause; Delete is archive.
 const STATUS_MOVES = {
@@ -49,6 +53,8 @@ export class AutomationsService {
     @Inject(AutomationsRepository) private readonly repository: AutomationsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(TeamService) private readonly team: TeamService,
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
@@ -107,28 +113,38 @@ export class AutomationsService {
   }
 
   // Runs already in the workflow keep the version they entered (feature 09).
-  async publish(storeId: string, automationId: string, actor: Actor): Promise<AutomationResponse> {
+  async publish(
+    storeId: string,
+    automationId: string,
+    { access, actor }: Approver,
+  ): Promise<AutomationResponse> {
+    await this.checkCanApprove(storeId, access);
     return this.transaction.run(storeId, async () => {
-      const automation = await this.findVisible(storeId, automationId);
-      checkPublishable(automation.graph);
-      // The status update locks the row first, so a second publish waits for this one. The live
-      // trigger becomes the published graph's.
-      await this.move(storeId, automationId, 'publish', automation.graph.trigger.key);
+      // The status update locks the row first, so a second publish or a draft edit waits, and
+      // the checks run on the graph that is published. A refusal rolls the status back.
+      const locked = await this.move(storeId, automationId, 'publish');
+      checkPublishable(locked.graph);
       const now = this.clock.now();
       const version = await this.repository.insertVersion(storeId, automationId, {
-        graph: automation.graph,
+        graph: locked.graph,
         publishedByUserId: actor.kind === 'user' ? actor.userId : null,
         publishedAt: now,
       });
       const published = await this.repository.change(storeId, automationId, ['active'], {
         publishedVersionId: version.id,
+        triggerType: locked.graph.trigger.key,
         updatedAt: now,
       });
       return toAutomationResponse(published!);
     });
   }
 
-  enable(storeId: string, automationId: string, _actor: Actor): Promise<AutomationResponse> {
+  async enable(
+    storeId: string,
+    automationId: string,
+    { access }: Approver,
+  ): Promise<AutomationResponse> {
+    await this.checkCanApprove(storeId, access);
     return this.move(storeId, automationId, 'enable');
   }
 
@@ -159,17 +175,23 @@ export class AutomationsService {
     storeId: string,
     automationId: string,
     move: StatusMove,
-    triggerType?: TriggerKey,
   ): Promise<AutomationResponse> {
     const { from, to } = STATUS_MOVES[move];
     const automation = await this.repository.change(storeId, automationId, from, {
       status: to,
-      triggerType,
       updatedAt: this.clock.now(),
     });
     if (automation) return toAutomationResponse(automation);
     await this.findVisible(storeId, automationId);
     throw automationError('AUTOMATION_STATUS_NOT_ALLOWED');
+  }
+
+  // Publish and Enable let a workflow send (CAMP-R1), so the store's approval setting covers
+  // them as it covers campaign approval.
+  private async checkCanApprove(storeId: string, access: StoreAccess) {
+    const { onlyOwnersAndAdminsApprove } = await this.stores.sendingSettings(storeId);
+    if (onlyOwnersAndAdminsApprove && !this.team.canApproveSends(access))
+      throw automationError('AUTOMATION_APPROVAL_DENIED');
   }
 
   private async findVisible(storeId: string, automationId: string): Promise<Automation> {
