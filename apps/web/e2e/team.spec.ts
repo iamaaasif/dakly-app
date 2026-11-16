@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
+import { maskPhone } from '@dakly/contracts/phone';
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { createDatabase } from '@dakly/db/client';
 
@@ -179,6 +180,10 @@ async function transfer(
   await privateInput(owner, 'code', notice.match(/\b\d{6}\b/)![0]);
   await owner.getByRole('button', { name: 'Start ownership transfer' }).click();
   await expect(owner.getByRole('heading', { name: 'Pending ownership transfer' })).toBeVisible();
+  await expect(
+    owner.getByText(`Transfer to ${fixture.name} (${maskPhone(fixture.phone)})`, { exact: true }),
+  ).toBeVisible();
+  await expect(owner.getByText(/Recipient account/)).toHaveCount(0);
   await recipient
     .getByRole('navigation', { name: 'Main navigation' })
     .getByRole('link', { name: 'Ownership transfer' })

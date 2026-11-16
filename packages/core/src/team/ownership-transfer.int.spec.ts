@@ -7,6 +7,8 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { maskPhone } from '@dakly/contracts/phone';
+import { ownershipTransferResponseSchema } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 import { users } from '@dakly/db/schema/auth';
 import { stores } from '@dakly/db/schema/stores';
@@ -160,6 +162,42 @@ describe('ownership transfer over Fastify and Postgres', () => {
     expect(
       audit.rows.every((row: { actor_user_id: string }) => row.actor_user_id === f.member.id),
     ).toBe(true);
+  });
+  it('names the recipient with a masked phone and never sends the raw phone or email', async () => {
+    const f = await fixture();
+    await admin.db.update(users).set({ name: 'Nusrat Jahan' }).where(eq(users.id, f.member.id));
+    const recipient = {
+      recipientName: 'Nusrat Jahan',
+      recipientContact: maskPhone(f.member.phone),
+    };
+    const code = await proof(f);
+    const started = await request(path, { membershipId: f.membershipId, code }, f.owner);
+    const current = await app.inject({ url: path, headers: { cookie: f.owner.cookie } });
+    const accepted = await request(`${path}/accept`, { transferId: started.json().id }, f.member);
+    for (const [response, transfer] of [
+      [started, started.json()],
+      [current, current.json().transfer],
+      [accepted, accepted.json()],
+    ]) {
+      expect(ownershipTransferResponseSchema.parse(transfer)).toMatchObject(recipient);
+      expect(response.body).not.toContain(f.member.phone);
+    }
+    const emailOnly = await fixture();
+    const email = `transfer-${randomInt(1, 1e9)}@example.com`;
+    await admin.pool.query(
+      'update users set email=$2, email_verified_at=now(), phone=null, phone_verified_at=null where id=$1',
+      [emailOnly.member.id, email],
+    );
+    const response = await request(
+      path,
+      { membershipId: emailOnly.membershipId, code: await proof(emailOnly) },
+      emailOnly.owner,
+    );
+    expect(ownershipTransferResponseSchema.parse(response.json())).toMatchObject({
+      recipientName: 'Rina',
+      recipientContact: null,
+    });
+    expect(response.body).not.toContain(email);
   });
   it('denies wrong members, cancellation, expiry, code reuse and a second open transfer', async () => {
     const f = await fixture();
