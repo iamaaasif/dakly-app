@@ -140,6 +140,7 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | ---------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `contact.created`      | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
 | `consent.changed`      | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
+| `segment.saved`        | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
 | `conversation.started` | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
 | `message.received`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
 | `message.delivered`    | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
@@ -148,6 +149,8 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `message.tapped`       | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
 | `message.opted_out`    | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
 | `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+
+Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 
 [Feature 02](../features/02-channel-connections.md) lists `channel.connected`, `channel.needs_reconnect` and `channel.disconnected`. No M2 or M3 task emits them yet, so they are not in the catalogue.
 

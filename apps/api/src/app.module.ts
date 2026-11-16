@@ -8,6 +8,7 @@ import { LinksModule } from '@dakly/core/links/links.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
+import { SegmentsModule } from '@dakly/core/segments/segments.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
 import { StoresModule } from '@dakly/core/stores/stores.module';
 import { WalletsModule } from '@dakly/core/wallets/wallets.module';
@@ -24,6 +25,7 @@ import { HealthController } from './health.controller';
     ContactsModule,
     ConsentsModule,
     LinksModule,
+    SegmentsModule,
     StoresModule,
     NotificationsModule,
     WalletsModule,

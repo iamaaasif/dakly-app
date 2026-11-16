@@ -7,6 +7,7 @@ const CONTACT_ERRORS = {
     status: 409,
     message: 'A contact with this phone number already exists',
   },
+  CONTACT_SEARCH_TOO_SHORT: { status: 400, message: 'Type at least 3 letters to search by name' },
 } as const satisfies ErrorCatalog;
 
 export function contactError(code: keyof typeof CONTACT_ERRORS): AppError {

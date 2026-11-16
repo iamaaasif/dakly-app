@@ -92,6 +92,48 @@ fixture('POST /contacts', async () => {
   expect((await f.row('contacts', own)).store_id).toBe(b.id);
   expect(await f.row('contacts', id)).toEqual(before);
 });
+fixture('GET /contacts', async () => {
+  const { a, b } = await pair(),
+    aId = await contact(a),
+    bId = await contact(b);
+  for (const [shop, own, foreign] of [
+    [a, aId, bId],
+    [b, bId, aId],
+  ] as const) {
+    const ids = (await success(shop, 'GET', '/contacts', 200))
+      .json()
+      .items.map((item: { id: string }) => item.id);
+    expect(ids).toEqual([own]);
+    expect(ids).not.toContain(foreign);
+  }
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /contacts/:contactId`, async () => {
+    const positive = await f.shop(),
+      { a, b } = await pair();
+    const positiveId = await contact(positive),
+      foreignId = await contact(a);
+    const payload = method === 'PATCH' ? { name: 'করিম', tags: ['ঈদ'] } : undefined;
+    await success(
+      positive,
+      method,
+      `/contacts/${positiveId}`,
+      method === 'DELETE' ? 204 : 200,
+      payload,
+    );
+    const changed = await f.row('contacts', positiveId);
+    if (method === 'DELETE') expect(changed.deleted_at).not.toBeNull();
+    else expect(changed).toMatchObject({ name: 'করিম', tags: ['ঈদ'] });
+    const before = await f.row('contacts', foreignId);
+    await hidden(
+      b,
+      method,
+      (id) => `/contacts/${id}`,
+      foreignId,
+      () => payload ?? {},
+    );
+    expect(await f.row('contacts', foreignId)).toEqual(before);
+  });
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
     id = await contact(a);
@@ -111,6 +153,66 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+const dhaka = {
+  match: 'all',
+  conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
+};
+async function segment(shop: Shop) {
+  const input = { name: `ঢাকা ${randomUUID()}`, rules: dhaka };
+  return (await success(shop, 'POST', '/segments', 201, input)).json().id as string;
+}
+async function dhakaContact(shop: Shop) {
+  const id = await contact(shop);
+  await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [id]);
+}
+fixture('GET /segments', async () => {
+  const { a, b } = await pair(),
+    aId = await segment(a),
+    bId = await segment(b);
+  const ids = (await success(b, 'GET', '/segments', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/segments', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /segments', async () => {
+  const { a, b } = await pair(),
+    id = await segment(a),
+    before = await f.row('segments', id);
+  const own = await segment(b);
+  expect((await f.row('segments', own)).store_id).toBe(b.id);
+  expect(await f.row('segments', id)).toEqual(before);
+});
+fixture('POST /segments/preview', async () => {
+  const { a, b } = await pair();
+  await dhakaContact(a);
+  await dhakaContact(a);
+  await dhakaContact(b);
+  const count = async (shop: Shop) =>
+    (await success(shop, 'POST', '/segments/preview', 200, { rules: dhaka })).json().count;
+  expect(await count(a)).toBe(2);
+  expect(await count(b)).toBe(1);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /segments/:segmentId`, async () => {
+    const { a, b } = await pair(),
+      own = await segment(b),
+      foreign = await segment(a);
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/segments/${own}`, method === 'DELETE' ? 204 : 200, payload);
+    const changed = await f.row('segments', own);
+    if (method === 'DELETE') expect(changed).toBeUndefined();
+    else expect(changed).toMatchObject({ name: 'নতুন নাম' });
+    const before = await f.row('segments', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/segments/${id}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('segments', foreign)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -210,8 +312,16 @@ fixture('GET /store', async () => {
   expect((await success(a, 'GET', '/store', 200)).json().id).toBe(a.id);
   expect((await success(b, 'GET', '/store', 200)).json().id).toBe(b.id);
 });
+const shopSending = {
+  quietHours: { startHour: 22, endHour: 8 },
+  frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+};
 for (const [path, payload, expected] of [
-  ['/store', { name: 'রিনার দোকান' }, { name: 'রিনার দোকান' }],
+  [
+    '/store',
+    { name: 'রিনার দোকান', sending: shopSending },
+    { name: 'রিনার দোকান', sending: shopSending },
+  ],
   ['/store/extensions', { extensions: ['chats'] }, { extensions: ['chats'] }],
 ] as const)
   fixture(`PATCH ${path}`, async () => {
@@ -556,6 +666,7 @@ describe('every production shop route isolates its data', () => {
       ['memberships', 'id', a.membership, b.membership],
       ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
+      ['segments', 'id', await segment(a), await segment(b)],
       ['ownership_transfers', 'id', await f.transfer(a), await f.transfer(b)],
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],

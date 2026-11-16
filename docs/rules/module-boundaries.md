@@ -29,3 +29,12 @@ Other rules, all checked by `pnpm lint:boundaries` (`.dependency-cruiser.cjs`):
 - No circular imports. Cycles through the web apps' `@/` alias are not seen, because dependency-cruiser does not resolve it.
 
 When feature A must react to something in feature B (order paid → send WhatsApp receipt), B emits an event and A listens. B does not call A.
+
+## Read-only reads across features
+
+A few queries must join another feature's table to stay one indexed query. They read only, the owner keeps every write, and each one is listed here.
+
+| Reader     | Tables                                                                                       | Why                                                                    | Who owns writes            |
+| ---------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------- |
+| `contacts` | `contact_consent_current`                                                                    | Compiling segment conditions on consent into the contacts count        | `consents`                 |
+| `sending`  | `campaign_recipients`, `campaigns`, `automation_run_steps`, `automation_runs`, `automations` | The frequency cap counts campaign and workflow sends together (A1, A2) | `campaigns`, `automations` |
