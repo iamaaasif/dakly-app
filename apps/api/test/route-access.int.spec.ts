@@ -78,7 +78,7 @@ describe('API route access rules', () => {
         'TotpRecoveryController.complete',
         'AuthController.requestCode',
         'AuthController.verifyCode',
-        'CustomersController.getById',
+        'ContactsController.getById',
         'StoresController.create',
         'PlansController.list',
         'WalletsController.balances',

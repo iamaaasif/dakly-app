@@ -134,18 +134,18 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await page.getByRole('button', { name: 'Add customer', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('Customer added');
     const created = await database.pool.query(
-      'select store_id, name from customers where store_id=any($1::uuid[])',
+      'select store_id, name from contacts where store_id=any($1::uuid[])',
       [fixture.storeIds],
     );
     expect(created.rows).toEqual([{ store_id: fixture.storeIds[1], name: customer.name }]);
-    const stale = await context.request.post('/api/customers', {
+    const stale = await context.request.post('/api/contacts', {
       headers: { Origin: baseURL!, 'X-Session-Context': before.contextTag },
       data: { name: 'Stale draft', phone: `019${randomInt(10000000, 99999999)}` },
     });
     expect(stale.status()).toBe(409);
     expect((await stale.json()).error.code).toBe('SESSION_CONTEXT_CHANGED');
     const after = await database.pool.query(
-      'select store_id, name from customers where store_id=any($1::uuid[])',
+      'select store_id, name from contacts where store_id=any($1::uuid[])',
       [fixture.storeIds],
     );
     expect(after.rows).toEqual(created.rows);

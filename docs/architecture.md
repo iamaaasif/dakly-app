@@ -10,7 +10,7 @@ apps/
   admin/      Next.js staff app at admin.dakly.app (not built yet).
 packages/
   ui/         Generic UI components and theme tokens for web and admin (not built yet).
-  core/       Features (customers/, later chats/, orders/, products/, social/, ai/, billing/)
+  core/       Features (contacts/, later chats/, orders/, products/, social/, ai/, billing/)
               and platform/ (config, errors, tenancy, database, queue).
   contracts/  zod schemas and response types shared by api and web.
   db/         Drizzle schema, migrations, RLS policies.
@@ -46,7 +46,7 @@ Beta runs on one DigitalOcean Droplet; managed PostgreSQL and managed Valkey (Re
 
 ## What is built
 
-Only the skeleton: platform pieces, the `customers` example feature, driver interfaces for channels and payments, and the web feature-folder example. Auth is the next piece; until it exists every store route returns `401 STORE_REQUIRED`.
+Only the skeleton: platform pieces, the `contacts` feature, driver interfaces for channels and payments, and the web feature-folder example. Auth is the next piece; until it exists every store route returns `401 STORE_REQUIRED`.
 
 ## API conventions
 

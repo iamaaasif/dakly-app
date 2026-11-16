@@ -5,7 +5,7 @@ Every form uses React Hook Form with the zod schema from `@dakly/contracts`, the
 ## Rules
 
 1. The schema comes from contracts. A form never defines its own copy of an API rule (phone format, required fields, max lengths).
-2. If the form needs a field the API does not take (confirm password), extend the contract schema in the feature: `createCustomerSchema.extend({ ... })`.
+2. If the form needs a field the API does not take (confirm password), extend the contract schema in the feature: `createContactSchema.extend({ ... })`.
 3. Inputs use the `packages/ui` field components, which wire the label, the input, the hint and the error message with the right ARIA attributes.
 4. Validate on submit first, then on change for fields that already showed an error (`mode: 'onSubmit'`, `reValidateMode: 'onChange'`).
 5. Server errors map back to fields where the code says which field (`CUSTOMER_PHONE_TAKEN` → `phone`). Others show above the submit button.
@@ -30,8 +30,8 @@ function submit() {
 Right:
 
 ```tsx
-const form = useForm<CreateCustomerInput>({
-  resolver: zodResolver(createCustomerSchema),
+const form = useForm<CreateContactInput>({
+  resolver: zodResolver(createContactSchema),
   defaultValues: { name: '', phone: '' },
 });
 const createCustomer = useCreateCustomer();

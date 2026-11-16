@@ -6,8 +6,8 @@ Every request body, query, webhook and job payload is parsed with a zod schema b
 
 ```ts
 @Post()
-create(@CurrentStore() storeId: string, @Body(new ZodValidationPipe(createCustomerSchema)) input: CreateCustomerInput) {
-  return this.customersService.create(storeId, input);
+create(@CurrentStore() storeId: string, @Body(new ZodValidationPipe(createContactSchema)) input: CreateContactInput) {
+  return this.contactsService.create(storeId, input);
 }
 ```
 

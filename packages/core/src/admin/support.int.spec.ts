@@ -15,7 +15,7 @@ import { SlackAlertDriver } from '@dakly/providers/staff-alert/slack/slack-alert
 
 import { AuditService } from '../audit/audit.service';
 import { AuthModule } from '../auth/auth.module';
-import { CustomersService } from '../customers/customers.service';
+import { ContactsService } from '../contacts/contacts.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
@@ -299,7 +299,7 @@ afterAll(async () => {
   for (const table of [
     'support_sessions',
     'support_grants',
-    'customers',
+    'contacts',
     'audit_log',
     'memberships',
   ])
@@ -424,7 +424,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
     expect(
       (
         await database.pool.query(
-          'select count(*)::int as count from customers where store_id=any($1::uuid[])',
+          'select count(*)::int as count from contacts where store_id=any($1::uuid[])',
           [[a.storeId, b.storeId]],
         )
       ).rows[0].count,
@@ -449,7 +449,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
     expect(fresh.statusCode).toBe(201);
     expect(fresh.json().contextTag).toBe(contextB);
     expect(
-      (await database.pool.query('select store_id from customers where id=$1', [fresh.json().id]))
+      (await database.pool.query('select store_id from contacts where id=$1', [fresh.json().id]))
         .rows[0].store_id,
     ).toBe(b.storeId);
     const staleRead = await app.inject({
@@ -472,21 +472,22 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
     await database.pool.query('update sessions set active_store_id=null where id=$1', [
       account.sessionId,
     ]);
-    const original = CustomersService.prototype.getById;
-    const probe = vi
-      .spyOn(CustomersService.prototype, 'getById')
-      .mockImplementation(async function (this: CustomersService, ...args) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        new Logger('NestedVendor').log({ event: 'vendor' }, 'Vendor request finished');
-        if (args[1] === failureId) throw new Error('Synthetic vendor failure');
-        return original.apply(this, args);
-      });
+    const original = ContactsService.prototype.getById;
+    const probe = vi.spyOn(ContactsService.prototype, 'getById').mockImplementation(async function (
+      this: ContactsService,
+      ...args
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      new Logger('NestedVendor').log({ event: 'vendor' }, 'Vendor request finished');
+      if (args[1] === failureId) throw new Error('Synthetic vendor failure');
+      return original.apply(this, args);
+    });
     const failureId = randomUUID();
     try {
       logLines.length = 0;
       const cases = [
-        { cookie: a.ownerCookie, url: `/customers/${failureId}`, storeId: a.storeId },
-        { cookie: b.ownerCookie, url: `/customers/${failureId}`, storeId: b.storeId },
+        { cookie: a.ownerCookie, url: `/contacts/${failureId}`, storeId: a.storeId },
+        { cookie: b.ownerCookie, url: `/contacts/${failureId}`, storeId: b.storeId },
         { cookie: supportA.cookie, url: `/support/customers/${failureId}`, storeId: a.storeId },
         { cookie: supportB.cookie, url: `/support/customers/${failureId}`, storeId: b.storeId },
         { cookie: account.ownerCookie, url: '/me', storeId: undefined },
@@ -633,7 +634,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       (
         await shop(
           f,
-          '/customers',
+          '/contacts',
           { name: 'Not allowed', phone: `018${randomInt(10000000, 99999999)}` },
           session.cookie,
         )
@@ -687,7 +688,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       expect(await parentState(f)).toEqual(originalParent);
       expect(
         (
-          await database.pool.query('select id from customers where store_id=$1 and phone=$2', [
+          await database.pool.query('select id from contacts where store_id=$1 and phone=$2', [
             f.storeId,
             phone,
           ])
@@ -708,12 +709,10 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
     expect(events.rows).toEqual([{ actor_type: 'staff', actor_staff_id: f.staffId }]);
     const other = await fixture();
     const otherCustomer = randomUUID();
-    await database.pool.query('insert into customers(id,store_id,name,phone) values($1,$2,$3,$4)', [
-      otherCustomer,
-      other.storeId,
-      'Other',
-      `019${randomInt(10000000, 99999999)}`,
-    ]);
+    await database.pool.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,$3,$4,'manual','customer')",
+      [otherCustomer, other.storeId, 'Other', `019${randomInt(10000000, 99999999)}`],
+    );
     expect(
       (await shop(f, `/support/customers/${otherCustomer}`, undefined, cookie)).statusCode,
     ).toBe(404);
@@ -1222,7 +1221,7 @@ describe('Owner-approved support through Fastify and app-role PostgreSQL', () =>
       expect(await parentState(f)).toEqual(initial);
       expect(
         (
-          await database.pool.query('select id from customers where store_id=$1 and phone=$2', [
+          await database.pool.query('select id from contacts where store_id=$1 and phone=$2', [
             f.storeId,
             phone,
           ])

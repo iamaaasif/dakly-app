@@ -1,0 +1,14 @@
+import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
+
+const CONTACT_ERRORS = {
+  CONTACT_NOT_FOUND: { status: 404, message: 'Contact not found' },
+  // Says nothing about the other contact: a member may not be allowed to see who has the number.
+  CONTACT_PHONE_TAKEN: {
+    status: 409,
+    message: 'A contact with this phone number already exists',
+  },
+} as const satisfies ErrorCatalog;
+
+export function contactError(code: keyof typeof CONTACT_ERRORS): AppError {
+  return new AppError(code, CONTACT_ERRORS[code]);
+}

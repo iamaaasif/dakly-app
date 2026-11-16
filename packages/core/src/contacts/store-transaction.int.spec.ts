@@ -5,22 +5,24 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { contacts } from '@dakly/db/schema/contacts';
-import { customers } from '@dakly/db/schema/customers';
+import { contacts, segments } from '@dakly/db/schema/contacts';
 import { stores } from '@dakly/db/schema/stores';
 
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { CustomersRepository } from './customers.repository';
+import { ContactsRepository } from './contacts.repository';
 
-// The second repository stays in the test until contacts has its own feature.
-class ContactsRepository {
+// The second repository stays in the test until segments has its own feature.
+// A staff add, as ContactsService.create saves it.
+const manualCustomer = { source: 'manual', kind: 'customer' } as const;
+
+class SegmentsRepository {
   constructor(private readonly database: TenantDatabase) {}
 
-  insert(storeId: string, phone: string): Promise<void> {
+  insert(storeId: string, name: string): Promise<void> {
     return this.database.forStore(storeId, async (tx) => {
-      await tx.insert(contacts).values({ storeId, phone, source: 'manual', kind: 'lead' });
-      throw new Error('Contact action failed');
+      await tx.insert(segments).values({ storeId, name, rules: {} });
+      throw new Error('Segment action failed');
     });
   }
 }
@@ -30,8 +32,8 @@ describe('TenantDatabase transactions (Postgres)', () => {
   const app = createDatabase(requireEnv('DATABASE_URL'));
   const database = new TenantDatabase(app.db);
   const transaction = new StoreTransaction(database);
-  const repository = new CustomersRepository(database);
-  const contactRepository = new ContactsRepository(database);
+  const repository = new ContactsRepository(database);
+  const segmentRepository = new SegmentsRepository(database);
   let storeA: string;
   let storeB: string;
   const userIds: string[] = [];
@@ -46,7 +48,7 @@ describe('TenantDatabase transactions (Postgres)', () => {
   });
 
   afterAll(async () => {
-    await admin.db.delete(customers).where(inArray(customers.storeId, [storeA, storeB]));
+    await admin.db.delete(segments).where(inArray(segments.storeId, [storeA, storeB]));
     await admin.db.delete(contacts).where(inArray(contacts.storeId, [storeA, storeB]));
     await admin.db.delete(stores).where(inArray(stores.id, [storeA, storeB]));
     if (userIds.length) await admin.db.delete(users).where(inArray(users.id, userIds));
@@ -56,28 +58,38 @@ describe('TenantDatabase transactions (Postgres)', () => {
   it('rolls back both repositories when the second action fails', async () => {
     await expect(
       transaction.run(storeA, async () => {
-        await repository.insert(storeA, { name: 'Rahim', phone: '01711000001' });
-        await contactRepository.insert(storeA, '01711000001');
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rahim',
+          phone: '01711000001',
+        });
+        await segmentRepository.insert(storeA, 'রিনার তালিকা');
       }),
-    ).rejects.toThrow('Contact action failed');
+    ).rejects.toThrow('Segment action failed');
 
-    expect(await customerWithPhone(storeA, '01711000001')).toEqual([]);
+    expect(await contactWithPhone(storeA, '01711000001')).toEqual([]);
     expect(
       await admin.db
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(and(eq(contacts.storeId, storeA), eq(contacts.phone, '01711000001'))),
+        .select({ id: segments.id })
+        .from(segments)
+        .where(and(eq(segments.storeId, storeA), eq(segments.name, 'রিনার তালিকা'))),
     ).toEqual([]);
   });
 
   it('joins nested calls for the same store and returns their result', async () => {
     const result = await database.forStore(storeA, async (outer) => {
-      await outer.insert(customers).values({ storeId: storeA, name: 'Rina', phone: '01711000002' });
+      await outer.insert(contacts).values({
+        storeId: storeA,
+        name: 'Rina',
+        phone: '01711000002',
+        source: 'manual',
+        kind: 'lead',
+      });
       return database.forStore(storeA, async (inner) => {
         const rows = await inner
-          .select({ name: customers.name })
-          .from(customers)
-          .where(eq(customers.phone, '01711000002'));
+          .select({ name: contacts.name })
+          .from(contacts)
+          .where(eq(contacts.phone, '01711000002'));
         return rows[0]?.name;
       });
     });
@@ -88,13 +100,21 @@ describe('TenantDatabase transactions (Postgres)', () => {
   it('rejects another store inside the scope and rolls back the outer write', async () => {
     await expect(
       database.forStore(storeA, async () => {
-        await repository.insert(storeA, { name: 'Sumi', phone: '01711000003' });
-        await repository.insert(storeB, { name: 'Karim', phone: '01711000003' });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Sumi',
+          phone: '01711000003',
+        });
+        await repository.insert(storeB, {
+          ...manualCustomer,
+          name: 'Karim',
+          phone: '01711000003',
+        });
       }),
     ).rejects.toThrow();
 
-    expect(await customerWithPhone(storeA, '01711000003')).toEqual([]);
-    expect(await customerWithPhone(storeB, '01711000003')).toEqual([]);
+    expect(await contactWithPhone(storeA, '01711000003')).toEqual([]);
+    expect(await contactWithPhone(storeB, '01711000003')).toEqual([]);
   });
 
   it.each(['commit', 'rollback'])('clears the scope after %s', async (outcome) => {
@@ -106,11 +126,12 @@ describe('TenantDatabase transactions (Postgres)', () => {
         if (outcome !== 'rollback') throw error;
       });
 
-    const customer = await repository.insert(storeB, {
+    const contact = await repository.insert(storeB, {
+      ...manualCustomer,
       name: 'Farhana',
       phone: outcome === 'commit' ? '01711000004' : '01711000005',
     });
-    expect(await repository.findById(storeB, customer!.id)).toMatchObject({ name: 'Farhana' });
+    expect(await repository.findById(storeB, contact!.id)).toMatchObject({ name: 'Farhana' });
     const setting = await app.db.execute<{ store_id: string | null }>(
       sql`select current_setting('app.store_id', true) as store_id`,
     );
@@ -127,24 +148,36 @@ describe('TenantDatabase transactions (Postgres)', () => {
       const entered = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
       const first = database.forStore(storeA, async () => {
-        await repository.insert(storeA, { name: 'Rahim', phone: firstPhone });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rahim',
+          phone: firstPhone,
+        });
         entered.resolve();
         await release.promise;
-        await repository.insert(storeA, { name: 'Rahim', phone: resumedPhone });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rahim',
+          phone: resumedPhone,
+        });
         throw new Error('First request failed');
       });
       const rejected = expect(first).rejects.toThrow('First request failed');
       await entered.promise;
       try {
-        await repository.insert(secondStore, { name: 'Rina', phone: secondPhone });
+        await repository.insert(secondStore, {
+          ...manualCustomer,
+          name: 'Rina',
+          phone: secondPhone,
+        });
       } finally {
         release.resolve();
       }
       await rejected;
 
-      expect(await customerWithPhone(storeA, firstPhone)).toEqual([]);
-      expect(await customerWithPhone(storeA, resumedPhone)).toEqual([]);
-      expect(await customerWithPhone(secondStore, secondPhone)).toHaveLength(1);
+      expect(await contactWithPhone(storeA, firstPhone)).toEqual([]);
+      expect(await contactWithPhone(storeA, resumedPhone)).toEqual([]);
+      expect(await contactWithPhone(secondStore, secondPhone)).toHaveLength(1);
     },
   );
 
@@ -157,6 +190,7 @@ describe('TenantDatabase transactions (Postgres)', () => {
         .forStore(storeA, async () => {
           detached = release.promise.then(() =>
             repository.insert(storeA, {
+              ...manualCustomer,
               name: 'Detached',
               phone: outcome === 'commit' ? '01711000007' : '01711000008',
             }),
@@ -171,7 +205,7 @@ describe('TenantDatabase transactions (Postgres)', () => {
       await rejected;
 
       expect(
-        await customerWithPhone(storeA, outcome === 'commit' ? '01711000007' : '01711000008'),
+        await contactWithPhone(storeA, outcome === 'commit' ? '01711000007' : '01711000008'),
       ).toEqual([]);
     },
   );
@@ -196,7 +230,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
 
     await expect(
       database.forStore(storeA, async () => {
-        await repository.insert(storeA, { name: 'Farhana', phone: '01711000009' });
+        await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Farhana',
+          phone: '01711000009',
+        });
         throw new Error('Store setup failed');
       }),
     ).rejects.toThrow('Store setup failed');
@@ -207,14 +245,18 @@ describe('TenantDatabase transactions (Postgres)', () => {
     expect(
       await app.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, session!.id)),
     ).toEqual([{ id: session!.id }]);
-    expect(await customerWithPhone(storeA, '01711000009')).toEqual([]);
+    expect(await contactWithPhone(storeA, '01711000009')).toEqual([]);
   });
 
   it('returns the result from a service action and joins a nested facade call', async () => {
     const result = await transaction.run(storeA, () =>
       transaction.run(storeA, async () => {
-        const customer = await repository.insert(storeA, { name: 'Rina', phone: '01711000010' });
-        return customer!.id;
+        const contact = await repository.insert(storeA, {
+          ...manualCustomer,
+          name: 'Rina',
+          phone: '01711000010',
+        });
+        return contact!.id;
       }),
     );
 
@@ -229,14 +271,18 @@ describe('TenantDatabase transactions (Postgres)', () => {
       await database.forStore(storeId, (tx) =>
         tx.insert(stores).values({ id: storeId, name: 'New store' }),
       );
-      await repository.insert(storeId, { name: 'Sumi', phone: '01711000011' });
+      await repository.insert(storeId, {
+        ...manualCustomer,
+        name: 'Sumi',
+        phone: '01711000011',
+      });
       return storeId;
     });
 
     try {
-      expect(await customerWithPhone(result, '01711000011')).toHaveLength(1);
+      expect(await contactWithPhone(result, '01711000011')).toHaveLength(1);
     } finally {
-      await admin.db.delete(customers).where(eq(customers.storeId, result));
+      await admin.db.delete(contacts).where(eq(contacts.storeId, result));
       await admin.db.delete(stores).where(eq(stores.id, result));
     }
   });
@@ -249,7 +295,11 @@ describe('TenantDatabase transactions (Postgres)', () => {
         await database.forStore(storeId, (tx) =>
           tx.insert(stores).values({ id: storeId, name: 'Failed store' }),
         );
-        await repository.insert(storeId, { name: 'Sumi', phone: '01711000012' });
+        await repository.insert(storeId, {
+          ...manualCustomer,
+          name: 'Sumi',
+          phone: '01711000012',
+        });
         throw new Error('Setup failed');
       }),
     ).rejects.toThrow('Setup failed');
@@ -257,14 +307,14 @@ describe('TenantDatabase transactions (Postgres)', () => {
     expect(
       await admin.db.select({ id: stores.id }).from(stores).where(eq(stores.id, newStoreId)),
     ).toEqual([]);
-    expect(await customerWithPhone(newStoreId, '01711000012')).toEqual([]);
+    expect(await contactWithPhone(newStoreId, '01711000012')).toEqual([]);
   });
 
-  function customerWithPhone(storeId: string, phone: string) {
+  function contactWithPhone(storeId: string, phone: string) {
     return admin.db
-      .select({ id: customers.id })
-      .from(customers)
-      .where(and(eq(customers.storeId, storeId), eq(customers.phone, phone)));
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.storeId, storeId), eq(contacts.phone, phone)));
   }
 });
 

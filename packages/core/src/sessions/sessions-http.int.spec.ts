@@ -7,11 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 import { sessions, users } from '@dakly/db/schema/auth';
-import { customers } from '@dakly/db/schema/customers';
+import { contacts } from '@dakly/db/schema/contacts';
 import { stores } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
 
-import { CustomersModule } from '../customers/customers.module';
+import { ContactsModule } from '../contacts/contacts.module';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DATABASE_CONNECTION } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -54,7 +54,7 @@ Post('write')(
 CurrentUser()(PublicController.prototype, 'user', 0);
 class TestModule {}
 Module({
-  imports: [DatabaseModule, SessionsModule, CustomersModule],
+  imports: [DatabaseModule, SessionsModule, ContactsModule],
   controllers: [PublicController],
 })(TestModule);
 
@@ -75,7 +75,7 @@ describe('Session boundary over Fastify and Postgres', () => {
   const origin = 'http://localhost:3000';
   const cookie = () => `dakly_session=${token}`;
   const getCustomer = () =>
-    app.inject({ url: `/customers/${customerId}`, headers: { cookie: cookie() } });
+    app.inject({ url: `/contacts/${customerId}`, headers: { cookie: cookie() } });
 
   beforeAll(async () => {
     process.env.WEB_ORIGINS = origin;
@@ -122,14 +122,20 @@ describe('Session boundary over Fastify and Postgres', () => {
       })),
     );
     const [customer] = await admin.db
-      .insert(customers)
-      .values({ storeId, name: 'Karim', phone: '01712345678' })
-      .returning({ id: customers.id });
+      .insert(contacts)
+      .values({ storeId, name: 'Karim', phone: '01712345678', source: 'manual', kind: 'customer' })
+      .returning({ id: contacts.id });
     customerId = customer!.id;
     const [otherCustomer] = await admin.db
-      .insert(customers)
-      .values({ storeId: otherStoreId, name: 'Sumi', phone: '01912345678' })
-      .returning({ id: customers.id });
+      .insert(contacts)
+      .values({
+        storeId: otherStoreId,
+        name: 'Sumi',
+        phone: '01912345678',
+        source: 'manual',
+        kind: 'customer',
+      })
+      .returning({ id: contacts.id });
     otherCustomerId = otherCustomer!.id;
     const created = await service.create(userId, { isRemembered: true });
     token = created.token;
@@ -146,8 +152,8 @@ describe('Session boundary over Fastify and Postgres', () => {
     await admin.db.delete(users).where(eq(users.id, userId));
     await admin.db.delete(roles).where(eq(roles.storeId, storeId));
     await admin.db
-      .delete(customers)
-      .where(sql`${customers.storeId} in (${storeId}, ${otherStoreId})`);
+      .delete(contacts)
+      .where(sql`${contacts.storeId} in (${storeId}, ${otherStoreId})`);
     await admin.db.delete(stores).where(sql`${stores.id} in (${storeId}, ${otherStoreId})`);
     await admin.pool.end();
   });
@@ -164,7 +170,7 @@ describe('Session boundary over Fastify and Postgres', () => {
     const account = await app.inject({ url: '/me', headers });
     expect(account.statusCode).toBe(401);
     expect(account.json().error.code).toBe('AUTH_REQUIRED');
-    const store = await app.inject({ url: `/customers/${customerId}`, headers });
+    const store = await app.inject({ url: `/contacts/${customerId}`, headers });
     expect(store.statusCode).toBe(401);
     expect(store.json().error.code).toBe('STORE_REQUIRED');
   });
@@ -274,13 +280,13 @@ describe('Session boundary over Fastify and Postgres', () => {
     await service.setActiveStore(userId, sessionId, otherStoreId);
     const rejected = await app.inject({
       method: 'POST',
-      url: '/customers',
+      url: '/contacts',
       headers: { cookie: cookie(), origin, 'x-session-context': shell.contextTag },
       payload: { name: 'Must not be created', phone: '01855555555' },
     });
     expect(rejected.statusCode).toBe(409);
     expect(rejected.json().error.code).toBe('SESSION_CONTEXT_CHANGED');
-    const rows = await admin.db.select().from(customers).where(eq(customers.phone, '01855555555'));
+    const rows = await admin.db.select().from(contacts).where(eq(contacts.phone, '01855555555'));
     expect(rows).toHaveLength(0);
     const changed = await app.inject({ url: '/me/context', headers: { cookie: cookie() } });
     expect(changed.json().currentStore.storeId).toBe(otherStoreId);
@@ -484,7 +490,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       expect(after.contextTag).not.toBe(before.contextTag);
       const stale = await app.inject({
         method: 'POST',
-        url: '/customers',
+        url: '/contacts',
         headers: { ...headers, origin, 'x-session-context': before.contextTag },
         payload: { name: 'Must not be created', phone: '01855555555' },
       });
@@ -558,12 +564,12 @@ describe('Session boundary over Fastify and Postgres', () => {
     });
     expect(switched.statusCode).toBe(204);
     expect(
-      (await app.inject({ url: `/customers/${otherCustomerId}`, headers: { cookie: cookie() } }))
+      (await app.inject({ url: `/contacts/${otherCustomerId}`, headers: { cookie: cookie() } }))
         .statusCode,
     ).toBe(200);
     const foreignCustomer = await getCustomer();
     const missingCustomer = await app.inject({
-      url: `/customers/${crypto.randomUUID()}`,
+      url: `/contacts/${crypto.randomUUID()}`,
       headers: { cookie: cookie() },
     });
     expect(foreignCustomer.statusCode).toBe(404);
@@ -606,7 +612,7 @@ describe('Session boundary over Fastify and Postgres', () => {
     const create = () =>
       app.inject({
         method: 'POST',
-        url: '/customers',
+        url: '/contacts',
         headers: { cookie: cookie(), origin },
         payload: { name: 'New customer', phone: '01812345678' },
       });
@@ -661,7 +667,7 @@ describe('Session boundary over Fastify and Postgres', () => {
     expect(
       (
         await app.inject({
-          url: `/customers/${customerId}`,
+          url: `/contacts/${customerId}`,
           headers: { cookie: `dakly_session=${secondSession.token}` },
         })
       ).statusCode,
@@ -692,7 +698,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       .update(sessions)
       .set({ expiresAt: new Date(0) })
       .where(eq(sessions.id, expired.session.id));
-    for (const url of ['/me', `/customers/${customerId}`]) {
+    for (const url of ['/me', `/contacts/${customerId}`]) {
       expect(
         (await app.inject({ url, headers: { cookie: `dakly_session=${expired.token}` } }))
           .statusCode,

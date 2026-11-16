@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0029_snapshot.json`: **96 tables, 1249 columns, 370 explicit indexes and 296 foreign keys**. This includes the transitional `customers` example; CUS-1 removes it after migration to `contacts`.
+Built from `packages/db/migrations/meta/0031_snapshot.json`: **95 tables, 1244 columns, 369 explicit indexes and 295 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -375,7 +375,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `customers.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`.
 
 ```mermaid
 erDiagram
@@ -457,7 +457,6 @@ erDiagram
     users |o..o{ sms_messages : "created_by_user_id"
     contacts |o..o{ sms_messages : "store_id, contact_id"
     sms_sender_ids |o..o{ sms_messages : "store_id, sender_id_id"
-    stores ||..o{ customers : "store_id"
     bd_areas {
         integer id PK "NOT NULL; integer"
         text kind "NOT NULL; text"
@@ -758,13 +757,6 @@ erDiagram
         timestamp_with_time_zone sent_at "NULL; timestamp with time zone"
         timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
-    }
-    customers {
-        uuid id PK "NOT NULL; uuid"
-        uuid store_id FK "NOT NULL; uuid"
-        text name "NOT NULL; text"
-        text phone "NOT NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -1996,7 +1988,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `segments_created_by_user_id_users_id_fk`                            | `segments(created_by_user_id)`                            | `users(id)`                                 | no action |
 | `customer_insights_store_id_stores_id_fk`                            | `customer_insights(store_id)`                             | `stores(id)`                                | no action |
 | `customer_insights_hidden_by_user_id_users_id_fk`                    | `customer_insights(hidden_by_user_id)`                    | `users(id)`                                 | no action |
-| `customers_store_id_stores_id_fk`                                    | `customers(store_id)`                                     | `stores(id)`                                | no action |
 | `data_requests_store_id_stores_id_fk`                                | `data_requests(store_id)`                                 | `stores(id)`                                | no action |
 | `data_requests_contact_id_contacts_id_fk`                            | `data_requests(contact_id)`                               | `contacts(id)`                              | set null  |
 | `data_requests_requested_by_user_id_users_id_fk`                     | `data_requests(requested_by_user_id)`                     | `users(id)`                                 | no action |
