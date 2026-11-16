@@ -37,13 +37,6 @@ Each task is one PR under about 500 lines, in this order, on the branch named un
 
 ### Group 1: who to send to
 
-### CUS-6 · Segments: condition tree, compiler and counts
-
-Branch: `feat/cus-6-segments`
-
-- Scope: `segments/` feature on the `segments` table. A condition tree (AND or OR groups, at most 3 levels, at most 20 conditions) over a fixed field list in `packages/contracts/src/segments.ts`: tags, district, source, kind, lifecycle stage, consent per channel, first and last inbound message, last campaign received. Order fields (order count, spend, last order, usual gap) are in the field list but marked unavailable until ORD-1, and the compiler refuses them with a clear error until then. `SegmentsService.count` and `SegmentsService.contactIds` compile the tree to a Drizzle `where` with bound parameters only. Not a customer contacts never match. Emit `segment.saved`.
-- Tests (integration): every operator against seeded contacts; a value with SQL characters is a plain value; a tree over the depth limit is refused; counts on 50,000 contacts under 2 seconds (a seeded performance test, skipped in unit runs); store B's segment never counts A's contacts.
-
 ### CUS-7 · Web: segments list and builder
 
 Branch: `feat/cus-7-segments-web`

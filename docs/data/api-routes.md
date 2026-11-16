@@ -115,8 +115,8 @@ atomically and retain business data when an extension is disabled.
 | `POST /contacts/:contactId/consents`                                                                       | `customers`                                                      |
 | `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`     | `customers`                                                      |
 | `POST /contacts/exports`                                                                                   | `customers` + "Download customer lists"                          |
-| `GET /segments`, `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`             | `customers`                                                      |
-| `POST /segments/preview` (count only)                                                                      | `segments.view`                                                  |
+| `GET /segments`, `POST /segments/preview` (count only)                                                     | `segments.view`                                                  |
+| `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`                              | `segments.edit`                                                  |
 | `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                        | `customers`                                                      |
 
 ## Chats and AI agent (04)

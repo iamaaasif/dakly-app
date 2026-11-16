@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
 import { consentChannels, contactKinds, contactSources, lifecycleStages } from './contacts';
+import { memberListQuerySchema } from './team';
 
 // Feature 03: at most 20 conditions, in groups at most three levels deep counting the top one.
 export const MAX_SEGMENT_CONDITIONS = 20;
+export const MAX_SEGMENTS_PER_STORE = 200;
 
 // The builder lists these before their data exists. They are refused until the named task
 // stores it: contact stats from orders, inbound messages, campaign sends.
@@ -126,7 +128,29 @@ export const segmentRulesSchema = groupSchema(
     });
 });
 
-export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
+const segmentNameSchema = z.string().trim().min(1).max(80);
 
+export const createSegmentSchema = z.strictObject({
+  name: segmentNameSchema,
+  rules: segmentRulesSchema,
+});
+export const changeSegmentSchema = createSegmentSchema
+  .partial()
+  .refine((input) => input.name !== undefined || input.rules !== undefined, 'Nothing to change');
+export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
+export const segmentListQuerySchema = z.strictObject(memberListQuerySchema.shape);
+
+export type CreateSegmentInput = z.infer<typeof createSegmentSchema>;
+export type ChangeSegmentInput = z.infer<typeof changeSegmentSchema>;
 export type SegmentPreviewInput = z.infer<typeof segmentPreviewSchema>;
+export type SegmentListQuery = z.infer<typeof segmentListQuerySchema>;
+
+export type SegmentResponse = {
+  id: string;
+  name: string;
+  rules: SegmentGroup;
+  createdAt: string;
+  updatedAt: string;
+};
+export type SegmentListResponse = { items: SegmentResponse[]; nextCursor: string | null };
 export type SegmentCountResponse = { count: number };

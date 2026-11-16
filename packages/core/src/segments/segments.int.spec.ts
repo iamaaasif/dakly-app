@@ -6,14 +6,9 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type {
-  AvailableSegmentRules,
-  SegmentCondition,
-  SegmentGroup,
-} from '@dakly/contracts/segments';
+import type { SegmentCondition, SegmentGroup } from '@dakly/contracts/segments';
 import { createDatabase } from '@dakly/db/client';
 
-import { ContactsService } from '../contacts/contacts.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsModule } from './segments.module';
 import { SegmentsService } from './segments.service';
@@ -25,9 +20,10 @@ const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeA = randomUUID();
 const storeB = randomUUID();
 const bulkStore = randomUUID();
+const userId = randomUUID();
+const staff = { kind: 'user', userId } as const;
 let app: INestApplicationContext;
 let service: SegmentsService;
-let contacts: ContactsService;
 
 type Person = {
   name: string;
@@ -80,9 +76,8 @@ function all(...conditions: (SegmentCondition | SegmentGroup)[]): SegmentGroup {
 
 async function matching(storeId: string, rules: SegmentGroup) {
   const names = Object.entries(ids);
-  const found = await contacts.listIdsMatching(storeId, rules as AvailableSegmentRules, {
-    limit: 100,
-  });
+  const segment = await service.create(storeId, { name: randomUUID(), rules }, staff);
+  const found = await service.contactIds(storeId, segment.id, { limit: 100 });
   expect((await service.count(storeId, rules)).count).toBe(found.length);
   return names
     .filter(([, id]) => found.includes(id))
@@ -96,6 +91,10 @@ describe('SegmentsService (Postgres)', () => {
       "insert into stores(id,name) values($1,'রিনার দোকান'),($2,'করিমের দোকান'),($3,'বড় দোকান')",
       [storeA, storeB, bulkStore],
     );
+    await admin.pool.query(
+      "insert into users(id,name,email) values($1::uuid,'নুসরাত',$1::text || '@example.test')",
+      [userId],
+    );
     for (const [key, person] of Object.entries(people)) await seed(storeA, key, person);
     await seed(storeB, 'foreign', { name: 'অন্য দোকানের রিনা', district: 'ঢাকা', tags: ['vip'] });
     await consent(ids.rina!, 'sms', 'granted', '2026-11-01T00:00:00Z');
@@ -104,19 +103,19 @@ describe('SegmentsService (Postgres)', () => {
     await consent(ids.foreign!, 'sms', 'granted', '2026-11-01T00:00:00Z');
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(SegmentsService);
-    contacts = app.get(ContactsService);
   });
 
   afterAll(async () => {
     try {
       await app?.close();
-      for (const table of ['contacts'])
+      for (const table of ['outbox_events', 'segments', 'contacts'])
         await admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
           [storeA, storeB, bulkStore],
         ]);
       await admin.pool.query('delete from stores where id=any($1::uuid[])', [
         [storeA, storeB, bulkStore],
       ]);
+      await admin.pool.query('delete from users where id=$1', [userId]);
     } finally {
       await admin.pool.end();
     }
@@ -186,21 +185,78 @@ describe('SegmentsService (Postgres)', () => {
       { field: 'tag', operator: 'is_any_of', values: ['vip'] },
       all({ field: 'orders_count', operator: 'more_than', value: 2 }),
     );
+    const refused = { code: 'SEGMENT_FIELD_NOT_AVAILABLE', status: 400 };
     await expect(service.count(storeA, rules)).rejects.toMatchObject({
-      code: 'SEGMENT_FIELD_NOT_AVAILABLE',
-      status: 400,
+      ...refused,
       fields: [
         { path: 'rules.conditions.1.conditions.0.field', message: 'Not available until CUS-3' },
       ],
     });
+    await expect(
+      service.create(storeA, { name: 'নিয়মিত ক্রেতা', rules }, staff),
+    ).rejects.toMatchObject(refused);
   });
 
-  it('never counts another store’s contacts', async () => {
+  it('never counts another store’s contacts or reads its segments', async () => {
     const dhaka = all({ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] });
     expect((await service.count(storeB, dhaka)).count).toBe(1);
     expect(
       await matching(storeB, all({ field: 'consent', channel: 'sms', granted: true })),
     ).toEqual(['foreign']);
+    const segment = await service.create(storeA, { name: 'ঢাকার ক্রেতা', rules: dhaka }, staff);
+    await expect(service.contactIds(storeB, segment.id, { limit: 10 })).rejects.toMatchObject({
+      code: 'SEGMENT_NOT_FOUND',
+    });
+    await expect(service.change(storeB, segment.id, { name: 'চুরি' }, staff)).rejects.toMatchObject({
+      code: 'SEGMENT_NOT_FOUND',
+    });
+    await expect(service.remove(storeB, segment.id, staff)).rejects.toMatchObject({
+      code: 'SEGMENT_NOT_FOUND',
+    });
+    const listed = (await service.list(storeB, { limit: 100 })).items.map((item) => item.id);
+    expect(listed).not.toContain(segment.id);
+  });
+
+  it('saves, renames and deletes a segment and writes segment.saved', async () => {
+    const rules = all({ field: 'tag', operator: 'is_any_of', values: ['vip'] });
+    const segment = await service.create(storeA, { name: 'ভিআইপি', rules }, staff);
+    await expect(service.create(storeA, { name: 'ভিআইপি', rules }, staff)).rejects.toMatchObject({
+      code: 'SEGMENT_NAME_TAKEN',
+      status: 409,
+    });
+    const renamed = await service.change(storeA, segment.id, { name: 'সেরা ক্রেতা' }, staff);
+    expect(renamed).toMatchObject({ id: segment.id, name: 'সেরা ক্রেতা', rules });
+    const other = await service.create(storeA, { name: 'নতুন ক্রেতা', rules }, staff);
+    await expect(
+      service.change(storeA, other.id, { name: 'সেরা ক্রেতা' }, staff),
+    ).rejects.toMatchObject({ code: 'SEGMENT_NAME_TAKEN', status: 409 });
+    await service.remove(storeA, other.id, staff);
+
+    const events = await admin.pool.query(
+      "select payload from outbox_events where type='segment.saved' and payload->>'segmentId'=$1",
+      [segment.id],
+    );
+    expect(events.rows).toEqual([
+      { payload: { segmentId: segment.id } },
+      { payload: { segmentId: segment.id } },
+    ]);
+    await service.remove(storeA, segment.id, staff);
+    await expect(service.remove(storeA, segment.id, staff)).rejects.toMatchObject({
+      code: 'SEGMENT_NOT_FOUND',
+      status: 404,
+    });
+  });
+
+  it('refuses the 201st segment in a store', async () => {
+    await admin.pool.query(
+      "insert into segments(id,store_id,name,rules) select gen_random_uuid(), $1, 'ভাগ ' || n, '{}'::jsonb from generate_series(1,200) n",
+      [bulkStore],
+    );
+    const rules = all({ field: 'tag', operator: 'is_any_of', values: ['vip'] });
+    await expect(
+      service.create(bulkStore, { name: 'আরও একটি', rules }, staff),
+    ).rejects.toMatchObject({ code: 'SEGMENT_LIMIT_REACHED', status: 409 });
+    await admin.pool.query('delete from segments where store_id=$1', [bulkStore]);
   });
 
   it('counts 50,000 contacts in under 2 seconds', async () => {
