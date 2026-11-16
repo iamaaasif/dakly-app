@@ -1,5 +1,5 @@
 {
-  "id": "589f49e5-4ee2-438f-8a15-48ac757417c5",
+  "id": "32af93e7-bde0-4e89-adae-15548ff30ae1",
   "prevId": "fef08c0a-bddf-4b82-a24d-044f38527ea6",
   "version": "7",
   "dialect": "postgresql",
@@ -17502,9 +17502,15 @@
           "method": "btree",
           "with": {}
         },
-        "notifications_snoozed_until_idx": {
-          "name": "notifications_snoozed_until_idx",
+        "notifications_store_id_snoozed_until_idx": {
+          "name": "notifications_store_id_snoozed_until_idx",
           "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "snoozed_until",
               "isExpression": false,
