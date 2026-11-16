@@ -5,7 +5,7 @@ import { NotificationsRepository } from './notifications.repository';
 
 describe('notification filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
-  const repository = new NotificationsRepository(f.tenant);
+  const repository = new NotificationsRepository(f.tenant, f.connection.db);
   const card = (title: string) => ({
     type: 'conversation.handed_over',
     category: 'fix_now' as const,
@@ -42,5 +42,21 @@ describe('notification filters without RLS assistance', () => {
     expect(await repository.changeStatus(f.a, f.userA, a!.id, done)).toBe(true);
     expect(await repository.changeStatus(f.a, f.userA, a!.id, done)).toBe(false);
     expect((await f.row('notifications', b!.id)).status).toBe('new');
+  });
+
+  it('wakes due snoozed cards only in the selected store', async () => {
+    const snooze = { ...card('ঘুমন্ত কার্ড'), dedupeKey: 'chat-2' };
+    const [a] = await repository.insertForUsers(f.a, [f.userA], snooze);
+    const [b] = await repository.insertForUsers(f.b, [f.userB], snooze);
+    await f.connection.pool.query(
+      "update notifications set status='snoozed', snoozed_until=now()-interval '1 minute' where id=any($1::uuid[])",
+      [[a!.id, b!.id]],
+    );
+    const now = new Date();
+    await repository.wakeSnoozed(f.b, now);
+    expect((await f.row('notifications', a!.id)).status).toBe('snoozed');
+    expect((await f.row('notifications', b!.id)).status).toBe('new');
+    await repository.wakeSnoozed(f.a, now);
+    expect((await f.row('notifications', a!.id)).status).toBe('new');
   });
 });
