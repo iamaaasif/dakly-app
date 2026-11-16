@@ -66,12 +66,11 @@ function navigationLinks(session: SessionContext) {
       icon: Users,
       visible: session.currentStore?.canViewCustomers,
     },
-    // The session has no segments flag yet; the API still refuses members without segments.view.
     {
       href: '/segments',
       label: 'Segments',
       icon: Layers,
-      visible: Boolean(session.currentStore),
+      visible: session.currentStore?.canViewSegments,
     },
     {
       href: '/support-access',
