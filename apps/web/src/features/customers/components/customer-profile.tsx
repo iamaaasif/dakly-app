@@ -9,21 +9,18 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useCustomer } from '../api/customer';
 import { channelLabels, customerPhone } from '../customer-labels';
 import { CustomerBadges } from './customer-badges';
-import { StorePage } from '@/components/store-page';
 
 type CustomerProfileProps = { contactId: string };
 
 export function CustomerProfile({ contactId }: CustomerProfileProps) {
   const customer = useCustomer(contactId);
   return (
-    <StorePage permission="canViewCustomers">
-      <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-        <Link href="/customers" className="inline-flex min-h-10 items-center text-action underline">
-          All customers
-        </Link>
-        <ProfileBody customer={customer} />
-      </main>
-    </StorePage>
+    <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
+      <Link href="/customers" className="inline-flex min-h-10 items-center text-action underline">
+        All customers
+      </Link>
+      <ProfileBody customer={customer} />
+    </main>
   );
 }
 

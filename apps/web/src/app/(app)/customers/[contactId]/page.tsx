@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { z } from 'zod';
 
 import { CustomerProfile } from '@/features/customers/components/customer-profile';
@@ -15,7 +16,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ conta
   if (!parsed.success)
     return (
       <p role="alert" className="p-6">
-        This customer address is invalid. <a href="/customers">Open all customers</a>.
+        This customer address is invalid. <Link href="/customers">Open all customers</Link>.
       </p>
     );
   return <CustomerProfile contactId={parsed.data} />;

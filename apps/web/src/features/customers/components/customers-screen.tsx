@@ -21,24 +21,22 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
       ? customers.error.message
       : undefined;
   return (
-    <StorePage permission="canViewCustomers">
-      <main className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-        <h1 className="text-xl font-bold">All customers</h1>
-        <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-          <section aria-label="Customer list" className="space-y-4 lg:col-span-2">
-            <CustomerFilters
-              key={`${query.kind}|${query.search}|${query.tag}`}
-              query={query}
-              searchError={searchError}
-            />
-            <CustomerResults query={query} customers={customers} hideError={Boolean(searchError)} />
-          </section>
-          <StorePage permission="canCreateCustomer">
-            <NewCustomerForm />
-          </StorePage>
-        </div>
-      </main>
-    </StorePage>
+    <main className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
+      <h1 className="text-xl font-bold">All customers</h1>
+      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <section aria-label="Customer list" className="space-y-4 lg:col-span-2">
+          <CustomerFilters
+            key={`${query.kind}|${query.search}|${query.tag}`}
+            query={query}
+            searchError={searchError}
+          />
+          <CustomerResults query={query} customers={customers} hideError={Boolean(searchError)} />
+        </section>
+        <StorePage permission="canCreateCustomer">
+          <NewCustomerForm />
+        </StorePage>
+      </div>
+    </main>
   );
 }
 

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { contactListQuerySchema } from '@dakly/contracts/contacts';
 
 import { CustomersScreen } from '@/features/customers/components/customers-screen';
@@ -20,7 +22,7 @@ export default async function CustomersPage({
   if (!parsed.success)
     return (
       <p role="alert" className="p-6">
-        This customers page address is invalid. <a href="/customers">Open all customers</a>.
+        This customers page address is invalid. <Link href="/customers">Open all customers</Link>.
       </p>
     );
   return <CustomersScreen query={parsed.data} />;
