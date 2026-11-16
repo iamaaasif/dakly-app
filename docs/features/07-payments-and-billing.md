@@ -352,7 +352,13 @@ Coupons carry `duration` (`once`, `months`, `forever`). `duration_months` is req
 
 Coupon billing rules for PAY-7: once discounts the first paid invoice, then detaches. Months discounts each paid invoice whose period starts before redemption time plus N calendar months (`coupon_ends_at`). A yearly plan with a three-month coupon gets one discounted year. A failed and retried invoice remains one invoice and one redemption. PAY-10 adds storage and contracts only; redemption, expiry and invoice consumers (PAY-7) remain planned.
 
-Usage: every billable thing goes through `UsageService.consume(storeId, unit, quantity, reference)`, which checks the allowance, then top-ups, and writes a usage event unique on reference. Units are the AI allowances the schema allows: `ai_conversation`, `ai_content`, `ai_ask`. SMS credits and WhatsApp money are wallets in `wallet_ledger` (PAY-11), not usage units. 80% and 100% thresholds notify once per period.
+Usage (PAY-1): every billable AI action goes through `UsageService.consume(storeId, { unit, quantity, reference })`. Units are the AI allowances the schema allows: `ai_conversation`, `ai_content`, `ai_ask`. SMS credits and WhatsApp money are wallets in `wallet_ledger` (PAY-11), not usage units.
+
+- The allowance is the base plan's `limits` entry for the unit, read through `BillingService.currentAllowance`; a unit the plan omits has 0. Add-ons add no allowance yet. A store with no subscription gets `404 SUBSCRIPTION_NOT_FOUND`.
+- The period is the subscription's current period. `usage_events.period_start` holds the UTC date of `current_period_start`, because billing counts periods in UTC calendar days. A new period starts at zero.
+- One store transaction takes an advisory lock on (store, unit), so two consumes of the last unit cannot both pass. A reference already used for that unit returns its first row and writes nothing. Otherwise, when the period's total plus the quantity passes the allowance, it refuses with `409 USAGE_ALLOWANCE_EXCEEDED`; if not, it writes one row with source `allowance`.
+- Top-ups are not drawn yet. The AI top-up wallet (`ai_conversations`) has no service until PAY-11.
+- A consume that crosses 80% or 100% of the allowance notifies members with `billing.view` (Owner, Admin and custom roles that view billing, the roles that can top up) in the `billing` category, with dedupe key `usage-<percent>:<unit>:<period start>`, so each notice goes once per period. The `usage.threshold_reached` event is not emitted yet.
 
 ### Rules
 

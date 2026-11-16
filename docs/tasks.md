@@ -66,12 +66,12 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M2. Shared plumbing
 
-| ID     | Task                                                    | Status      | Depends      | PR  | Notes                                                                |
-| ------ | ------------------------------------------------------- | ----------- | ------------ | --- | -------------------------------------------------------------------- |
-| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | In review   | DB-2, ACC-3  | #83 | Q10; follows: `GET /events/stream`, waking snoozed cards             |
-| HOME-2 | Web: notification bell and list                         | Todo        | HOME-1       |     |                                                                      |
-| PAY-1  | Usage service: units, allowances, usage events          | In progress | ACC-3        |     |                                                                      |
-| PAY-11 | Wallets: reserve, release, charge and staff credit      | Todo        | PAY-1, ADM-6 |     | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
+| ID     | Task                                                    | Status    | Depends      | PR  | Notes                                                                |
+| ------ | ------------------------------------------------------- | --------- | ------------ | --- | -------------------------------------------------------------------- |
+| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | In review | DB-2, ACC-3  | #83 | Q10; follows: `GET /events/stream`, waking snoozed cards             |
+| HOME-2 | Web: notification bell and list                         | Todo      | HOME-1       |     |                                                                      |
+| PAY-1  | Usage service: units, allowances, usage events          | In review | ACC-3        |     | Top-ups wait for PAY-11                                              |
+| PAY-11 | Wallets: reserve, release, charge and staff credit      | Todo      | PAY-1, ADM-6 |     | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
 
 ## M3. Channels and customers
 
