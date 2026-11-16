@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import type {
   CreateStoreInput,
@@ -57,6 +57,19 @@ export class StoresRepository {
   async settings(storeId: string): Promise<StoreSettingsResponse | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(settingsColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row;
+  }
+
+  async sendingSettings(
+    storeId: string,
+  ): Promise<{ timeZone: string; sending: unknown } | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ timeZone: stores.timeZone, sending: sql<unknown>`${stores.settings}->'sending'` })
+        .from(stores)
+        .where(eq(stores.id, storeId))
+        .limit(1),
     );
     return row;
   }

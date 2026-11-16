@@ -33,6 +33,24 @@ export const notificationPreferencesSchema = z.strictObject({
 });
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
+// The settings.sending section. Quiet hours are whole hours in store time and always span
+// midnight (feature 09 allows 8-10 pm to 8-10 am); the cap follows CAMP-R3 and D41.
+export const sendingSettingsSchema = z.strictObject({
+  quietHours: z
+    .strictObject({
+      startHour: z.number().int().min(20).max(22),
+      endHour: z.number().int().min(8).max(10),
+    })
+    .default({ startHour: 21, endHour: 9 }),
+  frequencyCap: z
+    .strictObject({
+      perChannelPerDay: z.number().int().positive(),
+      perSevenDays: z.number().int().positive(),
+    })
+    .default({ perChannelPerDay: 1, perSevenDays: 3 }),
+});
+export type SendingSettings = z.infer<typeof sendingSettingsSchema>;
+
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
   businessType: z.string().trim().min(1).max(100),

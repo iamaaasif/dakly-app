@@ -5,7 +5,7 @@ import { maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { contactError } from './contacts.errors';
-import { type Contact, ContactsRepository } from './contacts.repository';
+import { type Contact, type ContactRecipient, ContactsRepository } from './contacts.repository';
 
 @Injectable()
 export class ContactsService {
@@ -40,6 +40,11 @@ export class ContactsService {
       throw contactError('CONTACT_NOT_FOUND');
     }
     return toContactResponse(contact, access.seeFullPhone);
+  }
+
+  // A deleted contact reads as undefined.
+  findRecipient(storeId: string, id: string): Promise<ContactRecipient | undefined> {
+    return this.contactsRepository.findRecipient(storeId, id);
   }
 
   async assertContactExists(storeId: string, id: string): Promise<void> {

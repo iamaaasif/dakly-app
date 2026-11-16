@@ -1,12 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { PlansResponse } from '@dakly/contracts/billing';
-import type {
-  CreateStoreInput,
-  StoreResponse,
-  ChangeStoreSettingsInput,
-  ChangeStoreExtensionsInput,
-  StoreSettingsResponse,
+import {
+  sendingSettingsSchema,
+  type CreateStoreInput,
+  type StoreResponse,
+  type ChangeStoreSettingsInput,
+  type ChangeStoreExtensionsInput,
+  type StoreSettingsResponse,
+  type SendingSettings,
 } from '@dakly/contracts/stores';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -39,6 +41,13 @@ export class StoresService {
     const store = await this.repository.settings(storeId);
     if (!store) throw storeError('STORE_NOT_FOUND');
     return store;
+  }
+
+  // A store that never saved the section gets the defaults from the schema.
+  async sendingSettings(storeId: string): Promise<SendingSettings & { timeZone: string }> {
+    const store = await this.repository.sendingSettings(storeId);
+    if (!store) throw storeError('STORE_NOT_FOUND');
+    return { ...sendingSettingsSchema.parse(store.sending ?? {}), timeZone: store.timeZone };
   }
 
   changeSettings(
