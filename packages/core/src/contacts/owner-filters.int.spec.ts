@@ -35,6 +35,15 @@ describe('contact filters without RLS assistance', () => {
       hasPhone: true,
     });
     expect(await repository.findRecipient(f.b, a!.id)).toBeUndefined();
+    expect(await repository.findRecipients(f.b, [a!.id, b!.id])).toEqual([
+      {
+        id: b!.id,
+        kind: 'customer',
+        isBlocked: false,
+        isOverPlanLimit: false,
+        phone: '01711000001',
+      },
+    ]);
   });
 
   it('lists, edits, deletes and reads identities only in the selected store', async () => {

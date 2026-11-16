@@ -52,9 +52,17 @@ export class StoresService {
   changeSettings(
     storeId: string,
     input: ChangeStoreSettingsInput,
-    userId: string,
+    { userId, access }: { userId: string; access: StoreAccess },
   ): Promise<StoreSettingsResponse> {
     return this.transaction.run(storeId, async () => {
+      // Turning the approval rule off would let the member approve their own campaigns.
+      if (
+        input.sending &&
+        input.sending.onlyOwnersAndAdminsApprove !==
+          (await this.sendingSettings(storeId)).onlyOwnersAndAdminsApprove &&
+        !this.team.canApproveSends(access)
+      )
+        throw storeError('STORE_APPROVAL_SETTING_DENIED');
       const store = await this.repository.changeSettings(storeId, input, this.clock.now());
       if (!store) throw storeError('STORE_NOT_FOUND');
       await this.recordChange(

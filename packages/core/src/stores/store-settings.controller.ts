@@ -31,9 +31,10 @@ export class StoreSettingsController {
   changeSettings(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
     @Body(new ZodValidationPipe(changeStoreSettingsSchema)) input: ChangeStoreSettingsInput,
   ): Promise<StoreSettingsResponse> {
-    return this.stores.changeSettings(storeId, input, userId);
+    return this.stores.changeSettings(storeId, input, { userId, access });
   }
 
   @Patch('extensions')

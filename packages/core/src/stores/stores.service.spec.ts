@@ -35,6 +35,7 @@ describe('StoresService', () => {
       timeZone: 'Asia/Dhaka',
       quietHours: { startHour: 22, endHour: 8 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+      onlyOwnersAndAdminsApprove: true,
     });
   });
 
@@ -43,6 +44,7 @@ describe('StoresService', () => {
       timeZone: 'Asia/Dhaka',
       quietHours: { startHour: 21, endHour: 9 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+      onlyOwnersAndAdminsApprove: true,
     });
   });
 });

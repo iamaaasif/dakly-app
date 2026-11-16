@@ -94,7 +94,7 @@ Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
 requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
 patches preserve omitted fields and clear optional fields with `null`; name
 cannot be cleared. BIN uses `vatBin` (13 digits), and the trade licence uses
-`tradeLicenceNumber`. `sending` holds quiet hours and the frequency cap (feature 09) and is saved whole. Empty or unknown input is rejected.
+`tradeLicenceNumber`. `sending` holds quiet hours, the frequency cap and `onlyOwnersAndAdminsApprove` (feature 09) and is saved whole; changing `onlyOwnersAndAdminsApprove` also requires Owner or Admin. Empty or unknown input is rejected.
 `PATCH /store/extensions` accepts `{ extensions: [...] }` as the complete
 selection of `chats`, `sales` and `social_auto_post`, including an empty array.
 It returns the updated settings and requires Owner or Admin through the team
@@ -187,18 +187,19 @@ atomically and retain business data when an extension is disabled.
 
 ## Campaigns and automations (09)
 
-| Route                                                                                                                                                                                           | Permission    |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/recipients`                                                                                                         | `campaigns`   |
-| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                                                                 | `campaigns`   |
-| `POST /campaigns/:campaignId/audience-preview`, `POST /campaigns/:campaignId/cost-estimate`                                                                                                     | `campaigns`   |
-| `POST /campaigns/:campaignId/schedule`, `POST /campaigns/:campaignId/send-now`, `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel` | `campaigns`   |
-| `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                                                                            | `campaigns`   |
-| `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                                                                   | `automations` |
-| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable`, `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                         | `automations` |
-| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                                                               | `automations` |
-| `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                                                                    | `automations` |
-| `GET /automations/:automationId/runs`                                                                                                                                                           | `automations` |
+| Route                                                                                                                                              | Permission    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`        | `campaigns`   |
+| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                    | `campaigns`   |
+| `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                               | `campaigns`   |
+| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel`                                    | `campaigns`   |
+| `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                               | `campaigns`   |
+| `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                      | `automations` |
+| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable` (also Owner or Admin while the store's approval setting is on) | `automations` |
+| `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                                                                 | `automations` |
+| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                  | `automations` |
+| `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                       | `automations` |
+| `GET /automations/:automationId/runs`                                                                                                              | `automations` |
 
 ## Dashboard, notifications and assistant (10)
 

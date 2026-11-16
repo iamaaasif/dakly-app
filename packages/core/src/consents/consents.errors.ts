@@ -2,11 +2,16 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 // Callers page through contacts in bounded batches (indexes-and-scale.md).
 export const MAX_CONSENT_CONTACTS = 100;
+export const MAX_AUDIENCE_CONSENT_CONTACTS = 500;
 
 const CONSENT_ERRORS = {
   CONSENT_CONTACTS_TOO_MANY: {
     status: 400,
     message: `Read consent for at most ${MAX_CONSENT_CONTACTS} contacts at a time`,
+  },
+  CONSENT_AUDIENCE_TOO_MANY: {
+    status: 400,
+    message: `Read audience consent for at most ${MAX_AUDIENCE_CONSENT_CONTACTS} contacts at a time`,
   },
   CONSENT_OPT_IN_NEEDS_CUSTOMER: {
     status: 400,

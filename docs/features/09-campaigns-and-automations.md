@@ -311,7 +311,17 @@ The public routes take no session. They find the store and link from the code th
 
 `CampaignsService` in `packages/core/src/campaigns/` keeps drafts, so the builder can save on every step. `POST /campaigns` takes a name and the channel; goal, content, include and exclude segment ids (up to 10 each) and `scheduledFor` are optional, and a later `PATCH /campaigns/:campaignId` changes only the fields it sends. An empty `scheduledFor` means send on approval. `GET /campaigns` lists the newest first with a cursor, and `DELETE /campaigns/:campaignId` removes a draft. Reads need `campaigns.view` and writes `campaigns.edit`. Change and delete apply only to a `draft`; anything later is refused with `CAMPAIGN_NOT_DRAFT`.
 
-SMS is the only channel a draft accepts: its content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content (text, image and buttons) comes with CAMP-7, and WhatsApp templates with CAMP-1. A draft does not check that its segment ids exist; approval is to check them. The estimate, approval with frozen recipients and reserved cost, and the scheduled edit, cancel, pause and resume rules are still to build.
+SMS is the only channel a draft accepts: its content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content (text, image and buttons) comes with CAMP-7, and WhatsApp templates with CAMP-1. A draft does not check that its segment ids exist; the estimate and approval do, with `SEGMENT_NOT_FOUND`. The scheduled edit, cancel, pause and resume rules are still to build.
+
+### Estimate and approval (CAMP-2)
+
+The audience is every contact in any include segment and in no exclude segment, read through `SegmentsService` in pages of 500. Each page goes through `SendPolicyService.checkAudience` as of the send time: `scheduledFor`, or now when it is empty.
+
+- `GET /campaigns/:campaignId/estimate` (`campaigns.view`, drafts only) returns `audienceCount`, `skippedByReason`, `recipientsCount` (the final audience), `smsParts` and `smsCredits` (parts × final recipients). An empty message has 0 parts. SMS has no poisha rate yet, so `costPoisha` is 0.
+- `POST /campaigns/:campaignId/approve` (`campaigns.edit`) works in one store transaction. It locks the draft and refuses an empty message (`CAMPAIGN_TEXT_EMPTY`), a send time at or before now (`CAMPAIGN_SEND_TIME_PASSED`) or no final recipients (`CAMPAIGN_NO_RECIPIENTS`). It writes one `campaign_recipients` row per contact with its phone as `destination_address`: `queued`, or `skipped` with the gate's reason. Only then does it reserve the credits with `WalletService.reserve` under the key `campaign-approval:<campaignId>`, so the wallet lock is held only until commit. A short balance refuses with `WALLET_BALANCE_TOO_LOW` and rolls everything back (CAMP-R5). The campaign moves to `scheduled` when it has a send time and to `sending` otherwise, with `recipients_count` set to the final queued count, as in the estimate, and `skipped_count` to the skips. `campaign.approved` is emitted. Later segment or contact changes do not touch the frozen rows. A second approval is `CAMPAIGN_NOT_DRAFT`.
+- While the sending setting `onlyOwnersAndAdminsApprove` is on (the default), only an Owner or Admin approves; anyone else gets `CAMPAIGN_APPROVAL_DENIED` (403). Only an Owner or Admin may change the setting itself through `PATCH /store` (`STORE_APPROVAL_SETTING_DENIED`), so a custom role with settings edit cannot turn it off.
+- A quiet-hours defer is frozen as `queued`, and the sender waits for the allowed time. During quiet hours the cap is therefore not shown at approval; the sender's own check applies it.
+- The estimate counts the message text as written. The opt-out link that CAMP-R4 adds is not counted yet.
 
 ### Frozen destinations and final send checks
 
@@ -336,7 +346,9 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
-Quiet hours and the cap are the `sending` section of `stores.settings`, parsed by `sendingSettingsSchema` in `packages/contracts/src/stores.ts`: `quietHours` with `startHour` 20 to 22 and `endHour` 8 to 10, and `frequencyCap` with `perChannelPerDay` 1 to 3 and `perSevenDays` 1 to 10. `PATCH /store` with `storeSettings.edit` takes the whole section, as `GET /store` returns it, so a save never resets a part to its default. A store that never saved the section gets the defaults.
+`SendPolicyService.checkAudience(storeId, { contactIds, channel, category, at })` runs the same rules for a page of up to 500 contacts. It reads the contacts and their phones through `ContactsService.findRecipients` and, for marketing, their consent through `ConsentService.currentForAudience` (the only consent read allowed 500 contacts; everything else keeps 100), the sending settings and, outside quiet hours, the page's marketing sends. It takes no lock and needs no transaction. Approval freezes the skips it returns; the check inside the send transaction can still skip a queued recipient, but never sends a skipped one.
+
+Quiet hours, the cap and the approval setting are the `sending` section of `stores.settings`, parsed by `sendingSettingsSchema` in `packages/contracts/src/stores.ts`: `quietHours` with `startHour` 20 to 22 and `endHour` 8 to 10, `frequencyCap` with `perChannelPerDay` 1 to 3 and `perSevenDays` 1 to 10, and `onlyOwnersAndAdminsApprove`, on by default. `PATCH /store` with `storeSettings.edit` takes the whole section, as `GET /store` returns it, so a save never resets a part to its default. A store that never saved the section gets the defaults.
 
 The gate does not reserve cost: the campaign reserves at approval (CAMP-2) and the sending job reserves or releases around the gate in the same transaction (CAMP-3, CAMP-5).
 
