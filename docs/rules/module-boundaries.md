@@ -2,19 +2,19 @@
 
 Each folder in `packages/core/src/` (except `platform/`) is a feature and a NestJS module. A feature may use another feature only through its `*.module.ts`, `*.service.ts` or `*.events.ts` file.
 
-**Why:** if `orders` reads the `customers` table directly, a change to customers silently breaks orders. Going through the service keeps one owner per table.
+**Why:** if `orders` reads the `contacts` table directly, a change to contacts silently breaks orders. Going through the service keeps one owner per table.
 
 Wrong:
 
 ```ts
 // packages/core/src/orders/orders.service.ts
-import { CustomersRepository } from '../customers/customers.repository';
+import { ContactsRepository } from '../contacts/contacts.repository';
 ```
 
 Right:
 
 ```ts
-import { CustomersService } from '../customers/customers.service';
+import { ContactsService } from '../contacts/contacts.service';
 ```
 
 Other rules, all checked by `pnpm lint:boundaries` (`.dependency-cruiser.cjs`):

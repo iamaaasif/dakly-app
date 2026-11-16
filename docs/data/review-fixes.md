@@ -48,7 +48,7 @@ The behavioral schema checks live in `packages/core/src/platform/database/schema
 
 ## Necessity and query review
 
-Each planned table has a named product responsibility. Preserve historical snapshots, workflow versions, financial/stock ledgers and reversible-operation evidence. The example `customers` table is transitional and must be removed through CUS-1 after its data moves to `contacts`. Saved content and repeated tap evidence fill specific gaps; they do not justify adding general duplicate history tables.
+Each planned table has a named product responsibility. Preserve historical snapshots, workflow versions, financial/stock ledgers and reversible-operation evidence. The example `customers` table was removed in CUS-1 after its rows moved to `contacts`. Saved content and repeated tap evidence fill specific gaps; they do not justify adding general duplicate history tables.
 
 No implemented application-level N+1 loop was demonstrated in this schema PR. The measured admin issue is repeated work inside one SQL statement. Future repositories need bounded batch APIs across feature boundaries, stable keyset cursors with unique tie-breakers, correct all-status sorts, tenant-selective consent/search plans and limits on sweeps/provider work. Scale estimates and small fixtures are not throughput guarantees. See [indexes and scale](indexes-and-scale.md).
 

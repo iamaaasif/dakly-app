@@ -71,8 +71,8 @@ Branch: `feat/pay-1-usage-service`
 
 Branch: `feat/cus-1-contacts`
 
-- Scope: the example `customers/` feature becomes `contacts/` on the `contacts` and `contact_identities` tables already in the schema. Kinds follow the glossary (`chat_only`, `lead`, `customer`, `not_customer`). `ContactsService.findOrCreateByIdentity(storeId, { channel, connectionId, externalId, profile })` is the one way a channel creates a contact, safe under concurrent webhooks (unique key plus retry on conflict). Phone unique per store; masking through the shared `maskPhone` (REV-9 Task E). Emit `contact.created`.
-- Tests (integration): two webhooks for the same new sender create one contact; a contact on two Pages keeps two identities; phone with Bangla digits or `+880` saves normalised; the cross-store suite covers every new route.
+- Scope: the example `customers/` feature becomes `contacts/` on the `contacts` and `contact_identities` tables already in the schema. Kinds follow the glossary (`chat_only`, `lead`, `customer`, `not_customer`). Phone unique per store; masking through the shared `maskPhone` (REV-9 Task E). Emit `contact.created`.
+- Tests (integration): phone with Bangla digits or `+880` saves normalised; the cross-store suite covers every new route.
 
 ### CUS-2 · Consent
 
@@ -120,8 +120,8 @@ Branch: `feat/chn-6-sms-sender`
 
 Branch: `feat/chat-1-core-messaging-inbound`
 
-- Scope: P6. `messaging/` feature (core, not the Chats extension) on `conversations` and `messages`. `MessagingService.receiveInboundMessage(storeId, { connectionId, externalSenderId, externalMessageId, content, sentAt })` finds or creates the contact through `ContactsService`, the conversation for that contact and connection, and the message (unique on connection and external message id), and sets `last_inbound_at` and `window_expires_at`. STOP keywords call `ConsentService` (CUS-2). Emits `message.received` and `conversation.started`. No inbox screen: the customer profile shows the message history.
-- Tests (integration): a duplicate webhook stores one message; two messages from a new sender at once create one contact and one conversation; the window moves with each inbound message and never with an outbound one; a STOP message withdraws consent; works with the Chats extension switched off.
+- Scope: P6. `messaging/` feature (core, not the Chats extension) on `conversations` and `messages`. `MessagingService.receiveInboundMessage(storeId, { connectionId, externalSenderId, externalMessageId, content, sentAt })` finds or creates the contact through `ContactsService`, the conversation for that contact and connection, and the message (unique on connection and external message id), and sets `last_inbound_at` and `window_expires_at`. CHAT-1 adds `ContactsService.findOrCreateByIdentity(storeId, { channel, connectionId, externalId, profile })`, the one way a channel creates a contact, safe under concurrent webhooks (unique key plus retry on conflict). STOP keywords call `ConsentService` (CUS-2). Emits `message.received` and `conversation.started`. No inbox screen: the customer profile shows the message history.
+- Tests (integration): a duplicate webhook stores one message; two messages from a new sender at once create one contact and one conversation; a contact on two Pages keeps two identities; the window moves with each inbound message and never with an outbound one; a STOP message withdraws consent; works with the Chats extension switched off.
 
 ### CHAT-2 · Core messaging: send and receipts
 
