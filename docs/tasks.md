@@ -66,12 +66,12 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M2. Shared plumbing
 
-| ID     | Task                                                    | Status    | Depends     | PR            | Notes                                                                |
-| ------ | ------------------------------------------------------- | --------- | ----------- | ------------- | -------------------------------------------------------------------- |
-| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Done      | DB-2, ACC-3 | #83, #87, #90 | Q10                                                                  |
-| HOME-2 | Web: notification bell and list                         | In review | HOME-1      | #85           | follows: `useEventStream` and the 60-second fallback                 |
-| PAY-1  | Usage service: units, allowances, usage events          | Done      | ACC-3       | #84           | AI top-ups not drawn yet                                             |
-| PAY-11 | Wallets: reserve, release, charge and staff credit      | Done      | ADM-6       | #82, #86      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
+| ID     | Task                                                    | Status | Depends     | PR            | Notes                                                                |
+| ------ | ------------------------------------------------------- | ------ | ----------- | ------------- | -------------------------------------------------------------------- |
+| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Done   | DB-2, ACC-3 | #83, #87, #90 | Q10                                                                  |
+| HOME-2 | Web: notification bell and list                         | Done   | HOME-1      | #85, #92      |                                                                      |
+| PAY-1  | Usage service: units, allowances, usage events          | Done   | ACC-3       | #84           | AI top-ups not drawn yet                                             |
+| PAY-11 | Wallets: reserve, release, charge and staff credit      | Done   | ADM-6       | #82, #86      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
 
 ## M3. Channels and customers
 
@@ -106,7 +106,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | CAMP-3  | Campaign sender job, callbacks and results counts                                                   | Todo      | CAMP-2, CAMP-10, MSG-1         |     |                                                                                  |
 | CAMP-7  | Messenger campaigns to people with an open window                                                   | Todo      | CAMP-3, CHAT-2                 |     | D24                                                                              |
 | CAMP-4  | Web: campaign list, builder, results                                                                | Todo      | CAMP-3, WEB-2                  |     | Results page design needed                                                       |
-| CAMP-8  | Release 1 workflow catalogue and typed graph contracts                                              | In review | REV-7                          |     | Triggers, actions and templates in `packages/contracts/src/automations/`         |
+| CAMP-8  | Release 1 workflow catalogue and typed graph contracts                                              | In review | REV-7                          | #88 | Triggers, actions and templates in `packages/contracts/src/automations/`         |
 | CAMP-5  | Workflow engine in two PRs: drafts, publish checks and versions; then the runner for runs and steps | Todo      | CAMP-8, CAMP-9, CAMP-10, MSG-1 |     | D23; versions first (needs CAMP-8), runner second (needs CAMP-9, CAMP-10, MSG-1) |
 | CAMP-11 | Workflow triggers and entry rules                                                                   | Todo      | CAMP-5, DB-2                   |     | Order triggers added by ORD-4                                                    |
 | CAMP-12 | Web: automations list, template library and settings forms                                          | Todo      | CAMP-11, WEB-2                 |     | Builder stage 1                                                                  |

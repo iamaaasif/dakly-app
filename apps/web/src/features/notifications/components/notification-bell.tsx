@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import { Button } from '@dakly/ui/button';
 
 import { useUnreadNotifications } from '../api/unread-notifications';
+import { useEventStream } from '../hooks/use-event-stream';
 import { useNotificationTab } from '../hooks/use-notification-tab';
 import { NotificationSheet } from './notification-sheet';
 import { useSessionContext } from '@/lib/session-context';
@@ -14,6 +15,7 @@ export function NotificationBell() {
 }
 
 function StoreNotificationBell() {
+  useEventStream();
   const unread = useUnreadNotifications();
   const [tab, changeTab] = useNotificationTab();
   const count = unread.data
