@@ -69,6 +69,7 @@ const isSaved = await this.chatsRepository.insertAiReplyIfAiResponder(
 
 - Prefer guarded updates over locks: `UPDATE ... WHERE id = $1 AND status = $2` and check the row count.
 - Counters (order numbers) use `UPDATE ... RETURNING`, not `SELECT max() + 1`.
+  - The other accepted pattern is a number counted per parent row (workflow versions): lock the parent row first with its guarded update, then count under that lock. A unique index on the number is the backstop.
 - Writes that other features must hear about insert an outbox row in the same transaction.
 
 ## Work across stores

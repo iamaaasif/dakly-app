@@ -113,7 +113,7 @@ View Campaigns or Automations: see lists and results. Edit: create, edit, approv
 
 ### Events
 
-campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, workflow.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
+campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, automation.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
 
 ### Acceptance criteria
 
