@@ -143,6 +143,15 @@ Webhook intake
 
 Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
 
+SMS sender name (CHN-6)
+
+1. Until a store's own sender name is approved, every SMS goes from Dakly's shared sender. `MessagingService.send` reads the store's approved name from `SmsSendersService` and passes it to the SMS driver; without one the driver uses the shared sender.
+2. `POST /sms-sender-ids` (`storeSettings.edit`) requests a name of 3 to 11 English letters, numbers or spaces. It saves an `sms_sender_ids` row as `requested` with the member who asked. A store has one sender at a time: a second request while one is requested, in review or approved returns `409 SMS_SENDER_ID_ALREADY_ACTIVE` (partial unique index `sms_sender_ids_store_id_active_key`). After a rejection the store can request again.
+3. `GET /sms-sender-ids` (`storeSettings.view`) lists the store's requests, newest first, with status, rejection reason and decision time.
+4. Staff with a support role see undecided requests from every store at `GET /admin/sms-sender-ids`, oldest first, through the `open_sms_sender_ids` `SECURITY DEFINER` function. They approve or reject one at `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve` or `/reject` with a reason of at least 10 characters. The service checks the live staff session and conflict of interest, writes the staff audit row and the shop's audit row, then moves the request from `requested` or `in_review` to `approved` or `rejected`, all in one store transaction. A rejection's reason is shown to the shop. A request is decided once; a second decision returns `409 SMS_SENDER_ID_ALREADY_DECIDED`.
+5. `POST /sms-sender-ids/:smsSenderIdId/test` (`storeSettings.edit`) sends a test SMS from an approved name to the signed-in member's own verified phone, never to a customer. An unapproved name returns `409 SMS_SENDER_ID_NOT_APPROVED`; a member without a verified phone gets `409 SMS_SENDER_TEST_PHONE_REQUIRED`.
+6. Development and CI send through Mailpit, which shows the store's sender as the From name. Registering the name with the operator, the trade licence and NID uploads, and the status on the Integrations page are not built yet.
+
 ### Rules
 
 1. One external account belongs to one store (unique on kind and external account id across all stores).
