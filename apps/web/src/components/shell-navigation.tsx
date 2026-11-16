@@ -1,5 +1,5 @@
 'use client';
-import { Users, ShieldCheck, LifeBuoy, LayoutDashboard } from 'lucide-react';
+import { Users, ShieldCheck, LifeBuoy, LayoutDashboard, Layers } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -65,6 +65,12 @@ function navigationLinks(session: SessionContext) {
       label: 'Customers',
       icon: Users,
       visible: session.currentStore?.canViewCustomers,
+    },
+    {
+      href: '/segments',
+      label: 'Segments',
+      icon: Layers,
+      visible: session.currentStore?.canViewSegments,
     },
     {
       href: '/support-access',
