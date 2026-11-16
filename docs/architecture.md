@@ -68,10 +68,13 @@ Only the skeleton: platform pieces, the `customers` example feature, driver inte
 
 ## Events (outbox)
 
-1. A module changes its tables and inserts an event row into `outbox_events` in the **same transaction** (`id`, `store_id`, `type`, `payload`, `occurred_at`).
-2. A relay worker reads new rows in order, publishes them to BullMQ queues for each subscribing module, and marks them sent.
-3. Consumers are idempotent: they record processed event ids and skip repeats.
-4. Moving to Kafka later only replaces the relay's publish step; modules don't change.
+1. A service changes its tables and calls `OutboxService.publish(storeId, event)` (`platform/outbox/`) inside the same `StoreTransaction.run`. It parses the event with the catalogue schema in `packages/contracts/src/events/` and inserts one `outbox_events` row; outside a store transaction it throws `STORE_TRANSACTION_REQUIRED`. A rolled-back change leaves no event.
+2. The `relay-outbox` job scheduler runs every second on `transactional`. Each run claims up to 100 rows through `claim_outbox_events` in one statement, then, with no transaction open, queues one job per subscriber with `addBulk` under job id `<eventId>-<subscriber>`, then marks the rows through `mark_outbox_events_published`.
+3. A subscriber is a job class marked `@HandlesEvent(type, { queue })`; its class name is its job name, and the queue's dispatcher runs it like any job ([rules/jobs.md](rules/jobs.md#event-subscribers)). Its job data is the event's `id`, `storeId`, `type`, `payload` and `occurredAt`. Each subscriber retries on its own.
+4. A run that stops after queueing and before marking leaves its rows claimed; a minute later another run claims them again, and the job ids drop the repeats because completed subscriber jobs are kept an hour. Consumers stay idempotent anyway.
+5. A row is claimed at most 10 times. After 10 failed relays it stays unpublished with `attempts` 10 and is no longer claimed. No staff alert is raised for it yet.
+6. Order: rows are claimed in id order (UUID v7, made at publish time), so events one store publishes one after another, each committed before the next, are queued in that order. Events from transactions that commit out of order, or in the same millisecond, can be queued out of order, and a re-claimed row is queued after rows claimed meanwhile. `transactional` runs five jobs at once and retries failed jobs later, so a subscriber that needs order checks it itself.
+7. Moving to Kafka later only replaces the relay's publish step; modules don't change.
 
 Pending review: cross-store workers read due work through SECURITY DEFINER functions with a fixed `search_path`, and the outbox is a global table, so a worker never needs to bypass RLS.
 
@@ -88,7 +91,7 @@ Pending review: cross-store workers read due work through SECURITY DEFINER funct
 | `sync`          | Shopify and WooCommerce sync (Q13), Meta insights; courier status later | Low      |
 | `bulk`          | Imports, exports, segment rebuilds, attribution recalculation           | Lowest   |
 
-Repeating sweeps are BullMQ job schedulers that the worker upserts at startup under fixed ids, one job per interval across all workers ([rules/jobs.md](rules/jobs.md)). Today they are the account security notice sweep and the staff alert relay on `transactional`, and staff audit maintenance on `bulk`, each every 30 seconds. Sign-in and TOTP recovery store their security notices, then queue one `send-security-notice` job per notice on `transactional`; the worker sends it, so no request waits for an email or SMS vendor. If queueing fails, the request still succeeds and the sweep sends the stored notice.
+Repeating sweeps are BullMQ job schedulers that the worker upserts at startup under fixed ids, one job per interval across all workers ([rules/jobs.md](rules/jobs.md)). Today they are the account security notice sweep and the staff alert relay on `transactional` and staff audit maintenance on `bulk`, each every 30 seconds, and the outbox relay on `transactional` every second. Sign-in and TOTP recovery store their security notices, then queue one `send-security-notice` job per notice on `transactional`; the worker sends it, so no request waits for an email or SMS vendor. If queueing fails, the request still succeeds and the sweep sends the stored notice.
 
 Per-store concurrency limits on `campaign`, `bulk` and `sync` stop one shop from filling a queue. Failed jobs retry with exponential backoff, then move to a dead-letter list with an alert.
 | `payments` | Payment intent checks, renewals, reconciliation | High |

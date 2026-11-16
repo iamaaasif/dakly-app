@@ -5,6 +5,10 @@ import type { Queue } from 'bullmq';
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
 import { STAFF_AUDIT_MAINTENANCE } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
+import {
+  RELAY_OUTBOX,
+  RELAY_OUTBOX_INTERVAL_MS,
+} from '@dakly/core/platform/outbox/jobs/relay-outbox.job';
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 
@@ -19,6 +23,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
     await Promise.all([
       scheduleJob(this.transactional, SEND_DUE_SECURITY_NOTICES),
       scheduleJob(this.transactional, STAFF_ALERT_RELAY),
+      scheduleJob(this.transactional, RELAY_OUTBOX, RELAY_OUTBOX_INTERVAL_MS),
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
     ]);
   }

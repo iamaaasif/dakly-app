@@ -31,4 +31,6 @@ export const PLATFORM_ERRORS = {
   PERMISSION_DENIED: { status: 403, message: 'You do not have permission to do this' },
   STORE_REQUIRED: { status: 401, message: 'Sign in to a store to continue' },
   INTERNAL_ERROR: { status: 500, message: 'Something went wrong' },
+  STORE_TRANSACTION_REQUIRED: { status: 500, message: 'Something went wrong' },
+  EVENT_STORE_MISMATCH: { status: 500, message: 'Something went wrong' },
 } as const satisfies ErrorCatalog;

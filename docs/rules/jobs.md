@@ -38,3 +38,28 @@ Rules:
 - Bulk work (imports, exports, segment rebuilds, campaign sends, attribution recalculation) is always a job with progress, never inside a request.
 - Failed jobs retry with exponential backoff, then go to a dead-letter list that raises an alert.
 - Cross-feature reactions use events: the owner emits `OrderPaidEvent`, other features listen. For anything that must not be lost, write the event to the outbox table in the same transaction (architecture doc).
+
+## Event subscribers
+
+A feature that reacts to an outbox event marks one job class with `@HandlesEvent(type, { queue })` from `platform/outbox/handles-event.ts`. The relay queues one job per subscriber with job id `<eventId>-<subscriber>`, and the queue's dispatcher runs it like any other job. The class name is the subscriber's job name and part of that id, so one class handles one event, and a rename fails the jobs already queued under the old name. The job data is the event plus its `id`; parse it with the event's schema and call a service, keyed so a second run changes nothing.
+
+Wrong:
+
+```ts
+// Called from ContactsService after the commit: lost if the process stops in between.
+await this.contactStatsService.refresh(storeId, contact.id);
+```
+
+Right:
+
+```ts
+@HandlesEvent('contact.created', { queue: QUEUES.bulk })
+export class RefreshStatsOnContactCreated implements JobHandler {
+  constructor(@Inject(ContactStatsService) private readonly contactStats: ContactStatsService) {}
+
+  async handle(data: unknown) {
+    const { storeId, payload } = contactCreatedEventSchema.extend({ id: z.uuid() }).parse(data);
+    await this.contactStats.refresh(storeId, payload.contactId);
+  }
+}
+```

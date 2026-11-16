@@ -26,6 +26,10 @@ export class TenantDatabase {
     return this.transactions.run(storeId, work);
   }
 
+  hasTransaction(): boolean {
+    return this.transactions.isOpen();
+  }
+
   inTransaction<TResult>(
     storeId: string,
     work: (tx: Transaction) => Promise<TResult>,

@@ -14,9 +14,9 @@ function recordingQueue() {
   return { queue, schedulers };
 }
 
-const scheduler = (name: string) => [
+const scheduler = (name: string, every = 30000) => [
   name,
-  { every: 30000 },
+  { every },
   {
     name,
     data: {},
@@ -30,13 +30,17 @@ const scheduler = (name: string) => [
 ];
 
 describe('Worker job schedulers', () => {
-  it('registers each scheduled job on its queue every 30 seconds under a fixed id', async () => {
+  it('registers each scheduled job on its queue at its interval under a fixed id', async () => {
     const transactional = recordingQueue();
     const bulk = recordingQueue();
     const schedulers = new JobSchedulers(transactional.queue, bulk.queue);
     await schedulers.onApplicationBootstrap();
     await schedulers.onApplicationBootstrap();
-    const sweeps = [scheduler('send-due-security-notices'), scheduler('staff-alert-relay')];
+    const sweeps = [
+      scheduler('send-due-security-notices'),
+      scheduler('staff-alert-relay'),
+      scheduler('relay-outbox', 1000),
+    ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
     expect(bulk.schedulers).toEqual([
       scheduler('staff-audit-maintenance'),
