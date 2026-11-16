@@ -153,6 +153,24 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+const dhaka = {
+  match: 'all',
+  conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
+};
+async function dhakaContact(shop: Shop) {
+  const id = await contact(shop);
+  await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [id]);
+}
+fixture('POST /segments/preview', async () => {
+  const { a, b } = await pair();
+  await dhakaContact(a);
+  await dhakaContact(a);
+  await dhakaContact(b);
+  const count = async (shop: Shop) =>
+    (await success(shop, 'POST', '/segments/preview', 200, { rules: dhaka })).json().count;
+  expect(await count(a)).toBe(2);
+  expect(await count(b)).toBe(1);
+});
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
