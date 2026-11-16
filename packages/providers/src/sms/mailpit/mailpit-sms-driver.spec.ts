@@ -14,7 +14,11 @@ describe('MailpitSmsDriver', () => {
     await once(server, 'listening');
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Missing test server port');
-    const driver = new MailpitSmsDriver({ host: '127.0.0.1', port: address.port });
+    const driver = new MailpitSmsDriver({
+      host: '127.0.0.1',
+      port: address.port,
+      apiUrl: 'http://127.0.0.1:1',
+    });
     try {
       const error = await driver
         .send({ to: '+8801700000000', text: 'secret-code' })

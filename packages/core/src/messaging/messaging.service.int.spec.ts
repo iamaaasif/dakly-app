@@ -51,6 +51,16 @@ async function capturedText(providerMessageId: string) {
   return ((await response.json()) as { Text: string }).Text.trimEnd();
 }
 
+async function capturedIdsTo(phone: string) {
+  const query = new URLSearchParams({ query: `to:"${phone}@sms.test"` });
+  const response = await fetch(`${mailpitApi}/api/v1/search?${query}`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  return ((await response.json()) as { messages: { ID: string }[] }).messages.map(
+    (message) => message.ID,
+  );
+}
+
 async function errorCode(work: Promise<unknown>) {
   const error = await work.then(
     () => undefined,
@@ -128,6 +138,21 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     const sent = await send(storeA, contact.id, 'a'.repeat(161));
 
     expect(sent).toMatchObject({ parts: 2, credits: 2 });
+  });
+
+  it('sends one SMS for the same operation key twice', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Farhana Islam', phone: '01712345606' },
+      fullPhone,
+    );
+    watchDriver();
+
+    const first = await send(storeA, contact.id, 'Your order has shipped');
+    const second = await send(storeA, contact.id, 'Your order has shipped');
+
+    expect(second).toEqual(first);
+    expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
   });
 
   it('calls the driver with no store transaction open', async () => {

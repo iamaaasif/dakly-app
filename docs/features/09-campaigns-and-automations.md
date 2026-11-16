@@ -328,7 +328,7 @@ Campaigns and workflows send through `MessagingService.send(storeId, { channel, 
 - It counts parts with `countSmsParts` in `packages/contracts/src/sms.ts`, where the web app can use the same counter. One part holds 160 GSM-7 or 70 Unicode characters; a longer text splits into parts of 153 or 67, because each part carries a header. One Bangla character makes the whole text Unicode, and `^ { } \ [ ] ~ | €` take two GSM-7 characters each. One part costs one SMS credit.
 - It calls the driver with no store transaction open and refuses to run inside one (`MESSAGING_INSIDE_TRANSACTION`). It returns the provider message id, parts and credits. The caller, a campaign recipient or a workflow step, records status and cost and decides retries; `messaging/` writes no rows.
 - Every SMS goes from Dakly's shared sender until CHN-6 adds the store's approved sender. Delivery receipts come with the provider driver (ACC-14); Mailpit, used in development and tests, sends none, so an accepted message counts as delivered.
-- The operation key does not reach the driver yet, because neither the Mailpit nor the fake driver takes an idempotency key. Until that is settled, a caller reconciles by provider message id before it resends.
+- The operation key goes to the driver as its idempotency key: the same key again sends nothing and returns the first provider message id. The fake driver remembers keys in memory. The Mailpit driver sets the key as the Message-ID and searches Mailpit for it before sending; that check-then-act lookup stands in until a real aggregator's client reference (ACC-14).
 
 ### Workflow builder (D23)
 

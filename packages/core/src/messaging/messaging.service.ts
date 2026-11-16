@@ -36,6 +36,7 @@ export class MessagingService {
     const { providerMessageId } = await this.smsService.send({
       to: contact.phone,
       text: message.body,
+      idempotencyKey: message.operationKey,
     });
     // One SMS credit pays for one part (glossary: message cost).
     return { providerMessageId, parts, credits: parts };
