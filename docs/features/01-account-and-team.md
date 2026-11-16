@@ -125,7 +125,7 @@ Areas each role can be given (No access / View / Edit): Customers, Chats, Orders
 
 ### Events and notifications
 
-user.signed\_up, store.created, store.extension\_changed, member.invited, member.joined, whatsapp.connected, whatsapp.quality\_changed, sms.sender\_id\_status, plan.changed, payment.succeeded, payment.failed, trial.ending.
+user.signed\_up, store.created, store.extension\_changed, member.invited, member.joined, whatsapp.connected, whatsapp.quality\_changed, sms\_sender\_id.approved and sms\_sender\_id.rejected (not built yet; CHN-6 emits no event), plan.changed, payment.succeeded, payment.failed, trial.ending.
 
 ### Acceptance criteria
 

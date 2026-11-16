@@ -81,13 +81,6 @@ Branch: `feat/chn-5-integrations-page`
 - Scope: cards for Messenger, Instagram, WhatsApp (shows "Waiting for setup", CHN-3 blocked on Q2) and SMS sender; connect, reconnect and disconnect with confirmation.
 - Tests: component states; Playwright with the fake driver connects a Page.
 
-### CHN-6 · SMS sender identity
-
-Branch: `feat/chn-6-sms-sender`
-
-- Scope: `sms_sender_ids`: request a masking sender name, staff approve or reject it from the admin app with a reason, test send to the owner's own phone, status on the Integrations page. Until approved, SMS goes from Dakly's shared sender.
-- Tests (integration): only one active sender per store; a rejected request shows the reason; staff approval writes a staff audit row.
-
 ### CHAT-1 · Core messaging: receive and store
 
 Branch: `feat/chat-1-core-messaging-inbound`
