@@ -21,3 +21,10 @@ export const consentChangedEventSchema = z.strictObject({
     source: z.enum(consentSources),
   }),
 });
+
+export const segmentSavedEventSchema = z.strictObject({
+  type: z.literal('segment.saved'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ segmentId: z.uuid() }),
+});

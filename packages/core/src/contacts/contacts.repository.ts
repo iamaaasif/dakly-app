@@ -3,10 +3,12 @@ import {
   and,
   arrayContains,
   arrayOverlaps,
+  asc,
   count,
   desc,
   eq,
   exists,
+  gt,
   ilike,
   inArray,
   isNull,
@@ -200,6 +202,24 @@ export class ContactsRepository {
       tx.select({ count: count() }).from(contacts).where(matching(storeId, rules)),
     );
     return row!.count;
+  }
+
+  async listIdsMatching(
+    storeId: string,
+    rules: SegmentRules,
+    page: { cursor?: string; limit: number },
+  ): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(matching(storeId, rules), page.cursor ? gt(contacts.id, page.cursor) : undefined),
+        )
+        .orderBy(asc(contacts.id))
+        .limit(page.limit),
+    );
+    return rows.map((row) => row.id);
   }
 }
 

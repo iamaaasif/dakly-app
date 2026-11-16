@@ -157,10 +157,32 @@ const dhaka = {
   match: 'all',
   conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
 };
+async function segment(shop: Shop) {
+  const input = { name: `ঢাকা ${randomUUID()}`, rules: dhaka };
+  return (await success(shop, 'POST', '/segments', 201, input)).json().id as string;
+}
 async function dhakaContact(shop: Shop) {
   const id = await contact(shop);
   await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [id]);
 }
+fixture('GET /segments', async () => {
+  const { a, b } = await pair(),
+    aId = await segment(a),
+    bId = await segment(b);
+  const ids = (await success(b, 'GET', '/segments', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/segments', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /segments', async () => {
+  const { a, b } = await pair(),
+    id = await segment(a),
+    before = await f.row('segments', id);
+  const own = await segment(b);
+  expect((await f.row('segments', own)).store_id).toBe(b.id);
+  expect(await f.row('segments', id)).toEqual(before);
+});
 fixture('POST /segments/preview', async () => {
   const { a, b } = await pair();
   await dhakaContact(a);
@@ -171,6 +193,26 @@ fixture('POST /segments/preview', async () => {
   expect(await count(a)).toBe(2);
   expect(await count(b)).toBe(1);
 });
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /segments/:segmentId`, async () => {
+    const { a, b } = await pair(),
+      own = await segment(b),
+      foreign = await segment(a);
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/segments/${own}`, method === 'DELETE' ? 204 : 200, payload);
+    const changed = await f.row('segments', own);
+    if (method === 'DELETE') expect(changed).toBeUndefined();
+    else expect(changed).toMatchObject({ name: 'নতুন নাম' });
+    const before = await f.row('segments', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/segments/${id}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('segments', foreign)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -671,6 +713,7 @@ describe('every production shop route isolates its data', () => {
       ['memberships', 'id', a.membership, b.membership],
       ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
+      ['segments', 'id', await segment(a), await segment(b)],
       ['ownership_transfers', 'id', await f.transfer(a), await f.transfer(b)],
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
