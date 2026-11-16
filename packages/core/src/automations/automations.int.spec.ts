@@ -253,6 +253,19 @@ describe('AutomationsService (Postgres)', () => {
     });
   });
 
+  it('keeps the first draft’s trigger as the live trigger when the draft trigger changes', async () => {
+    const automation = await draft();
+    const graph: AutomationGraph = { ...welcome, trigger: { key: 'link_tapped', filters: [] } };
+
+    await service.change(storeA, automation.id, { graph }, staff);
+
+    const row = await admin.pool.query(
+      'select trigger_type, draft_graph from automations where id=$1',
+      [automation.id],
+    );
+    expect(row.rows).toEqual([{ trigger_type: 'consent_given', draft_graph: graph }]);
+  });
+
   it('never reads or changes another store’s workflows', async () => {
     const automation = await draft();
     const { publishedVersionId } = await service.publish(storeA, automation.id, staff);

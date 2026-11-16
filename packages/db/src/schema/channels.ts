@@ -100,6 +100,10 @@ export const smsSenderIds = pgTable(
     }),
 
     uniqueIndex('sms_sender_ids_store_id_id_key').on(table.storeId, table.id),
+    // A store has one sender at a time: requested, in review or approved.
+    uniqueIndex('sms_sender_ids_store_id_active_key')
+      .on(table.storeId)
+      .where(sql`${table.status} <> 'rejected'`),
     index('sms_sender_ids_store_id_idx').on(table.storeId),
     index('sms_sender_ids_status_idx').on(table.status),
     index('sms_sender_ids_trade_licence_file_id_idx').on(table.tradeLicenceFileId),

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, gt, inArray, sql } from 'drizzle-orm';
 
 import type { AutomationListQuery, AutomationStatus } from '@dakly/contracts/automations';
+import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { automations, automationVersions } from '@dakly/db/schema/automations';
 
@@ -42,7 +43,7 @@ const versionColumns = {
   publishedAt: automationVersions.publishedAt,
 };
 
-type Transition = {
+type AutomationChange = {
   status?: AutomationStatus;
   name?: string;
   graph?: AutomationGraph;
@@ -98,30 +99,33 @@ export class AutomationsRepository {
 
   async insert(
     storeId: string,
-    automation: { name: string; graph: AutomationGraph; createdByUserId: string | null },
+    automation: {
+      name: string;
+      graph: AutomationGraph;
+      triggerType: TriggerKey;
+      createdByUserId: string | null;
+    },
   ): Promise<Automation> {
     const { graph, ...rest } = automation;
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .insert(automations)
-        .values({ storeId, ...rest, draftGraph: graph, triggerType: graph.trigger.key })
+        .values({ storeId, ...rest, draftGraph: graph })
         .returning(automationColumns),
     );
     return row!;
   }
 
-  // Changes the row only while it is in one of the given statuses.
   async change(
     storeId: string,
     id: string,
     from: readonly AutomationStatus[],
-    { graph, ...change }: Transition,
+    { graph, ...change }: AutomationChange,
   ): Promise<Automation | undefined> {
-    const draft = graph ? { draftGraph: graph, triggerType: graph.trigger.key } : {};
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automations)
-        .set({ ...change, ...draft })
+        .set({ ...change, ...(graph && { draftGraph: graph }) })
         .where(
           and(
             eq(automations.storeId, storeId),

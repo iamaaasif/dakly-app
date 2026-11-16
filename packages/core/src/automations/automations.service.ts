@@ -24,6 +24,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { automationError } from './automations.errors';
 import { type Automation, AutomationsRepository } from './automations.repository';
 
+// Writes take the actor (services.md); nothing records it for automations yet.
 type Actor = AuditEntry['actor'];
 
 // Feature 09 and state-machines.md. Disable on the list is pause; Delete is archive.
@@ -80,8 +81,10 @@ export class AutomationsService {
         MAX_AUTOMATIONS_PER_STORE
       )
         throw automationError('AUTOMATION_LIMIT_REACHED');
+      // The live trigger starts as the first draft's; only Publish changes it after that.
       const automation = await this.repository.insert(storeId, {
         ...input,
+        triggerType: input.graph.trigger.key,
         createdByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       return toAutomationResponse(automation);
@@ -238,7 +241,6 @@ function shortestWait(
 function toAutomationResponse(automation: Automation): AutomationResponse {
   return {
     ...automation,
-    triggerKey: automation.graph.trigger.key,
     createdAt: automation.createdAt.toISOString(),
     updatedAt: automation.updatedAt.toISOString(),
   };

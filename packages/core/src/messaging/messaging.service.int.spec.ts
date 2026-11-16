@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
+import { smsSenderIds } from '@dakly/db/schema/channels';
 import { contacts as contactsTable } from '@dakly/db/schema/contacts';
 import { stores } from '@dakly/db/schema/stores';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
@@ -13,6 +14,7 @@ import { ContactsService } from '../contacts/contacts.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { MessagingModule } from './messaging.module';
 import { MessagingService } from './messaging.service';
 
@@ -49,6 +51,13 @@ async function capturedText(providerMessageId: string) {
   });
   expect(response.status).toBe(200);
   return ((await response.json()) as { Text: string }).Text.trimEnd();
+}
+
+async function capturedSenderName(providerMessageId: string) {
+  const response = await fetch(`${mailpitApi}/api/v1/message/${providerMessageId}`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  return ((await response.json()) as { From: { Name: string } }).From.Name;
 }
 
 async function capturedIdsTo(phone: string) {
@@ -109,6 +118,7 @@ afterAll(async () => {
   }
   await admin.db.execute(sql`delete from outbox_events where store_id in (${storeA}, ${storeB})`);
   await admin.db.execute(sql`delete from contacts where store_id in (${storeA}, ${storeB})`);
+  await admin.db.execute(sql`delete from sms_sender_ids where store_id in (${storeA}, ${storeB})`);
   await admin.db.execute(sql`delete from stores where id in (${storeA}, ${storeB})`);
   await Promise.all([admin.pool.end(), app.close()]);
 });
@@ -160,6 +170,38 @@ describe('MessagingService (Postgres and Mailpit)', () => {
 
     expect(second).toEqual(first);
     expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
+  });
+
+  it('sends from the shared sender until the store’s sender name is approved', async () => {
+    const contact = await contacts.create(
+      storeB,
+      { name: 'Nusrat Jahan', phone: '01712345607' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    watchDriver();
+    const senders = app.get(SmsSendersService);
+    const [requested] = await admin.db
+      .insert(smsSenderIds)
+      .values({ storeId: storeB, senderName: 'Nusrat Fab' })
+      .returning({ id: smsSenderIds.id });
+
+    const shared = await send(storeB, contact.id, 'Your order has shipped');
+    await senders.decideRequest(
+      storeB,
+      requested!.id,
+      { status: 'approved', reason: 'Operator approved the masking name' },
+      { kind: 'system' },
+    );
+    const own = await messaging.send(storeB, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order is out for delivery',
+      operationKey: `approved-${contact.id}`,
+    });
+
+    expect(await capturedSenderName(shared.providerMessageId)).toBe('');
+    expect(await capturedSenderName(own.providerMessageId)).toBe('Nusrat Fab');
   });
 
   it('calls the driver with no store transaction open', async () => {
