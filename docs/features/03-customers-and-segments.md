@@ -1,12 +1,12 @@
 # Customers, consent and segments
 
-|           |                                                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------ |
-| Release   | 1                                                                                                |
-| Status    | In progress (CUS-1 contacts, CUS-2 consent)                                                      |
-| Extension | Core                                                                                             |
-| Code      | `packages/core/src/{contacts,consents,segments}/`, `apps/web/src/features/{customers,segments}/` |
-| Tasks     | CUS-1 to CUS-14                                                                                  |
+|           |                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| Release   | 1                                                                                                        |
+| Status    | In progress (CUS-1 contacts, CUS-2 consent, CUS-8 import)                                                |
+| Extension | Core                                                                                                     |
+| Code      | `packages/core/src/{contacts,consents,imports,segments}/`, `apps/web/src/features/{customers,segments}/` |
+| Tasks     | CUS-1 to CUS-14                                                                                          |
 
 ## Purpose
 
@@ -79,6 +79,28 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
   missing or in another store returns `404 CONTACT_NOT_FOUND`.
 - STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
   `ConsentService.record` when it receives them.
+
+Customer import (CUS-8, first part) reads a CSV file into contact rows; nothing is saved yet.
+Upload, the import job, consent evidence and undo come in the next parts.
+
+- The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
+  (required), name, WhatsApp number, email, address, district, tags and notes. One column
+  fills one field at most, so two columns with the same header stay apart.
+- `readCustomerImportRows` reads RFC 4180 CSV: quoted cells may hold commas, line breaks and
+  doubled quotes, and a byte order mark is dropped. A stray quote fails the whole file with
+  `IMPORT_FILE_UNREADABLE` rather than shifting cells. A file with no rows under the header
+  fails with `IMPORT_FILE_EMPTY`, one over 50,000 rows with `IMPORT_FILE_TOO_MANY_ROWS`, and a
+  mapped column the file lacks with `IMPORT_COLUMN_MISSING`.
+- Every other problem is a row error with the spreadsheet row number (the header is row 1),
+  the field and a message: a missing or invalid phone, a phone an earlier row already has, a
+  bad WhatsApp number or email, and text over its limit. Bad rows are reported, never dropped
+  silently. Messages never repeat the cell, so the report shows no phone numbers.
+- Blank rows are skipped without changing later row numbers. Blank cells leave the field
+  unset. Phones accept every form the phone schema accepts, Bangla digits included. A phone
+  cell with two numbers (split by a comma, semicolon or slash) keeps the second as the
+  WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
+  dropped. Tags are split by commas.
+- Only CSV is read. XLSX needs a parser the repository does not have yet.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
