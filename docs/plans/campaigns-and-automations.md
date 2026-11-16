@@ -65,6 +65,44 @@ Branch: `feat/camp-9-send-policy`
 - Scope: `sending/` feature (A1). `SendPolicyService.check(storeId, { contactId, channel, connectionId, identityId, category, at })` returns `send`, `defer` with the next allowed time, or `skip` with a reason from the schema's skip reasons (`no_consent`, `window_closed`, `blocked`, `not_customer`, `frequency_cap`, `quiet_hours`, `do_not_call`, `daily_reach_limit`, `meta_user_limit`). Categories: `staff_reply` (block and window only), `transactional` (phone or identity, block, window or template), `marketing` (all checks). Quiet hours from the store setting, default 21:00 to 09:00 Asia/Dhaka, transactional exempt. Frequency cap per CAMP-R3 and A2, with workflow priority per AUTO-R2. Smart sending (24 hours) is the per-channel daily part of the same check. Migration adds the indexes A2 needs.
 - Tests (unit and integration): a table of cases, one per reason; a withdrawal after approval skips; a window 23 hours and 1 minute old skips as `window_closed`; 20:59 sends and 21:00 defers to 09:00 the next day in Dhaka time across a date change; transactional ignores quiet hours and the cap; the cap counts campaign and workflow sends together.
 
+#### The final send gate
+
+The gate runs once for each message, inside the short store transaction in which the `send-message` job (CHAT-2) moves the message from `queued` to sending. That transaction commits before the provider call ([jobs.md](../data/jobs.md#send-time-and-financial-gates)). Campaigns may run the same checks at approval to show skips, but only the run inside the send transaction decides. A skip writes its reason and releases any reserved cost in the same transaction; a defer leaves the message queued until the next allowed time. The checks run top to bottom and stop at the first one that fails.
+
+Staff replies, typed by a person in the Chats inbox:
+
+1. Extension: the Chats extension is on. Turning an extension off stops its background jobs ([feature 01](../features/01-account-and-team.md)); the gate repeats the check so a reply queued before the switch is not sent.
+2. Block: a blocked contact is skipped as `blocked`.
+3. Consent and STOP: not checked. STOP withdraws marketing consent; it does not stop a person answering the customer.
+4. Window: Messenger and Instagram allow a free-form reply within 24 hours of the customer's last message, and up to 7 days after it with Meta's `HUMAN_AGENT` tag (CHAT-R2). After 7 days the reply is skipped as `window_closed`. WhatsApp allows free-form within 24 hours and only an approved template after that (CHAT-R3); WhatsApp sends wait for CHN-3.
+5. Frequency cap and quiet hours: not checked.
+6. Wallet: not checked; Messenger and Instagram replies are free.
+
+Transactional sends, such as order confirmation, shipping update, payment receipt and due reminder. Sign-in codes are not channel sends and do not pass this gate.
+
+1. Extension: the extension that owns the source is on, for example Sales for an order update.
+2. Block: a blocked contact is skipped as `blocked`; transactional messages respect it ([feature 03](../features/03-customers-and-segments.md)).
+3. Consent and STOP: marketing consent is not needed (CAMP-R2), and a STOP does not stop order updates. The send needs a phone for SMS and WhatsApp, or the contact's identity on the sending connection for Messenger; without it the message is skipped.
+4. Window: Messenger only inside the 24-hour window. Meta has rejected the `POST_PURCHASE_UPDATE`, `CONFIRMED_EVENT_UPDATE` and `ACCOUNT_UPDATE` tags since 27 Apr 2026, so no tag can carry an order update. Outside the window the message is skipped as `window_closed`, and a workflow's channel order tries the next channel. WhatsApp outside the window needs an approved utility template with no offer. SMS has no window.
+5. Frequency cap and quiet hours: exempt.
+6. Wallet: SMS reserves SMS credits and WhatsApp reserves the utility rate through `WalletService.reserve` in this transaction; Messenger is free. If the reserve is refused, nothing is sent. Feature 09 defines a short balance only for campaigns, so CAMP-9 settles what a transactional send does then.
+
+Marketing sends, from campaigns and workflows:
+
+1. Extension: none needed; campaigns and workflows are core (D37). The campaign must still be `sending`, and the workflow run active on a version that is not stopped; otherwise the send is skipped.
+2. Block and kind: a blocked contact is skipped as `blocked`, a Not a customer contact as `not_customer`.
+3. Consent and STOP: the channel's row in `contact_consent_current` must be `granted`. STOP or `বন্ধ` on WhatsApp or Messenger, the SMS opt-out link and blocking the Page each write a withdrawal, so a withdrawal after approval is skipped as `no_consent`.
+4. Window: Messenger only when the contact's last inbound message on the sending Page is under 23 hours old at send time (D24, CAMP-R6), otherwise `window_closed`. No message tag carries marketing. WhatsApp needs an approved marketing template (CAMP-1, waits for Q2). SMS has no window.
+5. Quiet hours: inside the store's quiet hours (default 21:00 to 09:00 Asia/Dhaka) the send defers to the next allowed time. Quiet hours are checked before the frequency cap, as in feature 09.
+6. Frequency cap: at most 1 marketing message per store per channel per day and 3 per 7 days across campaigns and workflows (CAMP-R3), counted from Postgres (A2); over the cap is skipped as `frequency_cap`. When two workflows fire the same day, only the higher priority message sends (AUTO-R2).
+7. Wallet: a campaign recipient's cost was reserved at approval (CAMP-2) and must still be held; a workflow send reserves its cost here. A campaign with a short balance pauses and notifies the Owner (feature 09). Feature 09 says nothing for a workflow step, so CAMP-9 settles it.
+
+Where the feature docs disagree, the gate follows these:
+
+- Frequency cap. [Feature 09](../features/09-campaigns-and-automations.md) CAMP-R3 says "a person gets at most 1 marketing message per store per channel per day and 3 per 7 days across campaigns and automations (editable)". Its entry and frequency rules say "**Frequency cap** across everything (default 2 marketing messages a week)". The gate follows CAMP-R3, as A2 and the CAMP-9 scope do.
+- Messenger marketing. Feature 09's channel branch says "else Messenger if inside the 24-hour window or opted in". D24 says the opted-in path does not exist, and CAMP-R6 uses 23 hours. The gate follows D24 and CAMP-R6.
+- WhatsApp staff replies. [Feature 04](../features/04-chats-and-ai-agent.md) CHAT-R3 says "From Oct 1, 2026 Meta charges service messages beyond 1,000 free per number per month, so WhatsApp AI replies count toward the store's WhatsApp balance". The CAMP-9 scope says "`staff_reply` (block and window only)". The gate follows the CAMP-9 scope; CHN-3 settles whether a WhatsApp staff reply reserves WhatsApp balance.
+
 ### CAMP-10 · Tracked links and the SMS opt-out page
 
 Branch: `feat/camp-10-tracked-links`
