@@ -110,6 +110,15 @@ module.exports = {
       to: { path: '^packages/(core|db)/|^apps/|(^|/)@dakly/(?!contracts/)' },
     },
     {
+      name: 'no-barrel-imports',
+      comment:
+        'ESLint sees only the import text, so a directory import that resolves to an index file ' +
+        'is caught here. Import the file directly; barrel files are not used in this repo.',
+      severity: 'error',
+      from: {},
+      to: { path: '(^|/)index\\.tsx?$', pathNot: '(^|/)node_modules/' },
+    },
+    {
       name: 'no-circular',
       severity: 'error',
       from: {},
