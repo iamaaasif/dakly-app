@@ -12,10 +12,12 @@ import {
 } from '@nestjs/common';
 
 import {
+  smsSenderIdDecisionPathSchema,
   smsSenderIdDecisionSchema,
   smsSenderIdListQuerySchema,
   type OpenSmsSenderIdListResponse,
   type SmsSenderIdDecisionInput,
+  type SmsSenderIdDecisionPath,
   type SmsSenderIdListQuery,
   type SmsSenderIdResponse,
 } from '@dakly/contracts/sms-senders';
@@ -42,34 +44,21 @@ export class SmsSenderReviewController {
     return this.smsSenders.listOpen(query);
   }
 
-  @Post('stores/:storeId/sms-sender-ids/:smsSenderIdId/approve')
+  @Post('stores/:storeId/sms-sender-ids/:smsSenderIdId/:decision')
   @HttpCode(200)
-  approve(
+  decide(
     @Req() request: StaffRequest,
     @Param('storeId', ParseUUIDPipe) storeId: string,
     @Param('smsSenderIdId', ParseUUIDPipe) smsSenderIdId: string,
+    @Param('decision', new ZodValidationPipe(smsSenderIdDecisionPathSchema))
+    decision: SmsSenderIdDecisionPath,
     @Body(new ZodValidationPipe(smsSenderIdDecisionSchema)) input: SmsSenderIdDecisionInput,
   ): Promise<SmsSenderIdResponse> {
+    const status = decision === 'approve' ? 'approved' : 'rejected';
     return this.review.decide(
       request.staff,
       storeId,
-      { smsSenderIdId, status: 'approved', reason: input.reason },
-      request.ip,
-    );
-  }
-
-  @Post('stores/:storeId/sms-sender-ids/:smsSenderIdId/reject')
-  @HttpCode(200)
-  reject(
-    @Req() request: StaffRequest,
-    @Param('storeId', ParseUUIDPipe) storeId: string,
-    @Param('smsSenderIdId', ParseUUIDPipe) smsSenderIdId: string,
-    @Body(new ZodValidationPipe(smsSenderIdDecisionSchema)) input: SmsSenderIdDecisionInput,
-  ): Promise<SmsSenderIdResponse> {
-    return this.review.decide(
-      request.staff,
-      storeId,
-      { smsSenderIdId, status: 'rejected', reason: input.reason },
+      { smsSenderIdId, status, reason: input.reason },
       request.ip,
     );
   }

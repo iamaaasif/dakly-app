@@ -15,10 +15,12 @@ export const smsSenderIdListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export const smsSenderIdDecisionSchema = z.strictObject({ reason: supportReasonSchema });
+export const smsSenderIdDecisionPathSchema = z.enum(['approve', 'reject']);
 
 export type RequestSmsSenderIdInput = z.infer<typeof requestSmsSenderIdSchema>;
 export type SmsSenderIdListQuery = z.infer<typeof smsSenderIdListQuerySchema>;
 export type SmsSenderIdDecisionInput = z.infer<typeof smsSenderIdDecisionSchema>;
+export type SmsSenderIdDecisionPath = z.infer<typeof smsSenderIdDecisionPathSchema>;
 export type SmsSenderIdStatus = (typeof smsSenderIdStatuses)[number];
 export type SmsSenderIdResponse = {
   id: string;

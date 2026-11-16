@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 
-import type { SmsSenderIdStatus } from '@dakly/contracts/sms-senders';
+import type { OpenSmsSenderIdResponse, SmsSenderIdStatus } from '@dakly/contracts/sms-senders';
 import type { Database } from '@dakly/db/client';
 import { smsSenderIds } from '@dakly/db/schema/channels';
 
@@ -25,13 +25,6 @@ export type SmsSenderDecision = {
   rejectionReason: string | null;
   decidedAt: Date;
 };
-// Raw queries return timestamps in Postgres text form, not ISO 8601.
-export type OpenSmsSender = Pick<SmsSender, 'id' | 'senderName' | 'status'> & {
-  storeId: string;
-  storeName: string;
-  createdAt: string;
-};
-
 @Injectable()
 export class SmsSendersRepository {
   constructor(
@@ -122,8 +115,9 @@ export class SmsSendersRepository {
   }
 
   // Staff read across stores through the definer function, never with row security off.
-  async listOpen(page: { cursor?: string; limit: number }): Promise<OpenSmsSender[]> {
-    const { rows } = await this.connection.execute<OpenSmsSender>(
+  // createdAt comes back in Postgres text form; the service turns it into ISO 8601.
+  async listOpen(page: { cursor?: string; limit: number }): Promise<OpenSmsSenderIdResponse[]> {
+    const { rows } = await this.connection.execute<OpenSmsSenderIdResponse>(
       sql`select id, store_id as "storeId", store_name as "storeName", sender_name as "senderName",
         status, created_at as "createdAt"
         from open_sms_sender_ids(${page.cursor ?? null}::uuid, ${page.limit + 1})`,

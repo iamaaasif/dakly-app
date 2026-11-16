@@ -99,8 +99,7 @@ const groups = [
     boundary: 'staff review of sender requests: definer-function queue and audited decisions',
     routes: [
       'GET /admin/sms-sender-ids',
-      'POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve',
-      'POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/reject',
+      'POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/:decision',
     ],
   },
   {

@@ -187,6 +187,30 @@ describe('Staff review of SMS sender names over Fastify and Postgres', () => {
     });
   });
 
+  it('answers 404 for a store that does not exist and writes no audit row', async () => {
+    const headers = await staff();
+    const { id } = await requestedSender();
+
+    const response = await decide(
+      headers,
+      `/admin/stores/${randomUUID()}/sms-sender-ids/${id}/approve`,
+    );
+
+    expect(response.statusCode, response.body).toBe(404);
+    expect(response.json().error.code).toBe('STORE_NOT_FOUND');
+    expect(await recorded(id)).toMatchObject({ status: 'requested', staff_audits: 0 });
+  });
+
+  it('refuses a decision word other than approve or reject', async () => {
+    const headers = await staff();
+    const { storeId, id } = await requestedSender();
+
+    const response = await decide(headers, `/admin/stores/${storeId}/sms-sender-ids/${id}/revoke`);
+
+    expect(response.statusCode).toBe(400);
+    expect(await recorded(id)).toMatchObject({ status: 'requested', staff_audits: 0 });
+  });
+
   it('changes nothing for another store, a short reason or a role without review access', async () => {
     const headers = await staff();
     const { storeId, id } = await requestedSender();
