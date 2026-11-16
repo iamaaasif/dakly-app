@@ -14,9 +14,10 @@ import { SessionDialog as Dialog } from '@/components/session-dialog';
 type SegmentRowProps = {
   segment: SegmentResponse;
   editHref: string;
+  canEdit: boolean;
 };
 
-export function SegmentRow({ segment, editHref }: SegmentRowProps) {
+export function SegmentRow({ segment, editHref, canEdit }: SegmentRowProps) {
   const [deleting, setDeleting] = useState(false);
   const count = useSegmentCount(segment.rules);
   const remove = useRemoveSegment(segment.id);
@@ -28,22 +29,24 @@ export function SegmentRow({ segment, editHref }: SegmentRowProps) {
         <p className="text-sm break-words text-text-muted">{describeRules(segment.rules)}</p>
         <p className="tabular-nums">{count.error ? 'Count not available' : countText}</p>
       </div>
-      <div className="flex shrink-0 gap-2">
-        <Link
-          href={editHref}
-          aria-label={`Edit ${segment.name}`}
-          className="inline-flex min-h-10 items-center text-action underline"
-        >
-          Edit
-        </Link>
-        <Button
-          variant="secondary"
-          aria-label={`Delete ${segment.name}`}
-          onClick={() => setDeleting(true)}
-        >
-          Delete
-        </Button>
-      </div>
+      {canEdit ? (
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href={editHref}
+            aria-label={`Edit ${segment.name}`}
+            className="inline-flex min-h-10 items-center text-action underline"
+          >
+            Edit
+          </Link>
+          <Button
+            variant="secondary"
+            aria-label={`Delete ${segment.name}`}
+            onClick={() => setDeleting(true)}
+          >
+            Delete
+          </Button>
+        </div>
+      ) : null}
       {deleting ? (
         <Dialog open title={`Delete ${segment.name}?`} onClose={() => setDeleting(false)}>
           <p className="mb-4">The customers stay; only this group is removed.</p>

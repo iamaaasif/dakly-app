@@ -27,5 +27,11 @@ export default async function SegmentsPage({
         This segments page address is invalid. <a href="/segments">Open the segment list</a>.
       </p>
     );
-  return <SegmentsScreen cursor={parsed.data.cursor} edit={parsed.data.edit} />;
+  return (
+    <SegmentsScreen
+      cursor={parsed.data.cursor}
+      edit={parsed.data.edit}
+      canEdit={session.currentStore.canEditSegments}
+    />
+  );
 }

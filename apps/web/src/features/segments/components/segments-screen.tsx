@@ -11,9 +11,12 @@ import { SegmentsLoading } from './segments-loading';
 type SegmentsScreenProps = {
   cursor?: string;
   edit?: string;
+  canEdit: boolean;
 };
 
-export function SegmentsScreen({ cursor, edit }: SegmentsScreenProps) {
+export function SegmentsScreen({ cursor, edit: requestedEdit, canEdit }: SegmentsScreenProps) {
+  // A member who cannot edit segments gets the list, even from an edit link.
+  const edit = canEdit ? requestedEdit : undefined;
   const listHref = cursor ? `/segments?cursor=${encodeURIComponent(cursor)}` : '/segments';
   const segments = useSegments(cursor);
   if (edit === 'new')
@@ -33,7 +36,7 @@ export function SegmentsScreen({ cursor, edit }: SegmentsScreenProps) {
         />
       </main>
     );
-  if (!edit) return <SegmentList page={segments.data} cursor={cursor} />;
+  if (!edit) return <SegmentList page={segments.data} cursor={cursor} canEdit={canEdit} />;
   // There is no single-segment route, so the segment comes from the list page it was opened on.
   const editing = segments.data.items.find((segment) => segment.id === edit);
   return (

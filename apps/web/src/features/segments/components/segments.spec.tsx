@@ -82,6 +82,7 @@ function show(child: ReactNode) {
       canViewCustomers: true,
       canCreateCustomer: true,
       canViewSegments: true,
+      canEditSegments: true,
       canApproveSupport: false,
       canTransferOwnership: false,
       canViewStoreSettings: false,
@@ -110,7 +111,7 @@ describe('Segments screen', () => {
     const requests = serve(({ path }) =>
       path === '/segments/preview' ? json({ count: 42 }) : json({ items: [vip], nextCursor: null }),
     );
-    show(<SegmentsScreen />);
+    show(<SegmentsScreen canEdit />);
     expect(screen.getByRole('status', { name: 'Loading segments' })).toBeTruthy();
     await screen.findByRole('heading', { name: 'VIP in Dhaka' });
     expect(
@@ -122,6 +123,18 @@ describe('Segments screen', () => {
     });
   });
 
+  it('shows a member who cannot edit only the list, even from an edit link', async () => {
+    serve(({ path }) =>
+      path === '/segments/preview' ? json({ count: 42 }) : json({ items: [vip], nextCursor: null }),
+    );
+    show(<SegmentsScreen edit={vip.id} canEdit={false} />);
+    await screen.findByRole('heading', { name: 'VIP in Dhaka' });
+    expect(screen.queryByRole('link', { name: 'Create segment' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Edit VIP in Dhaka' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete VIP in Dhaka' })).toBeNull();
+    expect(screen.queryByLabelText('Segment name')).toBeNull();
+  });
+
   it('shows the empty list and a failed list with a retry', async () => {
     let fail = true;
     serve(() =>
@@ -129,7 +142,7 @@ describe('Segments screen', () => {
         ? json({ error: { code: 'FORBIDDEN', message: 'You cannot view segments.' } }, 403)
         : json({ items: [], nextCursor: null }),
     );
-    show(<SegmentsScreen />);
+    show(<SegmentsScreen canEdit />);
     expect(await screen.findByText('You cannot view segments.')).toBeTruthy();
     fail = false;
     await userEvent.setup().click(screen.getByRole('button', { name: 'Retry segments' }));
@@ -145,7 +158,7 @@ describe('Segments screen', () => {
       if (method === 'POST') return json({ ...vip, name: 'Repeat buyers' }, 201);
       return json({ items: [], nextCursor: null });
     });
-    show(<SegmentsScreen edit="new" />);
+    show(<SegmentsScreen edit="new" canEdit />);
     expect(
       await screen.findByText('Finish each condition to see how many customers match.'),
     ).toBeTruthy();
@@ -202,7 +215,7 @@ describe('Segments screen', () => {
         );
       return json({ items: [vip], nextCursor: null });
     });
-    show(<SegmentsScreen edit={vip.id} />);
+    show(<SegmentsScreen edit={vip.id} canEdit />);
     const name = await screen.findByLabelText('Segment name');
     expect(await screen.findByText('1 customer matches')).toBeTruthy();
     const first = screen.getByRole('group', { name: 'Condition 1' });
@@ -230,7 +243,7 @@ describe('Segments screen', () => {
       }
       return json({ items, nextCursor: null });
     });
-    show(<SegmentsScreen />);
+    show(<SegmentsScreen canEdit />);
     await user.click(await screen.findByRole('button', { name: 'Delete VIP in Dhaka' }));
     const dialog = screen.getByRole('dialog', { name: 'Delete VIP in Dhaka?' });
     await user.click(within(dialog).getByRole('button', { name: 'Delete segment' }));

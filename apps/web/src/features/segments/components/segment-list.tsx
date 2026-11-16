@@ -8,11 +8,12 @@ import { SegmentRow } from './segment-row';
 type SegmentListProps = {
   page: SegmentListResponse;
   cursor?: string;
+  canEdit: boolean;
 };
 
 const linkClass = 'inline-flex min-h-10 items-center gap-2 text-action underline';
 
-export function SegmentList({ page, cursor }: SegmentListProps) {
+export function SegmentList({ page, cursor, canEdit }: SegmentListProps) {
   const editPrefix = cursor
     ? `/segments?cursor=${encodeURIComponent(cursor)}&edit=`
     : '/segments?edit=';
@@ -25,10 +26,12 @@ export function SegmentList({ page, cursor }: SegmentListProps) {
             Groups of customers to send a campaign to. Counts are live.
           </p>
         </div>
-        <Link href="/segments?edit=new" className={linkClass}>
-          <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
-          Create segment
-        </Link>
+        {canEdit ? (
+          <Link href="/segments?edit=new" className={linkClass}>
+            <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
+            Create segment
+          </Link>
+        ) : null}
       </div>
       {page.items.length ? (
         <div className="space-y-3">
@@ -37,6 +40,7 @@ export function SegmentList({ page, cursor }: SegmentListProps) {
               key={segment.id}
               segment={segment}
               editHref={`${editPrefix}${segment.id}`}
+              canEdit={canEdit}
             />
           ))}
         </div>
