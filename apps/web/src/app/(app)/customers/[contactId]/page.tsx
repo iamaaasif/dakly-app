@@ -1,0 +1,22 @@
+import { z } from 'zod';
+
+import { CustomerProfile } from '@/features/customers/components/customer-profile';
+import { requireSession } from '@/lib/require-session';
+
+export default async function CustomerPage({ params }: { params: Promise<{ contactId: string }> }) {
+  const session = await requireSession();
+  if (!session.currentStore?.canViewCustomers)
+    return (
+      <p role="status" className="p-6">
+        You do not have Customers access in this shop.
+      </p>
+    );
+  const parsed = z.uuid().safeParse((await params).contactId);
+  if (!parsed.success)
+    return (
+      <p role="alert" className="p-6">
+        This customer address is invalid. <a href="/customers">Open all customers</a>.
+      </p>
+    );
+  return <CustomerProfile contactId={parsed.data} />;
+}
