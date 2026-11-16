@@ -122,6 +122,14 @@ export class ContactsService {
   countMatching(storeId: string, rules: SegmentRules): Promise<number> {
     return this.contactsRepository.countMatching(storeId, rules);
   }
+
+  listIdsMatching(
+    storeId: string,
+    rules: SegmentRules,
+    page: { cursor?: string; limit: number },
+  ): Promise<string[]> {
+    return this.contactsRepository.listIdsMatching(storeId, rules, page);
+  }
 }
 
 // A partial number is a prefix search only for members who see full phones. Anyone may find a

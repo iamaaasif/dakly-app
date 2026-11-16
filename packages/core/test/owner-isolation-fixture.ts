@@ -49,6 +49,7 @@ export class OwnerIsolationFixture {
       'support_grants',
       'staff_recovery_history',
       'ownership_transfers',
+      'segments',
       'contacts',
       'channel_connections',
       'audit_log',

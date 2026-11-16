@@ -4,6 +4,7 @@ import { consentChannels, contactKinds, contactSources } from './contacts';
 
 // Feature 03: at most 20 conditions, in a top group with one level of groups inside it.
 export const MAX_SEGMENT_CONDITIONS = 20;
+export const MAX_SEGMENTS_PER_STORE = 200;
 
 // "Is" and "is any of" both compile as any of; "is not" as none of.
 function listCondition<Field extends string, Value extends z.ZodType<string>>(
@@ -60,7 +61,32 @@ export const segmentRulesSchema = groupSchema(
 
 export type SegmentRules = z.infer<typeof segmentRulesSchema>;
 
-export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
+const segmentNameSchema = z.string().trim().min(1).max(80);
 
+export const createSegmentSchema = z.strictObject({
+  name: segmentNameSchema,
+  rules: segmentRulesSchema,
+});
+export const changeSegmentSchema = createSegmentSchema
+  .partial()
+  .refine((input) => input.name !== undefined || input.rules !== undefined, 'Nothing to change');
+export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
+export const segmentListQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type CreateSegmentInput = z.infer<typeof createSegmentSchema>;
+export type ChangeSegmentInput = z.infer<typeof changeSegmentSchema>;
 export type SegmentPreviewInput = z.infer<typeof segmentPreviewSchema>;
+export type SegmentListQuery = z.infer<typeof segmentListQuerySchema>;
+
+export type SegmentResponse = {
+  id: string;
+  name: string;
+  rules: SegmentRules;
+  createdAt: string;
+  updatedAt: string;
+};
+export type SegmentListResponse = { items: SegmentResponse[]; nextCursor: string | null };
 export type SegmentCountResponse = { count: number };

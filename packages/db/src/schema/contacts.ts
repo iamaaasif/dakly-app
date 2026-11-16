@@ -30,6 +30,7 @@ import {
   matchSuggestionStatuses,
   notCustomerReasons,
 } from '@dakly/contracts/contacts';
+import type { SegmentRules } from '@dakly/contracts/segments';
 
 import { bdAreas } from './areas';
 import { users } from './auth';
@@ -374,7 +375,7 @@ export const segments = pgTable(
     name: text('name').notNull(),
     readyMadeKey: text('ready_made_key'),
     // Condition tree validated by the contracts schema and compiled to bound SQL; never filtered on.
-    rules: jsonb('rules').notNull(),
+    rules: jsonb('rules').$type<SegmentRules>().notNull(),
     aiPrompt: text('ai_prompt'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     createdAt: createdAt(),
