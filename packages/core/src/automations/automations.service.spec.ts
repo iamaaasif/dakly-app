@@ -6,12 +6,16 @@ import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { StoresService } from '../stores/stores.service';
+import { builtInRoleAccess } from '../team/built-in-roles';
+import type { TeamService } from '../team/team.service';
 import type { Automation, AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const AUTOMATION_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a6b';
 const staff = { kind: 'user', userId: 'c5a0f0e4-0b55-4b7e-8d0e-6f3c3b7f1e21' } as const;
+const owner = { access: builtInRoleAccess.owner, actor: staff };
 const now = new Date('2026-11-16T05:00:00Z');
 const welcome = automationTemplates.welcome_new_subscriber.graph;
 
@@ -60,6 +64,10 @@ function serviceFor(graph: AutomationGraph) {
     repository as unknown as AutomationsRepository,
     transaction as unknown as StoreTransaction,
     { now: () => now } as Clock,
+    {
+      sendingSettings: async () => ({ onlyOwnersAndAdminsApprove: true }),
+    } as unknown as StoresService,
+    { canApproveSends: () => true } as unknown as TeamService,
   );
 }
 
@@ -94,7 +102,7 @@ describe('AutomationsService publish checks', () => {
       next: 'split',
     });
 
-    expect((await serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, staff)).status).toBe('active');
+    expect((await serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, owner)).status).toBe('active');
   });
 
   it('does not count a wait for a time of day, which may end a minute later', async () => {
@@ -104,7 +112,7 @@ describe('AutomationsService publish checks', () => {
       next: 'split',
     });
 
-    await expect(serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, staff)).rejects.toMatchObject({
+    await expect(serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, owner)).rejects.toMatchObject({
       code: 'AUTOMATION_SPLIT_TOO_SOON',
       fields: [{ path: 'steps.split', message: 'Less than 2 hours after offer' }],
     });
@@ -129,7 +137,7 @@ describe('AutomationsService publish checks', () => {
       },
     };
 
-    await expect(serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, staff)).rejects.toMatchObject({
+    await expect(serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, owner)).rejects.toMatchObject({
       code: 'AUTOMATION_SPLIT_TOO_SOON',
     });
   });
@@ -137,6 +145,6 @@ describe('AutomationsService publish checks', () => {
   it('publishes a birthday workflow, whose dates live on contacts', async () => {
     const graph = automationTemplates.birthday.graph;
 
-    expect((await serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, staff)).status).toBe('active');
+    expect((await serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, owner)).status).toBe('active');
   });
 });

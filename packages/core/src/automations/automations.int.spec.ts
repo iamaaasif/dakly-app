@@ -11,6 +11,7 @@ import { automationTemplates } from '@dakly/contracts/automations/templates';
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
+import { builtInRoleAccess } from '../team/built-in-roles';
 import { AutomationsModule } from './automations.module';
 import { AutomationsService } from './automations.service';
 
@@ -23,6 +24,7 @@ const storeA = randomUUID();
 const storeB = randomUUID();
 const userId = randomUUID();
 const staff = { kind: 'user', userId } as const;
+const owner = { access: builtInRoleAccess.owner, actor: staff };
 let app: INestApplicationContext;
 let service: AutomationsService;
 
@@ -126,7 +128,7 @@ describe('AutomationsService (Postgres)', () => {
     const automation = await draft();
     expect(automation).toMatchObject({ status: 'draft', publishedVersionId: null });
 
-    const published = await service.publish(storeA, automation.id, staff);
+    const published = await service.publish(storeA, automation.id, owner);
 
     const detail = await service.get(storeA, automation.id);
     expect(published.status).toBe('active');
@@ -166,7 +168,7 @@ describe('AutomationsService (Postgres)', () => {
   ] as const)('refuses to publish %s and writes no version', async (_name, graph, code) => {
     const automation = await draft(graph as AutomationGraph);
 
-    await expect(service.publish(storeA, automation.id, staff)).rejects.toMatchObject({ code });
+    await expect(service.publish(storeA, automation.id, owner)).rejects.toMatchObject({ code });
 
     expect(await service.get(storeA, automation.id)).toMatchObject({
       status: 'draft',
@@ -175,14 +177,33 @@ describe('AutomationsService (Postgres)', () => {
     });
   });
 
+  it('refuses a Marketer’s publish and enable while only owners and admins approve sends', async () => {
+    const automation = await draft();
+    const marketer = { access: builtInRoleAccess.marketer, actor: staff };
+
+    await expect(service.publish(storeA, automation.id, marketer)).rejects.toMatchObject({
+      code: 'AUTOMATION_APPROVAL_DENIED',
+      status: 403,
+    });
+    expect(await service.get(storeA, automation.id)).toMatchObject({
+      status: 'draft',
+      versions: [],
+    });
+    await service.publish(storeA, automation.id, owner);
+    await service.pause(storeA, automation.id, staff);
+    await expect(service.enable(storeA, automation.id, marketer)).rejects.toMatchObject({
+      code: 'AUTOMATION_APPROVAL_DENIED',
+    });
+  });
+
   it('publishes a split on taps after 2 hours of wait', async () => {
     const automation = await draft(splitAfter(120));
-    expect((await service.publish(storeA, automation.id, staff)).status).toBe('active');
+    expect((await service.publish(storeA, automation.id, owner)).status).toBe('active');
   });
 
   it('keeps a published graph when the draft changes, and the app role cannot change it', async () => {
     const automation = await draft();
-    const { publishedVersionId } = await service.publish(storeA, automation.id, staff);
+    const { publishedVersionId } = await service.publish(storeA, automation.id, owner);
     await service.change(storeA, automation.id, { graph: splitAfter(180) }, staff);
 
     const version = await admin.pool.query(
@@ -207,11 +228,11 @@ describe('AutomationsService (Postgres)', () => {
 
   it('leaves runs on the old version when a new version is published, until the owner stops it', async () => {
     const automation = await draft();
-    const first = await service.publish(storeA, automation.id, staff);
+    const first = await service.publish(storeA, automation.id, owner);
     const runId = await seedRun(storeA, automation.id, first.publishedVersionId!);
     await service.change(storeA, automation.id, { graph: splitAfter(180) }, staff);
 
-    const second = await service.publish(storeA, automation.id, staff);
+    const second = await service.publish(storeA, automation.id, owner);
 
     const run = await admin.pool.query(
       'select version_id, status from automation_runs where id=$1',
@@ -235,7 +256,7 @@ describe('AutomationsService (Postgres)', () => {
     try {
       await editor.query('begin');
       await editor.query('select id from automations where id=$1 for update', [automation.id]);
-      const publishing = service.publish(storeA, automation.id, staff);
+      const publishing = service.publish(storeA, automation.id, owner);
       // Wait until publish is blocked on the row lock, then commit an edit under it.
       let isBlocked = false;
       for (let waited = 0; waited < 100 && !isBlocked; waited += 1) {
@@ -264,7 +285,7 @@ describe('AutomationsService (Postgres)', () => {
 
   it('changes the live trigger only on publish', async () => {
     const automation = await draft();
-    await service.publish(storeA, automation.id, staff);
+    await service.publish(storeA, automation.id, owner);
     const tapped: AutomationGraph = { ...welcome, trigger: { key: 'link_tapped', filters: [] } };
     const triggerType = async () =>
       (await admin.pool.query('select trigger_type from automations where id=$1', [automation.id]))
@@ -272,7 +293,7 @@ describe('AutomationsService (Postgres)', () => {
 
     await service.change(storeA, automation.id, { graph: tapped }, staff);
     expect(await triggerType()).toBe('consent_given');
-    await service.publish(storeA, automation.id, staff);
+    await service.publish(storeA, automation.id, owner);
     expect(await triggerType()).toBe('link_tapped');
   });
 
@@ -280,8 +301,8 @@ describe('AutomationsService (Postgres)', () => {
     const automation = await draft();
 
     await Promise.all([
-      service.publish(storeA, automation.id, staff),
-      service.publish(storeA, automation.id, staff),
+      service.publish(storeA, automation.id, owner),
+      service.publish(storeA, automation.id, owner),
     ]);
 
     const detail = await service.get(storeA, automation.id);
@@ -291,25 +312,25 @@ describe('AutomationsService (Postgres)', () => {
 
   it('pauses, enables and archives, and refuses a move the status does not allow', async () => {
     const automation = await draft();
-    await expect(service.enable(storeA, automation.id, staff)).rejects.toMatchObject({
+    await expect(service.enable(storeA, automation.id, owner)).rejects.toMatchObject({
       code: 'AUTOMATION_STATUS_NOT_ALLOWED',
     });
     await expect(service.pause(storeA, automation.id, staff)).rejects.toMatchObject({
       code: 'AUTOMATION_STATUS_NOT_ALLOWED',
     });
-    await service.publish(storeA, automation.id, staff);
+    await service.publish(storeA, automation.id, owner);
 
     expect((await service.pause(storeA, automation.id, staff)).status).toBe('paused');
     await expect(service.pause(storeA, automation.id, staff)).rejects.toMatchObject({
       code: 'AUTOMATION_STATUS_NOT_ALLOWED',
     });
-    expect((await service.enable(storeA, automation.id, staff)).status).toBe('active');
+    expect((await service.enable(storeA, automation.id, owner)).status).toBe('active');
     await service.archive(storeA, automation.id, staff);
 
     await expect(service.get(storeA, automation.id)).rejects.toMatchObject({
       code: 'AUTOMATION_NOT_FOUND',
     });
-    await expect(service.enable(storeA, automation.id, staff)).rejects.toMatchObject({
+    await expect(service.enable(storeA, automation.id, owner)).rejects.toMatchObject({
       code: 'AUTOMATION_NOT_FOUND',
     });
   });
@@ -329,13 +350,13 @@ describe('AutomationsService (Postgres)', () => {
 
   it('never reads or changes another store’s workflows', async () => {
     const automation = await draft();
-    const { publishedVersionId } = await service.publish(storeA, automation.id, staff);
+    const { publishedVersionId } = await service.publish(storeA, automation.id, owner);
     const own = await draft(welcome, storeB);
 
     for (const attempt of [
       () => service.get(storeB, automation.id),
       () => service.change(storeB, automation.id, { name: 'চুরি' }, staff),
-      () => service.publish(storeB, automation.id, staff),
+      () => service.publish(storeB, automation.id, owner),
       () => service.pause(storeB, automation.id, staff),
       () => service.archive(storeB, automation.id, staff),
     ])
