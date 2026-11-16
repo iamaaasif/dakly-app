@@ -18,7 +18,7 @@ import { StaffIdentityService } from './staff-identity.service';
 import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { SupportOwnerService } from './support-owner.service';
-import { supportRoles, walletCreditRoles } from './support-roles';
+import { smsSenderReviewRoles, supportRoles, walletCreditRoles } from './support-roles';
 import { supportContextTag, assertSupportContext } from './support-session';
 import { assertSupportStaff } from './support-staff-checks';
 import { supportError, isSupportCodeUnavailable } from './support.errors';
@@ -47,6 +47,11 @@ export class SupportService {
   async authorizeWalletCredit(storeId: string, staff: Staff) {
     const current = await this.lockStaff(storeId, staff.id, staff.sessionId);
     if (!walletCreditRoles.includes(current.role)) throw supportError('SUPPORT_DENIED');
+  }
+
+  // Live staff role, status, session and conflict of interest, inside the store's transaction.
+  async authorizeSmsSenderReview(storeId: string, staff: Staff) {
+    await this.lockStaff(storeId, staff.id, staff.sessionId, smsSenderReviewRoles);
   }
 
   targets(staff: Staff, query: string) {
@@ -297,8 +302,14 @@ export class SupportService {
     return grant;
   }
 
-  private async lockStaff(storeId: string, staffUserId: string, sessionId: string) {
+  private async lockStaff(
+    storeId: string,
+    staffUserId: string,
+    sessionId: string,
+    roles = supportRoles,
+  ) {
     return assertSupportStaff(await this.repository.staff(storeId, staffUserId), {
+      roles,
       storeId,
       clock: this.clock,
       identities: this.identities,

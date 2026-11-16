@@ -35,7 +35,7 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 
 #### SMS settings
 
-Balance and "about N Bangla messages"; sender choice between the shared number and approved brand sender IDs; Request a sender ID (max 11 letters and numbers; upload trade licence and NID; status Requested → Approved or Rejected, typically about 7 days); test SMS; quiet hours (default 21:00–09:00); daily limit (default 2,000).
+Balance and "about N Bangla messages"; sender choice between the shared number and approved brand sender IDs; Request a sender ID (3 to 11 English letters, numbers or spaces; upload trade licence and NID; status Requested → Approved or Rejected, typically about 7 days); test SMS; quiet hours (default 21:00–09:00); daily limit (default 2,000).
 
 #### Connection screens
 
@@ -142,6 +142,15 @@ Webhook intake
 3. The job parses with the driver, finds the store with the `store_id_for_channel_account(kind, externalId)` database function, and calls `ChatsService.receiveInboundMessage(storeId, ...)` or `SocialService.receiveComment(storeId, ...)`. A duplicate hits the unique key and is skipped.
 
 Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
+
+SMS sender name (CHN-6)
+
+1. Until a store's own sender name is approved, every SMS goes from Dakly's shared sender. `MessagingService.send` reads the store's approved name from `SmsSendersService` and passes it to the SMS driver; without one the driver uses the shared sender.
+2. `POST /sms-sender-ids` (`storeSettings.edit`) requests a name of 3 to 11 English letters, numbers or spaces. It saves an `sms_sender_ids` row as `requested` with the member who asked. A store has one sender at a time: a second request while one is requested, in review or approved returns `409 SMS_SENDER_ID_ALREADY_ACTIVE` (partial unique index `sms_sender_ids_store_id_active_key`). After a rejection the store can request again.
+3. `GET /sms-sender-ids` (`storeSettings.view`) lists the store's requests, newest first, with status, rejection reason and decision time.
+4. Super admins and ops staff (feature 12) see undecided requests from every store at `GET /admin/sms-sender-ids`, oldest first, through the `open_sms_sender_ids` `SECURITY DEFINER` function. They approve or reject one at `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve` or `/reject` with a reason of at least 10 characters. The service checks the live staff session and conflict of interest, writes the staff audit row and the shop's audit row, then moves the request from `requested` or `in_review` to `approved` or `rejected`, all in one store transaction. A store id that does not exist returns `404 STORE_NOT_FOUND` before anything is written. A rejection's reason is shown to the shop. A request is decided once; a second decision returns `409 SMS_SENDER_ID_ALREADY_DECIDED`. Staff register the name with the operators by hand before they approve it, so approved means registered and live. The `in_review` step and revoking an approved name come with CHN-7; until then a store keeps one active name, and staff revoke the old one before a new request.
+5. `POST /sms-sender-ids/:smsSenderIdId/test` (`storeSettings.edit`) sends a test SMS from an approved name to the signed-in member's own verified phone, never to a customer. An unapproved name returns `409 SMS_SENDER_ID_NOT_APPROVED`; a member without a verified phone gets `409 SMS_SENDER_TEST_PHONE_REQUIRED`. A store can send 5 test SMS an hour (`sms-sender-test:<storeId>` in the Valkey limiter); the sixth returns `429 SMS_SENDER_TEST_RATE_LIMITED`.
+6. Development and CI send through Mailpit, which shows the store's sender as the From name. Registering the name with the operator, the trade licence and NID uploads, and the status screen come with CHN-7.
 
 ### Rules
 

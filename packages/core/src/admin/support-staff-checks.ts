@@ -1,3 +1,5 @@
+import type { StaffIdentity } from '@dakly/contracts/staff-auth';
+
 import type { Clock } from '../platform/clock';
 import type { StaffIdentityService } from './staff-identity.service';
 import { supportRoles } from './support-roles';
@@ -11,18 +13,14 @@ type SupportStaffCheck = {
   identities: StaffIdentityService;
   // Loaded only after the staff row passes, so a failed check reads and locks no parent row.
   findParent?: () => Promise<StaffParentSession | undefined>;
+  roles?: StaffIdentity['role'][];
 };
 
 export async function assertSupportStaff(
   staff: SupportStaff | undefined,
-  { storeId, clock, identities, findParent }: SupportStaffCheck,
+  { storeId, clock, identities, findParent, roles = supportRoles }: SupportStaffCheck,
 ): Promise<SupportStaff> {
-  if (
-    !staff ||
-    staff.status !== 'active' ||
-    !staff.enrolledAt ||
-    !supportRoles.includes(staff.role)
-  )
+  if (!staff || staff.status !== 'active' || !staff.enrolledAt || !roles.includes(staff.role))
     throw supportError('SUPPORT_ENDED');
   if (findParent) assertSupportParent(await findParent(), clock.now());
   if (await identities.conflictsWithStore(storeId, staff.id)) throw supportError('SUPPORT_DENIED');

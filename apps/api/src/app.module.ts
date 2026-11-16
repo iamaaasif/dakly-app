@@ -10,6 +10,7 @@ import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { SegmentsModule } from '@dakly/core/segments/segments.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
+import { SmsSendersModule } from '@dakly/core/sms-senders/sms-senders.module';
 import { StoresModule } from '@dakly/core/stores/stores.module';
 import { WalletsModule } from '@dakly/core/wallets/wallets.module';
 
@@ -29,6 +30,7 @@ import { HealthController } from './health.controller';
     StoresModule,
     NotificationsModule,
     WalletsModule,
+    SmsSendersModule,
   ],
   controllers: [HealthController],
 })
