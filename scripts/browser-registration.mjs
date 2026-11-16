@@ -38,7 +38,7 @@ export function browserRegistration(database, mailpitUrl) {
       const stores = memberships.rows.map((row) => row.store_id);
       await database.pool.query('delete from sessions where user_id=any($1::uuid[])', [ids]);
       for (const table of [
-        'customers',
+        'contacts',
         'audit_log',
         'memberships',
         'subscriptions',

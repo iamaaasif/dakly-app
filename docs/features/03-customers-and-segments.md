@@ -1,12 +1,12 @@
 # Customers, consent and segments
 
-|           |                                                                                          |
-| --------- | ---------------------------------------------------------------------------------------- |
-| Release   | 1                                                                                        |
-| Status    | Not started (the `customers` example feature from FND-1 exists)                          |
-| Extension | Core                                                                                     |
-| Code      | `packages/core/src/{customers,segments}/`, `apps/web/src/features/{customers,segments}/` |
-| Tasks     | CUS-1 to CUS-14                                                                          |
+|           |                                                                                         |
+| --------- | --------------------------------------------------------------------------------------- |
+| Release   | 1                                                                                       |
+| Status    | In progress (CUS-1: contacts replaced the `customers` example)                          |
+| Extension | Core                                                                                    |
+| Code      | `packages/core/src/{contacts,segments}/`, `apps/web/src/features/{customers,segments}/` |
+| Tasks     | CUS-1 to CUS-14                                                                         |
 
 ## Purpose
 
@@ -22,7 +22,22 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - D26: another person's delivery details belong to the order. They do not replace the buyer profile, merge contacts or move purchase history. No OTP is required.
 - D27: self-delivery also saves the buyer's own phone on their profile, subject to the rules below. Saving a phone is separate from verification, merging and marketing consent.
 
-## Existing customer example
+## Built so far
+
+The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
+`customers` example moved into it: migration 0030 copied each `customers` row into
+`contacts` with the same id (source `manual`, kind `customer`), and 0031 dropped the
+`customers` table.
+
+- `POST /contacts` (`customers.edit`) adds a contact with a name and phone. A staff
+  add is an intentional customer, so it saves with source `manual` and kind `customer`.
+- `GET /contacts/:contactId` (`customers.view`) returns one contact. A deleted contact
+  reads as not found.
+- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`.
+  The error never names or links the other contact, because the member may not be
+  allowed to see who has the number.
+- A contact without a phone returns `phone: null`.
+- The support read and create screens call `ContactsService`, with full phones as before.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
@@ -34,12 +49,12 @@ fields and array indexes. The response contains no submitted values. Other
 business errors keep their code and message without field details. The web
 client retains these details for forms.
 
-The web client sends credentials to `/api/customers` on the web origin. Next.js
+The web client sends credentials to `/api/contacts` on the web origin. Next.js
 forwards `/api/*` to `http://localhost:4000/*` in local development; production
 routes that prefix to the API through the load balancer. No CORS is needed.
-The customer API still requires a verified store session.
+The contacts API still requires a verified store session.
 
-The customer and member APIs mask restricted phone values as `01712-XXX678` with
+The contacts and member APIs mask restricted phone values as `01712-XXX678` with
 `maskPhone` from the shared phone contract, keeping the first five and last three
 digits, as the glossary shows. WEB-4 does not change that permission policy. The support
 customer read screen uses `formatPhone` to show full values as `01712-345678`; masked
@@ -138,7 +153,7 @@ An insight is shown only with at least 100 orders in the period; otherwise "Insi
 
 | ID     | Rule                                                                                                                                                                                           |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CUS-R1 | Phone is unique per store. Saving a manual customer with an existing phone shows "Already saved as Nusrat Jahan" with Open.                                                                    |
+| CUS-R1 | Phone is unique per store. Saving a contact with a phone the store already has fails with `409 CONTACT_PHONE_TAKEN`, which names and links no one.                                             |
 | CUS-R2 | Deleting customers removes profile, notes and message history from Dakly; orders stay with the customer name only, for sales reports. Requires confirmation and the Edit Customers permission. |
 | CUS-R3 | Export downloads the current filter as .xlsx; phone numbers are included only for roles with "Download customer lists" and "See full phone numbers". Every export is logged.                   |
 | CUS-R4 | Import requires the owner to tick "These customers agreed to hear from my shop" before any consent is set to yes; otherwise imported consents are no.                                          |

@@ -20,20 +20,20 @@ The full flow is in [features/01-account-and-team.md](../features/01-account-and
 Wrong:
 
 ```ts
-@Delete(':customerId')
-remove(@Req() request: StoreRequest, @Param('customerId') customerId: string) {
+@Delete(':contactId')
+remove(@Req() request: StoreRequest, @Param('contactId') contactId: string) {
   if (request.user.role !== 'owner' && request.user.role !== 'admin') throw new ForbiddenException();
-  return this.customersService.remove(request.body.storeId, customerId);
+  return this.contactsService.remove(request.body.storeId, contactId);
 }
 ```
 
 Right:
 
 ```ts
-@Delete(':customerId')
+@Delete(':contactId')
 @RequirePermission('customers.edit')
 @HttpCode(204)
-remove(@CurrentStore() storeId: string, @Param('customerId', ParseUUIDPipe) customerId: string) {
-  return this.customersService.remove(storeId, customerId);
+remove(@CurrentStore() storeId: string, @Param('contactId', ParseUUIDPipe) contactId: string) {
+  return this.contactsService.remove(storeId, contactId);
 }
 ```

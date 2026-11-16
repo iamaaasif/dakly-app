@@ -90,7 +90,7 @@ test('fences two real support delegations and discards stale drafts and late res
     await page.getByRole('button', { name: 'Create customer' }).click();
     expect((await stale).status()).toBe(409);
     const counts = await database.pool.query(
-      "select (select count(*) from customers where store_id=any($1::uuid[]))::int as customers,(select count(*) from audit_log where store_id=any($1::uuid[]) and action='support.customer_created')::int as creates",
+      "select (select count(*) from contacts where store_id=any($1::uuid[]))::int as customers,(select count(*) from audit_log where store_id=any($1::uuid[]) and action='support.customer_created')::int as creates",
       [f.storeIds.slice(0, 2)],
     );
     expect(counts.rows[0]).toEqual({ customers: 1, creates: 0 });
@@ -104,7 +104,7 @@ test('fences two real support delegations and discards stale drafts and late res
     await page.getByRole('button', { name: 'Create customer' }).click();
     await expect(page.getByText('Customer created:', { exact: false })).toBeVisible();
     const created = await database.pool.query(
-      "select store_id from customers where name='Explicit B draft' and store_id=any($1::uuid[])",
+      "select store_id from contacts where name='Explicit B draft' and store_id=any($1::uuid[])",
       [f.storeIds.slice(0, 2)],
     );
     expect(created.rows.map((row) => row.store_id)).toEqual([f.storeIds[1]]);

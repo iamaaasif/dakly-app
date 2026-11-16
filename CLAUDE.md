@@ -10,11 +10,11 @@ Stack: NestJS modular monolith (`apps/api`, `apps/worker`), Next.js (`apps/web`)
 2. Follow the build steps in `docs/development/workflow.md`: contract, schema and migration, repository, service, controller, jobs, then the web screen.
 3. Read the rule file for each area you touch in `docs/rules/`. They are short.
 4. Search `packages/` for an existing helper before writing one. Re-implementing an existing function is the most common AI-written defect.
-5. Copy the shape of `packages/core/src/customers/`. Every feature looks like it.
+5. Copy the shape of `packages/core/src/contacts/`. Every feature looks like it.
 
 ## House rules
 
-- Code is organised by feature (`customers/`, `chats/`, `orders/`), never by layer.
+- Code is organised by feature (`contacts/`, `chats/`, `orders/`), never by layer.
 - Controller → service → repository. Controllers only do HTTP. Services hold the rules and never import Drizzle. Repositories only talk to the database and hold no rules.
 - A feature uses another feature only through its exported service. Never import another feature's repository, job or internal file. `pnpm lint:boundaries` enforces this.
 - Every repository method takes `storeId` first and runs inside `TenantDatabase.forStore`. Every new table with shop data gets `store_id` and an RLS policy in the same PR.

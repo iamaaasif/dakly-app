@@ -49,7 +49,7 @@ export class OwnerIsolationFixture {
       'support_grants',
       'staff_recovery_history',
       'ownership_transfers',
-      'customers',
+      'contacts',
       'audit_log',
       'memberships',
       'roles',

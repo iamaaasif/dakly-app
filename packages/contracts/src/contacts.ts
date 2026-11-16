@@ -1,3 +1,7 @@
+import { z } from 'zod';
+
+import { bdMobileSchema } from './phone';
+
 export const contactSources = [
   'messenger',
   'instagram',
@@ -85,3 +89,20 @@ export const customerInsightKinds = [
   'places',
 ] as const;
 export const customerInsightSources = ['all', 'shopify', 'facebook', 'store'] as const;
+
+export const createContactSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  phone: bdMobileSchema,
+});
+
+export type CreateContactInput = z.infer<typeof createContactSchema>;
+export type ContactKind = (typeof contactKinds)[number];
+export type ContactSource = (typeof contactSources)[number];
+
+export type ContactResponse = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  kind: ContactKind;
+  createdAt: string;
+};

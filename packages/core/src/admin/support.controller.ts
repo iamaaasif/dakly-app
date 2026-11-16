@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { createCustomerSchema, type CreateCustomerInput } from '@dakly/contracts/customers';
+import { createContactSchema, type CreateContactInput } from '@dakly/contracts/contacts';
 import { supportHandoffSchema, type SupportHandoffInput } from '@dakly/contracts/support';
 
 import { loadEnv } from '../platform/config/env';
@@ -65,7 +65,7 @@ export class SupportController {
   @Header('Cache-Control', 'no-store')
   create(
     @Req() request: FastifyRequest,
-    @Body(new ZodValidationPipe(createCustomerSchema)) input: CreateCustomerInput,
+    @Body(new ZodValidationPipe(createContactSchema)) input: CreateContactInput,
   ) {
     return this.support.createCustomer(
       request.cookies[cookie],

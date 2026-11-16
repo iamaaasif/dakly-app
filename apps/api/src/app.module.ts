@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AdminModule } from '@dakly/core/admin/admin.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
-import { CustomersModule } from '@dakly/core/customers/customers.module';
+import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
@@ -19,7 +19,7 @@ import { HealthController } from './health.controller';
     DatabaseModule,
     AuthModule,
     SessionsModule,
-    CustomersModule,
+    ContactsModule,
     StoresModule,
     NotificationsModule,
     WalletsModule,

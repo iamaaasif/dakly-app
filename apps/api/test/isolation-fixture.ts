@@ -202,7 +202,7 @@ export class IsolationFixture {
       'support_grants',
       'staff_recovery_history',
       'ownership_transfers',
-      'customers',
+      'contacts',
       'notifications',
       'outbox_events',
       'audit_log',

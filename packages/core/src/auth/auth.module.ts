@@ -1,5 +1,6 @@
-import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
+import { Module, type OnModuleInit } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
 import { EmailModule } from '../email/email.module';
@@ -88,4 +89,12 @@ import { UsersModule } from './users.module';
   ],
   exports: [AuthService, CodesModule],
 })
-export class AuthModule {}
+export class AuthModule implements OnModuleInit {
+  constructor(@InjectQueue(QUEUES.transactional) private readonly queue: Queue) {}
+
+  // BullMQ leaves an unhandled rejection when a queue closes during its connection check, so the
+  // app starts only once that check is done.
+  async onModuleInit() {
+    await this.queue.waitUntilReady();
+  }
+}

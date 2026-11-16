@@ -6,7 +6,7 @@ import { AuditModule } from '../audit/audit.module';
 import { CodesModule } from '../auth/codes.module';
 import { SecurityNoticesModule } from '../auth/security-notices.module';
 import { UsersModule } from '../auth/users.module';
-import { CustomersModule } from '../customers/customers.module';
+import { ContactsModule } from '../contacts/contacts.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { CryptoModule } from '../platform/crypto/crypto.module';
@@ -63,7 +63,7 @@ import { WalletCreditService } from './wallet-credit.service';
     CodesModule,
     SmsModule,
     TeamModule,
-    CustomersModule,
+    ContactsModule,
     AuditModule,
     ClockModule,
     WalletsModule,

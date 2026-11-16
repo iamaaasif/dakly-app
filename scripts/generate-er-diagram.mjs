@@ -26,7 +26,7 @@ const groups = [
   ],
   [
     'Channels, customers and chats',
-    ['areas', 'channels', 'contacts', 'contact-memory', 'customer-insights', 'chats', 'customers'],
+    ['areas', 'channels', 'contacts', 'contact-memory', 'customer-insights', 'chats'],
   ],
   ['Products, orders and payments', ['products', 'orders', 'payments']],
   ['AI', ['ai']],
@@ -140,7 +140,7 @@ const registry = foreignKeys.map(
 );
 const markdown = `# ER diagram
 
-Built from \`packages/db/migrations/meta/${snapshotName}\`: **${tables.length} tables, ${columnsCount} columns, ${indexesCount} explicit indexes and ${foreignKeys.length} foreign keys**. This includes the transitional \`customers\` example; CUS-1 removes it after migration to \`contacts\`.
+Built from \`packages/db/migrations/meta/${snapshotName}\`: **${tables.length} tables, ${columnsCount} columns, ${indexesCount} explicit indexes and ${foreignKeys.length} foreign keys**.
 
 Regenerate with \`node scripts/generate-er-diagram.mjs\`; verify with \`node scripts/generate-er-diagram.mjs --check\`.
 

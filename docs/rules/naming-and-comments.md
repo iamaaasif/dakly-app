@@ -25,7 +25,7 @@ Wrong:
 
 ```ts
 // Get the customer by id
-const customer = await this.customersRepository.findById(storeId, id);
+const contact = await this.contactsRepository.findById(storeId, id);
 ```
 
 Right:

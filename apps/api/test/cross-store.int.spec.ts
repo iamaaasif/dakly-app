@@ -61,8 +61,8 @@ async function hidden(
   expect(missing.statusCode, missing.body).toBe(404);
   expect(foreign.json()).toEqual(missing.json());
 }
-async function customer(shop: Shop) {
-  const result = await success(shop, 'POST', '/customers', 201, { name: 'রিনা', phone: phone() });
+async function contact(shop: Shop) {
+  const result = await success(shop, 'POST', '/contacts', 201, { name: 'রিনা', phone: phone() });
   expect(result.json().name).toBe('রিনা');
   return result.json().id as string;
 }
@@ -78,19 +78,19 @@ async function smsCredits(shop: Shop, quantity: number) {
   );
   return id;
 }
-fixture('GET /customers/:id', async () => {
+fixture('GET /contacts/:contactId', async () => {
   const { a, b } = await pair(),
-    id = await customer(a);
-  expect((await success(a, 'GET', `/customers/${id}`, 200)).json().id).toBe(id);
-  await hidden(b, 'GET', (value) => `/customers/${value}`, id);
+    id = await contact(a);
+  expect((await success(a, 'GET', `/contacts/${id}`, 200)).json().id).toBe(id);
+  await hidden(b, 'GET', (value) => `/contacts/${value}`, id);
 });
-fixture('POST /customers', async () => {
+fixture('POST /contacts', async () => {
   const { a, b } = await pair(),
-    id = await customer(a),
-    before = await f.row('customers', id);
-  const own = await customer(b);
-  expect((await f.row('customers', own)).store_id).toBe(b.id);
-  expect(await f.row('customers', id)).toEqual(before);
+    id = await contact(a),
+    before = await f.row('contacts', id);
+  const own = await contact(b);
+  expect((await f.row('contacts', own)).store_id).toBe(b.id);
+  expect(await f.row('contacts', id)).toEqual(before);
 });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
@@ -339,7 +339,7 @@ fixture('GET /support/session', async () => {
 });
 fixture('GET /support/customers/:id', async () => {
   const { a, b } = await pair(),
-    id = await customer(a),
+    id = await contact(a),
     supportA = await f.support(a),
     supportB = await f.support(b);
   const own = await f.request(supportA, 'GET', `/support/customers/${id}`);
@@ -358,11 +358,11 @@ fixture('POST /support/customers', async () => {
   const input = { name: 'করিম', phone: phone() };
   const own = await f.request(supportA, 'POST', '/support/customers', input);
   expect(own.statusCode, own.body).toBe(201);
-  const before = await f.row('customers', own.json().id);
+  const before = await f.row('contacts', own.json().id);
   const other = await f.request(supportB, 'POST', '/support/customers', input);
   expect(other.statusCode, other.body).toBe(201);
-  expect((await f.row('customers', other.json().id)).store_id).toBe(b.id);
-  expect(await f.row('customers', own.json().id)).toEqual(before);
+  expect((await f.row('contacts', other.json().id)).store_id).toBe(b.id);
+  expect(await f.row('contacts', own.json().id)).toEqual(before);
 });
 async function notification(shop: Shop) {
   await app.get(NotificationsService).notify(shop.id, {
@@ -523,10 +523,10 @@ describe('every production shop route isolates its data', () => {
   it('uses the non-owner app role without bypassing row security', async () => {
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const result = await connection.pool.query(
-      "select current_user,rolsuper,rolbypassrls,pg_get_userbyid(c.relowner)=current_user as owns_customers from pg_roles join pg_class c on c.relname='customers' where rolname=current_user",
+      "select current_user,rolsuper,rolbypassrls,pg_get_userbyid(c.relowner)=current_user as owns_contacts from pg_roles join pg_class c on c.relname='contacts' where rolname=current_user",
     );
     expect(result.rows).toEqual([
-      { current_user: 'dakly_app', rolsuper: false, rolbypassrls: false, owns_customers: false },
+      { current_user: 'dakly_app', rolsuper: false, rolbypassrls: false, owns_contacts: false },
     ]);
   });
   it('returns own rows and hides foreign rows without repository filters under every route policy', async () => {
@@ -534,7 +534,7 @@ describe('every production shop route isolates its data', () => {
     const rows: [string, string, string, string][] = [
       ['stores', 'id', a.id, b.id],
       ['memberships', 'id', a.membership, b.membership],
-      ['customers', 'id', await customer(a), await customer(b)],
+      ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
       ['ownership_transfers', 'id', await f.transfer(a), await f.transfer(b)],
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
