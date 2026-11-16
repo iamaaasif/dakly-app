@@ -101,6 +101,12 @@ export class ContactsService {
     if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');
   }
+
+  async assertContactExists(storeId: string, id: string): Promise<void> {
+    if (!(await this.contactsRepository.findById(storeId, id))) {
+      throw contactError('CONTACT_NOT_FOUND');
+    }
+  }
 }
 
 // A partial number is a prefix search only for members who see full phones. Anyone may find a

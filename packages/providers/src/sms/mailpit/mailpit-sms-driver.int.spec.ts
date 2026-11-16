@@ -4,11 +4,12 @@ import { MailpitSmsDriver } from './mailpit-sms-driver';
 
 describe('MailpitSmsDriver (SMTP and API)', () => {
   it('captures the phone and Bangla text under the returned provider message id', async () => {
+    const apiUrl = process.env.MAILPIT_API_URL ?? 'http://127.0.0.1:8025';
     const driver = new MailpitSmsDriver({
       host: process.env.MAILPIT_SMTP_HOST ?? '127.0.0.1',
       port: Number(process.env.MAILPIT_SMTP_PORT ?? 1025),
+      apiUrl,
     });
-    const apiUrl = process.env.MAILPIT_API_URL ?? 'http://127.0.0.1:8025';
     const { providerMessageId } = await driver.send({
       to: '+8801700000000',
       text: 'আপনার কোড 123456\nশুধু পরীক্ষার জন্য।',

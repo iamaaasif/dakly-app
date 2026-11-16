@@ -286,6 +286,7 @@ beforeAll(async () => {
   vi.spyOn(Clock.prototype, 'now').mockImplementation(() => now);
   vi.spyOn(SmsService.prototype, 'send').mockImplementation(async (message) => {
     sms.push(message.text);
+    return { providerMessageId: 'test-sms' };
   });
 });
 afterEach(() => {

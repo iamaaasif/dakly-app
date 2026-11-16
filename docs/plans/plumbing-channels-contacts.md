@@ -53,13 +53,6 @@ Branch: `feat/pay-1-usage-service`
 
 ### Group 3: contacts and channels (M3)
 
-### CUS-2 · Consent
-
-Branch: `feat/cus-2-consent`
-
-- Scope: append-only `consents` rows per contact and channel, read only through `contact_consent_current`. `ConsentService.record(storeId, { contactId, channel, status, source, evidence })` and `current(storeId, contactIds, channel)`. STOP keywords in Bangla and English (`STOP`, `বন্ধ`, and the list in feature 03) on WhatsApp and Messenger write a withdrawal when core messaging receives them; CHAT-1 calls this service. Emit `consent.changed`.
-- Tests (integration): the latest row wins; the app role cannot update or delete a consent row; each STOP keyword withdraws; a withdrawal then a new opt-in reads as opted in.
-
 ### CHN-1 · Meta webhook intake
 
 Branch: `feat/chn-1-meta-webhooks`
@@ -99,8 +92,8 @@ Branch: `feat/chn-6-sms-sender`
 
 Branch: `feat/chat-1-core-messaging-inbound`
 
-- Scope: P6. `messaging/` feature (core, not the Chats extension) on `conversations` and `messages`. `MessagingService.receiveInboundMessage(storeId, { connectionId, externalSenderId, externalMessageId, content, sentAt })` finds or creates the contact through `ContactsService`, the conversation for that contact and connection, and the message (unique on connection and external message id), and sets `last_inbound_at` and `window_expires_at`. CHAT-1 adds `ContactsService.findOrCreateByIdentity(storeId, { channel, connectionId, externalId, profile })`, the one way a channel creates a contact, safe under concurrent webhooks (unique key plus retry on conflict). STOP keywords call `ConsentService` (CUS-2). Emits `message.received` and `conversation.started`. No inbox screen: the customer profile shows the message history.
-- Tests (integration): a duplicate webhook stores one message; two messages from a new sender at once create one contact and one conversation; a contact on two Pages keeps two identities; the window moves with each inbound message and never with an outbound one; a STOP message withdraws consent; works with the Chats extension switched off.
+- Scope: P6. `messaging/` feature (core, not the Chats extension) on `conversations` and `messages`. `MessagingService.receiveInboundMessage(storeId, { connectionId, externalSenderId, externalMessageId, content, sentAt })` finds or creates the contact through `ContactsService`, the conversation for that contact and connection, and the message (unique on connection and external message id), and sets `last_inbound_at` and `window_expires_at`. CHAT-1 adds `ContactsService.findOrCreateByIdentity(storeId, { channel, connectionId, externalId, profile })`, the one way a channel creates a contact, safe under concurrent webhooks (unique key plus retry on conflict). STOP keywords in Bangla and English (`STOP`, `বন্ধ`, and the list in feature 03) on WhatsApp and Messenger call `ConsentService.record` (CUS-2) with source `stop_keyword` to write a withdrawal. Emits `message.received` and `conversation.started`. No inbox screen: the customer profile shows the message history.
+- Tests (integration): a duplicate webhook stores one message; two messages from a new sender at once create one contact and one conversation; a contact on two Pages keeps two identities; the window moves with each inbound message and never with an outbound one; each STOP keyword withdraws consent on that channel; works with the Chats extension switched off.
 
 ### CHAT-2 · Core messaging: send and receipts
 

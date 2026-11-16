@@ -43,7 +43,7 @@ describe('Overlapping security notice sweeps', () => {
       sent.push(message.to);
     });
     // Notices left by other tests may also be due; they must never reach a real provider.
-    vi.spyOn(SmsService.prototype, 'send').mockResolvedValue(undefined);
+    vi.spyOn(SmsService.prototype, 'send').mockResolvedValue({ providerMessageId: 'test-sms' });
     // Both sweeps reach the claim before either runs it, so they claim at the same moment.
     const claim = SecurityNoticesRepository.prototype.claim;
     let claims = 0;
