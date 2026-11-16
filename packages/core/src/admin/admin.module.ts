@@ -14,6 +14,7 @@ import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SmsModule } from '../sms/sms.module';
 import { TeamModule } from '../team/team.module';
+import { WalletsModule } from '../wallets/wallets.module';
 import { BreakGlassController } from './break-glass.controller';
 import { BreakGlassService } from './break-glass.service';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
@@ -45,6 +46,8 @@ import { SupportOwnerService } from './support-owner.service';
 import { SupportController } from './support.controller';
 import { SupportRepository } from './support.repository';
 import { SupportService } from './support.service';
+import { WalletCreditController } from './wallet-credit.controller';
+import { WalletCreditService } from './wallet-credit.service';
 
 @Module({
   imports: [
@@ -63,6 +66,7 @@ import { SupportService } from './support.service';
     CustomersModule,
     AuditModule,
     ClockModule,
+    WalletsModule,
   ],
   controllers: [
     StaffRecoveryController,
@@ -74,6 +78,7 @@ import { SupportService } from './support.service';
     OwnerSupportController,
     SupportController,
     StaffHistoryController,
+    WalletCreditController,
   ],
   providers: [
     StaffRecoveryService,
@@ -82,6 +87,7 @@ import { SupportService } from './support.service';
     SupportRepository,
     RiskyActionConfirmation,
     BreakGlassService,
+    WalletCreditService,
     SupportService,
     SupportOwnerService,
     SupportAuditService,

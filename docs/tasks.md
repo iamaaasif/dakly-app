@@ -66,12 +66,12 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M2. Shared plumbing
 
-| ID     | Task                                                    | Status    | Depends     | PR       | Notes                                                                                            |
-| ------ | ------------------------------------------------------- | --------- | ----------- | -------- | ------------------------------------------------------------------------------------------------ |
-| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | In review | DB-2, ACC-3 | #83, #87 | Q10; follows: waking snoozed cards                                                               |
-| HOME-2 | Web: notification bell and list                         | Todo      | HOME-1      |          |                                                                                                  |
-| PAY-1  | Usage service: units, allowances, usage events          | In review | ACC-3       | #84      | AI top-ups not drawn yet                                                                         |
-| PAY-11 | Wallets: reserve, release, charge and staff credit      | In review | ADM-6       | #82      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8; staff credit route follows |
+| ID     | Task                                                    | Status    | Depends     | PR       | Notes                                                                |
+| ------ | ------------------------------------------------------- | --------- | ----------- | -------- | -------------------------------------------------------------------- |
+| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | In review | DB-2, ACC-3 | #83, #87 | Q10; follows: waking snoozed cards                                   |
+| HOME-2 | Web: notification bell and list                         | In review | HOME-1      | #85      | follows: `useEventStream` and the 60-second fallback                 |
+| PAY-1  | Usage service: units, allowances, usage events          | Done      | ACC-3       | #84      | AI top-ups not drawn yet                                             |
+| PAY-11 | Wallets: reserve, release, charge and staff credit      | Done      | ADM-6       | #82, #86 | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
 
 ## M3. Channels and customers
 

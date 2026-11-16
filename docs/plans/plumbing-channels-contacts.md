@@ -65,13 +65,6 @@ Branch: `feat/pay-1-usage-service`
 - Scope: `usage/` feature. `UsageService.consume(storeId, { unit, quantity, reference })` checks the period allowance from the plan, then top-ups, and writes a `usage_events` row unique on reference, all in one store transaction; a repeated reference returns the first result. Notify at 80% and 100% once per period through HOME-1. Fix the unit list in feature 07 (P2).
 - Tests (integration): two parallel consumes of the last unit let exactly one through; the same reference twice charges once; the 80% notice is sent once per period; a new period starts at zero.
 
-### PAY-11 · Wallets: reserve, release, charge and staff credit
-
-Branch: `feat/pay-11-wallet-ledger`
-
-- Scope: `wallets/` feature over `wallet_ledger` for `sms_credits` and `whatsapp_poisha`. `WalletService.reserve`, `release`, `charge` and `balance`, each taking an idempotency key; the next `revision` and `balance_quantity_after` are computed under a per-store, per-wallet advisory lock inside the store transaction, and the check constraint refuses a negative balance. A reservation is released or charged once. Admin app (P4): `POST /staff/stores/:id/wallet-credits` for support and super admin, with a reason, a confirmation step and a staff audit row before the change (D28, ADM-6 pattern).
-- Tests (integration): 20 parallel reserves against a balance for 10 let exactly 10 through; the same idempotency key twice writes one row; release after charge fails; a staff credit without the audit row fails and changes nothing; store B cannot read A's ledger.
-
 ### Group 3: contacts and channels (M3)
 
 ### CUS-1 · Contacts, channel identities and kinds
