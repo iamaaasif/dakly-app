@@ -16,6 +16,7 @@ const selected = {
   ...stores[1]!,
   canViewCustomers: true,
   canCreateCustomer: true,
+  canViewSegments: true,
   canApproveSupport: false,
   canViewTeam: false,
   canEditTeam: false,
