@@ -12,6 +12,7 @@ import { Clock } from '../platform/clock';
 import { hashToken } from '../platform/crypto/token-hash';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { DAY_MS } from '../platform/time';
 import { TeamService } from '../team/team.service';
 import { sessionContextTag } from './session-context';
 import { sessionError } from './sessions.errors';
@@ -105,12 +106,11 @@ export class SessionsService {
     const now = this.clock.now();
     if (!session || session.expiresAt.getTime() <= now.getTime()) return undefined;
     if (session.lastSeenAt.getTime() <= now.getTime() - TOUCH_INTERVAL) {
-      await this.repository.touch(
-        session.userId,
-        session.id,
-        lifetimeMilliseconds(session.isRemembered),
-        TOUCH_INTERVAL,
-      );
+      await this.repository.touch(session.userId, session.id, {
+        lifetimeMilliseconds: lifetimeMilliseconds(session.isRemembered),
+        absoluteExpiresAt: new Date(session.createdAt.getTime() + ABSOLUTE_SESSION_LIFETIME_MS),
+        touchInterval: TOUCH_INTERVAL,
+      });
     }
     return session;
   }
@@ -156,6 +156,9 @@ export class SessionsService {
     });
   }
 }
+
+// D38: activity never keeps a session past 90 days from sign-in.
+const ABSOLUTE_SESSION_LIFETIME_MS = 90 * DAY_MS;
 
 function lifetimeMilliseconds(isRemembered: boolean): number {
   return (isRemembered ? 30 * 24 : 12) * 60 * 60 * 1000;
