@@ -149,13 +149,6 @@ Branches: `feat/camp-4-campaign-list-and-results`, `feat/camp-4-campaign-builder
 
 ### Group 3: automations
 
-### CAMP-8 · Workflow catalogue and typed graph
-
-Branch: `docs/camp-8-workflow-catalogue`
-
-- Scope: A5. The graph schema in `packages/contracts/src/automations/`, with the limits from feature 09 (50 steps, 90 days of waiting, 5 exit conditions, 10 condition paths plus Else, 4 random paths). A catalogue file listing every release 1 trigger with its source event, filters and whether it is available before Orders; every action with its typed settings; every template with trigger, steps, goal, category and prerequisites. Update feature 09 so its trigger list matches the catalogue, and split the CAMP-5 row as below.
-- Tests: the schema accepts every template in the catalogue and rejects a graph with a loop, a dead end, a step over the limits or an unknown step kind.
-
 ### CAMP-5 · Workflow engine: versions, runs and steps
 
 Branches: `feat/camp-5-automation-versions`, `feat/camp-5-automation-runner`
@@ -167,7 +160,7 @@ Branches: `feat/camp-5-automation-versions`, `feat/camp-5-automation-runner`
 
 Branch: `feat/camp-11-automation-triggers`
 
-- Scope: `@HandlesEvent` subscribers for the triggers available before Orders (from CAMP-8: consent given, tag added, segment joined, chat started, comment on a post, lead captured, date property such as birthday). `start-automation-run` checks the trigger filter once, the re-entry rule (once ever, once every N days, every time; default 30 days), one active run per contact per workflow, and creates the run unique on (automation, contact, trigger key). Segment-joined triggers fire after the segment's refresh, and the builder adds the 2-minute delay feature 09 describes. A daily job fires date triggers in store time.
+- Scope: `@HandlesEvent` subscribers for the triggers the [workflow catalogue](../features/09-campaigns-and-automations.md#workflow-catalogue) marks ready before channels: consent given, tag added and link tapped, plus the birthday date trigger. Chat started, comment on a post and lead captured follow with the channels work; segment joined waits for stored segment membership (feature 03). `start-automation-run` checks the trigger filter once, the re-entry rule (once ever, once every N days, every time; default 30 days), one active run per contact per workflow, and creates the run unique on (automation, contact, trigger key). A daily job fires date triggers in store time.
 - Tests (integration): the same event delivered twice starts one run; a contact still inside cannot re-enter; once every 30 days refuses day 29 and allows day 30; a disabled workflow starts nothing; the trigger preview returns the last 10 matching events.
 
 ### CAMP-12 · Web: automations list and template library
@@ -195,6 +188,8 @@ Branches: `feat/camp-6-canvas-view`, `feat/camp-6-canvas-editing`
 | AI-written campaign text (approval required, D7)                                                                         | AI-2                   |
 
 ORD-4 changes meaning with this plan: it adds the order triggers and the COD confirmation template to the engine, and handles Confirm and Cancel replies, instead of a separate confirmation sender.
+
+ORD-4 also adds the workflow templates that need Orders, left out of CAMP-8: COD order confirmation, advance not paid, shipped and tracking, delivery feedback and review, order link not finished, thank you after the first order, cross-sell, reorder reminder, win back, cancellation follow-up and welcome new lead. Abandoned cart, abandoned checkout and browse abandonment wait for store sync (Q13) and the tracking script.
 
 ## How each task is reviewed
 
