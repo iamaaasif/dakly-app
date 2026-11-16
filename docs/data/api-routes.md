@@ -189,7 +189,7 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                                                                                                           | Permission    |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
 | `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/recipients`                                                                                                         | `campaigns`   |
-| `POST /campaigns` (idem), `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                                                          | `campaigns`   |
+| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                                                                 | `campaigns`   |
 | `POST /campaigns/:campaignId/audience-preview`, `POST /campaigns/:campaignId/cost-estimate`                                                                                                     | `campaigns`   |
 | `POST /campaigns/:campaignId/schedule`, `POST /campaigns/:campaignId/send-now`, `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel` | `campaigns`   |
 | `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                                                                            | `campaigns`   |

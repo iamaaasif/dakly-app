@@ -298,6 +298,12 @@ WhatsApp templates: every WhatsApp campaign uses a template. Edited or new templ
 
 Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0.
 
+### Campaign drafts (CAMP-2)
+
+`CampaignsService` in `packages/core/src/campaigns/` keeps drafts, so the builder can save on every step. `POST /campaigns` takes a name and the channel; goal, content, include and exclude segment ids (up to 10 each) and `scheduledFor` are optional, and a later `PATCH /campaigns/:campaignId` changes only the fields it sends. An empty `scheduledFor` means send on approval. `GET /campaigns` lists the newest first with a cursor, and `DELETE /campaigns/:campaignId` removes a draft. Reads need `campaigns.view` and writes `campaigns.edit`. Change and delete apply only to a `draft`; anything later is refused with `CAMPAIGN_NOT_DRAFT`.
+
+SMS is the only channel a draft accepts: its content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content (text, image and buttons) comes with CAMP-7, and WhatsApp templates with CAMP-1. A draft does not check that its segment ids exist; approval is to check them. The estimate, approval with frozen recipients and reserved cost, and the scheduled edit, cancel, pause and resume rules are still to build.
+
 ### Frozen destinations and final send checks
 
 At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each sendable recipient's `contact_identity_id` under that connection and freeze its address. A Messenger id is Page-scoped: a contact on two Pages must use the identity on the selected Page. Resolve or create a WhatsApp identity from the contact's own consented WhatsApp address under the selected business connection; this does not verify or merge a profile. The chosen template must belong to that connection. SMS stores a normalized phone and has no channel connection or channel identity. A skipped recipient with no address may have no identity.

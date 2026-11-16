@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AdminModule } from '@dakly/core/admin/admin.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
+import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -24,6 +25,7 @@ import { HealthController } from './health.controller';
     ContactsModule,
     ConsentsModule,
     SegmentsModule,
+    CampaignsModule,
     StoresModule,
     NotificationsModule,
     WalletsModule,
