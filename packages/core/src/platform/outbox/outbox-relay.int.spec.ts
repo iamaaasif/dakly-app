@@ -34,7 +34,7 @@ function contactIdOf(data: unknown) {
   return (data as { payload: { contactId: string } }).payload.contactId;
 }
 
-// Bulk runs one job at a time, so this subscriber sees events in the order they were queued.
+// Bulk runs one job at a time on this one worker, so the subscriber sees events in queued order.
 class RefreshContactStats implements JobHandler {
   async handle(data: unknown) {
     handled.push({ subscriber: 'RefreshContactStats', contactId: contactIdOf(data) });

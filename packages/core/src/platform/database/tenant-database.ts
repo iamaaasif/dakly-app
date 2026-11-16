@@ -26,7 +26,7 @@ export class TenantDatabase {
     return this.transactions.run(storeId, work);
   }
 
-  hasTransaction(): boolean {
+  isOpen(): boolean {
     return this.transactions.isOpen();
   }
 

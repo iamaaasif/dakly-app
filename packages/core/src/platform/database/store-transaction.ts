@@ -15,7 +15,7 @@ export class StoreTransaction {
   }
 
   isOpen(): boolean {
-    return this.database.hasTransaction();
+    return this.database.isOpen();
   }
 
   runLocked<TResult>(storeId: string, work: () => Promise<TResult>): Promise<TResult> {

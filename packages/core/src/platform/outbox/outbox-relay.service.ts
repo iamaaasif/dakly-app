@@ -14,8 +14,9 @@ const RELAY_BATCH_SIZE = 100;
 const subscriberJobOptions = {
   attempts: 3,
   backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
-  // A relay that queued but did not mark retries after the one-minute re-claim, at most ten
-  // times. Keeping the completed job an hour makes those re-adds no-ops, with room for a restart.
+  // A relay that queued but did not mark is re-claimed a minute later, at most ten times. Keeping
+  // completed jobs an hour drops those re-adds; a relay outage longer than that can queue a job
+  // twice, which is why subscribers stay idempotent.
   removeOnComplete: { age: 60 * 60 },
   removeOnFail: 100,
 } satisfies JobsOptions;
