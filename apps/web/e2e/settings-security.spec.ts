@@ -59,7 +59,13 @@ test('edits settings, verifies the invited mailbox and protects account-only dev
     await expect(page.getByRole('dialog')).toBeHidden();
     const notice = await messageText(fixture.email, /Join your team/, seen);
     const link = notice.match(/http[^\s]+(?=\. This link)/)![0];
+    // Before hydration Next rewrites the history entry from the URL it read at start, dropping a
+    // fragment set meanwhile. The account check is sent only after hydration.
+    const checked = account.waitForResponse((response) =>
+      response.url().endsWith('/api/me/context'),
+    );
     await account.goto('/invites/accept');
+    await checked;
     await account.evaluate((url) => location.assign(url), link);
     await account.getByRole('button', { name: 'Accept invitation', exact: true }).click();
     await expect(
@@ -79,7 +85,11 @@ test('edits settings, verifies the invited mailbox and protects account-only dev
     );
     expect(verified.rows[0].id).toBe(fixture.emailUserId);
     expect(verified.rows[0].email_verified_at !== null).toBe(true);
+    const rechecked = account.waitForResponse((response) =>
+      response.url().endsWith('/api/me/context'),
+    );
     await account.goto('/invites/accept');
+    await rechecked;
     await account.evaluate((url) => location.assign(url), link);
     await account.getByRole('button', { name: 'Accept invitation', exact: true }).click();
     await expect(account.getByText('Invitation accepted.')).toBeVisible();
