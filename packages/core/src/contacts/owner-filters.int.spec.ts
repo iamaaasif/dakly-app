@@ -66,4 +66,28 @@ describe('contact filters without RLS assistance', () => {
     expect(await f.row('contacts', a!.id)).toMatchObject({ name: 'সুমি', deleted_at: null });
     expect(await repository.findIdentities(f.a, a!.id)).toHaveLength(1);
   });
+
+  it('counts and lists segment matches only in the selected store', async () => {
+    const a = await repository.insert(f.a, {
+      ...manualCustomer,
+      name: 'সুমি',
+      phone: '01711000003',
+    });
+    const b = await repository.insert(f.b, {
+      ...manualCustomer,
+      name: 'সুমন',
+      phone: '01711000003',
+    });
+    await f.connection.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'sms','granted','manual'),(gen_random_uuid(),$3,$4,'sms','granted','manual')",
+      [f.a, a!.id, f.b, b!.id],
+    );
+    const rules = {
+      match: 'all',
+      conditions: [{ field: 'consent', channel: 'sms', granted: true }],
+    } as const;
+
+    expect(await repository.countMatching(f.b, rules)).toBe(1);
+    expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
+  });
 });
