@@ -18,6 +18,7 @@ import { Clock } from '../platform/clock';
 import { AccountDatabase } from '../platform/database/account-database';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { TeamService } from '../team/team.service';
 import { SessionsRepository } from './sessions.repository';
 import { SessionsService } from './sessions.service';
@@ -106,6 +107,68 @@ describe('SessionsService (Postgres)', () => {
     time += 43200000;
     expect(await service.resolve(expired.token)).toBeUndefined();
     expect(await service.resolve('unknown')).toBeUndefined();
+  });
+
+  // Moving the row back a day is the same as a day passing; renewal reads database time.
+  async function moveBackOneDay(sessionId: string) {
+    await admin.db
+      .update(sessions)
+      .set({
+        createdAt: sql`${sessions.createdAt} - interval '1 day'`,
+        lastSeenAt: sql`${sessions.lastSeenAt} - interval '1 day'`,
+        expiresAt: sql`${sessions.expiresAt} - interval '1 day'`,
+      })
+      .where(eq(sessions.id, sessionId));
+    time = Date.now();
+  }
+
+  it('ends a remembered session used every day at day 90', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: true });
+    for (let day = 1; day < 90; day++) {
+      await moveBackOneDay(created.session.id);
+      expect(await service.resolve(created.token)).toMatchObject({ id: created.session.id });
+      const [row] = await admin.db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.id, created.session.id));
+      const cap = row!.createdAt.getTime() + 90 * DAY_MS;
+      if (day >= 60) expect(row!.expiresAt.getTime()).toBe(cap);
+      else expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(30 * DAY_MS);
+    }
+    await moveBackOneDay(created.session.id);
+    expect(await service.resolve(created.token)).toBeUndefined();
+  });
+
+  it('keeps the 12 hour idle lifetime for a session far from the cap', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: false });
+    await admin.db
+      .update(sessions)
+      .set({ createdAt: new Date(time - 89 * DAY_MS), lastSeenAt: new Date(time - 10 * MINUTE_MS) })
+      .where(eq(sessions.id, created.session.id));
+    await service.resolve(created.token);
+    const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
+    expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(time);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(DAY_MS / 2);
+  });
+
+  it('renews a session used at day 89 only until day 90', async () => {
+    time = Date.now();
+    const created = await service.create(userId, { isRemembered: true });
+    const createdAt = new Date(time - 89 * DAY_MS);
+    await admin.db
+      .update(sessions)
+      .set({ createdAt, lastSeenAt: new Date(time - DAY_MS) })
+      .where(eq(sessions.id, created.session.id));
+    await service.resolve(created.token);
+    const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
+    const cap = createdAt.getTime() + 90 * DAY_MS;
+    expect(row!.expiresAt.getTime()).toBe(cap);
+    time = cap - 1;
+    expect(await service.resolve(created.token)).toMatchObject({ id: created.session.id });
+    time = cap;
+    expect(await service.resolve(created.token)).toBeUndefined();
   });
 
   it('does not extend a session that expires while its lookup is paused', async () => {

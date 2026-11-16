@@ -24,6 +24,12 @@ type NewSession = {
   expiresAt: Date;
 };
 
+type SessionRenewal = {
+  lifetimeMilliseconds: number;
+  absoluteExpiresAt: Date;
+  touchInterval: number;
+};
+
 @Injectable()
 export class SessionsRepository {
   constructor(
@@ -84,10 +90,10 @@ export class SessionsRepository {
     return rows.length > 0;
   }
 
-  async findByTokenHash(tokenHash: Buffer, now: Date): Promise<Session | undefined> {
+  async findByTokenHash(tokenHash: Buffer, now: Date) {
     // The identity is unknown until this indexed read; no account or tenant scope exists yet.
     const rows = await this.database
-      .select(columns)
+      .select({ ...columns, createdAt: sessions.createdAt })
       .from(sessions)
       .innerJoin(users, eq(users.id, sessions.userId))
       .where(
@@ -121,8 +127,7 @@ export class SessionsRepository {
   async touch(
     userId: string,
     id: string,
-    lifetimeMilliseconds: number,
-    touchInterval: number,
+    { lifetimeMilliseconds, absoluteExpiresAt, touchInterval }: SessionRenewal,
   ): Promise<void> {
     // Materialization keeps the clock read after FOR UPDATE acquires the current row.
     // A WHERE clock_timestamp() alone can run before a row-lock wait; now() is transaction time.
@@ -138,7 +143,10 @@ export class SessionsRepository {
       )
       update ${sessions}
       set last_seen_at = renewal.checked_at,
-          expires_at = renewal.checked_at + ${lifetimeMilliseconds}::double precision * interval '1 millisecond'
+          expires_at = least(
+            renewal.checked_at + ${lifetimeMilliseconds}::double precision * interval '1 millisecond',
+            ${absoluteExpiresAt.toISOString()}::timestamptz
+          )
       from renewal
       where sessions.id = renewal.id and sessions.user_id = ${userId}
         and renewal.revoked_at is null
