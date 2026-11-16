@@ -35,7 +35,7 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   reads as not found.
 - A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`.
   The error never names or links the other contact, because the member may not be
-  allowed to see who has the number. This replaces the "Already saved as" text in CUS-R1.
+  allowed to see who has the number.
 - A contact without a phone returns `phone: null`.
 - The support read and create screens call `ContactsService`, with full phones as before.
 
@@ -153,7 +153,7 @@ An insight is shown only with at least 100 orders in the period; otherwise "Insi
 
 | ID     | Rule                                                                                                                                                                                           |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CUS-R1 | Phone is unique per store. Saving a manual customer with an existing phone shows "Already saved as Nusrat Jahan" with Open.                                                                    |
+| CUS-R1 | Phone is unique per store. Saving a contact with a phone the store already has fails with `409 CONTACT_PHONE_TAKEN`, which names and links no one.                                             |
 | CUS-R2 | Deleting customers removes profile, notes and message history from Dakly; orders stay with the customer name only, for sales reports. Requires confirmation and the Edit Customers permission. |
 | CUS-R3 | Export downloads the current filter as .xlsx; phone numbers are included only for roles with "Download customer lists" and "See full phone numbers". Every export is logged.                   |
 | CUS-R4 | Import requires the owner to tick "These customers agreed to hear from my shop" before any consent is set to yes; otherwise imported consents are no.                                          |

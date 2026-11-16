@@ -28,7 +28,7 @@ The API injection probe used dummy database credentials; these routes did not qu
 
 ### CF-1 · P1 · Database errors put personal data into logs
 
-Evidence: [app-error.filter.ts](../../packages/core/src/platform/errors/app-error.filter.ts), line 33, logs an arbitrary exception directly. [customers.repository.ts](../../packages/core/src/contacts/contacts.repository.ts), line 41, binds the customer's name and full phone to the INSERT.
+Evidence: [app-error.filter.ts](../../packages/core/src/platform/errors/app-error.filter.ts), line 33, logs an arbitrary exception directly. [contacts.repository.ts](../../packages/core/src/contacts/contacts.repository.ts) binds the customer's name and full phone to the INSERT.
 
 The locked Drizzle version, 0.45.4, embeds SQL parameters into the error message itself in [DrizzleQueryError](https://raw.githubusercontent.com/drizzle-team/drizzle-orm/0.45.4/drizzle-orm/src/errors.ts). A synthetic error passed through the real filter confirmed that its logger receives the name and full phone. A failed database operation can therefore expose submitted personal data even though the HTTP response is safely generic. Redacting structured fields named `phone` will not remove values embedded in an error message or stack.
 
@@ -82,7 +82,7 @@ Tests: invalid input with more than one invalid field returns `VALIDATION_FAILED
 
 ### CF-6 · P2 · Cross-feature atomic writes have no supported transaction pattern
 
-Evidence: [tenant-database.ts](../../packages/core/src/platform/database/tenant-database.ts), lines 15–22, always opens a new transaction on the root database. Each [customer repository method](../../packages/core/src/contacts/contacts.repository.ts), lines 25–44, independently calls that method. There is no ambient transaction context, transaction-bound repository factory, or mechanism for a nested service call to join the caller's transaction.
+Evidence: [tenant-database.ts](../../packages/core/src/platform/database/tenant-database.ts), lines 15–22, always opens a new transaction on the root database. Each [contact repository method](../../packages/core/src/contacts/contacts.repository.ts) independently calls that method. There is no ambient transaction context, transaction-bound repository factory, or mechanism for a nested service call to join the caller's transaction.
 
 At the same time, [services.md](../rules/services.md), rules 6–7, requires cross-feature calls through services and keeps Drizzle out of services. [module-boundaries.md](../rules/module-boundaries.md) prohibits reaching into another feature's repository. The [order flow](../features/06-orders-and-delivery.md), line 251, requires one transaction across contact resolution, numbering, stock reservation, order creation and event publication. [ProductsService.moveStock](../features/05-products-and-stock.md), line 124, owns stock changes. [architecture.md](../architecture.md), lines 59 and 118, requires atomic outbox writes and order/stock reservation.
 
@@ -116,7 +116,7 @@ Tests: cover DB 0, a nonzero database, invalid database paths, unsupported schem
 
 ### CF-9 · P3 · The key RLS test depends on another test's data
 
-Evidence: [customers.repository.int.spec.ts](../../packages/core/src/contacts/contacts.repository.int.spec.ts), lines 40–43, asserts an unfiltered query from store B returns no rows, but the foreign-store customer is inserted by the preceding test at line 34. If the unfiltered test runs alone, both enabled and disabled RLS can return an empty result.
+Evidence: [contacts.repository.int.spec.ts](../../packages/core/src/contacts/contacts.repository.int.spec.ts) asserts an unfiltered query from store B returns no rows, but the foreign-store customer is inserted by the preceding test at line 34. If the unfiltered test runs alone, both enabled and disabled RLS can return an empty result.
 
 The full suite does exercise a meaningful RLS read check in its current order, and its cross-store INSERT test is useful. The issue is that the most direct read-isolation test does not establish its own precondition.
 

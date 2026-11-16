@@ -97,6 +97,29 @@ describe('ContactsRepository (Postgres)', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('hides a deleted contact and lets its phone be saved again', async () => {
+    const [deleted] = await admin.db
+      .insert(contacts)
+      .values({
+        storeId: storeA,
+        name: 'Nasrin',
+        phone: '01312345678',
+        source: 'manual',
+        kind: 'customer',
+        deletedAt: new Date('2026-11-15T10:00:00Z'),
+      })
+      .returning({ id: contacts.id });
+
+    expect(await repository.findById(storeA, deleted!.id)).toBeUndefined();
+    const saved = await repository.insert(storeA, {
+      ...manualCustomer,
+      name: 'Nasrin',
+      phone: '01312345678',
+    });
+    expect(saved).toMatchObject({ name: 'Nasrin', phone: '01312345678', kind: 'customer' });
+    expect(saved!.id).not.toBe(deleted!.id);
+  });
 });
 
 function requireEnv(name: string): string {

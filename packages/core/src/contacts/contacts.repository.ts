@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { ContactKind, ContactSource, CreateContactInput } from '@dakly/contracts/contacts';
 import { contacts } from '@dakly/db/schema/contacts';
@@ -45,7 +45,10 @@ export class ContactsRepository {
       tx
         .insert(contacts)
         .values({ storeId, ...contact })
-        .onConflictDoNothing()
+        .onConflictDoNothing({
+          target: [contacts.storeId, contacts.phone],
+          where: sql`${contacts.phone} is not null and ${contacts.deletedAt} is null`,
+        })
         .returning(contactColumns),
     );
     return rows[0];
