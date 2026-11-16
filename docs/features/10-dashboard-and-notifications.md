@@ -242,9 +242,10 @@ Dashboard: one API call returns the cards for the period. Numbers come from the 
 
 Notifications
 
-1. A notification row has a dedupe key unique per store, so a rule that fires every hour creates one card until it is done.
-2. Delivery: in the app (Server-Sent Events from the API, polling as fallback), web push for staff who allow it, and SMS, WhatsApp or email only for billing, credential and security alerts (email is allowed for these, D20).
-3. One row per user who should see it (pending review).
+1. A rule calls `NotificationsService.notify(storeId, { type, category, dedupeKey, recipientPermission, title, body?, actionUrl?, priority? })`. The recipients are the active members whose role grants `recipientPermission` (for example `chats.view`), built-in or custom, read through `TeamService`. In one store transaction it writes one row per recipient and publishes one `notification.created` event per row it created. A dedupe key is used once per user for good, even after the card is done, so a rule that should fire again puts its period or occurrence in the key (for example `usage-80:2026-11`).
+2. Routes, for the signed-in member's own rows in the session's store only (`@AnyMember()`, since every role gets notifications): `GET /notifications` (newest first, `cursor`, `limit`, `category`, `status`), `POST /notifications/:notificationId/seen`, `/done` and `/snooze` (`{ until }`, a future UTC time). Each POST answers 204; another member's row is 404 like a missing one.
+3. Status moves: seen only moves a new card, so opening a snoozed or done card changes nothing; done is final; snoozing a done card is `NOTIFICATION_DONE` (409) and a past time is `SNOOZE_NOT_IN_FUTURE` (400). Each change is one guarded update, so two changes at once on one card end in a state these rules allow. A snoozed card stays `snoozed` after `snoozedUntil` passes; waking it is a follow-up.
+4. Delivery: in the app (Server-Sent Events from the API, polling as fallback), web push for staff who allow it, and SMS, WhatsApp or email only for billing, credential and security alerts (email is allowed for these, D20).
 
 Ask Dakly AI
 

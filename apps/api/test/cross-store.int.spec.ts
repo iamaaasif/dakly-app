@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { NotificationsService } from '@dakly/core/notifications/notifications.service';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
@@ -361,6 +362,58 @@ fixture('POST /support/customers', async () => {
   expect((await f.row('customers', other.json().id)).store_id).toBe(b.id);
   expect(await f.row('customers', own.json().id)).toEqual(before);
 });
+async function notification(shop: Shop) {
+  await app.get(NotificationsService).notify(shop.id, {
+    type: 'conversation.handed_over',
+    category: 'fix_now',
+    dedupeKey: randomUUID(),
+    recipientPermission: 'chats.view',
+    title: 'একটি চ্যাট দেখুন',
+  });
+  const result = await f.admin.pool.query(
+    'select id from notifications where store_id=$1 and user_id=$2 order by id desc limit 1',
+    [shop.id, shop.owner.id],
+  );
+  return result.rows[0].id as string;
+}
+fixture('GET /notifications', async () => {
+  const { a, b } = await pair(),
+    aId = await notification(a),
+    bId = await notification(b);
+  for (const [shop, own, foreign] of [
+    [a, aId, bId],
+    [b, bId, aId],
+  ] as const) {
+    const ids = (await success(shop, 'GET', '/notifications', 200))
+      .json()
+      .items.map((item: { id: string }) => item.id);
+    expect(ids).toEqual([own]);
+    expect(ids).not.toContain(foreign);
+  }
+});
+for (const [action, status] of [
+  ['seen', 'seen'],
+  ['done', 'done'],
+  ['snooze', 'snoozed'],
+] as const)
+  fixture(`POST /notifications/:notificationId/${action}`, async () => {
+    const positive = await f.shop(),
+      { a, b } = await pair();
+    const positiveId = await notification(positive),
+      foreignId = await notification(a);
+    const payload = action === 'snooze' ? { until: new Date(Date.now() + 3_600_000) } : {};
+    await success(positive, 'POST', `/notifications/${positiveId}/${action}`, 204, payload);
+    expect(await f.row('notifications', positiveId)).toMatchObject({ status });
+    const before = await f.row('notifications', foreignId);
+    await hidden(
+      b,
+      'POST',
+      (id) => `/notifications/${id}/${action}`,
+      foreignId,
+      () => payload,
+    );
+    expect(await f.row('notifications', foreignId)).toEqual(before);
+  });
 fixture('GET /wallets', async () => {
   const { a, b } = await pair();
   await smsCredits(a, 120);

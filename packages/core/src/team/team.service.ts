@@ -6,6 +6,7 @@ import {
   type StoreAccess,
   type PermissionArea,
   type AccessLevel,
+  type Permission,
 } from '@dakly/contracts/team';
 
 import { builtInRoleAccess } from './built-in-roles';
@@ -34,17 +35,16 @@ export class TeamService {
 
   async accessFor(storeId: string, userId: string): Promise<StoreAccess | undefined> {
     const membership = await this.repository.findAccess(storeId, userId);
-    if (!membership) return undefined;
-    if (membership.builtInRole) return structuredClone(builtInRoleAccess[membership.builtInRole]);
-    if (!membership.roleId) return undefined;
-    // Stored custom JSON crosses the database boundary; invalid grants fail closed.
-    const permissions = customRolePermissionsSchema.safeParse({
-      areas: membership.areas,
-      seeFullPhone: membership.seeFullPhone,
-      exportLists: membership.exportLists,
-      refund: membership.refund,
+    return membership && toStoreAccess(membership);
+  }
+
+  async userIdsWithPermission(storeId: string, permission: Permission): Promise<string[]> {
+    const [area, level] = permission.split('.') as [PermissionArea, AccessLevel];
+    const members = await this.repository.findActiveAccess(storeId);
+    return members.flatMap((member) => {
+      const access = toStoreAccess(member);
+      return member.userId && access && canAccess(access, area, level) ? [member.userId] : [];
     });
-    return permissions.success ? { role: 'custom', ...permissions.data } : undefined;
   }
 
   lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {
@@ -71,4 +71,19 @@ export class TeamService {
     const items = rows.slice(0, query.limit);
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.storeId : null };
   }
+}
+
+function toStoreAccess(
+  membership: Awaited<ReturnType<TeamRepository['findActiveAccess']>>[number],
+): StoreAccess | undefined {
+  if (membership.builtInRole) return structuredClone(builtInRoleAccess[membership.builtInRole]);
+  if (!membership.roleId) return undefined;
+  // Stored custom JSON crosses the database boundary; invalid grants fail closed.
+  const permissions = customRolePermissionsSchema.safeParse({
+    areas: membership.areas,
+    seeFullPhone: membership.seeFullPhone,
+    exportLists: membership.exportLists,
+    refund: membership.refund,
+  });
+  return permissions.success ? { role: 'custom', ...permissions.data } : undefined;
 }
