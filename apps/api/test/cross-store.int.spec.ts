@@ -287,6 +287,12 @@ fixture('POST /campaigns/:campaignId/approve', async () => {
   const { a, b } = await pair(),
     own = await approvableCampaign(b),
     foreign = await approvableCampaign(a);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  const marketer = await f.request(b.member, 'POST', `/campaigns/${own}/approve`);
+  expect(marketer.statusCode).toBe(403);
+  expect(marketer.json().error.code).toBe('CAMPAIGN_APPROVAL_DENIED');
   expect((await success(b, 'POST', `/campaigns/${own}/approve`, 200)).json().status).toBe(
     'sending',
   );

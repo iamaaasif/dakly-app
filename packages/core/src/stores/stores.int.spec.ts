@@ -530,6 +530,10 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     const editor = await staff(storeId, null, 'edit');
     expect((await patch(editor, { name: 'Edited' })).statusCode).toBe(200);
     expect((await patch(editor, { extensions: [] }, '/store/extensions')).statusCode).toBe(403);
+    const approvalOff = { sending: sendingWith({ onlyOwnersAndAdminsApprove: false }) };
+    expect((await patch(editor, approvalOff)).statusCode).toBe(403);
+    expect((await patch(editor, { sending: sendingWith({}) })).statusCode).toBe(200);
+    expect((await settings(editor)).json().sending.onlyOwnersAndAdminsApprove).toBe(true);
     for (const role of ['marketer', 'support_agent'] as const) {
       const member = await staff(storeId, role);
       expect((await settings(member)).statusCode).toBe(403);

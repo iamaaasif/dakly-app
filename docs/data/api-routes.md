@@ -94,7 +94,7 @@ Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
 requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
 patches preserve omitted fields and clear optional fields with `null`; name
 cannot be cleared. BIN uses `vatBin` (13 digits), and the trade licence uses
-`tradeLicenceNumber`. `sending` holds quiet hours and the frequency cap (feature 09) and is saved whole. Empty or unknown input is rejected.
+`tradeLicenceNumber`. `sending` holds quiet hours, the frequency cap and `onlyOwnersAndAdminsApprove` (feature 09) and is saved whole; changing `onlyOwnersAndAdminsApprove` also requires Owner or Admin. Empty or unknown input is rejected.
 `PATCH /store/extensions` accepts `{ extensions: [...] }` as the complete
 selection of `chats`, `sales` and `social_auto_post`, including an empty array.
 It returns the updated settings and requires Owner or Admin through the team
