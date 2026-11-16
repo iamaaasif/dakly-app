@@ -18,6 +18,8 @@ import { TeamService } from '../team/team.service';
 import { NotificationsService } from './notifications.service';
 
 export const STREAM_HEARTBEAT_MS = 25_000;
+// Ten times the replay limit, so a replayed row or a relay retry minutes later still finds its id.
+export const STREAM_SENT_IDS_LIMIT = 1000;
 const CHANNEL_PREFIX = 'notifications:';
 const liveNotificationSchema = z.tuple([z.uuid(), z.uuid()]);
 
@@ -61,6 +63,8 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
       const send = (notification?: NotificationResponse) => {
         if (!notification || sent.has(notification.id)) return;
         sent.add(notification.id);
+        // A Set iterates in insertion order, so this forgets the oldest id.
+        if (sent.size > STREAM_SENT_IDS_LIMIT) sent.delete(sent.values().next().value!);
         subscriber.next({ type: 'notification', id: notification.id, data: notification });
       };
       const stream: Stream = {
