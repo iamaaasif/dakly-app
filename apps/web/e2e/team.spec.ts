@@ -56,7 +56,13 @@ test('invites a new recipient, changes live access and transfers ownership to th
     await invite(page, fixture.phone, 'Team reader');
     const notice = await messageText(fixture.phone, /Join your team/, seen);
     const link = notice.match(/http[^\s]+(?=\. This link)/)![0];
+    // Before hydration Next rewrites the history entry from the URL it read at start, dropping a
+    // fragment set meanwhile. The account check is sent only after hydration.
+    const checked = recipient.waitForResponse((response) =>
+      response.url().endsWith('/api/me/context'),
+    );
     await recipient.goto('/invites/accept');
+    await checked;
     await recipient.evaluate((url) => location.assign(url), link);
     await expect(recipient.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
     expect(await recipient.evaluate(() => location.hash)).toBe('');

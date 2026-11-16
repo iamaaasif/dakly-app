@@ -144,18 +144,30 @@ export class StaffAlertsRepository {
         order by next_attempt_at
         limit 100
       )`);
+    // Reserving the alert for one lease keeps an overlapping relay from queueing it again after
+    // the first delivery job finished. The reservation has no lease id, so delivery can claim it.
     return (
       await this.database.execute<{
         id: string;
       }>(sql`
-        select audit_id as id
-        from staff_alert_deliveries
-        where status='pending'
-          and attempts<5
-          and next_attempt_at<=${now}
-          and (leased_until is null or leased_until<=${now})
-        order by next_attempt_at
-        limit 20`)
+        with due as (
+          select audit_id
+          from staff_alert_deliveries
+          where status='pending'
+            and attempts<5
+            and next_attempt_at<=${now}
+            and (leased_until is null or leased_until<=${now})
+          order by next_attempt_at
+          limit 20
+          for update skip locked
+        )
+        update staff_alert_deliveries d
+        set
+          lease_id=null,
+          leased_until=${new Date(now.getTime() + ALERT_DELIVERY_LEASE_MS)}
+        from due
+        where d.audit_id=due.audit_id
+        returning d.audit_id as id`)
     ).rows;
   }
 
@@ -171,7 +183,7 @@ export class StaffAlertsRepository {
           and status='pending'
           and attempts<5
           and next_attempt_at<=${now}
-          and (leased_until is null or leased_until<=${now})
+          and (lease_id is null or leased_until<=${now})
         returning attempts`)
     ).rows[0];
   }

@@ -114,7 +114,7 @@ describe('Scheduled security notice sweep after retry persistence failure', () =
         DiscoveryModule,
         BullModule.forRoot({
           connection: toRedisConnection(loadEnv().REDIS_URL),
-          prefix: `test-${randomUUID()}`,
+          prefix: `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
         }),
         BullModule.registerQueue({ name: QUEUES.transactional }),
       ],

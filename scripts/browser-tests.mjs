@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -9,11 +9,14 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const web = `${root}apps/web`;
 const artifacts = `${web}/e2e-artifacts`;
 const requireWeb = createRequire(`${web}/package.json`);
+const requireCore = createRequire(`${root}packages/core/package.json`);
 const apiOrigin = 'http://127.0.0.1:4015';
 const webOrigin = 'http://localhost:3015';
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => controller.abort());
 const processes = [];
+// The API and worker queue under a prefix of their own, so a local worker never takes their jobs.
+const queuePrefix = `test-${randomUUID()}`;
 
 function localService(name) {
   let url;
@@ -59,6 +62,7 @@ function apiEnvironment(environment, publicKey) {
   return {
     ...environment,
     NODE_ENV: 'test',
+    QUEUE_PREFIX: queuePrefix,
     API_PORT: '4015',
     API_HOST: '127.0.0.1',
     WEB_ORIGINS: webOrigin,
@@ -82,6 +86,17 @@ function apiEnvironment(environment, publicKey) {
     SLACK_BOT_TOKEN: undefined,
     SENTRY_DSN: undefined,
   };
+}
+
+async function removeQueues() {
+  const { Redis } = requireCore('ioredis');
+  const redis = new Redis(process.env.REDIS_URL);
+  try {
+    for await (const keys of redis.scanStream({ match: `${queuePrefix}:*`, count: 1000 }))
+      if (keys.length) await redis.unlink(...keys);
+  } finally {
+    redis.disconnect();
+  }
 }
 
 async function main() {
@@ -170,11 +185,11 @@ async function main() {
     try {
       await Promise.all(processes.map(stopProcess));
     } finally {
-      await fixture?.close();
+      await Promise.all([fixture?.close(), removeQueues()]);
     }
     await writeFile(
       `${artifacts}/cleanup.log`,
-      'Owned processes stopped; fixture users and stores removed.\n',
+      'Owned processes stopped; fixture users, stores and test queues removed.\n',
     );
   }
 }

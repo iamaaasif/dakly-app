@@ -67,7 +67,7 @@ describe('Staff alert relay', () => {
     const { relay, queue } = await start(async () => {
       calls++;
       return [{ id: first }, { id: second }];
-    }, `test-${randomUUID()}`);
+    }, `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`);
     await relay.handle({});
     await relay.handle({});
     expect(calls).toBe(2);
@@ -80,7 +80,7 @@ describe('Staff alert relay', () => {
 
   it('queues an alert again once its earlier delivery job failed and was kept', async () => {
     const auditId = randomUUID();
-    const prefix = `test-${randomUUID()}`;
+    const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
     const { relay, queue } = await start(async () => [{ id: auditId }], prefix);
     await relay.handle({});
     const worker = new Worker(QUEUES.transactional, null, { connection, prefix, autorun: false });

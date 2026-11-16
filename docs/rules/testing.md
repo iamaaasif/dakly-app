@@ -19,6 +19,8 @@ Rules:
 
 Commands: `pnpm test` (unit), `pnpm test:int` (needs `DATABASE_URL` and `DATABASE_ADMIN_URL`, see README), and `pnpm test:e2e` ([browser setup](../development/browser-tests.md)).
 
+Each `pnpm test:int` run sets `QUEUE_PREFIX` to a prefix of its own and removes its keys at the end. A test that needs an empty queue gives `BullModule.forRoot` the prefix `` `${loadEnv().QUEUE_PREFIX}-${randomUUID()}` ``, so its queue goes too. `AuthModule` registers its queue with the run prefix itself, so a test that imports it shares the run's `transactional` queue.
+
 ## Store route isolation
 
 `apps/api/test/cross-store.int.spec.ts` boots the production API module with its full guard chain.

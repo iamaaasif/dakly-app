@@ -9,7 +9,13 @@ import { serializeError } from '../logging/safe-error';
 import { HandlesJob, type JobHandler } from './job-handler';
 import { QUEUES, type QueueName } from './queues';
 
-const concurrency = { transactional: 1, bulk: 1 } satisfies Record<QueueName, number>;
+// Overlapping transactional runs are safe: each job claims its notice or alert under a lease first.
+const TRANSACTIONAL_JOBS_AT_ONCE = 5;
+const BULK_JOBS_AT_ONCE = 1;
+const concurrency = {
+  transactional: TRANSACTIONAL_JOBS_AT_ONCE,
+  bulk: BULK_JOBS_AT_ONCE,
+} satisfies Record<QueueName, number>;
 
 // BullMQ gives every job on a queue to that queue's one worker, so the worker routes by job name.
 abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnApplicationBootstrap {
