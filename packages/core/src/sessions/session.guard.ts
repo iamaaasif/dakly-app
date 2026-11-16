@@ -5,6 +5,7 @@ import {
   Injectable,
   Optional,
 } from '@nestjs/common';
+import { SSE_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { PinoLogger } from 'nestjs-pino';
@@ -53,7 +54,9 @@ export class SessionGuard implements CanActivate {
       request.access = access;
       bindVerifiedStore(this.logger, session.activeStoreId);
     }
-    stampContext(context, request, this.checksContext(context, request, rule));
+    const isStream =
+      this.reflector.get<true | undefined>(SSE_METADATA, context.getHandler()) === true;
+    stampContext(context, request, this.checksContext(context, request, rule), isStream);
     if (session.isRemembered)
       setSessionCookie(context.switchToHttp().getResponse<FastifyReply>(), token, true);
     return true;
@@ -76,9 +79,11 @@ function stampContext(
   context: ExecutionContext,
   request: FastifyRequest & StoreRequest,
   checksContext: boolean,
+  isStream: boolean,
 ): void {
   const reply = context.switchToHttp().getResponse<FastifyReply>();
-  reply.header('Cache-Control', 'no-store');
+  // Nest sends its own no-store Cache-Control on a stream and keeps the reply's beside it.
+  if (!isStream) reply.header('Cache-Control', 'no-store');
   const tag = sessionContextTag(request.sessionId!, request.storeId, request.access);
   reply.header('X-Session-Context', tag);
 

@@ -401,6 +401,21 @@ describe('NotificationsService and its routes', () => {
     for (const stream of [revoked, removed, active]) expect(stream.text()).not.toContain('error');
   });
 
+  it('sends one Cache-Control header on the stream', async () => {
+    const a = await shop();
+    const abort = new AbortController();
+    const response = await fetch(`${baseUrl}/events/stream`, {
+      headers: { cookie: a.owner.cookie },
+      signal: abort.signal,
+    });
+    // fetch joins repeated headers with a comma, so a second copy would change this value.
+    expect(response.headers.get('cache-control')).toBe(
+      'private, no-cache, no-store, must-revalidate, max-age=0, no-transform',
+    );
+    expect(response.headers.get('x-session-context')).toBeTruthy();
+    abort.abort();
+  });
+
   it('rejects a stream without a session or with a malformed Last-Event-ID', async () => {
     const a = await shop();
     const anonymous = await fetch(`${baseUrl}/events/stream`);
