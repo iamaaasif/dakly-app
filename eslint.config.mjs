@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
 import importX from 'eslint-plugin-import-x';
+import reactHooks from 'eslint-plugin-react-hooks';
 import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -196,6 +197,14 @@ export default tseslint.config(
       'no-restricted-syntax': ['error', ...restrictedSyntax, ...webRestrictedSyntax],
     },
   }),
+  {
+    files: ['apps/{web,admin}/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+    },
+  },
   ...withProductionSyntax({
     // Next.js needs default exports only from route files.
     files: ['apps/{web,admin}/src/**/*.{ts,tsx}'],
