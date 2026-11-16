@@ -42,14 +42,6 @@ Branch: `docs/rev-7-event-catalogue`
 - Scope: `packages/contracts/src/events/` with one file per area (`contacts.ts`, `messaging.ts`, `notifications.ts` now; later areas add theirs). No M2 or M3 task emits a channel event, so there is no `channels.ts` yet. Each event is a zod schema with `type`, `storeId`, `occurredAt` and an ids-only payload; `events/dakly-event.ts` holds the union of all events and the `DaklyEvent` type. [jobs.md](../data/jobs.md#events-in-m2-and-m3) lists which events exist in M2 and M3, who emits each and who listens. The final send gate for staff replies, transactional and marketing sends is defined in the [CAMP-9 section](campaigns-and-automations.md#the-final-send-gate) (CAMP-9 builds it). Real-time recovery and AI latency measurements moved to REV-10.
 - Tests: every event schema accepts a valid example and rejects a payload with a `phone`, `email`, `name` or `text` key; the union rejects an unknown type; `pnpm lint:docs`.
 
-### DB-2 · Outbox relay and event handlers
-
-Branch: `feat/db-2-outbox-relay`
-
-- Scope: `platform/outbox/`: `OutboxService.publish(event)` inserts into `outbox_events` and must run inside the caller's store transaction (it throws when called outside one). A `relay-outbox` job on a BullMQ job scheduler every second claims rows through `claim_outbox_events`, queues one job per subscriber (P5) with `addBulk`, then marks them through `mark_outbox_events_published`. A `@HandlesEvent(type, { queue })` decorator registers a subscriber, routed by the existing job dispatchers. Rows that fail 10 times stay unpublished and raise a staff alert. Purging stays in DB-7.
-- Rules: [jobs.md](../rules/jobs.md); the relay never holds a transaction while talking to Valkey.
-- Tests (integration): an event written in a rolled-back transaction is never relayed; two relays running at once queue each subscriber job once; a crash after queueing and before marking queues nothing twice (same job id); a handler that throws retries without affecting other subscribers of the same event; ordering within one store is by `occurred_at`.
-
 ### Group 2: notifications and usage (M2)
 
 ### HOME-1 · Notifications and the live stream

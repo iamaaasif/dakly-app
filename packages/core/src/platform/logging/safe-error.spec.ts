@@ -2,9 +2,16 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { serializeError } from './safe-error';
 
 describe('serializeError', () => {
+  it('keeps the code of an AppError and only an AppError', () => {
+    const parked = new AppError('OUTBOX_EVENTS_PARKED', PLATFORM_ERRORS.OUTBOX_EVENTS_PARKED);
+    expect(serializeError(parked).errorCode).toBe('OUTBOX_EVENTS_PARKED');
+    expect(serializeError(new Error('OUTBOX_EVENTS_PARKED')).errorCode).toBe('INTERNAL_ERROR');
+  });
+
   it('keeps the driver code from a wrapped PostgreSQL error', () => {
     const error = new Error('query failed', { cause: { code: '23505' } });
     expect(serializeError(error).errorCode).toBe('23505');

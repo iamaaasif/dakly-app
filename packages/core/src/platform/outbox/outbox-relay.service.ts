@@ -1,8 +1,9 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, Reflector } from '@nestjs/core';
 import type { JobsOptions, Queue } from 'bullmq';
 
+import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { HandlesJob } from '../queue/job-handler';
 import { QUEUES, type QueueName } from '../queue/queues';
 import { JOB_POLL_INTERVAL_MS } from '../time';
@@ -10,6 +11,8 @@ import { SubscribedEvent } from './handles-event';
 import { OutboxRepository } from './outbox.repository';
 
 const RELAY_BATCH_SIZE = 100;
+// claim_outbox_events stops claiming a row at the same number of attempts.
+const RELAY_ATTEMPT_LIMIT = 10;
 
 const subscriberJobOptions = {
   attempts: 3,
@@ -26,6 +29,7 @@ type Subscriber = { queue: QueueName; name: string };
 
 @Injectable()
 export class OutboxRelayService implements OnModuleInit {
+  private readonly logger = new Logger(OutboxRelayService.name);
   private readonly subscribers = new Map<string, Subscriber[]>();
   private readonly queues: Record<QueueName, Queue>;
 
@@ -54,18 +58,28 @@ export class OutboxRelayService implements OnModuleInit {
     const events = await this.repository.claim(RELAY_BATCH_SIZE);
     if (events.length === 0) return;
     const jobs: Record<QueueName, SubscriberJob[]> = { transactional: [], bulk: [] };
-    for (const event of events)
-      for (const { queue, name } of this.subscribers.get(event.type) ?? [])
+    for (const { id, storeId, type, payload, occurredAt } of events)
+      for (const { queue, name } of this.subscribers.get(type) ?? [])
         jobs[queue].push({
           name,
-          data: event,
-          opts: { ...subscriberJobOptions, jobId: `${event.id}-${name}` },
+          data: { id, storeId, type, payload, occurredAt },
+          opts: { ...subscriberJobOptions, jobId: `${id}-${name}` },
         });
-    await Promise.all(
-      Object.values(QUEUES)
-        .filter((queue) => jobs[queue].length > 0)
-        .map((queue) => this.queues[queue].addBulk(jobs[queue])),
-    );
-    await this.repository.markPublished(events.map((event) => event.id));
+    try {
+      await Promise.all(
+        Object.values(QUEUES)
+          .filter((queue) => jobs[queue].length > 0)
+          .map((queue) => this.queues[queue].addBulk(jobs[queue])),
+      );
+      await this.repository.markPublished(events.map((event) => event.id));
+    } catch (error) {
+      const parked = events.filter((event) => event.attempts >= RELAY_ATTEMPT_LIMIT);
+      if (parked.length === 0) throw error;
+      this.logger.error(
+        { events: parked.map(({ id, type }) => ({ id, type })) },
+        'Outbox events parked after their last relay attempt',
+      );
+      throw new AppError('OUTBOX_EVENTS_PARKED', PLATFORM_ERRORS.OUTBOX_EVENTS_PARKED);
+    }
   }
 }

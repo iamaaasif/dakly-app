@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 
 import { databaseErrorCode } from '../database/error-code';
+import { AppError } from '../errors/app-error';
 
 const repositoryRoot = `${resolve(__dirname, '../../../../..').replaceAll('\\', '/')}/`;
 
@@ -35,8 +36,10 @@ export function serializeError(error: unknown) {
     ? error.constructor.name
     : 'UnknownError';
   const driverCode = databaseErrorCode(error);
-  const code =
-    typeof driverCode === 'string' && databaseCodes.has(driverCode) ? driverCode : 'INTERNAL_ERROR';
+  let code = 'INTERNAL_ERROR';
+  // AppError codes are fixed strings from the *.errors.ts catalogues, so they hold no personal data.
+  if (error instanceof AppError) code = error.code;
+  else if (typeof driverCode === 'string' && databaseCodes.has(driverCode)) code = driverCode;
   // Messages can contain newlines and forged frames. Parse only after the full error header.
   const header = `${Error.prototype.toString.call(error)}\n`;
   const stack = error.stack?.startsWith(header)
