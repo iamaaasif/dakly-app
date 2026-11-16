@@ -5,6 +5,7 @@ import type { Queue } from 'bullmq';
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
 import { STAFF_AUDIT_MAINTENANCE } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
+import { WAKE_SNOOZED_NOTIFICATIONS } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import {
   RELAY_OUTBOX,
   RELAY_OUTBOX_INTERVAL_MS,
@@ -24,6 +25,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.transactional, SEND_DUE_SECURITY_NOTICES),
       scheduleJob(this.transactional, STAFF_ALERT_RELAY),
       scheduleJob(this.transactional, RELAY_OUTBOX, RELAY_OUTBOX_INTERVAL_MS),
+      scheduleJob(this.transactional, WAKE_SNOOZED_NOTIFICATIONS),
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
     ]);
   }
