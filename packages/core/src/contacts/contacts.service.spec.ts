@@ -230,7 +230,7 @@ describe('ContactsService', () => {
     it('rejects a name search shorter than 3 characters but not a short number', async () => {
       await expect(search('রি', true)).rejects.toMatchObject({
         code: 'CONTACT_SEARCH_TOO_SHORT',
-        status: 422,
+        status: 400,
       });
       expect(await search('01', false)).toEqual([]);
     });

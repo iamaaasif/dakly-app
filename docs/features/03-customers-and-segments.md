@@ -52,7 +52,7 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 Search rules:
 
 - A name matches anywhere in the contact's name, for every member.
-- A name search needs at least 3 characters (`CONTACT_SEARCH_TOO_SHORT`, 422). Digits
+- A name search needs at least 3 characters (`CONTACT_SEARCH_TOO_SHORT`, 400). Digits
   are a phone search and have no minimum.
 - A full phone number, in any form the phone schema accepts, finds the contact with
   that exact number, for every member. Results stay masked without "See full phone
