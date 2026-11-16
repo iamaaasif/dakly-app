@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 
 import type {
   NotificationCategory,
@@ -96,6 +96,23 @@ export class NotificationsRepository {
         .limit(1),
     );
     return rows[0];
+  }
+
+  // Ids are UUID v7 made at insert time, so a greater id is a later row.
+  listCreatedAfter(
+    storeId: string,
+    userId: string,
+    notificationId: string,
+    limit: number,
+  ): Promise<Notification[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(notificationColumns)
+        .from(notifications)
+        .where(and(ofUser(storeId, userId), gt(notifications.id, notificationId)))
+        .orderBy(asc(notifications.id))
+        .limit(limit),
+    );
   }
 
   async changeStatus(
