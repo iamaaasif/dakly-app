@@ -60,13 +60,6 @@ Branch: `feat/cus-8-customer-import`
 
 ### Group 2: campaigns
 
-### MSG-1 · Core send step for SMS
-
-Branch: `feat/msg-1-sms-send-step`
-
-- Scope: D37, D40. `messaging/` feature with `MessagingService.send(storeId, { channel: 'sms', contactId, body, operationKey })`. It reads the contact's phone through `ContactsService`, counts SMS parts and credits (GSM-7 and Unicode limits from feature 09; reuse the `sms/` feature's counter if one exists), and calls the SMS driver outside any transaction with the operation key as the provider idempotency key where the driver supports it. It returns the provider message id, parts and credits; the caller (campaign recipient or workflow step) owns status, cost and retries, as `campaign_recipients` and `automation_run_steps` hold `provider_message_id`. Messages go from Dakly's shared sender until CHN-6 adds the store's approved sender. Delivery receipts wait for the provider driver (ACC-14); the Mailpit driver reports accepted as delivered. CHAT-2 later adds Messenger and Instagram to the same method.
-- Tests (integration, Mailpit driver): Bangla text counts Unicode parts; a 161-character English text is two parts; the same operation key twice reaches the driver once where the driver supports it; no transaction is open during the driver call; a contact with no phone is refused with an AppError.
-
 ### CAMP-9 · Final send checks
 
 Branch: `feat/camp-9-send-policy`

@@ -353,6 +353,16 @@ Checked 13 Nov 2026; sources are in the market study. Confirm the SMS rules with
 
 Window first: a send step tries a free-form message on the channel where the customer's window is still open, then a WhatsApp template, then SMS, in an order the owner can change. A wait can end "before the window closes".
 
+### Core send step
+
+Campaigns and workflows send through `MessagingService.send(storeId, { channel, contactId, body, operationKey })` in `messaging/` (D37). SMS is the only channel so far (D40); Messenger and Instagram join the same method later.
+
+- It reads the contact's phone through `ContactsService`. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone goes only to the SMS driver; it is never logged or returned.
+- It counts parts with `countSmsParts` in `packages/contracts/src/sms.ts`, where the web app can use the same counter. One part holds 160 GSM-7 or 70 Unicode characters; a longer text splits into parts of 153 or 67, because each part carries a header. One Bangla character makes the whole text Unicode, and `^ { } \ [ ] ~ | €` take two GSM-7 characters each. One part costs one SMS credit.
+- It calls the driver with no store transaction open and refuses to run inside one (`MESSAGING_INSIDE_TRANSACTION`). It returns the provider message id, parts and credits. The caller, a campaign recipient or a workflow step, records status and cost and decides retries; `messaging/` writes no rows.
+- Every SMS goes from Dakly's shared sender until CHN-6 adds the store's approved sender. Delivery receipts come with the provider driver (ACC-14); Mailpit, used in development and tests, sends none, so an accepted message counts as delivered.
+- The operation key does not reach the driver yet, because neither the Mailpit nor the fake driver takes an idempotency key. Until that is settled, a caller reconciles by provider message id before it resends.
+
 ### Workflow builder (D23)
 
 A workflow is a graph of steps: trigger (one event, filters checked once), wait (duration, time of day, or until an event with a timeout), condition split (up to 10 paths plus Else), random split (up to 4 paths), send (ordered channel list), action (tag, task for staff, hand to a person, coupon) and goal or exit. Workflow filters, exit conditions and consent are checked before every step and again at send time.
