@@ -59,11 +59,6 @@ export class WalletService {
     };
   }
 
-  async findByIdempotencyKey(storeId: string, key: string): Promise<WalletWriteResult | undefined> {
-    const entry = await this.ledger.findByIdempotencyKey(storeId, key);
-    return entry && toResult(entry);
-  }
-
   async reserve(storeId: string, input: ReserveInput): Promise<WalletWriteResult> {
     const quantity = positiveQuantity(input.quantity);
     return this.transaction.run(storeId, () =>

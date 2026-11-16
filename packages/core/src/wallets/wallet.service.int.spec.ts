@@ -172,7 +172,17 @@ describe('WalletService (Postgres)', () => {
     const reservation = await reserve(storeA, 4);
     const before = await ledger(storeA);
     expect(await wallets.balance(storeB, 'sms_credits')).toBe(0);
-    expect(await wallets.findByIdempotencyKey(storeB, `seed-${storeA}`)).toBeUndefined();
+    // Store A's key must not replay A's entry for store B.
+    expect(
+      await errorCode(
+        wallets.reserve(storeB, {
+          wallet: 'sms_credits',
+          quantity: 1,
+          idempotencyKey: `seed-${storeA}`,
+          actor: system,
+        }),
+      ),
+    ).toBe('WALLET_BALANCE_TOO_LOW');
     const settle = {
       reservationId: reservation.entryId,
       idempotencyKey: randomUUID(),
