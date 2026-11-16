@@ -2,6 +2,7 @@ import { createHmac, randomBytes, randomInt } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
 import type { TrackedLinkSourceType } from '@dakly/contracts/campaigns';
 
 import { ConsentService } from '../consents/consent.service';
@@ -49,7 +50,12 @@ export class LinksService {
 
   // Links come back in the order asked. Codes are unique across stores because the short link
   // names no store; a rare clash gets a new code.
-  async create(storeId: string, links: NewTrackedLink[]): Promise<TrackedLink[]> {
+  // Writes take the actor (services.md); nothing records it for links yet.
+  async create(
+    storeId: string,
+    links: NewTrackedLink[],
+    _actor: AuditEntry['actor'],
+  ): Promise<TrackedLink[]> {
     let pending: NewTrackedLinkRow[] = links.map((link) => ({
       targetUrl: null,
       ...link,
@@ -100,7 +106,7 @@ export class LinksService {
   async assertOptOutLink(code: string, ip: string): Promise<void> {
     await this.limit(ip);
     const link = await this.repository.locate(code);
-    if (!link || !(await this.repository.lockOptOutLink(link.storeId, link.trackedLinkId)))
+    if (!link || !(await this.repository.findOptOutLink(link.storeId, link.trackedLinkId)))
       throw linkError('LINK_NOT_FOUND');
   }
 

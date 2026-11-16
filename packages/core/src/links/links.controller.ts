@@ -14,7 +14,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { trackedLinkCodeSchema } from '@dakly/contracts/campaigns';
 
-import { Public } from '../platform/tenancy/access.decorators';
+import { AllowShortLinkOrigin, Public } from '../platform/tenancy/access.decorators';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { LinksService } from './links.service';
 
@@ -60,6 +60,7 @@ export class LinksController {
   }
 
   @Post('s/:code')
+  @AllowShortLinkOrigin()
   @HttpCode(200)
   @Header('Content-Security-Policy', PAGE_POLICY)
   async optOut(

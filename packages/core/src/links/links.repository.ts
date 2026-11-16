@@ -6,6 +6,7 @@ import type { Database } from '@dakly/db/client';
 import { trackedLinks, trackedLinkVisits } from '@dakly/db/schema/campaigns';
 
 import { DATABASE } from '../platform/database/database.tokens';
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 type LinkSource = {
@@ -90,21 +91,31 @@ export class LinksRepository {
     });
   }
 
-  // The row lock makes a second tap on the same link wait until the first one has committed.
-  async lockOptOutLink(storeId: string, trackedLinkId: string): Promise<OptOutLink | undefined> {
+  async findOptOutLink(storeId: string, trackedLinkId: string): Promise<OptOutLink | undefined> {
     const [link] = await this.tenant.forStore(storeId, (tx) =>
-      tx
-        .select({ ...sourceColumns, contactId: sql<string>`${trackedLinks.contactId}` })
-        .from(trackedLinks)
-        .where(
-          and(
-            eq(trackedLinks.storeId, storeId),
-            eq(trackedLinks.id, trackedLinkId),
-            eq(trackedLinks.kind, 'sms_opt_out'),
-          ),
-        )
-        .for('update'),
+      selectOptOutLink(tx, storeId, trackedLinkId),
     );
     return link;
   }
+
+  // The row lock makes a second tap on the same link wait until the first one has committed.
+  async lockOptOutLink(storeId: string, trackedLinkId: string): Promise<OptOutLink | undefined> {
+    const [link] = await this.tenant.forStore(storeId, (tx) =>
+      selectOptOutLink(tx, storeId, trackedLinkId).for('update'),
+    );
+    return link;
+  }
+}
+
+function selectOptOutLink(tx: Transaction, storeId: string, trackedLinkId: string) {
+  return tx
+    .select({ ...sourceColumns, contactId: sql<string>`${trackedLinks.contactId}` })
+    .from(trackedLinks)
+    .where(
+      and(
+        eq(trackedLinks.storeId, storeId),
+        eq(trackedLinks.id, trackedLinkId),
+        eq(trackedLinks.kind, 'sms_opt_out'),
+      ),
+    );
 }

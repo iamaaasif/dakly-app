@@ -23,6 +23,7 @@ const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeA = randomUUID();
 const storeB = randomUUID();
 const campaignId = randomUUID();
+const system = { kind: 'system' } as const;
 const userAgent = 'Mozilla/5.0 (Linux; Android 14; SM-A155F) Chrome/131.0 Mobile';
 const target = 'https://rinar-dokan.example.test/products/jamdani-saree';
 let app: NestFastifyApplication;
@@ -59,22 +60,28 @@ async function contact(storeId: string) {
 }
 
 async function redirectLink(storeId: string, contactId: string) {
-  const [link] = await links.create(storeId, [
-    {
-      kind: 'redirect',
-      targetUrl: target,
-      sourceType: 'campaign',
-      sourceId: campaignId,
-      contactId,
-    },
-  ]);
+  const [link] = await links.create(
+    storeId,
+    [
+      {
+        kind: 'redirect',
+        targetUrl: target,
+        sourceType: 'campaign',
+        sourceId: campaignId,
+        contactId,
+      },
+    ],
+    system,
+  );
   return link!;
 }
 
 async function optOutLink(storeId: string, contactId: string) {
-  const [link] = await links.create(storeId, [
-    { kind: 'sms_opt_out', sourceType: 'campaign', sourceId: campaignId, contactId },
-  ]);
+  const [link] = await links.create(
+    storeId,
+    [{ kind: 'sms_opt_out', sourceType: 'campaign', sourceId: campaignId, contactId }],
+    system,
+  );
   return link!;
 }
 
