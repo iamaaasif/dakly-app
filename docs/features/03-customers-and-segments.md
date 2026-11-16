@@ -1,12 +1,12 @@
 # Customers, consent and segments
 
-|           |                                                                                         |
-| --------- | --------------------------------------------------------------------------------------- |
-| Release   | 1                                                                                       |
-| Status    | In progress (CUS-1: contacts replaced the `customers` example)                          |
-| Extension | Core                                                                                    |
-| Code      | `packages/core/src/{contacts,segments}/`, `apps/web/src/features/{customers,segments}/` |
-| Tasks     | CUS-1 to CUS-14                                                                         |
+|           |                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------ |
+| Release   | 1                                                                                                |
+| Status    | In progress (CUS-1 contacts, CUS-2 consent)                                                      |
+| Extension | Core                                                                                             |
+| Code      | `packages/core/src/{contacts,consents,segments}/`, `apps/web/src/features/{customers,segments}/` |
+| Tasks     | CUS-1 to CUS-14                                                                                  |
 
 ## Purpose
 
@@ -38,6 +38,22 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   allowed to see who has the number.
 - A contact without a phone returns `phone: null`.
 - The support read and create screens call `ContactsService`, with full phones as before.
+
+The `consents/` feature owns the `consents` table. `ConsentService.record(storeId, change, actor)`
+appends one row per answer, with its channel, status, source, evidence and the member who
+recorded it, and publishes `consent.changed` in the same store transaction. The app never
+changes or deletes a row; its role has no UPDATE or DELETE on the table. The contact must exist
+in the store, checked through `ContactsService`. `ConsentService.current(storeId, contactIds,
+channel)` reads only the `contact_consent_current` view, where the latest row per contact and
+channel wins, so a new opt-in after a withdrawal reads as granted. A contact that never answered
+on a channel has no row there.
+
+- `POST /contacts/:contactId/consents` (`customers.edit`) records a staff answer with
+  `channel`, `status` and a required `note` saying how the customer agreed or refused. It saves
+  with source `manual` and the note as evidence. Email is not accepted (D20). A contact that is
+  missing or in another store returns `404 CONTACT_NOT_FOUND`.
+- STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
+  `ConsentService.record` when it receives them.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
