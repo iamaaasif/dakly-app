@@ -213,6 +213,75 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('segments', foreign)).toEqual(before);
   });
+const welcome = {
+  trigger: { key: 'consent_given', filters: [] },
+  reEntry: { rule: 'once' },
+  workflowFilters: [],
+  goal: { kind: 'placed_order' },
+  exitConditions: [],
+  firstStepKey: 'welcome',
+  steps: {
+    welcome: {
+      kind: 'send',
+      category: 'marketing',
+      channels: ['sms'],
+      message: { text: 'আমাদের সাথে থাকার জন্য ধন্যবাদ!', buttons: [] },
+      ifNotReachable: 'skip',
+      reviewBeforeSending: false,
+      next: 'end',
+    },
+    end: { kind: 'exit' },
+  },
+};
+async function automation(shop: Shop) {
+  const input = { name: `স্বাগতম ${randomUUID()}`, graph: welcome };
+  return (await success(shop, 'POST', '/automations', 201, input)).json().id as string;
+}
+fixture('GET /automations', async () => {
+  const { a, b } = await pair(),
+    aId = await automation(a),
+    bId = await automation(b);
+  const ids = (await success(b, 'GET', '/automations', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/automations', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /automations', async () => {
+  const { a, b } = await pair(),
+    id = await automation(a),
+    before = await f.row('automations', id);
+  const own = await automation(b);
+  expect((await f.row('automations', own)).store_id).toBe(b.id);
+  expect(await f.row('automations', id)).toEqual(before);
+});
+fixture('GET /automations/:automationId', async () => {
+  const { a, b } = await pair(),
+    id = await automation(a);
+  expect((await success(a, 'GET', `/automations/${id}`, 200)).json().id).toBe(id);
+  await hidden(b, 'GET', (value) => `/automations/${value}`, id);
+});
+for (const [method, action, status, expected] of [
+  ['PATCH', '', 200, { name: 'নতুন নাম' }],
+  ['POST', '/archive', 204, { status: 'archived' }],
+] as const)
+  fixture(`${method} /automations/:automationId${action}`, async () => {
+    const { a, b } = await pair(),
+      own = await automation(b),
+      foreign = await automation(a);
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/automations/${own}${action}`, status, payload);
+    expect(await f.row('automations', own)).toMatchObject(expected);
+    const before = await f.row('automations', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/automations/${id}${action}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('automations', foreign)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],

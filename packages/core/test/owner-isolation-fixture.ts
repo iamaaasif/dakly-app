@@ -44,7 +44,15 @@ export class OwnerIsolationFixture {
   }
 
   async close() {
+    // Versions and workflows point at each other.
+    await this.connection.pool.query(
+      'update automations set published_version_id=null where store_id=any($1::uuid[])',
+      [[this.a, this.b]],
+    );
     for (const table of [
+      'automation_runs',
+      'automation_versions',
+      'automations',
       'support_sessions',
       'support_grants',
       'staff_recovery_history',

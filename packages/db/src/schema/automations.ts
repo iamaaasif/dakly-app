@@ -20,6 +20,7 @@ import {
   automationStatuses,
   automationStepKinds,
 } from '@dakly/contracts/automations';
+import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { recipientSkipReasons } from '@dakly/contracts/campaigns';
 
 import { users } from './auth';
@@ -42,7 +43,7 @@ export const automations = pgTable(
     // AUTO-R2: transactional first, then priority, when two automations hit one person on a day.
     isTransactional: boolean('is_transactional').notNull().default(false),
     priority: smallint('priority').notNull().default(0),
-    draftGraph: jsonb('draft_graph').notNull(),
+    draftGraph: jsonb('draft_graph').$type<AutomationGraph>().notNull(),
     publishedVersionId: uuid('published_version_id').references(
       (): AnyPgColumn => automationVersions.id,
     ),
@@ -80,7 +81,7 @@ export const automationVersions = pgTable(
       .notNull()
       .references((): AnyPgColumn => automations.id),
     version: integer('version').notNull(),
-    graph: jsonb('graph').notNull(),
+    graph: jsonb('graph').$type<AutomationGraph>().notNull(),
     // "Stop the old version": runs on it exit at their next step.
     isStopped: boolean('is_stopped').notNull().default(false),
     publishedByUserId: uuid('published_by_user_id').references(() => users.id),
