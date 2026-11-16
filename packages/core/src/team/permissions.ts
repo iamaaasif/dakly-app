@@ -63,6 +63,11 @@ export function canChangeExtensions(access: StoreAccess): boolean {
   return access.role === 'owner' || access.role === 'admin';
 }
 
+// Checked only while the store's "Only owners and admins can approve sends" setting is on.
+export function canApproveSends(access: StoreAccess): boolean {
+  return access.role === 'owner' || access.role === 'admin';
+}
+
 export function canApproveSupport(access: StoreAccess): boolean {
   return access.role === 'owner';
 }

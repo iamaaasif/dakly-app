@@ -330,6 +330,50 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('campaigns', foreign)).toEqual(before);
   });
+// A draft to one consented Dhaka customer, with the credits to send it.
+async function approvableCampaign(shop: Shop) {
+  const contactId = await contact(shop);
+  await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [contactId]);
+  const answer = { channel: 'sms', status: 'granted', note: 'দোকানে এসে রাজি হয়েছেন' };
+  await success(shop, 'POST', `/contacts/${contactId}/consents`, 201, answer);
+  await smsCredits(shop, 5);
+  const input = {
+    name: 'ঈদের অফার',
+    channel: 'sms',
+    content: { text: 'ঈদে ২০% ছাড়' },
+    includeSegmentIds: [await segment(shop)],
+  };
+  return (await success(shop, 'POST', '/campaigns', 201, input)).json().id as string;
+}
+fixture('GET /campaigns/:campaignId/estimate', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const estimate = (await success(a, 'GET', `/campaigns/${id}/estimate`, 200)).json();
+  expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
+  await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
+});
+fixture('POST /campaigns/:campaignId/approve', async () => {
+  const { a, b } = await pair(),
+    own = await approvableCampaign(b),
+    foreign = await approvableCampaign(a);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  const marketer = await f.request(b.member, 'POST', `/campaigns/${own}/approve`);
+  expect(marketer.statusCode).toBe(403);
+  expect(marketer.json().error.code).toBe('CAMPAIGN_APPROVAL_DENIED');
+  expect((await success(b, 'POST', `/campaigns/${own}/approve`, 200)).json().status).toBe(
+    'sending',
+  );
+  const before = await f.row('campaigns', foreign);
+  await hidden(b, 'POST', (id) => `/campaigns/${id}/approve`, foreign);
+  expect(await f.row('campaigns', foreign)).toEqual(before);
+  const recipients = await f.admin.pool.query(
+    'select store_id from campaign_recipients where campaign_id=any($1::uuid[])',
+    [[own, foreign]],
+  );
+  expect(recipients.rows).toEqual([{ store_id: b.id }]);
+});
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -432,6 +476,7 @@ fixture('GET /store', async () => {
 const shopSending = {
   quietHours: { startHour: 22, endHour: 8 },
   frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+  onlyOwnersAndAdminsApprove: false,
 };
 for (const [path, payload, expected] of [
   [

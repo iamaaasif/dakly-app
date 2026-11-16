@@ -10,7 +10,13 @@ import {
 } from '@dakly/contracts/team';
 
 import { builtInRoleAccess } from './built-in-roles';
-import { canAccess, canApproveSupport, canChangeExtensions, canDo } from './permissions';
+import {
+  canAccess,
+  canApproveSends,
+  canApproveSupport,
+  canChangeExtensions,
+  canDo,
+} from './permissions';
 import { TeamRepository } from './team.repository';
 
 @Injectable()
@@ -23,6 +29,10 @@ export class TeamService {
 
   canApproveSupport(access: StoreAccess) {
     return canApproveSupport(access);
+  }
+
+  canApproveSends(access: StoreAccess): boolean {
+    return canApproveSends(access);
   }
 
   canTransferOwnership(access: StoreAccess): boolean {
