@@ -8,6 +8,7 @@ import {
   canDo,
   canGrantRole,
   canManageMember,
+  canApproveSends,
   canChangeExtensions,
 } from './permissions';
 
@@ -49,6 +50,15 @@ describe('permission policy', () => {
     expect(canChangeExtensions({ ...customAccess, areas: { storeSettings: 'edit' } })).toBe(false);
     expect(
       canChangeExtensions({ ...builtInRoleAccess.owner, role: 'unknown' } as StoreAccess),
+    ).toBe(false);
+  });
+  it('lets only Owner and Admin approve sends, whatever a custom role can edit', () => {
+    expect(canApproveSends(builtInRoleAccess.owner)).toBe(true);
+    expect(canApproveSends(builtInRoleAccess.admin)).toBe(true);
+    expect(canApproveSends(builtInRoleAccess.marketer)).toBe(false);
+    expect(canApproveSends(builtInRoleAccess.support_agent)).toBe(false);
+    expect(
+      canApproveSends({ ...customAccess, areas: { campaigns: 'edit', storeSettings: 'edit' } }),
     ).toBe(false);
   });
   it('never assigns or changes Owner through ordinary membership management', () => {

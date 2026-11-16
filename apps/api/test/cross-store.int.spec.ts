@@ -213,6 +213,113 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('segments', foreign)).toEqual(before);
   });
+const welcome = {
+  trigger: { key: 'consent_given', filters: [] },
+  reEntry: { rule: 'once' },
+  workflowFilters: [],
+  goal: { kind: 'placed_order' },
+  exitConditions: [],
+  firstStepKey: 'welcome',
+  steps: {
+    welcome: {
+      kind: 'send',
+      category: 'marketing',
+      channels: ['sms'],
+      message: { text: 'আমাদের সাথে থাকার জন্য ধন্যবাদ!', buttons: [] },
+      ifNotReachable: 'skip',
+      reviewBeforeSending: false,
+      next: 'end',
+    },
+    end: { kind: 'exit' },
+  },
+};
+async function automation(shop: Shop) {
+  const input = { name: `স্বাগতম ${randomUUID()}`, graph: welcome };
+  return (await success(shop, 'POST', '/automations', 201, input)).json().id as string;
+}
+async function publishedAutomation(shop: Shop) {
+  const id = await automation(shop);
+  const versionId = (await success(shop, 'POST', `/automations/${id}/publish`, 200)).json()
+    .publishedVersionId as string;
+  return { id, versionId };
+}
+fixture('GET /automations', async () => {
+  const { a, b } = await pair(),
+    aId = await automation(a),
+    bId = await automation(b);
+  const ids = (await success(b, 'GET', '/automations', 200))
+    .json()
+    .items.map((item: { id: string }) => item.id);
+  expect(ids).toEqual([bId]);
+  expect((await success(a, 'GET', '/automations', 200)).json().items[0].id).toBe(aId);
+});
+fixture('POST /automations', async () => {
+  const { a, b } = await pair(),
+    id = await automation(a),
+    before = await f.row('automations', id);
+  const own = await automation(b);
+  expect((await f.row('automations', own)).store_id).toBe(b.id);
+  expect(await f.row('automations', id)).toEqual(before);
+});
+fixture('GET /automations/:automationId', async () => {
+  const { a, b } = await pair(),
+    { id, versionId } = await publishedAutomation(a);
+  const own = (await success(a, 'GET', `/automations/${id}`, 200)).json();
+  expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
+  await hidden(b, 'GET', (value) => `/automations/${value}`, id);
+});
+// Each action runs on a workflow in the status it starts from.
+for (const [method, action, status, start, expected] of [
+  ['PATCH', '', 200, 'draft', { name: 'নতুন নাম' }],
+  ['POST', '/publish', 200, 'draft', { status: 'active' }],
+  ['POST', '/pause', 200, 'active', { status: 'paused' }],
+  ['POST', '/enable', 200, 'paused', { status: 'active' }],
+  ['POST', '/archive', 204, 'active', { status: 'archived' }],
+] as const)
+  fixture(`${method} /automations/:automationId${action}`, async () => {
+    const { a, b } = await pair();
+    const prepare = async (shop: Shop) => {
+      const id = start === 'draft' ? await automation(shop) : (await publishedAutomation(shop)).id;
+      if (start === 'paused') await success(shop, 'POST', `/automations/${id}/pause`, 200);
+      return id;
+    };
+    const own = await prepare(b),
+      foreign = await prepare(a);
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/automations/${own}${action}`, status, payload);
+    expect(await f.row('automations', own)).toMatchObject(expected);
+    const before = await f.row('automations', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/automations/${id}${action}`,
+      foreign,
+      () => payload ?? {},
+    );
+    expect(await f.row('automations', foreign)).toEqual(before);
+  });
+fixture('POST /automations/:automationId/versions/:versionId/stop', async () => {
+  const { a, b } = await pair();
+  const stopOld = async (shop: Shop) => {
+    const { id, versionId } = await publishedAutomation(shop);
+    await success(shop, 'POST', `/automations/${id}/publish`, 200);
+    return { id, versionId };
+  };
+  const own = await stopOld(b),
+    foreign = await stopOld(a);
+  await success(b, 'POST', `/automations/${own.id}/versions/${own.versionId}/stop`, 204);
+  expect(await f.row('automation_versions', own.versionId)).toMatchObject({ is_stopped: true });
+  await hidden(
+    b,
+    'POST',
+    (id) => `/automations/${id}/versions/${foreign.versionId}/stop`,
+    foreign.id,
+  );
+  await hidden(b, 'POST', (id) => `/automations/${own.id}/versions/${id}/stop`, foreign.versionId);
+  expect(await f.row('automation_versions', foreign.versionId)).toMatchObject({
+    is_stopped: false,
+  });
+});
 async function campaign(shop: Shop) {
   const input = { name: 'ঈদের অফার', channel: 'sms', content: { text: 'ঈদে ২০% ছাড়' } };
   return (await success(shop, 'POST', '/campaigns', 201, input)).json().id as string;
@@ -261,6 +368,50 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('campaigns', foreign)).toEqual(before);
   });
+// A draft to one consented Dhaka customer, with the credits to send it.
+async function approvableCampaign(shop: Shop) {
+  const contactId = await contact(shop);
+  await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [contactId]);
+  const answer = { channel: 'sms', status: 'granted', note: 'দোকানে এসে রাজি হয়েছেন' };
+  await success(shop, 'POST', `/contacts/${contactId}/consents`, 201, answer);
+  await smsCredits(shop, 5);
+  const input = {
+    name: 'ঈদের অফার',
+    channel: 'sms',
+    content: { text: 'ঈদে ২০% ছাড়' },
+    includeSegmentIds: [await segment(shop)],
+  };
+  return (await success(shop, 'POST', '/campaigns', 201, input)).json().id as string;
+}
+fixture('GET /campaigns/:campaignId/estimate', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const estimate = (await success(a, 'GET', `/campaigns/${id}/estimate`, 200)).json();
+  expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
+  await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
+});
+fixture('POST /campaigns/:campaignId/approve', async () => {
+  const { a, b } = await pair(),
+    own = await approvableCampaign(b),
+    foreign = await approvableCampaign(a);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  const marketer = await f.request(b.member, 'POST', `/campaigns/${own}/approve`);
+  expect(marketer.statusCode).toBe(403);
+  expect(marketer.json().error.code).toBe('CAMPAIGN_APPROVAL_DENIED');
+  expect((await success(b, 'POST', `/campaigns/${own}/approve`, 200)).json().status).toBe(
+    'sending',
+  );
+  const before = await f.row('campaigns', foreign);
+  await hidden(b, 'POST', (id) => `/campaigns/${id}/approve`, foreign);
+  expect(await f.row('campaigns', foreign)).toEqual(before);
+  const recipients = await f.admin.pool.query(
+    'select store_id from campaign_recipients where campaign_id=any($1::uuid[])',
+    [[own, foreign]],
+  );
+  expect(recipients.rows).toEqual([{ store_id: b.id }]);
+});
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -363,6 +514,7 @@ fixture('GET /store', async () => {
 const shopSending = {
   quietHours: { startHour: 22, endHour: 8 },
   frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+  onlyOwnersAndAdminsApprove: false,
 };
 for (const [path, payload, expected] of [
   [

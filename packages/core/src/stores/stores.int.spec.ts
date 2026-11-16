@@ -42,6 +42,7 @@ function sendingWith(change: object) {
   return {
     quietHours: { startHour: 21, endHour: 9 },
     frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+    onlyOwnersAndAdminsApprove: true,
     ...change,
   };
 }
@@ -489,10 +490,12 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     expect((await settings(cookie)).json().sending).toEqual({
       quietHours: { startHour: 21, endHour: 9 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+      onlyOwnersAndAdminsApprove: true,
     });
     const sending = {
       quietHours: { startHour: 22, endHour: 8 },
       frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+      onlyOwnersAndAdminsApprove: false,
     };
     const changed = await patch(cookie, { sending });
 
@@ -512,6 +515,7 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
       { sending: sendingWith({ quietHours: { startHour: 19, endHour: 9 } }) },
       { sending: sendingWith({ frequencyCap: { perChannelPerDay: 4, perSevenDays: 3 } }) },
       { sending: sendingWith({ frequencyCap: { perChannelPerDay: 1, perSevenDays: 11 } }) },
+      { sending: sendingWith({ onlyOwnersAndAdminsApprove: 'yes' }) },
     ])
       expect((await patch(cookie, payload)).statusCode).toBe(400);
     for (const extensions of [['physical_shop'], ['core'], ['chats', 'chats']])
@@ -526,6 +530,10 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     const editor = await staff(storeId, null, 'edit');
     expect((await patch(editor, { name: 'Edited' })).statusCode).toBe(200);
     expect((await patch(editor, { extensions: [] }, '/store/extensions')).statusCode).toBe(403);
+    const approvalOff = { sending: sendingWith({ onlyOwnersAndAdminsApprove: false }) };
+    expect((await patch(editor, approvalOff)).statusCode).toBe(403);
+    expect((await patch(editor, { sending: sendingWith({}) })).statusCode).toBe(200);
+    expect((await settings(editor)).json().sending.onlyOwnersAndAdminsApprove).toBe(true);
     for (const role of ['marketer', 'support_agent'] as const) {
       const member = await staff(storeId, role);
       expect((await settings(member)).statusCode).toBe(403);

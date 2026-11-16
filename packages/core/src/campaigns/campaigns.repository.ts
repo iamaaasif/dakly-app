@@ -6,9 +6,10 @@ import type {
   CampaignGoal,
   CampaignListQuery,
   CampaignStatus,
+  recipientSkipReasons,
   SmsCampaignContent,
 } from '@dakly/contracts/campaigns';
-import { campaigns } from '@dakly/db/schema/campaigns';
+import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -29,6 +30,21 @@ export type CampaignDraft = Pick<
   Campaign,
   'name' | 'goal' | 'content' | 'includeSegmentIds' | 'excludeSegmentIds' | 'scheduledFor'
 >;
+
+export type FrozenRecipient = {
+  contactId: string;
+  destinationAddress: string | null;
+} & (
+  | { status: 'queued'; skipReason: null }
+  | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
+);
+export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
+  approvedByUserId: string | null;
+  approvedAt: Date;
+  estimatedCostPoisha: number;
+  recipientsCount: number;
+  skippedCount: number;
+};
 
 const campaignColumns = {
   id: campaigns.id,
@@ -97,6 +113,37 @@ export class CampaignsRepository {
   ): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx.update(campaigns).set(change).where(draftWhere(storeId, id)).returning(campaignColumns),
+    );
+    return row;
+  }
+
+  // Holds the draft until the approval commits, so two approvals cannot both freeze it.
+  async lockDraft(storeId: string, id: string): Promise<Campaign | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx.select(campaignColumns).from(campaigns).where(draftWhere(storeId, id)).for('update'),
+    );
+    return row;
+  }
+
+  async insertRecipients(
+    storeId: string,
+    campaignId: string,
+    recipients: FrozenRecipient[],
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(campaignRecipients)
+        .values(recipients.map((recipient) => ({ storeId, campaignId, ...recipient }))),
+    );
+  }
+
+  async markApproved(
+    storeId: string,
+    id: string,
+    approval: CampaignApproval,
+  ): Promise<Campaign | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx.update(campaigns).set(approval).where(draftWhere(storeId, id)).returning(campaignColumns),
     );
     return row;
   }
