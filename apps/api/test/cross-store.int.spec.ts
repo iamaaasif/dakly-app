@@ -237,6 +237,12 @@ async function automation(shop: Shop) {
   const input = { name: `স্বাগতম ${randomUUID()}`, graph: welcome };
   return (await success(shop, 'POST', '/automations', 201, input)).json().id as string;
 }
+async function publishedAutomation(shop: Shop) {
+  const id = await automation(shop);
+  const versionId = (await success(shop, 'POST', `/automations/${id}/publish`, 200)).json()
+    .publishedVersionId as string;
+  return { id, versionId };
+}
 fixture('GET /automations', async () => {
   const { a, b } = await pair(),
     aId = await automation(a),
@@ -257,18 +263,28 @@ fixture('POST /automations', async () => {
 });
 fixture('GET /automations/:automationId', async () => {
   const { a, b } = await pair(),
-    id = await automation(a);
-  expect((await success(a, 'GET', `/automations/${id}`, 200)).json().id).toBe(id);
+    { id, versionId } = await publishedAutomation(a);
+  const own = (await success(a, 'GET', `/automations/${id}`, 200)).json();
+  expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
 });
-for (const [method, action, status, expected] of [
-  ['PATCH', '', 200, { name: 'নতুন নাম' }],
-  ['POST', '/archive', 204, { status: 'archived' }],
+// Each action runs on a workflow in the status it starts from.
+for (const [method, action, status, start, expected] of [
+  ['PATCH', '', 200, 'draft', { name: 'নতুন নাম' }],
+  ['POST', '/publish', 200, 'draft', { status: 'active' }],
+  ['POST', '/pause', 200, 'active', { status: 'paused' }],
+  ['POST', '/enable', 200, 'paused', { status: 'active' }],
+  ['POST', '/archive', 204, 'active', { status: 'archived' }],
 ] as const)
   fixture(`${method} /automations/:automationId${action}`, async () => {
-    const { a, b } = await pair(),
-      own = await automation(b),
-      foreign = await automation(a);
+    const { a, b } = await pair();
+    const prepare = async (shop: Shop) => {
+      const id = start === 'draft' ? await automation(shop) : (await publishedAutomation(shop)).id;
+      if (start === 'paused') await success(shop, 'POST', `/automations/${id}/pause`, 200);
+      return id;
+    };
+    const own = await prepare(b),
+      foreign = await prepare(a);
     const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
     await success(b, method, `/automations/${own}${action}`, status, payload);
     expect(await f.row('automations', own)).toMatchObject(expected);
@@ -282,6 +298,28 @@ for (const [method, action, status, expected] of [
     );
     expect(await f.row('automations', foreign)).toEqual(before);
   });
+fixture('POST /automations/:automationId/versions/:versionId/stop', async () => {
+  const { a, b } = await pair();
+  const stopOld = async (shop: Shop) => {
+    const { id, versionId } = await publishedAutomation(shop);
+    await success(shop, 'POST', `/automations/${id}/publish`, 200);
+    return { id, versionId };
+  };
+  const own = await stopOld(b),
+    foreign = await stopOld(a);
+  await success(b, 'POST', `/automations/${own.id}/versions/${own.versionId}/stop`, 204);
+  expect(await f.row('automation_versions', own.versionId)).toMatchObject({ is_stopped: true });
+  await hidden(
+    b,
+    'POST',
+    (id) => `/automations/${id}/versions/${foreign.versionId}/stop`,
+    foreign.id,
+  );
+  await hidden(b, 'POST', (id) => `/automations/${own.id}/versions/${id}/stop`, foreign.versionId);
+  expect(await f.row('automation_versions', foreign.versionId)).toMatchObject({
+    is_stopped: false,
+  });
+});
 async function campaign(shop: Shop) {
   const input = { name: 'ঈদের অফার', channel: 'sms', content: { text: 'ঈদে ২০% ছাড়' } };
   return (await success(shop, 'POST', '/campaigns', 201, input)).json().id as string;
