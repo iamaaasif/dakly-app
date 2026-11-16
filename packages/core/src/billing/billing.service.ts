@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { PublicPlan, billingCycles } from '@dakly/contracts/billing';
+import type { PublicPlan, UsageUnit, billingCycles } from '@dakly/contracts/billing';
 
 import { Clock } from '../platform/clock';
 import { DAY_MS } from '../platform/time';
@@ -29,6 +29,13 @@ export class BillingService {
 
   async seatLimit(storeId: string): Promise<number> {
     return (await this.repository.currentLimits(storeId))?.seats ?? 0;
+  }
+
+  // Only the base plan's limits count; add-ons carry no allowance until their purchase flow exists.
+  async currentAllowance(storeId: string, unit: UsageUnit) {
+    const period = await this.repository.currentPeriod(storeId);
+    if (!period) throw billingError('SUBSCRIPTION_NOT_FOUND');
+    return { allowance: period.limits[unit] ?? 0, periodStart: period.currentPeriodStart };
   }
 
   async startPlan(storeId: string, code: string, cycle: (typeof billingCycles)[number]) {
