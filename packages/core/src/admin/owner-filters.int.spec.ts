@@ -4,6 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { AccountDatabase } from '../platform/database/account-database';
+import { StaffDatabase } from '../platform/database/staff-database';
+import { StaffAuditRepository } from './staff-audit.repository';
 import { StaffRecoveryRepository } from './staff-recovery.repository';
 import { SupportRepository } from './support.repository';
 
@@ -11,6 +13,11 @@ describe('support and recovery filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new SupportRepository(f.tenant, f.connection.db);
   const recovery = new StaffRecoveryRepository(new AccountDatabase(f.connection.db), f.tenant);
+  const staffAudit = new StaffAuditRepository(
+    new AccountDatabase(f.connection.db),
+    new StaffDatabase(f.connection.db),
+    f.tenant,
+  );
   const staff = randomUUID(),
     session = randomUUID();
   beforeAll(async () => {
@@ -26,6 +33,9 @@ describe('support and recovery filters without RLS assistance', () => {
   });
   afterAll(async () => {
     // Remove only this fixture's dependent rows before its staff principal.
+    await f.connection.pool.query('delete from sessions where user_id=any($1::uuid[])', [
+      [f.userA, f.userB],
+    ]);
     await f.connection.pool.query('delete from support_sessions where staff_user_id=$1', [staff]);
     await f.connection.pool.query('delete from support_grants where staff_user_id=$1', [staff]);
     await f.connection.pool.query('delete from staff_sessions where staff_user_id=$1', [staff]);
@@ -85,8 +95,63 @@ describe('support and recovery filters without RLS assistance', () => {
     await f.tenant.forStore(f.a, () => repository.consume(f.a, hash, token, new Date()));
     expect(await repository.session(f.a, token)).toMatchObject({ grantId: a });
     expect(await repository.session(f.b, token)).toBeUndefined();
+    expect(await repository.readSession(f.a, token)).toMatchObject({ grantId: a });
+    expect(await repository.readSession(f.b, token)).toBeUndefined();
     expect(await repository.storeName(f.a)).toBe('রিনার দোকান');
     expect(await repository.storeName(f.b)).toBe('করিমের দোকান');
+  });
+  it('filters the owner and owner sessions by store and writes break-glass grants and staff audit into the requested store', async () => {
+    const now = new Date(),
+      sessionA = randomUUID(),
+      sessionB = randomUUID();
+    await f.connection.pool.query(
+      "update memberships set built_in_role='owner' where id=any($1::uuid[])",
+      [[f.memberA, f.memberB]],
+    );
+    await f.connection.pool.query(
+      "insert into sessions(id,token_hash,user_id,active_store_id,expires_at) values($1,$2,$3,$4,now()+interval '1 hour'),($5,$6,$7,$8,now()+interval '1 hour')",
+      [sessionA, randomBytes(32), f.userA, f.a, sessionB, randomBytes(32), f.userB, f.b],
+    );
+    expect(await repository.owner(f.a)).toBe(f.userA);
+    expect(await repository.owner(f.b)).toBe(f.userB);
+    for (const read of [repository.ownerSession, repository.readOwnerSession]) {
+      expect(await read.call(repository, f.a, f.userA, sessionA, now)).toBe(true);
+      expect(await read.call(repository, f.b, f.userB, sessionB, now)).toBe(true);
+      expect(await read.call(repository, f.b, f.userA, sessionA, now)).toBe(false);
+    }
+    const grant = randomUUID();
+    await f.tenant.forStore(f.b, () =>
+      repository.insertBreakGlass(
+        f.b,
+        {
+          targetId: f.b,
+          reason: 'Investigate customer issue',
+          category: 'security_incident',
+          action: 'support.break_glass_opened',
+          id: grant,
+          staffUserId: staff,
+          staffSessionId: session,
+          shopName: 'করিমের দোকান',
+          access: 'read',
+          scopes: ['customers'],
+          durationMinutes: 30,
+          expiresAt: new Date(now.getTime() + 1800000).toISOString(),
+          confirmBy: new Date(now.getTime() + 60000).toISOString(),
+        },
+        now,
+      ),
+    );
+    expect((await f.row('support_grants', grant)).store_id).toBe(f.b);
+    const auditId = await f.tenant.forStore(f.b, () =>
+      staffAudit.recordForStore(f.b, {
+        actor: { kind: 'user', userId: f.userB },
+        action: 'support.request_approved',
+        targetType: 'user',
+        targetId: f.userB,
+        reason: 'Investigate customer issue',
+      }),
+    );
+    expect((await f.row('staff_audit_log', auditId)).store_id).toBe(f.b);
   });
   it('filters recovery history with positive rows in both stores', async () => {
     const a = randomUUID(),

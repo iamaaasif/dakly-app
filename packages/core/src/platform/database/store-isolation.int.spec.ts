@@ -1,4 +1,7 @@
+import { randomUUID } from 'node:crypto';
+
 import { sql } from 'drizzle-orm';
+import type { PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
@@ -74,6 +77,48 @@ describe('store isolation (Postgres)', () => {
       .filter((row) => !row.has_rls || row.policies < 1)
       .map((row) => row.table_name);
     expect(unprotected).toEqual([]);
+  });
+
+  it('shows the app only its own rows in every relation with store_id, and fails a table without RLS', async () => {
+    const client = await admin.pool.connect();
+    const shops = [randomUUID(), randomUUID()];
+    const probe = `isolation_probe_${randomUUID().replaceAll('-', '')}`;
+    try {
+      await client.query('begin');
+      // Replica mode skips foreign keys and triggers, so every table takes a bare row without
+      // parent rows. The rollback below removes the rows, the relaxed constraints and the probe.
+      await client.query('set local session_replication_role = replica');
+      await client.query(
+        `create table ${probe} (id uuid primary key default gen_random_uuid(), store_id uuid not null)`,
+      );
+      await client.query(`grant select on ${probe} to dakly_app`);
+      const relations = await client.query<{ name: string; kind: string }>(`
+        select c.relname as name, c.relkind as kind
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r', 'p', 'v') and not c.relispartition
+          and exists (select 1 from information_schema.columns col where col.table_schema = 'public'
+            and col.table_name = c.relname and col.column_name = 'store_id')`);
+      const checked = relations.rows.filter((row) => !globalTables.includes(row.name));
+      for (const row of checked) if (row.kind !== 'v') await seedEachShop(client, row.name, shops);
+
+      await client.query('set local role dakly_app');
+      const failing = new Set<string>();
+      for (const [name, shop] of checked.flatMap((row) =>
+        shops.map((id) => [row.name, id] as const),
+      )) {
+        await client.query("select set_config('app.store_id', $1, true)", [shop]);
+        const seen = await client.query<{ store_id: string }>(
+          `select distinct store_id from ${name}`,
+        );
+        if (seen.rows.length !== 1 || seen.rows[0]!.store_id !== shop) failing.add(name);
+      }
+
+      expect(checked.length).toBeGreaterThan(50);
+      expect([...failing]).toEqual([probe]);
+    } finally {
+      await client.query('rollback');
+      client.release();
+    }
   });
 
   it('gives the app no direct access to a partition, so every read goes through the parent policy', async () => {
@@ -187,6 +232,45 @@ describe('store isolation (Postgres)', () => {
     expect(found.rows[0]!.store_id).toBe(storeA);
   });
 });
+
+// Inserts one row per shop with only store_id and generated key values. Check and not-null
+// constraints are dropped inside the caller's transaction, so no table needs realistic values.
+async function seedEachShop(client: PoolClient, table: string, shops: string[]) {
+  const checks = await client.query<{ name: string }>(
+    "select conname as name from pg_constraint where conrelid = $1::regclass and contype = 'c'",
+    [table],
+  );
+  for (const check of checks.rows)
+    await client.query(`alter table ${table} drop constraint if exists "${check.name}"`);
+  const required = await client.query<{ name: string; type: string; is_key: boolean }>(
+    `select a.attname as name, format_type(a.atttypid, null) as type,
+       exists (select 1 from pg_index i where i.indrelid = a.attrelid and i.indisprimary
+         and a.attnum = any(i.indkey)) as is_key
+     from pg_attribute a
+     where a.attrelid = $1::regclass and a.attnum > 0 and not a.attisdropped and a.attnotnull
+       and not a.atthasdef and a.attgenerated = '' and a.attidentity = '' and a.attname <> 'store_id'`,
+    [table],
+  );
+  const keys = required.rows.filter((column) => column.is_key);
+  for (const column of required.rows.filter((column) => !column.is_key))
+    await client.query(`alter table ${table} alter column "${column.name}" drop not null`);
+  const columns = ['store_id', ...keys.map((column) => `"${column.name}"`)].join(', ');
+  const values = ['$1', ...keys.map((column) => generatedValue(column.type))].join(', ');
+  for (const shop of shops)
+    await client.query(`insert into ${table} (${columns}) values (${values})`, [shop]);
+}
+
+function generatedValue(type: string) {
+  const values: Record<string, string> = {
+    uuid: 'gen_random_uuid()',
+    text: "'isolation'",
+    date: 'current_date',
+    'timestamp with time zone': 'now()',
+  };
+  const value = values[type];
+  if (!value) throw new Error(`No fixture value for primary key type ${type}`);
+  return value;
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
