@@ -28,12 +28,13 @@ export type NotifyInput = {
   priority?: number;
 };
 
+type StatusChange = 'seen' | 'done' | 'snoozed';
+
 // Seen is a read receipt, so it only moves a new card. A done card stays done.
-const statusChanges: Record<NotificationStatus, readonly NotificationStatus[]> = {
-  new: ['seen', 'done', 'snoozed'],
-  seen: ['done', 'snoozed'],
-  snoozed: ['done', 'snoozed'],
-  done: [],
+const movesFrom: Record<StatusChange, NotificationStatus[]> = {
+  seen: ['new'],
+  done: ['new', 'seen', 'snoozed'],
+  snoozed: ['new', 'seen', 'snoozed'],
 };
 
 @Injectable()
@@ -52,13 +53,14 @@ export class NotificationsService {
       if (!userIds.length) return;
       const created = await this.repository.insertForUsers(storeId, userIds, notification);
       const occurredAt = this.clock.now().toISOString();
-      for (const { id, userId, category } of created)
-        await this.outbox.publish({
-          type: 'notification.created',
+      await this.outbox.publishAll(
+        created.map(({ id, userId, category }) => ({
+          type: 'notification.created' as const,
           storeId,
           occurredAt,
           payload: { notificationId: id, userId, category },
-        });
+        })),
+      );
     });
   }
 
@@ -95,19 +97,14 @@ export class NotificationsService {
     storeId: string,
     userId: string,
     notificationId: string,
-    { to, snoozedUntil }: { to: NotificationStatus; snoozedUntil: Date | null },
+    { to, snoozedUntil }: { to: StatusChange; snoozedUntil: Date | null },
   ) {
+    const change = { from: movesFrom[to], to, snoozedUntil };
+    if (await this.repository.changeStatus(storeId, userId, notificationId, change)) return;
+    // The guarded update moved nothing: the card is missing, done, or already past this change.
     const current = await this.repository.findForUser(storeId, userId, notificationId);
     if (!current) throw notificationError('NOTIFICATION_NOT_FOUND');
-    if (!statusChanges[current.status].includes(to)) {
-      if (to === 'snoozed') throw notificationError('NOTIFICATION_DONE');
-      return;
-    }
-    await this.repository.changeStatus(storeId, userId, notificationId, {
-      from: current.status,
-      to,
-      snoozedUntil,
-    });
+    if (to === 'snoozed' && current.status === 'done') throw notificationError('NOTIFICATION_DONE');
   }
 }
 

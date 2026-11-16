@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import type {
   NotificationCategory,
@@ -102,9 +102,9 @@ export class NotificationsRepository {
     storeId: string,
     userId: string,
     notificationId: string,
-    change: { from: NotificationStatus; to: NotificationStatus; snoozedUntil: Date | null },
-  ): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
+    change: { from: NotificationStatus[]; to: NotificationStatus; snoozedUntil: Date | null },
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(notifications)
         .set({ status: change.to, snoozedUntil: change.snoozedUntil })
@@ -112,9 +112,11 @@ export class NotificationsRepository {
           and(
             ofUser(storeId, userId),
             eq(notifications.id, notificationId),
-            eq(notifications.status, change.from),
+            inArray(notifications.status, change.from),
           ),
-        ),
+        )
+        .returning({ id: notifications.id }),
     );
+    return rows.length > 0;
   }
 }

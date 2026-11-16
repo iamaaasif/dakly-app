@@ -27,9 +27,9 @@ export class OutboxRepository {
     @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
   ) {}
 
-  async insert(storeId: string, event: NewOutboxEvent) {
+  async insert(storeId: string, events: NewOutboxEvent[]) {
     await this.tenant.inTransaction(storeId, (tx) =>
-      tx.insert(outboxEvents).values({ storeId, ...event }),
+      tx.insert(outboxEvents).values(events.map((event) => ({ storeId, ...event }))),
     );
   }
 

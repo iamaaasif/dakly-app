@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -142,12 +142,20 @@ describe('NotificationsService and its routes', () => {
     expect(published.map((event) => event.payload.userId).sort()).toEqual(recipients);
   });
 
-  it('gives no row to a member whose role lacks the permission', async () => {
+  it('gives no row to an invited or removed member whose role would grant the permission', async () => {
     const a = await shop();
+    await admin.pool.query(
+      "insert into memberships(id,store_id,built_in_role,status,invite_phone,invite_token_hash,invite_expires_at) values(gen_random_uuid(),$1,'admin','invited',$2,$3,now()+interval '1 day')",
+      [a.id, `018${randomInt(10000000, 99999999)}`, randomBytes(32)],
+    );
+    const removed = await member(a.id, 'admin');
+    await admin.pool.query(
+      "update memberships set status='removed' where store_id=$1 and user_id=$2",
+      [a.id, removed.userId],
+    );
     await service.notify(a.id, handedOver());
-    const users = (await rows(a.id)).map((row) => row.user_id);
-    expect(users).not.toContain(a.marketer.userId);
-    expect(users).toHaveLength(3);
+    const users = (await rows(a.id)).map((row) => row.user_id).sort();
+    expect(users).toEqual([a.owner.userId, a.agent.userId, a.chatRole.userId].sort());
   });
 
   it('lists, marks and snoozes only the signed-in member’s own rows', async () => {
@@ -212,5 +220,29 @@ describe('NotificationsService and its routes', () => {
     const agentRows = (await request(a.agent, 'GET', '/notifications')).json().items;
     expect(agentRows.map((item: { status: string }) => item.status)).toEqual(['new', 'new']);
     expect(agentRows.map((item: { id: string }) => item.id)).not.toContain(first.id);
+  });
+
+  it('answers two changes made at once on one card consistently', async () => {
+    const a = await shop();
+    await service.notify(a.id, handedOver());
+    const [card] = (await rows(a.id)).filter((row) => row.user_id === a.owner.userId);
+    const until = new Date(Date.now() + 3_600_000).toISOString();
+    for (let round = 0; round < 5; round += 1) {
+      await admin.pool.query(
+        "update notifications set status='new', snoozed_until=null where id=$1",
+        [card!.id],
+      );
+      const [done, snoozed] = await Promise.allSettled([
+        service.markDone(a.id, a.owner.userId, card!.id),
+        service.snooze(a.id, a.owner.userId, card!.id, { until }),
+      ]);
+      expect(done.status).toBe('fulfilled');
+      const final = await admin.pool.query('select status from notifications where id=$1', [
+        card!.id,
+      ]);
+      expect(final.rows[0].status).toBe('done');
+      if (snoozed.status === 'rejected')
+        expect((snoozed.reason as { code: string }).code).toBe('NOTIFICATION_DONE');
+    }
   });
 });
