@@ -98,11 +98,13 @@ export const createContactSchema = z.object({
   phone: bdMobileSchema,
 });
 
+const contactTags = z.array(z.string().trim().min(1).max(50)).max(50);
+
 export const updateContactSchema = z
   .strictObject({
     name: contactName.optional(),
     phone: bdMobileSchema.optional(),
-    tags: z.array(z.string().trim().min(1).max(50)).max(50).optional(),
+    tags: contactTags.optional(),
   })
   .refine((change) => Object.keys(change).length > 0, 'Change at least one field');
 
@@ -115,9 +117,58 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
+const importColumn = z.int().min(0).max(199);
+
+// The file column for each field, by position, so two columns with the same header stay apart.
+// The phone finds an existing contact, so an import never replaces it.
+export const contactImportMappingSchema = z
+  .strictObject({
+    phone: importColumn,
+    name: importColumn.optional(),
+    whatsappPhone: importColumn.optional(),
+    email: importColumn.optional(),
+    address: importColumn.optional(),
+    district: importColumn.optional(),
+    tags: importColumn.optional(),
+    notes: importColumn.optional(),
+  })
+  .refine(
+    (mapping) => new Set(Object.values(mapping)).size === Object.keys(mapping).length,
+    'Map each column to one field at most',
+  );
+
+function optionalCell<T extends z.ZodType<unknown, string>>(schema: T) {
+  return z
+    .string()
+    .trim()
+    .optional()
+    .transform((cell) => cell || undefined)
+    .pipe(schema.optional());
+}
+
+// One file row after mapping, every cell as text. Blank or unmapped cells leave the field unset.
+export const contactImportRowSchema = z.object({
+  phone: z.string().trim().min(1, 'Add a phone number').pipe(bdMobileSchema),
+  name: optionalCell(contactName),
+  whatsappPhone: optionalCell(bdMobileSchema),
+  email: optionalCell(z.email().max(254)),
+  address: optionalCell(z.string().max(500)),
+  district: optionalCell(z.string().max(100)),
+  tags: optionalCell(
+    z
+      .string()
+      .transform((cell) => cell.split(',').filter((tag) => tag.trim()))
+      .pipe(contactTags),
+  ),
+  notes: optionalCell(z.string().max(2000)),
+});
+
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
 export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
+export type ContactImportMapping = z.infer<typeof contactImportMappingSchema>;
+export type ContactImportRow = z.infer<typeof contactImportRowSchema>;
+export type ContactImportField = keyof ContactImportRow;
 export type ContactKind = (typeof contactKinds)[number];
 export type ContactSource = (typeof contactSources)[number];
 
