@@ -74,7 +74,7 @@ async function publishCommitted() {
   const storeId = randomUUID();
   storeIds.push(storeId);
   const event = contactCreated(storeId);
-  await storeTransaction.run(storeId, () => outbox.publish(storeId, event));
+  await storeTransaction.run(storeId, () => outbox.publish(event));
   return { storeId, contactId: contactIdOf(event) };
 }
 
@@ -170,7 +170,7 @@ describe('OutboxRelayService', () => {
     const event = contactCreated(storeId);
     await expect(
       storeTransaction.run(storeId, async () => {
-        await outbox.publish(storeId, event);
+        await outbox.publish(event);
         throw new Error('Contact save failed');
       }),
     ).rejects.toThrow('Contact save failed');
@@ -185,9 +185,16 @@ describe('OutboxRelayService', () => {
 
   it('rejects an event published outside a store transaction', async () => {
     const storeId = randomUUID();
-    await expect(outbox.publish(storeId, contactCreated(storeId))).rejects.toMatchObject({
+    await expect(outbox.publish(contactCreated(storeId))).rejects.toMatchObject({
       code: 'STORE_TRANSACTION_REQUIRED',
     });
+  });
+
+  it('rejects an event for another store than the open store transaction', async () => {
+    const storeId = randomUUID();
+    await expect(
+      storeTransaction.run(storeId, () => outbox.publish(contactCreated(randomUUID()))),
+    ).rejects.toThrow('Cannot change stores inside a transaction');
   });
 
   it('queues each subscriber job once when two relays run at the same time', async () => {
@@ -259,7 +266,7 @@ describe('OutboxRelayService', () => {
     const contactIds: string[] = [];
     for (let index = 0; index < 5; index += 1) {
       const event = contactCreated(storeId);
-      await storeTransaction.run(storeId, () => outbox.publish(storeId, event));
+      await storeTransaction.run(storeId, () => outbox.publish(event));
       contactIds.push(contactIdOf(event));
       // Ids order by millisecond, so each event gets a later one than the last.
       await setTimeout(2);

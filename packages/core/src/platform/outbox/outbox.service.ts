@@ -14,9 +14,9 @@ export class OutboxService {
   ) {}
 
   // The event must commit or roll back with the change it describes, so it only joins the
-  // caller's store transaction and never opens one.
-  async publish(storeId: string, event: DaklyEvent) {
-    const { type, occurredAt, payload } = daklyEventSchema.parse(event);
+  // caller's store transaction and never opens one. Joining fails if the event names another store.
+  async publish(event: DaklyEvent) {
+    const { storeId, type, occurredAt, payload } = daklyEventSchema.parse(event);
     if (!this.transaction.isOpen())
       throw new AppError('STORE_TRANSACTION_REQUIRED', PLATFORM_ERRORS.STORE_TRANSACTION_REQUIRED);
     await this.repository.insert(storeId, { type, payload, occurredAt: new Date(occurredAt) });

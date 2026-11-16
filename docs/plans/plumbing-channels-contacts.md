@@ -46,7 +46,7 @@ Branch: `docs/rev-7-event-catalogue`
 
 Branch: `feat/db-2-outbox-relay`
 
-- Scope: `platform/outbox/`: `OutboxService.publish(storeId, event)` inserts into `outbox_events` and must run inside the caller's store transaction (it throws when called outside one). A `relay-outbox` job on a BullMQ job scheduler every second claims rows through `claim_outbox_events`, queues one job per subscriber (P5) with `addBulk`, then marks them through `mark_outbox_events_published`. A `@HandlesEvent(type, { queue })` decorator registers a subscriber, routed by the existing job dispatchers. Rows that fail 10 times stay unpublished and raise a staff alert. Purging stays in DB-7.
+- Scope: `platform/outbox/`: `OutboxService.publish(event)` inserts into `outbox_events` and must run inside the caller's store transaction (it throws when called outside one). A `relay-outbox` job on a BullMQ job scheduler every second claims rows through `claim_outbox_events`, queues one job per subscriber (P5) with `addBulk`, then marks them through `mark_outbox_events_published`. A `@HandlesEvent(type, { queue })` decorator registers a subscriber, routed by the existing job dispatchers. Rows that fail 10 times stay unpublished and raise a staff alert. Purging stays in DB-7.
 - Rules: [jobs.md](../rules/jobs.md); the relay never holds a transaction while talking to Valkey.
 - Tests (integration): an event written in a rolled-back transaction is never relayed; two relays running at once queue each subscriber job once; a crash after queueing and before marking queues nothing twice (same job id); a handler that throws retries without affecting other subscribers of the same event; ordering within one store is by `occurred_at`.
 
