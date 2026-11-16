@@ -1,8 +1,15 @@
-import { StorePage } from '@/components/store-page';
-import { NewCustomerForm } from '@/features/customers/components/new-customer-form';
+import Link from 'next/link';
+
+import { contactListQuerySchema } from '@dakly/contracts/contacts';
+
+import { CustomersScreen } from '@/features/customers/components/customers-screen';
 import { requireSession } from '@/lib/require-session';
 
-export default async function CustomersPage() {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cursor?: string; kind?: string; tag?: string; search?: string }>;
+}) {
   const session = await requireSession();
   if (!session.currentStore?.canViewCustomers)
     return (
@@ -10,14 +17,13 @@ export default async function CustomersPage() {
         You do not have Customers access in this shop.
       </p>
     );
-  return (
-    <StorePage permission="canViewCustomers">
-      <main className="mx-auto max-w-2xl space-y-6 p-6 md:p-8">
-        <h1 className="text-xl font-bold">Customers</h1>
-        <StorePage permission="canCreateCustomer">
-          <NewCustomerForm />
-        </StorePage>
-      </main>
-    </StorePage>
-  );
+  const { cursor, kind, tag, search } = await searchParams;
+  const parsed = contactListQuerySchema.safeParse({ cursor, kind, tag, search });
+  if (!parsed.success)
+    return (
+      <p role="alert" className="p-6">
+        This customers page address is invalid. <Link href="/customers">Open all customers</Link>.
+      </p>
+    );
+  return <CustomersScreen query={parsed.data} />;
 }

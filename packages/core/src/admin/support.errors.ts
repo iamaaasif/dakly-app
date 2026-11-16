@@ -12,6 +12,7 @@ const errors = {
   SUPPORT_DENIED: { status: 403, message: 'Support access is not allowed' },
   SUPPORT_ENDED: { status: 403, message: 'Support access has ended or expired' },
   SUPPORT_NOT_FOUND: { status: 404, message: 'Support request not found' },
+  STORE_NOT_FOUND: { status: 404, message: 'Shop not found' },
   SUPPORT_INVALID: { status: 409, message: 'This request is no longer available' },
   SUPPORT_PHONE_REQUIRED: {
     status: 409,

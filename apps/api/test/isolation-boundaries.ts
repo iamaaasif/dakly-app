@@ -95,6 +95,14 @@ const groups = [
     ],
   },
   {
+    evidence: 'admin/sms-sender-review.int.spec.ts',
+    boundary: 'staff review of sender requests: definer-function queue and audited decisions',
+    routes: [
+      'GET /admin/sms-sender-ids',
+      'POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/:decision',
+    ],
+  },
+  {
     evidence: 'route-access.int.spec.ts; stores/stores.int.spec.ts; admin/support.int.spec.ts',
     boundary: 'public health/catalogue or one-use support handoff (no shop session)',
     routes: ['GET /health', 'GET /plans', 'POST /support/exchange'],
