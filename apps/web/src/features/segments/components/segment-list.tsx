@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import type { SegmentListResponse } from '@dakly/contracts/segments';
@@ -12,18 +13,31 @@ type SegmentListProps = {
 const linkClass = 'inline-flex min-h-10 items-center gap-2 text-action underline';
 
 export function SegmentList({ page, cursor }: SegmentListProps) {
+  const editPrefix = cursor
+    ? `/segments?cursor=${encodeURIComponent(cursor)}&edit=`
+    : '/segments?edit=';
   return (
     <main className="space-y-6 p-4 md:p-8">
-      <div>
-        <h1 className="text-xl font-bold">Segments</h1>
-        <p className="text-text-muted">
-          Groups of customers to send a campaign to. Counts are live.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold">Segments</h1>
+          <p className="text-text-muted">
+            Groups of customers to send a campaign to. Counts are live.
+          </p>
+        </div>
+        <Link href="/segments?edit=new" className={linkClass}>
+          <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
+          Create segment
+        </Link>
       </div>
       {page.items.length ? (
         <div className="space-y-3">
           {page.items.map((segment) => (
-            <SegmentRow key={segment.id} segment={segment} />
+            <SegmentRow
+              key={segment.id}
+              segment={segment}
+              editHref={`${editPrefix}${segment.id}`}
+            />
           ))}
         </div>
       ) : (

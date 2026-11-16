@@ -37,13 +37,6 @@ Each task is one PR under about 500 lines, in this order, on the branch named un
 
 ### Group 1: who to send to
 
-### CUS-7 · Web: segments list and builder
-
-Branch: `feat/cus-7-segments-web`
-
-- Scope: list with counts, builder with live count (debounced), save, duplicate, delete; the ready-made lifecycle segments from feature 03 appear as read-only starting points.
-- Tests: component states; Playwright builds a segment with two conditions and sees the count change.
-
 ### CUS-8 · Customer import
 
 Branch: `feat/cus-8-customer-import`
