@@ -6,5 +6,6 @@ export default defineConfig({
     server: { deps: { external: [/\/packages\/core\/dist\//] } },
     include: ['test/**/*.int.spec.ts'],
     fileParallelism: false,
+    globalSetup: ['../../packages/core/test/queue-prefix.ts'],
   },
 });

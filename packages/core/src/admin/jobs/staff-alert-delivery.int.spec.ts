@@ -45,7 +45,7 @@ describe('Staff alert worker lifecycle', () => {
         DiscoveryModule,
         BullModule.forRoot({
           connection: toRedisConnection(loadEnv().REDIS_URL),
-          prefix: `test-${randomUUID()}`,
+          prefix: `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
         }),
         BullModule.registerQueue({ name: QUEUES.transactional }),
       ],

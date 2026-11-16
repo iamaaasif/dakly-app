@@ -8,6 +8,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.url(),
   REDIS_URL: redisUrlSchema,
+  // Test runs set their own, so a local worker never takes their jobs. BullMQ's default otherwise.
+  QUEUE_PREFIX: z.string().min(1).default('bull'),
   EMAIL_DRIVER: z.enum(['smtp', 'sendgrid']).optional(),
   EMAIL_FROM: z.email().optional(),
   SENDGRID_API_KEY: z.string().min(1).optional(),

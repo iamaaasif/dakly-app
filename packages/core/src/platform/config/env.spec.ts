@@ -13,6 +13,12 @@ describe('loadEnv', () => {
       ).toThrow();
     },
   );
+
+  it("keeps BullMQ's queue prefix unless a test run sets its own", () => {
+    const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+    expect(loadEnv(base).QUEUE_PREFIX).toBe('bull');
+    expect(loadEnv({ ...base, QUEUE_PREFIX: 'test-run' }).QUEUE_PREFIX).toBe('test-run');
+  });
 });
 
 describe('SMS driver configuration', () => {

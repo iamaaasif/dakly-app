@@ -47,7 +47,10 @@ import { JobSchedulers } from './job-schedulers';
     DatabaseModule,
     SecurityNoticesModule,
     BullModule.forRootAsync({
-      useFactory: () => ({ connection: toRedisConnection(loadEnv().REDIS_URL) }),
+      useFactory: () => {
+        const env = loadEnv();
+        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+      },
     }),
   ],
 })
