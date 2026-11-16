@@ -11,10 +11,6 @@ const AUTOMATION_ERRORS = {
     message: `A store can have at most ${MAX_AUTOMATIONS_PER_STORE} workflows`,
   },
   AUTOMATION_STATUS_NOT_ALLOWED: { status: 409, message: 'The workflow cannot do this now' },
-  AUTOMATION_PUBLISH_CONFLICT: {
-    status: 409,
-    message: 'This workflow was published at the same time. Try again.',
-  },
   AUTOMATION_VERSION_IS_CURRENT: {
     status: 409,
     message: 'This is the published version. Pause the workflow to stop it.',

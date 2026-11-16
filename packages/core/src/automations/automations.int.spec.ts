@@ -228,6 +228,33 @@ describe('AutomationsService (Postgres)', () => {
     ]);
   });
 
+  it('changes the live trigger only on publish', async () => {
+    const automation = await draft();
+    await service.publish(storeA, automation.id, staff);
+    const tapped: AutomationGraph = { ...welcome, trigger: { key: 'link_tapped', filters: [] } };
+    const triggerType = async () =>
+      (await admin.pool.query('select trigger_type from automations where id=$1', [automation.id]))
+        .rows[0].trigger_type;
+
+    await service.change(storeA, automation.id, { graph: tapped }, staff);
+    expect(await triggerType()).toBe('consent_given');
+    await service.publish(storeA, automation.id, staff);
+    expect(await triggerType()).toBe('link_tapped');
+  });
+
+  it('numbers two publishes at the same moment 1 and 2', async () => {
+    const automation = await draft();
+
+    await Promise.all([
+      service.publish(storeA, automation.id, staff),
+      service.publish(storeA, automation.id, staff),
+    ]);
+
+    const detail = await service.get(storeA, automation.id);
+    expect(detail.versions.map((version) => version.version)).toEqual([1, 2]);
+    expect(detail.publishedVersionId).toBe(detail.versions[1]!.id);
+  });
+
   it('pauses, enables and archives, and refuses a move the status does not allow', async () => {
     const automation = await draft();
     await expect(service.enable(storeA, automation.id, staff)).rejects.toMatchObject({

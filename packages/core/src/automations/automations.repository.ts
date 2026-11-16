@@ -6,7 +6,6 @@ import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { automations, automationVersions } from '@dakly/db/schema/automations';
 
-import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Automation = {
@@ -47,6 +46,7 @@ type AutomationChange = {
   status?: AutomationStatus;
   name?: string;
   graph?: AutomationGraph;
+  triggerType?: TriggerKey;
   publishedVersionId?: string;
   updatedAt: Date;
 };
@@ -138,28 +138,23 @@ export class AutomationsRepository {
     return row;
   }
 
-  // Two publishes at once compute the same number; the unique index refuses the second.
+  // The caller holds the workflow's row lock from its status update, so two publishes cannot
+  // pick the same number.
   async insertVersion(
     storeId: string,
     automationId: string,
     version: { graph: AutomationGraph; publishedByUserId: string | null; publishedAt: Date },
-  ): Promise<AutomationVersion | 'version_taken'> {
+  ): Promise<AutomationVersion> {
     const next = sql<number>`(select coalesce(max(${automationVersions.version}), 0) + 1
       from ${automationVersions} where ${automationVersions.storeId} = ${storeId}
       and ${automationVersions.automationId} = ${automationId})`;
-    try {
-      const [row] = await this.database.forStore(storeId, (tx) =>
-        tx
-          .insert(automationVersions)
-          .values({ storeId, automationId, version: next, ...version })
-          .returning(versionColumns),
-      );
-      return row!;
-    } catch (error) {
-      if (isConstraintViolation(error, '23505', 'automation_versions_automation_version_key'))
-        return 'version_taken';
-      throw error;
-    }
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(automationVersions)
+        .values({ storeId, automationId, version: next, ...version })
+        .returning(versionColumns),
+    );
+    return row!;
   }
 
   listVersions(storeId: string, automationId: string): Promise<AutomationVersion[]> {

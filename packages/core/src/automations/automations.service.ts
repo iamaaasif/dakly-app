@@ -11,7 +11,7 @@ import {
   type CreateAutomationInput,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
-import { automationTriggers } from '@dakly/contracts/automations/catalogue';
+import { automationTriggers, type TriggerKey } from '@dakly/contracts/automations/catalogue';
 import {
   type AutomationGraph,
   type AutomationStep,
@@ -111,13 +111,20 @@ export class AutomationsService {
     return this.transaction.run(storeId, async () => {
       const automation = await this.findVisible(storeId, automationId);
       checkPublishable(automation.graph);
+      // The status update locks the row first, so a second publish waits for this one. The live
+      // trigger becomes the published graph's.
+      await this.move(storeId, automationId, 'publish', automation.graph.trigger.key);
+      const now = this.clock.now();
       const version = await this.repository.insertVersion(storeId, automationId, {
         graph: automation.graph,
         publishedByUserId: actor.kind === 'user' ? actor.userId : null,
-        publishedAt: this.clock.now(),
+        publishedAt: now,
       });
-      if (version === 'version_taken') throw automationError('AUTOMATION_PUBLISH_CONFLICT');
-      return this.move(storeId, automationId, 'publish', version.id);
+      const published = await this.repository.change(storeId, automationId, ['active'], {
+        publishedVersionId: version.id,
+        updatedAt: now,
+      });
+      return toAutomationResponse(published!);
     });
   }
 
@@ -152,12 +159,12 @@ export class AutomationsService {
     storeId: string,
     automationId: string,
     move: StatusMove,
-    publishedVersionId?: string,
+    triggerType?: TriggerKey,
   ): Promise<AutomationResponse> {
     const { from, to } = STATUS_MOVES[move];
     const automation = await this.repository.change(storeId, automationId, from, {
       status: to,
-      publishedVersionId,
+      triggerType,
       updatedAt: this.clock.now(),
     });
     if (automation) return toAutomationResponse(automation);

@@ -27,7 +27,6 @@ describe('automation filters without RLS assistance', () => {
       publishedByUserId: userId,
       publishedAt: now,
     });
-    if (version === 'version_taken') throw new Error('Fixture version already taken');
     return { automation, version };
   }
 
@@ -49,14 +48,22 @@ describe('automation filters without RLS assistance', () => {
       await repository.change(f.b, a.automation.id, visible, { name: 'চুরি', updatedAt: now }),
     ).toBeUndefined();
     expect(await repository.stopVersion(f.b, a.automation.id, a.version.id)).toBe(false);
-    // Store B sees no versions of A's workflow, so it picks 1, which A's version already holds.
-    expect(
-      await repository.insertVersion(f.b, a.automation.id, {
-        graph,
-        publishedByUserId: f.userB,
-        publishedAt: now,
-      }),
-    ).toBe('version_taken');
+    const fromStoreB = { graph, publishedByUserId: f.userB, publishedAt: now };
+    await expect(repository.insertVersion(f.b, a.automation.id, fromStoreB)).rejects.toThrow();
+    // A workflow with no version yet: the composite foreign key refuses it, not the unique index.
+    const unpublished = await repository.insert(f.a, {
+      name: 'জন্মদিনের শুভেচ্ছা',
+      graph,
+      triggerType: 'consent_given',
+      createdByUserId: f.userA,
+    });
+    await expect(repository.insertVersion(f.b, unpublished.id, fromStoreB)).rejects.toThrow();
+    const written = await f.connection.pool.query(
+      'select id from automation_versions where automation_id=any($1::uuid[]) and store_id=$2',
+      [[a.automation.id, unpublished.id], f.b],
+    );
+    expect(written.rows).toEqual([]);
+    expect(await repository.listVersions(f.a, unpublished.id)).toEqual([]);
     expect(await repository.listVersions(f.a, a.automation.id)).toEqual([
       expect.objectContaining({ id: a.version.id, isStopped: false }),
     ]);
