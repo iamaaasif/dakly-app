@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   ContactDetailResponse,
+  ContactIdentityResponse,
   ContactListQuery,
   ContactListResponse,
   ContactResponse,
@@ -12,14 +13,19 @@ import type {
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
-import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { contactError } from './contacts.errors';
-import { type Contact, type ContactFilter, ContactsRepository } from './contacts.repository';
+import {
+  type Contact,
+  type ContactFilter,
+  type ContactIdentity,
+  ContactsRepository,
+} from './contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
+// Writes take the actor (services.md); nothing records it for contacts yet.
 type Actor = AuditEntry['actor'];
 
 @Injectable()
@@ -28,7 +34,6 @@ export class ContactsService {
     @Inject(ContactsRepository) private readonly contactsRepository: ContactsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
-    @Inject(AuditService) private readonly audit: AuditService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -36,7 +41,7 @@ export class ContactsService {
     storeId: string,
     input: CreateContactInput,
     access: Access,
-    actor: Actor,
+    _actor: Actor,
   ): Promise<ContactResponse> {
     const contact = await this.transaction.run(storeId, async () => {
       // A staff add is an intentional customer under the glossary, whatever its orders.
@@ -51,12 +56,6 @@ export class ContactsService {
         storeId,
         occurredAt: this.clock.now().toISOString(),
         payload: { contactId: created.id },
-      });
-      await this.audit.record(storeId, {
-        actor,
-        action: 'contact.created',
-        entityType: 'contact',
-        entityId: created.id,
       });
       return created;
     });
@@ -84,7 +83,9 @@ export class ContactsService {
     if (!contact) throw contactError('CONTACT_NOT_FOUND');
     return {
       ...toContactResponse(contact, access.seeFullPhone),
-      identities: await this.contactsRepository.findIdentities(storeId, id),
+      identities: (await this.contactsRepository.findIdentities(storeId, id)).map(
+        toIdentityResponse,
+      ),
     };
   }
 
@@ -94,39 +95,24 @@ export class ContactsService {
     change: UpdateContactInput,
     editor: { access: Access; actor: Actor },
   ): Promise<ContactResponse> {
-    const contact = await this.transaction.run(storeId, async () => {
-      const updated = await this.contactsRepository.update(storeId, id, change);
-      if (updated === 'phone_taken') throw contactError('CONTACT_PHONE_TAKEN');
-      if (!updated) throw contactError('CONTACT_NOT_FOUND');
-      // Field names only: the audit log never holds the name or phone itself.
-      await this.audit.record(storeId, {
-        actor: editor.actor,
-        action: 'contact.updated',
-        entityType: 'contact',
-        entityId: id,
-        after: { changedFields: Object.keys(change) },
-      });
-      return updated;
+    // A typed phone proves nothing, so an edited phone is no longer the verified WhatsApp sender.
+    const updated = await this.contactsRepository.update(storeId, id, {
+      ...change,
+      ...(change.phone && { phoneVerifiedAt: null }),
     });
-    return toContactResponse(contact, editor.access.seeFullPhone);
+    if (updated === 'phone_taken') throw contactError('CONTACT_PHONE_TAKEN');
+    if (!updated) throw contactError('CONTACT_NOT_FOUND');
+    return toContactResponse(updated, editor.access.seeFullPhone);
   }
 
-  async remove(storeId: string, id: string, actor: Actor): Promise<void> {
-    await this.transaction.run(storeId, async () => {
-      if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
-        throw contactError('CONTACT_NOT_FOUND');
-      await this.audit.record(storeId, {
-        actor,
-        action: 'contact.deleted',
-        entityType: 'contact',
-        entityId: id,
-      });
-    });
+  async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
+    if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
+      throw contactError('CONTACT_NOT_FOUND');
   }
 }
 
-// Without "See full phone numbers" digits are matched whole, so part of a number finds nothing;
-// a prefix search would let a member read the hidden digits back one search at a time.
+// A partial number is a prefix search only for members who see full phones. Anyone may find a
+// contact by its exact full number; the result stays masked without the flag.
 function searchFilter(
   search: string | undefined,
   seeFullPhone: boolean,
@@ -136,6 +122,15 @@ function searchFilter(
   if (fullPhone.success) return { phone: fullPhone.data };
   if (/^\d+$/.test(search)) return seeFullPhone ? { phonePrefix: search } : { phone: search };
   return { name: search };
+}
+
+function toIdentityResponse(identity: ContactIdentity): ContactIdentityResponse {
+  return {
+    id: identity.id,
+    channel: identity.channel,
+    channelConnectionId: identity.channelConnectionId,
+    profileName: identity.profileName,
+  };
 }
 
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {

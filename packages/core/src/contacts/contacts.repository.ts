@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, arrayContains, desc, eq, ilike, isNull, like, sql } from 'drizzle-orm';
 
+import type { chatChannels } from '@dakly/contracts/channels';
 import type {
-  ContactIdentityResponse,
   ContactKind,
   ContactListQuery,
   ContactSource,
@@ -24,6 +24,15 @@ export type Contact = {
 };
 
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
+
+export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
+
+export type ContactIdentity = {
+  id: string;
+  channel: (typeof chatChannels)[number];
+  channelConnectionId: string;
+  profileName: string | null;
+};
 
 // The service decides what a search means; each search field has its own index.
 export type ContactFilter = Omit<ContactListQuery, 'search'> & {
@@ -81,7 +90,7 @@ export class ContactsRepository {
     );
   }
 
-  findIdentities(storeId: string, contactId: string): Promise<ContactIdentityResponse[]> {
+  findIdentities(storeId: string, contactId: string): Promise<ContactIdentity[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -117,7 +126,7 @@ export class ContactsRepository {
   async update(
     storeId: string,
     id: string,
-    change: UpdateContactInput,
+    change: ContactChange,
   ): Promise<Contact | 'phone_taken' | undefined> {
     try {
       const rows = await this.database.forStore(storeId, (tx) =>
@@ -131,8 +140,7 @@ export class ContactsRepository {
       );
       return rows[0];
     } catch (error) {
-      // The per-store phone index is the only unique key these fields can break.
-      if (databaseErrorCode(error) === '23505') return 'phone_taken';
+      if (isUniqueConflict(error, 'contacts_store_id_phone_key')) return 'phone_taken';
       throw error;
     }
   }
@@ -147,6 +155,17 @@ export class ContactsRepository {
     );
     return rows.length > 0;
   }
+}
+
+function isUniqueConflict(error: unknown, constraint: string): boolean {
+  const cause = error instanceof Error && error.cause ? error.cause : error;
+  return (
+    typeof cause === 'object' &&
+    cause !== null &&
+    databaseErrorCode(error) === '23505' &&
+    'constraint' in cause &&
+    cause.constraint === constraint
+  );
 }
 
 function escapeLike(value: string): string {

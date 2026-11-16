@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AuditService } from '../audit/audit.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
-import type { ContactsRepository, NewContact } from './contacts.repository';
+import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
@@ -23,6 +22,7 @@ describe('ContactsService', () => {
   const repository = {
     insert: vi.fn(),
     findById: vi.fn(),
+    list: vi.fn(),
     findIdentities: vi.fn(),
     update: vi.fn(),
     softDelete: vi.fn(),
@@ -37,7 +37,6 @@ describe('ContactsService', () => {
       repository as unknown as ContactsRepository,
       transaction as unknown as StoreTransaction,
       { publish: vi.fn() } as unknown as OutboxService,
-      { record: vi.fn() } as unknown as AuditService,
       { now: () => new Date('2026-11-16T04:30:00Z') } as Clock,
     );
   });
@@ -178,6 +177,68 @@ describe('ContactsService', () => {
     await expect(service.remove(STORE_ID, contact.id, actor)).rejects.toMatchObject({
       code: 'CONTACT_NOT_FOUND',
       status: 404,
+    });
+  });
+
+  describe('list', () => {
+    const people: Contact[] = [
+      { ...contact, id: '019c01ea-cf15-7d31-a7f5-d73d66007a01', name: 'রিনা বেগম' },
+      {
+        ...contact,
+        id: '019c01ea-cf15-7d31-a7f5-d73d66007a02',
+        name: 'Karim',
+        phone: '01812345678',
+      },
+      { ...contact, id: '019c01ea-cf15-7d31-a7f5-d73d66007a03', name: 'Sumi', phone: null },
+    ];
+    // Behaves like the repository's filters over a store's contacts, newest first.
+    const fakeList = async (_storeId: string, filter: ContactFilter) => {
+      const start = filter.cursor ? people.findIndex((row) => row.id === filter.cursor) + 1 : 0;
+      return people
+        .slice(start)
+        .filter(
+          (row) =>
+            (!filter.phone || row.phone === filter.phone) &&
+            (!filter.phonePrefix || row.phone?.startsWith(filter.phonePrefix)) &&
+            (!filter.name || row.name?.includes(filter.name)),
+        )
+        .slice(0, filter.limit + 1);
+    };
+    const search = async (term: string, seeFullPhone: boolean) =>
+      (await service.list(STORE_ID, { limit: 50, search: term }, { seeFullPhone })).items.map(
+        (item) => [item.name, item.phone],
+      );
+
+    beforeEach(() => {
+      repository.list.mockImplementation(fakeList);
+    });
+
+    it('finds a contact by its full number in any form, masked without the flag', async () => {
+      expect(await search('+880 ১৮১২-৩৪৫৬৭৮', false)).toEqual([['Karim', '01812-XXX678']]);
+      expect(await search('01812345678', true)).toEqual([['Karim', '01812345678']]);
+    });
+
+    it('finds by part of a number only for members who see full phones', async () => {
+      expect(await search('01812', false)).toEqual([]);
+      expect(await search('01812', true)).toEqual([['Karim', '01812345678']]);
+    });
+
+    it('finds by name for every member', async () => {
+      expect(await search('রিনা', false)).toEqual([['রিনা বেগম', '01712-XXX678']]);
+    });
+
+    it('returns a cursor only while more contacts follow', async () => {
+      const first = await service.list(STORE_ID, { limit: 2 }, { seeFullPhone: true });
+      expect(first.items.map((item) => item.id)).toEqual([people[0]!.id, people[1]!.id]);
+      expect(first.nextCursor).toBe(people[1]!.id);
+
+      const second = await service.list(
+        STORE_ID,
+        { limit: 2, cursor: first.nextCursor! },
+        { seeFullPhone: true },
+      );
+      expect(second.items.map((item) => item.id)).toEqual([people[2]!.id]);
+      expect(second.nextCursor).toBeNull();
     });
   });
 });

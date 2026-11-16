@@ -27,25 +27,19 @@ describe('ContactsService (Postgres)', () => {
   let service: ContactsService;
   let transaction: StoreTransaction;
   const storeId = randomUUID();
-  const userId = randomUUID();
-  const actor = { kind: 'user', userId } as const;
+  const actor = { kind: 'user', userId: randomUUID() } as const;
 
   beforeAll(async () => {
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ContactsService);
     transaction = app.get(StoreTransaction);
     await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
-    await admin.pool.query(
-      "insert into users(id,name,email) values($1::uuid,'রিনা',$1::text || '@example.test')",
-      [userId],
-    );
   });
 
   afterAll(async () => {
-    for (const table of ['outbox_events', 'audit_log', 'contacts', 'channel_connections'])
+    for (const table of ['outbox_events', 'contacts', 'channel_connections'])
       await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
     await admin.pool.query('delete from stores where id=$1', [storeId]);
-    await admin.pool.query('delete from users where id=$1', [userId]);
     await Promise.all([admin.pool.end(), app.close()]);
   });
 
@@ -88,24 +82,29 @@ describe('ContactsService (Postgres)', () => {
     expect((await service.getById(storeId, id, full)).phone).not.toBe(taken);
   });
 
-  it('saves an edit and records who made it without the values', async () => {
+  it('saves an edit and clears the verification of a changed phone', async () => {
     const { id } = await add();
+    await admin.pool.query('update contacts set phone_verified_at=now() where id=$1', [id]);
 
-    const edited = await service.editDetails(
+    const named = await service.editDetails(
       storeId,
       id,
       { name: 'সুমি', tags: ['ঈদ', 'ঢাকা'] },
       { access: masked, actor },
     );
-
-    expect(edited).toMatchObject({ name: 'সুমি', tags: ['ঈদ', 'ঢাকা'] });
-    const audit = await admin.pool.query(
-      "select actor_user_id, after from audit_log where store_id=$1 and entity_id=$2 and action='contact.updated'",
-      [storeId, id],
-    );
-    expect(audit.rows).toEqual([
-      { actor_user_id: userId, after: { changedFields: ['name', 'tags'] } },
+    expect(named).toMatchObject({ name: 'সুমি', tags: ['ঈদ', 'ঢাকা'] });
+    const verified = await admin.pool.query('select phone_verified_at from contacts where id=$1', [
+      id,
     ]);
+    expect(verified.rows[0].phone_verified_at).not.toBeNull();
+
+    const number = phone();
+    await service.editDetails(storeId, id, { phone: number }, { access: masked, actor });
+    const changed = await admin.pool.query(
+      'select phone, phone_verified_at from contacts where id=$1',
+      [id],
+    );
+    expect(changed.rows).toEqual([{ phone: number, phone_verified_at: null }]);
   });
 
   it('removes a deleted contact from the list and the profile', async () => {
