@@ -15,7 +15,7 @@ const latest: WalletEntry = {
 
 describe('WalletService', () => {
   it('refuses the write when the database check finds a negative balance', async () => {
-    // A writer that skipped the lock moved the balance after this read.
+    // The database check refuses the row even though the service check passed.
     const ledger = {
       lockWallet: async () => {},
       findByIdempotencyKey: async () => undefined,

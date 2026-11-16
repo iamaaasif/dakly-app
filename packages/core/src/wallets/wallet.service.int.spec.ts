@@ -188,6 +188,76 @@ describe('WalletService (Postgres)', () => {
     expect(unfiltered.rows).toEqual([]);
   });
 
+  it('refuses a zero or negative quantity and writes nothing', async () => {
+    const storeId = await store(10);
+    const reservation = await reserve(storeId, 4);
+    const before = await ledger(storeId);
+    const settle = { reservationId: reservation.entryId, actor: system };
+    for (const quantity of [0, -3]) {
+      expect(await errorCode(reserve(storeId, quantity))).toBe('WALLET_QUANTITY_INVALID');
+      expect(
+        await errorCode(
+          wallets.charge(storeId, { ...settle, quantity, idempotencyKey: randomUUID() }),
+        ),
+      ).toBe('WALLET_QUANTITY_INVALID');
+      expect(
+        await errorCode(
+          wallets.credit(storeId, {
+            wallet: 'sms_credits',
+            quantity,
+            idempotencyKey: randomUUID(),
+            staffUserId: randomUUID(),
+            staffAuditId: randomUUID(),
+          }),
+        ),
+      ).toBe('WALLET_QUANTITY_INVALID');
+    }
+    expect(await ledger(storeId)).toEqual(before);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(6);
+  });
+
+  it('returns the first charge for the same key and writes its two rows once', async () => {
+    const storeId = await store(10);
+    const reservation = await reserve(storeId, 5);
+    const input = {
+      reservationId: reservation.entryId,
+      quantity: 3,
+      idempotencyKey: randomUUID(),
+      actor: system,
+    };
+    const first = await wallets.charge(storeId, input);
+    expect(await wallets.charge(storeId, input)).toEqual(first);
+    expect(first.balanceQuantity).toBe(7);
+    const keys = (
+      await admin.pool.query(
+        'select idempotency_key from wallet_ledger where store_id=$1 and reference_id=$2 order by revision',
+        [storeId, reservation.entryId],
+      )
+    ).rows.map((row: { idempotency_key: string }) => row.idempotency_key);
+    expect(keys).toEqual([`${input.idempotencyKey}:release`, input.idempotencyKey]);
+  });
+
+  it('settles a reservation once when release and charge run at the same time', async () => {
+    const storeId = await store(10);
+    const reservation = await reserve(storeId, 4);
+    const settle = { reservationId: reservation.entryId, actor: system };
+    const results = await Promise.allSettled([
+      wallets.release(storeId, { ...settle, idempotencyKey: randomUUID() }),
+      wallets.charge(storeId, { ...settle, quantity: 2, idempotencyKey: randomUUID() }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(
+      results.flatMap((result) =>
+        result.status === 'rejected' ? [(result.reason as AppError).code] : [],
+      ),
+    ).toEqual(['WALLET_RESERVATION_SETTLED']);
+    const releases = await admin.pool.query(
+      "select id from wallet_ledger where store_id=$1 and reference_id=$2 and kind='release'",
+      [storeId, reservation.entryId],
+    );
+    expect(releases.rowCount).toBe(1);
+  });
+
   it('maps the negative balance check constraint to a typed result', async () => {
     const storeId = await store();
     const repository = new WalletLedgerRepository(tenant);

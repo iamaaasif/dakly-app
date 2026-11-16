@@ -17,7 +17,7 @@ const entryColumns = {
 export type WalletEntry = {
   [Key in keyof typeof entryColumns]: (typeof walletLedger.$inferSelect)[Key];
 };
-export type NewWalletEntry = Omit<typeof walletLedger.$inferInsert, 'id' | 'storeId' | 'createdAt'>;
+export type NewWalletEntry = Omit<typeof walletLedger.$inferInsert, 'storeId' | 'createdAt'>;
 
 @Injectable()
 export class WalletLedgerRepository {
@@ -91,14 +91,12 @@ export class WalletLedgerRepository {
   async insert(
     storeId: string,
     entries: NewWalletEntry[],
-  ): Promise<WalletEntry[] | 'balance_negative'> {
+  ): Promise<'balance_negative' | undefined> {
     try {
-      return await this.database.inTransaction(storeId, (tx) =>
-        tx
-          .insert(walletLedger)
-          .values(entries.map((entry) => ({ ...entry, storeId })))
-          .returning(entryColumns),
+      await this.database.inTransaction(storeId, (tx) =>
+        tx.insert(walletLedger).values(entries.map((entry) => ({ ...entry, storeId }))),
       );
+      return undefined;
     } catch (error) {
       if (isNegativeBalance(error)) return 'balance_negative';
       throw error;
