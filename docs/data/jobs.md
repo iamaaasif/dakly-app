@@ -130,6 +130,23 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 5. Purge in batches of 5,000: published outbox events and webhook events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, `store_daily_metrics` rows after 24 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
 6. Account history: as the owner, call `SELECT public.purge_account_security_events(1000)` in separate short transactions until it returns zero. The SQL exists in migration 0016; the daily runner remains DB-7. It deletes rows strictly older than two years and rejects limits outside 1–1,000. Retrying cannot remove newer events; it needs no store scan. No R2 archive is required for account events.
 
+## Events in M2 and M3
+
+The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
+
+| Event                  | Emitted by                                                      | Payload                                                  | Listeners                                                    |
+| ---------------------- | --------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
+| `contact.created`      | CUS-1, `ContactsService.findOrCreateByIdentity`                 | `contactId`                                              | CUS-3 `refresh-contact-stats`                                |
+| `consent.changed`      | CUS-2, `ConsentService.record`                                  | `consentId`, `contactId`, `channel`, `status`, `source`  | CAMP-11 consent given trigger (M3b)                          |
+| `conversation.started` | CHAT-1, `MessagingService.receiveInboundMessage`                | `conversationId`, `contactId`, `connectionId`, `channel` | CAMP-11 chat started trigger (M3b)                           |
+| `message.received`     | CHAT-1, `MessagingService.receiveInboundMessage`                | `messageId`, `conversationId`, `contactId`, `channel`    | CUS-3 `refresh-contact-stats`                                |
+| `message.delivered`    | CHAT-2, `MessagingService` on a delivery receipt                | `messageId`, `conversationId`, `contactId`, `channel`    | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.read`         | CHAT-2, `MessagingService` on a read receipt                    | `messageId`, `conversationId`, `contactId`, `channel`    | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.failed`       | CHAT-2, `MessagingService` on a failure receipt or send failure | `messageId`, `conversationId`, `contactId`, `channel`    | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row | `notificationId`, `userId`, `category`                   | HOME-1 live stream (`GET /events/stream`) for that user      |
+
+[Feature 02](../features/02-channel-connections.md) lists `channel.connected`, `channel.needs_reconnect` and `channel.disconnected`. No M2 or M3 task emits them yet, so they are not in the catalogue.
+
 ## Send-time and financial gates
 
 Immediately before calling the provider, recheck consent, block status, channel window, campaign state and frozen routing. A queued recipient, or a sending recipient that has not been handed to the provider, may become skipped with its reason; release reserved cost in that same transition. Never label an already accepted or unknown provider outcome skipped. Messenger identity must belong to the frozen sending connection and selected contact; an address alone is insufficient.
