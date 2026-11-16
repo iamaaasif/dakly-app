@@ -92,6 +92,25 @@ fixture('POST /contacts', async () => {
   expect((await f.row('contacts', own)).store_id).toBe(b.id);
   expect(await f.row('contacts', id)).toEqual(before);
 });
+fixture('POST /contacts/:contactId/consents', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const answer = { channel: 'sms', status: 'granted', note: 'দোকানে এসে রাজি হয়েছেন' };
+  const own = await success(a, 'POST', `/contacts/${id}/consents`, 201, answer);
+  expect(own.json()).toMatchObject({ contactId: id, status: 'granted', source: 'manual' });
+  await hidden(
+    b,
+    'POST',
+    (value) => `/contacts/${value}/consents`,
+    id,
+    () => ({ ...answer, status: 'withdrawn' }),
+  );
+  const rows = await f.admin.pool.query(
+    'select id, store_id, status from consents where contact_id=$1',
+    [id],
+  );
+  expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
+});
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],

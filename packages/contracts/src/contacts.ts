@@ -106,3 +106,26 @@ export type ContactResponse = {
   kind: ContactKind;
   createdAt: string;
 };
+
+export type ConsentChannel = (typeof consentChannels)[number];
+export type ConsentStatus = (typeof consentStatuses)[number];
+export type ConsentSource = (typeof consentSources)[number];
+
+// Staff record consent by hand with a note saying how the customer agreed or refused. Email consent
+// is not offered until email campaigns ship (D20).
+export const recordConsentSchema = z.object({
+  channel: z.enum(consentChannels).exclude(['email']),
+  status: z.enum(consentStatuses),
+  note: z.string().trim().min(1).max(500),
+});
+
+export type RecordConsentInput = z.infer<typeof recordConsentSchema>;
+
+export type ConsentResponse = {
+  id: string;
+  contactId: string;
+  channel: ConsentChannel;
+  status: ConsentStatus;
+  source: ConsentSource;
+  capturedAt: string;
+};

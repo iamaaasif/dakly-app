@@ -105,4 +105,15 @@ describe('ContactsService', () => {
       status: 404,
     });
   });
+
+  it('confirms a contact exists only when this store has it', async () => {
+    repository.findById.mockImplementation(async (storeId: string) =>
+      storeId === STORE_ID ? contact : undefined,
+    );
+
+    await expect(service.assertContactExists(STORE_ID, contact.id)).resolves.toBeUndefined();
+    await expect(
+      service.assertContactExists('0b7e5f6a-2d4c-4f1e-9a3b-8c6d5e4f3a21', contact.id),
+    ).rejects.toMatchObject({ code: 'CONTACT_NOT_FOUND', status: 404 });
+  });
 });
