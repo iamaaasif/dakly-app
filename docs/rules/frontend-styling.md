@@ -34,7 +34,7 @@ Right:
 
 ## packages/ui
 
-- Holds generic pieces only: Button, Input, Select, Checkbox, Switch, Dialog, Sheet, DropdownMenu, Popover, Tooltip, Tabs, Table, Badge, Card, Skeleton, Toast, Avatar, EmptyState.
+- Holds generic pieces only: Button, Input, Textarea, Label, FormField, Select, Checkbox, Switch, Dialog, Sheet, DropdownMenu, Popover, Tooltip, Tabs, Table, Badge, Card, Skeleton, Toast, Avatar, EmptyState.
 - Knows nothing about Dakly data. No `Order`, `Customer` or API calls.
 - Each component file exports the component and its props type. No barrel file; import `@dakly/ui/button`.
 - Adding a shadcn component: run the shadcn CLI into `packages/ui`, replace its colour classes with our tokens, delete the variants we do not use, and add it in its own PR.
