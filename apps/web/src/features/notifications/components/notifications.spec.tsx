@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -140,28 +140,46 @@ describe('Notification bell and list', () => {
     expect(screen.getByText('Done', { selector: 'span' })).toBeTruthy();
   });
 
-  it('snoozes a card until a future time and shows a refused change', async () => {
-    const before = Date.now();
+  it('snoozes a card until the picked time and shows a refused change', async () => {
     const requests = serve((_url, init) =>
       init.method === 'POST'
         ? Response.json(
-            { error: { code: 'NOTIFICATION_DONE', message: 'This notification is already done' } },
-            { status: 409 },
+            {
+              error: {
+                code: 'SNOOZE_NOT_IN_FUTURE',
+                message: 'Choose a snooze time in the future',
+              },
+            },
+            { status: 400 },
           )
         : page([reconnect]),
     );
     show();
     await screen.findByText('Reconnect your Facebook page');
-    await userEvent.click(screen.getByText('Snooze'));
-    await userEvent.click(screen.getByRole('button', { name: 'Snooze 1 day' }));
+    await userEvent.click(screen.getByText('Snooze', { selector: 'summary' }));
+    fireEvent.change(screen.getByLabelText('Snooze until'), {
+      target: { value: '2026-11-20T09:30' },
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Snooze' }));
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
-      'This notification is already done',
+      'Choose a snooze time in the future',
     );
     const snooze = requests.find(({ init }) => init.method === 'POST')!;
     expect(snooze.url.pathname).toBe(`/api/notifications/${reconnect.id}/snooze`);
-    const until = Date.parse(JSON.parse(String(snooze.init.body)).until);
-    expect(until - before).toBeGreaterThanOrEqual(24 * 60 * 60 * 1000);
+    expect(JSON.parse(String(snooze.init.body))).toEqual({
+      until: new Date('2026-11-20T09:30').toISOString(),
+    });
+  });
+
+  it('asks for a snooze time before sending', async () => {
+    const requests = serve(() => page([reconnect]));
+    show();
+    await screen.findByText('Reconnect your Facebook page');
+    await userEvent.click(screen.getByText('Snooze', { selector: 'summary' }));
+    fireEvent.submit(screen.getByRole('button', { name: 'Snooze' }).closest('form')!);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(requests.some(({ init }) => init.method === 'POST')).toBe(false);
   });
 
   it('hides the bell without a current shop', () => {

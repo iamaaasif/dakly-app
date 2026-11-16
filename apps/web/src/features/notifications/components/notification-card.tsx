@@ -1,22 +1,25 @@
 'use client';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
+import { useId } from 'react';
+import { useForm } from 'react-hook-form';
 
-import type { NotificationResponse, NotificationStatus } from '@dakly/contracts/notifications';
+import {
+  type NotificationResponse,
+  type NotificationStatus,
+  snoozeNotificationSchema,
+  type SnoozeNotificationInput,
+} from '@dakly/contracts/notifications';
 import { Badge, type BadgeProps } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
+import { Input } from '@dakly/ui/input';
 
 import { useMarkNotificationDone } from '../api/mark-notification-done';
 import { useMarkNotificationSeen } from '../api/mark-notification-seen';
 import { useSnoozeNotification } from '../api/snooze-notification';
 import { formatDateTime } from '@/lib/format-date';
 
-const HOUR_MS = 60 * 60 * 1000;
-const snoozeChoices = [
-  { label: '1 hour', durationMs: HOUR_MS },
-  { label: '1 day', durationMs: 24 * HOUR_MS },
-  { label: '1 week', durationMs: 7 * 24 * HOUR_MS },
-];
 const statusBadges: Record<NotificationStatus, { label: string; variant: BadgeProps['variant'] }> =
   {
     new: { label: 'New', variant: 'info' },
@@ -73,20 +76,7 @@ function NotificationActions({ notification }: { notification: NotificationRespo
           <summary className="inline-flex min-h-10 cursor-pointer items-center rounded-md px-2 text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
             Snooze
           </summary>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {snoozeChoices.map(({ label, durationMs }) => (
-              <Button
-                key={label}
-                variant="secondary"
-                disabled={pending}
-                onClick={() =>
-                  snooze.mutate({ until: new Date(Date.now() + durationMs).toISOString() })
-                }
-              >
-                {`Snooze ${label}`}
-              </Button>
-            ))}
-          </div>
+          <SnoozeForm pending={pending} onSnooze={(input) => snooze.mutate(input)} />
         </details>
       </div>
       {error ? (
@@ -95,5 +85,44 @@ function NotificationActions({ notification }: { notification: NotificationRespo
         </p>
       ) : null}
     </div>
+  );
+}
+
+type SnoozeFormProps = {
+  pending: boolean;
+  onSnooze: (input: SnoozeNotificationInput) => void;
+};
+function SnoozeForm({ pending, onSnooze }: SnoozeFormProps) {
+  const id = useId();
+  const form = useForm<SnoozeNotificationInput>({
+    resolver: zodResolver(snoozeNotificationSchema),
+    defaultValues: { until: '' },
+  });
+  const error = form.formState.errors.until;
+  return (
+    <form method="post" className="mt-2 space-y-2" onSubmit={form.handleSubmit(onSnooze)}>
+      <label htmlFor={id} className="block font-medium">
+        Snooze until
+      </label>
+      <Input
+        id={id}
+        type="datetime-local"
+        required
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
+        // datetime-local has no zone, so the browser reads it as local time and sends UTC.
+        {...form.register('until', {
+          setValueAs: (value: string) => (value ? new Date(value).toISOString() : value),
+        })}
+      />
+      {error ? (
+        <p id={`${id}-error`} role="alert" className="text-danger">
+          {error.message}
+        </p>
+      ) : null}
+      <Button type="submit" variant="secondary" loading={pending}>
+        Snooze
+      </Button>
+    </form>
   );
 }
