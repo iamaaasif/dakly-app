@@ -380,7 +380,9 @@ The PRD's payment rules apply in full. The ones code must make impossible to bre
 
 ### Events
 
-Emits `payment.succeeded`, `payment.failed`, `payment.refunded`, `subscription.renewed`, `subscription.past_due`, `subscription.read_only`, `usage.threshold_reached`.
+Emits `payment.succeeded`, `payment.failed`, `payment.refunded`, `subscription.renewed`, `subscription.past_due`, `subscription.read_only`.
+
+`usage.threshold_reached` is not emitted yet: it is not in the event catalogue (`packages/contracts/src/events/`). Crossing 80% or 100% of an allowance only creates the notification described under Usage (PAY-1) above.
 
 Refund reservations serialize on the common payment intent, not on the individual refund request. In one short transaction, lock the intent, check the permanent refund idempotency key, then reserve the amount in `reserved_refund_poisha` and insert the refund. `requested` and `pending` refunds consume reserved capacity; `succeeded` and `recorded_manually` consume `refunded_poisha`. Their combined amount cannot exceed `verified_amount_poisha`; an unverified payment has no refundable capacity. A manually verified payment records that verified amount first. Commit before calling the gateway. Completion moves the amount from reserved to refunded exactly once under the same lock; a confirmed failure releases the reservation. An unknown gateway outcome stays reserved until reconciliation. A simple SUM-before-insert without this common lock is insufficient.
 

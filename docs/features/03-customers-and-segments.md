@@ -25,8 +25,8 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 ## Built so far
 
 The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
-`customers` example moved into it: migration 0029 copied each `customers` row into
-`contacts` with the same id (source `manual`, kind `customer`), and 0030 dropped the
+`customers` example moved into it: migration 0030 copied each `customers` row into
+`contacts` with the same id (source `manual`, kind `customer`), and 0031 dropped the
 `customers` table.
 
 - `POST /contacts` (`customers.edit`) adds a contact with a name and phone. A staff

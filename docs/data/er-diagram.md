@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0030_snapshot.json`: **95 tables, 1244 columns, 368 explicit indexes and 295 foreign keys**.
+Built from `packages/db/migrations/meta/0031_snapshot.json`: **95 tables, 1244 columns, 369 explicit indexes and 295 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 

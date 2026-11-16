@@ -1,13 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 
 import type {
   NotificationCategory,
   NotificationListQuery,
   NotificationStatus,
 } from '@dakly/contracts/notifications';
+import type { Database } from '@dakly/db/client';
 import { notifications } from '@dakly/db/schema/platform';
 
+import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Notification = {
@@ -42,7 +44,10 @@ const ofUser = (storeId: string, userId: string) =>
 
 @Injectable()
 export class NotificationsRepository {
-  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+  constructor(
+    @Inject(TenantDatabase) private readonly database: TenantDatabase,
+    @Inject(DATABASE) private readonly global: Database,
+  ) {}
 
   // Returns only the rows this call created; a user who already has the dedupe key is skipped.
   insertForUsers(storeId: string, userIds: string[], notification: NewNotification) {
@@ -135,5 +140,27 @@ export class NotificationsRepository {
         .returning({ id: notifications.id }),
     );
     return rows.length > 0;
+  }
+
+  async storesWithSnoozesDue(asOf: Date): Promise<string[]> {
+    const result = await this.global.execute<{ storeId: string }>(
+      sql`select store_id as "storeId" from stores_with_snoozes_due(${asOf.toISOString()}::timestamptz)`,
+    );
+    return result.rows.map((row) => row.storeId);
+  }
+
+  async wakeSnoozed(storeId: string, asOf: Date) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(notifications)
+        .set({ status: 'new', snoozedUntil: null })
+        .where(
+          and(
+            eq(notifications.storeId, storeId),
+            eq(notifications.status, 'snoozed'),
+            lte(notifications.snoozedUntil, asOf),
+          ),
+        ),
+    );
   }
 }

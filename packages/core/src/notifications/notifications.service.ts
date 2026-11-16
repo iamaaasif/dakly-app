@@ -111,6 +111,13 @@ export class NotificationsService {
     await this.changeStatus(storeId, userId, notificationId, { to: 'snoozed', snoozedUntil });
   }
 
+  // Two sweeps can overlap; the update moves only cards still snoozed, so the second does nothing.
+  async wakeSnoozed() {
+    const now = this.clock.now();
+    for (const storeId of await this.repository.storesWithSnoozesDue(now))
+      await this.repository.wakeSnoozed(storeId, now);
+  }
+
   private async changeStatus(
     storeId: string,
     userId: string,

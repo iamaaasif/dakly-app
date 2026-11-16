@@ -208,15 +208,22 @@
     {
       "idx": 29,
       "version": "7",
-      "when": 1794818925005,
-      "tag": "0029_move_customers_to_contacts",
+      "when": 1794821108235,
+      "tag": "0029_notifications_wake_snoozed",
       "breakpoints": true
     },
     {
       "idx": 30,
       "version": "7",
-      "when": 1794818930527,
-      "tag": "0030_drop_customers",
+      "when": 1794821993441,
+      "tag": "0030_move_customers_to_contacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794821995522,
+      "tag": "0031_drop_customers",
       "breakpoints": true
     }
   ]

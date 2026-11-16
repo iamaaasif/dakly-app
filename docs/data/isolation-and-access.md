@@ -81,6 +81,7 @@ Every definer function sets `search_path = pg_catalog, public, pg_temp`, so temp
 | `trials_ending_before(before)`                | trials ending soon                                                                           | Trial reminder job                                     |
 | `channel_connections_expiring_before(before)` | tokens close to expiry                                                                       | Token check job                                        |
 | `due_conversation_returns(limit)`             | chats whose "return to AI" time passed                                                       | Chats sweeper                                          |
+| `stores_with_snoozes_due(as_of)`              | store ids with a snoozed notification due to wake                                            | Notification wake sweep                                |
 | `due_contact_purges(limit)`                   | contacts deleted more than 30 days ago                                                       | Purge job                                              |
 | `active_store_ids()`                          | stores with status `active`                                                                  | Active-store fan-outs; never retention rollups         |
 | `maintenance_store_ids(after, limit)`         | IDs of all retained stores, including suspended and closing, in UUID order; pages of 1–1,000 | Retention rollups before the global watermark advances |
