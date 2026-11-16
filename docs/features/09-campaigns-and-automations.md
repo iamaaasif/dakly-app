@@ -71,7 +71,7 @@ Every WhatsApp campaign uses a template. Ready-made templates are pre-approved p
 
 **Automations**
 
-Triggers, their filters and the sources they need are in [Workflow catalogue](#workflow-catalogue). Exit rules: places an order, cancels an order, enters a segment, clicks a link in this workflow, gets a tag. Frequency: once per person ever, once per N days, every time.
+Triggers, their filters and the sources they need are in [Workflow catalogue](#workflow-catalogue). Exit rules: places an order, cancels an order, clicks a link in this workflow, gets a tag; enters a segment comes later, once segment membership is stored. Frequency: once per person ever, once per N days, every time.
 
 Steps run per person: a delay waits (minutes, hours, days, weeks, or until a time of day); a message step sends inside quiet hours rules; a condition split checks (clicked a link in a previous step, replied on WhatsApp, customer field, segment) and branches yes or no. Built-in checks warn, for example "Wait before checking opens or clicks: add a 2–24 hour delay before the split" or a message step with no consent channel.
 
@@ -342,34 +342,33 @@ The graph schema is [`automations/graph.ts`](../../packages/contracts/src/automa
 
 Triggers and actions are in [`automations/catalogue.ts`](../../packages/contracts/src/automations/catalogue.ts). "Ready before" follows the build order (D40): Channels means it works with Dakly data and SMS alone, before channel connections and Orders; Orders means it works before Orders but needs channels or products; a dash means it waits for Orders or a later source. A source marked "not yet" is an event no task emits yet; the task that builds the source adds it to `packages/contracts/src/events/`.
 
-| Trigger                   | Source                               | Filters (required in bold)                                           | Needs           | Ready before |
-| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- | --------------- | ------------ |
-| `consent_given`           | `consent.changed`                    | channel, consent source                                              |                 | Channels     |
-| `tag_added`               | `contact.tag_added`, not yet         | **tag**                                                              |                 | Channels     |
-| `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          |                 | Channels     |
-| `link_tapped`             | `message.tapped`, not yet (CAMP-10)  | channel                                                              |                 | Channels     |
-| `birthday`                | Daily job in store time              | segment                                                              | Birthdays       | Channels     |
-| `festival`                | Daily job in store time              | **festival**, segment                                                |                 | Channels     |
-| `chat_started`            | `conversation.started`               | channel                                                              | Channels        | Orders       |
-| `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels        | Orders       |
-| `lead_captured`           | `chat.lead_saved`, not yet           | channel                                                              | Channels        | Orders       |
-| `back_in_stock`           | `variant.restocked`, not yet         | product                                                              | Products        | Orders       |
-| `price_dropped`           | `product.price_dropped`, not yet     | product                                                              | Products        | Orders       |
-| `order_placed`            | `order.created`, not yet             | order total, product, payment status, delivery district, first order | Orders          |              |
-| `order_paid`              | `payment.succeeded`, not yet         | order total                                                          | Orders          |              |
-| `order_shipped`           | `order.stage_changed`, not yet       | order total, delivery district                                       | Orders          |              |
-| `order_delivered`         | `order.stage_changed`, not yet       | order total, product                                                 | Orders          |              |
-| `order_cancelled`         | `order.stage_changed`, not yet       | order total                                                          | Orders          |              |
-| `order_returned`          | `order.stage_changed`, not yet       | order total                                                          | Orders          |              |
-| `order_link_abandoned`    | `order_link.abandoned`, not yet      | product                                                              | Orders          |              |
-| `lifecycle_stage_entered` | `contact.stage_changed`, not yet     | **lifecycle stage**                                                  | Orders          |              |
-| `days_since_last_order`   | Daily job in store time              | **days**                                                             | Orders          |              |
-| `reorder_due`             | Daily job, days before the usual gap | **days**, product                                                    | Orders          |              |
-| `cart_abandoned`          | `cart.abandoned`, not yet            | cart total                                                           | Store sync, Q13 |              |
-| `checkout_abandoned`      | `checkout.abandoned`, not yet        | cart total                                                           | Store sync, Q13 |              |
-| `product_viewed`          | `product.viewed`, not yet            | product                                                              | Tracking script |              |
+| Trigger                   | Source                               | Filters (required in bold)                                           | Needs                     | Ready before |
+| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- | ------------------------- | ------------ |
+| `consent_given`           | `consent.changed`                    | channel, consent source                                              |                           | Channels     |
+| `tag_added`               | `contact.tag_added`, not yet         | **tag**                                                              |                           | Channels     |
+| `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          | Stored segment membership |              |
+| `link_tapped`             | `message.tapped`, not yet (CAMP-10)  | channel                                                              |                           | Channels     |
+| `birthday`                | Daily job in store time              | segment                                                              | Birthdays                 | Channels     |
+| `chat_started`            | `conversation.started`               | channel                                                              | Channels                  | Orders       |
+| `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels                  | Orders       |
+| `lead_captured`           | `chat.lead_saved`, not yet           | channel                                                              | Channels                  | Orders       |
+| `back_in_stock`           | `variant.restocked`, not yet         | product                                                              | Products                  | Orders       |
+| `price_dropped`           | `product.price_dropped`, not yet     | product                                                              | Products                  | Orders       |
+| `order_placed`            | `order.created`, not yet             | order total, product, payment status, delivery district, first order | Orders                    |              |
+| `order_paid`              | `payment.succeeded`, not yet         | order total                                                          | Orders                    |              |
+| `order_shipped`           | `order.stage_changed`, not yet       | order total, delivery district                                       | Orders                    |              |
+| `order_delivered`         | `order.stage_changed`, not yet       | order total, product                                                 | Orders                    |              |
+| `order_cancelled`         | `order.stage_changed`, not yet       | order total                                                          | Orders                    |              |
+| `order_returned`          | `order.stage_changed`, not yet       | order total                                                          | Orders                    |              |
+| `order_link_abandoned`    | `order_link.abandoned`, not yet      | product                                                              | Orders                    |              |
+| `lifecycle_stage_entered` | `contact.stage_changed`, not yet     | **lifecycle stage**                                                  | Orders                    |              |
+| `days_since_last_order`   | Daily job in store time              | **days**                                                             | Orders                    |              |
+| `reorder_due`             | Daily job, days before the usual gap | **days**, product                                                    | Orders                    |              |
+| `cart_abandoned`          | `cart.abandoned`, not yet            | cart total                                                           | Store sync, Q13           |              |
+| `checkout_abandoned`      | `checkout.abandoned`, not yet        | cart total                                                           | Store sync, Q13           |              |
+| `product_viewed`          | `product.viewed`, not yet            | product                                                              | Tracking script           |              |
 
-Shipped means staff moved the order to With courier (D21). Lifecycle stages come from orders, so every contact is in no stage until Orders exists. Festival dates come from Dakly, not from the shop. A custom event by API, "update a field" and "add to Due reminder" are not release 1: Dakly has no public API in release 1, no editable contact field is named for workflows, and Due is release 2.
+Shipped means staff moved the order to With courier (D21). Lifecycle stages come from orders, so every contact is in no stage until Orders exists. Segment joined waits for stored segment membership, which segments do not keep yet (feature 03); the same holds for an "enters a segment" exit condition. A custom event by API, "update a field" and "add to Due reminder" are not release 1: Dakly has no public API in release 1, no editable contact field is named for workflows, and Due is release 2.
 
 | Action           | Settings                                                        | Needs           | Ready before |
 | ---------------- | --------------------------------------------------------------- | --------------- | ------------ |
@@ -380,31 +379,16 @@ Shipped means staff moved the order to With courier (D21). Lifecycle stages come
 | `hand_to_person` | none                                                            | Chats extension | Orders       |
 | `give_coupon`    | percent, amount in poisha or free delivery; valid for 1–90 days | Orders          |              |
 
-Templates are in [`automations/templates.ts`](../../packages/contracts/src/automations/templates.ts) and [`automations/order-templates.ts`](../../packages/contracts/src/automations/order-templates.ts). Each has a trigger, steps, goal, category and prerequisites. Categories are the library types: transactional, abandoned, welcome, post-purchase, win back and special occasion; AUTO-R2 ranks transactional, then abandoned, then welcome, then the rest. Transactional templates run for every order; cart, checkout and order-link reminders allow once a day; the rest default to once every 30 days, and welcome and first-order thank you run once ever.
+Templates are in [`automations/templates.ts`](../../packages/contracts/src/automations/templates.ts). This catalogue holds the templates that run before Orders; each has a trigger, steps, goal, category and prerequisites. Templates that need Orders, store sync or the tracking script are added with their source ([plan](../plans/campaigns-and-automations.md#waiting-on-other-work)). Categories are the library types: transactional, abandoned, welcome, post-purchase, win back and special occasion; AUTO-R2 ranks transactional, then abandoned, then welcome, then the rest. Re-entry defaults to once every 30 days; welcome runs once ever and back in stock every time.
 
-| Template                    | Trigger                                                         | Steps (default)                                                                                                                                 | Goal            | Category         | Needs            |
-| --------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ---------------- | ---------------- |
-| Welcome new subscribers     | Consent given                                                   | Welcome now; wait 2 days; SMS with best sellers                                                                                                 | Placed order    | Welcome          |                  |
-| Welcome new lead            | Lead captured                                                   | Wait 1 hour; best sellers; wait 2 days; coupon and offer                                                                                        | Placed order    | Welcome          | Channels, Orders |
-| Chat follow-up              | Chat started on Messenger                                       | Wait 2 hours; Messenger follow-up inside the window; exit if they reply                                                                         | Placed order    | Abandoned        | Channels         |
-| Back in stock               | Variant restocked, person on waiting list                       | Message with the product and order link                                                                                                         | Placed order    | Abandoned        | Products         |
-| Birthday                    | Birthday                                                        | Greeting at 10:00; wait 7 days                                                                                                                  | Placed order    | Special occasion | Birthdays        |
-| Festival greetings          | Festival: Eid ul-Fitr, Eid ul-Adha, Durga Puja, Pohela Boishakh | Greeting at 10:00 on the day; one template each                                                                                                 | Placed order    | Special occasion |                  |
-| Abandoned cart              | Cart abandoned                                                  | Wait 1 hour; reminder; wait 1 day; SMS reminder                                                                                                 | Placed order    | Abandoned        | Store sync       |
-| Abandoned checkout          | Checkout abandoned                                              | Wait 30 minutes; reminder with checkout link                                                                                                    | Placed order    | Abandoned        | Store sync       |
-| Browse abandonment          | Product viewed                                                  | Wait 4 hours; message with that product                                                                                                         | Placed order    | Abandoned        | Tracking script  |
-| COD order confirmation      | Order placed, COD pending                                       | WhatsApp with Confirm and Cancel; wait 2 hours; SMS with confirm link; wait 12 hours; task for staff to call; exit if cancelled                 | Order confirmed | Transactional    | Orders           |
-| Advance not paid            | Order placed, advance requested                                 | Wait 6 hours (feature 07); reminder with payment link; exit if cancelled                                                                        | Order paid      | Transactional    | Orders           |
-| Shipped and tracking        | Order shipped                                                   | Message with courier and tracking link                                                                                                          | None            | Transactional    | Orders           |
-| Delivery feedback           | Order delivered                                                 | Wait 2 days; ask how it was (3 answers); wait up to 2 days for the reply; best answer: ask for a Facebook review; other answers: task for staff | None            | Transactional    | Orders           |
-| Order link not finished     | Order link abandoned                                            | Wait 30 minutes; reminder with link; wait 1 day; second reminder                                                                                | Placed order    | Abandoned        | Orders           |
-| Thank you after first order | Order placed, first order                                       | Thank you now; wait 7 days; how was it; wait 14 days; coupon and reason to come back                                                            | Placed order    | Post-purchase    | Orders           |
-| Cross-sell                  | Order delivered                                                 | Wait 7 days; product suggestion                                                                                                                 | Placed order    | Post-purchase    | Orders           |
-| Reorder reminder            | 3 days before the usual gap between orders                      | Reminder with the last product                                                                                                                  | Placed order    | Post-purchase    | Orders           |
-| Win back                    | Entered Slipping away                                           | Message; wait 5 days; coupon and offer; wait 10 days                                                                                            | Placed order    | Win back         | Orders           |
-| Cancellation follow-up      | Order cancelled                                                 | Ask the reason, offer help                                                                                                                      | None            | Post-purchase    | Orders           |
+| Template                | Trigger                                   | Steps (default)                                                         | Goal         | Category         | Needs     |
+| ----------------------- | ----------------------------------------- | ----------------------------------------------------------------------- | ------------ | ---------------- | --------- |
+| Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                         | Placed order | Welcome          |           |
+| Chat follow-up          | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply | Placed order | Abandoned        | Channels  |
+| Back in stock           | Variant restocked, person on waiting list | Message with the product and order link                                 | Placed order | Abandoned        | Products  |
+| Birthday                | Birthday                                  | Greeting at 10:00; wait 7 days                                          | Placed order | Special occasion | Birthdays |
 
-WhatsApp allows 3 reply buttons, so the delivery feedback rating has three answers (very good, okay, not good) in place of 1 to 5 stars. It has no goal: a reply goal would exit the run before the answer is read. "If no order" in a template is its goal: placing an order exits the run before the next step.
+"If no order" in a template is its goal: placing an order exits the run before the next step.
 
 ### Rules
 

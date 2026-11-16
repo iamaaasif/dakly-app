@@ -160,7 +160,7 @@ Branches: `feat/camp-5-automation-versions`, `feat/camp-5-automation-runner`
 
 Branch: `feat/camp-11-automation-triggers`
 
-- Scope: `@HandlesEvent` subscribers for the triggers the [workflow catalogue](../features/09-campaigns-and-automations.md#workflow-catalogue) marks ready before channels: consent given, tag added, segment joined and link tapped, plus the birthday and festival date triggers. Chat started, comment on a post and lead captured follow with the channels work. `start-automation-run` checks the trigger filter once, the re-entry rule (once ever, once every N days, every time; default 30 days), one active run per contact per workflow, and creates the run unique on (automation, contact, trigger key). Segment-joined triggers fire after the segment's refresh, and the builder adds the 2-minute delay feature 09 describes. A daily job fires date triggers in store time.
+- Scope: `@HandlesEvent` subscribers for the triggers the [workflow catalogue](../features/09-campaigns-and-automations.md#workflow-catalogue) marks ready before channels: consent given, tag added and link tapped, plus the birthday date trigger. Chat started, comment on a post and lead captured follow with the channels work; segment joined waits for stored segment membership (feature 03). `start-automation-run` checks the trigger filter once, the re-entry rule (once ever, once every N days, every time; default 30 days), one active run per contact per workflow, and creates the run unique on (automation, contact, trigger key). A daily job fires date triggers in store time.
 - Tests (integration): the same event delivered twice starts one run; a contact still inside cannot re-enter; once every 30 days refuses day 29 and allows day 30; a disabled workflow starts nothing; the trigger preview returns the last 10 matching events.
 
 ### CAMP-12 · Web: automations list and template library
@@ -188,6 +188,8 @@ Branches: `feat/camp-6-canvas-view`, `feat/camp-6-canvas-editing`
 | AI-written campaign text (approval required, D7)                                                                         | AI-2                   |
 
 ORD-4 changes meaning with this plan: it adds the order triggers and the COD confirmation template to the engine, and handles Confirm and Cancel replies, instead of a separate confirmation sender.
+
+ORD-4 also adds the workflow templates that need Orders, left out of CAMP-8: COD order confirmation, advance not paid, shipped and tracking, delivery feedback and review, order link not finished, thank you after the first order, cross-sell, reorder reminder, win back, cancellation follow-up and welcome new lead. Abandoned cart, abandoned checkout and browse abandonment wait for store sync (Q13) and the tracking script.
 
 ## How each task is reviewed
 
