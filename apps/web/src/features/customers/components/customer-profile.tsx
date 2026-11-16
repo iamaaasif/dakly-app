@@ -11,7 +11,6 @@ import { channelLabels, customerPhone } from '../customer-labels';
 import { ConsentForm } from './consent-form';
 import { CustomerActions } from './customer-actions';
 import { CustomerBadges } from './customer-badges';
-import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
 
 type CustomerProfileProps = { contactId: string };
@@ -20,17 +19,15 @@ export function CustomerProfile({ contactId }: CustomerProfileProps) {
   const customer = useCustomer(contactId);
   const { data: context } = useSessionContext();
   return (
-    <StorePage permission="canViewCustomers">
-      <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-        <Link href="/customers" className="inline-flex min-h-10 items-center text-action underline">
-          All customers
-        </Link>
-        <ProfileBody
-          customer={customer}
-          canEdit={Boolean(context?.currentStore?.canCreateCustomer)}
-        />
-      </main>
-    </StorePage>
+    <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
+      <Link href="/customers" className="inline-flex min-h-10 items-center text-action underline">
+        All customers
+      </Link>
+      <ProfileBody
+        customer={customer}
+        canEdit={Boolean(context?.currentStore?.canCreateCustomer)}
+      />
+    </main>
   );
 }
 

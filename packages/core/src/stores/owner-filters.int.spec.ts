@@ -24,6 +24,20 @@ describe('store filters without RLS assistance', () => {
     });
     expect(await f.row('stores', f.a)).toEqual(before);
   });
+  it('reads the sending settings of the requested store only', async () => {
+    await f.connection.pool.query(
+      `update stores set settings='{"sending":{"quietHours":{"startHour":22,"endHour":8}}}' where id=$1`,
+      [f.b],
+    );
+    expect(await repository.sendingSettings(f.a)).toEqual({
+      timeZone: 'Asia/Dhaka',
+      sending: null,
+    });
+    expect(await repository.sendingSettings(f.b)).toEqual({
+      timeZone: 'Asia/Dhaka',
+      sending: { quietHours: { startHour: 22, endHour: 8 } },
+    });
+  });
   it('creates the store and its counters under the requested id only', async () => {
     const created = randomUUID();
     try {

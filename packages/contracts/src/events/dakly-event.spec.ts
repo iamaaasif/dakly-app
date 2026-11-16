@@ -25,6 +25,12 @@ const examples: DaklyEvent[] = [
     },
   },
   {
+    type: 'segment.saved',
+    storeId,
+    occurredAt,
+    payload: { segmentId: '019c01ea-cf15-7d31-a7f5-d73d66007adf' },
+  },
+  {
     type: 'conversation.started',
     storeId,
     occurredAt,
