@@ -29,7 +29,8 @@ Merge requests carry a stable operation key through all retries, including retri
 | `GET /payments/callback/:gateway`                                 | Customer returns from the gateway                                                              |
 | `GET /public/stores/:storeSlug/order-link/:shortCode`             | Order and payment page for the customer                                                        |
 | `POST /public/stores/:storeSlug/order-link/:shortCode/confirm`    | Customer confirms an order                                                                     |
-| `GET /l/:code`                                                    | Tracked link redirect, or SMS opt-out page                                                     |
+| `GET /l/:code`                                                    | Tracked link redirect                                                                          |
+| `GET /l/s/:code`, `POST /l/s/:code`                               | SMS opt-out page, and the tap that withdraws SMS consent                                       |
 
 ### Account security routes (ACC-7)
 

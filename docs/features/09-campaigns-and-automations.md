@@ -298,6 +298,15 @@ WhatsApp templates: every WhatsApp campaign uses a template. Edited or new templ
 
 Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0.
 
+### Tracked links and the SMS opt-out page
+
+`links/` owns `tracked_links` and `tracked_link_visits`. A sender calls `LinksService.create(storeId, links)` with the source (campaign, automation, post, chat or order), its id, the contact and, for a redirect, the stored URL. Each link gets an 8-character base62 code, unique across stores, because the short link names no store. Links read `SHORT_LINK_BASE_URL` (A4): `dkly.co/<code>` for a redirect and `dkly.co/s/<code>` for an opt-out once the domain is bought; until then the API serves them at `/l/<code>` and `/l/s/<code>`.
+
+The public routes take no session. They find the store and link from the code through `tracked_link_for_code`, then work inside that store. A code that never existed, a deleted link and a code on the wrong path all give the same 404. Each route allows 120 requests a minute per address, counted under a hash of the address, because mobile carriers put many customers behind one address.
+
+- Redirect (`GET /l/:code`): every tap adds a visit and raises `tap_count`, and the redirect goes only to the link's stored URL. The first tap sets `first_tapped_at` and emits `message.tapped`; later taps are visits only. A visit keeps the time, an event key and `visitor_hash` (D31): an HMAC-SHA256 of the store id, address and user agent under a random salt made for each Asia/Dhaka day and kept in Valkey for two days. The address and user agent are never stored, the same visitor hashes the same only within a day, and a day's hashes cannot be recomputed once its salt has expired.
+- SMS opt-out (CAMP-R4): opening `GET /l/s/:code` shows a Bangla and English page and changes nothing, because phones fetch links to draw previews. Its one button posts to the same address, which writes an SMS withdrawal through `ConsentService.record` with source `opt_out_link` and emits `message.opted_out`. A tap when the current SMS consent is already withdrawn writes nothing, and two taps at once write one withdrawal. Order updates still go out (CAMP-R2). The page posts from the short link origin, which the origin check allows on public routes.
+
 ### Frozen destinations and final send checks
 
 At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each sendable recipient's `contact_identity_id` under that connection and freeze its address. A Messenger id is Page-scoped: a contact on two Pages must use the identity on the selected Page. Resolve or create a WhatsApp identity from the contact's own consented WhatsApp address under the selected business connection; this does not verify or merge a profile. The chosen template must belong to that connection. SMS stores a normalized phone and has no channel connection or channel identity. A skipped recipient with no address may have no identity.
@@ -347,7 +356,7 @@ Triggers and actions are in [`automations/catalogue.ts`](../../packages/contract
 | `consent_given`           | `consent.changed`                    | channel, consent source                                              |                           | Channels     |
 | `tag_added`               | `contact.tag_added`, not yet         | **tag**                                                              |                           | Channels     |
 | `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          | Stored segment membership |              |
-| `link_tapped`             | `message.tapped`, not yet (CAMP-10)  | channel                                                              |                           | Channels     |
+| `link_tapped`             | `message.tapped`                     | channel                                                              |                           | Channels     |
 | `birthday`                | Daily job in store time              | segment                                                              | Birthdays                 | Channels     |
 | `chat_started`            | `conversation.started`               | channel                                                              | Channels                  | Orders       |
 | `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels                  | Orders       |
