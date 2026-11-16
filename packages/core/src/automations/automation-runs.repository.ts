@@ -6,7 +6,7 @@ import type {
   AutomationStatus,
   AutomationStepKind,
 } from '@dakly/contracts/automations';
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import type { Database } from '@dakly/db/client';
 import {
   automationRunSteps,
@@ -17,6 +17,7 @@ import {
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import type { SkipReason } from '../sending/send-policy.service';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
@@ -45,7 +46,25 @@ export type RunChange = {
   finishedAt?: Date;
 };
 
-export type NewRunStep = { stepKey: string; kind: AutomationStepKind; outcome: string };
+export type NewRunStep = {
+  id?: string;
+  stepKey: string;
+  kind: AutomationStepKind;
+  outcome: string;
+  channel?: 'sms';
+  category?: Extract<AutomationStep, { kind: 'send' }>['category'];
+  optOutCode?: string | null;
+  skipReason?: SkipReason;
+  sentAt?: Date;
+};
+export type RunStepChange = {
+  outcome: string;
+  providerMessageId?: string;
+  skipReason?: SkipReason;
+  sentAt?: Date;
+};
+// A send handed to the provider whose outcome is not known yet.
+export type SendingStep = { sentAt: Date; optOutCode: string | null };
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -113,6 +132,45 @@ export class AutomationRunsRepository {
         ),
     );
     return rows.map((row) => row.stepKey);
+  }
+
+  async findSendingStep(
+    storeId: string,
+    runId: string,
+    stepKey: string,
+  ): Promise<SendingStep | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ sentAt: automationRunSteps.sentAt, optOutCode: automationRunSteps.optOutCode })
+        .from(automationRunSteps)
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.runId, runId),
+            eq(automationRunSteps.stepKey, stepKey),
+            eq(automationRunSteps.outcome, 'sending'),
+            isNotNull(automationRunSteps.sentAt),
+          ),
+        )
+        .limit(1),
+    );
+    // The where clause keeps only rows with a send time.
+    return row && { sentAt: row.sentAt!, optOutCode: row.optOutCode };
+  }
+
+  async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automationRunSteps)
+        .set(change)
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.runId, runId),
+            eq(automationRunSteps.stepKey, stepKey),
+          ),
+        ),
+    );
   }
 
   // Moves nothing when another worker has claimed the run since, or it left this step.

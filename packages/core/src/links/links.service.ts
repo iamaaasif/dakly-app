@@ -21,7 +21,7 @@ type LinkSource = { sourceType: TrackedLinkSourceType; sourceId: string };
 export type NewTrackedLink =
   | (LinkSource & { kind: 'redirect'; targetUrl: string; contactId: string | null })
   | (LinkSource & { kind: 'sms_opt_out'; contactId: string });
-export type TrackedLink = { id: string; url: string };
+export type TrackedLink = { id: string; code: string; url: string };
 export type Visitor = { ip: string; userAgent: string | undefined };
 
 const CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -69,7 +69,12 @@ export class LinksService {
       for (const row of pending) row.code = newCode();
     }
     if (pending.length) throw linkError('LINK_CODES_EXHAUSTED');
-    return rows.map((row) => ({ id: row.id, url: linkUrl(row.kind, row.code) }));
+    return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
+  }
+
+  // A sender that kept the code builds the same address again.
+  optOutUrl(code: string): string {
+    return linkUrl('sms_opt_out', code);
   }
 
   // D31: a visit keeps only an HMAC of the address and browser, never either value.

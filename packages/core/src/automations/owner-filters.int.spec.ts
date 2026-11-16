@@ -108,6 +108,21 @@ describe('automation filters without RLS assistance', () => {
       attempts: 0,
       graph,
     });
+    const sending = {
+      stepKey: 'offer',
+      kind: 'send',
+      outcome: 'sending',
+      sentAt: claimedAt,
+    } as const;
+    await runs.insertStep(f.a, runId, contactId, sending);
+    expect(await runs.findSendingStep(f.b, runId, 'offer')).toBeUndefined();
+    await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
+      sentAt: claimedAt,
+      optOutCode: null,
+    });
+    await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toBeUndefined();
     expect(await runs.moveRun(f.a, claim, { status: 'done' })).toBe(true);
   });
 });

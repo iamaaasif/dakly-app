@@ -63,7 +63,7 @@ Branch: `feat/camp-9-send-policy`
   - The extension checks for staff replies and transactional sends, and the campaign and run state checks, belong to CAMP-3 and CAMP-5: their sending jobs check them before they call the gate.
   - AUTO-R2 priority between two workflows on the same day: it needs the waiting runs, with CAMP-5.
   - `do_not_call`, `daily_reach_limit` and `meta_user_limit` come from the SMS provider and Meta, with ACC-14 and CHN-3.
-  - What a short balance does for a transactional send (CAMP-3 for its sending job) and for a workflow step (CAMP-5).
+  - What a short balance does for a transactional send (CAMP-3 for its sending job). A workflow step skips as `no_credits` (CAMP-5), until the reviewer confirms that or picks pause or fail.
   - The settings screen that edits `stores.settings.sending` through `PATCH /store`. Features 01 and 02 show quiet hours under SMS settings and WhatsApp settings; the gate holds one store-wide setting, so that screen settles whether quiet hours are per channel.
 
 #### The final send gate

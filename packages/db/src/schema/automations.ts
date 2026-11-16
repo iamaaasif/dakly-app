@@ -201,6 +201,8 @@ export const automationRunSteps = pgTable(
     channel: text('channel'),
     // A send step's own category, so the frequency cap counts only marketing sends.
     category: text('category', { enum: sendCategories }),
+    // The opt-out link a marketing SMS ends with, so a retry sends the same text.
+    optOutCode: text('opt_out_code'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),
