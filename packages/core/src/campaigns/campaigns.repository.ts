@@ -137,15 +137,15 @@ export class CampaignsRepository {
     );
   }
 
-  async markApproved(storeId: string, id: string, approval: CampaignApproval): Promise<Campaign> {
+  async markApproved(
+    storeId: string,
+    id: string,
+    approval: CampaignApproval,
+  ): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .update(campaigns)
-        .set(approval)
-        .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)))
-        .returning(campaignColumns),
+      tx.update(campaigns).set(approval).where(draftWhere(storeId, id)).returning(campaignColumns),
     );
-    return row!;
+    return row;
   }
 
   async removeDraft(storeId: string, id: string): Promise<boolean> {

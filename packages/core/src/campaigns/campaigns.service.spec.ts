@@ -88,7 +88,9 @@ class FakeCampaignsRepository {
   }
 
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
-    const changed = { ...this.rows.get(id)!, ...approval };
+    const row = this.rows.get(id);
+    if (row?.status !== 'draft') return undefined;
+    const changed = { ...row, ...approval };
     this.rows.set(id, changed);
     return changed;
   }
@@ -266,6 +268,7 @@ describe('CampaignsService', () => {
 
     expect(approved.status).toBe('sending');
     expect(reserved).toEqual([estimate.smsCredits]);
+    expect(repository.rows.get(campaign.id)).toMatchObject({ recipientsCount: 2, skippedCount: 1 });
     expect(
       repository.recipients.map((recipient) => [recipient.contactId, recipient.status]),
     ).toEqual([
@@ -283,6 +286,28 @@ describe('CampaignsService', () => {
         payload: { campaignId: campaign.id, status: 'sending' },
       }),
     ]);
+  });
+
+  it.each([
+    ['at the current moment', now],
+    ['before it', new Date(now.getTime() - 60_000)],
+  ])('refuses a send time %s', async (_case, scheduledFor) => {
+    const { campaign } = audienceDraft(2);
+    campaign.scheduledFor = scheduledFor;
+
+    await expect(approve(campaign.id)).rejects.toMatchObject({ code: 'CAMPAIGN_SEND_TIME_PASSED' });
+    expect(reserved).toEqual([]);
+    expect(repository.rows.get(campaign.id)?.status).toBe('draft');
+  });
+
+  it('estimates no parts or credits for an empty message', async () => {
+    const { campaign } = audienceDraft(2);
+    campaign.content = { text: '' };
+
+    expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
+      smsParts: 0,
+      smsCredits: 0,
+    });
   });
 
   it('schedules a campaign with a send time', async () => {
@@ -329,7 +354,7 @@ describe('CampaignsService', () => {
     balance = 3;
 
     await expect(approve(campaign.id)).rejects.toMatchObject({ code: 'WALLET_BALANCE_TOO_LOW' });
-    expect(repository.recipients).toEqual([]);
+    expect(repository.rows.get(campaign.id)?.status).toBe('draft');
     expect(events).toEqual([]);
   });
 

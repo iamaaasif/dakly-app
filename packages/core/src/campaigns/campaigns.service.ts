@@ -109,21 +109,24 @@ export class CampaignsService {
       const campaign = await this.repository.lockDraft(storeId, campaignId);
       if (!campaign) throw await this.notDraftError(storeId, campaignId);
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
+      if (campaign.scheduledFor && campaign.scheduledFor <= this.clock.now())
+        throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
       const recipients = await this.checkAudience(storeId, campaign);
       const estimate = toEstimate(campaign, recipients);
       if (estimate.recipientsCount === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
-      await this.wallets.reserve(storeId, {
-        wallet: 'sms_credits',
-        quantity: estimate.smsCredits,
-        idempotencyKey: `campaign-approval:${campaignId}`,
-        actor: approver.actor,
-      });
       for (let start = 0; start < recipients.length; start += AUDIENCE_PAGE_SIZE)
         await this.repository.insertRecipients(
           storeId,
           campaignId,
           recipients.slice(start, start + AUDIENCE_PAGE_SIZE),
         );
+      // After the inserts, so the wallet lock that blocks the store's credit writes is held briefly.
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity: estimate.smsCredits,
+        idempotencyKey: `campaign-approval:${campaignId}`,
+        actor: approver.actor,
+      });
       return toCampaignResponse(
         await this.markApproved(storeId, campaign, estimate, approver.actor),
       );
@@ -144,9 +147,10 @@ export class CampaignsService {
       approvedAt: now,
       updatedAt: now,
       estimatedCostPoisha: estimate.costPoisha,
-      recipientsCount: estimate.audienceCount,
+      recipientsCount: estimate.recipientsCount,
       skippedCount: estimate.audienceCount - estimate.recipientsCount,
     });
+    if (!approved) throw campaignError('CAMPAIGN_NOT_DRAFT');
     await this.outbox.publish({
       type: 'campaign.approved',
       storeId,
@@ -156,7 +160,6 @@ export class CampaignsService {
     return approved;
   }
 
-  // Checks the audience as of the send time.
   private async checkAudience(storeId: string, campaign: Campaign): Promise<FrozenRecipient[]> {
     const contactIds = await this.audienceIds(storeId, campaign);
     const at = campaign.scheduledFor ?? this.clock.now();
@@ -173,7 +176,6 @@ export class CampaignsService {
     return decisions.map(toFrozenRecipient);
   }
 
-  // Contacts in any include segment and in no exclude segment.
   private async audienceIds(storeId: string, campaign: Campaign): Promise<string[]> {
     const excluded = new Set(await this.segmentContactIds(storeId, campaign.excludeSegmentIds));
     const included = new Set(await this.segmentContactIds(storeId, campaign.includeSegmentIds));
@@ -214,7 +216,7 @@ function toEstimate(campaign: Campaign, recipients: FrozenRecipient[]): Campaign
   for (const { skipReason } of recipients)
     if (skipReason) skippedByReason[skipReason] = (skippedByReason[skipReason] ?? 0) + 1;
   const recipientsCount = recipients.filter((recipient) => recipient.status === 'queued').length;
-  const smsParts = countSmsParts(campaign.content.text);
+  const smsParts = campaign.content.text ? countSmsParts(campaign.content.text) : 0;
   return {
     audienceCount: recipients.length,
     skippedByReason,

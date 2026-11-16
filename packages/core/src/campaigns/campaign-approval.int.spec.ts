@@ -12,6 +12,7 @@ import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsService } from '../segments/segments.service';
+import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
@@ -167,6 +168,31 @@ describe('Campaign estimate and approval (Postgres)', () => {
     expect((await service.get(storeId, campaignId)).status).toBe('draft');
   });
 
+  it('keeps a custom role with campaigns and settings edit from turning approval off', async () => {
+    const custom: StoreAccess = {
+      role: 'custom',
+      areas: { campaigns: 'edit', storeSettings: 'edit' },
+      seeFullPhone: false,
+      exportLists: false,
+      refund: false,
+    };
+    const sending = {
+      quietHours: { startHour: 21, endHour: 9 },
+      frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+      onlyOwnersAndAdminsApprove: false,
+    };
+
+    await expect(
+      app.get(StoresService).changeSettings(storeId, { sending }, { userId, access: custom }),
+    ).rejects.toMatchObject({ code: 'STORE_APPROVAL_SETTING_DENIED', status: 403 });
+    await expect(
+      service.approve(storeId, campaignId, { access: custom, actor }),
+    ).rejects.toMatchObject({ code: 'CAMPAIGN_APPROVAL_DENIED' });
+    expect((await app.get(StoresService).sendingSettings(storeId)).onlyOwnersAndAdminsApprove).toBe(
+      true,
+    );
+  });
+
   it('refuses an approval the balance cannot cover and changes nothing', async () => {
     await smsCredits(205, 1);
 
@@ -190,6 +216,12 @@ describe('Campaign estimate and approval (Postgres)', () => {
     const approved = await service.approve(storeId, campaignId, owner);
 
     expect(approved.status).toBe('scheduled');
+    const [counts] = (
+      await admin.pool.query('select recipients_count, skipped_count from campaigns where id=$1', [
+        campaignId,
+      ])
+    ).rows;
+    expect(counts).toEqual({ recipients_count: 103, skipped_count: 25 });
     expect(300 - (await app.get(WalletService).balance(storeId, 'sms_credits'))).toBe(
       estimate.smsCredits,
     );
