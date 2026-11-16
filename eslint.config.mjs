@@ -6,20 +6,40 @@ import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+// The API runs on Fastify (ADR 0004); these only work on Express.
+const expressPackages = [
+  'express',
+  '@nestjs/platform-express',
+  'multer',
+  'helmet',
+  'cookie-parser',
+  'express-session',
+  'express-rate-limit',
+  'body-parser',
+];
+const expressMessage = 'Express-only. Use the Fastify equivalent; see docs/rules/http-fastify.md.';
+
 const restrictedSyntax = [
   {
     selector: 'TSEnumDeclaration',
     message: 'Use a string literal union or an `as const` object instead of a TypeScript enum.',
   },
+  {
+    // no-restricted-imports sees only static imports.
+    selector: `ImportExpression:matches(${expressPackages.map((name) => `[source.value='${name}']`).join(', ')})`,
+    message: expressMessage,
+  },
 ];
 
+const hexColour = '/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/';
+const hexClass = '/\\[#[0-9a-fA-F]{3,8}\\]/';
 const hexColourSyntax = [
   {
-    selector: 'Literal[value=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]',
+    selector: `:matches(Literal[value=${hexColour}], TemplateElement[value.raw=${hexColour}])`,
     message: 'Use a theme token, not a hex colour. See docs/rules/frontend-styling.md.',
   },
   {
-    selector: 'Literal[value=/\\[#[0-9a-fA-F]{3,8}\\]/]',
+    selector: `:matches(Literal[value=${hexClass}], TemplateElement[value.raw=${hexClass}])`,
     message: 'Use a theme token, not an arbitrary hex class. See docs/rules/frontend-styling.md.',
   },
 ];
@@ -32,7 +52,8 @@ const webRestrictedSyntax = [
     message: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
   },
   {
-    selector: "NewExpression[callee.object.name='Intl']",
+    // Intl constructors also work when called without `new`.
+    selector: ":matches(NewExpression, CallExpression)[callee.object.name='Intl']",
     message: 'Format with lib/format-money or lib/format-date. See docs/rules/frontend-styling.md.',
   },
 ];
@@ -42,7 +63,7 @@ const testFiles = ['**/*.spec.ts', '**/*.spec.tsx', '**/test/**', '**/e2e/**'];
 // Tests may cast a partial fake; production code fixes the type instead.
 const doubleAssertion = {
   selector:
-    "TSAsExpression[expression.type='TSAsExpression'][expression.typeAnnotation.type='TSUnknownKeyword']",
+    ":matches(TSAsExpression, TSTypeAssertion)[expression.type=/^TS(AsExpression|TypeAssertion)$/][expression.typeAnnotation.type='TSUnknownKeyword']",
   message: 'Do not cast through `as unknown as`. Fix the type, or parse the value with zod.',
 };
 
@@ -118,20 +139,7 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          // The API runs on Fastify (ADR 0004); these only work on Express.
-          paths: [
-            'express',
-            '@nestjs/platform-express',
-            'multer',
-            'helmet',
-            'cookie-parser',
-            'express-session',
-            'express-rate-limit',
-            'body-parser',
-          ].map((name) => ({
-            name,
-            message: 'Express-only. Use the Fastify equivalent; see docs/rules/http-fastify.md.',
-          })),
+          paths: expressPackages.map((name) => ({ name, message: expressMessage })),
           patterns: [
             {
               group: ['**/index', '**/index.ts'],
@@ -236,4 +244,17 @@ export default tseslint.config(
       'no-restricted-syntax': ['error', ...restrictedSyntax, ...hexColourSyntax],
     },
   }),
+  {
+    // Last, so its no-restricted-syntax list is the one these files get.
+    files: ['{apps,packages}/**/index.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Program',
+          message: 'Name the file for what it holds. Barrel files are not used in this repo.',
+        },
+      ],
+    },
+  },
 );

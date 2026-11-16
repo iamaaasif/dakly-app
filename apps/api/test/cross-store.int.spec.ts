@@ -68,6 +68,14 @@ async function role(shop: Shop) {
   return (await success(shop, 'POST', '/roles', 201, { name: 'সহায়তা', permissions })).json()
     .id as string;
 }
+async function smsCredits(shop: Shop, quantity: number) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values($1::uuid,$2,'sms_credits',1,'top_up',$3,$3,$1::text,'system')",
+    [id, shop.id, quantity],
+  );
+  return id;
+}
 fixture('GET /customers/:id', async () => {
   const { a, b } = await pair(),
     id = await customer(a);
@@ -406,6 +414,19 @@ for (const [action, status] of [
     );
     expect(await f.row('notifications', foreignId)).toEqual(before);
   });
+fixture('GET /wallets', async () => {
+  const { a, b } = await pair();
+  await smsCredits(a, 120);
+  expect((await success(a, 'GET', '/wallets', 200)).json()).toEqual({
+    smsCredits: 120,
+    whatsappPoisha: 0,
+  });
+  expect((await success(b, 'GET', '/wallets', 200)).json()).toEqual({
+    smsCredits: 0,
+    whatsappPoisha: 0,
+  });
+  expect((await f.request(a.member, 'GET', '/wallets')).statusCode).toBe(403);
+});
 fixture('GET /account-recovery-history', async () => {
   const { a, b } = await pair(),
     aId = await f.recovery(a),
@@ -476,6 +497,7 @@ describe('every production shop route isolates its data', () => {
       ['ownership_transfers', 'id', await f.transfer(a), await f.transfer(b)],
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
+      ['wallet_ledger', 'id', await smsCredits(a, 10), await smsCredits(b, 20)],
     ];
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const client = await connection.pool.connect();

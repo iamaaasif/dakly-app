@@ -1,12 +1,12 @@
 # Payments and billing
 
-|           |                                                                                                                                                      |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Release   | 1                                                                                                                                                    |
-| Status    | Building                                                                                                                                             |
-| Extension | Core                                                                                                                                                 |
-| Code      | `packages/core/src/{payments,billing,usage}/`, `packages/providers/src/payment/{bkash,nagad,citybank}/`, `apps/web/src/features/{payments,billing}/` |
-| Tasks     | PAY-1 to PAY-10                                                                                                                                      |
+|           |                                                                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Release   | 1                                                                                                                                                            |
+| Status    | Building                                                                                                                                                     |
+| Extension | Core                                                                                                                                                         |
+| Code      | `packages/core/src/{payments,billing,usage,wallets}/`, `packages/providers/src/payment/{bkash,nagad,citybank}/`, `apps/web/src/features/{payments,billing}/` |
+| Tasks     | PAY-1 to PAY-11                                                                                                                                              |
 
 ## Purpose
 
@@ -384,7 +384,25 @@ Emits `payment.succeeded`, `payment.failed`, `payment.refunded`, `subscription.r
 
 Refund reservations serialize on the common payment intent, not on the individual refund request. In one short transaction, lock the intent, check the permanent refund idempotency key, then reserve the amount in `reserved_refund_poisha` and insert the refund. `requested` and `pending` refunds consume reserved capacity; `succeeded` and `recorded_manually` consume `refunded_poisha`. Their combined amount cannot exceed `verified_amount_poisha`; an unverified payment has no refundable capacity. A manually verified payment records that verified amount first. Commit before calling the gateway. Completion moves the amount from reserved to refunded exactly once under the same lock; a confirmed failure releases the reservation. An unknown gateway outcome stays reserved until reconciliation. A simple SUM-before-insert without this common lock is insufficient.
 
-Wallet writers take a transaction-scoped advisory lock for `(store_id, wallet)`, read the greatest `revision`, then insert the next revision and its resulting balance in the same transaction. Revision starts at 1 and is unique within the wallet; balance reads order by revision, never transaction-start `created_at`. A retried idempotency key returns its existing entry without allocating a revision or changing balance. Legacy rows receive a one-time deterministic revision in migration; this cannot recover historical lock order that was never recorded. These refund and wallet service protocols still need implementation and concurrency tests.
+Wallet writers take a transaction-scoped advisory lock for `(store_id, wallet)`, read the greatest `revision`, then insert the next revision and its resulting balance in the same transaction. Revision starts at 1 and is unique within the wallet; balance reads order by revision, never transaction-start `created_at`. A retried idempotency key returns its existing entry without allocating a revision or changing balance. Legacy rows receive a one-time deterministic revision in migration; this cannot recover historical lock order that was never recorded. The refund protocol still needs implementation and concurrency tests.
+
+### Wallets (PAY-11)
+
+`WalletService` in `wallets/` serves the two messaging wallets, `sms_credits` (a count) and `whatsapp_poisha` (poisha). AI top-ups (`ai_conversations`) stay with the usage allowance (P2), and wallets never call `UsageService`. Every write takes an idempotency key, unique per store: the same key again returns the first entry and writes nothing.
+
+| Method                                         | Rows written                                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `balance(storeId, wallet)`                     | None; the `balance_quantity_after` of the highest revision, 0 for an empty wallet                   |
+| `reserve(storeId, { wallet, quantity, ... })`  | `reserve` of minus the quantity. Its row id is the reservation id                                   |
+| `release(storeId, { reservationId, ... })`     | `release` of plus the reserved quantity                                                             |
+| `charge(storeId, { reservationId, quantity })` | `release` of the whole reservation, then `charge` of minus the charged quantity, in one transaction |
+| `credit(storeId, { wallet, quantity, ... })`   | `adjustment` of plus the quantity, by staff, referencing the staff audit row                        |
+
+Release and charge rows reference the reservation (`reference_type` `wallet_reservation`, `reference_id` the reserve row id). Every settled reservation has exactly one `release` row; under the wallet lock a second release or charge of the same reservation fails with `WALLET_RESERVATION_SETTLED`. A charge may be smaller than the reservation, never larger (`WALLET_CHARGE_OVER_RESERVATION`). Reserve, charge and credit quantities are whole numbers above 0 (`WALLET_QUANTITY_INVALID`); a charge of nothing is a release. Writing the charge as its own row keeps every delta non-zero, keeps the balance equal to the sum of deltas, and records the full charge of a reservation. A write that would take the balance below zero fails with `WALLET_BALANCE_TOO_LOW`; the service checks this before writing, and the `wallet_ledger_balance` check constraint maps to the same error.
+
+A staff credit is an `adjustment`, not a `top_up`: nothing was paid, so the top-up refund rule (PAY-R16) does not apply to it. The admin route for it follows in a separate PR: until PAY-8 sells SMS packs and WhatsApp top-ups, support and Super admin staff will credit a shop from the admin app (P4, D28) through the ADM-6 risky action pattern, with a reason, a confirmation step and the staff audit row written before `credit` appends the ledger row. Nothing calls `credit` yet.
+
+The shop reads its balances with `GET /wallets`, which needs `billing.view`: Owner and Admin have it, and a custom role can be given it. The response is `{ smsCredits, whatsappPoisha }`.
 
 Issued invoice document fields are immutable through application grants. Only `status` and `paid_at` can change; bill-to, lines, totals, tax, number and issue time require a separate credit note rather than an edit.
 
