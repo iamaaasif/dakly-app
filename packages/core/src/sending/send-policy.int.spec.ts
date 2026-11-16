@@ -318,6 +318,6 @@ describe('SendPolicyService (Postgres)', () => {
     expect(await policy.checkAudience(storeA, audienceOf(ids))).toHaveLength(500);
     await expect(
       policy.checkAudience(storeA, audienceOf([...ids, randomUUID()])),
-    ).rejects.toMatchObject({ code: 'CONSENT_CONTACTS_TOO_MANY' });
+    ).rejects.toMatchObject({ code: 'CONSENT_AUDIENCE_TOO_MANY' });
   });
 });

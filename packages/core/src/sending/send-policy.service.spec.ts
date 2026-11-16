@@ -37,7 +37,9 @@ describe('SendPolicyService', () => {
     const contacts = {
       findRecipient: async () => contact,
       findRecipients: async (_storeId: string, ids: string[]) =>
-        contact ? ids.map((id) => ({ ...contact!, id, phone: '01712345678' })) : [],
+        contact
+          ? ids.map((id) => ({ ...contact!, id, phone: contact!.hasPhone ? '01712345678' : null }))
+          : [],
     };
     const consents = {
       current: async () => (consent ? [{ contactId: CONTACT_ID, status: consent }] : []),
@@ -151,7 +153,7 @@ describe('SendPolicyService', () => {
       expect(audience).toEqual(
         ids.map((contactId) => ({
           contactId,
-          phone: contact ? '01712345678' : null,
+          phone: contact?.hasPhone ? '01712345678' : null,
           decision,
         })),
       );

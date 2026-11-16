@@ -41,7 +41,6 @@ describe('contact filters without RLS assistance', () => {
         kind: 'customer',
         isBlocked: false,
         isOverPlanLimit: false,
-        hasPhone: true,
         phone: '01711000001',
       },
     ]);

@@ -27,6 +27,8 @@ const STAFF_OPT_IN_CHANNELS: ConsentChannel[] = ['whatsapp', 'sms'];
 
 @Injectable()
 export class ConsentService {
+  static readonly AUDIENCE_LIMIT = MAX_AUDIENCE_CONSENT_CONTACTS;
+
   constructor(
     @Inject(ConsentsRepository) private readonly repository: ConsentsRepository,
     @Inject(ContactsService) private readonly contacts: ContactsService,
@@ -90,7 +92,7 @@ export class ConsentService {
 
   currentForAudience(storeId: string, contactIds: string[], channel: ConsentChannel) {
     if (contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
-      throw consentError('CONSENT_CONTACTS_TOO_MANY');
+      throw consentError('CONSENT_AUDIENCE_TOO_MANY');
     return this.repository.listCurrent(storeId, contactIds, channel);
   }
 }

@@ -55,7 +55,10 @@ export type ContactRecipient = {
 };
 
 // An audience check also freezes the phone as each recipient's SMS destination.
-export type AudienceRecipient = ContactRecipient & { id: string; phone: string | null };
+export type AudienceRecipient = Omit<ContactRecipient, 'hasPhone'> & {
+  id: string;
+  phone: string | null;
+};
 
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
@@ -116,7 +119,6 @@ export class ContactsRepository {
           kind: contacts.kind,
           isBlocked: contacts.isBlocked,
           isOverPlanLimit: contacts.isOverPlanLimit,
-          hasPhone: sql<boolean>`${contacts.phone} is not null`,
           phone: contacts.phone,
         })
         .from(contacts)

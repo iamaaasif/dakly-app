@@ -114,7 +114,7 @@ export class ContactsService {
     return this.contactsRepository.findRecipient(storeId, id);
   }
 
-  // Deleted contacts are left out. The phone goes only to the frozen campaign destination.
+  // Deleted contacts are left out.
   findRecipients(storeId: string, ids: string[]): Promise<AudienceRecipient[]> {
     return this.contactsRepository.findRecipients(storeId, ids);
   }

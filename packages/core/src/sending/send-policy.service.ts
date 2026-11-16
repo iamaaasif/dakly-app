@@ -29,8 +29,8 @@ export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: str
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
 
-// The consent read behind checkAudience takes at most this many contacts.
-export const AUDIENCE_PAGE_SIZE = 500;
+// The most contacts one checkAudience call takes: its consent read's limit.
+export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
 
 const HOUR = 60 * 60 * 1000;
 
@@ -72,14 +72,17 @@ export class SendPolicyService {
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
-  // Approval shows skips with the same rules, a page at a time and with no lock: only the check
-  // inside the send transaction decides (feature 09).
+  // Approval freezes these skips with the same rules, a page at a time and with no lock. The
+  // check inside the send transaction can still skip a queued recipient, never send a skipped one.
   async checkAudience(
     storeId: string,
     { contactIds, channel, category, at }: AudienceRequest,
   ): Promise<AudienceDecision[]> {
     const contacts = new Map(
-      (await this.contacts.findRecipients(storeId, contactIds)).map((row) => [row.id, row]),
+      (await this.contacts.findRecipients(storeId, contactIds)).map((row) => [
+        row.id,
+        { ...row, hasPhone: row.phone !== null },
+      ]),
     );
     const isMarketing = category === 'marketing';
     const consents = isMarketing
@@ -112,13 +115,14 @@ export class SendPolicyService {
     const settings = await this.stores.sendingSettings(storeId);
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
     if (quietUntil) return () => ({ action: 'defer', until: quietUntil });
-    const sends = await this.listWeekOfSends(storeId, contactIds, at);
+    const sendsOf = new Map<string, MarketingSend[]>();
+    for (const send of await this.listWeekOfSends(storeId, contactIds, at)) {
+      const own = sendsOf.get(send.contactId);
+      if (own) own.push(send);
+      else sendsOf.set(send.contactId, [send]);
+    }
     return (contactId) =>
-      capReached(
-        sends.filter((send) => send.contactId === contactId),
-        { channel, at },
-        settings.frequencyCap,
-      )
+      capReached(sendsOf.get(contactId) ?? [], { channel, at }, settings.frequencyCap)
         ? skip('frequency_cap')
         : SEND;
   }
