@@ -130,6 +130,8 @@ export class StaffAlertsRepository {
   }
 
   async pending(now: Date) {
+    // Postgres rechecks only the outer conditions on a row it waited to lock, so they repeat
+    // here: a staff retry that reset attempts meanwhile must not be marked failed.
     await this.database.execute(sql`
       update staff_alert_deliveries
       set
@@ -143,7 +145,10 @@ export class StaffAlertsRepository {
           and (leased_until is null or leased_until<=${now})
         order by next_attempt_at
         limit 100
-      )`);
+      )
+        and status='pending'
+        and attempts>=5
+        and (leased_until is null or leased_until<=${now})`);
     // Reserving the alert for one lease keeps an overlapping relay from queueing it again after
     // the first delivery job finished. The reservation has no lease id, so delivery can claim it.
     return (
