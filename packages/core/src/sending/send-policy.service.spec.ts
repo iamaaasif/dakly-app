@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ConsentService } from '../consents/consent.service';
 import type { ContactsService } from '../contacts/contacts.service';
+import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { StoresService } from '../stores/stores.service';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
 import type { SendingRepository } from './sending.repository';
@@ -16,6 +17,7 @@ type MarketingSend = { channel: string; sentAt: Date };
 type Contact = {
   kind: 'customer' | 'lead' | 'not_customer';
   isBlocked: boolean;
+  isOverPlanLimit: boolean;
   hasPhone: boolean;
 };
 
@@ -23,10 +25,12 @@ describe('SendPolicyService', () => {
   let contact: Contact | undefined;
   let consent: 'granted' | 'withdrawn' | undefined;
   let sends: MarketingSend[];
+  let isTransactionOpen: boolean;
   let service: SendPolicyService;
 
   beforeEach(() => {
-    contact = { kind: 'customer', isBlocked: false, hasPhone: true };
+    contact = { kind: 'customer', isBlocked: false, isOverPlanLimit: false, hasPhone: true };
+    isTransactionOpen = true;
     consent = 'granted';
     sends = [];
     const contacts = { findRecipient: async () => contact };
@@ -42,6 +46,7 @@ describe('SendPolicyService', () => {
     };
     // Mirrors the repository's window: after the first date, up to and including the second.
     const repository = {
+      lockContact: async () => undefined,
       listMarketingSends: async (_storeId: string, _contactId: string, after: Date, until: Date) =>
         sends.filter((send) => send.sentAt > after && send.sentAt <= until),
     };
@@ -50,6 +55,7 @@ describe('SendPolicyService', () => {
       consents as unknown as ConsentService,
       stores as unknown as StoresService,
       repository as unknown as SendingRepository,
+      { isOpen: () => isTransactionOpen } as unknown as StoreTransaction,
     );
   });
 
@@ -76,6 +82,12 @@ describe('SendPolicyService', () => {
     ['no_address', 'an SMS to a contact with no phone', () => (contact!.hasPhone = false), {}],
     ['blocked', 'a blocked contact', () => (contact!.isBlocked = true), {}],
     ['not_customer', 'a Not a customer contact', () => (contact!.kind = 'not_customer'), {}],
+    [
+      'over_plan_limit',
+      'a contact past the plan limit',
+      () => (contact!.isOverPlanLimit = true),
+      {},
+    ],
     ['no_consent', 'a contact who never answered', () => (consent = undefined), {}],
     ['no_consent', 'a withdrawal after approval', () => (consent = 'withdrawn'), {}],
     [
@@ -178,6 +190,22 @@ describe('SendPolicyService', () => {
     consent = 'withdrawn';
 
     expect(await service.check(STORE_ID, request({ category: 'staff_reply' }))).toEqual({
+      action: 'send',
+    });
+  });
+
+  it('refuses a marketing check outside a store transaction', async () => {
+    isTransactionOpen = false;
+
+    await expect(service.check(STORE_ID, request())).rejects.toMatchObject({
+      code: 'STORE_TRANSACTION_REQUIRED',
+    });
+  });
+
+  it('checks a transactional send outside a store transaction', async () => {
+    isTransactionOpen = false;
+
+    expect(await service.check(STORE_ID, request({ category: 'transactional' }))).toEqual({
       action: 'send',
     });
   });

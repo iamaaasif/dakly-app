@@ -31,6 +31,7 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.findRecipient(f.a, a!.id)).toEqual({
       kind: 'customer',
       isBlocked: false,
+      isOverPlanLimit: false,
       hasPhone: true,
     });
     expect(await repository.findRecipient(f.b, a!.id)).toBeUndefined();

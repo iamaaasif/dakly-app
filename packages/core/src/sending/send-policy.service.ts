@@ -6,6 +6,8 @@ import type { SendingSettings } from '@dakly/contracts/stores';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { StoresService } from '../stores/stores.service';
 import { SendingRepository } from './sending.repository';
 
@@ -38,14 +40,16 @@ export class SendPolicyService {
     @Inject(ConsentService) private readonly consents: ConsentService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(SendingRepository) private readonly repository: SendingRepository,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
+    this.requireTransactionForMarketing(request.category);
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     if (!contact) return skip('no_address');
     if (contact.isBlocked) return skip('blocked');
     if (request.category === 'marketing') {
-      const reason = await this.audienceSkip(storeId, contact.kind, request);
+      const reason = await this.audienceSkip(storeId, contact, request);
       if (reason) return skip(reason);
     }
     if (request.channel === 'sms' && !contact.hasPhone) return skip('no_address');
@@ -56,12 +60,19 @@ export class SendPolicyService {
     return this.marketingLimits(storeId, request);
   }
 
+  // The cap lock must last until the caller marks the message sending and commits.
+  private requireTransactionForMarketing(category: SendCategory): void {
+    if (category === 'marketing' && !this.transaction.isOpen())
+      throw new AppError('STORE_TRANSACTION_REQUIRED', PLATFORM_ERRORS.STORE_TRANSACTION_REQUIRED);
+  }
+
   private async audienceSkip(
     storeId: string,
-    kind: ContactKind,
+    contact: { kind: ContactKind; isOverPlanLimit: boolean },
     { contactId, channel }: SendRequest,
   ): Promise<SkipReason | undefined> {
-    if (kind === 'not_customer') return 'not_customer';
+    if (contact.kind === 'not_customer') return 'not_customer';
+    if (contact.isOverPlanLimit) return 'over_plan_limit';
     const [consent] = await this.consents.current(storeId, [contactId], channel);
     return consent?.status === 'granted' ? undefined : 'no_consent';
   }
@@ -75,6 +86,7 @@ export class SendPolicyService {
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
 
+    await this.repository.lockContact(storeId, contactId);
     const dayStart = new Date(at.getTime() - 24 * HOUR);
     const sends = await this.repository.listMarketingSends(
       storeId,
@@ -83,7 +95,7 @@ export class SendPolicyService {
       at,
     );
     const onChannelToday = sends.filter(
-      (send) => send.channel === channel && send.sentAt !== null && send.sentAt > dayStart,
+      (send) => send.channel === channel && send.sentAt > dayStart,
     ).length;
     const { perChannelPerDay, perSevenDays } = settings.frequencyCap;
     if (onChannelToday >= perChannelPerDay || sends.length >= perSevenDays)

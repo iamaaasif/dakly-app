@@ -16,7 +16,12 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { contactError } from './contacts.errors';
-import { type Contact, type ContactFilter, type ContactRecipient, ContactsRepository } from './contacts.repository';
+import {
+  type Contact,
+  type ContactFilter,
+  type ContactRecipient,
+  ContactsRepository,
+} from './contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 // Writes take the actor (services.md); nothing records it for contacts yet.

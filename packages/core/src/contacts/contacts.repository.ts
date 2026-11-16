@@ -24,7 +24,12 @@ export type Contact = {
 };
 
 // What the send gate needs; the phone itself stays here.
-export type ContactRecipient = { kind: ContactKind; isBlocked: boolean; hasPhone: boolean };
+export type ContactRecipient = {
+  kind: ContactKind;
+  isBlocked: boolean;
+  isOverPlanLimit: boolean;
+  hasPhone: boolean;
+};
 
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
@@ -67,6 +72,7 @@ export class ContactsRepository {
         .select({
           kind: contacts.kind,
           isBlocked: contacts.isBlocked,
+          isOverPlanLimit: contacts.isOverPlanLimit,
           hasPhone: sql<boolean>`${contacts.phone} is not null`,
         })
         .from(contacts)

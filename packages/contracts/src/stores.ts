@@ -44,8 +44,8 @@ export const sendingSettingsSchema = z.strictObject({
     .default({ startHour: 21, endHour: 9 }),
   frequencyCap: z
     .strictObject({
-      perChannelPerDay: z.number().int().positive(),
-      perSevenDays: z.number().int().positive(),
+      perChannelPerDay: z.number().int().min(1).max(3),
+      perSevenDays: z.number().int().min(1).max(10),
     })
     .default({ perChannelPerDay: 1, perSevenDays: 3 }),
 });
@@ -78,6 +78,8 @@ export const changeStoreSettingsSchema = z
       .nullable()
       .optional(),
     tradeLicenceNumber: z.string().trim().min(1).max(100).nullable().optional(),
+    // Replaces the whole section; a part left out returns to its default.
+    sending: sendingSettingsSchema.optional(),
   })
   .refine(
     (input) => Object.values(input).some((value) => value !== undefined),
@@ -102,4 +104,5 @@ export type StoreSettingsResponse = StoreResponse & {
   district: string | null;
   vatBin: string | null;
   tradeLicenceNumber: string | null;
+  sending: SendingSettings;
 };

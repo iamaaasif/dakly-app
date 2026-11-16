@@ -7,9 +7,12 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
+import { campaignRecipients } from '@dakly/db/schema/campaigns';
 
 import { ConsentService } from '../consents/consent.service';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
 import { SendingModule } from './sending.module';
 
@@ -48,17 +51,22 @@ async function consentedContact(storeId: string) {
   return id;
 }
 
-async function campaignSend(
-  storeId: string,
-  contactId: string,
-  sentAt: Date,
-  { status = 'sent', category = 'marketing' } = {},
-) {
+async function campaign(storeId: string, category = 'marketing') {
   const campaignId = randomUUID();
   await admin.pool.query(
     "insert into campaigns(id,store_id,name,channel,category,content,status) values($1,$2,'পূজার ছাড়','sms',$3,'{}','sending')",
     [campaignId, storeId, category],
   );
+  return campaignId;
+}
+
+async function campaignSend(
+  storeId: string,
+  contactId: string,
+  sentAt: Date | null,
+  { status = 'sent', category = 'marketing' } = {},
+) {
+  const campaignId = await campaign(storeId, category);
   await admin.pool.query(
     'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at) values($1,$2,$3,$4,$5,$6)',
     [randomUUID(), storeId, campaignId, contactId, status, sentAt],
@@ -90,14 +98,28 @@ async function workflowSend(
   );
 }
 
+// The sending job runs the gate inside its store transaction.
 function check(storeId: string, contactId: string, change: Partial<SendRequest> = {}) {
-  return policy.check(storeId, {
-    contactId,
-    channel: 'sms',
-    category: 'marketing',
-    at: noon,
-    ...change,
-  });
+  return app.get(StoreTransaction).run(storeId, () =>
+    policy.check(storeId, {
+      contactId,
+      channel: 'sms',
+      category: 'marketing',
+      at: noon,
+      ...change,
+    }),
+  );
+}
+
+async function waitForBlockedAdvisoryLock() {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const waiting = await admin.pool.query(
+      "select 1 from pg_locks where locktype='advisory' and not granted and database=(select oid from pg_database where datname=current_database())",
+    );
+    if (waiting.rowCount) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('The second check never waited for the contact lock');
 }
 
 describe('SendPolicyService (Postgres)', () => {
@@ -206,5 +228,44 @@ describe('SendPolicyService (Postgres)', () => {
       action: 'defer',
       until: new Date('2026-11-17T02:00:00Z'),
     });
+  });
+
+  it('counts a recipient still in sending as a send now', async () => {
+    const contactId = await consentedContact(storeA);
+    await campaignSend(storeA, contactId, null, { status: 'sending' });
+
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+  });
+
+  it('lets only one of two concurrent checks for one contact send', async () => {
+    const contactId = await consentedContact(storeA);
+    const campaignId = await campaign(storeA);
+    let firstDecided!: () => void;
+    let firstMayCommit!: () => void;
+    const decided = new Promise<void>((resolve) => (firstDecided = resolve));
+    const mayCommit = new Promise<void>((resolve) => (firstMayCommit = resolve));
+    // As the sending job does: decide, then mark the recipient sending in the same transaction.
+    const first = app.get(StoreTransaction).run(storeA, async () => {
+      const decision = await check(storeA, contactId);
+      firstDecided();
+      await mayCommit;
+      await app.get(TenantDatabase).forStore(storeA, (tx) =>
+        tx.insert(campaignRecipients).values({
+          id: randomUUID(),
+          storeId: storeA,
+          campaignId,
+          contactId,
+          status: 'sending',
+        }),
+      );
+      return decision;
+    });
+    await decided;
+    const second = check(storeA, contactId);
+    await waitForBlockedAdvisoryLock();
+    firstMayCommit();
+
+    expect(await first).toEqual({ action: 'send' });
+    expect(await second).toEqual({ action: 'skip', reason: 'frequency_cap' });
   });
 });

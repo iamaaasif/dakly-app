@@ -27,7 +27,12 @@ const settingsColumns = {
   district: stores.district,
   vatBin: stores.vatBin,
   tradeLicenceNumber: stores.tradeLicenceNumber,
+  sending: sql<unknown>`${stores.settings}->'sending'`,
 };
+
+// The service parses the sending section and fills its defaults.
+export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending'> & { sending: unknown };
+
 @Injectable()
 export class StoresRepository {
   constructor(@Inject(TenantDatabase) private readonly tenant: TenantDatabase) {}
@@ -54,7 +59,7 @@ export class StoresRepository {
     return row;
   }
 
-  async settings(storeId: string): Promise<StoreSettingsResponse | undefined> {
+  async settings(storeId: string): Promise<StoreSettingsRow | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(settingsColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
     );
@@ -76,13 +81,19 @@ export class StoresRepository {
 
   async changeSettings(
     storeId: string,
-    input: ChangeStoreSettingsInput,
+    { sending, ...columns }: ChangeStoreSettingsInput,
     updatedAt: Date,
-  ): Promise<StoreSettingsResponse | undefined> {
+  ): Promise<StoreSettingsRow | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
         .update(stores)
-        .set({ ...input, updatedAt })
+        .set({
+          ...columns,
+          updatedAt,
+          ...(sending && {
+            settings: sql`jsonb_set(${stores.settings}, '{sending}', ${JSON.stringify(sending)}::jsonb)`,
+          }),
+        })
         .where(eq(stores.id, storeId))
         .returning(settingsColumns),
     );
@@ -93,7 +104,7 @@ export class StoresRepository {
     storeId: string,
     extensions: string[],
     updatedAt: Date,
-  ): Promise<StoreSettingsResponse | undefined> {
+  ): Promise<StoreSettingsRow | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
         .update(stores)
