@@ -153,6 +153,24 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+const dhaka = {
+  match: 'all',
+  conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
+};
+async function dhakaContact(shop: Shop) {
+  const id = await contact(shop);
+  await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [id]);
+}
+fixture('POST /segments/preview', async () => {
+  const { a, b } = await pair();
+  await dhakaContact(a);
+  await dhakaContact(a);
+  await dhakaContact(b);
+  const count = async (shop: Shop) =>
+    (await success(shop, 'POST', '/segments/preview', 200, { rules: dhaka })).json().count;
+  expect(await count(a)).toBe(2);
+  expect(await count(b)).toBe(1);
+});
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
@@ -252,8 +270,16 @@ fixture('GET /store', async () => {
   expect((await success(a, 'GET', '/store', 200)).json().id).toBe(a.id);
   expect((await success(b, 'GET', '/store', 200)).json().id).toBe(b.id);
 });
+const shopSending = {
+  quietHours: { startHour: 22, endHour: 8 },
+  frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+};
 for (const [path, payload, expected] of [
-  ['/store', { name: 'রিনার দোকান' }, { name: 'রিনার দোকান' }],
+  [
+    '/store',
+    { name: 'রিনার দোকান', sending: shopSending },
+    { name: 'রিনার দোকান', sending: shopSending },
+  ],
   ['/store/extensions', { extensions: ['chats'] }, { extensions: ['chats'] }],
 ] as const)
   fixture(`PATCH ${path}`, async () => {

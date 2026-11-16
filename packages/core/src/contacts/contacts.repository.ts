@@ -1,7 +1,26 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, arrayContains, desc, eq, ilike, isNull, like, sql } from 'drizzle-orm';
+import {
+  and,
+  arrayContains,
+  arrayOverlaps,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  isNull,
+  like,
+  ne,
+  not,
+  or,
+  type SQL,
+  sql,
+} from 'drizzle-orm';
+import { type PgColumn, QueryBuilder } from 'drizzle-orm/pg-core';
 
 import type {
+  ConsentChannel,
   ContactIdentityResponse,
   ContactKind,
   ContactListQuery,
@@ -9,6 +28,8 @@ import type {
   CreateContactInput,
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
+import type { SegmentCondition, SegmentInnerGroup, SegmentRules } from '@dakly/contracts/segments';
+import { contactConsentCurrent } from '@dakly/db/schema/consents';
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
@@ -21,6 +42,14 @@ export type Contact = {
   kind: ContactKind;
   tags: string[];
   createdAt: Date;
+};
+
+// What the send gate needs; the phone itself stays here.
+export type ContactRecipient = {
+  kind: ContactKind;
+  isBlocked: boolean;
+  isOverPlanLimit: boolean;
+  hasPhone: boolean;
 };
 
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
@@ -51,6 +80,22 @@ export class ContactsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select(contactColumns)
+        .from(contacts)
+        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt)))
+        .limit(1),
+    );
+    return rows[0];
+  }
+
+  async findRecipient(storeId: string, id: string): Promise<ContactRecipient | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          kind: contacts.kind,
+          isBlocked: contacts.isBlocked,
+          isOverPlanLimit: contacts.isOverPlanLimit,
+          hasPhone: sql<boolean>`${contacts.phone} is not null`,
+        })
         .from(contacts)
         .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt)))
         .limit(1),
@@ -149,8 +194,78 @@ export class ContactsRepository {
     );
     return rows.length > 0;
   }
+
+  async countMatching(storeId: string, rules: SegmentRules): Promise<number> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx.select({ count: count() }).from(contacts).where(matching(storeId, rules)),
+    );
+    return row!.count;
+  }
 }
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
+}
+
+// Segments compile here because contacts owns the table (module-boundaries.md). Every value is a
+// bound parameter. Not a customer and deleted contacts never match.
+function matching(storeId: string, rules: SegmentRules): SQL | undefined {
+  return and(
+    eq(contacts.storeId, storeId),
+    isNull(contacts.deletedAt),
+    ne(contacts.kind, 'not_customer'),
+    groupWhere(storeId, rules),
+  );
+}
+
+function groupWhere(storeId: string, group: SegmentRules | SegmentInnerGroup): SQL | undefined {
+  const parts = group.conditions.map((item: SegmentCondition | SegmentInnerGroup) =>
+    'match' in item ? groupWhere(storeId, item) : conditionWhere(storeId, item),
+  );
+  return group.match === 'all' ? and(...parts) : or(...parts);
+}
+
+function conditionWhere(storeId: string, condition: SegmentCondition): SQL | undefined {
+  switch (condition.field) {
+    case 'tag':
+      return condition.operator === 'is_any_of'
+        ? arrayOverlaps(contacts.tags, condition.values)
+        : not(arrayOverlaps(contacts.tags, condition.values));
+    case 'district':
+      return listWhere(contacts.district, condition);
+    case 'source':
+      return listWhere(contacts.source, condition);
+    case 'kind':
+      return listWhere(contacts.kind, condition);
+    case 'consent':
+      return condition.granted
+        ? exists(granted(storeId, condition.channel))
+        : not(exists(granted(storeId, condition.channel)));
+  }
+}
+
+// "Is not Dhaka" keeps contacts with no district.
+function listWhere(
+  column: PgColumn,
+  condition: { operator: 'is_any_of' | 'is_none_of'; values: string[] },
+): SQL | undefined {
+  return condition.operator === 'is_any_of'
+    ? inArray(column, condition.values)
+    : or(isNull(column), not(inArray(column, condition.values)));
+}
+
+const query = new QueryBuilder();
+
+function granted(storeId: string, channel: ConsentChannel) {
+  return query
+    .select({ contactId: contactConsentCurrent.contactId })
+    .from(contactConsentCurrent)
+    .where(
+      and(
+        eq(contactConsentCurrent.storeId, storeId),
+        eq(contactConsentCurrent.contactId, contacts.id),
+        eq(contactConsentCurrent.channel, channel),
+        eq(contactConsentCurrent.status, 'granted'),
+      ),
+    );
 }

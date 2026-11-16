@@ -28,6 +28,13 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.findById(f.a, a!.id)).toMatchObject({ name: 'রিনা' });
     expect(await repository.findById(f.b, b!.id)).toMatchObject({ name: 'করিম' });
     expect(await repository.findById(f.b, a!.id)).toBeUndefined();
+    expect(await repository.findRecipient(f.a, a!.id)).toEqual({
+      kind: 'customer',
+      isBlocked: false,
+      isOverPlanLimit: false,
+      hasPhone: true,
+    });
+    expect(await repository.findRecipient(f.b, a!.id)).toBeUndefined();
   });
 
   it('lists, edits, deletes and reads identities only in the selected store', async () => {
@@ -58,5 +65,28 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.softDelete(f.b, a!.id, new Date())).toBe(false);
     expect(await f.row('contacts', a!.id)).toMatchObject({ name: 'সুমি', deleted_at: null });
     expect(await repository.findIdentities(f.a, a!.id)).toHaveLength(1);
+  });
+
+  it('counts segment matches only in the selected store', async () => {
+    const a = await repository.insert(f.a, {
+      ...manualCustomer,
+      name: 'সুমি',
+      phone: '01711000003',
+    });
+    const b = await repository.insert(f.b, {
+      ...manualCustomer,
+      name: 'সুমন',
+      phone: '01711000003',
+    });
+    await f.connection.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'sms','granted','manual'),(gen_random_uuid(),$3,$4,'sms','granted','manual')",
+      [f.a, a!.id, f.b, b!.id],
+    );
+    const rules = {
+      match: 'all',
+      conditions: [{ field: 'consent', channel: 'sms', granted: true }],
+    } as const;
+
+    expect(await repository.countMatching(f.b, rules)).toBe(1);
   });
 });
