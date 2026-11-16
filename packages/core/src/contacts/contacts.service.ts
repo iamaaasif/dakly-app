@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { ContactResponse, CreateContactInput } from '@dakly/contracts/contacts';
 import { maskPhone } from '@dakly/contracts/phone';
+import type { AvailableSegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { contactError } from './contacts.errors';
@@ -46,6 +47,18 @@ export class ContactsService {
     if (!(await this.contactsRepository.findById(storeId, id))) {
       throw contactError('CONTACT_NOT_FOUND');
     }
+  }
+
+  countMatching(storeId: string, rules: AvailableSegmentRules): Promise<number> {
+    return this.contactsRepository.countMatching(storeId, rules);
+  }
+
+  listIdsMatching(
+    storeId: string,
+    rules: AvailableSegmentRules,
+    page: { cursor?: string; limit: number },
+  ): Promise<string[]> {
+    return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }
 }
 

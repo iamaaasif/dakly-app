@@ -349,9 +349,12 @@ Stats: one `contact_stats` row per contact holds order count, delivered count, n
 
 Segments
 
-1. A segment is a condition tree over a fixed field list (stats, tags, district, source, consent, last message), validated by a zod schema in `packages/contracts`.
-2. `SegmentsService` compiles the tree to a Drizzle `where` with bound parameters, never string SQL.
-3. Counts are computed on demand. Membership is frozen into campaign recipients only when a campaign is approved.
+1. A segment is a condition tree validated by `segmentRulesSchema` in `packages/contracts/src/segments.ts`: groups that match all or any of their items, at most three levels deep counting the top group, and at most 20 conditions in all.
+2. Fields that work now: tag, district, source and kind (is any of, is none of; the builder's "is" and "is not" send one value), and consent per channel (granted, or not granted, which includes never asked). "Is none of" on district keeps contacts with no district. Kind cannot ask for Not a customer.
+3. Fields listed for the builder but refused with `400 SEGMENT_FIELD_NOT_AVAILABLE` until their data exists (`segmentFieldsWaiting`): order count, net spend, usual gap, first and last order and lifecycle stage until CUS-3 (contact stats, after ORD-1); first and last inbound message until CHAT-1; last campaign received until CAMP-3. The error names the field's path and the task.
+4. `ContactsService.countMatching` and `listIdsMatching` compile the tree to a Drizzle `where` in the contacts repository, because contacts owns the table; consent conditions read the `contact_consent_current` view in the same query. Every value is a bound parameter. Not a customer and deleted contacts never match.
+5. `SegmentsService.count` counts live on each call, and `POST /segments/preview` returns it. Membership is not stored, so there is no segment joined or left yet; it is frozen into campaign recipients only when a campaign is approved. The 60-second count cache waits until counts are slow.
+6. Indexes, measured with 50,000 contacts in one store of a 500,000-row table: every count starts from an index on `store_id` (`contacts_store_id_kind_idx` for kind, otherwise a bitmap scan on a `store_id` index) and filters tag, district and source on those rows; consent reads `consents_contact_channel_idx`. Each condition and an AND/OR mix counted in under 40 ms.
 
 Import: CSV of customers (and POS sales, D6) with a preview, column mapping and a result report. Rows with bad phones are reported, not dropped silently.
 
