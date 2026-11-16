@@ -152,6 +152,9 @@ export const notifications = pgTable(
       table.createdAt,
     ),
     index('notifications_user_id_idx').on(table.userId),
+    index('notifications_snoozed_until_idx')
+      .on(table.snoozedUntil)
+      .where(sql`${table.status} = 'snoozed'`),
     check('notifications_category', isOneOf(table.category, notificationCategories)),
     check('notifications_status', isOneOf(table.status, notificationStatuses)),
   ],

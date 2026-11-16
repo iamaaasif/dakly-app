@@ -16,6 +16,7 @@ import { registerSessionCookies } from '../platform/http/session-cookie';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SessionsService } from '../sessions/sessions.service';
 import { StreamNotificationOnCreated } from './jobs/stream-notification-on-created.job';
+import { WakeSnoozedNotificationsJob } from './jobs/wake-snoozed-notifications.job';
 import { NotificationStreamService, STREAM_HEARTBEAT_MS } from './notification-stream.service';
 import { NotificationsModule } from './notifications.module';
 import { type NotifyInput, NotificationsService } from './notifications.service';
@@ -306,6 +307,36 @@ describe('NotificationsService and its routes', () => {
       if (snoozed.status === 'rejected')
         expect((snoozed.reason as { code: string }).code).toBe('NOTIFICATION_DONE');
     }
+  });
+
+  it('wakes a card whose snooze has passed and leaves one snoozed until later', async () => {
+    const a = await shop();
+    await service.notify(a.id, handedOver());
+    const [due, later] = (await rows(a.id)).filter((row) => row.user_id !== a.chatRole.userId);
+    await admin.pool.query(
+      "update notifications set status='snoozed', snoozed_until=now()-interval '1 minute' where id=$1",
+      [due!.id],
+    );
+    await service.snooze(a.id, later!.user_id, later!.id, {
+      until: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    const wake = new WakeSnoozedNotificationsJob(service);
+    const states = async () =>
+      (
+        await admin.pool.query<{ id: string; status: string; snoozed_until: Date | null }>(
+          'select id, status, snoozed_until from notifications where id=any($1::uuid[]) order by id',
+          [[due!.id, later!.id]],
+        )
+      ).rows;
+    await wake.handle({});
+    const woken = await states();
+    expect(woken.find((row) => row.id === due!.id)).toMatchObject({
+      status: 'new',
+      snoozed_until: null,
+    });
+    expect(woken.find((row) => row.id === later!.id)?.status).toBe('snoozed');
+    await wake.handle({});
+    expect(await states()).toEqual(woken);
   });
 
   it('streams a notification only to its own user in its own store', async () => {

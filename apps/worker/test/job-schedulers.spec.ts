@@ -40,6 +40,7 @@ describe('Worker job schedulers', () => {
       scheduler('send-due-security-notices'),
       scheduler('staff-alert-relay'),
       scheduler('relay-outbox', 1000),
+      scheduler('wake-snoozed-notifications'),
     ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
     expect(bulk.schedulers).toEqual([

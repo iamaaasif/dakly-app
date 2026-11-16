@@ -204,6 +204,13 @@
       "when": 1794803483421,
       "tag": "0028_outbox_claim_returns_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794818823044,
+      "tag": "0029_notifications_wake_snoozed",
+      "breakpoints": true
     }
   ]
 }
