@@ -203,4 +203,96 @@ describe('Customer profile', () => {
       await screen.findByText('This customer was deleted or is not in this shop.'),
     ).toBeTruthy();
   });
+
+  it('sends a typed phone and the tags, and shows a taken phone on its field', async () => {
+    respond((_path, method) =>
+      method === 'PATCH'
+        ? apiError(409, 'CONTACT_PHONE_TAKEN', 'A contact with this phone number already exists')
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Edit customer' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Edit Rahima Akter' }));
+    expect(dialog.getByText('Leave empty to keep 01712-XXX678')).toBeTruthy();
+    const tags = dialog.getByLabelText('Tags');
+    await user.clear(tags);
+    await user.type(tags, 'wholesale, eid');
+    await user.type(dialog.getByLabelText('New mobile number'), '+880 1812-345678');
+    await user.click(dialog.getByRole('button', { name: 'Save customer' }));
+    await waitFor(() =>
+      expect(dialog.getByLabelText('New mobile number').getAttribute('aria-invalid')).toBe('true'),
+    );
+    expect(sent.find((request) => request.method === 'PATCH')?.body).toEqual({
+      name: 'Rahima Akter',
+      phone: '01812345678',
+      tags: ['wholesale', 'eid'],
+    });
+  });
+
+  it('keeps the phone out of the change when it is left empty', async () => {
+    respond(() => ({ body: detail }));
+    show(<CustomerProfile contactId={contactId} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Edit customer' }));
+    await user.click(screen.getByRole('button', { name: 'Save customer' }));
+    await waitFor(() =>
+      expect(sent.find((request) => request.method === 'PATCH')?.body).toEqual({
+        name: 'Rahima Akter',
+        tags: ['wholesale'],
+      }),
+    );
+  });
+
+  it('names the customer before deleting and returns to the list', async () => {
+    respond((_path, method) => (method === 'DELETE' ? { status: 204 } : { body: detail }));
+    show(<CustomerProfile contactId={contactId} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Delete customer' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Delete Rahima Akter?' }));
+    await user.click(dialog.getByRole('button', { name: 'Delete customer' }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/customers'));
+    expect(sent.at(-2)).toMatchObject({ path: `/api/contacts/${contactId}`, method: 'DELETE' });
+  });
+
+  it('offers only a withdrawal on Messenger and asks how the customer answered', async () => {
+    respond(() => ({ body: detail }));
+    show(<CustomerProfile contactId={contactId} />);
+    const user = userEvent.setup();
+    await user.selectOptions(await screen.findByLabelText('Channel'), 'messenger');
+    const agreed = screen.getByRole('option', { name: 'Agreed to marketing messages' });
+    expect((agreed as HTMLOptionElement).disabled).toBe(true);
+    await user.selectOptions(screen.getByLabelText('Answer'), 'withdrawn');
+    await user.click(screen.getByRole('button', { name: 'Save answer' }));
+    expect(
+      await screen.findByText('Write how the customer told you, up to 500 characters.'),
+    ).toBeTruthy();
+    expect(sent.some((request) => request.method === 'POST')).toBe(false);
+  });
+
+  it('records a WhatsApp opt-in with the note', async () => {
+    respond((_path, method) =>
+      method === 'POST'
+        ? {
+            body: {
+              id: 'consent',
+              contactId,
+              channel: 'whatsapp',
+              status: 'granted',
+              source: 'manual',
+              capturedAt: '2026-11-16T08:00:00Z',
+            },
+          }
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('How they told you'), 'Said yes on a call');
+    await user.click(screen.getByRole('button', { name: 'Save answer' }));
+    expect(await screen.findByText('Answer saved')).toBeTruthy();
+    expect(sent.find((request) => request.method === 'POST')).toMatchObject({
+      path: `/api/contacts/${contactId}/consents`,
+      body: { channel: 'whatsapp', status: 'granted', note: 'Said yes on a call' },
+    });
+  });
 });

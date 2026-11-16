@@ -8,25 +8,32 @@ import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useCustomer } from '../api/customer';
 import { channelLabels, customerPhone } from '../customer-labels';
+import { ConsentForm } from './consent-form';
+import { CustomerActions } from './customer-actions';
 import { CustomerBadges } from './customer-badges';
+import { useSessionContext } from '@/lib/session-context';
 
 type CustomerProfileProps = { contactId: string };
 
 export function CustomerProfile({ contactId }: CustomerProfileProps) {
   const customer = useCustomer(contactId);
+  const { data: context } = useSessionContext();
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
       <Link href="/customers" className="inline-flex min-h-10 items-center text-action underline">
         All customers
       </Link>
-      <ProfileBody customer={customer} />
+      <ProfileBody
+        customer={customer}
+        canEdit={Boolean(context?.currentStore?.canCreateCustomer)}
+      />
     </main>
   );
 }
 
-type ProfileBodyProps = { customer: ReturnType<typeof useCustomer> };
+type ProfileBodyProps = { customer: ReturnType<typeof useCustomer>; canEdit: boolean };
 
-function ProfileBody({ customer }: ProfileBodyProps) {
+function ProfileBody({ customer, canEdit }: ProfileBodyProps) {
   if (customer.error instanceof ApiError && customer.error.code === 'CONTACT_NOT_FOUND')
     return <p>This customer was deleted or is not in this shop.</p>;
   if (customer.error)
@@ -52,6 +59,7 @@ function ProfileBody({ customer }: ProfileBodyProps) {
         <h1 className="text-xl font-bold">{contact.name ?? 'No name'}</h1>
         <p className="tabular-nums">{customerPhone(contact)}</p>
         <CustomerBadges customer={contact} />
+        {canEdit ? <CustomerActions customer={contact} /> : null}
       </header>
       <Card className="space-y-3">
         <h2 className="text-md font-semibold">Chat channels</h2>
@@ -67,6 +75,7 @@ function ProfileBody({ customer }: ProfileBodyProps) {
           <p>No chat channels yet. They appear when this customer messages the shop.</p>
         )}
       </Card>
+      {canEdit ? <ConsentForm contactId={contact.id} /> : null}
     </>
   );
 }

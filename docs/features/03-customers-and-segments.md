@@ -92,6 +92,12 @@ The web app has two customer screens.
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
+- Members with Edit Customers also change the customer from the profile. Edit changes the
+  name, the tags (separated by commas) and the phone. The phone field starts empty, because
+  the shown phone may be masked, and is sent only when typed. Delete asks "Delete <name>?" and
+  returns to the list. The Marketing permission form records an answer for one channel with a
+  required note saying how the customer told the shop. Agreed is offered only on WhatsApp and
+  SMS; on Messenger and Instagram staff can record only a withdrawal.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
 - Not built yet, because no route gives the data: header totals and tab counts, sort, columns,

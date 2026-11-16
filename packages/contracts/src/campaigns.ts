@@ -81,3 +81,78 @@ export const campaignRecipientRouteSchema = z.discriminatedUnion('channel', [
   }),
 ]);
 export const whatsappQualityRatings = ['green', 'yellow', 'red', 'unknown'] as const;
+
+// Builder step 0 in feature 09.
+export const campaignGoals = [
+  'win_back',
+  'repeat_purchase',
+  'new_collection',
+  'vip_offer',
+  'discount',
+  'clearance',
+  'best_sellers',
+  'welcome',
+  'seasonal',
+  'from_scratch',
+] as const;
+
+// A draft is saved on every builder step, so the text may still be empty. SMS is the only
+// sendable channel until CAMP-7 adds Messenger content.
+export const smsCampaignContentSchema = z.strictObject({ text: z.string().trim().max(1000) });
+const segmentIdsSchema = z
+  .array(z.uuid())
+  .max(10)
+  .refine((ids) => new Set(ids).size === ids.length, 'Choose each segment once');
+
+const campaignDraftShape = {
+  name: z.string().trim().min(1).max(100),
+  goal: z.enum(campaignGoals).nullable(),
+  content: smsCampaignContentSchema,
+  includeSegmentIds: segmentIdsSchema,
+  excludeSegmentIds: segmentIdsSchema,
+  // Null sends on approval.
+  scheduledFor: z.iso.datetime().nullable(),
+};
+
+export const createCampaignSchema = z.strictObject({
+  ...campaignDraftShape,
+  channel: z.literal('sms'),
+  goal: campaignDraftShape.goal.default(null),
+  content: campaignDraftShape.content.default({ text: '' }),
+  includeSegmentIds: segmentIdsSchema.default([]),
+  excludeSegmentIds: segmentIdsSchema.default([]),
+  scheduledFor: campaignDraftShape.scheduledFor.default(null),
+});
+export const changeCampaignSchema = z
+  .strictObject(campaignDraftShape)
+  .partial()
+  .refine(
+    (input) => Object.values(input).some((value) => value !== undefined),
+    'Nothing to change',
+  );
+export const campaignListQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type CampaignChannel = (typeof campaignChannels)[number];
+export type CampaignGoal = (typeof campaignGoals)[number];
+export type CampaignStatus = (typeof campaignStatuses)[number];
+export type SmsCampaignContent = z.infer<typeof smsCampaignContentSchema>;
+export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
+export type ChangeCampaignInput = z.infer<typeof changeCampaignSchema>;
+export type CampaignListQuery = z.infer<typeof campaignListQuerySchema>;
+export type CampaignResponse = {
+  id: string;
+  name: string;
+  goal: CampaignGoal | null;
+  channel: CampaignChannel;
+  content: SmsCampaignContent;
+  includeSegmentIds: string[];
+  excludeSegmentIds: string[];
+  scheduledFor: string | null;
+  status: CampaignStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+export type CampaignListResponse = { items: CampaignResponse[]; nextCursor: string | null };
