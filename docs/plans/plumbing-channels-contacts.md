@@ -44,13 +44,6 @@ Branch: `docs/rev-7-event-catalogue`
 
 ### Group 2: notifications and usage (M2)
 
-### HOME-1 · Notifications and the live stream
-
-Branch: `feat/home-1-notifications`
-
-- Scope: `notifications/` feature. `NotificationsService.notify(storeId, { type, category, dedupeKey, recipients, ... })` resolves recipients from a permission (for example everyone with `chats.view`), writes one row per user with `ON CONFLICT (store_id, user_id, dedupe_key) DO NOTHING`, and publishes a `notification.created` event. Routes: list with cursor, mark seen, done, snooze. `GET /events/stream` (P1): SSE for the session's current store, events carry an id so `Last-Event-ID` replays missed notifications from the table; a heartbeat every 25 seconds; the stream closes when the session or membership ends (checked on each heartbeat). Valkey pub/sub channel per store. Update architecture.md "Real time".
-- Tests (integration): a rule firing twice makes one card per user; a member without the permission gets none; store B's stream never receives store A's events; reconnect with `Last-Event-ID` gets the missed rows; a revoked session's stream closes within one heartbeat.
-
 ### HOME-2 · Web: notification bell and list
 
 Branch: `feat/home-2-notification-bell`
