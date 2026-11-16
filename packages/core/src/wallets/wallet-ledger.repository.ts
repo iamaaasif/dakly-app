@@ -3,7 +3,7 @@ import { and, desc, eq, gt, sql } from 'drizzle-orm';
 
 import { walletLedger } from '@dakly/db/schema/billing';
 
-import { databaseErrorCode } from '../platform/database/error-code';
+import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const entryColumns = {
@@ -98,19 +98,8 @@ export class WalletLedgerRepository {
       );
       return undefined;
     } catch (error) {
-      if (isNegativeBalance(error)) return 'balance_negative';
+      if (isConstraintViolation(error, '23514', 'wallet_ledger_balance')) return 'balance_negative';
       throw error;
     }
   }
-}
-
-function isNegativeBalance(error: unknown): boolean {
-  const cause = error instanceof Error && error.cause ? error.cause : error;
-  return (
-    databaseErrorCode(error) === '23514' &&
-    typeof cause === 'object' &&
-    cause !== null &&
-    'constraint' in cause &&
-    cause.constraint === 'wallet_ledger_balance'
-  );
 }

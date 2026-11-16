@@ -50,6 +50,7 @@ export class OwnerIsolationFixture {
       'staff_recovery_history',
       'ownership_transfers',
       'contacts',
+      'channel_connections',
       'audit_log',
       'memberships',
       'roles',

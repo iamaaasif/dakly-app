@@ -7,3 +7,15 @@ export function databaseErrorCode(error: unknown): unknown {
     (typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined)
   );
 }
+
+// Drizzle wraps the driver error, so the constraint name sits on the cause when there is one.
+export function isConstraintViolation(error: unknown, code: string, constraint: string): boolean {
+  const cause = error instanceof Error && error.cause ? error.cause : error;
+  return (
+    databaseErrorCode(error) === code &&
+    typeof cause === 'object' &&
+    cause !== null &&
+    'constraint' in cause &&
+    cause.constraint === constraint
+  );
+}

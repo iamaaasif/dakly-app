@@ -146,6 +146,9 @@ describe('Session boundary over Fastify and Postgres', () => {
     vi.restoreAllMocks();
     await app?.close();
     await admin.db.execute(sql`delete from account_security_events where user_id = ${userId}`);
+    await admin.db.execute(
+      sql`delete from outbox_events where store_id in (${storeId}, ${otherStoreId})`,
+    );
     await admin.db
       .delete(memberships)
       .where(sql`${memberships.storeId} in (${storeId}, ${otherStoreId})`);
