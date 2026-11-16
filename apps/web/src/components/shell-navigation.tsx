@@ -1,5 +1,5 @@
 'use client';
-import { Users, ShieldCheck, LifeBuoy, LayoutDashboard } from 'lucide-react';
+import { Users, ShieldCheck, LifeBuoy, LayoutDashboard, Layers } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -65,6 +65,13 @@ function navigationLinks(session: SessionContext) {
       label: 'Customers',
       icon: Users,
       visible: session.currentStore?.canViewCustomers,
+    },
+    // The session has no segments flag yet; the API still refuses members without segments.view.
+    {
+      href: '/segments',
+      label: 'Segments',
+      icon: Layers,
+      visible: Boolean(session.currentStore),
     },
     {
       href: '/support-access',
