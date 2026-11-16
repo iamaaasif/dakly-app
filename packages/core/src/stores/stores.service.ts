@@ -1,12 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { PlansResponse } from '@dakly/contracts/billing';
-import type {
-  CreateStoreInput,
-  StoreResponse,
-  ChangeStoreSettingsInput,
-  ChangeStoreExtensionsInput,
-  StoreSettingsResponse,
+import {
+  sendingSettingsSchema,
+  type CreateStoreInput,
+  type StoreResponse,
+  type ChangeStoreSettingsInput,
+  type ChangeStoreExtensionsInput,
+  type StoreSettingsResponse,
+  type SendingSettings,
 } from '@dakly/contracts/stores';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -20,7 +22,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
 import { onboardingExtensions, recommendedPlans } from './onboarding';
 import { storeError } from './stores.errors';
-import { StoresRepository } from './stores.repository';
+import { type StoreSettingsRow, StoresRepository } from './stores.repository';
 
 @Injectable()
 export class StoresService {
@@ -38,7 +40,13 @@ export class StoresService {
   async settings(storeId: string): Promise<StoreSettingsResponse> {
     const store = await this.repository.settings(storeId);
     if (!store) throw storeError('STORE_NOT_FOUND');
-    return store;
+    return toSettingsResponse(store);
+  }
+
+  async sendingSettings(storeId: string): Promise<SendingSettings & { timeZone: string }> {
+    const store = await this.repository.sendingSettings(storeId);
+    if (!store) throw storeError('STORE_NOT_FOUND');
+    return { ...parseSending(store.sending), timeZone: store.timeZone };
   }
 
   changeSettings(
@@ -57,7 +65,7 @@ export class StoresService {
           (field) => input[field as keyof ChangeStoreSettingsInput] !== undefined,
         ),
       );
-      return store;
+      return toSettingsResponse(store);
     });
   }
 
@@ -75,7 +83,7 @@ export class StoresService {
       );
       if (!store) throw storeError('STORE_NOT_FOUND');
       await this.recordChange(storeId, actor.userId, 'store.extensions_changed', ['extensions']);
-      return store;
+      return toSettingsResponse(store);
     });
   }
 
@@ -129,4 +137,13 @@ export class StoresService {
       isCreated: result.isCreated,
     };
   }
+}
+
+// A store that never saved the section gets the defaults from the schema.
+function parseSending(sending: unknown): SendingSettings {
+  return sendingSettingsSchema.parse(sending ?? {});
+}
+
+function toSettingsResponse(store: StoreSettingsRow): StoreSettingsResponse {
+  return { ...store, sending: parseSending(store.sending) };
 }

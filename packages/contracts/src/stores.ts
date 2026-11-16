@@ -33,6 +33,24 @@ export const notificationPreferencesSchema = z.strictObject({
 });
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
+// The settings.sending section. Quiet hours are whole hours in store time and always span
+// midnight (feature 09 allows 8-10 pm to 8-10 am); the cap follows CAMP-R3 and D41.
+export const sendingSettingsSchema = z.strictObject({
+  quietHours: z
+    .strictObject({
+      startHour: z.number().int().min(20).max(22),
+      endHour: z.number().int().min(8).max(10),
+    })
+    .default({ startHour: 21, endHour: 9 }),
+  frequencyCap: z
+    .strictObject({
+      perChannelPerDay: z.number().int().min(1).max(3),
+      perSevenDays: z.number().int().min(1).max(10),
+    })
+    .default({ perChannelPerDay: 1, perSevenDays: 3 }),
+});
+export type SendingSettings = z.infer<typeof sendingSettingsSchema>;
+
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
   businessType: z.string().trim().min(1).max(100),
@@ -60,6 +78,8 @@ export const changeStoreSettingsSchema = z
       .nullable()
       .optional(),
     tradeLicenceNumber: z.string().trim().min(1).max(100).nullable().optional(),
+    // The whole section, as GET /store returns it, so a save never resets a part to its default.
+    sending: sendingSettingsSchema.required().optional(),
   })
   .refine(
     (input) => Object.values(input).some((value) => value !== undefined),
@@ -84,4 +104,5 @@ export type StoreSettingsResponse = StoreResponse & {
   district: string | null;
   vatBin: string | null;
   tradeLicenceNumber: string | null;
+  sending: SendingSettings;
 };

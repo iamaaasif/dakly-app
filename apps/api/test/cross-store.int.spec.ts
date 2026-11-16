@@ -270,8 +270,16 @@ fixture('GET /store', async () => {
   expect((await success(a, 'GET', '/store', 200)).json().id).toBe(a.id);
   expect((await success(b, 'GET', '/store', 200)).json().id).toBe(b.id);
 });
+const shopSending = {
+  quietHours: { startHour: 22, endHour: 8 },
+  frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
+};
 for (const [path, payload, expected] of [
-  ['/store', { name: 'রিনার দোকান' }, { name: 'রিনার দোকান' }],
+  [
+    '/store',
+    { name: 'রিনার দোকান', sending: shopSending },
+    { name: 'রিনার দোকান', sending: shopSending },
+  ],
   ['/store/extensions', { extensions: ['chats'] }, { extensions: ['chats'] }],
 ] as const)
   fixture(`PATCH ${path}`, async () => {

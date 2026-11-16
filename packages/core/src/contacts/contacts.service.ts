@@ -17,7 +17,12 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { contactError } from './contacts.errors';
-import { type Contact, type ContactFilter, ContactsRepository } from './contacts.repository';
+import {
+  type Contact,
+  type ContactFilter,
+  type ContactRecipient,
+  ContactsRepository,
+} from './contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 // Writes take the actor (services.md); nothing records it for contacts yet.
@@ -101,6 +106,11 @@ export class ContactsService {
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');
+  }
+
+  // A deleted contact reads as undefined.
+  findRecipient(storeId: string, id: string): Promise<ContactRecipient | undefined> {
+    return this.contactsRepository.findRecipient(storeId, id);
   }
 
   async assertContactExists(storeId: string, id: string): Promise<void> {
