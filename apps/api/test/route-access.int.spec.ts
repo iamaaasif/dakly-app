@@ -82,8 +82,6 @@ describe('API route access rules', () => {
         'StoresController.create',
         'PlansController.list',
         'WalletsController.balances',
-        'WalletCreditController.preview',
-        'WalletCreditController.confirm',
       ]),
     );
   });

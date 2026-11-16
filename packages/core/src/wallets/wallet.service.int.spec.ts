@@ -17,6 +17,7 @@ const tenant = new TenantDatabase(app.db);
 const wallets = new WalletService(new WalletLedgerRepository(tenant), new StoreTransaction(tenant));
 const system = { kind: 'system' } as const;
 const storeIds: string[] = [];
+const staffIds: string[] = [];
 
 async function store(smsCredits = 0) {
   const id = randomUUID();
@@ -67,6 +68,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await admin.pool.query('delete from wallet_ledger where store_id=any($1::uuid[])', [storeIds]);
   await admin.pool.query('delete from stores where id=any($1::uuid[])', [storeIds]);
+  await admin.pool.query('delete from staff_users where id=any($1::uuid[])', [staffIds]);
   await Promise.all([admin.pool.end(), app.pool.end()]);
 });
 
@@ -256,6 +258,42 @@ describe('WalletService (Postgres)', () => {
       [storeId, reservation.entryId],
     );
     expect(releases.rowCount).toBe(1);
+  });
+
+  it('credits as staff with the staff audit reference and returns the first credit again', async () => {
+    const storeId = await store();
+    const staffUserId = randomUUID(),
+      staffAuditId = randomUUID();
+    staffIds.push(staffUserId);
+    await admin.pool.query(
+      "insert into staff_users(id,email,name,role,access_subject,enrolled_at) values($1::uuid,$2,'করিম','support',$1::text,now())",
+      [staffUserId, `${staffUserId}@example.test`],
+    );
+    const input = {
+      wallet: 'whatsapp_poisha',
+      quantity: 50000,
+      idempotencyKey: randomUUID(),
+      staffUserId,
+      staffAuditId,
+    } as const;
+    const credit = await wallets.credit(storeId, input);
+    expect(credit.balanceQuantity).toBe(50000);
+    expect(await wallets.credit(storeId, input)).toEqual(credit);
+    expect(await wallets.balance(storeId, 'whatsapp_poisha')).toBe(50000);
+    const rows = await admin.pool.query(
+      'select kind,quantity_delta::int as delta,actor_type,actor_staff_id,reference_type,reference_id from wallet_ledger where store_id=$1',
+      [storeId],
+    );
+    expect(rows.rows).toEqual([
+      {
+        kind: 'adjustment',
+        delta: 50000,
+        actor_type: 'staff',
+        actor_staff_id: staffUserId,
+        reference_type: 'staff_audit',
+        reference_id: staffAuditId,
+      },
+    ]);
   });
 
   it('maps the negative balance check constraint to a typed result', async () => {
