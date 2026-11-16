@@ -117,7 +117,6 @@ export class SessionsRepository {
           tokenHash,
           ...input,
           lastSeenAt: now,
-          createdAt: now,
           expiresAt,
         })
         .returning(columns),

@@ -18,6 +18,7 @@ import { Clock } from '../platform/clock';
 import { AccountDatabase } from '../platform/database/account-database';
 import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { TeamService } from '../team/team.service';
 import { SessionsRepository } from './sessions.repository';
 import { SessionsService } from './sessions.service';
@@ -99,7 +100,7 @@ describe('SessionsService (Postgres)', () => {
     await service.resolve(created.token);
     [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(time);
-    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(DAY_MS / 2);
     await service.revoke(userId, created.session.id);
     expect(await service.resolve(created.token)).toBeUndefined();
     const expired = await service.create(userId, { isRemembered: false });
@@ -131,9 +132,9 @@ describe('SessionsService (Postgres)', () => {
         .select()
         .from(sessions)
         .where(eq(sessions.id, created.session.id));
-      const cap = row!.createdAt.getTime() + 90 * 86400000;
+      const cap = row!.createdAt.getTime() + 90 * DAY_MS;
       if (day >= 60) expect(row!.expiresAt.getTime()).toBe(cap);
-      else expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(2592000000);
+      else expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(30 * DAY_MS);
     }
     await moveBackOneDay(created.session.id);
     expect(await service.resolve(created.token)).toBeUndefined();
@@ -144,25 +145,25 @@ describe('SessionsService (Postgres)', () => {
     const created = await service.create(userId, { isRemembered: false });
     await admin.db
       .update(sessions)
-      .set({ createdAt: new Date(time - 89 * 86400000), lastSeenAt: new Date(time - 600000) })
+      .set({ createdAt: new Date(time - 89 * DAY_MS), lastSeenAt: new Date(time - 10 * MINUTE_MS) })
       .where(eq(sessions.id, created.session.id));
     await service.resolve(created.token);
     const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(time);
-    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(DAY_MS / 2);
   });
 
   it('renews a session used at day 89 only until day 90', async () => {
     time = Date.now();
     const created = await service.create(userId, { isRemembered: true });
-    const createdAt = new Date(time - 89 * 86400000);
+    const createdAt = new Date(time - 89 * DAY_MS);
     await admin.db
       .update(sessions)
-      .set({ createdAt, lastSeenAt: new Date(time - 86400000) })
+      .set({ createdAt, lastSeenAt: new Date(time - DAY_MS) })
       .where(eq(sessions.id, created.session.id));
     await service.resolve(created.token);
     const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
-    const cap = createdAt.getTime() + 90 * 86400000;
+    const cap = createdAt.getTime() + 90 * DAY_MS;
     expect(row!.expiresAt.getTime()).toBe(cap);
     time = cap - 1;
     expect(await service.resolve(created.token)).toMatchObject({ id: created.session.id });
@@ -190,7 +191,7 @@ describe('SessionsService (Postgres)', () => {
     const deadline = new Date(time + 250);
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 600000), expiresAt: deadline })
+      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS), expiresAt: deadline })
       .where(eq(sessions.id, created.session.id));
     const account = context.get(AccountDatabase);
     const original = account.forUser.bind(account);
@@ -221,7 +222,7 @@ describe('SessionsService (Postgres)', () => {
     const created = await service.create(userId, { isRemembered: false });
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 600000) })
+      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS) })
       .where(eq(sessions.id, created.session.id));
     const account = context.get(AccountDatabase);
     const original = account.forUser.bind(account);
@@ -245,7 +246,7 @@ describe('SessionsService (Postgres)', () => {
     }
     const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(releasedAt!.getTime());
-    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(DAY_MS / 2);
   });
 
   it('does not renew after expiry while waiting for an unchanged row lock', async () => {
@@ -254,7 +255,7 @@ describe('SessionsService (Postgres)', () => {
     const deadline = new Date(time + 2000);
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 600000), expiresAt: deadline })
+      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS), expiresAt: deadline })
       .where(eq(sessions.id, created.session.id));
     const blocker = await admin.pool.connect();
     await blocker.query('begin');
@@ -288,7 +289,7 @@ describe('SessionsService (Postgres)', () => {
     const created = await service.create(userId, { isRemembered: false });
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 600000) })
+      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS) })
       .where(eq(sessions.id, created.session.id));
     const read = repository.findByTokenHash.bind(repository);
     const bothRead = deferred();
