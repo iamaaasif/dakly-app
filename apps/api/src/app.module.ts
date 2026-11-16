@@ -7,6 +7,7 @@ import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
 import { StoresModule } from '@dakly/core/stores/stores.module';
+import { WalletsModule } from '@dakly/core/wallets/wallets.module';
 
 import { HealthController } from './health.controller';
 
@@ -19,6 +20,7 @@ import { HealthController } from './health.controller';
     SessionsModule,
     CustomersModule,
     StoresModule,
+    WalletsModule,
   ],
   controllers: [HealthController],
 })

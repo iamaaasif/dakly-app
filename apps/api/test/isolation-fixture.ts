@@ -207,6 +207,7 @@ export class IsolationFixture {
       'memberships',
       'roles',
       'subscriptions',
+      'wallet_ledger',
     ])
       await this.admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         this.stores,
