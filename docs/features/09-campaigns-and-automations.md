@@ -306,6 +306,23 @@ Before every actual send, verify the contact, identity, connection, channel and 
 
 Immediately before provider submission, repeat consent, window, block, plan and frequency checks. Both `queued` and pre-submission `sending` may become `skipped` with a skip reason. Record the skip and release its reserved cost atomically, with no provider send. A provider-accepted or uncertain submission must be reconciled; it cannot be relabelled as an unsent skip. A withdrawal after scheduling records `no_consent`; a closed Messenger window records `window_closed`.
 
+### Send gate (CAMP-9)
+
+`SendPolicyService.check(storeId, { contactId, channel, connectionId, identityId, category, at })` in `packages/core/src/sending/` is the one place that decides consent, block, kind, window, quiet hours and the frequency cap (A1 in the [plan](../plans/campaigns-and-automations.md)). The sending job calls it inside the short transaction that moves a message to sending. It returns `send`, `defer` with the time quiet hours end, or `skip` with a recipient skip reason, and reads time only from `at`. Checks run in this order and stop at the first that fails:
+
+1. Contact: a deleted contact is `no_address`; a blocked contact is `blocked` for every category.
+2. Marketing only: a Not a customer contact is `not_customer`; a channel consent that is not `granted` in `contact_consent_current` is `no_consent`, so a withdrawal after approval skips.
+3. SMS needs a phone, else `no_address`, for every category.
+4. Window: SMS has none. Messenger, Instagram and WhatsApp skip as `window_closed` until CHAT-2 stores inbound message times and CHN-3 adds WhatsApp templates.
+5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
+6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time from workflows that are not transactional, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
+
+Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
+
+Quiet hours and the cap are the `sending` section of `stores.settings`, parsed by `sendingSettingsSchema` in `packages/contracts/src/stores.ts`: `quietHours` with `startHour` 20 to 22 and `endHour` 8 to 10, and `frequencyCap` with `perChannelPerDay` and `perSevenDays`. A store that never saved the section gets the defaults.
+
+The gate does not reserve cost: the campaign reserves at approval (CAMP-2) and the sending job reserves or releases around the gate in the same transaction (CAMP-3, CAMP-5).
+
 ### Channel rules
 
 Checked 13 Nov 2026; sources are in the market study. Confirm the SMS rules with the chosen aggregator.

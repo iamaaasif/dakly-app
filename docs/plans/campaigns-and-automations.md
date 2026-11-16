@@ -71,8 +71,13 @@ Branch: `feat/msg-1-sms-send-step`
 
 Branch: `feat/camp-9-send-policy`
 
-- Scope: `sending/` feature (A1). `SendPolicyService.check(storeId, { contactId, channel, connectionId, identityId, category, at })` returns `send`, `defer` with the next allowed time, or `skip` with a reason from the schema's skip reasons (`no_consent`, `window_closed`, `blocked`, `not_customer`, `frequency_cap`, `quiet_hours`, `do_not_call`, `daily_reach_limit`, `meta_user_limit`). Categories: `staff_reply` (block and window only), `transactional` (phone or identity, block, window or template), `marketing` (all checks). Quiet hours from the store setting, default 21:00 to 09:00 Asia/Dhaka, transactional exempt. Frequency cap per CAMP-R3 and A2, with workflow priority per AUTO-R2. Smart sending (24 hours) is the per-channel daily part of the same check. Migration adds the indexes A2 needs.
-- Tests (unit and integration): a table of cases, one per reason; a withdrawal after approval skips; a window 23 hours and 1 minute old skips as `window_closed`; 20:59 sends and 21:00 defers to 09:00 the next day in Dhaka time across a date change; transactional ignores quiet hours and the cap; the cap counts campaign and workflow sends together.
+- Built for SMS: see "Send gate (CAMP-9)" in [feature 09](../features/09-campaigns-and-automations.md). Still to build, each with the task that brings its data:
+  - Messenger and Instagram windows (24 hours for replies, 7 days with `HUMAN_AGENT`, 23 hours for marketing) once CHAT-2 stores inbound message times, with the test that a window 23 hours and 1 minute old skips as `window_closed`; the sending identity on the frozen connection, with CHN-2.
+  - WhatsApp windows and templates, with CHN-3 and CAMP-1.
+  - The extension checks for staff replies and transactional sends, and the campaign and run state checks: the gate has no skip reason for them and takes no campaign or run id yet.
+  - AUTO-R2 priority between two workflows on the same day: it needs the waiting runs, with CAMP-5.
+  - `do_not_call`, `daily_reach_limit` and `meta_user_limit` come from the SMS provider and Meta, with ACC-14 and CHN-3.
+  - The settings route and screen that edit `stores.settings.sending`.
 
 #### The final send gate
 
