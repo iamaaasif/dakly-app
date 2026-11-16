@@ -107,6 +107,7 @@ afterAll(async () => {
     });
     expect(response.ok).toBe(true);
   }
+  await admin.db.execute(sql`delete from outbox_events where store_id in (${storeA}, ${storeB})`);
   await admin.db.execute(sql`delete from contacts where store_id in (${storeA}, ${storeB})`);
   await admin.db.execute(sql`delete from stores where id in (${storeA}, ${storeB})`);
   await Promise.all([admin.pool.end(), app.close()]);
@@ -118,6 +119,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       storeA,
       { name: 'নুসরাত জাহান', phone: '01712345601' },
       fullPhone,
+      { kind: 'system' },
     );
     const calls = watchDriver();
     const body = 'ঈদের অফার! সব পাঞ্জাবিতে ২০% ছাড়, কোড EID20। আজই অর্ডার করুন, স্টক সীমিত।';
@@ -135,6 +137,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       storeA,
       { name: 'Rahim Uddin', phone: '01812345602' },
       fullPhone,
+      { kind: 'system' },
     );
     watchDriver();
 
@@ -148,6 +151,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       storeA,
       { name: 'Farhana Islam', phone: '01712345606' },
       fullPhone,
+      { kind: 'system' },
     );
     watchDriver();
 
@@ -163,6 +167,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       storeA,
       { name: 'Karim Hossain', phone: '01912345603' },
       fullPhone,
+      { kind: 'system' },
     );
     const calls = watchDriver();
 
@@ -176,6 +181,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       storeA,
       { name: 'Sumaiya Akter', phone: '01512345604' },
       fullPhone,
+      { kind: 'system' },
     );
     const calls = watchDriver();
 
@@ -206,6 +212,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       storeB,
       { name: 'Jamal Mia', phone: '01312345605' },
       fullPhone,
+      { kind: 'system' },
     );
     const calls = watchDriver();
 
