@@ -227,6 +227,14 @@ describe('ContactsService', () => {
       expect(await search('রিনা', false)).toEqual([['রিনা বেগম', '01712-XXX678']]);
     });
 
+    it('rejects a name search shorter than 3 characters but not a short number', async () => {
+      await expect(search('রি', true)).rejects.toMatchObject({
+        code: 'CONTACT_SEARCH_TOO_SHORT',
+        status: 422,
+      });
+      expect(await search('01', false)).toEqual([]);
+    });
+
     it('returns a cursor only while more contacts follow', async () => {
       const first = await service.list(STORE_ID, { limit: 2 }, { seeFullPhone: true });
       expect(first.items.map((item) => item.id)).toEqual([people[0]!.id, people[1]!.id]);

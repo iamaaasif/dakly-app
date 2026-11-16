@@ -3,7 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   ContactDetailResponse,
-  ContactIdentityResponse,
   ContactListQuery,
   ContactListResponse,
   ContactResponse,
@@ -17,12 +16,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { contactError } from './contacts.errors';
-import {
-  type Contact,
-  type ContactFilter,
-  type ContactIdentity,
-  ContactsRepository,
-} from './contacts.repository';
+import { type Contact, type ContactFilter, ContactsRepository } from './contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 // Writes take the actor (services.md); nothing records it for contacts yet.
@@ -83,9 +77,7 @@ export class ContactsService {
     if (!contact) throw contactError('CONTACT_NOT_FOUND');
     return {
       ...toContactResponse(contact, access.seeFullPhone),
-      identities: (await this.contactsRepository.findIdentities(storeId, id)).map(
-        toIdentityResponse,
-      ),
+      identities: await this.contactsRepository.findIdentities(storeId, id),
     };
   }
 
@@ -121,16 +113,9 @@ function searchFilter(
   const fullPhone = bdMobileSchema.safeParse(search);
   if (fullPhone.success) return { phone: fullPhone.data };
   if (/^\d+$/.test(search)) return seeFullPhone ? { phonePrefix: search } : { phone: search };
+  // The trigram name index cannot narrow a search shorter than one trigram.
+  if (search.length < 3) throw contactError('CONTACT_SEARCH_TOO_SHORT');
   return { name: search };
-}
-
-function toIdentityResponse(identity: ContactIdentity): ContactIdentityResponse {
-  return {
-    id: identity.id,
-    channel: identity.channel,
-    channelConnectionId: identity.channelConnectionId,
-    profileName: identity.profileName,
-  };
 }
 
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {
