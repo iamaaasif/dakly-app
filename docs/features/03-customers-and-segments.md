@@ -92,6 +92,12 @@ The web app has two customer screens.
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
+- Members with Edit Customers also change the customer from the profile. Edit changes the
+  name, the tags (separated by commas) and the phone. The phone field starts empty, because
+  the shown phone may be masked, and is sent only when typed. Delete asks "Delete <name>?" and
+  returns to the list. The Marketing permission form records an answer for one channel with a
+  required note saying how the customer told the shop. Agreed is offered only on WhatsApp and
+  SMS; on Messenger and Instagram staff can record only a withdrawal.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
 - Not built yet, because no route gives the data: header totals and tab counts, sort, columns,
@@ -394,8 +400,9 @@ Segments
 3. Fields that wait for their data, and are not in the schema until then: order count, net spend, usual gap, first and last order and lifecycle stage wait for CUS-3 (contact stats, after ORD-1); first and last inbound message wait for CHAT-1; last campaign received waits for CAMP-3.
 4. `ContactsService.countMatching` and `listIdsMatching` compile the tree to a Drizzle `where` in the contacts repository, because contacts owns the table; consent conditions read the `contact_consent_current` view in the same query, a read-only exception listed in [module-boundaries.md](../rules/module-boundaries.md). Every value is a bound parameter. Not a customer and deleted contacts never match.
 5. `SegmentsService.count` counts live on each call, and `POST /segments/preview` returns it; `contactIds` pages through a saved segment's contacts by id. Membership is not stored, so there is no segment joined or left yet; it is frozen into campaign recipients only when a campaign is approved. The 60-second count cache waits until counts are slow.
-6. Saving a segment, new or changed, writes the `segment.saved` event. SEG-R2 (a segment in use cannot be deleted) waits for CAMP-2 and CAMP-5, and ready-made segments (SEG-R1) for CUS-7.
-7. Indexes, measured with 50,000 contacts in one store of a 500,000-row table: every count starts from an index on `store_id` (`contacts_store_id_kind_idx` for kind, otherwise a bitmap scan on a `store_id` index) and filters tag, district and source on those rows; consent reads `consents_contact_channel_idx`. Each condition and an AND/OR mix counted in under 40 ms.
+6. Saving a segment, new or changed, writes the `segment.saved` event. SEG-R2 (a segment in use cannot be deleted) waits for CAMP-2 and CAMP-5. Ready-made segments (SEG-R1) wait for the order fields from CUS-3, since all eight are built from orders and spend.
+7. The Segments page (`/segments`) lists saved segments 50 to a page with the rule in words and a live count for each, from `POST /segments/preview`. Delete asks first, naming the segment. The Segments link shows only to members whose role can view segments.
+8. Indexes, measured with 50,000 contacts in one store of a 500,000-row table: every count starts from an index on `store_id` (`contacts_store_id_kind_idx` for kind, otherwise a bitmap scan on a `store_id` index) and filters tag, district and source on those rows; consent reads `consents_contact_channel_idx`. Each condition and an AND/OR mix counted in under 40 ms.
 
 Import: CSV of customers (and POS sales, D6) with a preview, column mapping and a result report. Rows with bad phones are reported, not dropped silently.
 
