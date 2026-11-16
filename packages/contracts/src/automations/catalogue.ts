@@ -3,6 +3,7 @@ import { type DaklyEvent } from '../events/dakly-event';
 // What a store must have before a trigger can fire, an action can run or a template can be used.
 export const automationPrerequisites = [
   'birthdays',
+  'segment_membership',
   'channels',
   'chats_extension',
   'products',
@@ -16,8 +17,6 @@ export type AutomationPrerequisite = (typeof automationPrerequisites)[number];
 // Orders only, null once Orders or a later source exists.
 type AvailableBefore = 'channels' | 'orders' | null;
 
-export const festivals = ['eid_ul_fitr', 'eid_ul_adha', 'durga_puja', 'pohela_boishakh'] as const;
-
 export const triggerFilterFields = [
   'channel',
   'consent_source',
@@ -30,7 +29,6 @@ export const triggerFilterFields = [
   'payment_status',
   'delivery_district',
   'first_order',
-  'festival',
   'days',
 ] as const;
 export type TriggerFilterField = (typeof triggerFilterFields)[number];
@@ -52,7 +50,6 @@ export const triggerKeys = [
   'segment_joined',
   'link_tapped',
   'birthday',
-  'festival',
   'chat_started',
   'comment_on_post',
   'lead_captured',
@@ -87,11 +84,12 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     needs: null,
     availableBefore: 'channels',
   },
+  // Feature 03: needs stored segment membership, which segments do not keep yet.
   segment_joined: {
     source: { plannedEvent: 'segment.entered' },
     filters: { segment: 'required' },
-    needs: null,
-    availableBefore: 'channels',
+    needs: 'segment_membership',
+    availableBefore: null,
   },
   link_tapped: {
     source: { plannedEvent: 'message.tapped' },
@@ -103,12 +101,6 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     source: { schedule: 'daily' },
     filters: { segment: 'optional' },
     needs: 'birthdays',
-    availableBefore: 'channels',
-  },
-  festival: {
-    source: { schedule: 'daily' },
-    filters: { festival: 'required', segment: 'optional' },
-    needs: null,
     availableBefore: 'channels',
   },
   chat_started: {

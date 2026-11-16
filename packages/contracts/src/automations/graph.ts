@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { campaignChannels } from '../campaigns';
 import { consentChannels, consentSources, lifecycleStages } from '../contacts';
 import { orderPaymentStatuses } from '../orders';
-import { automationTriggers, festivals, triggerFilterFields, triggerKeys } from './catalogue';
+import { automationTriggers, triggerFilterFields, triggerKeys } from './catalogue';
 
 // Limits from feature 09.
 export const MAX_WORKFLOW_STEPS = 50;
@@ -59,7 +59,6 @@ const triggerFilterSchema = z.discriminatedUnion('field', [
     bdAreaIds: z.array(z.number().int().positive()).min(1).max(64),
   }),
   z.strictObject({ field: z.literal('first_order') }),
-  z.strictObject({ field: z.literal('festival'), festival: z.enum(festivals) }),
   z.strictObject({ field: z.literal('days'), days: z.number().int().min(1).max(365) }),
 ]);
 
@@ -79,12 +78,12 @@ const conditionSchema = z.discriminatedUnion('kind', [
 ]);
 
 // Leave the workflow when this happens after entry. A goal is an exit that counts as a conversion.
+// Entering a segment waits for stored segment membership (feature 03).
 const exitConditionSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('placed_order') }),
   z.strictObject({ kind: z.literal('order_confirmed') }),
   z.strictObject({ kind: z.literal('order_paid') }),
   z.strictObject({ kind: z.literal('order_cancelled') }),
-  z.strictObject({ kind: z.literal('joined_segment'), segmentId: z.uuid() }),
   z.strictObject({ kind: z.literal('got_tag'), tag: tagSchema }),
   z.strictObject({ kind: z.literal('tapped_link') }),
   z.strictObject({ kind: z.literal('replied') }),

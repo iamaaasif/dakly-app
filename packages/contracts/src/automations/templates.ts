@@ -1,77 +1,49 @@
-import { type festivals } from './catalogue';
-import { orderTemplates } from './order-templates';
-import {
-  type AutomationTemplate,
-  DAY,
-  DEFAULT_RE_ENTRY,
-  end,
-  givePercentCoupon,
-  HOUR,
-  MARKETING_CHANNELS,
-  ONCE_A_DAY,
-  send,
-  wait,
-} from './template-steps';
+import { type campaignChannels } from '../campaigns';
+import { type AutomationPrerequisite } from './catalogue';
+import { type AutomationGraph, type AutomationStep, type sendCategories } from './graph';
 
-function festivalGreeting(
-  name: string,
-  festival: (typeof festivals)[number],
-  greeting: string,
-): AutomationTemplate {
-  return {
-    name,
-    category: 'special_occasion',
-    needs: [],
-    graph: {
-      trigger: { key: 'festival', filters: [{ field: 'festival', festival }] },
-      reEntry: DEFAULT_RE_ENTRY,
-      workflowFilters: [],
-      goal: { kind: 'placed_order' },
-      exitConditions: [],
-      firstStepKey: 'morning',
-      steps: {
-        morning: { kind: 'wait', wait: { until: 'time_of_day', time: '10:00' }, next: 'greeting' },
-        greeting: send(
-          'marketing',
-          MARKETING_CHANNELS,
-          `{first_name}, ${greeting}! {store_name}-এর পক্ষ থেকে শুভেচ্ছা।`,
-          'end',
-        ),
-        end,
-      },
-    },
-  };
-}
+// Library types in feature 09. AUTO-R2 ranks transactional, then abandoned, then welcome.
+export const templateCategories = [
+  'transactional',
+  'abandoned',
+  'welcome',
+  'post_purchase',
+  'win_back',
+  'special_occasion',
+] as const;
 
-type ReminderSettings = Pick<AutomationTemplate, 'name' | 'needs'> & {
-  trigger: 'checkout_abandoned' | 'product_viewed';
-  reEntry: AutomationTemplate['graph']['reEntry'];
-  delayMinutes: number;
-  text: string;
+type AutomationTemplate = {
+  name: string;
+  category: (typeof templateCategories)[number];
+  needs: readonly AutomationPrerequisite[];
+  graph: AutomationGraph;
 };
 
-function abandonedReminder(settings: ReminderSettings): AutomationTemplate {
-  return {
-    name: settings.name,
-    category: 'abandoned',
-    needs: settings.needs,
-    graph: {
-      trigger: { key: settings.trigger, filters: [] },
-      reEntry: settings.reEntry,
-      workflowFilters: [],
-      goal: { kind: 'placed_order' },
-      exitConditions: [],
-      firstStepKey: 'wait',
-      steps: {
-        wait: wait(settings.delayMinutes, 'remind'),
-        remind: send('marketing', MARKETING_CHANNELS, settings.text, 'end'),
-        end,
-      },
-    },
-  };
+const HOUR = 60;
+const DAY = 24 * HOUR;
+// Once every 30 days is the default re-entry rule (feature 09).
+const DEFAULT_RE_ENTRY = { rule: 'every_days', days: 30 } as const;
+const MARKETING_CHANNELS = ['whatsapp', 'messenger', 'sms'] as const;
+const end: AutomationStep = { kind: 'exit' };
+
+function send(
+  category: (typeof sendCategories)[number],
+  channels: readonly (typeof campaignChannels)[number][],
+  text: string,
+  next: string,
+): AutomationStep {
+  const message = { text, buttons: [] };
+  const settings = { ifNotReachable: 'skip', reviewBeforeSending: false } as const;
+  return { kind: 'send', category, channels: [...channels], message, next, ...settings };
 }
 
-const contactTemplates = {
+function wait(minutes: number, next: string): AutomationStep {
+  return { kind: 'wait', wait: { until: 'duration', minutes }, next };
+}
+
+// The release 1 templates that run before Orders. Use template copies a graph into the store as a
+// draft. Templates that need Orders, store sync or the tracking script come with their source.
+export const automationTemplates = {
   welcome_new_subscriber: {
     name: 'Welcome new subscribers',
     category: 'welcome',
@@ -95,37 +67,6 @@ const contactTemplates = {
           'marketing',
           ['sms'],
           'আমাদের সবচেয়ে বেশি বিক্রি হওয়া পণ্যগুলো দেখুন: {link}',
-          'end',
-        ),
-        end,
-      },
-    },
-  },
-  welcome_new_lead: {
-    name: 'Welcome new lead',
-    category: 'welcome',
-    needs: ['channels', 'orders'],
-    graph: {
-      trigger: { key: 'lead_captured', filters: [] },
-      reEntry: { rule: 'once' },
-      workflowFilters: [],
-      goal: { kind: 'placed_order' },
-      exitConditions: [],
-      firstStepKey: 'wait',
-      steps: {
-        wait: wait(HOUR, 'best_sellers'),
-        best_sellers: send(
-          'marketing',
-          MARKETING_CHANNELS,
-          '{first_name}, আমাদের বেস্টসেলার পণ্যগুলো দেখুন: {link}',
-          'wait_offer',
-        ),
-        wait_offer: wait(2 * DAY, 'coupon'),
-        coupon: givePercentCoupon(10, 'offer'),
-        offer: send(
-          'marketing',
-          MARKETING_CHANNELS,
-          'প্রথম অর্ডারে {offer} ছাড়, কোড {code}, {validity} পর্যন্ত: {link}',
           'end',
         ),
         end,
@@ -203,53 +144,5 @@ const contactTemplates = {
       },
     },
   },
-  eid_ul_fitr: festivalGreeting('Eid ul-Fitr greeting', 'eid_ul_fitr', 'ঈদ মোবারক'),
-  eid_ul_adha: festivalGreeting('Eid ul-Adha greeting', 'eid_ul_adha', 'ঈদ মোবারক'),
-  durga_puja: festivalGreeting('Durga Puja greeting', 'durga_puja', 'শারদীয় শুভেচ্ছা'),
-  pohela_boishakh: festivalGreeting('Pohela Boishakh greeting', 'pohela_boishakh', 'শুভ নববর্ষ'),
-  cart_abandoned: {
-    name: 'Abandoned cart',
-    category: 'abandoned',
-    needs: ['store_sync'],
-    graph: {
-      trigger: { key: 'cart_abandoned', filters: [] },
-      reEntry: ONCE_A_DAY,
-      workflowFilters: [],
-      goal: { kind: 'placed_order' },
-      exitConditions: [],
-      firstStepKey: 'wait',
-      steps: {
-        wait: wait(HOUR, 'first'),
-        first: send(
-          'marketing',
-          MARKETING_CHANNELS,
-          '{first_name}, আপনার কার্টে পণ্য রয়ে গেছে। অর্ডার শেষ করুন: {link}',
-          'wait_again',
-        ),
-        wait_again: wait(DAY, 'second'),
-        second: send('marketing', ['sms'], 'আপনার কার্টের পণ্যগুলো এখনও আছে: {link}', 'end'),
-        end,
-      },
-    },
-  },
-  checkout_abandoned: abandonedReminder({
-    name: 'Abandoned checkout',
-    trigger: 'checkout_abandoned',
-    needs: ['store_sync'],
-    reEntry: ONCE_A_DAY,
-    delayMinutes: 30,
-    text: '{first_name}, অর্ডার প্রায় শেষ! এখানে শেষ করুন: {link}',
-  }),
-  browse_abandonment: abandonedReminder({
-    name: 'Browse abandonment',
-    trigger: 'product_viewed',
-    needs: ['tracking_script'],
-    reEntry: DEFAULT_RE_ENTRY,
-    delayMinutes: 4 * HOUR,
-    text: '{first_name}, {product} পছন্দ হয়েছে? অর্ডার করুন: {link}',
-  }),
 } satisfies Record<string, AutomationTemplate>;
-
-// The release 1 template library. Use template copies a graph into the store as a draft.
-export const automationTemplates = { ...contactTemplates, ...orderTemplates };
 export type TemplateKey = keyof typeof automationTemplates;
