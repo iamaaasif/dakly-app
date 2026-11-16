@@ -53,10 +53,7 @@ Branch: `feat/home-1-notifications`
 
 ### HOME-2 · Web: notification bell and list
 
-Branch: `feat/home-2-notification-bell`
-
-- Scope: bell with unread count in the app shell, list sheet with categories from feature 10, mark seen and done, snooze. One `useEventStream` hook that opens the SSE stream once and updates the React Query cache; polling every 60 seconds only when the stream fails.
-- Tests: component tests for empty, loading, error and data states; Playwright: a notification created through the API appears in the open page without reload.
+- Left: once WEB-2 is in main, the notification sheet uses its Sheet and Tabs instead of `SessionDialog` and the `aria-pressed` buttons.
 
 ### PAY-1 · Usage service
 
