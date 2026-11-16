@@ -92,7 +92,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     availableBefore: null,
   },
   link_tapped: {
-    source: { plannedEvent: 'message.tapped' },
+    source: { event: 'message.tapped' },
     filters: { channel: 'optional' },
     needs: null,
     availableBefore: 'channels',

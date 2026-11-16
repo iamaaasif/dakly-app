@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 
 import { loadEnv } from '../config/env';
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
-import { ACCESS_RULE, type AccessRule } from './access.decorators';
+import { ACCESS_RULE, type AccessRule, SHORT_LINK_ORIGIN } from './access.decorators';
 
 @Injectable()
 export class OriginGuard implements CanActivate {
@@ -17,7 +17,9 @@ export class OriginGuard implements CanActivate {
     const origins =
       rule?.kind === 'staff' || rule?.kind === 'support-handoff'
         ? [loadEnv().ADMIN_ORIGIN]
-        : this.origins;
+        : [...this.origins];
+    if (this.reflector.get<boolean>(SHORT_LINK_ORIGIN, context.getHandler()))
+      origins.push(new URL(loadEnv().SHORT_LINK_BASE_URL).origin);
     const request = context
       .switchToHttp()
       .getRequest<{ method: string; headers: { origin?: string } }>();

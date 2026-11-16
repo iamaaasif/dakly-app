@@ -51,6 +51,11 @@ const envSchema = z.object({
       return key.length >= 32 && key.toString('base64') === value;
     })
     .optional(),
+  // A4: the short link domain is not bought yet, so local runs serve links from the API.
+  SHORT_LINK_BASE_URL: z
+    .url()
+    .refine((value) => !value.endsWith('/'))
+    .default('http://localhost:4000/l'),
   API_TRUSTED_PROXIES: trustedProxiesSchema,
   API_HOST: z.union([z.ipv4(), z.ipv6()]).default('0.0.0.0'),
   API_PORT: z.coerce.number().int().positive().default(4000),
