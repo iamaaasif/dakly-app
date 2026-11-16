@@ -8,13 +8,15 @@ export const automationStepKinds = [
   'trigger',
   'wait',
   'condition',
-  'random',
+  'random_split',
   'send',
   'action',
   'goal',
   'exit',
 ] as const;
 export type AutomationStatus = (typeof automationStatuses)[number];
+export type AutomationRunStatus = (typeof automationRunStatuses)[number];
+export type AutomationStepKind = (typeof automationStepKinds)[number];
 
 export const MAX_AUTOMATIONS_PER_STORE = 100;
 

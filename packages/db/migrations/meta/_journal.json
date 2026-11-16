@@ -232,6 +232,13 @@
       "when": 1794843920200,
       "tag": "0032_sms_sender_review",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794866939652,
+      "tag": "0033_automation_runner",
+      "breakpoints": true
     }
   ]
 }
