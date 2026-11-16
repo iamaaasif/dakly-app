@@ -100,7 +100,7 @@ describe('SessionsService (Postgres)', () => {
     await service.resolve(created.token);
     [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(time);
-    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(DAY_MS / 2);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
     await service.revoke(userId, created.session.id);
     expect(await service.resolve(created.token)).toBeUndefined();
     const expired = await service.create(userId, { isRemembered: false });
@@ -191,7 +191,7 @@ describe('SessionsService (Postgres)', () => {
     const deadline = new Date(time + 250);
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS), expiresAt: deadline })
+      .set({ lastSeenAt: new Date(time - 600000), expiresAt: deadline })
       .where(eq(sessions.id, created.session.id));
     const account = context.get(AccountDatabase);
     const original = account.forUser.bind(account);
@@ -222,7 +222,7 @@ describe('SessionsService (Postgres)', () => {
     const created = await service.create(userId, { isRemembered: false });
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS) })
+      .set({ lastSeenAt: new Date(time - 600000) })
       .where(eq(sessions.id, created.session.id));
     const account = context.get(AccountDatabase);
     const original = account.forUser.bind(account);
@@ -246,7 +246,7 @@ describe('SessionsService (Postgres)', () => {
     }
     const [row] = await admin.db.select().from(sessions).where(eq(sessions.id, created.session.id));
     expect(row!.lastSeenAt.getTime()).toBeGreaterThanOrEqual(releasedAt!.getTime());
-    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(DAY_MS / 2);
+    expect(row!.expiresAt.getTime() - row!.lastSeenAt.getTime()).toBe(43200000);
   });
 
   it('does not renew after expiry while waiting for an unchanged row lock', async () => {
@@ -255,7 +255,7 @@ describe('SessionsService (Postgres)', () => {
     const deadline = new Date(time + 2000);
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS), expiresAt: deadline })
+      .set({ lastSeenAt: new Date(time - 600000), expiresAt: deadline })
       .where(eq(sessions.id, created.session.id));
     const blocker = await admin.pool.connect();
     await blocker.query('begin');
@@ -289,7 +289,7 @@ describe('SessionsService (Postgres)', () => {
     const created = await service.create(userId, { isRemembered: false });
     await admin.db
       .update(sessions)
-      .set({ lastSeenAt: new Date(time - 10 * MINUTE_MS) })
+      .set({ lastSeenAt: new Date(time - 600000) })
       .where(eq(sessions.id, created.session.id));
     const read = repository.findByTokenHash.bind(repository);
     const bothRead = deferred();
