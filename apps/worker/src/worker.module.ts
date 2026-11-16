@@ -12,6 +12,7 @@ import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-securi
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
+import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -40,6 +41,7 @@ import { JobSchedulers } from './job-schedulers';
     SendSecurityNoticeJob,
     RelayOutboxJob,
     StreamNotificationOnCreated,
+    WakeSnoozedNotificationsJob,
     JobSchedulers,
   ],
   imports: [
