@@ -46,15 +46,15 @@ Groups 2 and 3 run at the same time. Group 4 needs groups 2 and 3; each later gr
 
 ## Needed from Asif
 
-| Item                                                                                                                      | Needed by                    |
-| ------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Frequency cap: CAMP-R3 says 1 per channel per day and 3 per 7 days; feature 09 also says a default of 2 a week. Pick one. | Group 5 (CAMP-9)             |
-| Import: an existing phone updates allowed fields and never changes consent without evidence (CUS-8). Confirm or change.   | Group 4 (CUS-8)              |
-| Campaign results page: approve building it from the feature 09 text, or provide a design.                                 | Group 6 (CAMP-4)             |
-| SMS provider account (ACC-14) for real sending and delivery receipts. Development and CI use Mailpit until then.          | Before beta, not for coding  |
-| Short link domain (A4, `dkly.co` in the docs).                                                                            | Before beta, not for coding  |
-| Sentry alert rule for `OUTBOX_EVENTS_PARKED` to the staff Slack channel.                                                  | Before production            |
-| Meta app review and a test Page; WhatsApp BSP (Q2).                                                                       | Channels work, after group 8 |
+Settled on 16 Nov 2026: the frequency cap default follows CAMP-R3 (D41), and an import never changes consent without evidence (D42).
+
+| Item                                                                                                             | Needed by                    |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Campaign results page: approve building it from the feature 09 text, or provide a design.                        | Group 6 (CAMP-4)             |
+| SMS provider account (ACC-14) for real sending and delivery receipts. Development and CI use Mailpit until then. | Before beta, not for coding  |
+| Short link domain (A4, `dkly.co` in the docs).                                                                   | Before beta, not for coding  |
+| Sentry alert rule for `OUTBOX_EVENTS_PARKED` to the staff Slack channel.                                         | Before production            |
+| Meta app review and a test Page; WhatsApp BSP (Q2).                                                              | Channels work, after group 8 |
 
 ## Questions during a run
 
@@ -70,5 +70,5 @@ The reviewer watches every worker PR and answers on the PR. A product question t
 ## How each run is reviewed and merged
 
 - The reviewer reads every PR line by line against [CLAUDE.md](../../CLAUDE.md), [rules/](../rules/README.md) and the task's section, fixes small things on the branch or asks the worker, and posts the verdicts to Asif.
-- Nothing merges without Asif's go-ahead. Independent PRs squash; stacked PRs use merge commits, bottom first, then retarget the next PR to `main`.
+- The reviewer merges a PR once the review passes and CI is green (Asif, 16 Nov 2026), and asks Asif only about product decisions. Independent PRs squash; stacked PRs use merge commits, bottom first, then retarget the next PR to `main`.
 - Leftovers and out-of-scope findings go into the next group's prompt, not into a PR that is already open.
