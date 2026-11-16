@@ -116,13 +116,6 @@ Branch: `feat/cus-4-phone-matches`
 - Scope: D27: save a buyer's own phone on the profile; if another contact has it, keep it on the record and create a `contact_match_suggestions` row for staff instead of merging. Merge with the 7-day undo is CUS-14.
 - Tests: the D26 and D27 edge cases listed in feature 03.
 
-### CUS-5 · Web: customers list and profile
-
-Branch: `feat/cus-5-customers-web`
-
-- Scope: list with filters in the URL, profile with identities, consent per channel, tags, notes, masked phone unless `seeFullPhone`.
-- Tests: component states; a Support agent sees `01712-XXX678`.
-
 ## Out of this plan
 
 WhatsApp connect (CHN-3) waits on Q2. Customer import (CUS-8) is planned with campaigns, because a shop's first campaign usually goes to an imported list. The Chats inbox (M4, the Chats extension) is planned separately; it reads and sends through core messaging.
