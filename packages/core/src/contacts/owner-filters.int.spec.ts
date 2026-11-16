@@ -60,7 +60,7 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.findIdentities(f.a, a!.id)).toHaveLength(1);
   });
 
-  it('counts and lists segment matches only in the selected store', async () => {
+  it('counts segment matches only in the selected store', async () => {
     const a = await repository.insert(f.a, {
       ...manualCustomer,
       name: 'সুমি',
@@ -81,6 +81,5 @@ describe('contact filters without RLS assistance', () => {
     } as const;
 
     expect(await repository.countMatching(f.b, rules)).toBe(1);
-    expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
   });
 });

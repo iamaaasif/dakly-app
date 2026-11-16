@@ -16,4 +16,15 @@ describe('SegmentsController preview body', () => {
       expect.objectContaining({ code: 'VALIDATION_FAILED', status: 400 }),
     );
   });
+
+  it('refuses a field the segment builder does not offer as a validation failure', () => {
+    const rules = {
+      match: 'all',
+      conditions: [{ field: 'orders_count', operator: 'more_than', value: 2 }],
+    };
+
+    expect(() => new ZodValidationPipe(segmentPreviewSchema).transform({ rules })).toThrow(
+      expect.objectContaining({ code: 'VALIDATION_FAILED', status: 400 }),
+    );
+  });
 });

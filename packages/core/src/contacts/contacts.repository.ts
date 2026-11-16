@@ -3,12 +3,10 @@ import {
   and,
   arrayContains,
   arrayOverlaps,
-  asc,
   count,
   desc,
   eq,
   exists,
-  gt,
   ilike,
   inArray,
   isNull,
@@ -30,7 +28,7 @@ import type {
   CreateContactInput,
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
-import type { AvailableSegmentCondition, AvailableSegmentRules } from '@dakly/contracts/segments';
+import type { SegmentCondition, SegmentInnerGroup, SegmentRules } from '@dakly/contracts/segments';
 import { contactConsentCurrent } from '@dakly/db/schema/consents';
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
@@ -173,29 +171,11 @@ export class ContactsRepository {
     return rows.length > 0;
   }
 
-  async countMatching(storeId: string, rules: AvailableSegmentRules): Promise<number> {
+  async countMatching(storeId: string, rules: SegmentRules): Promise<number> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx.select({ count: count() }).from(contacts).where(matching(storeId, rules)),
     );
     return row!.count;
-  }
-
-  async listIdsMatching(
-    storeId: string,
-    rules: AvailableSegmentRules,
-    page: { cursor?: string; limit: number },
-  ): Promise<string[]> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(
-          and(matching(storeId, rules), page.cursor ? gt(contacts.id, page.cursor) : undefined),
-        )
-        .orderBy(asc(contacts.id))
-        .limit(page.limit),
-    );
-    return rows.map((row) => row.id);
   }
 }
 
@@ -205,7 +185,7 @@ function escapeLike(value: string): string {
 
 // Segments compile here because contacts owns the table (module-boundaries.md). Every value is a
 // bound parameter. Not a customer and deleted contacts never match.
-function matching(storeId: string, rules: AvailableSegmentRules): SQL | undefined {
+function matching(storeId: string, rules: SegmentRules): SQL | undefined {
   return and(
     eq(contacts.storeId, storeId),
     isNull(contacts.deletedAt),
@@ -214,14 +194,14 @@ function matching(storeId: string, rules: AvailableSegmentRules): SQL | undefine
   );
 }
 
-function groupWhere(storeId: string, group: AvailableSegmentRules): SQL | undefined {
-  const parts = group.conditions.map((item) =>
+function groupWhere(storeId: string, group: SegmentRules | SegmentInnerGroup): SQL | undefined {
+  const parts = group.conditions.map((item: SegmentCondition | SegmentInnerGroup) =>
     'match' in item ? groupWhere(storeId, item) : conditionWhere(storeId, item),
   );
   return group.match === 'all' ? and(...parts) : or(...parts);
 }
 
-function conditionWhere(storeId: string, condition: AvailableSegmentCondition): SQL | undefined {
+function conditionWhere(storeId: string, condition: SegmentCondition): SQL | undefined {
   switch (condition.field) {
     case 'tag':
       return condition.operator === 'is_any_of'
