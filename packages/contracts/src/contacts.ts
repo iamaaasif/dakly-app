@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { chatChannels } from './channels';
 import { bdMobileSchema } from './phone';
 
 export const contactSources = [
@@ -90,12 +91,33 @@ export const customerInsightKinds = [
 ] as const;
 export const customerInsightSources = ['all', 'shopify', 'facebook', 'store'] as const;
 
+const contactName = z.string().trim().min(1).max(120);
+
 export const createContactSchema = z.object({
-  name: z.string().trim().min(1).max(120),
+  name: contactName,
   phone: bdMobileSchema,
 });
 
+export const updateContactSchema = z
+  .strictObject({
+    name: contactName.optional(),
+    phone: bdMobileSchema.optional(),
+    tags: z.array(z.string().trim().min(1).max(50)).max(50).optional(),
+  })
+  .refine((change) => Object.keys(change).length > 0, 'Change at least one field');
+
+export const contactListQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  kind: z.enum(contactKinds).optional(),
+  tag: z.string().trim().min(1).max(50).optional(),
+  // A name, a full phone number, or the start of a number for members who see full phones.
+  search: z.string().trim().min(1).max(120).optional(),
+});
+
 export type CreateContactInput = z.infer<typeof createContactSchema>;
+export type UpdateContactInput = z.infer<typeof updateContactSchema>;
+export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
 export type ContactKind = (typeof contactKinds)[number];
 export type ContactSource = (typeof contactSources)[number];
 
@@ -104,5 +126,16 @@ export type ContactResponse = {
   name: string | null;
   phone: string | null;
   kind: ContactKind;
+  tags: string[];
   createdAt: string;
 };
+
+export type ContactIdentityResponse = {
+  id: string;
+  channel: (typeof chatChannels)[number];
+  channelConnectionId: string;
+  profileName: string | null;
+};
+
+export type ContactDetailResponse = ContactResponse & { identities: ContactIdentityResponse[] };
+export type ContactListResponse = { items: ContactResponse[]; nextCursor: string | null };

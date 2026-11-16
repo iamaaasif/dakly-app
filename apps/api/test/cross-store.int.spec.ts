@@ -92,6 +92,48 @@ fixture('POST /contacts', async () => {
   expect((await f.row('contacts', own)).store_id).toBe(b.id);
   expect(await f.row('contacts', id)).toEqual(before);
 });
+fixture('GET /contacts', async () => {
+  const { a, b } = await pair(),
+    aId = await contact(a),
+    bId = await contact(b);
+  for (const [shop, own, foreign] of [
+    [a, aId, bId],
+    [b, bId, aId],
+  ] as const) {
+    const ids = (await success(shop, 'GET', '/contacts', 200))
+      .json()
+      .items.map((item: { id: string }) => item.id);
+    expect(ids).toEqual([own]);
+    expect(ids).not.toContain(foreign);
+  }
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /contacts/:contactId`, async () => {
+    const positive = await f.shop(),
+      { a, b } = await pair();
+    const positiveId = await contact(positive),
+      foreignId = await contact(a);
+    const payload = method === 'PATCH' ? { name: 'করিম', tags: ['ঈদ'] } : undefined;
+    await success(
+      positive,
+      method,
+      `/contacts/${positiveId}`,
+      method === 'DELETE' ? 204 : 200,
+      payload,
+    );
+    const changed = await f.row('contacts', positiveId);
+    if (method === 'DELETE') expect(changed.deleted_at).not.toBeNull();
+    else expect(changed).toMatchObject({ name: 'করিম', tags: ['ঈদ'] });
+    const before = await f.row('contacts', foreignId);
+    await hidden(
+      b,
+      method,
+      (id) => `/contacts/${id}`,
+      foreignId,
+      () => payload ?? {},
+    );
+    expect(await f.row('contacts', foreignId)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
