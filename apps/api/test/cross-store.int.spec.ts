@@ -558,6 +558,53 @@ fixture('GET /wallets', async () => {
   });
   expect((await f.request(a.member, 'GET', '/wallets')).statusCode).toBe(403);
 });
+async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'requested') {
+  const id = (
+    await success(shop, 'POST', '/sms-sender-ids', 201, { senderName: 'Rina Shop' })
+  ).json().id as string;
+  if (status === 'approved')
+    await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
+  return id;
+}
+fixture('GET /sms-sender-ids', async () => {
+  const { a, b } = await pair(),
+    aId = await smsSender(a),
+    bId = await smsSender(b);
+  for (const [shop, own] of [
+    [a, aId],
+    [b, bId],
+  ] as const)
+    expect(
+      (await success(shop, 'GET', '/sms-sender-ids', 200))
+        .json()
+        .items.map((item: { id: string }) => item.id),
+    ).toEqual([own]);
+  expect((await f.request(a.member, 'GET', '/sms-sender-ids')).statusCode).toBe(403);
+});
+fixture('POST /sms-sender-ids', async () => {
+  const { a, b } = await pair(),
+    id = await smsSender(a),
+    before = await f.row('sms_sender_ids', id);
+  // A pending request in shop A does not block shop B.
+  const own = await smsSender(b);
+  expect((await f.row('sms_sender_ids', own)).store_id).toBe(b.id);
+  expect(await f.row('sms_sender_ids', id)).toEqual(before);
+});
+fixture('POST /sms-sender-ids/:smsSenderIdId/test', async () => {
+  const { a, b } = await pair(),
+    id = await smsSender(a, 'approved');
+  await success(a, 'POST', `/sms-sender-ids/${id}/test`, 204, {});
+  expect(f.sms.at(-1)).toMatchObject({ to: a.owner.phone, sender: 'Rina Shop' });
+  const sent = f.sms.length;
+  await hidden(
+    b,
+    'POST',
+    (value) => `/sms-sender-ids/${value}/test`,
+    id,
+    () => ({}),
+  );
+  expect(f.sms).toHaveLength(sent);
+});
 // Nest's SSE stream needs a real socket, which app.inject does not provide.
 fixture('GET /events/stream', async () => {
   const { a, b } = await pair();
@@ -671,6 +718,7 @@ describe('every production shop route isolates its data', () => {
       ['support_grants', 'id', (await f.grant(a, false)).id, (await f.grant(b, false)).id],
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
       ['wallet_ledger', 'id', await smsCredits(a, 10), await smsCredits(b, 20)],
+      ['sms_sender_ids', 'id', await smsSender(a), await smsSender(b)],
     ];
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const client = await connection.pool.connect();

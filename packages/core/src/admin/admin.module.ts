@@ -13,6 +13,7 @@ import { CryptoModule } from '../platform/crypto/crypto.module';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SmsModule } from '../sms/sms.module';
+import { SmsSendersModule } from '../sms-senders/sms-senders.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { BreakGlassController } from './break-glass.controller';
@@ -20,6 +21,8 @@ import { BreakGlassService } from './break-glass.service';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
 import { OwnerSupportController } from './owner-support.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { SmsSenderReviewController } from './sms-sender-review.controller';
+import { SmsSenderReviewService } from './sms-sender-review.service';
 import { StaffAccessService } from './staff-access.service';
 import { StaffAlertsController } from './staff-alerts.controller';
 import { StaffAlertsModule } from './staff-alerts.module';
@@ -67,6 +70,7 @@ import { WalletCreditService } from './wallet-credit.service';
     AuditModule,
     ClockModule,
     WalletsModule,
+    SmsSendersModule,
   ],
   controllers: [
     StaffRecoveryController,
@@ -79,6 +83,7 @@ import { WalletCreditService } from './wallet-credit.service';
     SupportController,
     StaffHistoryController,
     WalletCreditController,
+    SmsSenderReviewController,
   ],
   providers: [
     StaffRecoveryService,
@@ -88,6 +93,7 @@ import { WalletCreditService } from './wallet-credit.service';
     RiskyActionConfirmation,
     BreakGlassService,
     WalletCreditService,
+    SmsSenderReviewService,
     SupportService,
     SupportOwnerService,
     SupportAuditService,

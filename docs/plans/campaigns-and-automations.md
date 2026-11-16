@@ -97,13 +97,6 @@ Where the feature docs disagree, the gate follows these:
 - Messenger marketing. Feature 09's channel branch says "else Messenger if inside the 24-hour window or opted in". D24 says the opted-in path does not exist, and CAMP-R6 uses 23 hours. The gate follows D24 and CAMP-R6.
 - WhatsApp staff replies. [Feature 04](../features/04-chats-and-ai-agent.md) CHAT-R3 says "From Oct 1, 2026 Meta charges service messages beyond 1,000 free per number per month, so WhatsApp AI replies count toward the store's WhatsApp balance". The CAMP-9 scope says "`staff_reply` (block and window only)". The gate follows the CAMP-9 scope; CHN-3 settles whether a WhatsApp staff reply reserves WhatsApp balance.
 
-### CAMP-10 · Tracked links and the SMS opt-out page
-
-Branch: `feat/camp-10-tracked-links`
-
-- Scope: `links/` feature on `tracked_links`, `tracked_link_visits` and `tracked_link_visit_days`. `LinksService.create` makes a per-recipient code (8 characters, unguessable, unique per store); `GET /l/:code` (`@Public()`, rate limited) records a visit with only the daily-rotating visitor hash (D31) and redirects; the first tap emits `message.tapped`. Opt-out links (`kind = opt_out`) open a one-tap Bangla and English page that writes a consent withdrawal through `ConsentService` and emits `message.opted_out` (CAMP-R4). The link domain follows A4.
-- Tests (integration): a tap stores no IP or user agent; a second tap counts a visit but not a second first-tap; an unknown code returns 404 with no timing difference from a known one; the opt-out page withdraws once even when tapped twice; a link never redirects to a URL that was not stored.
-
 ### CAMP-2 · Campaigns: draft, approval, frozen recipients and cost
 
 Branch: `feat/camp-2-campaigns`

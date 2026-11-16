@@ -29,7 +29,8 @@ Merge requests carry a stable operation key through all retries, including retri
 | `GET /payments/callback/:gateway`                                 | Customer returns from the gateway                                                              |
 | `GET /public/stores/:storeSlug/order-link/:shortCode`             | Order and payment page for the customer                                                        |
 | `POST /public/stores/:storeSlug/order-link/:shortCode/confirm`    | Customer confirms an order                                                                     |
-| `GET /l/:code`                                                    | Tracked link redirect, or SMS opt-out page                                                     |
+| `GET /l/:code`                                                    | Tracked link redirect                                                                          |
+| `GET /l/s/:code`, `POST /l/s/:code`                               | SMS opt-out page, and the tap that withdraws SMS consent                                       |
 
 ### Account security routes (ACC-7)
 
@@ -87,7 +88,7 @@ resend is explicit. See [account and team](../features/01-account-and-team.md).
 | `POST /channel-connections/meta`, `POST /channel-connections/whatsapp`                                         | `storeSettings` |
 | `POST /channel-connections/:channelConnectionId/reconnect`, `DELETE /channel-connections/:channelConnectionId` | `storeSettings` |
 | `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`         |
-| `GET /sms-sender-ids`, `POST /sms-sender-ids`                                                                  | `storeSettings` |
+| `GET /sms-sender-ids`, `POST /sms-sender-ids`, `POST /sms-sender-ids/:smsSenderIdId/test`                      | `storeSettings` |
 
 Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
 requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
@@ -225,6 +226,8 @@ On the admin hostname, staff session, passkey or TOTP required. Each route names
 | `GET /admin/stores/:storeId/*` (store data)                                        | support, with an approved support grant |
 | `POST /admin/stores/:storeId/support-grants`                                       | support                                 |
 | `POST /admin/stores/:storeId/suspend`, `POST /admin/stores/:storeId/restore`       | ops                                     |
+| `GET /admin/sms-sender-ids` (`open_sms_sender_ids`)                                | super_admin, ops                        |
+| `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve`, `.../reject`  | super_admin, ops                        |
 | `GET /admin/plans`, `PUT /admin/plans/:planCode`                                   | finance                                 |
 | `GET /admin/coupons`, `POST /admin/coupons`, `PATCH /admin/coupons/:couponId`      | finance                                 |
 | `GET /admin/settings`, `PUT /admin/settings/:key`                                  | super_admin                             |

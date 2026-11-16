@@ -2,6 +2,8 @@ import { createTransport } from 'nodemailer';
 
 import { type SmsDriver, type SmsMessage, type SmsSendResult } from '../sms-driver';
 
+const SHARED_FROM = 'dakly@sms.dakly.test';
+
 export class MailpitSmsDriver implements SmsDriver {
   private readonly transport;
   private readonly apiUrl: string;
@@ -27,7 +29,8 @@ export class MailpitSmsDriver implements SmsDriver {
       const earlier = messageId && (await this.findCaptured(messageId));
       if (earlier) return { providerMessageId: earlier };
       const result = await this.transport.sendMail({
-        from: 'dakly@sms.dakly.test',
+        // The store's sender shows as the From name; the shared sender has none.
+        from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
         to: `${message.to}@sms.test`,
         subject: 'SMS',
         text: message.text,
