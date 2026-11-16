@@ -60,13 +60,6 @@ Branch: `feat/pay-1-usage-service`
 
 ### Group 3: contacts and channels (M3)
 
-### CUS-1 · Contacts, channel identities and kinds
-
-Branch: `feat/cus-1-contacts`
-
-- Scope: the example `customers/` feature becomes `contacts/` on the `contacts` and `contact_identities` tables already in the schema. Kinds follow the glossary (`chat_only`, `lead`, `customer`, `not_customer`). Phone unique per store; masking through the shared `maskPhone` (REV-9 Task E). Emit `contact.created`.
-- Tests (integration): phone with Bangla digits or `+880` saves normalised; the cross-store suite covers every new route.
-
 ### CUS-2 · Consent
 
 Branch: `feat/cus-2-consent`

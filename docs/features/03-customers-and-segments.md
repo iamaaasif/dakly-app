@@ -31,13 +31,36 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 
 - `POST /contacts` (`customers.edit`) adds a contact with a name and phone. A staff
   add is an intentional customer, so it saves with source `manual` and kind `customer`.
-- `GET /contacts/:contactId` (`customers.view`) returns one contact. A deleted contact
+  The create publishes `contact.created` (the contact id only) in the same store
+  transaction, so the event and the contact commit or roll back together.
+- `GET /contacts` (`customers.view`) lists the store's contacts, newest first, with
+  `cursor` and `limit` (default 50, at most 100). Filters: `kind`, one `tag`, and
+  `search`. Deleted contacts are never listed.
+- `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
+  identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
-- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`.
-  The error never names or links the other contact, because the member may not be
-  allowed to see who has the number.
+- `PATCH /contacts/:contactId` (`customers.edit`) changes the name, phone or tags.
+- `DELETE /contacts/:contactId` (`customers.edit`) soft deletes the contact: it is
+  gone from the list and the profile, and its phone can be saved on another contact.
+- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`,
+  on create and on edit. The error never names or links the other contact, because the
+  member may not be allowed to see who has the number.
 - A contact without a phone returns `phone: null`.
+- Every add, edit and delete writes an `audit_log` row with who did it (a member, or
+  Dakly staff through a support session) and, for an edit, the names of the changed
+  fields. The row holds no names or phone numbers.
 - The support read and create screens call `ContactsService`, with full phones as before.
+
+Search rules:
+
+- A name matches anywhere in the contact's name, for every member.
+- A full phone number, in any form the phone schema accepts, finds the contact with
+  that exact number, for every member. Results stay masked without "See full phone
+  numbers".
+- Partial phone search needs "See full phone numbers": digits that are not a full
+  number match the start of stored numbers only for those members. For anyone else
+  they find nothing, so the hidden digits of a masked number cannot be found by
+  guessing.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
