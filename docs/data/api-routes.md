@@ -106,7 +106,7 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                      | Permission                                                       |
 | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `GET /contacts`, `GET /contacts/:contactId`                                                                | `customers` (phones masked unless "See full phone numbers")      |
-| `POST /contacts` (idem), `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                       | `customers`                                                      |
+| `POST /contacts`, `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                              | `customers`                                                      |
 | `GET /contacts/:contactId/timeline`                                                                        | `customers`                                                      |
 | `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory` | View with `customers.view`; edit and clear with `customers.edit` |
 | `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                            | `customers`                                                      |

@@ -31,13 +31,35 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
 
 - `POST /contacts` (`customers.edit`) adds a contact with a name and phone. A staff
   add is an intentional customer, so it saves with source `manual` and kind `customer`.
-- `GET /contacts/:contactId` (`customers.view`) returns one contact. A deleted contact
+  The create publishes `contact.created` (the contact id only) in the same store
+  transaction, so the event and the contact commit or roll back together.
+- `GET /contacts` (`customers.view`) lists the store's contacts, newest first, with
+  `cursor` and `limit` (default 50, at most 100). Filters: `kind`, one `tag`, and
+  `search`. Deleted contacts are never listed.
+- `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
+  identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
-- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`.
-  The error never names or links the other contact, because the member may not be
-  allowed to see who has the number.
+- `PATCH /contacts/:contactId` (`customers.edit`) changes the name, phone or tags. A
+  changed phone clears its WhatsApp verification, because a typed phone proves nothing.
+- `DELETE /contacts/:contactId` (`customers.edit`) soft deletes the contact: it is
+  gone from the list and the profile, and its phone can be saved on another contact.
+- A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`,
+  on create and on edit. The error never names or links the other contact, because the
+  member may not be allowed to see who has the number.
 - A contact without a phone returns `phone: null`.
 - The support read and create screens call `ContactsService`, with full phones as before.
+
+Search rules:
+
+- A name matches anywhere in the contact's name, for every member.
+- A name search needs at least 3 characters (`CONTACT_SEARCH_TOO_SHORT`, 400). Digits
+  are a phone search and have no minimum.
+- A full phone number, in any form the phone schema accepts, finds the contact with
+  that exact number, for every member. Results stay masked without "See full phone
+  numbers".
+- Partial phone search needs "See full phone numbers": for those members, digits that
+  are not a full number match the start of stored numbers. For anyone else a partial
+  number finds nothing, and only an exact full number finds the contact.
 
 The `consents/` feature owns the `consents` table. `ConsentService.record(storeId, change, actor)`
 appends one row per answer, with its channel, status, source, evidence and the member who
@@ -349,11 +371,11 @@ Stats: one `contact_stats` row per contact holds order count, delivered count, n
 
 Segments
 
-1. A segment is a condition tree validated by `segmentRulesSchema` in `packages/contracts/src/segments.ts`: groups that match all or any of their items, at most three levels deep counting the top group, and at most 20 conditions in all. A store saves at most 200 segments, each with a unique name.
+1. A segment is a condition tree validated by `segmentRulesSchema` in `packages/contracts/src/segments.ts`: a top group that matches all or any of its items, which are conditions or groups of conditions (two levels of groups), and at most 20 conditions in all. Any other field, or a deeper group, is `400 VALIDATION_FAILED`. A store saves at most 200 segments, each with a unique name.
 2. Fields that work now: tag, district, source and kind (is any of, is none of; the builder's "is" and "is not" send one value), and consent per channel (granted, or not granted, which includes never asked). "Is none of" on district keeps contacts with no district. Kind cannot ask for Not a customer.
-3. Fields listed for the builder but refused with `400 SEGMENT_FIELD_NOT_AVAILABLE` until their data exists (`segmentFieldsWaiting`): order count, net spend, usual gap, first and last order and lifecycle stage until CUS-3 (contact stats, after ORD-1); first and last inbound message until CHAT-1; last campaign received until CAMP-3. The error names the field's path and the task.
-4. `ContactsService.countMatching` and `listIdsMatching` compile the tree to a Drizzle `where` in the contacts repository, because contacts owns the table; consent conditions read the `contact_consent_current` view in the same query. Every value is a bound parameter. Not a customer and deleted contacts never match.
-5. `SegmentsService.count` counts live on each call and `contactIds` pages through a saved segment's contacts by id. Membership is not stored, so there is no segment joined or left yet; it is frozen into campaign recipients only when a campaign is approved. The 60-second count cache waits until counts are slow.
+3. Fields that wait for their data, and are not in the schema until then: order count, net spend, usual gap, first and last order and lifecycle stage wait for CUS-3 (contact stats, after ORD-1); first and last inbound message wait for CHAT-1; last campaign received waits for CAMP-3.
+4. `ContactsService.countMatching` and `listIdsMatching` compile the tree to a Drizzle `where` in the contacts repository, because contacts owns the table; consent conditions read the `contact_consent_current` view in the same query, a read-only exception listed in [module-boundaries.md](../rules/module-boundaries.md). Every value is a bound parameter. Not a customer and deleted contacts never match.
+5. `SegmentsService.count` counts live on each call, and `POST /segments/preview` returns it; `contactIds` pages through a saved segment's contacts by id. Membership is not stored, so there is no segment joined or left yet; it is frozen into campaign recipients only when a campaign is approved. The 60-second count cache waits until counts are slow.
 6. Saving a segment, new or changed, writes the `segment.saved` event. SEG-R2 (a segment in use cannot be deleted) waits for CAMP-2 and CAMP-5, and ready-made segments (SEG-R1) for CUS-7.
 7. Indexes, measured with 50,000 contacts in one store of a 500,000-row table: every count starts from an index on `store_id` (`contacts_store_id_kind_idx` for kind, otherwise a bitmap scan on a `store_id` index) and filters tag, district and source on those rows; consent reads `consents_contact_channel_idx`. Each condition and an AND/OR mix counted in under 40 ms.
 

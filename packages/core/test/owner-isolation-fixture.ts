@@ -51,6 +51,7 @@ export class OwnerIsolationFixture {
       'ownership_transfers',
       'segments',
       'contacts',
+      'channel_connections',
       'audit_log',
       'memberships',
       'roles',

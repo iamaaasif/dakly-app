@@ -207,7 +207,12 @@ export class SupportService {
       assertSupportContext(expectedContext, contextTag);
       if (grant.isBreakGlass || grant.access !== 'write' || !grant.scopes.includes('customers'))
         return this.denied(principal, ip);
-      const result = await this.contacts.create(principal.storeId, input, { seeFullPhone: true });
+      const result = await this.contacts.create(
+        principal.storeId,
+        input,
+        { seeFullPhone: true },
+        { kind: 'staff', staffUserId: principal.staffUserId },
+      );
       await this.audit.record(principal.storeId, {
         id: result.id,
         actor: { kind: 'staff', staffUserId: principal.staffUserId },

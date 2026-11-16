@@ -6,7 +6,7 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { SegmentCondition, SegmentGroup } from '@dakly/contracts/segments';
+import type { SegmentCondition, SegmentInnerGroup, SegmentRules } from '@dakly/contracts/segments';
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
@@ -70,11 +70,11 @@ async function consent(contactId: string, channel: string, status: string, at: s
   );
 }
 
-function all(...conditions: (SegmentCondition | SegmentGroup)[]): SegmentGroup {
+function all(...conditions: SegmentCondition[]): SegmentInnerGroup {
   return { match: 'all', conditions };
 }
 
-async function matching(storeId: string, rules: SegmentGroup) {
+async function matching(storeId: string, rules: SegmentRules) {
   const names = Object.entries(ids);
   const segment = await service.create(storeId, { name: randomUUID(), rules }, staff);
   const found = await service.contactIds(storeId, segment.id, { limit: 100 });
@@ -157,7 +157,7 @@ describe('SegmentsService (Postgres)', () => {
   });
 
   it('combines any and all groups', async () => {
-    const rules: SegmentGroup = {
+    const rules: SegmentRules = {
       match: 'any',
       conditions: [
         all(
@@ -178,23 +178,6 @@ describe('SegmentsService (Postgres)', () => {
     expect(
       (await service.count(storeA, all({ field: 'tag', operator: 'is_any_of', values }))).count,
     ).toBe(0);
-  });
-
-  it('refuses an order field and names the task it waits for', async () => {
-    const rules = all(
-      { field: 'tag', operator: 'is_any_of', values: ['vip'] },
-      all({ field: 'orders_count', operator: 'more_than', value: 2 }),
-    );
-    const refused = { code: 'SEGMENT_FIELD_NOT_AVAILABLE', status: 400 };
-    await expect(service.count(storeA, rules)).rejects.toMatchObject({
-      ...refused,
-      fields: [
-        { path: 'rules.conditions.1.conditions.0.field', message: 'Not available until CUS-3' },
-      ],
-    });
-    await expect(
-      service.create(storeA, { name: 'নিয়মিত ক্রেতা', rules }, staff),
-    ).rejects.toMatchObject(refused);
   });
 
   it('never counts another store’s contacts or reads its segments', async () => {
@@ -272,7 +255,7 @@ describe('SegmentsService (Postgres)', () => {
       [bulkStore],
     );
     await admin.pool.query('analyze contacts; analyze consents');
-    const rules: SegmentGroup = {
+    const rules: SegmentRules = {
       match: 'any',
       conditions: [
         all(

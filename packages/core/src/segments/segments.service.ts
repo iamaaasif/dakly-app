@@ -2,18 +2,14 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
-  type AvailableSegmentCondition,
-  type AvailableSegmentRules,
   type ChangeSegmentInput,
   type CreateSegmentInput,
   MAX_SEGMENTS_PER_STORE,
-  type SegmentCondition,
   type SegmentCountResponse,
-  type SegmentGroup,
   type SegmentListQuery,
   type SegmentListResponse,
   type SegmentResponse,
-  segmentFieldsWaiting,
+  type SegmentRules,
 } from '@dakly/contracts/segments';
 
 import { ContactsService } from '../contacts/contacts.service';
@@ -43,8 +39,8 @@ export class SegmentsService {
   }
 
   // Counted live on each call: membership is not stored (feature 03).
-  async count(storeId: string, rules: SegmentGroup): Promise<SegmentCountResponse> {
-    return { count: await this.contacts.countMatching(storeId, availableRules(rules)) };
+  async count(storeId: string, rules: SegmentRules): Promise<SegmentCountResponse> {
+    return { count: await this.contacts.countMatching(storeId, rules) };
   }
 
   async contactIds(
@@ -53,12 +49,11 @@ export class SegmentsService {
     page: { cursor?: string; limit: number },
   ): Promise<string[]> {
     const segment = await this.find(storeId, segmentId);
-    return this.contacts.listIdsMatching(storeId, availableRules(segment.rules), page);
+    return this.contacts.listIdsMatching(storeId, segment.rules, page);
   }
 
   // The store lock makes the name check and the 200-segment limit hold under concurrent saves.
   async create(storeId: string, input: CreateSegmentInput, actor: Actor): Promise<SegmentResponse> {
-    availableRules(input.rules);
     return this.transaction.runLocked(storeId, async () => {
       if ((await this.repository.countSaved(storeId)) >= MAX_SEGMENTS_PER_STORE)
         throw segmentError('SEGMENT_LIMIT_REACHED');
@@ -78,7 +73,6 @@ export class SegmentsService {
     input: ChangeSegmentInput,
     _actor: Actor,
   ): Promise<SegmentResponse> {
-    if (input.rules) availableRules(input.rules);
     return this.transaction.run(storeId, async () => {
       const now = this.clock.now();
       // The event goes first: a name clash aborts the transaction, and the throw rolls it back.
@@ -117,29 +111,6 @@ export class SegmentsService {
       payload: { segmentId },
     });
   }
-}
-
-// Refuses fields whose data does not exist yet, naming the task that brings it.
-function availableRules(group: SegmentGroup, path = 'rules'): AvailableSegmentRules {
-  return {
-    match: group.match,
-    conditions: group.conditions.map((item, index) => {
-      const itemPath = `${path}.conditions.${index}`;
-      if ('match' in item) return availableRules(item, itemPath);
-      if (!isAvailable(item))
-        throw segmentError('SEGMENT_FIELD_NOT_AVAILABLE', [
-          {
-            path: `${itemPath}.field`,
-            message: `Not available until ${segmentFieldsWaiting[item.field]}`,
-          },
-        ]);
-      return item;
-    }),
-  };
-}
-
-function isAvailable(condition: SegmentCondition): condition is AvailableSegmentCondition {
-  return !(condition.field in segmentFieldsWaiting);
 }
 
 function toSegmentResponse(segment: Segment): SegmentResponse {

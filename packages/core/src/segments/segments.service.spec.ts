@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { SegmentGroup } from '@dakly/contracts/segments';
+import type { SegmentRules } from '@dakly/contracts/segments';
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { Clock } from '../platform/clock';
@@ -14,7 +14,7 @@ import { SegmentsService } from './segments.service';
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const staff = { kind: 'user', userId: 'c5a0f0e4-0b55-4b7e-8d0e-6f3c3b7f1e21' } as const;
 const now = new Date('2026-11-16T05:00:00Z');
-const vip: SegmentGroup = {
+const vip: SegmentRules = {
   match: 'all',
   conditions: [{ field: 'tag', operator: 'is_any_of', values: ['vip'] }],
 };
@@ -99,7 +99,7 @@ describe('SegmentsService', () => {
 
   it('lets a segment keep its own name while its rules change', async () => {
     const segment = await service.create(STORE_ID, { name: 'ভিআইপি', rules: vip }, staff);
-    const dhaka: SegmentGroup = {
+    const dhaka: SegmentRules = {
       match: 'any',
       conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
     };
@@ -122,25 +122,7 @@ describe('SegmentsService', () => {
     );
   });
 
-  it('refuses a field whose data does not exist yet, on count, create and change', async () => {
-    const rules: SegmentGroup = {
-      match: 'all',
-      conditions: [{ field: 'last_inbound_message_at', operator: 'in_last_days', days: 7 }],
-    };
-    const refused = {
-      code: 'SEGMENT_FIELD_NOT_AVAILABLE',
-      status: 400,
-      fields: [{ path: 'rules.conditions.0.field', message: 'Not available until CHAT-1' }],
-    };
-    const segment = await service.create(STORE_ID, { name: 'ভিআইপি', rules: vip }, staff);
-
-    await expect(service.count(STORE_ID, rules)).rejects.toMatchObject(refused);
-    await expect(service.create(STORE_ID, { name: 'চ্যাট', rules }, staff)).rejects.toMatchObject(
-      refused,
-    );
-    await expect(service.change(STORE_ID, segment.id, { rules }, staff)).rejects.toMatchObject(
-      refused,
-    );
+  it('counts through the contacts service', async () => {
     expect(await service.count(STORE_ID, vip)).toEqual({ count: 7 });
   });
 });

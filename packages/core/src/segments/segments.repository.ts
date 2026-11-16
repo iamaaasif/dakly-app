@@ -1,16 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, gt } from 'drizzle-orm';
 
-import type { SegmentGroup, SegmentListQuery } from '@dakly/contracts/segments';
+import type { SegmentListQuery, SegmentRules } from '@dakly/contracts/segments';
 import { segments } from '@dakly/db/schema/contacts';
 
-import { databaseErrorCode } from '../platform/database/error-code';
+import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Segment = {
   id: string;
   name: string;
-  rules: SegmentGroup;
+  rules: SegmentRules;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -102,7 +102,7 @@ export class SegmentsRepository {
       );
       return row;
     } catch (error) {
-      if (isUniqueViolation(error, 'segments_store_id_name_key')) return 'name_taken';
+      if (isConstraintViolation(error, '23505', 'segments_store_id_name_key')) return 'name_taken';
       throw error;
     }
   }
@@ -116,15 +116,4 @@ export class SegmentsRepository {
     );
     return rows.length > 0;
   }
-}
-
-function isUniqueViolation(error: unknown, constraint: string): boolean {
-  const cause = error instanceof Error && error.cause ? error.cause : error;
-  return (
-    databaseErrorCode(error) === '23505' &&
-    typeof cause === 'object' &&
-    cause !== null &&
-    'constraint' in cause &&
-    cause.constraint === constraint
-  );
 }

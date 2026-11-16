@@ -6,7 +6,7 @@ import { contacts } from '@dakly/db/schema/contacts';
 import { stores } from '@dakly/db/schema/stores';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { ContactsRepository } from './contacts.repository';
+import { type ContactFilter, ContactsRepository } from './contacts.repository';
 
 // Proves the RLS policies, not just the WHERE clauses: store B must never see store A's rows.
 // A staff add, as ContactsService.create saves it.
@@ -119,6 +119,41 @@ describe('ContactsRepository (Postgres)', () => {
     });
     expect(saved).toMatchObject({ name: 'Nasrin', phone: '01312345678', kind: 'customer' });
     expect(saved!.id).not.toBe(deleted!.id);
+  });
+
+  it('lists contacts newest first by kind, tag, name and phone, page by page', async () => {
+    const [rina, karim, lead, deleted] = await admin.db
+      .insert(contacts)
+      .values(
+        [
+          { storeId: storeB, name: 'রিনা বেগম', phone: '01711100001', tags: ['vip'] },
+          { storeId: storeB, name: 'Karim_50%', phone: '01811100002', tags: ['vip', 'ঈদ'] },
+          { storeId: storeB, name: 'Lina', phone: '01911100003', kind: 'lead' as const },
+          { storeId: storeB, name: 'রিনা', phone: '01711100004', deletedAt: new Date() },
+        ].map((row, index) => ({
+          source: 'manual' as const,
+          kind: 'customer' as const,
+          createdAt: new Date(Date.UTC(2026, 10, 1, index)),
+          ...row,
+        })),
+      )
+      .returning({ id: contacts.id });
+    const ids = async (filter: Partial<ContactFilter>) =>
+      (await repository.list(storeB, { limit: 50, ...filter })).map((row) => row.id);
+
+    expect(await ids({})).toEqual([lead!.id, karim!.id, rina!.id]);
+    expect(await ids({ kind: 'lead' })).toEqual([lead!.id]);
+    expect(await ids({ tag: 'vip' })).toEqual([karim!.id, rina!.id]);
+    expect(await ids({ name: 'রিনা' })).toEqual([rina!.id]);
+    expect(await ids({ name: '_50%' })).toEqual([karim!.id]);
+    expect(await ids({ name: '%' })).toEqual([karim!.id]);
+    expect(await ids({ phone: '01811100002' })).toEqual([karim!.id]);
+    expect(await ids({ phone: '01711100004' })).toEqual([]);
+    expect(await ids({ phonePrefix: '0171' })).toEqual([rina!.id]);
+    expect(await ids({ limit: 1 })).toEqual([lead!.id, karim!.id]);
+    expect(await ids({ limit: 1, cursor: karim!.id })).toEqual([rina!.id]);
+    expect(await ids({ cursor: deleted!.id })).toEqual([lead!.id, karim!.id, rina!.id]);
+    expect(await repository.list(storeA, { limit: 50, tag: 'ঈদ' })).toEqual([]);
   });
 });
 
