@@ -1,0 +1,43 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+
+import { notificationsKeys } from '../api/notifications-keys';
+import { useSessionContext } from '@/lib/session-context';
+
+export const STREAM_FALLBACK_POLL_MS = 60_000;
+
+// One stream per page, opened again when the session's shop or access changes. While it is
+// down the notification queries are polled instead.
+export function useEventStream() {
+  const client = useQueryClient();
+  const contextTag = useSessionContext().data?.contextTag;
+
+  useEffect(() => {
+    const refresh = () => void client.invalidateQueries({ queryKey: notificationsKeys.all });
+    let source: EventSource;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    const open = () => {
+      source = new EventSource('/api/events/stream');
+      source.addEventListener('notification', refresh);
+      source.addEventListener('open', () => {
+        if (!poll) return;
+        clearInterval(poll);
+        poll = undefined;
+        // Last-Event-ID only replays after a received message, so read what the gap missed.
+        refresh();
+      });
+      source.addEventListener('error', () => {
+        poll ??= setInterval(() => {
+          refresh();
+          // The browser stops retrying after an error response, such as a 502 during a deploy.
+          if (source.readyState === EventSource.CLOSED) open();
+        }, STREAM_FALLBACK_POLL_MS);
+      });
+    };
+    open();
+    return () => {
+      clearInterval(poll);
+      source.close();
+    };
+  }, [client, contextTag]);
+}
