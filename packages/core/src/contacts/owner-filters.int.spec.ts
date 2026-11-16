@@ -28,6 +28,13 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.findById(f.a, a!.id)).toMatchObject({ name: 'রিনা' });
     expect(await repository.findById(f.b, b!.id)).toMatchObject({ name: 'করিম' });
     expect(await repository.findById(f.b, a!.id)).toBeUndefined();
+    expect(await repository.findRecipient(f.a, a!.id)).toEqual({
+      kind: 'customer',
+      isBlocked: false,
+      isOverPlanLimit: false,
+      hasPhone: true,
+    });
+    expect(await repository.findRecipient(f.b, a!.id)).toBeUndefined();
   });
 
   it('lists, edits, deletes and reads identities only in the selected store', async () => {
