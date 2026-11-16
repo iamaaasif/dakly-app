@@ -34,7 +34,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | API-2 | Rate limiting with Valkey storage                                                        | Done      |             | #10      | Valkey client and per-key limiter; [plan](plans/core.md)         |
 | API-3 | Route test that fails when a route has no access rule or a store route has no permission | Done      | ACC-3       | #15      | [plan](plans/core.md)                                            |
 | WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Done      |             | #29      | [design/theme.md](design/theme.md)                               |
-| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | In review | WEB-1       |          | Radix primitives; `FormField` reads React Hook Form errors       |
+| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | In review | WEB-1       | #89      | Radix primitives; `FormField` reads React Hook Form errors       |
 | WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Done      | WEB-1       | #35      | Verified session context and responsive shell                    |
 | WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Done      |             | #36      | Exact money, store dates and supplied phone display values       |
 | WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Done      | WEB-3       | #37      | Real API browser flow and component tests                        |
