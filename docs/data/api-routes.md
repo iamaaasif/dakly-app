@@ -192,7 +192,8 @@ atomically and retain business data when an extension is disabled.
 | `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients` | `campaigns`   |
 | `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                             | `campaigns`   |
 | `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                        | `campaigns`   |
-| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel`                             | `campaigns`   |
+| `POST /campaigns/:campaignId/unschedule`, `POST /campaigns/:campaignId/cancel` (scheduled, until 5 minutes before the send)                 | `campaigns`   |
+| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                   | `campaigns`   |
 | `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                        | `campaigns`   |
 | `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                               | `automations` |
 | `POST /automations/:automationId/publish`, `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`               | `automations` |

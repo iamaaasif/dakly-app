@@ -6,12 +6,21 @@ const CAMPAIGN_ERRORS = {
   CAMPAIGN_TEXT_EMPTY: { status: 409, message: 'Write the message before approving' },
   CAMPAIGN_SEND_TIME_PASSED: { status: 409, message: 'The send time has passed; choose a new one' },
   CAMPAIGN_NO_RECIPIENTS: { status: 409, message: 'No one in this audience can get this message' },
+  CAMPAIGN_NOT_SCHEDULED: { status: 409, message: 'This campaign is not scheduled' },
+  CAMPAIGN_CHANGE_TOO_LATE: {
+    status: 409,
+    message: 'A campaign can be edited or cancelled until 5 minutes before it sends',
+  },
+  CAMPAIGN_NOT_SENDING: { status: 409, message: 'This campaign is not sending' },
+  CAMPAIGN_NOT_PAUSED: { status: 409, message: 'This campaign is not paused' },
   CAMPAIGN_APPROVAL_DENIED: {
     status: 403,
     message: 'Only an owner or admin can approve sends in this shop',
   },
 } as const satisfies ErrorCatalog;
 
-export function campaignError(code: keyof typeof CAMPAIGN_ERRORS): AppError {
+export type CampaignErrorCode = keyof typeof CAMPAIGN_ERRORS;
+
+export function campaignError(code: CampaignErrorCode): AppError {
   return new AppError(code, CAMPAIGN_ERRORS[code]);
 }

@@ -6,6 +6,7 @@ import type {
   CampaignListQuery,
   CampaignListResponse,
   CampaignResponse,
+  CampaignStatus,
   ChangeCampaignInput,
   CreateCampaignInput,
 } from '@dakly/contracts/campaigns';
@@ -24,11 +25,29 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
-import { campaignError } from './campaigns.errors';
-import { type Campaign, CampaignsRepository, type FrozenRecipient } from './campaigns.repository';
+import { campaignError, type CampaignErrorCode } from './campaigns.errors';
+import {
+  type Campaign,
+  CampaignsRepository,
+  type CampaignStatusChange,
+  type FrozenRecipient,
+} from './campaigns.repository';
 
 // Writes take the actor (services.md); nothing records it for drafts yet.
 type Actor = AuditEntry['actor'];
+
+// The changes a member makes by hand (state-machines.md); the sender (CAMP-3) makes the rest.
+const STATUS_CHANGES = {
+  unschedule: { from: 'scheduled', to: 'draft', refused: 'CAMPAIGN_NOT_SCHEDULED' },
+  cancel: { from: 'scheduled', to: 'cancelled', refused: 'CAMPAIGN_NOT_SCHEDULED' },
+  pause: { from: 'sending', to: 'paused', refused: 'CAMPAIGN_NOT_SENDING' },
+  resume: { from: 'paused', to: 'sending', refused: 'CAMPAIGN_NOT_PAUSED' },
+} as const satisfies Record<
+  string,
+  { from: CampaignStatus; to: CampaignStatus; refused: CampaignErrorCode }
+>;
+// CAMP-R7: a scheduled campaign can be edited or cancelled until 5 minutes before it sends.
+const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class CampaignsService {
@@ -80,13 +99,13 @@ export class CampaignsService {
       }),
       updatedAt: this.clock.now(),
     });
-    if (!campaign) throw await this.notDraftError(storeId, campaignId);
+    if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
     return toCampaignResponse(campaign);
   }
 
   async removeDraft(storeId: string, campaignId: string, _actor: Actor): Promise<void> {
     if (!(await this.repository.removeDraft(storeId, campaignId)))
-      throw await this.notDraftError(storeId, campaignId);
+      throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
   }
 
   async estimate(storeId: string, campaignId: string): Promise<CampaignEstimateResponse> {
@@ -107,9 +126,10 @@ export class CampaignsService {
       throw campaignError('CAMPAIGN_APPROVAL_DENIED');
     return this.transaction.run(storeId, async () => {
       const campaign = await this.repository.lockDraft(storeId, campaignId);
-      if (!campaign) throw await this.notDraftError(storeId, campaignId);
+      if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
-      if (campaign.scheduledFor && campaign.scheduledFor <= this.clock.now())
+      const now = this.clock.now();
+      if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
       const recipients = await this.checkAudience(storeId, campaign);
       const estimate = toEstimate(campaign, recipients);
@@ -124,22 +144,97 @@ export class CampaignsService {
       await this.wallets.reserve(storeId, {
         wallet: 'sms_credits',
         quantity: estimate.smsCredits,
-        idempotencyKey: `campaign-approval:${campaignId}`,
+        idempotencyKey: approvalKey(campaignId, now),
         actor: approver.actor,
       });
       return toCampaignResponse(
-        await this.markApproved(storeId, campaign, estimate, approver.actor),
+        await this.markApproved(storeId, campaign, estimate, { actor: approver.actor, now }),
       );
     });
+  }
+
+  // Back to draft: the frozen recipients go, so a new approval freezes the audience again.
+  async unschedule(storeId: string, campaignId: string, actor: Actor): Promise<CampaignResponse> {
+    return this.transaction.run(storeId, async () => {
+      const campaign = await this.lockBeforeSend(storeId, campaignId);
+      await this.repository.removeRecipients(storeId, campaignId);
+      const draft = await this.changeStatus(storeId, campaignId, 'unschedule', {
+        approvedByUserId: null,
+        approvedAt: null,
+        estimatedCostPoisha: null,
+        recipientsCount: 0,
+        skippedCount: 0,
+      });
+      await this.releaseCredits(storeId, campaign, actor);
+      return draft;
+    });
+  }
+
+  async cancel(storeId: string, campaignId: string, actor: Actor): Promise<CampaignResponse> {
+    return this.transaction.run(storeId, async () => {
+      const campaign = await this.lockBeforeSend(storeId, campaignId);
+      await this.repository.cancelQueuedRecipients(storeId, campaignId);
+      const cancelled = await this.changeStatus(storeId, campaignId, 'cancel');
+      await this.releaseCredits(storeId, campaign, actor);
+      return cancelled;
+    });
+  }
+
+  // Only the status moves until the sender (CAMP-3) reads it.
+  async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
+    return this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
+  }
+
+  async resume(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
+    return this.changeStatus(storeId, campaignId, 'resume', { pauseReason: null });
+  }
+
+  private async lockBeforeSend(storeId: string, campaignId: string) {
+    const campaign = await this.repository.lockScheduled(storeId, campaignId);
+    if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_SCHEDULED');
+    // Approval schedules a campaign only with a send time.
+    const untilSend = campaign.scheduledFor!.getTime() - this.clock.now().getTime();
+    if (untilSend < LAST_CHANGE_BEFORE_SEND_MS) throw campaignError('CAMPAIGN_CHANGE_TOO_LATE');
+    return campaign;
+  }
+
+  // Last, as in approve, so the wallet lock is held only until commit.
+  private async releaseCredits(
+    storeId: string,
+    campaign: Campaign & { approvedAt: Date | null },
+    actor: Actor,
+  ): Promise<void> {
+    const key = approvalKey(campaign.id, campaign.approvedAt!);
+    const reservation = await this.wallets.findByIdempotencyKey(storeId, key);
+    await this.wallets.release(storeId, {
+      reservationId: reservation!.entryId,
+      idempotencyKey: `${key}:release`,
+      actor,
+    });
+  }
+
+  private async changeStatus(
+    storeId: string,
+    campaignId: string,
+    name: keyof typeof STATUS_CHANGES,
+    change: Omit<CampaignStatusChange, 'status' | 'updatedAt'> = {},
+  ): Promise<CampaignResponse> {
+    const { from, to, refused } = STATUS_CHANGES[name];
+    const campaign = await this.repository.changeStatus(storeId, campaignId, from, {
+      ...change,
+      status: to,
+      updatedAt: this.clock.now(),
+    });
+    if (!campaign) throw await this.refusal(storeId, campaignId, refused);
+    return toCampaignResponse(campaign);
   }
 
   private async markApproved(
     storeId: string,
     campaign: Campaign,
     estimate: CampaignEstimateResponse,
-    actor: Actor,
+    { actor, now }: { actor: Actor; now: Date },
   ): Promise<Campaign> {
-    const now = this.clock.now();
     const status = campaign.scheduledFor ? 'scheduled' : 'sending';
     const approved = await this.repository.markApproved(storeId, campaign.id, {
       status,
@@ -204,11 +299,16 @@ export class CampaignsService {
     return campaign;
   }
 
-  // The guarded write found no draft: say whether the campaign is missing or past draft.
-  private async notDraftError(storeId: string, campaignId: string) {
+  // The guarded write found nothing: say whether the campaign is missing or in another state.
+  private async refusal(storeId: string, campaignId: string, code: CampaignErrorCode) {
     await this.find(storeId, campaignId);
-    return campaignError('CAMPAIGN_NOT_DRAFT');
+    return campaignError(code);
   }
+}
+
+// Holds the approval time, so a campaign approved again after an edit reserves anew.
+function approvalKey(campaignId: string, approvedAt: Date): string {
+  return `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
 }
 
 function toEstimate(campaign: Campaign, recipients: FrozenRecipient[]): CampaignEstimateResponse {

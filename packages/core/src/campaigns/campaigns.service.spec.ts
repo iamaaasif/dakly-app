@@ -23,6 +23,7 @@ import type {
   Campaign,
   CampaignApproval,
   CampaignsRepository,
+  CampaignStatusChange,
   FrozenRecipient,
 } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
@@ -76,15 +77,43 @@ class FakeCampaignsRepository {
     return this.rows.delete(id);
   }
 
-  readonly recipients: FrozenRecipient[] = [];
+  recipients: (FrozenRecipient & { campaignId: string })[] = [];
 
   async lockDraft(_storeId: string, id: string) {
     const row = this.rows.get(id);
     return row?.status === 'draft' ? row : undefined;
   }
 
-  async insertRecipients(_storeId: string, _campaignId: string, recipients: FrozenRecipient[]) {
-    this.recipients.push(...recipients);
+  async insertRecipients(_storeId: string, campaignId: string, recipients: FrozenRecipient[]) {
+    this.recipients.push(...recipients.map((recipient) => ({ ...recipient, campaignId })));
+  }
+
+  async lockScheduled(_storeId: string, id: string) {
+    const row = this.rows.get(id);
+    return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
+  }
+
+  async changeStatus(
+    _storeId: string,
+    id: string,
+    from: CampaignStatus,
+    change: CampaignStatusChange,
+  ) {
+    const row = this.rows.get(id);
+    if (row?.status !== from) return undefined;
+    const changed = { ...row, ...change };
+    this.rows.set(id, changed);
+    return changed;
+  }
+
+  async removeRecipients(_storeId: string, campaignId: string) {
+    this.recipients = this.recipients.filter((recipient) => recipient.campaignId !== campaignId);
+  }
+
+  async cancelQueuedRecipients(_storeId: string, campaignId: string) {
+    for (const recipient of this.recipients)
+      if (recipient.campaignId === campaignId && recipient.status === 'queued')
+        Object.assign(recipient, { status: 'cancelled' });
   }
 
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
@@ -115,6 +144,8 @@ describe('CampaignsService', () => {
   let onlyOwnersAndAdminsApprove: boolean;
   let balance: number;
   let reserved: number[];
+  let reservations: Map<string, { entryId: string; quantity: number; released: boolean }>;
+  let clockNow: Date;
   let events: DaklyEvent[];
 
   beforeEach(() => {
@@ -124,6 +155,8 @@ describe('CampaignsService', () => {
     onlyOwnersAndAdminsApprove = true;
     balance = 1000;
     reserved = [];
+    reservations = new Map();
+    clockNow = now;
     events = [];
     const segments = {
       contactIds: async (
@@ -144,12 +177,36 @@ describe('CampaignsService', () => {
           decision: decisions.get(contactId) ?? { action: 'send' },
         })),
     };
+    // Keys behave as in the ledger: a repeated key replays and a reservation releases once.
     const wallets = {
-      reserve: async (_storeId: string, input: { quantity: number }) => {
+      reserve: async (_storeId: string, input: { quantity: number; idempotencyKey: string }) => {
+        const replay = reservations.get(input.idempotencyKey);
+        if (replay) return { entryId: replay.entryId, balanceQuantity: balance };
         if (input.quantity > balance)
           throw new AppError('WALLET_BALANCE_TOO_LOW', { status: 409, message: 'Too low' });
         reserved.push(input.quantity);
-        return { entryId: randomUUID(), balanceQuantity: balance - input.quantity };
+        balance -= input.quantity;
+        const entryId = randomUUID();
+        reservations.set(input.idempotencyKey, {
+          entryId,
+          quantity: input.quantity,
+          released: false,
+        });
+        return { entryId, balanceQuantity: balance };
+      },
+      findByIdempotencyKey: async (_storeId: string, key: string) => {
+        const reservation = reservations.get(key);
+        return reservation && { entryId: reservation.entryId, balanceQuantity: balance };
+      },
+      release: async (_storeId: string, input: { reservationId: string }) => {
+        const reservation = [...reservations.values()].find(
+          (entry) => entry.entryId === input.reservationId,
+        );
+        if (!reservation || reservation.released)
+          throw new AppError('WALLET_RESERVATION_SETTLED', { status: 409, message: 'Settled' });
+        reservation.released = true;
+        balance += reservation.quantity;
+        return { entryId: randomUUID(), balanceQuantity: balance };
       },
     };
     const stores = { sendingSettings: async () => ({ onlyOwnersAndAdminsApprove }) };
@@ -162,7 +219,7 @@ describe('CampaignsService', () => {
       new TeamService(undefined as never),
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
-      { now: () => now } as Clock,
+      { now: () => clockNow } as Clock,
     );
   });
 
@@ -365,4 +422,113 @@ describe('CampaignsService', () => {
     await expect(approve(campaign.id)).rejects.toMatchObject({ code: 'CAMPAIGN_NOT_DRAFT' });
     expect(reserved).toHaveLength(1);
   });
+
+  // Approved for a send ten minutes from now, then the clock moves to `beforeSend` minutes ahead.
+  async function scheduled(beforeSend: number) {
+    const { campaign, ids } = audienceDraft(3);
+    campaign.scheduledFor = new Date(now.getTime() + 10 * 60_000);
+    decisions.set(ids[2]!, { action: 'skip', reason: 'no_consent' });
+    await approve(campaign.id);
+    clockNow = new Date(campaign.scheduledFor.getTime() - beforeSend * 60_000);
+    return campaign;
+  }
+
+  it.each(['unschedule', 'cancel'] as const)(
+    'refuses to %s 4 minutes before the send and keeps the credits reserved',
+    async (change) => {
+      const campaign = await scheduled(4);
+
+      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_CHANGE_TOO_LATE',
+        status: 409,
+      });
+      expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
+      expect(balance).toBe(998);
+      expect(repository.recipients).toHaveLength(2);
+    },
+  );
+
+  it.each([6, 5])(
+    'cancels %i minutes before the send, cancels the queued recipients and releases the credits',
+    async (beforeSend) => {
+      const campaign = await scheduled(beforeSend);
+
+      expect((await service.cancel(STORE_ID, campaign.id, actor)).status).toBe('cancelled');
+      expect(balance).toBe(1000);
+      expect(repository.recipients.map((recipient) => recipient.status)).toEqual([
+        'cancelled',
+        'skipped',
+      ]);
+    },
+  );
+
+  it('returns a scheduled campaign to draft and approves it again with a new reservation', async () => {
+    const campaign = await scheduled(6);
+
+    const draft = await service.unschedule(STORE_ID, campaign.id, actor);
+
+    expect(draft.status).toBe('draft');
+    expect(balance).toBe(1000);
+    expect(repository.recipients).toEqual([]);
+    expect(repository.rows.get(campaign.id)).toMatchObject({
+      approvedAt: null,
+      approvedByUserId: null,
+      recipientsCount: 0,
+      skippedCount: 0,
+    });
+
+    expect((await approve(campaign.id)).status).toBe('scheduled');
+    expect(reserved).toEqual([2, 2]);
+    expect(balance).toBe(998);
+    expect(repository.recipients).toHaveLength(2);
+  });
+
+  it.each(['unschedule', 'cancel'] as const)(
+    'refuses to %s a campaign that is not scheduled',
+    async (change) => {
+      const campaign = repository.add('sending');
+
+      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_SCHEDULED',
+      });
+      await expect(service[change](STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_FOUND',
+      });
+      expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+    },
+  );
+
+  it('pauses a sending campaign by hand and resumes it', async () => {
+    const campaign = repository.add('sending');
+
+    expect((await service.pause(STORE_ID, campaign.id, actor)).status).toBe('paused');
+    expect(repository.rows.get(campaign.id)).toMatchObject({ pauseReason: 'manual' });
+
+    expect((await service.resume(STORE_ID, campaign.id, actor)).status).toBe('sending');
+    expect(repository.rows.get(campaign.id)).toMatchObject({ pauseReason: null });
+  });
+
+  it.each(['draft', 'scheduled', 'paused', 'sent', 'cancelled'] as const)(
+    'refuses to pause a %s campaign',
+    async (status) => {
+      const campaign = repository.add(status);
+
+      await expect(service.pause(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_SENDING',
+      });
+      expect(repository.rows.get(campaign.id)?.status).toBe(status);
+    },
+  );
+
+  it.each(['draft', 'scheduled', 'sending', 'sent', 'cancelled'] as const)(
+    'refuses to resume a %s campaign',
+    async (status) => {
+      const campaign = repository.add(status);
+
+      await expect(service.resume(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_PAUSED',
+      });
+      expect(repository.rows.get(campaign.id)?.status).toBe(status);
+    },
+  );
 });
