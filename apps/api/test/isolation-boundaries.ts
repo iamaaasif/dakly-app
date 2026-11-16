@@ -107,6 +107,11 @@ const groups = [
     boundary: 'public health/catalogue or one-use support handoff (no shop session)',
     routes: ['GET /health', 'GET /plans', 'POST /support/exchange'],
   },
+  {
+    evidence: 'links/links.int.spec.ts',
+    boundary: 'public tracked link and SMS opt-out page; the store comes from the link code',
+    routes: ['GET /l/:code', 'GET /l/s/:code', 'POST /l/s/:code'],
+  },
 ];
 export const isolationBoundaries = new Map(
   groups.flatMap(({ routes, ...reason }) => routes.map((route) => [route, reason] as const)),
