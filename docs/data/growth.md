@@ -1,6 +1,6 @@
 # Database growth
 
-How each high-volume table stays a manageable size as Dakly goes from a few beta shops to 10,000 stores. Decision [D31](../product/decisions.md). Indexes for each query are in [indexes-and-scale.md](indexes-and-scale.md); the jobs that do the work are in [jobs.md](jobs.md#run-maintenance).
+How each high-volume table stays a manageable size as Dakly goes from a few beta shops to 10,000 stores. Decisions [D31 and D39](../product/decisions.md). Indexes for each query are in [indexes-and-scale.md](indexes-and-scale.md); the jobs that do the work are in [jobs.md](jobs.md#run-maintenance).
 
 The approach is the same for every table: keep in Postgres only what a screen, a rule or a rebuild reads; turn old detail into daily rollups; move what must be kept but is rarely read to R2; and partition a table by month only where whole months expire together, so expiry is a `DROP TABLE` of one partition instead of millions of deletes.
 
@@ -36,6 +36,7 @@ Numbers per active store per day, averaged across stores. The busiest 5% of shop
 | `account_security_events`                          | 24 months                                                            | None                            | Owner-only `purge_account_security_events(1000)`; daily runner remains DB-7 | not applicable                                                     |
 | `audit_log`                                        | 24 months                                                            | Monthly on `created_at`         | Month exported to R2 as gzipped JSON lines, then dropped by the owner       | none; the export is the record                                     |
 | `tracked_link_visits`                              | 13 months (exact tap times for the 372-day attribution rebuild)      | Monthly on `occurred_at`        | Partition dropped by `drop_expired_partitions()`                            | `tracked_link_visit_days`: visits, unique visitors, first and last |
+| `store_daily_metrics`                              | 24 months (ANA-R8, D39)                                              | None                            | Deleted in batches                                                          | is the rollup                                                      |
 | `tracked_link_visit_days`                          | While its link exists                                                | None (one row per link per day) | Deleted with the link                                                       | is the rollup                                                      |
 | `usage_events`                                     | 13 months                                                            | None; trigger below             | Deleted in batches after the invoice period closes                          | Invoice lines and `store_daily_metrics`                            |
 | `campaign_recipients`                              | 372 days after the campaign finishes (attribution rebuild, ADR 0008) | None; trigger below             | Deleted in batches                                                          | Campaign counters and `store_daily_metrics`                        |
@@ -44,6 +45,7 @@ Numbers per active store per day, averaged across stores. The busiest 5% of shop
 | `sms_messages`                                     | 13 months                                                            | None                            | Deleted in batches                                                          | Delivery and cost in `store_daily_metrics`                         |
 | `assistant_messages`                               | 90 days (AI-R6)                                                      | None                            | Deleted in batches                                                          | none needed                                                        |
 | `knowledge_chunks`                                 | While the knowledge item exists                                      | None                            | Cascade with the item                                                       | not applicable                                                     |
+| `staff_audit_log`                                  | At least 7 years (ADM-R11, D39)                                      | None                            | Kept; no purge is implemented                                               | not applicable                                                     |
 | `staff_audit_log_days`, `gateway_settlement_lines` | 7 years (ADM-R11, financial records)                                 | None                            | Deleted by the owner after 7 years                                          | not applicable                                                     |
 | Orders, ledgers, invoices                          | Life of the store (ACC-12)                                           | None                            | Store purge                                                                 | `store_daily_metrics`                                              |
 
@@ -56,6 +58,10 @@ Rules that come with this plan:
 - Raw rows are dropped only behind a recorded rollup. `maintenance_watermarks` holds the last Asia/Dhaka day each rollup has finished for every store. The job rolls up every day after the watermark, not only yesterday. It pages through `maintenance_store_ids(after, limit)` for all retained stores, including suspended and closing stores, and moves the watermark only after the complete scan finishes that day. A failed store or incomplete page leaves the watermark unchanged; a retry restarts the day from a null cursor. `drop_expired_partitions()` skips any month whose last day is past the watermark.
 - The app role can drop expired AI run and link visit months, never an audit month. Audit months are dropped by the archive step running as the owner, after the R2 object is written and its row count checked.
 - Purges of unpartitioned tables delete in batches of 5,000 rows by primary key, so no single statement holds locks for long or bloats the table at once.
+
+## R2 archives
+
+Archived `audit_log` months and archived messages are kept in R2 for the life of the store (D39). When a store is purged, 30 days after it closes, its archive objects are deleted with the rest of its data. A customer's deletion request also reaches the archive: that customer's archived messages are removed or anonymised, as they are in Postgres.
 
 ## Link visits without personal data
 

@@ -186,7 +186,7 @@ The 3-year column is where Dakly is designed to grow, not what release 1 must ru
 - Secrets in a managed secrets store, rotated; no secrets in code or logs.
 - Personal data minimised in logs and analytics; phone numbers hashed where only matching is needed.
 - Data export: an Owner can export all store data. Deletion: closing a store deletes its data within 30 days (backups age out within 35 days); a customer's deletion request removes their personal data and anonymises their messages.
-- Retention: messages 12 months from sending, then archived to R2 (D31), khata photos 30 days, raw webhook payloads 14 days (pending review: 7 days, and the payload is cleared once processed), audit log 24 months, then archived to R2 (D31), unless law requires longer.
+- Retention (D31, D39): messages 12 months from sending, then archived to R2; khata photos 30 days; raw webhook payloads 7 days, each cleared once its event is processed; the shop audit log 24 months, then archived to R2; the staff audit log at least 7 years; longer where law requires. R2 archives are kept for the life of the store and deleted when the store is purged.
 
 ### Integrations and webhooks
 

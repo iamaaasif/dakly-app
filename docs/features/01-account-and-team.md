@@ -687,7 +687,7 @@ Account `details` accepts only optional `sessionId` and `recoveryId` UUIDs. IP a
 
 `AccountSecurityEventsService.list(userId, { limit, before? })` reads only that user's events, newest UUID v7 first. `limit` is 1–100 and `before` is an exclusive UUID cursor; both come from the history query contract. A future route must derive `userId` from its verified session, never a query or body. No store or membership is required. Import each audit module to use its exported service; repositories remain private to their feature.
 
-Account events are kept for two years. Their user and staff foreign keys block deletion while history remains. The owner-only bounded purge function is implemented; DB-7 will schedule it daily, as described in [jobs](../data/jobs.md#run-maintenance). Account deletion and staff deletion must honor this retention rather than cascade away history.
+Account events are kept for 24 months. Their user and staff foreign keys block deletion while history remains. The owner-only bounded purge function is implemented; DB-7 will schedule it daily, as described in [jobs](../data/jobs.md#run-maintenance). Account deletion and staff deletion must honor this retention rather than cascade away history.
 
 ## Passwords (ACC-10)
 
