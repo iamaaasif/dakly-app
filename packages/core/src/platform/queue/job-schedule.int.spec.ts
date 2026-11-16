@@ -107,7 +107,7 @@ describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queue
 
   // Transactional runs five jobs at once, so its next tick starts beside the active run.
   const overlapping = queueName === QUEUES.transactional ? 2 : 1;
-  it(`runs at most ${overlapping} ticks at once on one worker and waits for them at shutdown`, async () => {
+  it(`runs ${overlapping} tick(s) at once on one worker and waits for them at shutdown`, async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => {
       finish = resolve;
