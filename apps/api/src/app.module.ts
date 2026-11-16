@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AdminModule } from '@dakly/core/admin/admin.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { CustomersModule } from '@dakly/core/customers/customers.module';
+import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
@@ -19,6 +20,7 @@ import { HealthController } from './health.controller';
     SessionsModule,
     CustomersModule,
     StoresModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
 })

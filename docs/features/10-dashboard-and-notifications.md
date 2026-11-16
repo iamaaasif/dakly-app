@@ -242,9 +242,10 @@ Dashboard: one API call returns the cards for the period. Numbers come from the 
 
 Notifications
 
-1. A notification row has a dedupe key unique per store, so a rule that fires every hour creates one card until it is done.
-2. Delivery: in the app (Server-Sent Events from the API, polling as fallback), web push for staff who allow it, and SMS, WhatsApp or email only for billing, credential and security alerts (email is allowed for these, D20).
-3. One row per user who should see it (pending review).
+1. A rule calls `NotificationsService.notify(storeId, { type, category, dedupeKey, recipientPermission, title, body?, actionUrl?, priority? })`. The recipients are the active members whose role grants `recipientPermission` (for example `chats.view`), built-in or custom, read through `TeamService`. In one store transaction it writes one row per recipient, unique on store, user and dedupe key, so a rule that fires every hour creates one card per person until it is done, and it publishes one `notification.created` event per row it created.
+2. Routes, for the signed-in member's own rows in the session's store only (`@AnyMember()`, since every role gets notifications): `GET /notifications` (newest first, `cursor`, `limit`, `category`, `status`), `POST /notifications/:notificationId/seen`, `/done` and `/snooze` (`{ until }`, a future UTC time). Each answers 204; another member's row is 404 like a missing one.
+3. Status moves: seen only moves a new card, so opening a snoozed or done card changes nothing; done is final; snoozing a done card is `NOTIFICATION_DONE` (409) and a past time is `SNOOZE_NOT_IN_FUTURE` (400).
+4. Delivery: in the app over `GET /events/stream` (Server-Sent Events, see [architecture](../architecture.md#real-time)), with polling as the web app's fallback; web push for staff who allow it (HOME-5); and SMS, WhatsApp or email only for billing, credential and security alerts (email is allowed for these, D20).
 
 Ask Dakly AI
 

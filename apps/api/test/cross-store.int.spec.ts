@@ -5,6 +5,9 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
+import { NotificationsService } from '@dakly/core/notifications/notifications.service';
+import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
@@ -352,6 +355,98 @@ fixture('POST /support/customers', async () => {
   expect(other.statusCode, other.body).toBe(201);
   expect((await f.row('customers', other.json().id)).store_id).toBe(b.id);
   expect(await f.row('customers', own.json().id)).toEqual(before);
+});
+async function notification(shop: Shop) {
+  await app.get(NotificationsService).notify(shop.id, {
+    type: 'conversation.handed_over',
+    category: 'fix_now',
+    dedupeKey: randomUUID(),
+    recipientPermission: 'chats.view',
+    title: 'একটি চ্যাট দেখুন',
+  });
+  const result = await f.admin.pool.query(
+    'select id from notifications where store_id=$1 and user_id=$2 order by id desc limit 1',
+    [shop.id, shop.owner.id],
+  );
+  return result.rows[0].id as string;
+}
+fixture('GET /notifications', async () => {
+  const { a, b } = await pair(),
+    aId = await notification(a),
+    bId = await notification(b);
+  for (const [shop, own, foreign] of [
+    [a, aId, bId],
+    [b, bId, aId],
+  ] as const) {
+    const ids = (await success(shop, 'GET', '/notifications', 200))
+      .json()
+      .items.map((item: { id: string }) => item.id);
+    expect(ids).toEqual([own]);
+    expect(ids).not.toContain(foreign);
+  }
+});
+for (const [action, status] of [
+  ['seen', 'seen'],
+  ['done', 'done'],
+  ['snooze', 'snoozed'],
+] as const)
+  fixture(`POST /notifications/:notificationId/${action}`, async () => {
+    const positive = await f.shop(),
+      { a, b } = await pair();
+    const positiveId = await notification(positive),
+      foreignId = await notification(a);
+    const payload = action === 'snooze' ? { until: new Date(Date.now() + 3_600_000) } : {};
+    await success(positive, 'POST', `/notifications/${positiveId}/${action}`, 204, payload);
+    expect(await f.row('notifications', positiveId)).toMatchObject({ status });
+    const before = await f.row('notifications', foreignId);
+    await hidden(
+      b,
+      'POST',
+      (id) => `/notifications/${id}/${action}`,
+      foreignId,
+      () => payload,
+    );
+    expect(await f.row('notifications', foreignId)).toEqual(before);
+  });
+// Nest's SSE stream needs a real socket, which app.inject does not provide.
+fixture('GET /events/stream', async () => {
+  const { a, b } = await pair();
+  await app.listen(0, '127.0.0.1');
+  const url = await app.getUrl();
+  const streams = await Promise.all(
+    [a, b].map(async (shop) => {
+      const abort = new AbortController();
+      const response = await fetch(`${url}/events/stream`, {
+        headers: { cookie: shop.owner.cookie },
+        signal: abort.signal,
+      });
+      expect(response.status).toBe(200);
+      const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+      const read = { text: '' };
+      void (async () => {
+        for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read())
+          read.text += chunk.value;
+      })().catch(() => undefined);
+      return { shop, abort, read };
+    }),
+  );
+  for (const shop of [a, b])
+    await vi.waitFor(async () => {
+      const reply = await app
+        .get(ValkeyClient)
+        .connection.pubsub('NUMSUB', `notifications:${shop.id}`);
+      expect((reply as [string, number])[1]).toBe(1);
+    });
+  const ids = new Map<string, string>();
+  for (const shop of [a, b]) {
+    ids.set(shop.id, await notification(shop));
+    await app.get(NotificationStreamService).announce(shop.id, ids.get(shop.id)!, shop.owner.id);
+  }
+  for (const { shop, read } of streams)
+    await vi.waitFor(() => expect(read.text).toContain(`id: ${ids.get(shop.id)}`));
+  expect(streams[0]!.read.text).not.toContain(ids.get(b.id));
+  expect(streams[1]!.read.text).not.toContain(ids.get(a.id));
+  for (const { abort } of streams) abort.abort();
 });
 fixture('GET /account-recovery-history', async () => {
   const { a, b } = await pair(),

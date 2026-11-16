@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, type SQL, sql } from 'drizzle-orm';
 
 import type { UserStore, UserStorePageQuery } from '@dakly/contracts/sessions';
 import type { Database } from '@dakly/db/client';
@@ -7,6 +7,7 @@ import { memberships, roles } from '@dakly/db/schema/team';
 
 import { AccountDatabase } from '../platform/database/account-database';
 import { DATABASE } from '../platform/database/database.tokens';
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 @Injectable()
@@ -43,30 +44,32 @@ export class TeamRepository {
 
   async findAccess(storeId: string, userId: string) {
     const rows = await this.tenant.forStore(storeId, (tx) =>
-      tx
-        .select({
-          builtInRole: memberships.builtInRole,
-          roleId: roles.id,
-          areas: roles.permissions,
-          seeFullPhone: roles.canSeeFullPhone,
-          exportLists: roles.canExportLists,
-          refund: roles.canRefund,
-        })
-        .from(memberships)
-        .leftJoin(
-          roles,
-          and(eq(roles.storeId, memberships.storeId), eq(roles.id, memberships.roleId)),
-        )
-        .where(
-          and(
-            eq(memberships.storeId, storeId),
-            eq(memberships.userId, userId),
-            eq(memberships.status, 'active'),
-          ),
-        )
-        .limit(1),
+      this.selectActiveAccess(tx, storeId, eq(memberships.userId, userId)).limit(1),
     );
     return rows[0];
+  }
+
+  findActiveAccess(storeId: string) {
+    return this.tenant.forStore(storeId, (tx) => this.selectActiveAccess(tx, storeId));
+  }
+
+  private selectActiveAccess(tx: Transaction, storeId: string, member?: SQL) {
+    return tx
+      .select({
+        userId: memberships.userId,
+        builtInRole: memberships.builtInRole,
+        roleId: roles.id,
+        areas: roles.permissions,
+        seeFullPhone: roles.canSeeFullPhone,
+        exportLists: roles.canExportLists,
+        refund: roles.canRefund,
+      })
+      .from(memberships)
+      .leftJoin(
+        roles,
+        and(eq(roles.storeId, memberships.storeId), eq(roles.id, memberships.roleId)),
+      )
+      .where(and(eq(memberships.storeId, storeId), eq(memberships.status, 'active'), member));
   }
 
   async accountOwnerContacts(userId: string) {
