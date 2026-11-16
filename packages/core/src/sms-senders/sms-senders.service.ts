@@ -11,6 +11,7 @@ import type {
 } from '@dakly/contracts/sms-senders';
 
 import { UsersService } from '../auth/users.service';
+import { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
 import { SmsService } from '../sms/sms.service';
 import { smsSenderError } from './sms-senders.errors';
@@ -29,6 +30,7 @@ export class SmsSendersService {
     @Inject(SmsService) private readonly smsService: SmsService,
     @Inject(UsersService) private readonly usersService: UsersService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(RateLimiter) private readonly limiter: RateLimiter,
   ) {}
 
   async request(
@@ -77,6 +79,9 @@ export class SmsSendersService {
     const member = await this.usersService.profile(userId);
     if (!member.phone || !member.isPhoneVerified)
       throw smsSenderError('SMS_SENDER_TEST_PHONE_REQUIRED');
+    // Each test is a real SMS that Dakly pays for.
+    if (!(await this.limiter.consume(`sms-sender-test:${storeId}`, 5, 3600)).allowed)
+      throw smsSenderError('SMS_SENDER_TEST_RATE_LIMITED');
     await this.smsService.send({
       to: member.phone,
       text: `This is a test SMS from ${sender.senderName} on Dakly.`,

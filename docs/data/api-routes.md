@@ -225,8 +225,8 @@ On the admin hostname, staff session, passkey or TOTP required. Each route names
 | `GET /admin/stores/:storeId/*` (store data)                                        | support, with an approved support grant |
 | `POST /admin/stores/:storeId/support-grants`                                       | support                                 |
 | `POST /admin/stores/:storeId/suspend`, `POST /admin/stores/:storeId/restore`       | ops                                     |
-| `GET /admin/sms-sender-ids` (`open_sms_sender_ids`)                                | super_admin, support, trust_safety      |
-| `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve`, `.../reject`  | super_admin, support, trust_safety      |
+| `GET /admin/sms-sender-ids` (`open_sms_sender_ids`)                                | super_admin, ops                        |
+| `POST /admin/stores/:storeId/sms-sender-ids/:smsSenderIdId/approve`, `.../reject`  | super_admin, ops                        |
 | `GET /admin/plans`, `PUT /admin/plans/:planCode`                                   | finance                                 |
 | `GET /admin/coupons`, `POST /admin/coupons`, `PATCH /admin/coupons/:couponId`      | finance                                 |
 | `GET /admin/settings`, `PUT /admin/settings/:key`                                  | super_admin                             |

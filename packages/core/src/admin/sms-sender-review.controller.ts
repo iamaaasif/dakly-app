@@ -27,10 +27,10 @@ import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { SmsSenderReviewService } from './sms-sender-review.service';
 import type { StaffRequest } from './staff.guard';
-import { supportRoles } from './support-roles';
+import { smsSenderReviewRoles } from './support-roles';
 
 @Controller('admin')
-@StaffAccess(true, supportRoles)
+@StaffAccess(true, smsSenderReviewRoles)
 export class SmsSenderReviewController {
   constructor(
     @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,

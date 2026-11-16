@@ -14,6 +14,7 @@ const SMS_SENDER_ERRORS = {
     status: 409,
     message: 'A test SMS can only be sent from an approved sender name',
   },
+  SMS_SENDER_TEST_RATE_LIMITED: { status: 429, message: 'Wait before sending another test SMS' },
   SMS_SENDER_TEST_PHONE_REQUIRED: {
     status: 409,
     message: 'Verify your phone number to receive a test SMS',

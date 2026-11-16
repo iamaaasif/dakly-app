@@ -28,7 +28,7 @@ let app: NestFastifyApplication;
 let key: Awaited<ReturnType<typeof generateKeyPair>>['privateKey'];
 const approval = { reason: 'Operator approved the masking name' };
 
-async function staff(role: 'support' | 'finance' = 'support') {
+async function staff(role: 'ops' | 'super_admin' | 'support' = 'ops') {
   const staffId = randomUUID(),
     email = `${staffId}@example.test`;
   staffIds.push(staffId);
@@ -169,6 +169,28 @@ describe('Staff review of SMS sender names over Fastify and Postgres', () => {
     ]);
   });
 
+  it('lets a super admin decide as well as ops', async () => {
+    const { storeId, id } = await requestedSender();
+
+    const response = await decide(
+      await staff('super_admin'),
+      `/admin/stores/${storeId}/sms-sender-ids/${id}/approve`,
+    );
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(await recorded(id)).toMatchObject({ status: 'approved', staff_audits: 1 });
+  });
+
+  it('refuses the queue to support staff', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/admin/sms-sender-ids',
+      headers: await staff('support'),
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
   it('rejects with a reason the shop can read', async () => {
     const headers = await staff();
     const { storeId, id } = await requestedSender();
@@ -211,7 +233,7 @@ describe('Staff review of SMS sender names over Fastify and Postgres', () => {
     expect(await recorded(id)).toMatchObject({ status: 'requested', staff_audits: 0 });
   });
 
-  it('changes nothing for another store, a short reason or a role without review access', async () => {
+  it('changes nothing for another store, a short reason or support staff', async () => {
     const headers = await staff();
     const { storeId, id } = await requestedSender();
     const other = await requestedSender();
@@ -222,13 +244,13 @@ describe('Staff review of SMS sender names over Fastify and Postgres', () => {
     const short = await decide(headers, `/admin/stores/${storeId}/sms-sender-ids/${id}/approve`, {
       reason: 'ok',
     });
-    const finance = await decide(
-      await staff('finance'),
+    const support = await decide(
+      await staff('support'),
       `/admin/stores/${storeId}/sms-sender-ids/${id}/approve`,
     );
 
     expect(missing.json().error.code).toBe('SMS_SENDER_ID_NOT_FOUND');
-    expect([short.statusCode, finance.statusCode]).toEqual([400, 403]);
+    expect([short.statusCode, support.statusCode]).toEqual([400, 403]);
     expect(await recorded(id)).toEqual({
       status: 'requested',
       rejection_reason: null,

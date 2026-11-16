@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { SmsMessage } from '@dakly/providers/sms/sms-driver';
 
 import type { UsersService } from '../auth/users.service';
+import type { RateLimiter } from '../platform/cache/rate-limiter';
 import type { Clock } from '../platform/clock';
 import type { SmsService } from '../sms/sms.service';
 import type { SmsSender, SmsSenderDecision, SmsSendersRepository } from './sms-senders.repository';
@@ -63,12 +64,21 @@ function setup(member = { phone: '01712345678' as string | null, isPhoneVerified
       return { providerMessageId: 'fake-1' };
     },
   };
+  // Counts per key like Valkey's INCR within one window.
+  const counts = new Map<string, number>();
+  const limiter = {
+    consume: async (key: string, limit: number) => {
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+      return { allowed: counts.get(key)! <= limit, retryAfter: 0 };
+    },
+  };
   const users = { profile: async () => ({ id: userId, name: 'নুসরাত', ...member }) };
   const service = new SmsSendersService(
     repository as unknown as SmsSendersRepository,
     sms as unknown as SmsService,
     users as unknown as UsersService,
     { now: () => now } as Clock,
+    limiter as unknown as RateLimiter,
   );
   const request = (store = storeId) =>
     service.request(store, { senderName: 'Nusrat Fab' }, { kind: 'user', userId });
@@ -144,6 +154,19 @@ describe('SmsSendersService', () => {
         sender: 'Nusrat Fab',
       },
     ]);
+  });
+
+  it('allows five test SMS per store an hour, then answers rate limited', async () => {
+    const { service, sent, request, decide } = setup();
+    const { id } = await request();
+    await decide(id, 'approved');
+    for (let count = 0; count < 5; count += 1) await service.sendTest(storeId, id, userId);
+
+    await expect(service.sendTest(storeId, id, userId)).rejects.toMatchObject({
+      code: 'SMS_SENDER_TEST_RATE_LIMITED',
+      status: 429,
+    });
+    expect(sent).toHaveLength(5);
   });
 
   it('refuses a test for a member without a verified phone', async () => {

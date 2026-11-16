@@ -33,7 +33,7 @@ export class SmsSenderReviewService {
     if (!(await this.repository.targets(storeId))[0]) throw supportError('STORE_NOT_FOUND');
     const actor = { kind: 'staff', staffUserId: staff.id } as const;
     return this.transaction.run(storeId, async () => {
-      await this.support.authorizeStoreReview(storeId, staff);
+      await this.support.authorizeSmsSenderReview(storeId, staff);
       await this.audit.record(storeId, {
         id: decision.smsSenderIdId,
         actor,
