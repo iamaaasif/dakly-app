@@ -54,19 +54,32 @@ function show() {
 
 const page = (items: NotificationResponse[]) => Response.json({ items, nextCursor: null });
 
+// jsdom has no EventSource; this one lets a test announce a message or drop the stream.
+class FakeEventSource extends EventTarget {
+  static readonly CLOSED = 2;
+  static opened: FakeEventSource[] = [];
+  readyState = 0;
+  constructor(readonly url: string) {
+    super();
+    FakeEventSource.opened.push(this);
+  }
+
+  close() {
+    this.readyState = FakeEventSource.CLOSED;
+  }
+}
+const stream = () => FakeEventSource.opened.at(-1)!;
+
 beforeEach(() => {
+  FakeEventSource.opened = [];
+  vi.stubGlobal('EventSource', FakeEventSource);
   navigation.search = 'notifications=all';
   navigation.replaced = [];
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.open = false;
-  };
 });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('Notification bell and list', () => {
@@ -98,7 +111,9 @@ describe('Notification bell and list', () => {
     serve(() => page([]));
     show();
     expect(await screen.findByText(/Nothing here yet/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open notifications, 0 unread' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Open notifications, 0 unread', hidden: true }),
+    ).toBeTruthy();
   });
 
   it('shows the unread count and the cards of the tab in the URL', async () => {
@@ -110,13 +125,13 @@ describe('Notification bell and list', () => {
     )!.parentElement!;
     expect(within(card).getByText('New')).toBeTruthy();
     expect(within(card).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe('/settings');
-    expect(screen.getByRole('button', { name: 'Open notifications, 1 unread' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Fix now' }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    expect(
+      screen.getByRole('button', { name: 'Open notifications, 1 unread', hidden: true }),
+    ).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Fix now' }).getAttribute('aria-selected')).toBe('true');
     const list = requests.find(({ url }) => !url.searchParams.get('status'))!;
     expect(list.url.searchParams.get('category')).toBe('fix_now');
-    await userEvent.click(screen.getByRole('button', { name: 'Billing' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Billing' }));
     expect(navigation.replaced).toEqual(['/dashboard?notifications=billing']);
   });
 
@@ -132,9 +147,9 @@ describe('Notification bell and list', () => {
       return page([{ ...reconnect, status }]);
     });
     show();
-    await screen.findByRole('button', { name: 'Open notifications, 1 unread' });
+    await screen.findByRole('button', { name: 'Open notifications, 1 unread', hidden: true });
     await userEvent.click(screen.getByRole('button', { name: 'Done' }));
-    await screen.findByRole('button', { name: 'Open notifications, 0 unread' });
+    await screen.findByRole('button', { name: 'Open notifications, 0 unread', hidden: true });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Done' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Mark seen' })).toBeNull();
     expect(screen.getByText('Done', { selector: 'span' })).toBeTruthy();
@@ -191,5 +206,53 @@ describe('Notification bell and list', () => {
       </QueryClientProvider>,
     );
     expect(screen.queryByRole('button', { name: /Open notifications/ })).toBeNull();
+  });
+});
+
+describe('Live notification updates', () => {
+  const unreadRequests = (requests: { url: URL }[]) =>
+    requests.filter(({ url }) => url.searchParams.get('status') === 'new').length;
+
+  it('shows a card the stream announces without a reload', async () => {
+    let isCreated = false;
+    serve(() => page(isCreated ? [reconnect] : []));
+    show();
+    await screen.findByRole('button', { name: 'Open notifications, 0 unread', hidden: true });
+    expect(FakeEventSource.opened.map(({ url }) => url)).toEqual(['/api/events/stream']);
+    isCreated = true;
+    stream().dispatchEvent(new MessageEvent('notification', { data: JSON.stringify(reconnect) }));
+    await screen.findByRole('button', { name: 'Open notifications, 1 unread', hidden: true });
+    expect(await screen.findByText('Reconnect your Facebook page')).toBeTruthy();
+  });
+
+  it('polls every 60 seconds while the stream is down and stops once it is back', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const requests = serve(() => page([]));
+    show();
+    await screen.findByRole('button', { name: 'Open notifications, 0 unread', hidden: true });
+    vi.advanceTimersByTime(60_000);
+    expect(unreadRequests(requests)).toBe(1);
+    stream().dispatchEvent(new Event('error'));
+    vi.advanceTimersByTime(60_000);
+    await waitFor(() => expect(unreadRequests(requests)).toBe(2));
+    vi.advanceTimersByTime(60_000);
+    await waitFor(() => expect(unreadRequests(requests)).toBe(3));
+    stream().dispatchEvent(new Event('open'));
+    await waitFor(() => expect(unreadRequests(requests)).toBe(4));
+    vi.advanceTimersByTime(120_000);
+    expect(unreadRequests(requests)).toBe(4);
+    expect(FakeEventSource.opened).toHaveLength(1);
+  });
+
+  it('opens the stream again when the browser stops retrying it', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    serve(() => page([]));
+    show();
+    await screen.findByRole('button', { name: 'Open notifications, 0 unread', hidden: true });
+    stream().readyState = FakeEventSource.CLOSED;
+    stream().dispatchEvent(new Event('error'));
+    vi.advanceTimersByTime(60_000);
+    expect(FakeEventSource.opened).toHaveLength(2);
+    expect(FakeEventSource.opened[0]!.readyState).toBe(FakeEventSource.CLOSED);
   });
 });

@@ -44,13 +44,6 @@ Branch: `docs/rev-7-event-catalogue`
 
 ### Group 2: notifications and usage (M2)
 
-### HOME-2 · Web: notification bell and list
-
-Branch: `feat/home-2-notification-bell`
-
-- Scope: bell with unread count in the app shell, list sheet with categories from feature 10, mark seen and done, snooze. One `useEventStream` hook that opens the SSE stream once and updates the React Query cache; polling every 60 seconds only when the stream fails.
-- Tests: component tests for empty, loading, error and data states; Playwright: a notification created through the API appears in the open page without reload.
-
 ### PAY-1 · Usage service
 
 Branch: `feat/pay-1-usage-service`
