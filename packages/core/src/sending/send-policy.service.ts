@@ -53,7 +53,7 @@ export class SendPolicyService {
 
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
     this.requireTransactionForMarketing(request.category);
-    const reason = await this.recheck(storeId, request);
+    const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
 
@@ -66,9 +66,21 @@ export class SendPolicyService {
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
-  // Checks 1 to 4 alone. A workflow runs them right before resending a message whose first try had
-  // an unknown outcome; quiet hours and the cap are not checked again, as that message counts.
-  async recheck(storeId: string, request: SendRequest): Promise<SkipReason | undefined> {
+  // Checks 1 to 5 without the cap. A workflow runs them right before resending a message whose
+  // first try had an unknown outcome: the cap already counts that message.
+  async recheck(storeId: string, request: SendRequest): Promise<SendDecision> {
+    const reason = await this.recipientReason(storeId, request);
+    if (reason) return skip(reason);
+    if (request.category !== 'marketing') return SEND;
+    const settings = await this.stores.sendingSettings(storeId);
+    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
+    return quietUntil ? { action: 'defer', until: quietUntil } : SEND;
+  }
+
+  private async recipientReason(
+    storeId: string,
+    request: SendRequest,
+  ): Promise<SkipReason | undefined> {
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =
       contact && request.category === 'marketing'

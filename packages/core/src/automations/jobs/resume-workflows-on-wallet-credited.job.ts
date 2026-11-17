@@ -14,7 +14,10 @@ export class ResumeWorkflowsOnWalletCredited implements JobHandler {
   constructor(@Inject(AutomationsService) private readonly automations: AutomationsService) {}
 
   async handle(data: unknown) {
-    const { storeId, payload } = walletCreditedEventSchema.extend({ id: z.uuid() }).parse(data);
-    if (payload.wallet === 'sms_credits') await this.automations.resumeAfterTopUp(storeId);
+    const { storeId, occurredAt, payload } = walletCreditedEventSchema
+      .extend({ id: z.uuid() })
+      .parse(data);
+    if (payload.wallet === 'sms_credits')
+      await this.automations.resumeAfterTopUp(storeId, new Date(occurredAt), { kind: 'system' });
   }
 }

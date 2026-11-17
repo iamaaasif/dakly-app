@@ -37,6 +37,7 @@ export type Delivery = {
   contactId: string;
   step: SendStep;
   body: string;
+  destination: string | null;
   isFirstTry: boolean;
 };
 // What the gate's transaction decided: a renewal refused for a paused, stopped or archived
@@ -46,7 +47,7 @@ export type GateResult =
   | 'not_live'
   | 'no_credits'
   | { decision: SendDecision }
-  | { decision: { action: 'send' }; body: string };
+  | { decision: { action: 'send' }; body: string; destination: string | null };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -91,9 +92,9 @@ export function operationKey({ runId, stepKey }: RunClaim) {
   return `run:${runId}:${stepKey}`;
 }
 
-// A send due more than a day before it runs is skipped (feature 09): as no_credits when it was due
-// before the last top-up that ended a pause for balance, so it waited through that pause, else as
-// late after a manual pause.
+// A send due more than a day before it runs is skipped (feature 09): as no_credits when it was
+// already a day old at the top-up that ended a pause for balance, else as late, as after a manual
+// pause that held it longer.
 export function lateSend(
   step: SendStep,
   stepKey: string,
@@ -103,7 +104,12 @@ export function lateSend(
   const { wakeAt, balanceResumedAt } = facts;
   if (!wakeAt || now.getTime() - wakeAt.getTime() <= DAY_MS) return undefined;
   const row = { stepKey, kind: 'send', category: step.category } as const;
-  if (balanceResumedAt && balanceResumedAt > wakeAt)
+  // Held through a balance pause and already a day old when the top-up ended it.
+  if (
+    balanceResumedAt &&
+    balanceResumedAt > wakeAt &&
+    balanceResumedAt.getTime() - wakeAt.getTime() > DAY_MS
+  )
     return {
       ...ifNotReachable(step, now),
       step: { ...row, outcome: 'skipped', skipReason: 'no_credits' },
@@ -132,7 +138,7 @@ export function endWithUnknownOutcome(held: StepResult): StepResult {
       ...held.run,
       lastError: held.run.lastError ? `${held.run.lastError}. ${UNKNOWN_OUTCOME}` : UNKNOWN_OUTCOME,
     },
-    stepChange: { outcome: 'failed' },
+    stepChange: { outcome: 'unconfirmed' },
   };
 }
 

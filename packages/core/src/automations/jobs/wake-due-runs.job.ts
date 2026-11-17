@@ -21,7 +21,7 @@ export class WakeDueRunsJob implements JobHandler {
 
   async handle(data: unknown) {
     payload.parse(data);
-    await this.runs.wakeDueRuns(async (claims) => {
+    await this.runs.wakeDueRuns(await this.queue.getWaitingCount(), async (claims) => {
       await this.queue.addBulk(
         claims.map(({ storeId, ...claim }) => continueRunJob(storeId, claim)),
       );

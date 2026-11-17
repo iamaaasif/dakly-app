@@ -192,11 +192,12 @@ export class AutomationsService {
 
   // Inside the send step's transaction. Only the first run short of SMS credits pauses the
   // workflow; the owner gets a card now and an email from the automation.paused event.
-  async pauseForBalance(storeId: string, automationId: string): Promise<void> {
+  async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
     const now = this.clock.now();
     const paused = await this.repository.change(storeId, automationId, ['active'], {
       status: 'paused',
       pauseReason: 'balance',
+      balancePausedAt: now,
       updatedAt: now,
     });
     if (!paused) return;
@@ -228,20 +229,29 @@ export class AutomationsService {
     );
     for (const { id, email } of owners) {
       if (!email) continue;
+      const key = `automation-pause-email:${eventId}:${id}`;
       const claim = await this.valkey.connection.set(
-        `automation-pause-email:${eventId}:${id}`,
+        key,
         '1',
         'EX',
         PAUSE_EMAIL_CLAIM_SECONDS,
         'NX',
       );
-      if (claim) await this.email.send({ to: email, subject: title, text });
+      if (!claim) continue;
+      try {
+        await this.email.send({ to: email, subject: title, text });
+      } catch (error) {
+        // Free the claim so the job's retry sends this owner's email.
+        await this.valkey.connection.del(key);
+        throw error;
+      }
     }
   }
 
-  // A top-up ends every pause for a short balance (feature 09); a repeated event finds none.
-  async resumeAfterTopUp(storeId: string): Promise<void> {
-    await this.repository.resumeBalancePaused(storeId, this.clock.now());
+  // A top-up ends every pause for a short balance that began before it (feature 09); a repeated
+  // event finds none.
+  async resumeAfterTopUp(storeId: string, creditedAt: Date, _actor: Actor): Promise<void> {
+    await this.repository.resumeBalancePaused(storeId, creditedAt, this.clock.now());
   }
 
   private async move(

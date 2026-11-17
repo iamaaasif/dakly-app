@@ -42,8 +42,9 @@ export const automations = pgTable(
     triggerType: text('trigger_type').notNull(),
     status: text('status', { enum: automationStatuses }).notNull().default('draft'),
     pauseReason: text('pause_reason', { enum: automationPauseReasons }),
-    // When a top-up last ended a pause for a short SMS balance; a send due before then that waited
-    // past a day is skipped as no_credits rather than late.
+    // When a short SMS balance last paused it and a top-up last ended that pause. A top-up resumes
+    // only pauses that began before it, and a send held through the pause is judged at the resume.
+    balancePausedAt: timestamptz('balance_paused_at'),
     balanceResumedAt: timestamptz('balance_resumed_at'),
     // AUTO-R2: transactional first, then priority, when two automations hit one person on a day.
     isTransactional: boolean('is_transactional').notNull().default(false),
@@ -213,6 +214,8 @@ export const automationRunSteps = pgTable(
     category: text('category', { enum: sendCategories }),
     // The opt-out link a marketing SMS ends with, so a retry sends the same text.
     optOutCode: text('opt_out_code'),
+    // The phone the send was decided for; a retry refuses a contact whose phone changed since.
+    destination: text('destination'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),

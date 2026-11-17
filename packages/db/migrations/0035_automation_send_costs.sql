@@ -1,5 +1,6 @@
 ALTER TABLE "automation_run_steps" DROP CONSTRAINT "automation_run_steps_skip_reason";--> statement-breakpoint
 ALTER TABLE "campaign_recipients" DROP CONSTRAINT "campaign_recipients_skip_reason_value";--> statement-breakpoint
 ALTER TABLE "automation_run_steps" ADD COLUMN "opt_out_code" text;--> statement-breakpoint
+ALTER TABLE "automation_run_steps" ADD COLUMN "destination" text;--> statement-breakpoint
 ALTER TABLE "automation_run_steps" ADD CONSTRAINT "automation_run_steps_skip_reason" CHECK ("automation_run_steps"."skip_reason" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits'));--> statement-breakpoint
 ALTER TABLE "campaign_recipients" ADD CONSTRAINT "campaign_recipients_skip_reason_value" CHECK ("campaign_recipients"."skip_reason" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits'));

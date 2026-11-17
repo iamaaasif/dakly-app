@@ -355,7 +355,7 @@ describe('AutomationsService (Postgres)', () => {
     });
 
     await admin.pool.query(
-      "update automations set status='paused', pause_reason='balance' where id=$1",
+      "update automations set status='paused', pause_reason='balance', balance_paused_at=now() where id=$1",
       [automation.id],
     );
     for (const move of [
@@ -371,9 +371,13 @@ describe('AutomationsService (Postgres)', () => {
       pauseReason: 'balance',
     });
 
-    await service.resumeAfterTopUp(storeB);
+    const system = { kind: 'system' } as const;
+    // A top-up recorded before the pause began does not end it.
+    await service.resumeAfterTopUp(storeA, new Date(Date.now() - 60 * 60 * 1000), system);
     expect((await service.get(storeA, automation.id)).status).toBe('paused');
-    await service.resumeAfterTopUp(storeA);
+    await service.resumeAfterTopUp(storeB, new Date(), system);
+    expect((await service.get(storeA, automation.id)).status).toBe('paused');
+    await service.resumeAfterTopUp(storeA, new Date(), system);
     expect(await service.get(storeA, automation.id)).toMatchObject({
       status: 'active',
       pauseReason: null,

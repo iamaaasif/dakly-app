@@ -4,10 +4,12 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ClockModule } from '../platform/clock.module';
+import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
 import { AutomationsModule } from './automations.module';
@@ -18,6 +20,7 @@ import { AutomationsModule } from './automations.module';
     AutomationsModule,
     ClockModule,
     ContactsModule,
+    ErrorReportingModule,
     LinksModule,
     MessagingModule,
     SegmentsModule,
@@ -25,7 +28,7 @@ import { AutomationsModule } from './automations.module';
     StoresModule,
     WalletsModule,
   ],
-  providers: [AutomationRunsRepository, AutomationRunsService],
+  providers: [AutomationConditionsService, AutomationRunsRepository, AutomationRunsService],
   exports: [AutomationRunsService],
 })
 export class AutomationRunsModule {}

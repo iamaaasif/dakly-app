@@ -56,6 +56,7 @@ export type NewRunStep = {
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutCode?: string | null;
+  destination?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
 };
@@ -66,7 +67,7 @@ export type RunStepChange = {
   sentAt?: Date;
 };
 // A send handed to the provider whose outcome is not known yet.
-export type SendingStep = { sentAt: Date; optOutCode: string | null };
+export type SendingStep = { sentAt: Date; optOutCode: string | null; destination: string | null };
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -77,10 +78,10 @@ export class AutomationRunsRepository {
 
   // Across stores through the SECURITY DEFINER function; each claim then runs inside its store.
   // A raw query returns timestamps as text.
-  async claimDue(limit: number): Promise<DueRun[]> {
+  async claimDue(limit: number, perStore: number): Promise<DueRun[]> {
     const result = await this.global.execute<Omit<DueRun, 'claimedAt'> & { claimedAt: string }>(
       sql`select store_id as "storeId", automation_run_id as "runId", step_key as "stepKey",
-        claimed_at as "claimedAt" from due_automation_runs(${limit})`,
+        claimed_at as "claimedAt" from due_automation_runs(${limit}, ${perStore})`,
     );
     return result.rows.map((row) => ({ ...row, claimedAt: new Date(row.claimedAt) }));
   }
@@ -145,7 +146,11 @@ export class AutomationRunsRepository {
   ): Promise<SendingStep | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ sentAt: automationRunSteps.sentAt, optOutCode: automationRunSteps.optOutCode })
+        .select({
+          sentAt: automationRunSteps.sentAt,
+          optOutCode: automationRunSteps.optOutCode,
+          destination: automationRunSteps.destination,
+        })
         .from(automationRunSteps)
         .where(
           and(
@@ -157,7 +162,7 @@ export class AutomationRunsRepository {
         )
         .limit(1),
     );
-    return row?.sentAt ? { sentAt: row.sentAt, optOutCode: row.optOutCode } : undefined;
+    return row?.sentAt ? { ...row, sentAt: row.sentAt } : undefined;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
@@ -175,16 +180,21 @@ export class AutomationRunsRepository {
     );
   }
 
-  // A step job counts its attempt once it holds the claim and starts, not when the sweep claims.
-  async startWork(storeId: string, claim: RunClaim): Promise<number | undefined> {
+  // A step job counts its attempt once it holds the claim and starts, not when the sweep claims,
+  // and renews the lease.
+  async startWork(
+    storeId: string,
+    claim: RunClaim,
+    claimedAt: Date,
+  ): Promise<{ attempts: number; claimedAt: Date } | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)
-        .set({ attempts: sql`least(${automationRuns.attempts} + 1, 32767)` })
+        .set({ attempts: sql`least(${automationRuns.attempts} + 1, 32767)`, claimedAt })
         .where(heldBy(storeId, claim))
         .returning({ attempts: automationRuns.attempts }),
     );
-    return row?.attempts;
+    return row && { attempts: row.attempts, claimedAt };
   }
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read

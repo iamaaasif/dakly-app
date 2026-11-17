@@ -41,4 +41,20 @@ describe('shared SMS delivery', () => {
       }
     },
   );
+
+  it('gives up on a provider that does not answer within 30 seconds', async () => {
+    vi.useFakeTimers();
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    try {
+      const driver = new FakeSmsDriver();
+      vi.spyOn(driver, 'send').mockReturnValue(new Promise(() => {}));
+      const sending = new SmsService(driver).send({ to: '01712345678', text: 'অর্ডার নিশ্চিত' });
+      const outcome = expect(sending).rejects.toThrow('The SMS provider did not answer in time');
+      await vi.advanceTimersByTimeAsync(30_000);
+      await outcome;
+    } finally {
+      log.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });

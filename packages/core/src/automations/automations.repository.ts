@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import type {
   AutomationListQuery,
@@ -55,6 +55,7 @@ type AutomationChange = {
   graph?: AutomationGraph;
   triggerType?: TriggerKey;
   publishedVersionId?: string;
+  balancePausedAt?: Date;
   updatedAt: Date;
   // Not a column: leaves a workflow paused for this reason as it is.
   unlessPausedFor?: AutomationPauseReason;
@@ -153,8 +154,9 @@ export class AutomationsRepository {
     return row;
   }
 
-  // Every workflow of the store paused for a short balance becomes active again, and records when.
-  async resumeBalancePaused(storeId: string, resumedAt: Date): Promise<void> {
+  // Every workflow of the store paused for a short balance before the top-up becomes active
+  // again, and records when.
+  async resumeBalancePaused(storeId: string, pausedBy: Date, resumedAt: Date): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(automations)
@@ -169,6 +171,7 @@ export class AutomationsRepository {
             eq(automations.storeId, storeId),
             eq(automations.status, 'paused'),
             eq(automations.pauseReason, 'balance'),
+            lte(automations.balancePausedAt, pausedBy),
           ),
         ),
     );

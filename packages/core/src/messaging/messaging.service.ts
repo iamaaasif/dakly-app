@@ -13,6 +13,8 @@ export type OutgoingMessage = {
   contactId: string;
   body: string;
   operationKey: string;
+  // The phone frozen when the send was decided; a contact whose phone changed since is refused.
+  destination?: string;
 };
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
@@ -34,6 +36,8 @@ export class MessagingService {
       seeFullPhone: true,
     });
     if (!contact.phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
+    if (message.destination && message.destination !== contact.phone)
+      throw messagingError('MESSAGING_DESTINATION_CHANGED');
     const parts = countSmsParts(message.body);
     const sender = await this.smsSenders.approvedSenderName(storeId);
     const { providerMessageId } = await this.smsService.send({

@@ -26,6 +26,7 @@ export type Visitor = { ip: string; userAgent: string | undefined };
 
 const CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const CODE_ATTEMPTS = 3;
+export const TRACKED_LINK_CODE_LENGTH = 8;
 // Shared mobile carrier addresses put many customers behind one IP, so the limit is generous.
 const TAPS_PER_IP_PER_MINUTE = 120;
 // Longer than one Asia/Dhaka day, so the salt lives through the day it was made on and then goes.
@@ -169,7 +170,10 @@ export class LinksService {
 }
 
 function newCode(): string {
-  return Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+  return Array.from(
+    { length: TRACKED_LINK_CODE_LENGTH },
+    () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)],
+  ).join('');
 }
 
 function linkUrl(kind: NewTrackedLink['kind'], code: string): string {
