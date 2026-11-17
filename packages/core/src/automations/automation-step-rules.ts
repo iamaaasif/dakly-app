@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
+import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
   NewRunStep,
@@ -33,7 +34,12 @@ export type Delivery = {
   contactId: string;
   step: SendStep;
   body: string;
+  isFirstTry: boolean;
 };
+// What the gate's transaction decided: a renewal refused for a paused, stopped or archived
+// workflow or a lost claim, a skip or defer, or a send with its text.
+export type GateResult =
+  'not_live' | { decision: SendDecision } | { decision: { action: 'send' }; body: string };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -88,6 +94,20 @@ export function messageBody(step: SendStep, optOutUrl: string | undefined): stri
 
 export function ifNotReachable(step: SendStep, now: Date) {
   return step.ifNotReachable === 'skip' ? goOn(step.next, now) : exited('not_reachable', now);
+}
+
+// The step was handed to the provider and no answer came; it may have been sent. Its credits stay
+// reserved until a reconciliation settles it (ACC-14 brings provider status reports).
+export const UNKNOWN_OUTCOME =
+  'The SMS provider did not confirm this message, so its credits stay reserved until it is checked';
+
+export function endWithUnknownOutcome(held: StepResult): StepResult {
+  if (held.run.status === 'waiting') return held;
+  return {
+    ...held,
+    run: { ...held.run, lastError: held.run.lastError ?? UNKNOWN_OUTCOME },
+    stepChange: { outcome: 'failed' },
+  };
 }
 
 // Checked before every step.

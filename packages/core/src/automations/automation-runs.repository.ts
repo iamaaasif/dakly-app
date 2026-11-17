@@ -149,13 +149,11 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.runId, runId),
             eq(automationRunSteps.stepKey, stepKey),
             eq(automationRunSteps.outcome, 'sending'),
-            isNotNull(automationRunSteps.sentAt),
           ),
         )
         .limit(1),
     );
-    // The where clause keeps only rows with a send time.
-    return row && { sentAt: row.sentAt!, optOutCode: row.optOutCode };
+    return row?.sentAt ? { sentAt: row.sentAt, optOutCode: row.optOutCode } : undefined;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
@@ -183,6 +181,25 @@ export class AutomationRunsRepository {
         .returning({ attempts: automationRuns.attempts }),
     );
     return row?.attempts;
+  }
+
+  // As moveRun, and only while the workflow is active and the run's version is not stopped, read
+  // in the same statement so a pause or stop that committed first is seen.
+  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+    const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
+      on ${automationVersions.storeId} = ${automations.storeId}
+      where ${automations.storeId} = ${automationRuns.storeId}
+        and ${automations.id} = ${automationRuns.automationId}
+        and ${automationVersions.id} = ${automationRuns.versionId}
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automationRuns)
+        .set(change)
+        .where(and(heldBy(storeId, claim), isLive))
+        .returning({ id: automationRuns.id }),
+    );
+    return rows.length > 0;
   }
 
   // Moves nothing when another worker has claimed the run since, or it left this step.

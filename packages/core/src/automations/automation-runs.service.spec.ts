@@ -72,6 +72,12 @@ class FakeRunsRepository {
 
   tappedStepKeys: string[] = [];
 
+  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange) {
+    const { automationStatus, isVersionStopped } = this.run;
+    if (automationStatus !== 'active' || isVersionStopped) return false;
+    return this.moveRun(storeId, claim, change);
+  }
+
   async startWork(_storeId: string, claim: RunClaim) {
     if (!(await this.moveRun(_storeId, claim, { status: 'running' }))) return undefined;
     this.run = { ...this.run, attempts: this.run.attempts + 1 };
@@ -525,7 +531,7 @@ describe('AutomationRunsService', () => {
 
       expect(repository.run).toMatchObject({
         status: 'failed',
-        lastError: 'The SMS provider did not take the message for 36 hours',
+        lastError: expect.stringContaining('The SMS provider did not answer for 36 hours.'),
       });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
     });
@@ -568,6 +574,83 @@ describe('AutomationRunsService', () => {
 
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'release']);
       expect(balance).toBe(10);
+    });
+
+    // The first try may have reached the provider, so these end the step and keep the credits.
+    async function afterUnknownOutcome(change: Partial<ClaimedRun> = {}) {
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now, ...change };
+      return service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+    }
+
+    it.each([
+      ['a stopped version', { isVersionStopped: true }, 'exited'],
+      ['an archived workflow', { automationStatus: 'archived' }, 'exited'],
+      ['the attempts limit', { attempts: 10 }, 'failed'],
+    ] as const)(
+      'keeps the credits reserved when %s ends a run whose send is unconfirmed',
+      async (_case, change, status) => {
+        await afterUnknownOutcome(change);
+
+        expect(repository.run.status).toBe(status);
+        expect(repository.run.lastError).toBeTruthy();
+        expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+        expect(ledger).toEqual([{ key, kind: 'reserve', quantity: 1 }]);
+        expect(balance).toBe(9);
+      },
+    );
+
+    it('keeps the credits reserved when the resend check refuses', async () => {
+      recheckReason = 'no_consent';
+      await afterUnknownOutcome();
+
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'failed', skipReason: 'no_consent' }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+      expect(balance).toBe(9);
+    });
+
+    it('keeps the credits reserved after 36 hours with no answer', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      clockNow = new Date(now.getTime() + 36 * HOUR);
+      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
+
+      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+
+      expect(repository.run.status).toBe('failed');
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+      expect(balance).toBe(9);
+    });
+
+    it('reserves nothing when the workflow was paused before the gate', async () => {
+      const read = repository.findRun.bind(repository);
+      // The pause commits between the step's first read and its gate transaction.
+      let reads = 0;
+      repository.findRun = async (storeId: string, runId: string) => {
+        const found = await read(storeId, runId);
+        if (++reads === 1) repository.run = { ...repository.run, automationStatus: 'paused' };
+        return found && { ...found };
+      };
+
+      await start(send);
+
+      expect(repository.run).toMatchObject({ status: 'waiting', currentStepKey: 'first' });
+      expect(ledger).toEqual([]);
+      expect(sent).toEqual([]);
+    });
+
+    it('fails a send step set to review before sending', async () => {
+      await start({ ...send, reviewBeforeSending: true });
+
+      expect(repository.run).toMatchObject({
+        status: 'failed',
+        lastError: 'Review before sending is not available yet',
+      });
+      expect(ledger).toEqual([]);
     });
 
     it('skips the step as no_credits on a short balance, then follows "if not reachable"', async () => {
