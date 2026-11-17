@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import {
+  automationPauseReasons,
   automationRunStatuses,
   automationStatuses,
   automationStepKinds,
@@ -40,6 +41,10 @@ export const automations = pgTable(
     templateKey: text('template_key'),
     triggerType: text('trigger_type').notNull(),
     status: text('status', { enum: automationStatuses }).notNull().default('draft'),
+    pauseReason: text('pause_reason', { enum: automationPauseReasons }),
+    // When a short SMS balance last paused it; a send due before then that waited past a day is
+    // skipped as no_credits rather than late.
+    balancePausedAt: timestamptz('balance_paused_at'),
     // AUTO-R2: transactional first, then priority, when two automations hit one person on a day.
     isTransactional: boolean('is_transactional').notNull().default(false),
     priority: smallint('priority').notNull().default(0),
@@ -66,6 +71,7 @@ export const automations = pgTable(
     index('automations_published_version_id_idx').on(table.publishedVersionId),
     index('automations_created_by_user_id_idx').on(table.createdByUserId),
     check('automations_status', isOneOf(table.status, automationStatuses)),
+    check('automations_pause_reason', isOneOf(table.pauseReason, automationPauseReasons)),
   ],
 );
 

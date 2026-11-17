@@ -19,12 +19,17 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { AutomationRunsModule } from './automation-runs.module';
+import { AutomationsModule } from './automations.module';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
+import { EmailOwnerOnAutomationPaused } from './jobs/email-owner-on-automation-paused.job';
+import { ResumeWorkflowsOnWalletCredited } from './jobs/resume-workflows-on-wallet-credited.job';
 import { WakeDueRunsJob } from './jobs/wake-due-runs.job';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
 const contactId = randomUUID();
+const ownerId = randomUUID();
+const ownerEmail = `owner-${ownerId}@example.test`;
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
 const applications: INestApplicationContext[] = [];
@@ -43,13 +48,19 @@ async function worker() {
     imports: [
       DatabaseModule,
       AutomationRunsModule,
+      AutomationsModule,
       BullModule.forRoot({
         connection: toRedisConnection(loadEnv().REDIS_URL),
         prefix: `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
       }),
       BullModule.registerQueue({ name: QUEUES.workflow }),
     ],
-    providers: [WakeDueRunsJob, ContinueAutomationRunJob],
+    providers: [
+      WakeDueRunsJob,
+      ContinueAutomationRunJob,
+      EmailOwnerOnAutomationPaused,
+      ResumeWorkflowsOnWalletCredited,
+    ],
   })(TestModule);
   const application = await NestFactory.createApplicationContext(TestModule, { logger: false });
   applications.push(application);
@@ -57,6 +68,9 @@ async function worker() {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
     runStep: (data: StepJobData) => application.get(ContinueAutomationRunJob).handle(data),
     consents: application.get(ConsentService),
+    emailOwner: (data: unknown) => application.get(EmailOwnerOnAutomationPaused).handle(data),
+    resumeOnCredit: (data: unknown) =>
+      application.get(ResumeWorkflowsOnWalletCredited).handle(data),
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
 }
@@ -160,6 +174,14 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'সুমি আক্তার','01711000201','manual','customer')",
       [contactId, storeId],
     );
+    await admin.pool.query("insert into users(id,name,email) values($1,'রিনা',$2)", [
+      ownerId,
+      ownerEmail,
+    ]);
+    await admin.pool.query(
+      "insert into memberships(id,store_id,user_id,built_in_role,status) values(gen_random_uuid(),$1,$2,'owner','active')",
+      [storeId, ownerId],
+    );
     await admin.pool.query(
       "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',1,'top_up',1000,1000,$2,'system')",
       [storeId, `seed-${storeId}`],
@@ -170,6 +192,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     try {
       await Promise.all(applications.map((application) => application.close()));
       await admin.pool.query('delete from automation_runs where store_id=$1', [storeId]);
+      await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
+      await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
+      await admin.pool.query('delete from memberships where store_id=$1', [storeId]);
+      await admin.pool.query('delete from users where id=$1', [ownerId]);
       await admin.pool.query('update automations set published_version_id=null where store_id=$1', [
         storeId,
       ]);
@@ -546,6 +572,16 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       return result.rows[0].balance as number;
     }
 
+    async function mailTo(address: string): Promise<string[]> {
+      const api = process.env.MAILPIT_API_URL ?? 'http://127.0.0.1:8025';
+      const query = new URLSearchParams({ query: `to:"${address}"` });
+      const response = await fetch(`${api}/api/v1/search?${query}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const found = (await response.json()) as { messages: { Subject: string }[] };
+      return found.messages.map((message) => message.Subject);
+    }
+
     function sentFor(runId: string) {
       return sms.messages.filter((message) => message.idempotencyKey?.startsWith(`run:${runId}:`));
     }
@@ -813,7 +849,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     });
 
     // Last: it drains the store's credits.
-    it('charges the credits a sent SMS reserved, and skips a send the balance cannot cover', async () => {
+    it('charges the credits a sent SMS reserved, and holds a send the balance cannot cover', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
@@ -845,10 +881,89 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runDueStep(runner, unpaid!);
 
       expect(sentFor(unpaid!)).toEqual([]);
-      expect(await sendStep(unpaid!)).toEqual([
+      expect(await sendStep(unpaid!)).toEqual([]);
+      expect(await run(unpaid!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+    });
+
+    // After the drain above: the store has no SMS credits.
+    it('pauses the workflow once on a short balance, tells the owner and resumes after a top-up', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [recent, old],
+      } = await dueRuns(send('transactional'), 2, 'active', contact);
+      await runDueStep(runner, recent!);
+      await runner.runStep(await queuedStep(runner.queue, old!));
+
+      for (const runId of [recent!, old!])
+        expect(await run(runId)).toMatchObject({
+          status: 'waiting',
+          current_step_key: 'first',
+          attempts: 0,
+        });
+      const paused = await admin.pool.query(
+        'select status,pause_reason from automations where id=$1',
+        [automationId],
+      );
+      expect(paused.rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
+      const cards = await admin.pool.query(
+        "select user_id,action_url from notifications where store_id=$1 and type='automation.paused_for_balance' and dedupe_key like $2",
+        [storeId, `automation-balance:${automationId}:%`],
+      );
+      expect(cards.rows).toEqual([{ user_id: ownerId, action_url: '/settings' }]);
+      const events = await admin.pool.query(
+        "select id,type,payload,occurred_at from outbox_events where store_id=$1 and type='automation.paused' and payload->>'automationId'=$2",
+        [storeId, automationId],
+      );
+      expect(events.rows).toHaveLength(1);
+      const [event] = events.rows;
+      await runner.emailOwner({
+        id: event.id,
+        type: event.type,
+        storeId,
+        occurredAt: event.occurred_at.toISOString(),
+        payload: event.payload,
+      });
+      expect(await mailTo(ownerEmail)).toEqual([expect.stringContaining('SMS credits ran out')]);
+      // A paused workflow's runs are not swept.
+      await runner.sweep();
+      expect((await run(old!)).status).toBe('waiting');
+
+      await admin.pool.query(
+        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',(select max(revision)+1 from wallet_ledger where store_id=$1 and wallet='sms_credits'),'top_up',100,100,$2,'system')",
+        [storeId, `top-up-${automationId}`],
+      );
+      const credited = {
+        id: randomUUID(),
+        type: 'wallet.credited',
+        storeId,
+        occurredAt: new Date().toISOString(),
+        payload: { wallet: 'sms_credits', entryId: randomUUID() },
+      };
+      await runner.resumeOnCredit(credited);
+      await runner.resumeOnCredit(credited);
+      const resumed = await admin.pool.query(
+        'select status,pause_reason from automations where id=$1',
+        [automationId],
+      );
+      expect(resumed.rows).toEqual([{ status: 'active', pause_reason: null }]);
+
+      // One message waited past a day, the other did not.
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        old,
+        new Date(daytime.getTime() - 25 * HOUR),
+      ]);
+      await wakeNow(recent!);
+      await runDueStep(runner, recent!);
+      await runDueStep(runner, old!);
+
+      expect(sentFor(recent!)).toHaveLength(1);
+      expect(sentFor(old!)).toEqual([]);
+      expect(await sendStep(old!)).toEqual([
         expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_credits' }),
       ]);
-      expect((await run(unpaid!)).current_step_key).toBe('end');
+      expect((await run(old!)).current_step_key).toBe('end');
     });
   });
 });

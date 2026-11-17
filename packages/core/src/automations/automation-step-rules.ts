@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
+import { DAY_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
@@ -22,6 +23,8 @@ type ExitCondition = AutomationGraph['exitConditions'][number];
 export type RunFacts = {
   storeId: string;
   runId: string;
+  automationId: string;
+  balancePausedAt: Date | null;
   contactId: string;
   tags: string[];
   tappedStepKeys: string[];
@@ -37,9 +40,13 @@ export type Delivery = {
   isFirstTry: boolean;
 };
 // What the gate's transaction decided: a renewal refused for a paused, stopped or archived
-// workflow or a lost claim, a skip or defer, or a send with its text.
+// workflow or a lost claim, a short balance that paused the workflow, a skip or defer, or a send
+// with its text.
 export type GateResult =
-  'not_live' | { decision: SendDecision } | { decision: { action: 'send' }; body: string };
+  | 'not_live'
+  | 'no_credits'
+  | { decision: SendDecision }
+  | { decision: { action: 'send' }; body: string };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -80,12 +87,27 @@ export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   return false;
 }
 
-// Short balance (feature 09): the step is skipped as no_credits and "if not reachable" applies.
-// Pausing the workflow or failing the run instead would change only this case.
-export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
-
 export function operationKey({ runId, stepKey }: RunClaim) {
   return `run:${runId}:${stepKey}`;
+}
+
+// A send due more than a day before it runs is skipped (feature 09): as no_credits when a short
+// balance paused the workflow after it was due, else as late after a manual pause.
+export function lateSend(
+  step: SendStep,
+  stepKey: string,
+  facts: RunFacts,
+  now: Date,
+): StepResult | undefined {
+  const { wakeAt, balancePausedAt } = facts;
+  if (!wakeAt || now.getTime() - wakeAt.getTime() <= DAY_MS) return undefined;
+  const row = { stepKey, kind: 'send', category: step.category } as const;
+  if (balancePausedAt && balancePausedAt > wakeAt)
+    return {
+      ...ifNotReachable(step, now),
+      step: { ...row, outcome: 'skipped', skipReason: 'no_credits' },
+    };
+  return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
 }
 
 export function messageBody(step: SendStep, optOutUrl: string | undefined): string {

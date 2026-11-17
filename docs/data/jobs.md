@@ -59,11 +59,12 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                              | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | --------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Outbox event matching an active trigger | `storeId`, `automationId`, `contactId`, `triggerKey` | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
-| `continue-automation-run` | The sweep, or the step before it        | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                            | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                               | Started by                              | Payload                                              | Makes a rerun harmless                                                                             |
+| --------------------------------- | --------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `start-automation-run`            | Outbox event matching an active trigger | `storeId`, `automationId`, `contactId`, `triggerKey` | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
+| `continue-automation-run`         | The sweep, or the step before it        | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`             | Every minute                            | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| `ResumeWorkflowsOnWalletCredited` | `wallet.credited` outbox event          | the event (`storeId`, `wallet`, `entryId`)           | Moves only workflows still paused for balance to active; an `sms_credits` credit only              |
 
 ## sync
 
@@ -138,20 +139,22 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 
 The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
-| Event                  | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
-| ---------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `contact.created`      | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
-| `consent.changed`      | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
-| `segment.saved`        | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
-| `campaign.approved`    | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
-| `conversation.started` | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
-| `message.received`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
-| `message.delivered`    | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.read`         | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.failed`       | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.tapped`       | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
-| `message.opted_out`    | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
-| `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| Event                  | Emitted by                                                          | Payload                                                                 | Listeners                                                              |
+| ---------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `contact.created`      | CUS-1, `ContactsService.findOrCreateByIdentity`                     | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                          |
+| `consent.changed`      | CUS-2, `ConsentService.record`                                      | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                                    |
+| `segment.saved`        | CUS-6, `SegmentsService.create` and `change`                        | `segmentId`                                                             | None yet                                                               |
+| `campaign.approved`    | CAMP-2, `CampaignsService.approve`                                  | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                          |
+| `conversation.started` | CHAT-1, `MessagingService.receiveInboundMessage`                    | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                                     |
+| `message.received`     | CHAT-1, `MessagingService.receiveInboundMessage`                    | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                          |
+| `message.delivered`    | CHAT-2, `MessagingService` on a delivery receipt                    | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b)           |
+| `message.read`         | CHAT-2, `MessagingService` on a read receipt                        | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b)           |
+| `message.failed`       | CHAT-2, `MessagingService` on a failure receipt or send failure     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b)           |
+| `message.tapped`       | CAMP-10, `LinksService.redirect` on a link's first tap              | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                                    |
+| `message.opted_out`    | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal    | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                               |
+| `automation.paused`    | CAMP-5, `AutomationsService.pauseForBalance` on a short SMS balance | `automationId`, `reason` (`balance`)                                    | CAMP-5 `EmailOwnerOnAutomationPaused` (transactional) emails the owner |
+| `wallet.credited`      | PAY-11, `WalletService.credit`                                      | `wallet`, `entryId`                                                     | CAMP-5 `ResumeWorkflowsOnWalletCredited` (workflow)                    |
+| `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row     | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user                |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 

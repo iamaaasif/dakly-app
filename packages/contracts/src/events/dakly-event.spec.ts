@@ -64,6 +64,18 @@ const examples: DaklyEvent[] = [
       category: 'fix_now',
     },
   },
+  {
+    type: 'automation.paused',
+    storeId,
+    occurredAt,
+    payload: { automationId: '019c01ea-cf15-7d31-a7f5-d73d66007adf', reason: 'balance' },
+  },
+  {
+    type: 'wallet.credited',
+    storeId,
+    occurredAt,
+    payload: { wallet: 'sms_credits', entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0' },
+  },
 ];
 
 const personalData = {

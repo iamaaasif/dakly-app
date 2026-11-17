@@ -10,7 +10,7 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { DAY_MS, HOUR_MS, MINUTE_MS } from '../platform/time';
+import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
 import { type SendDecision, SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
@@ -31,11 +31,11 @@ import {
   failed,
   goOn,
   hasHappened,
+  lateSend,
   holdOrEnd,
   holdsClaim,
   ifNotReachable,
   messageBody,
-  noCredits,
   operationKey,
   randomPath,
   runAction,
@@ -47,6 +47,7 @@ import {
   UNKNOWN_OUTCOME,
 } from './automation-step-rules';
 import { wakeTime } from './automation-waits';
+import { AutomationsService } from './automations.service';
 
 const CLAIM_BATCH_SIZE = 100;
 // One sweep claims at most this many batches, so a backlog spreads over the next ticks.
@@ -69,6 +70,7 @@ export class AutomationRunsService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(WalletService) private readonly wallets: WalletService,
+    @Inject(AutomationsService) private readonly automations: AutomationsService,
   ) {}
 
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
@@ -125,6 +127,8 @@ export class AutomationRunsService {
     const facts: RunFacts = {
       storeId,
       runId: claim.runId,
+      automationId: run.automationId,
+      balancePausedAt: run.balancePausedAt,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
@@ -196,9 +200,8 @@ export class AutomationRunsService {
     // Publish refuses it; a version published before that refusal still fails here.
     if (step.reviewBeforeSending) return failed('Review before sending is not available yet', now);
     const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
-    // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
-    if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
-      return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
+    const late = lateSend(step, claim.stepKey, facts, now);
+    if (late) return late;
     const renewed = { ...claim, claimedAt: now };
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const renewal = { status: 'running', claimedAt: now } as const;
@@ -214,8 +217,14 @@ export class AutomationRunsService {
         : { action: 'skip', reason: 'window_closed' };
       if (decision.action !== 'send') return { decision };
       const body = await this.writeSend({ storeId, claim, contactId, step }, now);
-      return body === undefined ? { decision: noCredits } : { decision, body };
+      if (body !== undefined) return { decision, body };
+      await this.automations.pauseForBalance(storeId, facts.automationId);
+      return 'no_credits';
     });
+    // The workflow is paused for its balance: the run waits at this step, which the sweep skips
+    // until a top-up resumes the workflow.
+    if (started === 'no_credits')
+      return { claim: renewed, run: { status: 'waiting', wakeAt: facts.wakeAt ?? now } };
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
     const { decision } = started;

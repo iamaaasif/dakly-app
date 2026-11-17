@@ -10,10 +10,12 @@ import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationsModule } from './automations.module';
 
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
   imports: [
+    AutomationsModule,
     ClockModule,
     ContactsModule,
     LinksModule,

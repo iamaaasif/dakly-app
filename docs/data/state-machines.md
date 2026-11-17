@@ -121,10 +121,11 @@ Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` →
 
 ## Workflow
 
-| Column                   | Values                                           | Moves                                                                                        |
-| ------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `automations.status`     | `draft`, `active`, `paused`, `archived`          | `draft` → `active` on publish; `active` ↔ `paused`; any → `archived`                         |
-| `automation_runs.status` | `waiting`, `running`, `done`, `exited`, `failed` | `running` ↔ `waiting` (wait steps); `running` → `done`, `exited` (exit rule met) or `failed` |
+| Column                     | Values                                           | Moves                                                                                        |
+| -------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `automations.status`       | `draft`, `active`, `paused`, `archived`          | `draft` → `active` on publish; `active` ↔ `paused`; any → `archived`                         |
+| `automations.pause_reason` | `manual`, `balance`                              | `manual` from Pause; `balance` from a short SMS balance, which only a top-up clears          |
+| `automation_runs.status`   | `waiting`, `running`, `done`, `exited`, `failed` | `running` ↔ `waiting` (wait steps); `running` → `done`, `exited` (exit rule met) or `failed` |
 
 A run keeps the `automation_version_id` it started on; publishing a new version does not move running runs. The app may update only `automation_versions.is_stopped`; a worker checks it before the next step. Running leases older than five minutes may be reclaimed with a new `claimed_at` token. `attempts` counts step jobs that started on a claim without committing a step: the job adds one when it starts, each committed step sets it back to 0, and a run past 10 fails. Only the worker holding the current claim may commit the step transition.
 

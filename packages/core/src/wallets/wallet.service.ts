@@ -3,8 +3,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type { MessagingWallet, WalletBalancesResponse } from '@dakly/contracts/wallets';
 
+import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import {
   type NewWalletEntry,
   type WalletEntry,
@@ -46,6 +48,8 @@ export class WalletService {
   constructor(
     @Inject(WalletLedgerRepository) private readonly ledger: WalletLedgerRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   async balance(storeId: string, wallet: MessagingWallet): Promise<number> {
@@ -114,8 +118,8 @@ export class WalletService {
 
   async credit(storeId: string, input: CreditInput): Promise<WalletWriteResult> {
     const quantity = positiveQuantity(input.quantity);
-    return this.transaction.run(storeId, () =>
-      this.append(storeId, {
+    return this.transaction.run(storeId, async () => {
+      const credited = await this.append(storeId, {
         wallet: input.wallet,
         idempotencyKey: input.idempotencyKey,
         actor: actorColumns({ kind: 'staff', staffUserId: input.staffUserId }),
@@ -128,8 +132,16 @@ export class WalletService {
             referenceId: input.staffAuditId,
           },
         }),
-      }),
-    );
+      });
+      // A replayed credit publishes again; its listeners change nothing the second time.
+      await this.outbox.publish({
+        type: 'wallet.credited',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { wallet: input.wallet, entryId: credited.entryId },
+      });
+      return credited;
+    });
   }
 
   private settle(
