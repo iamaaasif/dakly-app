@@ -158,7 +158,8 @@ describe('release schema behavior (Postgres)', () => {
         [staleId],
       );
       expect(retried.rows[0].claimed_at.getTime()).toBeGreaterThan(Date.now() - 60_000);
-      expect(retried.rows[0].attempts).toBe(1);
+      // The step job counts attempts when it starts work, not the claim.
+      expect(retried.rows[0].attempts).toBe(0);
       const lease = claimed.rows.find(
         (row: { automation_run_id: string }) => row.automation_run_id === staleId,
       );

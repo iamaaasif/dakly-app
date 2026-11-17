@@ -59,6 +59,12 @@ class FakeRunsRepository {
     return true;
   }
 
+  async startWork(_storeId: string, claim: RunClaim) {
+    if (!(await this.moveRun(_storeId, claim, { status: 'running' }))) return undefined;
+    this.run = { ...this.run, attempts: this.run.attempts + 1 };
+    return this.run.attempts;
+  }
+
   async insertStep(_storeId: string, _runId: string, _contactId: string, step: NewRunStep) {
     this.steps.push(step);
   }
@@ -76,7 +82,7 @@ describe('AutomationRunsService', () => {
       currentStepKey: 'first',
       claimedAt,
       wakeAt: claimedAt,
-      attempts: 1,
+      attempts: 0,
       graph: graphWith(first),
       isVersionStopped: false,
       automationStatus: 'active',
@@ -166,11 +172,11 @@ describe('AutomationRunsService', () => {
     expect(repository.steps).toEqual([]);
   });
 
-  it('fails a run claimed more than 10 times without a committed step', async () => {
-    await start(wait, { attempts: 10 });
+  it('fails a run whose step job started more than 10 times without a committed step', async () => {
+    await start(wait, { attempts: 9 });
     expect(repository.run.status).toBe('waiting');
 
-    await start(wait, { attempts: 11 });
+    await start(wait, { attempts: 10 });
     expect(repository.run).toMatchObject({
       status: 'failed',
       lastError: 'This step failed too many times in a row',
