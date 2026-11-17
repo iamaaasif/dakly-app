@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
 import { CampaignSenderService } from '../campaign-sender.service';
-import { sweptBatchJob } from './send-campaign-batch.job';
+import { batchJob } from './send-campaign-batch.job';
 
 export const START_DUE_CAMPAIGNS = 'start-due-campaigns';
 
@@ -23,7 +23,7 @@ export class StartDueCampaignsJob implements JobHandler {
     payload.parse(data);
     const campaigns = await this.sender.startDue();
     await this.queue.addBulk(
-      campaigns.map(({ storeId, campaignId }) => sweptBatchJob(storeId, campaignId)),
+      campaigns.map(({ storeId, campaignId }) => batchJob(storeId, campaignId)),
     );
   }
 }
