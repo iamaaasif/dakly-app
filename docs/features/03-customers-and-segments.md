@@ -138,6 +138,9 @@ contacts, with the consent evidence, comes in the next part, then undo.
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
 - Only CSV is read. XLSX comes with CUS-16.
+- Files must be UTF-8. NUL and other C0 control bytes are refused with
+  `IMPORT_FILE_UNREADABLE`; tab, CR and LF are allowed. UTF-16 files are refused
+  even without a byte order mark, before any rows reach the database.
 - The reader is one pass over the text. It drops blank lines as it goes, stops at 50,000
   rows and keeps at most 200 cells a row, so neither a file of empty lines nor a quote that
   never closes builds a large list.

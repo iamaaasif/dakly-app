@@ -25,6 +25,8 @@ export type CustomerImportRows = {
 // garbled text.
 export function decodeCustomerImportFile(bytes: Uint8Array): string {
   try {
+    if (bytes.some((byte) => byte < 32 && byte !== 9 && byte !== 10 && byte !== 13))
+      throw importError('IMPORT_FILE_UNREADABLE');
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     throw importError('IMPORT_FILE_UNREADABLE');
