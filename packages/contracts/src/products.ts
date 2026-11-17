@@ -109,11 +109,14 @@ export const changeProductSchema = z
 
 export type ChangeProductInput = z.infer<typeof changeProductSchema>;
 
+const productReadinessValues = ['needs_price', 'needs_photo', 'hidden', 'running_low'] as const;
+export type ProductReadiness = (typeof productReadinessValues)[number];
+
 export const productListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().min(3).max(200).optional(),
-  readiness: z.enum(['needs_price', 'needs_photo', 'hidden']).optional(),
+  readiness: z.enum(productReadinessValues).optional(),
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
@@ -131,8 +134,22 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
 export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   id: string;
   imageFileIds: string[];
+  readiness: ProductReadiness[];
   variants: ProductVariantResponse[];
   createdAt: string;
   updatedAt: string;
 };
 export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
+
+export type StockMovementKind = (typeof stockMovementKinds)[number];
+export const MAX_STOCK_QUANTITY = 2147483647;
+export const stockAdjustmentSchema = z.strictObject({
+  quantity: z
+    .number()
+    .int()
+    .min(-MAX_STOCK_QUANTITY)
+    .max(MAX_STOCK_QUANTITY)
+    .refine((value) => value !== 0, 'Use a nonzero quantity'),
+  reason: z.string().trim().min(1).max(500),
+});
+export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
