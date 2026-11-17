@@ -13,6 +13,8 @@ import type { SmsMessage } from '@dakly/providers/sms/sms-driver';
 
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
+import { ErrorReporter } from '../platform/logging/error-reporter';
+import { runWithJobContext } from '../platform/logging/job-context';
 import { SegmentsService } from '../segments/segments.service';
 import { SmsService } from '../sms/sms.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -409,13 +411,22 @@ describe('Campaign sender (Postgres)', () => {
         return start.apply(this, args);
       });
     const quiet = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const report = vi
+      .spyOn(app.get(ErrorReporter), 'reportJob')
+      .mockImplementation(() => undefined);
     clockNow = sendAt;
 
-    await sender.startDue();
+    await runWithJobContext(() => sender.startDue(), 'sweep-job-1');
 
+    expect(report).toHaveBeenCalledOnce();
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({ errorClass: 'Error' }),
+      'sweep-job-1',
+    );
     expect(await campaignRow(failing)).toMatchObject({ status: 'scheduled' });
     expect(await campaignRow(other)).toMatchObject({ status: 'sending' });
     failStart.mockRestore();
     quiet.mockRestore();
+    report.mockRestore();
   });
 });

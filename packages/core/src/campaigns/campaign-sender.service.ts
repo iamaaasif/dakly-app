@@ -5,6 +5,9 @@ import { LinksService } from '../links/links.service';
 import { MessagingService, type SentMessage } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { ErrorReporter } from '../platform/logging/error-reporter';
+import { jobLogBindings } from '../platform/logging/job-context';
+import { serializeError } from '../platform/logging/safe-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { MINUTE_MS } from '../platform/time';
 import { type SendDecision, SendPolicyService } from '../sending/send-policy.service';
@@ -51,6 +54,7 @@ export class CampaignSenderService {
     @Inject(WalletService) private readonly wallets: WalletService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -59,8 +63,10 @@ export class CampaignSenderService {
   async startDue(): Promise<CampaignRef[]> {
     const now = this.clock.now();
     for (const { storeId, campaignId } of await this.repository.listDue(now))
-      await this.repository.start(storeId, campaignId, now).catch(() => {
+      await this.repository.start(storeId, campaignId, now).catch((error: unknown) => {
         this.logger.error({ storeId, campaignId }, 'Campaign start failed');
+        const { jobId } = jobLogBindings();
+        if (jobId) this.reporter.reportJob(serializeError(error), jobId);
       });
     return this.repository.listSending();
   }
