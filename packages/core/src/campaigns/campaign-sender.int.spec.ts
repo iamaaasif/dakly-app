@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import { createDatabase } from '@dakly/db/client';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { CampaignSenderService } from './campaign-sender.service';
+import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
 
 class TestModule {}
@@ -63,5 +64,31 @@ describe('Campaign sweep (Postgres)', () => {
     clockNow = sendAt;
     await sender.startDue();
     expect(await campaignRow(id)).toEqual({ status: 'sending', started_at: sendAt });
+  });
+
+  it('starts the other due campaigns when one fails', async () => {
+    const [failing, other] = [randomUUID(), randomUUID()];
+    for (const id of [failing, other])
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
+         values($1,$2,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$3,now())`,
+        [id, storeId, sendAt],
+      );
+    const start = CampaignSendingRepository.prototype.start;
+    const failStart = vi
+      .spyOn(CampaignSendingRepository.prototype, 'start')
+      .mockImplementation(async function (this: CampaignSendingRepository, ...args) {
+        if (args[1] === failing) throw new Error('database unavailable');
+        return start.apply(this, args);
+      });
+    const quiet = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    clockNow = sendAt;
+
+    await sender.startDue();
+
+    expect(await campaignRow(failing)).toMatchObject({ status: 'scheduled' });
+    expect(await campaignRow(other)).toMatchObject({ status: 'sending' });
+    failStart.mockRestore();
+    quiet.mockRestore();
   });
 });
