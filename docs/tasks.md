@@ -39,7 +39,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Done        |             | #36      | Exact money, store dates and supplied phone display values       |
 | WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Done        | WEB-3       | #37      | Real API browser flow and component tests                        |
 | WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Done        |             | #75      | 7.1.1; rules-of-hooks and exhaustive-deps as errors              |
-| WEB-7 | Match built screens to the design images                                                 | In progress | WEB-3       |          | Part 1: sidebar and header; each screen PR matches its image     |
+| WEB-7 | Match built screens to the design images                                                 | In progress | WEB-3       | #123     | Part 1: sidebar and header; each screen PR matches its image     |
 
 ## M1. Account, stores and team
 
