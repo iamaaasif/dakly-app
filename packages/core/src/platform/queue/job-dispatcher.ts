@@ -12,8 +12,8 @@ import { QUEUES, type QueueName } from './queues';
 // Overlapping transactional runs are safe: each job claims its notice or alert under a lease first.
 const TRANSACTIONAL_JOBS_AT_ONCE = 5;
 const BULK_JOBS_AT_ONCE = 1;
-// One batch at a time, so one store's campaign never sends two batches at once on a worker, and
-// each batch queues the next behind other campaigns' batches.
+// One job at a time on each worker. Two workers can still run campaign jobs at once, so each
+// job tolerates overlap (jobs.md).
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
