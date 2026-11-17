@@ -60,6 +60,7 @@ function show(child: ReactNode, canEdit = true) {
       canViewCustomers: true,
       canCreateCustomer: canEdit,
       canViewSegments: true,
+      canEditSegments: true,
       canViewTeam: false,
       canEditTeam: false,
       canApproveSupport: false,

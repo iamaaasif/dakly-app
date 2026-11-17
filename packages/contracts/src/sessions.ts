@@ -39,6 +39,7 @@ export type SessionContext = {
         canViewCustomers: boolean;
         canCreateCustomer: boolean;
         canViewSegments: boolean;
+        canEditSegments: boolean;
         canApproveSupport: boolean;
         canViewStoreSettings: boolean;
         canEditStoreSettings: boolean;
