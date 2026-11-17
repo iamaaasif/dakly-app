@@ -91,6 +91,8 @@ jobs:
         run: |
           psql "$DATABASE_ADMIN_URL" -f packages/db/local-init.sql
           pnpm --filter @dakly/db db:migrate
+      # A service container cannot take SeaweedFS's command flags, so it runs from the compose file.
+      - run: docker compose up -d --wait seaweedfs
       - run: pnpm test:int
 
   e2e:
