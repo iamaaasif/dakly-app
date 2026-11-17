@@ -159,6 +159,7 @@ atomically and retain business data when an extension is disabled.
 | `GET /orders/return-risk?phone=`                                                                                                 | `orders`        |
 | `POST /orders/bulk-stage`                                                                                                        | `orders`        |
 | `GET /delivery-zones`, `POST /delivery-zones`, `PATCH /delivery-zones/:deliveryZoneId`, `DELETE /delivery-zones/:deliveryZoneId` | `storeSettings` |
+| `POST /delivery-zones/initialize-defaults` (empty stores only)                                                                   | `storeSettings` |
 | `GET /areas?parentId=`                                                                                                           | any member      |
 
 ## Payments and billing (07)

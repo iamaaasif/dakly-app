@@ -7,15 +7,29 @@ import type {
   ProductListQuery,
   ProductListResponse,
   ProductResponse,
+  ProductReadiness,
+  StockMovementKind,
 } from '@dakly/contracts/products';
 
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { StoresService } from '../stores/stores.service';
 import { productError } from './products.errors';
 import { type Product, ProductsRepository, type Variant } from './products.repository';
 
 type Actor = AuditEntry['actor'];
+type StockReference = { actor: Actor } & (
+  { orderId: string; reason?: string } | { reason: string; orderId?: string }
+);
+
+type StockMovementInput = { kind: StockMovementKind; quantity: number; reference: StockReference };
+type UpdatedStock = {
+  onHand: number;
+  reserved: number;
+  onHandDelta: number;
+  reservedDelta: number;
+};
 
 @Injectable()
 export class ProductsService {
@@ -24,6 +38,7 @@ export class ProductsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
   create(storeId: string, input: CreateProductInput, _actor: Actor): Promise<ProductResponse> {
@@ -58,13 +73,20 @@ export class ProductsService {
   async getById(storeId: string, id: string): Promise<ProductResponse> {
     const product = await this.repository.findById(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');
-    return toResponse(product, product.variants);
+    return toResponse(
+      product,
+      product.variants,
+      (await this.stores.settings(storeId)).stock.lowStockThreshold,
+    );
   }
 
   async list(storeId: string, query: ProductListQuery): Promise<ProductListResponse> {
-    const rows = await this.repository.list(storeId, query);
+    const { stock } = await this.stores.settings(storeId);
+    const rows = await this.repository.list(storeId, query, stock.lowStockThreshold);
     const page = rows.slice(0, query.limit);
-    const items = page.map((product) => toResponse(product, product.variants));
+    const items = page.map((product) =>
+      toResponse(product, product.variants, stock.lowStockThreshold),
+    );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -74,6 +96,69 @@ export class ProductsService {
         throw productError('PRODUCT_NOT_FOUND');
       await this.publishUpdated(storeId, id);
     });
+  }
+
+  moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
+    return this.transaction.run(storeId, async () => {
+      const variant = await this.repository.findStockVariant(storeId, variantId);
+      if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
+      if (!variant.isStockTracked) return;
+      const { kind, quantity } = input;
+      if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
+        throw productError('STOCK_QUANTITY_INVALID');
+      const change = {
+        reserve: { onHandDelta: 0, reservedDelta: quantity },
+        release: { onHandDelta: 0, reservedDelta: -quantity },
+        ship: { onHandDelta: -quantity, reservedDelta: -quantity },
+        return: { onHandDelta: quantity, reservedDelta: 0 },
+        adjust: { onHandDelta: quantity, reservedDelta: 0 },
+        import: { onHandDelta: quantity, reservedDelta: 0 },
+      }[kind];
+      const now = this.clock.now();
+      const updated = await this.repository.changeStock(storeId, variantId, change, now);
+      if (!updated) throw productError('STOCK_NOT_AVAILABLE');
+      await this.recordStockMovement(
+        storeId,
+        { ...input, variantId },
+        { ...change, ...updated },
+        now,
+      );
+    });
+  }
+
+  private async recordStockMovement(
+    storeId: string,
+    movement: StockMovementInput & { variantId: string },
+    stock: UpdatedStock,
+    now: Date,
+  ) {
+    const { variantId, kind, quantity, reference } = movement;
+    await this.repository.insertStockMovement(storeId, {
+      variantId,
+      kind,
+      quantity: stock.onHandDelta || quantity,
+      onHandAfter: stock.onHand,
+      reservedAfter: stock.reserved,
+      orderId: reference.orderId ?? null,
+      reason: reference.reason ?? null,
+      actorUserId: reference.actor.kind === 'user' ? reference.actor.userId : null,
+      createdAt: now,
+    });
+    await this.outbox.publish({
+      type: 'stock.changed',
+      storeId,
+      occurredAt: now.toISOString(),
+      payload: { variantId, kind },
+    });
+    const available = stock.onHand - stock.reserved;
+    const before = available - stock.onHandDelta + stock.reservedDelta;
+    if (before <= 0 && available > 0)
+      await this.outbox.publish({
+        type: 'variant.restocked',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { variantId },
+      });
   }
 
   private async saveVariants(
@@ -121,16 +206,24 @@ export class ProductsService {
   }
 }
 
-function toResponse(product: Product, variants: Variant[]): ProductResponse {
+function toResponse(product: Product, rows: Variant[], lowStockThreshold: number): ProductResponse {
+  const variants = rows.map(({ productId: _productId, ...variant }) => ({
+    ...variant,
+    pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
+    available: variant.onHand - variant.reserved,
+  }));
+  const readiness: ProductReadiness[] = [];
+  if (variants.some((variant) => variant.pricePoisha === 0)) readiness.push('needs_price');
+  if (!product.imageFileIds.length) readiness.push('needs_photo');
+  if (product.status === 'hidden') readiness.push('hidden');
+  if (product.isStockTracked && variants.some((variant) => variant.available <= lowStockThreshold))
+    readiness.push('running_low');
   return {
     ...product,
     status: product.status,
+    variants,
+    readiness,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
-    variants: variants.map(({ productId: _productId, ...variant }) => ({
-      ...variant,
-      pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
-      available: variant.onHand - variant.reserved,
-    })),
   };
 }

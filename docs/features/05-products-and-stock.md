@@ -121,7 +121,7 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), 
 
 1. A product has 0 to 3 option types (Size, Colour, Fabric) and one or more variants. A product with no options has one default variant, so an order always points at a variant.
 2. Stock lives on the variant: on hand and reserved. Available = on hand − reserved.
-3. Stock changes only through `ProductsService.moveStock(storeId, variantId, kind, quantity, reference)`. It runs one guarded `UPDATE ... WHERE on_hand - reserved >= quantity` and writes a `stock_movements` row in the same transaction. Zero rows updated throws `STOCK_NOT_AVAILABLE`.
+3. Stock changes only through `ProductsService.moveStock(storeId, variantId, { kind, quantity, reference })`. It runs one guarded `UPDATE ... WHERE on_hand - reserved >= quantity` and writes a `stock_movements` row in the same transaction. Zero rows updated throws `STOCK_NOT_AVAILABLE`.
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
@@ -136,7 +136,20 @@ keep their stock and ledger identity; omitted variants are archived. Products wi
 default variant. Prices use the variant override when set, and the
 product price otherwise. Lists search names and filter missing prices, missing
 photos or hidden products. Pages use descending UUID v7 ids, and each read loads
-product details and variants in one database snapshot. Stock labels and adjustments come with PROD-2.
+product details and variants in one database snapshot. Stock labels and adjustments are covered below.
+
+PROD-2 adds the stock ledger and staff stock-adjustment route. The adjustment
+quantity is a signed change, with a required reason. Each tracked movement uses
+one guarded counter update and one ledger row in the store transaction, alongside
+its outbox events. Shipping records a negative on-hand quantity; reservations and
+releases record their positive reserved-unit quantity. Untracked products skip
+counter, ledger and event writes.
+
+Readiness labels are computed from the effective variant prices, confirmed photo
+ids, visibility and available stock. `settings.stock.lowStockThreshold` defaults to
+3 and can be changed through Store settings. Lists accept the `running_low` filter.
+A `variant.restocked` event means availability crossed from zero or less to positive;
+notification sending still waits for PROD-6.
 
 ### Rules
 

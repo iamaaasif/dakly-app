@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { PlansResponse } from '@dakly/contracts/billing';
 import {
   sendingSettingsSchema,
+  stockSettingsSchema,
   type CreateStoreInput,
   type StoreResponse,
   type ChangeStoreSettingsInput,
@@ -153,5 +154,9 @@ function parseSending(sending: unknown): SendingSettings {
 }
 
 function toSettingsResponse(store: StoreSettingsRow): StoreSettingsResponse {
-  return { ...store, sending: parseSending(store.sending) };
+  return {
+    ...store,
+    sending: parseSending(store.sending),
+    stock: stockSettingsSchema.parse(store.stock ?? {}),
+  };
 }
