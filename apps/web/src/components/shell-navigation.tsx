@@ -93,7 +93,7 @@ function NavigationItem({
       className={cn(
         'flex min-h-10 min-w-10 items-center gap-3 rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         current === 'page' && 'bg-primary-soft font-semibold text-action-hover',
-        current === 'location' && 'font-semibold text-action-hover',
+        current === 'location' && 'font-semibold text-action-hover hover:bg-surface-muted',
         !current && 'hover:bg-surface-muted',
       )}
     >
@@ -211,7 +211,7 @@ function NavigationGroups({
 
 // A link with a tab is the page only on that tab. A link that owns several screens (Settings)
 // is the page on its own path without a tab, and the location on the screens it leads to.
-function currentState(
+export function currentState(
   { href, related }: Pick<NavigationLink, 'href' | 'related'>,
   pathname: string,
   tab: string | null,
