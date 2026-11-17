@@ -79,15 +79,16 @@ Per-store cap: one running campaign batch per store.
 
 ## bulk
 
-| Job                     | Started by                       | Payload                                                       | Makes a rerun harmless                                                                                                             |
-| ----------------------- | -------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `run-contact-import`    | `import.started` event           | `storeId`, `importId`                                         | Runs only while `importing`; contacts it added carry its `import_id`; consent is written only when the answer changes              |
-| `run-product-import`    | Product import confirmed         | `storeId`, `importId`                                         | Durable per-import-row results; stock adjustment and row outcome committed atomically                                              |
-| `export-contacts`       | Export asked for                 | `storeId`, `fileId`                                           | Writes to the same object key                                                                                                      |
-| `rebuild-segment-count` | Segment saved, and nightly       | `storeId`, `segmentId`                                        | Overwrites the count                                                                                                               |
-| `merge-contacts`        | Staff confirms a merge           | `storeId`, `keptContactId`, `mergedContactId`, `operationKey` | Permanent unique `(store_id, operation_key)`; an undone or redacted operation stays a no-op                                        |
-| `undo-contact-merge`    | Staff undoes within 7 days (D29) | `storeId`, `contactMergeId`                                   | After-state checks preserve later edits; dependent merges block; withdrawals stay effective; `undone_at` set atomically            |
-| `purge-contact`         | Sweep `due_contact_purges`       | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots |
+| Job                        | Started by                       | Payload                                                       | Makes a rerun harmless                                                                                                             |
+| -------------------------- | -------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `run-contact-import`       | `import.started` event           | `storeId`, `importId`                                         | Lease on `claimed_at`; rows it added carry its `import_id`; consent only where none, never over a withdrawal                       |
+| `run-product-import`       | Product import confirmed         | `storeId`, `importId`                                         | Durable per-import-row results; stock adjustment and row outcome committed atomically                                              |
+| `export-contacts`          | Export asked for                 | `storeId`, `fileId`                                           | Writes to the same object key                                                                                                      |
+| `rebuild-segment-count`    | Segment saved, and nightly       | `storeId`, `segmentId`                                        | Overwrites the count                                                                                                               |
+| `merge-contacts`           | Staff confirms a merge           | `storeId`, `keptContactId`, `mergedContactId`, `operationKey` | Permanent unique `(store_id, operation_key)`; an undone or redacted operation stays a no-op                                        |
+| `undo-contact-merge`       | Staff undoes within 7 days (D29) | `storeId`, `contactMergeId`                                   | After-state checks preserve later edits; dependent merges block; withdrawals stay effective; `undone_at` set atomically            |
+| `purge-contact`            | Sweep `due_contact_purges`       | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots |
+| sweep `fail-stuck-imports` | Every 30 seconds                 | none                                                          | `stores_with_stuck_imports`, then a guarded update on the stale lease; a running import renews its lease                           |
 
 ## payments
 

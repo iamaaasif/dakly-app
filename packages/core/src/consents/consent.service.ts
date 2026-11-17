@@ -45,7 +45,7 @@ export class ConsentService {
     actor: AuditEntry['actor'],
   ): Promise<ConsentResponse> {
     return this.transaction.run(storeId, async () => {
-      await this.contacts.assertContactExists(storeId, change.contactId);
+      await this.contacts.lockForConsent(storeId, [change.contactId]);
       const capturedAt = this.clock.now();
       const consent = await this.repository.insert(storeId, {
         ...change,
@@ -91,6 +91,7 @@ export class ConsentService {
     if (grant.contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
       throw consentError('CONSENT_AUDIENCE_TOO_MANY');
     return this.transaction.run(storeId, async () => {
+      await this.contacts.lockForConsent(storeId, grant.contactIds);
       const current = await this.repository.listCurrent(storeId, grant.contactIds, grant.channel);
       const answered = new Map(current.map((consent) => [consent.contactId, consent.status]));
       const capturedAt = this.clock.now();

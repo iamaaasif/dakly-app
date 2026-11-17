@@ -112,8 +112,15 @@ describe('contact filters without RLS assistance', () => {
       [importA, f.a, fileA],
     );
     const phone = '01711000009';
-    const [added] = await repository.insertImported(f.a, importA, [
-      { phone, name: 'শাহনাজ', tags: ['ঈদ'] },
+    const [added] = await repository.insertImported(f.a, [
+      {
+        phone,
+        name: 'শাহনাজ',
+        tags: ['ঈদ'],
+        importId: importA,
+        source: 'import',
+        kind: 'customer',
+      },
     ]);
     const b = await repository.insert(f.b, { ...manualCustomer, name: 'করিম', phone });
     expect(await f.row('contacts', added!.id)).toMatchObject({
@@ -122,8 +129,9 @@ describe('contact filters without RLS assistance', () => {
       source: 'import',
     });
     expect(await repository.findByPhones(f.b, [phone])).toEqual([
-      { id: b!.id, phone, importId: null },
+      { id: b!.id, phone, importId: null, whatsappPhone: null, tags: [] },
     ]);
+    expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([b!.id]);
 
     await repository.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
     await repository.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);

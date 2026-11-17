@@ -138,24 +138,38 @@ comes in the next part.
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
 - Only CSV is read. XLSX comes with CUS-16.
-- The job (`run-contact-import` on the bulk queue) reads the file through a presigned GET
-  before any transaction opens, then applies the rows in batches of 500. Each batch commits in
-  its own short transaction and saves the counts so far. A file that cannot be read, never
-  arrived or is over 10 MB fails the import, with the reason in the report.
+- The job (`run-contact-import` on the bulk queue) reads the whole file through the storage
+  driver before any transaction opens; a file over 10 MB is refused before it is read in full
+  or parsed. It marks the upload's `files` row `ready`, then applies the rows in batches of 500. Each batch commits in its own short transaction and saves the counts so far. A file
+  that cannot be read, never arrived or is over 10 MB fails the import, with the reason in the
+  report. The reader drops blank lines as it goes, stops at 50,000 rows and keeps at most 200
+  cells a row.
+- One run at a time: the job takes a lease on the import (`imports.claimed_at`) and renews it
+  after each batch. A second delivery of the job leaves an import whose lease is under 5
+  minutes old; a run that fails lets go at once, so the queue's retry carries on. The
+  `fail-stuck-imports` sweep fails an import still `importing` an hour after its last batch,
+  with a line in its report.
 - Existing phone (D42): a row whose phone a contact already has changes it only this way.
-  Phone, kind, source, verification and consent never change. Name, WhatsApp number, email,
-  address, district and notes take a non-blank cell. Tags are added to the contact's own. The
-  duplicate mode `skip` leaves the contact as it is, consent included. A new phone becomes a
-  customer with source `import` and the import's id in `contacts.import_id`.
+  Phone, kind, source, verification and consent never change. Name, email, address, district
+  and notes take a non-blank cell. A WhatsApp number is filled only when the contact has none:
+  an import never moves consent to a number nobody verified, and changing an existing number
+  stays a profile edit. A different number is left as it is, and the report says "WhatsApp
+  number differs, not changed". Tags are added to the contact's own up to 50; the report
+  counts the ones left out. The duplicate mode `skip` leaves the contact as it is, consent
+  included. A new phone becomes a customer with source `import` and the import's id in
+  `contacts.import_id`.
 - Consent evidence (CUS-R4, D42): for SMS and WhatsApp the shop writes where its customers
   agreed. The evidence applies to every row, for the channels it names; a channel without
-  evidence gets no consent. The import never grants a channel the customer withdrew: that
-  channel is skipped for that contact and its row in the report says so. A channel already
-  granted gets no new row, so importing the same file again records nothing new.
+  evidence gets no consent. Consent is written only for a contact with no answer on that
+  channel, after locking the contact rows, so a withdrawal saved at the same moment is never
+  overridden. The import never grants a channel the customer withdrew: that channel is
+  skipped for that contact and its row in the report says so. Importing the same file again
+  records nothing new.
 - A retried job finds the contacts this import already added and does not write them again,
   so the counts and consent come out the same.
-- The report is a CSV with the row, the field and the problem, stored in R2 for 7 days like
-  the upload.
+- The report is a CSV with the row, the field and the problem. Its `files` row has
+  `expires_at` 7 days ahead, like the upload, and the R2 lifecycle rule on `imports/` deletes
+  both objects after 7 days.
 - Imported contacts do not emit `contact.created`, so a large import does not start welcome
   workflows for everyone in the file. This is the owner's decision, not missing work.
 - Not built yet: undo, the import screens, a preview before start, and upload scanning

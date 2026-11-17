@@ -11,6 +11,7 @@ import type {
   ImportDuplicateMode,
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
+import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
@@ -25,6 +26,7 @@ import {
   type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
+  type ImportedChange,
   type ImportMatch,
 } from './contacts.repository';
 
@@ -36,6 +38,8 @@ export type ImportedContact = {
   contactId: string;
   phone: string;
   outcome: 'added' | 'updated' | 'skipped';
+  // Cells the D42 rule left out, for the import report.
+  notChanged: { field: 'whatsappPhone' | 'tags'; message: string }[];
 };
 
 @Injectable()
@@ -128,22 +132,40 @@ export class ContactsService {
       const byPhone = new Map(existing.map((contact) => [contact.phone, contact]));
       const added = await this.contactsRepository.insertImported(
         storeId,
-        importId,
-        rows.filter((row) => !byPhone.has(row.phone)),
-      );
-      const outcomes = existing.map((contact) => importOutcome(contact, importId, duplicateMode));
-      const updated = new Set(outcomes.filter((o) => o.outcome === 'updated').map((o) => o.phone));
-      await this.contactsRepository.updateImported(
-        storeId,
         rows
-          .filter((row) => updated.has(row.phone))
-          .map(({ phone, ...change }) => ({ ...change, id: byPhone.get(phone)!.id })),
+          .filter((row) => !byPhone.has(row.phone))
+          .map((row) => ({ ...row, importId, source: 'import', kind: 'customer' })),
       );
-      return [
-        ...added.map(({ id, phone }) => ({ contactId: id, phone, outcome: 'added' as const })),
-        ...outcomes,
-      ];
+      const results: ImportedContact[] = added.map(({ id, phone }) => ({
+        contactId: id,
+        phone,
+        outcome: 'added',
+        notChanged: [],
+      }));
+      const changes: ImportedChange[] = [];
+      for (const row of rows) {
+        const contact = byPhone.get(row.phone);
+        if (!contact) continue;
+        const outcome = importOutcome(contact, importId, duplicateMode);
+        const update = outcome === 'updated' ? importChange(contact, row) : undefined;
+        if (update) changes.push(update.change);
+        results.push({
+          contactId: contact.id,
+          phone: contact.phone,
+          outcome,
+          notChanged: update?.notChanged ?? [],
+        });
+      }
+      await this.contactsRepository.updateImported(storeId, changes);
+      return results;
     });
+  }
+
+  // Consent changes for these contacts wait for each other inside the caller's transaction, so a
+  // withdrawal is never overridden by an answer read before it.
+  async lockForConsent(storeId: string, ids: string[]): Promise<void> {
+    const locked = await this.contactsRepository.lockForConsent(storeId, ids);
+    if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
   }
 
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
@@ -159,12 +181,6 @@ export class ContactsService {
   // Deleted contacts are left out.
   findRecipients(storeId: string, ids: string[]): Promise<AudienceRecipient[]> {
     return this.contactsRepository.findRecipients(storeId, ids);
-  }
-
-  async assertContactExists(storeId: string, id: string): Promise<void> {
-    if (!(await this.contactsRepository.findById(storeId, id))) {
-      throw contactError('CONTACT_NOT_FOUND');
-    }
   }
 
   countMatching(storeId: string, rules: SegmentRules): Promise<number> {
@@ -199,10 +215,32 @@ function importOutcome(
   contact: ImportMatch,
   importId: string,
   duplicateMode: ImportDuplicateMode,
-): ImportedContact {
-  const { id: contactId, phone } = contact;
-  if (contact.importId === importId) return { contactId, phone, outcome: 'added' };
-  return { contactId, phone, outcome: duplicateMode === 'update' ? 'updated' : 'skipped' };
+): ImportedContact['outcome'] {
+  if (contact.importId === importId) return 'added';
+  return duplicateMode === 'update' ? 'updated' : 'skipped';
+}
+
+// A saved WhatsApp number is kept, because consent may rest on it and an import never moves
+// consent to a number nobody verified; changing it stays a profile edit.
+function importChange(contact: ImportMatch, { phone: _phone, ...row }: ContactImportRow) {
+  const notChanged: ImportedContact['notChanged'] = [];
+  const whatsappDiffers = row.whatsappPhone && row.whatsappPhone !== contact.whatsappPhone;
+  if (contact.whatsappPhone && whatsappDiffers)
+    notChanged.push({ field: 'whatsappPhone', message: 'WhatsApp number differs, not changed' });
+  const newTags = [...new Set(row.tags ?? [])].filter((tag) => !contact.tags.includes(tag));
+  const room = Math.max(0, MAX_CONTACT_TAGS - contact.tags.length);
+  if (newTags.length > room)
+    notChanged.push({
+      field: 'tags',
+      message: `${newTags.length - room} tags not added: a customer has at most ${MAX_CONTACT_TAGS}`,
+    });
+  const change: ImportedChange = {
+    ...row,
+    id: contact.id,
+    whatsappPhone: contact.whatsappPhone ? undefined : row.whatsappPhone,
+    tags: newTags.slice(0, room),
+  };
+  return { change, notChanged };
 }
 
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {

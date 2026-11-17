@@ -99,7 +99,8 @@ export const createContactSchema = z.object({
   phone: bdMobileSchema,
 });
 
-const contactTags = z.array(z.string().trim().min(1).max(50)).max(50);
+export const MAX_CONTACT_TAGS = 50;
+const contactTags = z.array(z.string().trim().min(1).max(50)).max(MAX_CONTACT_TAGS);
 
 export const updateContactSchema = z
   .strictObject({
@@ -118,7 +119,12 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
-const importColumn = z.int().min(0).max(199);
+// A file column the mapping can name; the reader keeps no cells past this.
+export const MAX_IMPORT_COLUMNS = 200;
+const importColumn = z
+  .int()
+  .min(0)
+  .max(MAX_IMPORT_COLUMNS - 1);
 
 // The file column for each field, by position, so two columns with the same header stay apart.
 // The phone finds an existing contact, so an import never replaces it.

@@ -22,7 +22,7 @@ function serviceWith(current: { contactId: string; status: 'granted' | 'withdraw
   };
   const service = new ConsentService(
     repository as unknown as ConsentsRepository,
-    {} as ContactsService,
+    { lockForConsent: async () => undefined } as unknown as ContactsService,
     { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
     { publishAll: vi.fn() } as unknown as OutboxService,
     { now: () => capturedAt } as Clock,

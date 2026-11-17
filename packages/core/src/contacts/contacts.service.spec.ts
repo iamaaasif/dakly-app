@@ -26,6 +26,7 @@ describe('ContactsService', () => {
     findIdentities: vi.fn(),
     update: vi.fn(),
     softDelete: vi.fn(),
+    lockForConsent: vi.fn(),
   };
   const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
   let service: ContactsService;
@@ -250,14 +251,14 @@ describe('ContactsService', () => {
     });
   });
 
-  it('confirms a contact exists only when this store has it', async () => {
-    repository.findById.mockImplementation(async (storeId: string) =>
-      storeId === STORE_ID ? contact : undefined,
+  it('locks a contact for consent only when this store has it', async () => {
+    repository.lockForConsent.mockImplementation(async (storeId: string, ids: string[]) =>
+      storeId === STORE_ID ? ids : [],
     );
 
-    await expect(service.assertContactExists(STORE_ID, contact.id)).resolves.toBeUndefined();
+    await expect(service.lockForConsent(STORE_ID, [contact.id])).resolves.toBeUndefined();
     await expect(
-      service.assertContactExists('0b7e5f6a-2d4c-4f1e-9a3b-8c6d5e4f3a21', contact.id),
+      service.lockForConsent('0b7e5f6a-2d4c-4f1e-9a3b-8c6d5e4f3a21', [contact.id]),
     ).rejects.toMatchObject({ code: 'CONTACT_NOT_FOUND', status: 404 });
   });
 });

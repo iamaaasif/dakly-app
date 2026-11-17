@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   foreignKey,
   type AnyPgColumn,
@@ -70,6 +71,9 @@ export const imports = pgTable(
     index('imports_file_id_idx').on(table.fileId),
     index('imports_report_file_id_idx').on(table.reportFileId),
     index('imports_created_by_user_id_idx').on(table.createdByUserId),
+    index('imports_importing_idx')
+      .on(table.storeId)
+      .where(sql`${table.status} = 'importing'`),
     check('imports_kind', isOneOf(table.kind, importKinds)),
     check('imports_status', isOneOf(table.status, importStatuses)),
     check('imports_duplicate_mode', isOneOf(table.duplicateMode, importDuplicateModes)),
