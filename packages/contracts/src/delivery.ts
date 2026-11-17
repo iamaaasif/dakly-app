@@ -51,5 +51,3 @@ export type AreaResponse = {
 };
 export type AreaListResponse = { items: AreaResponse[]; nextCursor: number | null };
 export type DeliveryChargeResponse = { deliveryZoneId: string; chargePoisha: number };
-
-export const initializeDeliveryZonesSchema = z.strictObject({});

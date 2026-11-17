@@ -16,7 +16,6 @@ import {
   changeDeliveryZoneSchema,
   createDeliveryZoneSchema,
   deliveryZoneListQuerySchema,
-  initializeDeliveryZonesSchema,
   type ChangeDeliveryZoneInput,
   type CreateDeliveryZoneInput,
   type DeliveryZoneListQuery,
@@ -48,7 +47,6 @@ export class DeliveryController {
   initializeDefaults(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
-    @Body(new ZodValidationPipe(initializeDeliveryZonesSchema)) _input: Record<string, never>,
   ): Promise<DeliveryZoneListResponse> {
     return this.service.initializeDefaults(storeId, { kind: 'user', userId });
   }

@@ -158,7 +158,7 @@ fixture('POST /delivery-zones/initialize-defaults', async () => {
   const { a, b } = await pair(),
     id = await deliveryZone(a),
     before = await f.row('delivery_zones', id);
-  const result = await success(b, 'POST', '/delivery-zones/initialize-defaults', 201, {});
+  const result = await success(b, 'POST', '/delivery-zones/initialize-defaults', 201);
   expect(result.json().items).toHaveLength(3);
   for (const zone of result.json().items)
     expect((await f.row('delivery_zones', zone.id)).store_id).toBe(b.id);
