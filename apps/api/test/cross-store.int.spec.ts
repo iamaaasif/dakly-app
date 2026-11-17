@@ -153,6 +153,45 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+async function customerImport(shop: Shop) {
+  const result = await success(shop, 'POST', '/imports', 201, { sizeBytes: 120 });
+  expect(result.json().uploadUrl).toContain(`/stores/${shop.id}/imports/`);
+  return result.json().importId as string;
+}
+const startImport = { mapping: { phone: 0 }, duplicateMode: 'update', consentEvidence: {} };
+fixture('POST /imports', async () => {
+  const { a, b } = await pair(),
+    id = await customerImport(a),
+    before = await f.row('imports', id);
+  const own = await customerImport(b);
+  expect((await f.row('imports', own)).store_id).toBe(b.id);
+  expect(await f.row('imports', id)).toEqual(before);
+});
+fixture('POST /imports/:importId/start', async () => {
+  const { a, b } = await pair(),
+    own = await customerImport(a),
+    foreign = await customerImport(a);
+  const started = await success(a, 'POST', `/imports/${own}/start`, 202, startImport);
+  expect(started.json()).toMatchObject({ id: own, status: 'importing' });
+  const before = await f.row('imports', foreign);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/imports/${id}/start`,
+    foreign,
+    () => startImport,
+  );
+  expect(await f.row('imports', foreign)).toEqual(before);
+});
+fixture('GET /imports/:importId', async () => {
+  const { a, b } = await pair(),
+    id = await customerImport(a);
+  expect((await success(a, 'GET', `/imports/${id}`, 200)).json()).toMatchObject({
+    id,
+    status: 'uploaded',
+  });
+  await hidden(b, 'GET', (value) => `/imports/${value}`, id);
+});
 const dhaka = {
   match: 'all',
   conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],

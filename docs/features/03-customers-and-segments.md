@@ -104,9 +104,18 @@ The web app has two customer screens.
   export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
   tabs, and the current consent answer per channel.
 
-Customer import (CUS-8, first part) reads a CSV file into contact rows; nothing is saved yet.
-Upload, the import job, consent evidence and undo come in the next parts.
+Customer import (CUS-8) takes a CSV file the shop uploads. The job that saves its rows as
+contacts, with the consent evidence, comes in the next part, then undo.
 
+- Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
+  and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
+  browser sends the file straight to R2 under `stores/<storeId>/imports/<uuid>.csv`.
+- Start: `POST /imports/:importId/start` takes the column mapping, the duplicate mode
+  (`update` or `skip`) and the consent evidence. It moves the import to `importing` and queues
+  the job through the `import.started` event. Only an uploaded import starts; a second start
+  fails with `IMPORT_ALREADY_STARTED`. `GET /imports/:importId` returns the status, the counts
+  and a 15-minute link to the error report. Upload and start need Edit Customers, the read
+  View Customers.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
   fills one field at most, so two columns with the same header stay apart.
@@ -124,7 +133,11 @@ Upload, the import job, consent evidence and undo come in the next parts.
   cell with two numbers (split by a comma, semicolon or slash) keeps the second as the
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
-- Only CSV is read. XLSX needs a parser the repository does not have yet.
+- Only CSV is read. XLSX comes with CUS-16.
+- The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
+  agreed. It applies to every row, for the channels it names.
+- Not built yet: the job that applies the rows, undo, the import screens, a preview before
+  start, and upload scanning (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

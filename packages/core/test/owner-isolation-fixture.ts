@@ -60,6 +60,8 @@ export class OwnerIsolationFixture {
       'campaigns',
       'segments',
       'contacts',
+      'imports',
+      'files',
       'channel_connections',
       'audit_log',
       'memberships',

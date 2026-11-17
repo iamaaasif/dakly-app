@@ -81,6 +81,8 @@ export const contacts = pgTable(
       .default(sql`'{}'::text[]`),
     notes: text('notes'),
     externalRef: text('external_ref'),
+    // The import that created this contact, so its undo removes only what it added.
+    importId: uuid('import_id').references((): AnyPgColumn => imports.id),
     deletedAt: timestamptz('deleted_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -101,6 +103,7 @@ export const contacts = pgTable(
     index('contacts_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
     index('contacts_phone_pattern_idx').on(table.storeId, sql`${table.phone} text_pattern_ops`),
     index('contacts_bd_area_id_idx').on(table.bdAreaId),
+    index('contacts_store_id_import_id_idx').on(table.storeId, table.importId),
     index('contacts_deleted_at_idx')
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} is not null`),
@@ -409,6 +412,7 @@ export const imports = pgTable(
       .default('update'),
     // CUS-R4: consents are set to granted only when the owner confirmed they agreed.
     hasConsentConfirmation: boolean('has_consent_confirmation').notNull().default(false),
+    consentEvidence: jsonb('consent_evidence'),
     rowsTotal: integer('rows_total'),
     rowsAdded: integer('rows_added'),
     rowsUpdated: integer('rows_updated'),

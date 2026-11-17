@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0032_snapshot.json`: **95 tables, 1244 columns, 370 explicit indexes and 295 foreign keys**.
+Built from `packages/db/migrations/meta/0033_snapshot.json`: **95 tables, 1246 columns, 371 explicit indexes and 296 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -390,6 +390,7 @@ erDiagram
     files |o..o{ sms_sender_ids : "store_id, nid_file_id"
     stores ||..o{ contacts : "store_id"
     bd_areas |o..o{ contacts : "bd_area_id"
+    imports |o..o{ contacts : "import_id"
     stores ||..o{ contact_merges : "store_id"
     contacts |o..o{ contact_merges : "kept_contact_id"
     contacts |o..o{ contact_merges : "merged_contact_id"
@@ -520,6 +521,7 @@ erDiagram
         text__ tags "NOT NULL; text[]"
         text notes "NULL; text"
         text external_ref "NULL; text"
+        uuid import_id FK "NULL; uuid"
         timestamp_with_time_zone deleted_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
@@ -609,6 +611,7 @@ erDiagram
         jsonb column_mapping "NULL; jsonb"
         text duplicate_mode "NOT NULL; text"
         boolean has_consent_confirmation "NOT NULL; boolean"
+        jsonb consent_evidence "NULL; jsonb"
         integer rows_total "NULL; integer"
         integer rows_added "NULL; integer"
         integer rows_updated "NULL; integer"
@@ -1978,6 +1981,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_stats_contact_id_store_fk`                                  | `contact_stats(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
 | `contacts_store_id_stores_id_fk`                                     | `contacts(store_id)`                                      | `stores(id)`                                | no action |
 | `contacts_bd_area_id_bd_areas_id_fk`                                 | `contacts(bd_area_id)`                                    | `bd_areas(id)`                              | no action |
+| `contacts_import_id_imports_id_fk`                                   | `contacts(import_id)`                                     | `imports(id)`                               | no action |
 | `imports_store_id_stores_id_fk`                                      | `imports(store_id)`                                       | `stores(id)`                                | no action |
 | `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
 | `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |
