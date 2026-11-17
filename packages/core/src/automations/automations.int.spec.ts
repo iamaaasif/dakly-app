@@ -342,6 +342,48 @@ describe('AutomationsService (Postgres)', () => {
     });
   });
 
+  it('records a manual pause and leaves a balance pause only to a top-up', async () => {
+    const automation = await draft();
+    await service.publish(storeA, automation.id, owner);
+    expect(await service.pause(storeA, automation.id, staff)).toMatchObject({
+      status: 'paused',
+      pauseReason: 'manual',
+    });
+    expect(await service.enable(storeA, automation.id, owner)).toMatchObject({
+      status: 'active',
+      pauseReason: null,
+    });
+
+    await admin.pool.query(
+      "update automations set status='paused', pause_reason='balance', balance_paused_at=now() where id=$1",
+      [automation.id],
+    );
+    for (const move of [
+      () => service.enable(storeA, automation.id, owner),
+      () => service.publish(storeA, automation.id, owner),
+    ])
+      await expect(move()).rejects.toMatchObject({
+        code: 'AUTOMATION_PAUSED_BY_SYSTEM',
+        fields: [{ path: 'pauseReason', message: 'balance' }],
+      });
+    expect(await service.get(storeA, automation.id)).toMatchObject({
+      status: 'paused',
+      pauseReason: 'balance',
+    });
+
+    const system = { kind: 'system' } as const;
+    // A top-up recorded before the pause began does not end it.
+    await service.resumeAfterTopUp(storeA, new Date(Date.now() - 60 * 60 * 1000), system);
+    expect((await service.get(storeA, automation.id)).status).toBe('paused');
+    await service.resumeAfterTopUp(storeB, new Date(), system);
+    expect((await service.get(storeA, automation.id)).status).toBe('paused');
+    await service.resumeAfterTopUp(storeA, new Date(), system);
+    expect(await service.get(storeA, automation.id)).toMatchObject({
+      status: 'active',
+      pauseReason: null,
+    });
+  });
+
   it('keeps the first draft’s trigger as the live trigger when the draft trigger changes', async () => {
     const automation = await draft();
     const graph: AutomationGraph = { ...welcome, trigger: { key: 'link_tapped', filters: [] } };

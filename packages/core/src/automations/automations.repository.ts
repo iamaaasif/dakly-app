@@ -1,7 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 
-import type { AutomationListQuery, AutomationStatus } from '@dakly/contracts/automations';
+import type {
+  AutomationListQuery,
+  AutomationPauseReason,
+  AutomationStatus,
+} from '@dakly/contracts/automations';
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { automations, automationVersions } from '@dakly/db/schema/automations';
@@ -12,6 +16,7 @@ export type Automation = {
   id: string;
   name: string;
   status: AutomationStatus;
+  pauseReason: AutomationPauseReason | null;
   graph: AutomationGraph;
   publishedVersionId: string | null;
   createdAt: Date;
@@ -29,6 +34,7 @@ const automationColumns = {
   id: automations.id,
   name: automations.name,
   status: automations.status,
+  pauseReason: automations.pauseReason,
   graph: automations.draftGraph,
   publishedVersionId: automations.publishedVersionId,
   createdAt: automations.createdAt,
@@ -44,11 +50,14 @@ const versionColumns = {
 
 type AutomationChange = {
   status?: AutomationStatus;
+  pauseReason?: AutomationPauseReason | null;
   name?: string;
   graph?: AutomationGraph;
   triggerType?: TriggerKey;
   publishedVersionId?: string;
   updatedAt: Date;
+  // Not a column: leaves a workflow paused for this reason as it is.
+  unlessPausedFor?: AutomationPauseReason;
 };
 
 @Injectable()
@@ -120,7 +129,7 @@ export class AutomationsRepository {
     storeId: string,
     id: string,
     from: readonly AutomationStatus[],
-    { graph, ...change }: AutomationChange,
+    { graph, unlessPausedFor, ...change }: AutomationChange,
   ): Promise<Automation | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -131,11 +140,68 @@ export class AutomationsRepository {
             eq(automations.storeId, storeId),
             eq(automations.id, id),
             inArray(automations.status, from),
+            unlessPausedFor &&
+              or(
+                ne(automations.status, 'paused'),
+                isNull(automations.pauseReason),
+                ne(automations.pauseReason, unlessPausedFor),
+              ),
           ),
         )
         .returning(automationColumns),
     );
     return row;
+  }
+
+  // The pause time is the database's, as is a top-up's, so the resume compares one clock. It is
+  // read after reserve took the wallet lock, and cut to milliseconds like the top-up time.
+  async pauseForBalance(
+    storeId: string,
+    id: string,
+    updatedAt: Date,
+  ): Promise<Automation | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automations)
+        .set({
+          status: 'paused',
+          pauseReason: 'balance',
+          balancePausedAt: sql`date_trunc('milliseconds', clock_timestamp())`,
+          updatedAt,
+        })
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            eq(automations.id, id),
+            eq(automations.status, 'active'),
+          ),
+        )
+        .returning(automationColumns),
+    );
+    return row;
+  }
+
+  // Every workflow of the store paused for a short balance before the top-up becomes active
+  // again, and records when.
+  async resumeBalancePaused(storeId: string, pausedBy: Date, resumedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automations)
+        .set({
+          status: 'active',
+          pauseReason: null,
+          balanceResumedAt: resumedAt,
+          updatedAt: resumedAt,
+        })
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            eq(automations.status, 'paused'),
+            eq(automations.pauseReason, 'balance'),
+            lte(automations.balancePausedAt, pausedBy),
+          ),
+        ),
+    );
   }
 
   // The caller holds the workflow's row lock from its status update, so two publishes cannot

@@ -24,6 +24,7 @@ export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
 export type DueRun = RunClaim & { storeId: string };
 
 export type ClaimedRun = {
+  automationId: string;
   contactId: string;
   status: AutomationRunStatus;
   currentStepKey: string;
@@ -33,6 +34,7 @@ export type ClaimedRun = {
   graph: AutomationGraph;
   isVersionStopped: boolean;
   automationStatus: AutomationStatus;
+  balanceResumedAt: Date | null;
 };
 
 export type RunChange = {
@@ -88,6 +90,7 @@ export class AutomationRunsRepository {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
+          automationId: automationRuns.automationId,
           contactId: automationRuns.contactId,
           status: automationRuns.status,
           currentStepKey: automationRuns.currentStepKey,
@@ -97,6 +100,7 @@ export class AutomationRunsRepository {
           graph: automationVersions.graph,
           isVersionStopped: automationVersions.isStopped,
           automationStatus: automations.status,
+          balanceResumedAt: automations.balanceResumedAt,
         })
         .from(automationRuns)
         .innerJoin(

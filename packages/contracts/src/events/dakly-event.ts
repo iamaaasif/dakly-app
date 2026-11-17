@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { automationPausedEventSchema } from './automations';
 import { campaignApprovedEventSchema } from './campaigns';
 import {
   consentChangedEventSchema,
@@ -21,6 +22,7 @@ import {
   stockChangedEventSchema,
   variantRestockedEventSchema,
 } from './products';
+import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactCreatedEventSchema,
@@ -38,6 +40,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   messageTappedEventSchema,
   messageOptedOutEventSchema,
   notificationCreatedEventSchema,
+  automationPausedEventSchema,
+  walletCreditedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

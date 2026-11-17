@@ -87,16 +87,21 @@ export class WalletLedgerRepository {
     return row;
   }
 
-  // Returns 'balance_negative' when the check constraint refuses a balance below zero.
-  async insert(
-    storeId: string,
-    entries: NewWalletEntry[],
-  ): Promise<'balance_negative' | undefined> {
+  // Returns when the rows were written, by the database's clock taken after the wallet lock, so a
+  // credit is later than any write that held the lock before it. Returns 'balance_negative' when
+  // the check constraint refuses a balance below zero.
+  async insert(storeId: string, entries: NewWalletEntry[]): Promise<Date | 'balance_negative'> {
     try {
-      await this.database.inTransaction(storeId, (tx) =>
-        tx.insert(walletLedger).values(entries.map((entry) => ({ ...entry, storeId }))),
+      const [written] = await this.database.inTransaction(storeId, (tx) =>
+        tx
+          .insert(walletLedger)
+          .values(
+            entries.map((entry) => ({ ...entry, storeId, createdAt: sql`clock_timestamp()` })),
+          )
+          .returning({ createdAt: walletLedger.createdAt }),
       );
-      return undefined;
+      if (!written) throw new Error('The wallet insert returned no row');
+      return written.createdAt;
     } catch (error) {
       if (isConstraintViolation(error, '23514', 'wallet_ledger_balance')) return 'balance_negative';
       throw error;

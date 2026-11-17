@@ -32,11 +32,11 @@ import {
   type GateResult,
   failed,
   goOn,
+  lateSend,
   holdOrEnd,
   holdsClaim,
   ifNotReachable,
   messageBody,
-  noCredits,
   operationKey,
   randomPath,
   runAction,
@@ -46,6 +46,7 @@ import {
   UNKNOWN_OUTCOME,
 } from './automation-step-rules';
 import { wakeTime } from './automation-waits';
+import { AutomationsService } from './automations.service';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
@@ -70,6 +71,7 @@ export class AutomationRunsService {
     @Inject(WalletService) private readonly wallets: WalletService,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
+    @Inject(AutomationsService) private readonly automations: AutomationsService,
   ) {}
 
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
@@ -132,6 +134,8 @@ export class AutomationRunsService {
     const facts: RunFacts = {
       storeId,
       runId: claim.runId,
+      automationId: run.automationId,
+      balanceResumedAt: run.balanceResumedAt,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
@@ -203,9 +207,8 @@ export class AutomationRunsService {
     // Publish refuses it; a version published before that refusal still fails here.
     if (step.reviewBeforeSending) return failed('Review before sending is not available yet', now);
     const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
-    // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
-    if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
-      return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
+    const late = lateSend(step, claim.stepKey, facts, now);
+    if (late) return late;
     const renewed = { ...claim, claimedAt: now };
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const renewal = { status: 'running', claimedAt: now } as const;
@@ -221,8 +224,14 @@ export class AutomationRunsService {
         : { action: 'skip', reason: 'window_closed' };
       if (decision.action !== 'send') return { decision };
       const written = await this.writeSend({ storeId, claim, contactId, step }, now);
-      return written ? { decision, ...written } : { decision: noCredits };
+      if (written) return { decision, ...written };
+      await this.automations.pauseForBalance(storeId, facts.automationId, system);
+      return 'no_credits';
     });
+    // The workflow is paused for its balance: the run waits at this step, which the sweep skips
+    // until a top-up resumes the workflow.
+    if (started === 'no_credits')
+      return { claim: renewed, run: { status: 'waiting', wakeAt: facts.wakeAt ?? now } };
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
     const { decision } = started;

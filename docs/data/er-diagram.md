@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0036_snapshot.json`: **95 tables, 1247 columns, 370 explicit indexes and 295 foreign keys**.
+Built from `packages/db/migrations/meta/0037_snapshot.json`: **95 tables, 1250 columns, 370 explicit indexes and 295 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1439,6 +1439,9 @@ erDiagram
         text template_key "NULL; text"
         text trigger_type "NOT NULL; text"
         text status "NOT NULL; text"
+        text pause_reason "NULL; text"
+        timestamp_with_time_zone balance_paused_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone balance_resumed_at "NULL; timestamp with time zone"
         boolean is_transactional "NOT NULL; boolean"
         smallint priority "NOT NULL; smallint"
         jsonb draft_graph "NOT NULL; jsonb"

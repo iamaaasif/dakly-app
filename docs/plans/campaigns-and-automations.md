@@ -56,7 +56,7 @@ Branch: `feat/camp-9-send-policy`
   - The extension checks for staff replies and transactional sends, and the campaign and run state checks, belong to CAMP-3 and CAMP-5: their sending jobs check them before they call the gate.
   - AUTO-R2 priority between two workflows on the same day: it needs the waiting runs, with CAMP-5.
   - `do_not_call`, `daily_reach_limit` and `meta_user_limit` come from the SMS provider and Meta, with ACC-14 and CHN-3.
-  - What a short balance does for a transactional send (CAMP-3 for its sending job). A workflow step skips as `no_credits` (CAMP-5), until the reviewer confirms that or picks pause or fail.
+  - What a short balance does for a transactional send (CAMP-3 for its sending job). A workflow step pauses its workflow for balance until a top-up (CAMP-5, feature 09).
   - The settings screen that edits `stores.settings.sending` through `PATCH /store`. Features 01 and 02 show quiet hours under SMS settings and WhatsApp settings; the gate holds one store-wide setting, so that screen settles whether quiet hours are per channel.
 
 #### The final send gate
@@ -134,7 +134,7 @@ Branches: `feat/camp-5-automation-versions`, then the runner in five: `feat/camp
 
 Branch: `feat/camp-11-automation-triggers`
 
-- Scope: `@HandlesEvent` subscribers for the triggers the [workflow catalogue](../features/09-campaigns-and-automations.md#workflow-catalogue) marks ready before channels: consent given, tag added and link tapped, plus the birthday date trigger. Chat started, comment on a post and lead captured follow with the channels work; segment joined waits for stored segment membership (feature 03). `start-automation-run` checks the trigger filter once, the re-entry rule (once ever, once every N days, every time; default 30 days), one active run per contact per workflow, and creates the run unique on (automation, contact, trigger key). A daily job fires date triggers in store time.
+- Scope: `@HandlesEvent` subscribers for the triggers the [workflow catalogue](../features/09-campaigns-and-automations.md#workflow-catalogue) marks ready before channels: consent given, tag added and link tapped, plus the birthday date trigger. Chat started, comment on a post and lead captured follow with the channels work; segment joined waits for stored segment membership (feature 03). `start-automation-run` checks the trigger filter once, the re-entry rule (once ever, once every N days, every time; default 30 days), one active run per contact per workflow, and creates the run unique on (automation, contact, trigger key). A daily job fires date triggers in store time. A workflow paused for balance still takes new runs: they enter and wait at their first step, and the sweep takes them once a top-up resumes it.
 - Tests (integration): the same event delivered twice starts one run; a contact still inside cannot re-enter; once every 30 days refuses day 29 and allows day 30; a disabled workflow starts nothing; the trigger preview returns the last 10 matching events.
 
 ### CAMP-12 · Web: automations list and template library
