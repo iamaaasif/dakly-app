@@ -245,9 +245,11 @@ export class AutomationRunsService {
     return undefined;
   }
 
-  private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
+  // With a send row that may have reached the provider, ending the run keeps its credits.
+  private async heldOrStale(storeId: string, claim: RunClaim, now: Date, hasSendingRow = false) {
     const run = await this.repository.findRun(storeId, claim.runId);
-    return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
+    const held = run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
+    return held && hasSendingRow ? endWithUnknownOutcome(held) : held;
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
@@ -328,7 +330,9 @@ export class AutomationRunsService {
   ): Promise<StepResult | undefined> {
     const { storeId, contactId, step } = delivery;
     const renewal = { status: 'running', claimedAt: now } as const;
-    if (!(await this.repository.moveRun(storeId, delivery.claim, renewal))) return undefined;
+    // A stopped, paused or archived workflow is not resent.
+    if (!(await this.repository.moveRunIfLive(storeId, delivery.claim, renewal)))
+      return this.heldOrStale(storeId, delivery.claim, now, true);
     const claim = { ...delivery.claim, claimedAt: now };
     const request = { contactId, channel: 'sms', category: step.category, at: now } as const;
     const skipReason = await this.sendPolicy.recheck(storeId, request);

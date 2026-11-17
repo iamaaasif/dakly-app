@@ -145,6 +145,7 @@ describe('release schema behavior (Postgres)', () => {
       const versionId = await insertVersion(client, storeId);
       const staleId = await insertRun(client, storeId, contactId, versionId, new Date(0));
       const currentId = await insertRun(client, storeId, contactId, versionId, new Date());
+      await client.query('update automation_runs set attempts = 3 where id = $1', [staleId]);
       await asApp(client, storeId);
       const claimed = await client.query(
         'select automation_run_id, claimed_at from due_automation_runs($1)',
@@ -158,8 +159,8 @@ describe('release schema behavior (Postgres)', () => {
         [staleId],
       );
       expect(retried.rows[0].claimed_at.getTime()).toBeGreaterThan(Date.now() - 60_000);
-      // The step job counts attempts when it starts work, not the claim.
-      expect(retried.rows[0].attempts).toBe(0);
+      // The step job counts attempts when it starts work; the claim leaves them as they were.
+      expect(retried.rows[0].attempts).toBe(3);
       const lease = claimed.rows.find(
         (row: { automation_run_id: string }) => row.automation_run_id === staleId,
       );
