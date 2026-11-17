@@ -1,2 +1,0 @@
-ALTER TABLE "product_variants" DROP CONSTRAINT "product_variants_money";--> statement-breakpoint
-ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_money" CHECK (coalesce("product_variants"."price_override_poisha", 0) >= 0 and coalesce("product_variants"."cost_poisha", 0) >= 0);

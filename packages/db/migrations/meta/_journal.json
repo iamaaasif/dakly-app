@@ -232,13 +232,6 @@
       "when": 1794843920200,
       "tag": "0032_sms_sender_review",
       "breakpoints": true
-    },
-    {
-      "idx": 33,
-      "version": "7",
-      "when": 1794901460861,
-      "tag": "0033_product_zero_price_override",
-      "breakpoints": true
     }
   ]
 }

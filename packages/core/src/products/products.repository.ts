@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableName, inArray, lt, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
@@ -10,6 +10,9 @@ import { products, productVariants } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
+
+// Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
+const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
 
 const productColumns = {
   id: products.id,
@@ -24,7 +27,7 @@ const productColumns = {
   isStockTracked: products.isStockTracked,
   isVisibleInChats: products.isVisibleInChats,
   isVisibleInOrderLink: products.isVisibleInOrderLink,
-  status: products.status,
+  status: sql<'active' | 'hidden'>`${products.status}`,
   createdAt: products.createdAt,
   updatedAt: products.updatedAt,
 };
@@ -43,9 +46,8 @@ const variantColumns = {
 type CatalogueProduct = Product & { variants: Variant[] };
 
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
-export type Product = Omit<ProductDetails, 'status'> & {
+export type Product = ProductDetails & {
   id: string;
-  status: 'active' | 'hidden' | 'archived';
   imageFileIds: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -96,7 +98,7 @@ export class ProductsRepository {
               ? sql`cardinality(${products.imageFileIds}) = 0`
               : undefined,
             query.readiness === 'needs_price'
-              ? sql`exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${products.id} and v.status <> 'archived' and coalesce(v.price_override_poisha, ${products.pricePoisha}) = 0)`
+              ? sql`exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived' and coalesce(v.price_override_poisha, ${products.pricePoisha}) = 0)`
               : undefined,
             query.cursor ? lt(products.id, query.cursor) : undefined,
           ),
@@ -223,5 +225,5 @@ function variantSnapshot(storeId: string) {
     'onHand', v.on_hand, 'reserved', v.reserved, 'isDefault', v.is_default
   ) order by v.position, v.id), '[]'::jsonb)
   from ${productVariants} v
-  where v.store_id = ${storeId} and v.product_id = products.id and v.status <> 'archived')`;
+  where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived')`;
 }
