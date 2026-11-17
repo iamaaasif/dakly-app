@@ -13,7 +13,6 @@ import {
   inArray,
   isNull,
   like,
-  lte,
   ne,
   not,
   or,
@@ -303,11 +302,12 @@ export class ContactsRepository {
     return rows.length > 0;
   }
 
-  // A contact edited after `createdUntil` is the shop's now, so it stays.
-  async softDeleteCreatedByImport(
+  // A contact whose updated_at still equals its created_at was never edited. Both come from the
+  // database clock, so no app clock is compared. One batch at a time keeps each statement short.
+  async softDeleteUneditedByImport(
     storeId: string,
     importId: string,
-    createdUntil: Date,
+    limit: number,
     deletedAt: Date,
   ): Promise<number> {
     const rows = await this.database.forStore(storeId, (tx) =>
@@ -317,9 +317,21 @@ export class ContactsRepository {
         .where(
           and(
             eq(contacts.storeId, storeId),
-            eq(contacts.importId, importId),
-            isNull(contacts.deletedAt),
-            lte(contacts.updatedAt, createdUntil),
+            inArray(
+              contacts.id,
+              tx
+                .select({ id: contacts.id })
+                .from(contacts)
+                .where(
+                  and(
+                    eq(contacts.storeId, storeId),
+                    eq(contacts.importId, importId),
+                    isNull(contacts.deletedAt),
+                    eq(contacts.updatedAt, contacts.createdAt),
+                  ),
+                )
+                .limit(limit),
+            ),
           ),
         )
         .returning({ id: contacts.id }),

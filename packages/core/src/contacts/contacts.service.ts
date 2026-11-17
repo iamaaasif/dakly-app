@@ -151,17 +151,18 @@ export class ContactsService {
       throw contactError('CONTACT_NOT_FOUND');
   }
 
-  // The contacts an import added and nobody has edited since it finished.
-  removeCreatedByImport(
+  // Removes up to `limit` contacts the import added and nobody has edited since; a smaller
+  // count than `limit` means none are left.
+  removeUneditedByImport(
     storeId: string,
     importId: string,
-    finishedAt: Date,
+    limit: number,
     _actor: Actor,
   ): Promise<number> {
-    return this.contactsRepository.softDeleteCreatedByImport(
+    return this.contactsRepository.softDeleteUneditedByImport(
       storeId,
       importId,
-      finishedAt,
+      limit,
       this.clock.now(),
     );
   }

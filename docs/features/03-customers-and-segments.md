@@ -155,15 +155,18 @@ undo the contacts it added.
 - Imported contacts do not emit `contact.created`, so a large import does not start welcome
   workflows for everyone in the file. This is the owner's decision, not missing work.
 - Undo: `POST /imports/:importId/undo` (Edit Customers) works on a `done` import for 7 days
-  after it finished. A later call fails with `IMPORT_UNDO_EXPIRED`, and an import that is not
-  `done`, or was already undone, fails with `IMPORT_NOT_UNDOABLE`. It moves the import to
-  `undone` and soft deletes, through the contacts service, the contacts whose `import_id` is
-  this import and whose `updated_at` is not after the import finished. A contact edited since
-  stays, and so does one the import only updated, because that one has no `import_id`. It runs
-  in one short transaction, since a file holds at most 50,000 rows and the work is one indexed
-  statement with no vendor call. Consent rows the import wrote are not touched: they are
-  append-only, and a deleted contact is never messaged. The phone of a removed contact can be
-  imported again. Undo emits no event.
+  after it finished and answers 202. A later call fails with `IMPORT_UNDO_EXPIRED`, and an
+  import that is not `done`, or was already undone, fails with `IMPORT_NOT_UNDOABLE`. In one
+  transaction it moves the import to `undone` and publishes `import.undo_requested`. The
+  `undo-contact-import` job (bulk queue) then soft deletes, through the contacts service, the
+  contacts whose `import_id` is this import and that nobody has edited: `updated_at` still
+  equals `created_at`, both written by the database, so no two clocks are compared. It
+  deletes 1,000 per statement until none are left. A rerun, for example after a crash between
+  batches or after `undone` was set, deletes what remains. A contact edited since stays, and so
+  does one the import only updated, because that one has no `import_id`. Chats and orders do
+  not change `updated_at`, so a removed contact may have had them. Consent rows the import
+  wrote are not touched: they are append-only, and a deleted contact is never messaged. The
+  phone of a removed contact can be imported again.
 - Not built yet: the import screens, a preview before start, and upload scanning
   (OPS-4).
 

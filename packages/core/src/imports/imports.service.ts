@@ -40,6 +40,7 @@ const LINK_SECONDS = 15 * 60;
 const FILE_DAYS = 7;
 const UNDO_MILLISECONDS = FILE_DAYS * 24 * 60 * 60 * 1000;
 const BATCH_ROWS = 500;
+const UNDO_BATCH_ROWS = 1_000;
 const COUNT_FOR_OUTCOME = {
   added: 'rowsAdded',
   updated: 'rowsUpdated',
@@ -100,19 +101,42 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
-  // Up to 50,000 contacts go in one indexed statement inside one short transaction, with no
-  // vendor call, so this needs no job. Contacts the import only updated have no import_id.
-  async undo(storeId: string, importId: string, actor: Actor): Promise<ImportResponse> {
+  // The status moves and the event is queued in one transaction, so a crash before the job
+  // finishes is covered by the job's rerun: it deletes whatever is still left.
+  async undo(storeId: string, importId: string, _actor: Actor): Promise<ImportResponse> {
     await this.transaction.run(storeId, async () => {
       const found = await this.findImport(storeId, importId);
       if (found.status !== 'done') throw importError('IMPORT_NOT_UNDOABLE');
-      if (this.clock.now().getTime() > found.finishedAt!.getTime() + UNDO_MILLISECONDS)
+      const now = this.clock.now();
+      if (now.getTime() > found.finishedAt!.getTime() + UNDO_MILLISECONDS)
         throw importError('IMPORT_UNDO_EXPIRED');
       if (!(await this.repository.markUndone(storeId, importId)))
         throw importError('IMPORT_NOT_UNDOABLE');
-      await this.contacts.removeCreatedByImport(storeId, importId, found.finishedAt!, actor);
+      await this.outbox.publish({
+        type: 'import.undo_requested',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { importId },
+      });
     });
     return this.get(storeId, importId);
+  }
+
+  // Each batch is its own statement; a retry deletes only what is still there.
+  async removeContactsOfUndoneImport(storeId: string, importId: string): Promise<void> {
+    const found = await this.repository.findById(storeId, importId);
+    if (found?.status !== 'undone') return;
+    for (;;) {
+      const removed = await this.contacts.removeUneditedByImport(
+        storeId,
+        importId,
+        UNDO_BATCH_ROWS,
+        {
+          kind: 'system',
+        },
+      );
+      if (removed < UNDO_BATCH_ROWS) return;
+    }
   }
 
   async get(storeId: string, importId: string): Promise<ImportResponse> {

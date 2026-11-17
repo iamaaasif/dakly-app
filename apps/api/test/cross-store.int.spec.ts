@@ -190,7 +190,7 @@ fixture('POST /imports/:importId/undo', async () => {
   const before = await f.row('imports', id);
   await hidden(b, 'POST', (value) => `/imports/${value}/undo`, id);
   expect(await f.row('imports', id)).toEqual(before);
-  const undone = await success(a, 'POST', `/imports/${id}/undo`, 200);
+  const undone = await success(a, 'POST', `/imports/${id}/undo`, 202);
   expect(undone.json()).toMatchObject({ id, status: 'undone' });
 });
 fixture('GET /imports/:importId', async () => {

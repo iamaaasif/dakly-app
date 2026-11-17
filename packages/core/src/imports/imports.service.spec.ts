@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ContactImportRow, ImportConsentEvidence } from '@dakly/contracts/contacts';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
@@ -24,7 +24,9 @@ describe('ImportsService', () => {
   let found: Import | undefined;
   let finished: Finished | undefined;
   let granted: { channel: string; contactIds: string[] }[];
-  let removed: { importId: string; createdUntil: Date }[];
+  let removed: string[];
+  let published: string[];
+  let leftToRemove: number;
   let service: ImportsService;
 
   const repository = {
@@ -45,9 +47,11 @@ describe('ImportsService', () => {
     },
   };
   const contacts = {
-    removeCreatedByImport: async (_storeId: string, importId: string, createdUntil: Date) => {
-      removed.push({ importId, createdUntil });
-      return 1;
+    removeUneditedByImport: async (_storeId: string, importId: string, limit: number) => {
+      removed.push(importId);
+      const batch = Math.min(limit, leftToRemove);
+      leftToRemove -= batch;
+      return batch;
     },
     saveImportedRows: async (
       _storeId: string,
@@ -115,12 +119,16 @@ describe('ImportsService', () => {
     finished = undefined;
     granted = [];
     removed = [];
+    published = [];
+    leftToRemove = 0;
     service = new ImportsService(
       repository as unknown as ImportsRepository,
       contacts as unknown as ContactsService,
       consents as unknown as ConsentService,
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
-      { publish: vi.fn() } as unknown as OutboxService,
+      {
+        publish: async (event: { type: string }) => void published.push(event.type),
+      } as unknown as OutboxService,
       { now: () => new Date('2026-11-17T04:30:00Z') } as Clock,
       storage,
     );
@@ -203,13 +211,33 @@ describe('ImportsService', () => {
       found = { ...found!, status, finishedAt: at };
     }
 
-    it('removes what the import created, up to its finish time, and marks it undone', async () => {
+    it('marks the import undone and queues the removal without deleting yet', async () => {
       finishedImport();
 
       const result = await service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID });
 
       expect(result.status).toBe('undone');
-      expect(removed).toEqual([{ importId: IMPORT_ID, createdUntil: finishedAt }]);
+      expect(published).toEqual(['import.undo_requested']);
+      expect(removed).toEqual([]);
+    });
+
+    it('removes the contacts in batches until none are left', async () => {
+      finishedImport('undone');
+      leftToRemove = 2_500;
+
+      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
+
+      expect(leftToRemove).toBe(0);
+      expect(removed).toHaveLength(3);
+    });
+
+    it('removes nothing for an import that is not undone', async () => {
+      finishedImport('done');
+      leftToRemove = 5;
+
+      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
+
+      expect(removed).toEqual([]);
     });
 
     it.each(['uploaded', 'importing', 'failed', 'undone'] as const)(
@@ -220,7 +248,7 @@ describe('ImportsService', () => {
         await expect(
           service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
         ).rejects.toMatchObject({ code: 'IMPORT_NOT_UNDOABLE' });
-        expect(removed).toEqual([]);
+        expect(published).toEqual([]);
       },
     );
 
@@ -231,7 +259,7 @@ describe('ImportsService', () => {
       await expect(
         service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
       ).rejects.toMatchObject({ code: 'IMPORT_NOT_UNDOABLE' });
-      expect(removed).toHaveLength(1);
+      expect(published).toHaveLength(1);
     });
 
     it('allows an undo exactly 7 days after the import finished and refuses a later one', async () => {

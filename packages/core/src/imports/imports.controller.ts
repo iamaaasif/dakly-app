@@ -52,7 +52,7 @@ export class ImportsController {
 
   @Post(':importId/undo')
   @RequirePermission('customers.edit')
-  @HttpCode(200)
+  @HttpCode(202)
   undo(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,

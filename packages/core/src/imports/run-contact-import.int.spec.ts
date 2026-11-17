@@ -235,6 +235,12 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
   describe('undo', () => {
     const lines = (...rows: string[]) => ['Name,Mobile,Email,Tags', ...rows].join('\n');
 
+    async function undo(importId: string) {
+      const result = await service.undo(storeId, importId, owner);
+      await service.removeContactsOfUndoneImport(storeId, importId);
+      return result;
+    }
+
     async function deletedAt(contactId: string) {
       const result = await admin.pool.query('select deleted_at from contacts where id=$1', [
         contactId,
@@ -242,7 +248,7 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
       return result.rows[0].deleted_at as Date | null;
     }
 
-    it('removes the contacts the import created, keeps one edited after it finished and any it only updated', async () => {
+    it('removes the contacts the import created, keeps one edited after it and any it only updated', async () => {
       const created = phone();
       const editedLater = phone();
       const known = phone();
@@ -257,7 +263,7 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
         [editedId],
       );
 
-      const result = await service.undo(storeId, importId, owner);
+      const result = await undo(importId);
 
       expect(result.status).toBe('undone');
       expect(await deletedAt(createdId)).not.toBeNull();
@@ -267,10 +273,28 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
       expect(await consentRows(createdId)).toHaveLength(2);
     });
 
+    it('queues the removal in the same transaction and a rerun of it is harmless', async () => {
+      const value = phone();
+      const { importId } = await runImport(lines(`রাবেয়া,${value},,`));
+      const contactId = (await contactByPhone(value)).id;
+
+      await service.undo(storeId, importId, owner);
+
+      expect(await deletedAt(contactId)).toBeNull();
+      const events = await admin.pool.query(
+        "select payload from outbox_events where type='import.undo_requested' and store_id=$1 and payload->>'importId'=$2",
+        [storeId, importId],
+      );
+      expect(events.rows).toEqual([{ payload: { importId } }]);
+      await service.removeContactsOfUndoneImport(storeId, importId);
+      await service.removeContactsOfUndoneImport(storeId, importId);
+      expect(await deletedAt(contactId)).not.toBeNull();
+    });
+
     it('frees the phone of a removed contact for a new import', async () => {
       const value = phone();
       const { importId } = await runImport(lines(`রাবেয়া,${value},,`));
-      await service.undo(storeId, importId, owner);
+      await undo(importId);
 
       const again = await runImport(lines(`রাবেয়া,${value},,`));
 
@@ -279,7 +303,7 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
 
     it('refuses a second undo and leaves the first result', async () => {
       const { importId } = await runImport(lines(`রাবেয়া,${phone()},,`));
-      await service.undo(storeId, importId, owner);
+      await undo(importId);
 
       await expect(service.undo(storeId, importId, owner)).rejects.toMatchObject({
         code: 'IMPORT_NOT_UNDOABLE',
