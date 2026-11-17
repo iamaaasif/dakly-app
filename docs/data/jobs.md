@@ -49,13 +49,13 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## campaign
 
-| Job                         | Started by                     | Payload                 | Makes a rerun harmless                                                                                                                     |
-| --------------------------- | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId` | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                     |
-| `send-campaign-batch`       | The sweep, then each batch     | `storeId`, `campaignId` | Recipients claimed with SKIP LOCKED; operation key `campaign-<recipientId>`                                                                |
-| sweep `start-due-campaigns` | Every minute                   | none                    | `due_campaigns`; status moves `scheduled` → `sending` once; `sending_campaigns` queues one batch per campaign, deduplicated by campaign id |
+| Job                         | Started by                     | Payload                 | Makes a rerun harmless                                                                                                                              |
+| --------------------------- | ------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId` | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                              |
+| `send-campaign-batch`       | The sweep, then each batch     | `storeId`, `campaignId` | Recipients claimed with SKIP LOCKED; operation key `campaign-<recipientId>`                                                                         |
+| sweep `start-due-campaigns` | Every minute                   | none                    | `due_campaigns`; status moves `scheduled` → `sending` once; `sending_campaigns` queues a batch for each, dropped while its campaign already has one |
 
-Per-store cap: one running campaign batch per store. The `campaign` queue runs one job at a time on a worker, and each batch queues the next behind other campaigns' batches; two workers may run two batches of one campaign at once, which the recipient claim makes safe.
+Per-store cap: one chain of batches per campaign. Every batch job is deduplicated by campaign id: the sweep's job is dropped while the campaign has a batch waiting, delayed or running, and a running batch frees the key just before it queues the next one at the back of the queue. The `campaign` queue runs one job at a time on a worker; two workers can still run batches of different campaigns of one store at once, and the recipient claims (SKIP LOCKED) keep any overlap safe.
 
 ## workflow
 

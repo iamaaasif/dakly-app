@@ -103,6 +103,15 @@ async function recipients(campaignId: string) {
   }[];
 }
 
+async function sendAttempts(campaignId: string) {
+  const { rows } = await admin.pool.query(
+    `select r.send_attempts from campaign_recipients r join contacts c on c.id = r.contact_id
+     where r.campaign_id=$1 order by c.phone`,
+    [campaignId],
+  );
+  return rows.map((row: { send_attempts: number }) => row.send_attempts);
+}
+
 async function campaignRow(campaignId: string) {
   const { rows } = await admin.pool.query(
     'select status, started_at, finished_at from campaigns where id=$1',
@@ -236,9 +245,54 @@ describe('Campaign sender (Postgres)', () => {
     expect(resends).toHaveLength(1);
     expect(resends[0]).toEqual(first);
     expect((await recipients(id)).map((row) => row.status)).toEqual(['sent', 'sent']);
+    // An expired claim is not a failed attempt.
+    expect(await sendAttempts(id)).toEqual([0, 0]);
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 2 },
       { kind: 'charge', quantity_delta: -2 },
+    ]);
+  });
+
+  it('records the provider answer of a worker whose claim was taken meanwhile', async () => {
+    const { id, phones } = await sendingCampaign(1);
+    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+      calls.push({ ...message });
+      // Another worker takes the claim while this one waits for the provider.
+      await admin.pool.query(
+        "update campaign_recipients set claimed_at=claimed_at + interval '6 minutes' where campaign_id=$1",
+        [id],
+      );
+      return driver.send(message);
+    });
+
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+    expect(calls.map((call) => call.to)).toEqual(phones);
+    expect((await recipients(id)).map((row) => row.status)).toEqual(['sent']);
+    expect(await campaignRow(id)).toMatchObject({ status: 'sent' });
+  });
+
+  it('skips a recipient whose phone changed after approval and releases its credit', async () => {
+    const { id, phones } = await sendingCampaign(2);
+    await admin.pool.query(
+      "update contacts set phone='01999000001' where store_id=$1 and phone=$2",
+      [storeId, phones[0]],
+    );
+
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+    expect(calls.map((call) => call.to)).toEqual([phones[1]]);
+    const { rows } = await admin.pool.query(
+      'select status, skip_reason from campaign_recipients where campaign_id=$1 order by destination_address',
+      [id],
+    );
+    expect(rows).toEqual([
+      { status: 'skipped', skip_reason: 'no_address' },
+      { status: 'sent', skip_reason: null },
+    ]);
+    expect(await settlementRows(id)).toEqual([
+      { kind: 'release', quantity_delta: 2 },
+      { kind: 'charge', quantity_delta: -1 },
     ]);
   });
 
@@ -300,15 +354,15 @@ describe('Campaign sender (Postgres)', () => {
       return driver.send(message);
     });
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      clockNow = new Date(noon.getTime() + attempt * 6 * MINUTE);
+    // Each thrown send frees the claim, so the job's retry tries again without waiting for it.
+    for (let attempt = 0; attempt < 2; attempt += 1)
       await expect(sender.sendBatch(storeId, id)).rejects.toThrow('provider down');
-    }
-    clockNow = new Date(noon.getTime() + 18 * MINUTE);
+    expect(await sendAttempts(id)).toEqual([2, 0]);
     expect(await sender.sendBatch(storeId, id)).toBeNull();
 
     expect(calls.filter((call) => call.to === phones[0])).toHaveLength(3);
     expect((await recipients(id)).map((row) => row.status)).toEqual(['failed', 'sent']);
+    expect(await sendAttempts(id)).toEqual([3, 0]);
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 2 },
       { kind: 'charge', quantity_delta: -1 },
@@ -339,6 +393,7 @@ describe('Campaign sender (Postgres)', () => {
   });
 
   it('starts the other due campaigns when one fails', async () => {
+    const sendAt = new Date(noon.getTime() + 60 * MINUTE);
     const [failing, other] = [randomUUID(), randomUUID()];
     for (const id of [failing, other])
       await admin.pool.query(

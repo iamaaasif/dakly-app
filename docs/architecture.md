@@ -87,7 +87,7 @@ Pending review: cross-store workers read due work through SECURITY DEFINER funct
 | `ai-reply`      | Generate and send AI chat replies                                       | High     |
 | `transactional` | Order confirmations, shipping updates, OTP, receipts                    | High     |
 | `outbound`      | Send one message through a provider                                     | Medium   |
-| `campaign`      | Expand an audience into recipients, then feed `outbound` in batches     | Low      |
+| `campaign`      | Start due campaigns, then send each campaign's recipients in batches    | Low      |
 | `workflow`      | Run due workflow steps                                                  | Medium   |
 | `sync`          | Shopify and WooCommerce sync (Q13), Meta insights; courier status later | Low      |
 | `bulk`          | Imports, exports, segment rebuilds, attribution recalculation           | Lowest   |
@@ -128,9 +128,9 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 
 ### 3. Campaign
 
-1. Owner approves. The campaign worker takes a snapshot of the audience (segment rules evaluated now) into `campaign_recipients`, marking skipped people with a reason.
-2. It feeds recipients into `outbound` in batches of 500, paced to the provider's limits and spread across the send window.
-3. Status callbacks update recipients; roll-ups update every minute; the campaign moves to Sent when all recipients reach a final status.
+1. Owner approves. The approval takes a snapshot of the audience (segment rules evaluated now) into `campaign_recipients`, marking skipped people with a reason.
+2. A sweep every minute starts due campaigns; the sender then sends each campaign's recipients in batches of 200 on the `campaign` queue, one chain of batches per campaign, through the send gate and core messaging.
+3. Status callbacks update recipients once a provider sends them (ACC-14, CHAT-2); the campaign moves to Sent when no recipient is queued or sending.
 4. Pause stops feeding new batches; cancel marks unsent recipients cancelled.
 
 ### 4. Order

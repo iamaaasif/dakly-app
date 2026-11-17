@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 
 import type { recipientSkipReasons, recipientStatuses } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -14,13 +14,14 @@ export type SendingCampaign = Pick<Campaign, 'id' | 'content'> & { approvedAt: D
 export type ClaimableRecipient = {
   id: string;
   contactId: string;
+  destinationAddress: string | null;
   status: 'queued' | 'sending';
   sendAttempts: number;
 };
 type RecipientStatus = (typeof recipientStatuses)[number];
 export type RecipientChange =
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
-  | { status: 'sending'; claimedAt: Date; sendAttempts: number }
+  | { status: 'sending'; claimedAt: Date | null; sendAttempts?: number }
   | {
       status: 'sent';
       providerMessageId: string;
@@ -28,7 +29,13 @@ export type RecipientChange =
       sentAt: Date;
       claimedAt: null;
     }
-  | { status: 'failed'; errorCode: string; failedAt: Date; claimedAt: null };
+  | {
+      status: 'failed';
+      errorCode: string;
+      failedAt: Date;
+      claimedAt: null;
+      sendAttempts: number;
+    };
 
 const sendingColumns = {
   id: campaigns.id,
@@ -93,6 +100,7 @@ export class CampaignSendingRepository {
         .select({
           id: campaignRecipients.id,
           contactId: campaignRecipients.contactId,
+          destinationAddress: campaignRecipients.destinationAddress,
           status: sql<ClaimableRecipient['status']>`${campaignRecipients.status}`,
           sendAttempts: campaignRecipients.sendAttempts,
         })
@@ -103,6 +111,7 @@ export class CampaignSendingRepository {
             inArray(campaignRecipients.status, ['queued', 'sending']),
             or(
               eq(campaignRecipients.status, 'queued'),
+              isNull(campaignRecipients.claimedAt),
               lt(campaignRecipients.claimedAt, claimedBefore),
             ),
           ),
@@ -114,8 +123,8 @@ export class CampaignSendingRepository {
     return row;
   }
 
-  // Guarded on the status, and for a recipient in sending on its claim, so a stale worker
-  // cannot overwrite a newer claim.
+  // Guarded on the status, and on the claim when one is given, so a stale worker cannot overwrite
+  // a newer claim.
   async changeRecipient(
     storeId: string,
     id: string,

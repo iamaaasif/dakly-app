@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ClockModule } from '../platform/clock.module';
@@ -17,6 +18,7 @@ import { CampaignsService } from './campaigns.service';
 
 @Module({
   imports: [
+    ContactsModule,
     ClockModule,
     LinksModule,
     MessagingModule,
