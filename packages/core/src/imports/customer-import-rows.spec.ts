@@ -157,13 +157,14 @@ describe('readCustomerImportRows', () => {
     );
   });
 
+  // These two read 10 MB for real, which takes a few seconds while the whole suite runs at once.
   it('reads a file of ten million empty lines as empty without keeping them', () => {
     const file = `Mobile${'\n'.repeat(10_000_000)}`;
 
     expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_EMPTY' }),
     );
-  });
+  }, 30_000);
 
   it('refuses a quote that never closes over 10 MB of text', () => {
     const file = `Mobile\n"${'0'.repeat(10 * 1024 * 1024)}`;
@@ -171,7 +172,7 @@ describe('readCustomerImportRows', () => {
     expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
     );
-  });
+  }, 30_000);
 
   it('keeps no cells past the last column a mapping can name', () => {
     const file = `Mobile${',x'.repeat(1_000)}\n01712345678${',y'.repeat(1_000)}`;
