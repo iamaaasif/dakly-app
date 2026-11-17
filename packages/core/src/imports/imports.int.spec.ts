@@ -7,12 +7,11 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
-
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
+import { DatabaseModule } from '../platform/database/database.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
-import { DatabaseModule } from '../platform/database/database.module';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
 
