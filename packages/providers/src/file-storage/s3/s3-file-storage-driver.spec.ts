@@ -34,13 +34,13 @@ describe('presignS3Url with content headers', () => {
     signedAt: new Date('2026-11-17T08:30:00Z'),
     expiresInSeconds: 900,
   } as const;
-  const csv = { 'content-type': 'text/csv', 'content-length': '120' };
+  const csv = { contentType: 'text/csv', sizeBytes: 120 };
 
   it('signs the content headers in sorted order beside the host', () => {
-    const url = presignS3Url({ ...request, headers: csv });
+    const url = presignS3Url({ ...request, upload: csv });
     const reordered = presignS3Url({
       ...request,
-      headers: { 'content-length': '120', 'content-type': 'text/csv' },
+      upload: { sizeBytes: 120, contentType: 'text/csv' },
     });
 
     expect(url.searchParams.get('X-Amz-SignedHeaders')).toBe('content-length;content-type;host');
@@ -48,17 +48,17 @@ describe('presignS3Url with content headers', () => {
   });
 
   it('changes the signature when the length or type changes', () => {
-    const signature = (headers: Record<string, string>) =>
-      presignS3Url({ ...request, headers }).searchParams.get('X-Amz-Signature');
+    const signature = (upload?: { sizeBytes: number; contentType: string }) =>
+      presignS3Url({ ...request, upload }).searchParams.get('X-Amz-Signature');
 
-    expect(signature(csv)).not.toBe(signature({ ...csv, 'content-length': '121' }));
-    expect(signature(csv)).not.toBe(signature({ ...csv, 'content-type': 'text/plain' }));
-    expect(signature(csv)).not.toBe(signature({}));
+    expect(signature(csv)).not.toBe(signature({ ...csv, sizeBytes: 121 }));
+    expect(signature(csv)).not.toBe(signature({ ...csv, contentType: 'text/plain' }));
+    expect(signature(csv)).not.toBe(signature());
   });
 });
 
 describe('S3FileStorageDriver', () => {
-  const jpeg = { contentLength: 2048, contentType: 'image/jpeg' };
+  const jpeg = { sizeBytes: 2048, contentType: 'image/jpeg' };
   const driver = new S3FileStorageDriver(
     {
       endpoint: 'https://account.r2.cloudflarestorage.com',

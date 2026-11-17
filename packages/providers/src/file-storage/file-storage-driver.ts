@@ -1,8 +1,7 @@
 // Presigned URLs let the browser send and fetch files directly, so the API never streams them.
+export type FileObjectMetadata = { contentType: string; sizeBytes: number };
 export type FileStorageDriver = {
-  // The upload must carry exactly this length and type, so the browser cannot send another file.
-  createUploadUrl(key: string, expiresInSeconds: number, content: UploadContent): string;
+  createUploadUrl(key: string, expiresInSeconds: number, upload?: FileObjectMetadata): string;
   createDownloadUrl(key: string, expiresInSeconds: number): string;
+  getObjectMetadata(key: string): Promise<FileObjectMetadata | null>;
 };
-
-export type UploadContent = { contentLength: number; contentType: string };

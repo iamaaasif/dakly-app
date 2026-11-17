@@ -6,7 +6,7 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { createFileStorageDriver } from './file-storage-provider';
 
-const csv = { contentLength: 120, contentType: 'text/csv' };
+const csv = { sizeBytes: 120, contentType: 'text/csv' };
 const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
 const r2 = {
   R2_ENDPOINT: 'https://account.r2.cloudflarestorage.com',

@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 
-import type { FileStorageDriver, UploadContent } from '../file-storage-driver';
+import type { FileObjectMetadata, FileStorageDriver } from '../file-storage-driver';
 
 export type S3Configuration = {
   endpoint: string;
@@ -11,15 +11,14 @@ export type S3Configuration = {
 };
 
 type PresignRequest = {
-  method: 'GET' | 'PUT';
+  method: 'GET' | 'PUT' | 'HEAD';
   url: URL;
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
   signedAt: Date;
   expiresInSeconds: number;
-  // Lower-case names. Host is always signed.
-  headers?: Record<string, string>;
+  upload?: FileObjectMetadata;
 };
 
 // Plain S3 with path-style URLs, so the same driver serves Cloudflare R2 and the local stand-in.
@@ -29,22 +28,46 @@ export class S3FileStorageDriver implements FileStorageDriver {
     private readonly clock: { now(): Date },
   ) {}
 
-  createUploadUrl(key: string, expiresInSeconds: number, content: UploadContent): string {
-    return this.presign('PUT', key, expiresInSeconds, {
-      'content-length': String(content.contentLength),
-      'content-type': content.contentType,
-    });
+  createUploadUrl(key: string, expiresInSeconds: number, upload?: FileObjectMetadata): string {
+    return this.presign('PUT', key, expiresInSeconds, upload);
   }
 
   createDownloadUrl(key: string, expiresInSeconds: number): string {
     return this.presign('GET', key, expiresInSeconds);
   }
 
+  async getObjectMetadata(key: string): Promise<FileObjectMetadata | null> {
+    try {
+      const response = await fetch(this.presign('HEAD', key, 60), {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (response.status === 404) return null;
+      const length = response.headers.get('content-length');
+      const contentType = response.headers.get('content-type');
+      const sizeBytes = Number(length);
+      if (
+        !response.ok ||
+        !contentType ||
+        length === null ||
+        !Number.isSafeInteger(sizeBytes) ||
+        sizeBytes < 0
+      )
+        throw new Error('Invalid object metadata');
+      return { contentType, sizeBytes };
+    } catch {
+      // Signed URLs contain credentials; keep vendor errors inside the driver.
+      throw Object.assign(new Error('File storage request failed'), {
+        code: 'FILE_STORAGE_UNAVAILABLE',
+      });
+    }
+  }
+
   private presign(
-    method: 'GET' | 'PUT',
+    method: PresignRequest['method'],
     key: string,
     expiresInSeconds: number,
-    headers: Record<string, string> = {},
+    upload?: FileObjectMetadata,
   ): string {
     const { endpoint, bucket, ...credentials } = this.configuration;
     const url = new URL(endpoint);
@@ -55,19 +78,24 @@ export class S3FileStorageDriver implements FileStorageDriver {
       url,
       signedAt: this.clock.now(),
       expiresInSeconds,
-      headers,
+      upload,
     }).toString();
   }
 }
 
-// AWS Signature Version 4 in the query string. The payload is unsigned, so the URL works for any body.
+// The payload stays unsigned because the browser sends the bytes directly.
 export function presignS3Url(request: PresignRequest): URL {
   const amzDate = request.signedAt.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const date = amzDate.slice(0, 8);
   const scope = `${date}/${request.region}/s3/aws4_request`;
-  const headers: Record<string, string> = { ...request.headers, host: request.url.host };
-  const names = Object.keys(headers).sort();
-  const signedHeaders = names.join(';');
+  const headers: [string, string][] = request.upload
+    ? [
+        ['content-length', String(request.upload.sizeBytes)],
+        ['content-type', request.upload.contentType],
+        ['host', request.url.host],
+      ]
+    : [['host', request.url.host]];
+  const signedHeaders = headers.map(([name]) => name).join(';');
   const parameters: [string, string][] = [
     ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
     ['X-Amz-Credential', `${request.accessKeyId}/${scope}`],
@@ -80,7 +108,7 @@ export function presignS3Url(request: PresignRequest): URL {
     request.method,
     request.url.pathname,
     query,
-    names.map((name) => `${name}:${headers[name]}\n`).join(''),
+    headers.map(([name, value]) => `${name}:${value.trim()}\n`).join(''),
     signedHeaders,
     'UNSIGNED-PAYLOAD',
   ].join('\n');
