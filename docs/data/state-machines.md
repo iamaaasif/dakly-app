@@ -111,7 +111,7 @@ stateDiagram-v2
 
 `pause_reason`: `manual`, `balance`, `whatsapp_quality`, `template_rejected`, `provider_error`.
 
-Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` → `delivered` → `read`; `failed` from `sending` or `sent`; `cancelled` from `queued` when the campaign is cancelled; `skipped` can be set at audience build or reached from `queued` or pre-provider `sending` when consent, blocking, window or another final gate fails. Record `skip_reason` and release the reserved cost atomically. Once handed to the provider, reconcile its outcome rather than changing to skipped. Skipped is terminal.
+Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` → `delivered` → `read`; `failed` from `sending` or `sent`; back to `queued` from `sending` when the provider refused the send, so every final check runs again (CAMP-3); `cancelled` from `queued` when the campaign is cancelled; `skipped` can be set at audience build or reached from `queued` or pre-provider `sending` when consent, blocking, window or another final gate fails. Record `skip_reason` and release the reserved cost atomically. Once handed to the provider, reconcile its outcome rather than changing to skipped. Skipped is terminal.
 
 ## Social post target
 

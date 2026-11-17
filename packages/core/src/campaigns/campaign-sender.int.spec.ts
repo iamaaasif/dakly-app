@@ -9,10 +9,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import type { SmsMessage } from '@dakly/providers/sms/sms-driver';
+import { type SmsMessage, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
+import { ErrorReporter } from '../platform/logging/error-reporter';
+import { runWithJobContext } from '../platform/logging/job-context';
 import { SegmentsService } from '../segments/segments.service';
 import { SmsService } from '../sms/sms.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -350,13 +352,13 @@ describe('Campaign sender (Postgres)', () => {
     const { id, phones } = await sendingCampaign(2);
     vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
       calls.push({ ...message });
-      if (message.to === phones[0]) throw new Error('provider down');
+      if (message.to === phones[0]) throw new SmsSendRefused();
       return driver.send(message);
     });
 
-    // Each thrown send frees the claim, so the job's retry tries again without waiting for it.
+    // Each refusal puts the recipient back in the queue, so the job's retry tries it at once.
     for (let attempt = 0; attempt < 2; attempt += 1)
-      await expect(sender.sendBatch(storeId, id)).rejects.toThrow('provider down');
+      await expect(sender.sendBatch(storeId, id)).rejects.toThrow(SmsSendRefused);
     expect(await sendAttempts(id)).toEqual([2, 0]);
     expect(await sender.sendBatch(storeId, id)).toBeNull();
 
@@ -368,6 +370,55 @@ describe('Campaign sender (Postgres)', () => {
       { kind: 'charge', quantity_delta: -1 },
     ]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 1);
+  });
+
+  it('checks consent again after a refusal and skips a contact who withdrew meanwhile', async () => {
+    const { id, phones } = await sendingCampaign(1);
+    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+      calls.push({ ...message });
+      throw new SmsSendRefused();
+    });
+    await expect(sender.sendBatch(storeId, id)).rejects.toThrow(SmsSendRefused);
+    await admin.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) select gen_random_uuid(),$1,id,'sms','withdrawn','opt_out_link',now()+interval '1 second' from contacts where store_id=$1 and phone=$2",
+      [storeId, phones[0]],
+    );
+
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+    expect(calls).toHaveLength(1);
+    expect((await recipients(id)).map((row) => [row.status, row.skip_reason])).toEqual([
+      ['skipped', 'no_consent'],
+    ]);
+    expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+  });
+
+  it('counts no attempt for an unknown outcome and resends it under the same key later', async () => {
+    const { id, phones } = await sendingCampaign(1);
+    vi.mocked(SmsService.prototype.send).mockImplementationOnce(async (message) => {
+      calls.push({ ...message });
+      throw new Error('provider timed out');
+    });
+    await expect(sender.sendBatch(storeId, id)).rejects.toThrow('provider timed out');
+    expect((await recipients(id)).map((row) => row.status)).toEqual(['sending']);
+    expect(await sendAttempts(id)).toEqual([0]);
+    // The claim holds the recipient until it expires.
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+    expect(calls).toHaveLength(1);
+
+    clockNow = new Date(noon.getTime() + 6 * MINUTE);
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+    expect(calls.map((call) => [call.to, call.idempotencyKey])).toEqual([
+      [phones[0], calls[0]!.idempotencyKey],
+      [phones[0], calls[0]!.idempotencyKey],
+    ]);
+    expect((await recipients(id)).map((row) => row.status)).toEqual(['sent']);
+    expect(await sendAttempts(id)).toEqual([0]);
+    expect(await settlementRows(id)).toEqual([
+      { kind: 'release', quantity_delta: 1 },
+      { kind: 'charge', quantity_delta: -1 },
+    ]);
   });
 
   it('sends nothing for a paused campaign and keeps its reservation', async () => {
@@ -384,11 +435,11 @@ describe('Campaign sender (Postgres)', () => {
     const sendAt = new Date(noon.getTime() + 60 * MINUTE);
     const { id } = await sendingCampaign(1, sendAt);
 
-    expect(await sender.startDue()).not.toContainEqual({ storeId, campaignId: id });
+    await sender.startDue();
     expect(await campaignRow(id)).toMatchObject({ status: 'scheduled', started_at: null });
 
     clockNow = sendAt;
-    expect(await sender.startDue()).toContainEqual({ storeId, campaignId: id });
+    await sender.startDue();
     expect(await campaignRow(id)).toMatchObject({ status: 'sending', started_at: sendAt });
   });
 
@@ -523,6 +574,31 @@ describe('Campaign sender (Postgres)', () => {
     });
   });
 
+  it('names one sending campaign per store, the earliest started, then the next', async () => {
+    const otherStore = randomUUID();
+    const [first, second] = [randomUUID(), randomUUID()];
+    await admin.pool.query("insert into stores(id,name) values($1,'রনির দোকান')", [otherStore]);
+    for (const [id, startedAt] of [
+      [second, '2026-11-18T07:00:00Z'],
+      [first, '2026-11-18T06:00:00Z'],
+    ])
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,approved_at,started_at)
+         values($1,$2,'নতুন কালেকশন','sms','{"text":"নতুন"}','sending',now(),$3)`,
+        [id, otherStore, startedAt],
+      );
+    const named = async () =>
+      (await sender.startDue()).filter((campaign) => campaign.storeId === otherStore);
+    try {
+      expect(await named()).toEqual([{ storeId: otherStore, campaignId: first }]);
+      await admin.pool.query("update campaigns set status='sent' where id=$1", [first]);
+      expect(await named()).toEqual([{ storeId: otherStore, campaignId: second }]);
+    } finally {
+      await admin.pool.query('delete from campaigns where store_id=$1', [otherStore]);
+      await admin.pool.query('delete from stores where id=$1', [otherStore]);
+    }
+  });
+
   it('starts the other due campaigns when one fails', async () => {
     const sendAt = new Date(noon.getTime() + 60 * MINUTE);
     const [failing, other] = [randomUUID(), randomUUID()];
@@ -540,13 +616,22 @@ describe('Campaign sender (Postgres)', () => {
         return start.apply(this, args);
       });
     const quiet = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const report = vi
+      .spyOn(app.get(ErrorReporter), 'reportJob')
+      .mockImplementation(() => undefined);
     clockNow = sendAt;
 
-    await sender.startDue();
+    await runWithJobContext(() => sender.startDue(), 'sweep-job-1');
 
+    expect(report).toHaveBeenCalledOnce();
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({ errorClass: 'Error' }),
+      'sweep-job-1',
+    );
     expect(await campaignRow(failing)).toMatchObject({ status: 'scheduled' });
     expect(await campaignRow(other)).toMatchObject({ status: 'sending' });
     failStart.mockRestore();
     quiet.mockRestore();
+    report.mockRestore();
   });
 });

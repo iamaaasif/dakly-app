@@ -4,6 +4,7 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ClockModule } from '../platform/clock.module';
+import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
@@ -22,6 +23,7 @@ import { CampaignsService } from './campaigns.service';
     ClockModule,
     LinksModule,
     MessagingModule,
+    ErrorReportingModule,
     OutboxModule,
     SegmentsModule,
     SendingModule,

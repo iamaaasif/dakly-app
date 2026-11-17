@@ -249,6 +249,29 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(calls).toEqual([]);
   });
 
+  it('refuses a phone that is no longer the approved number, and sends to the approved one', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'সাবিনা ইয়াসমিন', phone: '01712345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const approved = (destinationAddress: string) =>
+      messaging.send(storeA, {
+        channel: 'sms',
+        contactId: contact.id,
+        body: 'নতুন কালেকশন এসেছে',
+        operationKey: `test-destination-${destinationAddress}`,
+        destinationAddress,
+      });
+
+    expect(await errorCode(approved('01712345600'))).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+    await approved('01712345609');
+    expect(calls.map((call) => call.to)).toEqual(['01712345609']);
+  });
+
   it('never sends to another store’s contact', async () => {
     const contact = await contacts.create(
       storeB,

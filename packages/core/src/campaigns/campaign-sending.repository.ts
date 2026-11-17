@@ -21,7 +21,8 @@ export type ClaimableRecipient = {
 type RecipientStatus = (typeof recipientStatuses)[number];
 export type RecipientChange =
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
-  | { status: 'sending'; claimedAt: Date | null; sendAttempts?: number }
+  | { status: 'sending'; claimedAt: Date }
+  | { status: 'queued'; claimedAt: null; sendAttempts?: number }
   | {
       status: 'sent';
       providerMessageId: string;
@@ -108,7 +109,6 @@ export class CampaignSendingRepository {
             inArray(campaignRecipients.status, ['queued', 'sending']),
             or(
               eq(campaignRecipients.status, 'queued'),
-              isNull(campaignRecipients.claimedAt),
               lt(campaignRecipients.claimedAt, claimedBefore),
             ),
           ),

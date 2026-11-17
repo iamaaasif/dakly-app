@@ -20,13 +20,13 @@ const batchJobOptions = {
   removeOnFail: 100,
 } satisfies JobsOptions;
 
-// One chain of batches per campaign: a batch is dropped while another for the same campaign is
-// waiting, delayed or running.
+// One chain of batches per store (jobs.md): a batch is dropped while another for the same store
+// is waiting, delayed or running.
 export function batchJob(storeId: string, campaignId: string, delay = 0) {
   return {
     name: SEND_CAMPAIGN_BATCH,
     data: { storeId, campaignId },
-    opts: { ...batchJobOptions, delay, deduplication: { id: campaignId } },
+    opts: { ...batchJobOptions, delay, deduplication: { id: storeId } },
   };
 }
 
@@ -38,8 +38,8 @@ export class SendCampaignBatchJob implements JobHandler {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // This running job holds the campaign's key, so it frees the key just before queueing the next
-  // batch, which goes to the back of the queue behind other campaigns.
+  // This running job holds the store's key, so it frees the key just before queueing the next
+  // batch, which goes to the back of the queue behind other stores' batches.
   async handle(data: unknown) {
     const { storeId, campaignId } = payload.parse(data);
     const next = await this.sender.sendBatch(storeId, campaignId);
@@ -49,7 +49,7 @@ export class SendCampaignBatchJob implements JobHandler {
       data: job,
       opts,
     } = batchJob(storeId, campaignId, Math.max(0, next.getTime() - this.clock.now().getTime()));
-    await this.queue.removeDeduplicationKey(campaignId);
+    await this.queue.removeDeduplicationKey(storeId);
     await this.queue.add(name, job, opts);
   }
 }

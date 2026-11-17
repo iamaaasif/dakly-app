@@ -17,7 +17,7 @@ packages/providers/src/
 - Vendor payload types never appear in `packages/core`.
 - Drivers do no business logic: no "if the order is COD then...". That belongs in a service.
 - Credentials are passed in per call (each shop connects its own accounts), never read from a global.
-- Every driver call has a timeout and returns a clear error code when the vendor fails.
+- Every driver call has a timeout and returns a clear error code when the vendor fails. A timeout means the outcome is unknown, not a refusal: a sending driver says a vendor refused only when it is sure (for SMS, `SmsSendRefused`), so the caller can retry under the same idempotency key.
 - Add an interface only for vendors. Inside Dakly, use concrete classes until a second implementation really exists.
 
 **Why:** WhatsApp BSPs, couriers and gateways change. Swapping one should touch one folder. Release 1 uses OpenAI for AI (decision D17); adding another model provider later is a new folder under `llm/`.
