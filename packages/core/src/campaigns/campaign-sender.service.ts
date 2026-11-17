@@ -210,7 +210,7 @@ export class CampaignSenderService {
         contactId: claim.contactId,
         body: claim.text,
         operationKey: `campaign-${recipientId}`,
-        destinationAddress: claim.destinationAddress,
+        destination: claim.destinationAddress,
       });
     } catch (error) {
       if (!(error instanceof SmsSendRefused || error instanceof AppError)) throw error;
