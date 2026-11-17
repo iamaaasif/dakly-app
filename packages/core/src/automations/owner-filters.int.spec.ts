@@ -95,6 +95,7 @@ describe('automation filters without RLS assistance', () => {
     expect((await f.row('automation_runs', runId)).attempts).toBe(0);
     expect(await runs.startWork(f.a, claim)).toBe(1);
     expect(await runs.moveRun(f.b, claim, { status: 'done' })).toBe(false);
+    expect(await runs.moveRunIfLive(f.b, claim, { status: 'done' })).toBe(false);
     await expect(runs.insertStep(f.b, runId, contactId, step)).rejects.toThrow();
     expect((await f.row('automation_runs', runId)).status).toBe('running');
 

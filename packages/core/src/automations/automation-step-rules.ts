@@ -105,7 +105,10 @@ export function endWithUnknownOutcome(held: StepResult): StepResult {
   if (held.run.status === 'waiting') return held;
   return {
     ...held,
-    run: { ...held.run, lastError: held.run.lastError ?? UNKNOWN_OUTCOME },
+    run: {
+      ...held.run,
+      lastError: held.run.lastError ? `${held.run.lastError}. ${UNKNOWN_OUTCOME}` : UNKNOWN_OUTCOME,
+    },
     stepChange: { outcome: 'failed' },
   };
 }

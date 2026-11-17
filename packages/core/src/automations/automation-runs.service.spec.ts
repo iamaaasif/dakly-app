@@ -595,7 +595,11 @@ describe('AutomationRunsService', () => {
         await afterUnknownOutcome(change);
 
         expect(repository.run.status).toBe(status);
-        expect(repository.run.lastError).toBeTruthy();
+        expect(repository.run.lastError).toContain(
+          'The SMS provider did not confirm this message, so its credits stay reserved',
+        );
+        if (status === 'failed')
+          expect(repository.run.lastError).toContain('This step failed too many times in a row');
         expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
         expect(ledger).toEqual([{ key, kind: 'reserve', quantity: 1 }]);
         expect(balance).toBe(9);
