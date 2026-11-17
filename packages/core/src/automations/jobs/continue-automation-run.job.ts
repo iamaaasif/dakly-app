@@ -21,6 +21,7 @@ const payload = z.strictObject({
 // the step gets its own key, so a job kept after failing never blocks it.
 const stepJobOptions = {
   // The lease and the sweep are the retry: a retried job no longer holds the claim startWork renewed.
+  // docs/data/jobs.md states this exception to retrying failed jobs with backoff.
   attempts: 1,
   removeOnComplete: true,
   removeOnFail: 100,
