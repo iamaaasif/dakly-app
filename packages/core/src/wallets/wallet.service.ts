@@ -176,23 +176,36 @@ export class WalletService {
     const replay = await this.ledger.findByIdempotencyKey(storeId, idempotencyKey);
     if (replay) return toResult(replay);
     const latest = await this.ledger.latest(storeId, wallet);
-    let revision = latest?.revision ?? 0;
-    let balance = latest?.balanceQuantityAfter ?? 0;
     const { release, entry } = await changes();
     const entryId = newId();
-    const entries: NewWalletEntry[] = [];
-    for (const change of [...(release ? [release] : []), { ...entry, id: entryId }]) {
-      revision += 1;
-      balance += change.quantityDelta;
-      if (balance < 0) throw walletError('WALLET_BALANCE_TOO_LOW');
-      entries.push({ ...change, ...actor, wallet, revision, balanceQuantityAfter: balance });
-    }
+    const changed = [...(release ? [release] : []), { ...entry, id: entryId }];
+    const { entries, balance } = nextEntries(
+      latest,
+      changed.map((change) => ({ ...change, ...actor, wallet })),
+    );
     // The service check above normally prevents this; the database rule is the last guard.
     if ((await this.ledger.insert(storeId, entries)) === 'balance_negative')
       throw walletError('WALLET_BALANCE_TOO_LOW');
     await afterInsert?.(entryId);
     return { entryId, balanceQuantity: balance };
   }
+}
+
+// Numbers the new rows after the latest one and refuses a balance below zero.
+function nextEntries(
+  latest: WalletEntry | undefined,
+  changes: Omit<NewWalletEntry, 'revision' | 'balanceQuantityAfter'>[],
+) {
+  let revision = latest?.revision ?? 0;
+  let balance = latest?.balanceQuantityAfter ?? 0;
+  const entries: NewWalletEntry[] = [];
+  for (const change of changes) {
+    revision += 1;
+    balance += change.quantityDelta;
+    if (balance < 0) throw walletError('WALLET_BALANCE_TOO_LOW');
+    entries.push({ ...change, revision, balanceQuantityAfter: balance });
+  }
+  return { entries, balance };
 }
 
 function releaseOf(reservation: WalletEntry, idempotencyKey: string): EntryChange {
