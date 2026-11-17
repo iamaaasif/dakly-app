@@ -20,8 +20,8 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { TeamService } from '../team/team.service';
-import { WalletLedgerRepository } from '../wallets/wallet-ledger.repository';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationsModule } from './automations.module';
@@ -1145,13 +1145,15 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } = await dueRuns(twoParts, 1, 'active', contact);
       // One credit, too few for two parts, commits after the gate's transaction began.
       let credit: { id: string; created_at: Date } | undefined;
-      const lockWallet = WalletLedgerRepository.prototype.lockWallet;
-      vi.spyOn(WalletLedgerRepository.prototype, 'lockWallet').mockImplementationOnce(
-        async function (this: WalletLedgerRepository, ...args) {
-          credit = await setCredits(1);
-          return lockWallet.apply(this, args);
-        },
-      );
+      // The gate checks the send policy inside its transaction, before reserve takes the lock.
+      const check = SendPolicyService.prototype.check;
+      vi.spyOn(SendPolicyService.prototype, 'check').mockImplementationOnce(async function (
+        this: SendPolicyService,
+        ...args
+      ) {
+        credit = await setCredits(1);
+        return check.apply(this, args);
+      });
       await runDueStep(runner, runId!);
       const status = () =>
         admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
