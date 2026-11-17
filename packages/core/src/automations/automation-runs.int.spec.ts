@@ -180,15 +180,22 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     await Promise.all([first.sweep(), second.sweep()]);
 
-    const queued = [...(await queuedSteps(first.queue)), ...(await queuedSteps(second.queue))]
-      .map((step) => step.automationRunId)
-      .filter((runId) => runIds.includes(runId));
-    expect(queued.sort()).toEqual([...runIds].sort());
+    const queued = [
+      ...(await queuedSteps(first.queue)),
+      ...(await queuedSteps(second.queue)),
+    ].filter((step) => runIds.includes(step.automationRunId));
+    expect(queued.map((step) => step.automationRunId).sort()).toEqual([...runIds].sort());
+    // Each job carries the run's one claim, and a sweep does not count attempts.
     const claims = await admin.pool.query(
-      'select count(*)::int as count from automation_runs where id=any($1::uuid[]) and status=$2 and attempts=1',
+      'select id,claimed_at,attempts from automation_runs where id=any($1::uuid[]) and status=$2',
       [runIds, 'running'],
     );
-    expect(claims.rows).toEqual([{ count: 150 }]);
+    expect(claims.rows).toHaveLength(150);
+    for (const row of claims.rows) {
+      const step = queued.find((queuedStep) => queuedStep.automationRunId === row.id)!;
+      expect(new Date(step.claimedAt)).toEqual(row.claimed_at);
+      expect(row.attempts).toBe(0);
+    }
   });
 
   it('keeps a stale worker from advancing a run another sweep claimed again', async () => {
@@ -213,7 +220,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       status: 'running',
       current_step_key: 'first',
       claimed_at: new Date(current.claimedAt),
-      attempts: 2,
+      attempts: 0,
     });
     expect(await steps(runId!)).toEqual([]);
 
@@ -415,5 +422,33 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       { step_key: 'check', kind: 'condition', outcome: 'path_1' },
     ]);
     expect((await run(runId!)).current_step_key).toBe('yes');
+  });
+
+  it('does not count claims whose job never started toward the limit', async () => {
+    const {
+      runIds: [runId],
+    } = await dueRuns(wait);
+    const runner = await worker();
+    for (let claim = 0; claim < 12; claim++) {
+      await admin.pool.query(
+        "update automation_runs set claimed_at=claimed_at - interval '6 minutes' where id=$1",
+        [runId],
+      );
+      await runner.sweep();
+    }
+    const { claimed_at: claimedAt } = await run(runId!);
+    const current = (await queuedSteps(runner.queue)).find(
+      (step) =>
+        step.automationRunId === runId &&
+        new Date(step.claimedAt).getTime() === claimedAt.getTime(),
+    );
+
+    await runner.runStep(current!);
+
+    expect(await run(runId!)).toMatchObject({
+      status: 'waiting',
+      current_step_key: 'end',
+      attempts: 0,
+    });
   });
 });

@@ -85,4 +85,48 @@ describe('campaign filters without RLS assistance', () => {
       [contactA, contactB],
     ]);
   });
+
+  it('locks, changes the status of and clears recipients for only the selected store', async () => {
+    const [a, b] = [
+      await repository.insert(f.a, { ...draft, createdByUserId: f.userA }),
+      await repository.insert(f.b, { ...draft, createdByUserId: f.userB }),
+    ];
+    const contactA = randomUUID();
+    await f.connection.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+      [contactA, f.a],
+    );
+    await f.connection.pool.query("update campaigns set status='scheduled' where id=$1", [a.id]);
+    await repository.insertRecipients(f.a, a.id, [
+      {
+        contactId: contactA,
+        destinationAddress: '01711000001',
+        status: 'queued',
+        skipReason: null,
+      },
+    ]);
+    const before = await f.row('campaigns', a.id);
+    const now = new Date('2026-11-16T05:00:00Z');
+
+    expect(await repository.lockScheduled(f.b, a.id)).toBeUndefined();
+    expect(
+      await repository.changeStatus(f.b, a.id, 'scheduled', {
+        status: 'cancelled',
+        updatedAt: now,
+      }),
+    ).toBeUndefined();
+    await repository.cancelQueuedRecipients(f.b, a.id);
+    await repository.removeRecipients(f.b, a.id);
+    expect(
+      await repository.changeStatus(f.b, b.id, 'draft', { status: 'cancelled', updatedAt: now }),
+    ).toMatchObject({ status: 'cancelled' });
+
+    expect(await f.row('campaigns', a.id)).toEqual(before);
+    const { rows } = await f.connection.pool.query(
+      'select status from campaign_recipients where campaign_id=$1',
+      [a.id],
+    );
+    expect(rows).toEqual([{ status: 'queued' }]);
+    await f.connection.pool.query('delete from contacts where id=$1', [contactA]);
+  });
 });

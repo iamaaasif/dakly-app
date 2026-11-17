@@ -23,7 +23,7 @@ import { wakeTime } from './automation-waits';
 const CLAIM_BATCH_SIZE = 100;
 // One sweep claims at most this many batches, so a backlog spreads over the next ticks.
 const CLAIM_BATCHES_PER_SWEEP = 10;
-// Claims without a committed step, counted by due_automation_runs: a job that keeps failing.
+// Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 const system = { kind: 'system' } as const;
 
@@ -71,8 +71,11 @@ export class AutomationRunsService {
 
   // Returns the claim on the next step when the run goes straight on, for its job to queue.
   async continueRun(storeId: string, claim: RunClaim): Promise<RunClaim | undefined> {
-    const run = await this.repository.findRun(storeId, claim.runId);
-    if (!run || !holdsClaim(run, claim)) return undefined;
+    const found = await this.repository.findRun(storeId, claim.runId);
+    if (!found || !holdsClaim(found, claim)) return undefined;
+    const attempts = await this.repository.startWork(storeId, claim);
+    if (attempts === undefined) return undefined;
+    const run = { ...found, attempts };
     const result = await this.runStep(storeId, claim, run);
     // Every committed step starts the count of claims without progress again.
     const change = { attempts: 0, lastError: null, ...result.run };

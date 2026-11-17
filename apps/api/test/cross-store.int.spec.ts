@@ -412,6 +412,32 @@ fixture('POST /campaigns/:campaignId/approve', async () => {
   );
   expect(recipients.rows).toEqual([{ store_id: b.id }]);
 });
+// An approved campaign in the given state: scheduled for tomorrow, sending, or paused by hand.
+async function campaignIn(shop: Shop, status: 'scheduled' | 'sending' | 'paused') {
+  const id = await approvableCampaign(shop);
+  if (status === 'scheduled')
+    await success(shop, 'PATCH', `/campaigns/${id}`, 200, {
+      scheduledFor: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    });
+  await success(shop, 'POST', `/campaigns/${id}/approve`, 200);
+  if (status === 'paused') await success(shop, 'POST', `/campaigns/${id}/pause`, 200);
+  return id;
+}
+for (const [action, from, to] of [
+  ['unschedule', 'scheduled', 'draft'],
+  ['cancel', 'scheduled', 'cancelled'],
+  ['pause', 'sending', 'paused'],
+  ['resume', 'paused', 'sending'],
+] as const)
+  fixture(`POST /campaigns/:campaignId/${action}`, async () => {
+    const { a, b } = await pair(),
+      own = await campaignIn(b, from),
+      foreign = await campaignIn(a, from);
+    expect((await success(b, 'POST', `/campaigns/${own}/${action}`, 200)).json().status).toBe(to);
+    const before = await f.row('campaigns', foreign);
+    await hidden(b, 'POST', (id) => `/campaigns/${id}/${action}`, foreign);
+    expect(await f.row('campaigns', foreign)).toEqual(before);
+  });
 for (const [path, table, create] of [
   ['roles', 'roles', role],
   ['members', 'memberships', async (shop: Shop) => shop.membership],
