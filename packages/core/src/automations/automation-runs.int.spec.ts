@@ -776,7 +776,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         last_error: expect.stringContaining('The SMS provider did not answer for 36 hours.'),
         finished_at: clockNow,
       });
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       // The provider may have taken it, so the credits stay reserved for reconciliation.
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
     });
@@ -818,7 +818,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runDueStep(runner, runId!);
 
       expect(await run(runId!)).toMatchObject({ status: 'exited' });
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
       expect(await balance()).toBe(before - 1);
     });
@@ -848,7 +848,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runDueStep(runner, runId!);
 
       expect(await sendStep(runId!)).toEqual([
-        expect.objectContaining({ outcome: 'failed', skip_reason: 'no_consent' }),
+        expect.objectContaining({ outcome: 'unconfirmed', skip_reason: 'no_consent' }),
       ]);
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
       expect(await balance()).toBe(before - 1);

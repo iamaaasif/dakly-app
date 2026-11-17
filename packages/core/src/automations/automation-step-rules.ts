@@ -34,12 +34,15 @@ export type Delivery = {
   contactId: string;
   step: SendStep;
   body: string;
+  destination: string | null;
   isFirstTry: boolean;
 };
 // What the gate's transaction decided: a renewal refused for a paused, stopped or archived
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
-  'not_live' | { decision: SendDecision } | { decision: { action: 'send' }; body: string };
+  | 'not_live'
+  | { decision: SendDecision }
+  | { decision: { action: 'send' }; body: string; destination: string | null };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -109,7 +112,7 @@ export function endWithUnknownOutcome(held: StepResult): StepResult {
       ...held.run,
       lastError: held.run.lastError ? `${held.run.lastError}. ${UNKNOWN_OUTCOME}` : UNKNOWN_OUTCOME,
     },
-    stepChange: { outcome: 'failed' },
+    stepChange: { outcome: 'unconfirmed' },
   };
 }
 

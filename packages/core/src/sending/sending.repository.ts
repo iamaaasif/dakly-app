@@ -83,7 +83,8 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
     );
 }
 
-// A send step counts from its send time, while sending and once sent; a failed send does not.
+// A send step counts from its send time while sending, once sent, and when its outcome stayed
+// unknown (unconfirmed), as it may have reached the person; a send that provably failed does not.
 function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
   return tx
     .select({
@@ -100,7 +101,7 @@ function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: S
         lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
         eq(automationRunSteps.category, 'marketing'),
-        inArray(automationRunSteps.outcome, ['sending', 'sent']),
+        inArray(automationRunSteps.outcome, ['sending', 'sent', 'unconfirmed']),
       ),
     );
 }

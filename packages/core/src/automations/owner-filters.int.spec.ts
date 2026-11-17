@@ -126,6 +126,7 @@ describe('automation filters without RLS assistance', () => {
     expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
       sentAt: claimedAt,
       optOutCode: null,
+      destination: null,
     });
     await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
     expect(await runs.findSendingStep(f.a, runId, 'offer')).toBeUndefined();

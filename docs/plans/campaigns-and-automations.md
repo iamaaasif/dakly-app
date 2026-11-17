@@ -89,7 +89,7 @@ Marketing sends, from campaigns and workflows:
 4. Window: Messenger only when the contact's last inbound message on the sending Page is under 23 hours old at send time (D24, CAMP-R6), otherwise `window_closed`. No message tag carries marketing. WhatsApp needs an approved marketing template (CAMP-1, waits for Q2). SMS has no window.
 5. Quiet hours: inside the store's quiet hours (default 21:00 to 09:00 Asia/Dhaka) the send defers to the next allowed time. Quiet hours are checked before the frequency cap, as in feature 09.
 6. Frequency cap: at most 1 marketing message per store per channel per day and 3 per 7 days across campaigns and workflows (CAMP-R3), counted from Postgres (A2); over the cap is skipped as `frequency_cap`. When two workflows fire the same day, only the higher priority message sends (AUTO-R2).
-7. Wallet: not part of `SendPolicyService.check`. A campaign recipient's cost was reserved at approval (CAMP-2) and must still be held; a workflow step's job reserves its cost around the gate in the same transaction, and a skip releases it there. A campaign with a short balance pauses and notifies the Owner (feature 09); what a workflow step does then is still to build.
+7. Wallet: not part of `SendPolicyService.check`. A campaign recipient's cost was reserved at approval (CAMP-2) and must still be held; a workflow step's job reserves its cost in the gate transaction; a skip reserves nothing, a refused first try releases it, and an unknown outcome keeps it for reconciliation (feature 09). A campaign with a short balance pauses and notifies the Owner (feature 09); a workflow step's short balance is described there too.
 
 Where the feature docs disagree, the gate follows these:
 

@@ -203,6 +203,8 @@ export const automationRunSteps = pgTable(
     category: text('category', { enum: sendCategories }),
     // The opt-out link a marketing SMS ends with, so a retry sends the same text.
     optOutCode: text('opt_out_code'),
+    // The phone the send was decided for; a retry refuses a contact whose phone changed since.
+    destination: text('destination'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),
