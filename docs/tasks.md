@@ -16,29 +16,30 @@ Milestones follow the build order in [development/build-order.md](development/bu
 
 ## M0. Foundation
 
-| ID    | Task                                                                                     | Status    | Depends     | PR       | Notes                                                            |
-| ----- | ---------------------------------------------------------------------------------------- | --------- | ----------- | -------- | ---------------------------------------------------------------- |
-| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                                | Done      |             | -        |                                                                  |
-| FND-2 | Fastify adapter and Express ban                                                          | Done      | FND-1       | #1       |                                                                  |
-| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint                 | Done      | FND-1       | #2       | Merged                                                           |
-| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security          | Done      | FND-3       | #3       |                                                                  |
-| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules         | Done      | FND-4       | #4       |                                                                  |
-| DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done      |             | #6       | Done in DB-5; `customers` goes with CUS-1                        |
-| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Done      | DB-5        | #76, #77 |                                                                  |
-| DB-3  | Store and account audit services                                                         | Done      | DB-5, REV-4 | #12      | Atomic audit writes and account retention; [plan](plans/core.md) |
-| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Done      |             | #27      | Needed by ACC-7; [plan](plans/core.md)                           |
-| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done      |             | #6       | Schema #6; core migration fold #43; [data/](data/README.md)      |
-| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo      | DB-5        |          |                                                                  |
-| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo      | DB-5        |          | [growth.md](data/growth.md); all-store rollups                   |
-| API-1 | Logging (nestjs-pino), request ids, Sentry                                               | Done      |             | #9       | [plan](plans/core.md)                                            |
-| API-2 | Rate limiting with Valkey storage                                                        | Done      |             | #10      | Valkey client and per-key limiter; [plan](plans/core.md)         |
-| API-3 | Route test that fails when a route has no access rule or a store route has no permission | Done      | ACC-3       | #15      | [plan](plans/core.md)                                            |
-| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Done      |             | #29      | [design/theme.md](design/theme.md)                               |
-| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | In review | WEB-1       | #89      | Radix primitives; `FormField` reads React Hook Form errors       |
-| WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Done      | WEB-1       | #35      | Verified session context and responsive shell                    |
-| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Done      |             | #36      | Exact money, store dates and supplied phone display values       |
-| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Done      | WEB-3       | #37      | Real API browser flow and component tests                        |
-| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Done      |             | #75      | 7.1.1; rules-of-hooks and exhaustive-deps as errors              |
+| ID    | Task                                                                                     | Status      | Depends     | PR       | Notes                                                            |
+| ----- | ---------------------------------------------------------------------------------------- | ----------- | ----------- | -------- | ---------------------------------------------------------------- |
+| FND-1 | Monorepo, lint, boundaries, CI, customers example feature                                | Done        |             | -        |                                                                  |
+| FND-2 | Fastify adapter and Express ban                                                          | Done        | FND-1       | #1       |                                                                  |
+| FND-3 | Docs: product context, feature docs, rules, workflow, tracker, docs lint                 | Done        | FND-1       | #2       | Merged                                                           |
+| FND-4 | Docs: full PRD per feature, prototype sub-screens, glossary, scale and security          | Done        | FND-3       | #3       |                                                                  |
+| FND-5 | Docs: automations, segments and campaigns decisions (D23, D24) and channel rules         | Done        | FND-4       | #4       |                                                                  |
+| DB-1  | UUID v7 ids generated in the app; switch existing tables                                 | Done        |             | #6       | Done in DB-5; `customers` goes with CUS-1                        |
+| DB-2  | Outbox table, outbox relay job, event publishing helper                                  | Done        | DB-5        | #76, #77 |                                                                  |
+| DB-3  | Store and account audit services                                                         | Done        | DB-5, REV-4 | #12      | Atomic audit writes and account retention; [plan](plans/core.md) |
+| DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Done        |             | #27      | Needed by ACC-7; [plan](plans/core.md)                           |
+| DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done        |             | #6       | Schema #6; core migration fold #43; [data/](data/README.md)      |
+| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo        | DB-5        |          |                                                                  |
+| DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo        | DB-5        |          | [growth.md](data/growth.md); all-store rollups                   |
+| API-1 | Logging (nestjs-pino), request ids, Sentry                                               | Done        |             | #9       | [plan](plans/core.md)                                            |
+| API-2 | Rate limiting with Valkey storage                                                        | Done        |             | #10      | Valkey client and per-key limiter; [plan](plans/core.md)         |
+| API-3 | Route test that fails when a route has no access rule or a store route has no permission | Done        | ACC-3       | #15      | [plan](plans/core.md)                                            |
+| WEB-1 | Tailwind v4, theme tokens, `packages/ui` with Button, Input, Card, Badge, Skeleton       | Done        |             | #29      | [design/theme.md](design/theme.md)                               |
+| WEB-2 | `packages/ui`: Dialog, Sheet, DropdownMenu, Tabs, Table, Toast, Tooltip, form fields     | In review   | WEB-1       | #89      | Radix primitives; `FormField` reads React Hook Form errors       |
+| WEB-3 | App shell: sidebar, header, store switcher, phone layout                                 | Done        | WEB-1       | #35      | Verified session context and responsive shell                    |
+| WEB-4 | `lib/format-money.ts`, `lib/format-date.ts`, `lib/format-phone.ts` with tests            | Done        |             | #36      | Exact money, store dates and supplied phone display values       |
+| WEB-5 | Testing Library and Playwright set up with one end-to-end test                           | Done        | WEB-3       | #37      | Real API browser flow and component tests                        |
+| WEB-6 | Add `eslint-plugin-react-hooks` to lint                                                  | Done        |             | #75      | 7.1.1; rules-of-hooks and exhaustive-deps as errors              |
+| WEB-7 | Match built screens to the design images                                                 | In progress | WEB-3       | #123     | Part 1: sidebar and header; each screen PR matches its image     |
 
 ## M1. Account, stores and team
 
@@ -127,18 +128,18 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M5. Products
 
-| ID     | Task                                   | Status | Depends        | PR  | Notes |
-| ------ | -------------------------------------- | ------ | -------------- | --- | ----- |
-| PROD-1 | Products, options, variants            | Todo   | ACC-3          |     |       |
-| PROD-2 | Stock ledger and `moveStock`           | Todo   | PROD-1         |     |       |
-| PROD-3 | Photo upload to R2 with presigned URLs | Todo   | PROD-1, FILE-1 |     |       |
-| PROD-4 | Web: products list and product editor  | Todo   | PROD-2, WEB-2  |     |       |
+| ID     | Task                                   | Status    | Depends        | PR   | Notes |
+| ------ | -------------------------------------- | --------- | -------------- | ---- | ----- |
+| PROD-1 | Products, options, variants            | In review | ACC-3          | #121 |       |
+| PROD-2 | Stock ledger and `moveStock`           | Todo      | PROD-1         |      |       |
+| PROD-3 | Photo upload to R2 with presigned URLs | Todo      | PROD-1, FILE-1 |      |       |
+| PROD-4 | Web: products list and product editor  | Todo      | PROD-2, WEB-2  |      |       |
 
 ## M6. Orders
 
 | ID    | Task                                                                             | Status | Depends        | PR  | Notes                                                                         |
 | ----- | -------------------------------------------------------------------------------- | ------ | -------------- | --- | ----------------------------------------------------------------------------- |
-| ORD-1 | Orders, items, stage table, stage events, order numbers                          | Todo   | PROD-2, CUS-1  |     | Q7                                                                            |
+| ORD-1 | Orders, items, stage table, stage events, order numbers                          | Todo   | PROD-2, CUS-1  |     | Q7; open-order product archive guard through OrdersService                    |
 | ORD-2 | Delivery zones, areas and charges                                                | Todo   | ACC-3          |     |                                                                               |
 | ORD-3 | Create order from chat and from staff                                            | Todo   | ORD-1, ORD-2   |     | D26/D27: buyer and recipient snapshot; self phone save; conflicts allow order |
 | ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo   | ORD-3, CAMP-11 |     | Was a separate confirmation sender; now runs on the workflow engine           |

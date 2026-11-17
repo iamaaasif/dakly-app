@@ -60,7 +60,7 @@ async function verifyPhoneNavigation(page: Page) {
   const close = drawer.getByRole('button', { name: 'Close navigation' });
   await expect(close).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(drawer.getByRole('link', { name: 'Security', exact: true })).toBeFocused();
+  await expect(drawer.getByRole('button', { name: 'Log out', exact: true })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
   await page.keyboard.press('Escape');
@@ -105,7 +105,9 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await expect(page.getByRole('combobox', { name: 'Current shop' })).toHaveValue(
       fixture.storeIds[0],
     );
-    await expect(page.locator('aside').getByRole('link', { name: 'Support access' })).toBeVisible();
+    await page.locator('aside').getByRole('link', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Support access' })).toBeVisible();
+    await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
     await name.fill('Unfinished draft');
     await page.getByRole('button', { name: 'Collapse navigation' }).click();
     await verifyPausedDraft(page);
@@ -124,9 +126,10 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await expect(name).toHaveValue('');
     expect(await oldInput!.evaluate((element) => element.isConnected)).toBe(false);
     await oldInput!.dispose();
-    await expect(page.locator('aside').getByRole('link', { name: 'Support access' })).toHaveCount(
-      0,
-    );
+    await page.locator('aside').getByRole('link', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'Ownership transfer' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Support access' })).toHaveCount(0);
+    await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
     await expect(page.getByRole('button', { name: 'Collapse navigation' })).toBeVisible();
     const customer = { name: 'সাবিনা', phone: `018${randomInt(10000000, 99999999)}` };
     await name.fill(customer.name);
