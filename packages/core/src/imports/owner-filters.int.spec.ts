@@ -12,7 +12,7 @@ function upload(storeId: string) {
   const id = randomUUID();
   return {
     id,
-    objectKey: `stores/${storeId}/imports/${id}.csv`,
+    objectKey: `imports/${storeId}/${id}.csv`,
     sizeBytes: 120,
     expiresAt: new Date('2026-11-24T04:30:00Z'),
   };

@@ -20,13 +20,20 @@ function request(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...init, signal: AbortSignal.timeout(5000) });
 }
 
+const text = { contentLength: 1, contentType: 'text/plain' };
+
+function put(url: string, body: string | Uint8Array, contentType = 'text/plain') {
+  return request(url, { method: 'PUT', body, headers: { 'content-type': contentType } });
+}
+
 describe('S3FileStorageDriver (SeaweedFS)', () => {
   it('stores bytes through the upload URL and returns them through the download URL', async () => {
     const driver = driverAt(new Date());
     const key = `stores/${randomUUID()}/photos/${randomUUID()}.txt`;
     const body = new TextEncoder().encode('লাল জামদানি শাড়ি, ৳4,500');
 
-    const upload = await request(driver.createUploadUrl(key, 300), { method: 'PUT', body });
+    const content = { contentLength: body.length, contentType: 'text/plain' };
+    const upload = await put(driver.createUploadUrl(key, 300, content), body);
     expect(upload.status).toBe(200);
 
     const download = await request(driver.createDownloadUrl(key, 300));
@@ -36,7 +43,7 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
 
   it('refuses a download URL after it expires', async () => {
     const key = `stores/${randomUUID()}/photos/${randomUUID()}.txt`;
-    await request(driverAt(new Date()).createUploadUrl(key, 300), { method: 'PUT', body: 'x' });
+    await put(driverAt(new Date()).createUploadUrl(key, 300, text), 'x');
 
     const signedTwoMinutesAgo = driverAt(new Date(Date.now() - 120_000));
     const download = await request(signedTwoMinutesAgo.createDownloadUrl(key, 60));
@@ -46,13 +53,13 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
   it('refuses an upload URL whose expiry or key was changed after signing', async () => {
     const driver = driverAt(new Date());
     const key = `stores/${randomUUID()}/photos/${randomUUID()}.txt`;
-    const longer = new URL(driver.createUploadUrl(key, 60));
+    const longer = new URL(driver.createUploadUrl(key, 60, text));
     longer.searchParams.set('X-Amz-Expires', '604800');
-    const otherKey = new URL(driver.createUploadUrl(key, 60));
+    const otherKey = new URL(driver.createUploadUrl(key, 60, text));
     otherKey.pathname = otherKey.pathname.replace('.txt', '-other.txt');
 
     for (const url of [longer, otherKey]) {
-      const upload = await request(url.toString(), { method: 'PUT', body: 'x' });
+      const upload = await put(url.toString(), 'x');
       expect(upload.status).toBe(403);
     }
     const download = await request(driver.createDownloadUrl(key, 60));
@@ -61,7 +68,7 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
 
   it('writes text the server makes and reads it back with its content type', async () => {
     const driver = driverAt(new Date());
-    const key = `stores/${randomUUID()}/imports/${randomUUID()}.csv`;
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
     const report = 'Row,Field,Problem\r\n"2","phone","ফোন নম্বর দিন"\r\n';
 
     await driver.writeText(key, report, 'text/csv');
@@ -73,7 +80,7 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
 
   it('reads a missing file as missing and stops reading past the size limit', async () => {
     const driver = driverAt(new Date());
-    const key = `stores/${randomUUID()}/imports/${randomUUID()}.csv`;
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
     await driver.writeText(key, 'Mobile\n01712345678\n', 'text/csv');
 
     expect(await driver.readText(`${key}-missing`, 1_000)).toEqual({ kind: 'missing' });
@@ -82,5 +89,17 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
       kind: 'found',
       text: 'Mobile\n01712345678\n',
     });
+  });
+
+  it('refuses an upload whose length or type differs from the signed one', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    const url = driver.createUploadUrl(key, 60, { contentLength: 19, contentType: 'text/csv' });
+    const csv = 'Mobile\n01712345678\n';
+
+    expect((await put(url, `${csv}x`, 'text/csv')).status).toBe(403);
+    expect((await put(url, csv, 'text/html')).status).toBe(403);
+    expect((await request(driver.createDownloadUrl(key, 60))).status).toBe(404);
+    expect((await put(url, csv, 'text/csv')).status).toBe(200);
   });
 });

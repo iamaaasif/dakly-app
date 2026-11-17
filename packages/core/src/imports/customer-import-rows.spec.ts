@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { contactImportMappingSchema } from '@dakly/contracts/contacts';
+import { contactImportMappingSchema, createImportSchema } from '@dakly/contracts/contacts';
 
 import { readCustomerImportRows } from './customer-import-rows';
 
@@ -20,6 +20,13 @@ describe('contactImportMappingSchema', () => {
 
   it('refuses a field it does not know', () => {
     expect(contactImportMappingSchema.safeParse({ phone: 1, storeId: 2 }).success).toBe(false);
+  });
+});
+
+describe('createImportSchema', () => {
+  it('refuses a file over 10 MB before an upload URL is signed', () => {
+    expect(createImportSchema.safeParse({ sizeBytes: 10 * 1024 * 1024 }).success).toBe(true);
+    expect(createImportSchema.safeParse({ sizeBytes: 10 * 1024 * 1024 + 1 }).success).toBe(false);
   });
 });
 

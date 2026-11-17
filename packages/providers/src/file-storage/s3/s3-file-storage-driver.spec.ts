@@ -24,7 +24,41 @@ describe('presignS3Url', () => {
   });
 });
 
+describe('presignS3Url with content headers', () => {
+  const request = {
+    method: 'PUT',
+    url: new URL('https://account.r2.cloudflarestorage.com/dakly-production/imports/a.csv'),
+    region: 'auto',
+    accessKeyId: 'access-key',
+    secretAccessKey: 'secret-key',
+    signedAt: new Date('2026-11-17T08:30:00Z'),
+    expiresInSeconds: 900,
+  } as const;
+  const csv = { 'content-type': 'text/csv', 'content-length': '120' };
+
+  it('signs the content headers in sorted order beside the host', () => {
+    const url = presignS3Url({ ...request, headers: csv });
+    const reordered = presignS3Url({
+      ...request,
+      headers: { 'content-length': '120', 'content-type': 'text/csv' },
+    });
+
+    expect(url.searchParams.get('X-Amz-SignedHeaders')).toBe('content-length;content-type;host');
+    expect(url.toString()).toBe(reordered.toString());
+  });
+
+  it('changes the signature when the length or type changes', () => {
+    const signature = (headers: Record<string, string>) =>
+      presignS3Url({ ...request, headers }).searchParams.get('X-Amz-Signature');
+
+    expect(signature(csv)).not.toBe(signature({ ...csv, 'content-length': '121' }));
+    expect(signature(csv)).not.toBe(signature({ ...csv, 'content-type': 'text/plain' }));
+    expect(signature(csv)).not.toBe(signature({}));
+  });
+});
+
 describe('S3FileStorageDriver', () => {
+  const jpeg = { contentLength: 2048, contentType: 'image/jpeg' };
   const driver = new S3FileStorageDriver(
     {
       endpoint: 'https://account.r2.cloudflarestorage.com',
@@ -37,7 +71,7 @@ describe('S3FileStorageDriver', () => {
   );
 
   it('addresses the object under the bucket and escapes each part of the key', () => {
-    const url = new URL(driver.createUploadUrl('stores/7/photos/শাড়ি (1).jpg', 300));
+    const url = new URL(driver.createUploadUrl('stores/7/photos/শাড়ি (1).jpg', 300, jpeg));
 
     expect(url.host).toBe('account.r2.cloudflarestorage.com');
     expect(url.pathname).toBe(
@@ -48,7 +82,7 @@ describe('S3FileStorageDriver', () => {
   });
 
   it('signs uploads and downloads of the same key differently', () => {
-    const upload = new URL(driver.createUploadUrl('stores/7/photos/1.jpg', 300));
+    const upload = new URL(driver.createUploadUrl('stores/7/photos/1.jpg', 300, jpeg));
     const download = new URL(driver.createDownloadUrl('stores/7/photos/1.jpg', 300));
 
     expect(upload.pathname).toBe(download.pathname);

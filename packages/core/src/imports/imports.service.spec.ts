@@ -4,6 +4,7 @@ import type { ContactImportRow, ImportConsentEvidence } from '@dakly/contracts/c
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import type { ConsentService } from '../consents/consent.service';
+import type { RateLimiter } from '../platform/cache/rate-limiter';
 import type { ContactsService, ImportedContact } from '../contacts/contacts.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
@@ -111,6 +112,7 @@ describe('ImportsService', () => {
       { publish: vi.fn() } as unknown as OutboxService,
       { now: () => new Date('2026-11-17T04:30:00Z') } as Clock,
       storage,
+      { consume: async () => ({ allowed: true, retryAfter: 0 }) } as unknown as RateLimiter,
     );
   });
 

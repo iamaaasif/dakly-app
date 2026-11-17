@@ -35,7 +35,11 @@ async function runImport(file: string, start: Partial<StartImportInput> = {}) {
     { sizeBytes: body.length },
     owner,
   );
-  const upload = await fetch(uploadUrl, { method: 'PUT', body });
+  const upload = await fetch(uploadUrl, {
+    method: 'PUT',
+    body,
+    headers: { 'content-type': 'text/csv' },
+  });
   expect(upload.status).toBe(200);
   await service.start(
     storeId,

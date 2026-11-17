@@ -8,7 +8,7 @@ import type {
   ImportDuplicateMode,
   ImportStatus,
 } from '@dakly/contracts/contacts';
-import { imports } from '@dakly/db/schema/contacts';
+import { imports } from '@dakly/db/schema/imports';
 import { files } from '@dakly/db/schema/platform';
 
 import { TenantDatabase } from '../platform/database/tenant-database';

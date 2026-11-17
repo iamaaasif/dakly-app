@@ -13,6 +13,7 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 
 import { ConsentService } from '../consents/consent.service';
 import { type ImportedContact, ContactsService } from '../contacts/contacts.service';
+import { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -36,6 +37,8 @@ type ReportLine = {
 };
 
 const LINK_SECONDS = 15 * 60;
+// Each import is a file in R2 and a bulk job, so a store starts at most 20 an hour.
+const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
 const BATCH_ROWS = 500;
@@ -56,6 +59,7 @@ export class ImportsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
+    @Inject(RateLimiter) private readonly limiter: RateLimiter,
   ) {}
 
   async createCustomerImport(
@@ -63,11 +67,17 @@ export class ImportsService {
     input: CreateImportInput,
     actor: Actor,
   ): Promise<ImportUploadResponse> {
+    if (!(await this.limiter.consume(`customer-import:${storeId}`, IMPORTS_PER_HOUR, 3600)).allowed)
+      throw importError('IMPORT_RATE_LIMITED');
     const importId = newId();
     const upload = this.newFile(storeId, input.sizeBytes);
     const userId = actor.kind === 'user' ? actor.userId : null;
     await this.repository.createCustomerImport(storeId, importId, upload, userId);
-    return { importId, uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS) };
+    const content = { contentLength: input.sizeBytes, contentType: 'text/csv' };
+    return {
+      importId,
+      uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS, content),
+    };
   }
 
   async start(
@@ -214,7 +224,8 @@ export class ImportsService {
   private newFile(storeId: string, sizeBytes: number): NewImportFile {
     const id = newId();
     const expiresAt = new Date(this.clock.now().getTime() + FILE_DAYS * 24 * 60 * 60 * 1000);
-    return { id, objectKey: `stores/${storeId}/imports/${id}.csv`, sizeBytes, expiresAt };
+    // One R2 lifecycle rule on `imports/` deletes these after 7 days for every store.
+    return { id, objectKey: `imports/${storeId}/${id}.csv`, sizeBytes, expiresAt };
   }
 
   private async download(objectKey: string): Promise<string> {

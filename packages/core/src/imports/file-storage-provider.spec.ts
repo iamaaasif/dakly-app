@@ -6,6 +6,7 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { createFileStorageDriver } from './file-storage-provider';
 
+const csv = { contentLength: 120, contentType: 'text/csv' };
 const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
 const r2 = {
   R2_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
@@ -17,8 +18,8 @@ const r2 = {
 describe('File storage driver configuration', () => {
   it('uses the local SeaweedFS bucket in development', () => {
     const driver = createFileStorageDriver(new Clock(), loadEnv(base));
-    expect(driver.createUploadUrl('stores/a/imports/b.csv', 60)).toMatch(
-      /^http:\/\/127\.0\.0\.1:8333\/dakly-local\/stores\/a\/imports\/b\.csv\?/,
+    expect(driver.createUploadUrl('imports/a/b.csv', 60, csv)).toMatch(
+      /^http:\/\/127\.0\.0\.1:8333\/dakly-local\/imports\/a\/b\.csv\?/,
     );
   });
 
@@ -33,7 +34,7 @@ describe('File storage driver configuration', () => {
       loadEnv({ ...base, ...r2, NODE_ENV: 'production' }),
     );
     expect(driver).toBeInstanceOf(S3FileStorageDriver);
-    expect(driver.createDownloadUrl('stores/a/imports/b.csv', 60)).toMatch(
+    expect(driver.createDownloadUrl('imports/a/b.csv', 60)).toMatch(
       /^https:\/\/account\.r2\.cloudflarestorage\.com\/dakly-production\//,
     );
   });
