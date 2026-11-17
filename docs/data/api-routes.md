@@ -149,18 +149,18 @@ atomically and retain business data when an extension is disabled.
 
 ## Orders and delivery (06)
 
-| Route                                                                                                                            | Permission           |
-| -------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| `GET /orders`, `GET /orders/:orderId`, `GET /orders/:orderId/timeline`                                                           | `orders`             |
-| `POST /orders` (idem), `PATCH /orders/:orderId`                                                                                  | `orders`             |
-| `POST /orders/:orderId/stage` (to, reason, follow-up date)                                                                       | `orders`             |
-| `POST /orders/:orderId/courier` (courier name, tracking code)                                                                    | `orders`             |
-| `POST /orders/:orderId/cod-collected`                                                                                            | `orders`             |
-| `GET /orders/return-risk?phone=`                                                                                                 | `orders`             |
-| `POST /orders/bulk-stage`                                                                                                        | `orders`             |
-| `GET /delivery-zones`, `POST /delivery-zones`, `PATCH /delivery-zones/:deliveryZoneId`, `DELETE /delivery-zones/:deliveryZoneId` | `storeSettings`      |
-| `POST /delivery-zones/initialize-defaults` (empty stores only)                                                                   | `storeSettings.edit` |
-| `GET /areas?parentId=`                                                                                                           | any member           |
+| Route                                                                                                                            | Permission      |
+| -------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `GET /orders`, `GET /orders/:orderId`, `GET /orders/:orderId/timeline`                                                           | `orders`        |
+| `POST /orders` (idem), `PATCH /orders/:orderId`                                                                                  | `orders`        |
+| `POST /orders/:orderId/stage` (to, reason, follow-up date)                                                                       | `orders`        |
+| `POST /orders/:orderId/courier` (courier name, tracking code)                                                                    | `orders`        |
+| `POST /orders/:orderId/cod-collected`                                                                                            | `orders`        |
+| `GET /orders/return-risk?phone=`                                                                                                 | `orders`        |
+| `POST /orders/bulk-stage`                                                                                                        | `orders`        |
+| `GET /delivery-zones`, `POST /delivery-zones`, `PATCH /delivery-zones/:deliveryZoneId`, `DELETE /delivery-zones/:deliveryZoneId` | `storeSettings` |
+| `POST /delivery-zones/initialize-defaults` (empty stores only)                                                                   | `storeSettings` |
+| `GET /areas?parentId=`                                                                                                           | any member      |
 
 ## Payments and billing (07)
 
