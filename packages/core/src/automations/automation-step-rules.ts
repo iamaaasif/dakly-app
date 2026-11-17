@@ -11,7 +11,7 @@ import type {
   RunStepChange,
 } from './automation-runs.repository';
 
-// Claims without a committed step, counted by due_automation_runs: a job that keeps failing.
+// Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 
 export type SendStep = Extract<AutomationStep, { kind: 'send' }>;

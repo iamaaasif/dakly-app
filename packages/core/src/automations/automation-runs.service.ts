@@ -80,8 +80,11 @@ export class AutomationRunsService {
 
   // Returns the claim on the next step when the run goes straight on, for its job to queue.
   async continueRun(storeId: string, claim: RunClaim): Promise<RunClaim | undefined> {
-    const run = await this.repository.findRun(storeId, claim.runId);
-    if (!run || !holdsClaim(run, claim)) return undefined;
+    const found = await this.repository.findRun(storeId, claim.runId);
+    if (!found || !holdsClaim(found, claim)) return undefined;
+    const attempts = await this.repository.startWork(storeId, claim);
+    if (attempts === undefined) return undefined;
+    const run = { ...found, attempts };
     const result = await this.runStep(storeId, claim, run);
     if (!result) return undefined;
     // Every committed step starts the count of claims without progress again.

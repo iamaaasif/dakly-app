@@ -173,21 +173,25 @@ export class AutomationRunsRepository {
     );
   }
 
+  // A step job counts its attempt once it holds the claim and starts, not when the sweep claims.
+  async startWork(storeId: string, claim: RunClaim): Promise<number | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automationRuns)
+        .set({ attempts: sql`least(${automationRuns.attempts} + 1, 32767)` })
+        .where(heldBy(storeId, claim))
+        .returning({ attempts: automationRuns.attempts }),
+    );
+    return row?.attempts;
+  }
+
   // Moves nothing when another worker has claimed the run since, or it left this step.
   async moveRun(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)
         .set(change)
-        .where(
-          and(
-            eq(automationRuns.storeId, storeId),
-            eq(automationRuns.id, claim.runId),
-            eq(automationRuns.status, 'running'),
-            eq(automationRuns.currentStepKey, claim.stepKey),
-            eq(automationRuns.claimedAt, claim.claimedAt),
-          ),
-        )
+        .where(heldBy(storeId, claim))
         .returning({ id: automationRuns.id }),
     );
     return rows.length > 0;
@@ -198,4 +202,15 @@ export class AutomationRunsRepository {
       tx.insert(automationRunSteps).values({ storeId, runId, contactId, ...step }),
     );
   }
+}
+
+// The run is still running on this step under this claim.
+function heldBy(storeId: string, claim: RunClaim) {
+  return and(
+    eq(automationRuns.storeId, storeId),
+    eq(automationRuns.id, claim.runId),
+    eq(automationRuns.status, 'running'),
+    eq(automationRuns.currentStepKey, claim.stepKey),
+    eq(automationRuns.claimedAt, claim.claimedAt),
+  );
 }
