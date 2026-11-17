@@ -72,7 +72,7 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 | HOME-2 | Web: notification bell and list                         | Done      | HOME-1      | #85, #92      |                                                                                    |
 | PAY-1  | Usage service: units, allowances, usage events          | Done      | ACC-3       | #84           | AI top-ups not drawn yet                                                           |
 | PAY-11 | Wallets: reserve, release, charge and staff credit      | Done      | ADM-6       | #82, #86      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8               |
-| FILE-1 | R2 storage driver with presigned PUT and GET            | In review |             |               | CUS-8 part 2 and PROD-3 depend on it; SeaweedFS stands in for R2 locally and in CI |
+| FILE-1 | R2 storage driver with presigned PUT and GET            | In review |             | #116          | CUS-8 part 2 and PROD-3 depend on it; SeaweedFS stands in for R2 locally and in CI |
 
 ## M3. Channels and customers
 
