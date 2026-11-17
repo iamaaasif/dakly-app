@@ -87,8 +87,8 @@ function readLines(file: string) {
   const records = csvRecords(file.replace(/^\uFEFF/, ''));
   const header = records.next().value?.cells ?? [];
   const lines: { rowNumber: number; cells: string[] }[] = [];
-  for (const { rowNumber, cells } of records) {
-    if (!cells.some((cell) => cell.trim())) continue;
+  for (const { rowNumber, cells, hasContent } of records) {
+    if (!hasContent) continue;
     if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
     lines.push({ rowNumber, cells });
   }
@@ -99,16 +99,18 @@ function readLines(file: string) {
 // else, such as a stray quote inside a plain cell, makes the file unreadable rather than wrong.
 // Lines with nothing on them are counted and skipped in a tight loop, so 10 MB of line breaks
 // does not allocate a record each.
-function* csvRecords(text: string): Generator<{ rowNumber: number; cells: string[] }, undefined> {
+function* csvRecords(
+  text: string,
+): Generator<{ rowNumber: number; cells: string[]; hasContent: boolean }, undefined> {
   let position = 0;
   let rowNumber = 0;
   for (;;) {
     const blank = skipBlankLines(text, position);
     if (blank.position >= text.length) return undefined;
-    const { cells, next } = readRecord(text, blank.position);
+    const { cells, next, hasContent } = readRecord(text, blank.position);
     position = next;
     rowNumber += blank.lines + 1;
-    yield { rowNumber, cells };
+    yield { rowNumber, cells, hasContent };
   }
 }
 
@@ -124,10 +126,12 @@ function skipBlankLines(text: string, start: number) {
 
 function readRecord(text: string, start: number) {
   const cells: string[] = [];
+  let hasContent = false;
   let position = start;
   for (;;) {
     const { cell, end } =
       text[position] === '"' ? quotedCell(text, position) : plainCell(text, position);
+    hasContent ||= cell.trim().length > 0;
     if (cells.length < MAX_IMPORT_COLUMNS) cells.push(cell);
     position = end + 1;
     if (text[end] !== ',') break;
@@ -137,7 +141,7 @@ function readRecord(text: string, start: number) {
     }
   }
   const crlf = text[position - 1] === '\r' && text[position] === '\n';
-  return { cells, next: crlf ? position + 1 : position };
+  return { cells, hasContent, next: crlf ? position + 1 : position };
 }
 
 // `end` is the index of the separator after the cell, or the text length.

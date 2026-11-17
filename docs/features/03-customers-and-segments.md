@@ -123,7 +123,9 @@ contacts, with the consent evidence, comes in the next part, then undo.
   separately from the uploader.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
-  fills one field at most, so two columns with the same header stay apart.
+  fills one field at most, so two columns with the same header stay apart. Mapping uses
+  the first 200 columns; content in a later column still makes the row nonblank, so a
+  missing mapped phone is reported.
 - `readCustomerImportRows` reads RFC 4180 CSV: quoted cells may hold commas, line breaks and
   doubled quotes, and a byte order mark is dropped. A stray quote fails the whole file with
   `IMPORT_FILE_UNREADABLE` rather than shifting cells. A file with no rows under the header

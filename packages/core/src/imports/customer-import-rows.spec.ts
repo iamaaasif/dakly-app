@@ -31,6 +31,14 @@ describe('createImportSchema', () => {
 });
 
 describe('readCustomerImportRows', () => {
+  it('reports a missing mapped phone when only a later unmapped column has content', () => {
+    const file = `Phone\n${','.repeat(200)}Rahima\n`;
+    expect(readCustomerImportRows(file, { phone: 0 })).toMatchObject({
+      rows: [],
+      errors: [{ rowNumber: 2, field: 'phone' }],
+    });
+  });
+
   it('maps each field from its column and leaves blank cells unset', () => {
     const file = `${header}\r\nRahima Begum,01712345678,,rahima@example.com,Dhaka,"vip, eid"\r\n`;
 
