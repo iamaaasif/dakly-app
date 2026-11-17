@@ -17,11 +17,17 @@ import {
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
-import { productUpdatedEventSchema } from './products';
+import {
+  productUpdatedEventSchema,
+  stockChangedEventSchema,
+  variantRestockedEventSchema,
+} from './products';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactCreatedEventSchema,
   productUpdatedEventSchema,
+  stockChangedEventSchema,
+  variantRestockedEventSchema,
   consentChangedEventSchema,
   segmentSavedEventSchema,
   importStartedEventSchema,
