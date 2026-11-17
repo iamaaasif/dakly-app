@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
-import { privateInput, scrubPage, messageText, authenticatorCode } from './auth-browser';
+import { privateInput, scrubPage, messageText, authenticatorCode, signOut } from './auth-browser';
 
 test.use({ screenshot: 'off', actionTimeout: 15000 });
 test.setTimeout(150_000);
@@ -125,7 +125,10 @@ async function settings(page: Page) {
   await expect(page.getByLabel('Store name')).toHaveValue('Security browser shop');
   await expect(page.getByLabel('Legal name')).toHaveValue('');
   await pictures(page, 'settings-store');
-  await page.getByRole('link', { name: 'Extensions', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('link', { name: 'Extensions', exact: true })
+    .click();
   await page.getByLabel('Sales', { exact: true }).check();
   await page.getByLabel('Chats', { exact: true }).uncheck();
   await page.getByLabel('Social auto-post', { exact: true }).uncheck();
@@ -199,12 +202,12 @@ async function totp(page: Page, fixture: Fixture) {
   expect((await (await page.request.get('/api/me')).json()).isTotpEnabled).toBe(true);
   await page.getByRole('button', { name: 'I saved my backup codes' }).click();
   await expect(receipt).toBeHidden();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await passwordSignIn(page, fixture);
   await privateInput(page, 'code', codes[0]!);
   await page.getByRole('button', { name: 'Finish sign-in' }).click();
   await expect(page).toHaveURL(/dashboard/);
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut(page);
   await passwordSignIn(page, fixture);
   await privateInput(page, 'code', codes[0]!);
   await page.getByRole('button', { name: 'Finish sign-in' }).click();

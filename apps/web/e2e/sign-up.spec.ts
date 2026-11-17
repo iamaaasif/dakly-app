@@ -2,7 +2,7 @@ import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
-import { privateInput, scrubPage, messageText, authenticatorCode } from './auth-browser';
+import { privateInput, scrubPage, messageText, authenticatorCode, signOut } from './auth-browser';
 
 test.use({ screenshot: 'off' });
 test.setTimeout(150_000);
@@ -83,7 +83,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     await otherPage.goto('/dashboard');
     await expect(otherPage.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     const backupCode = await setupAuthenticator(context, baseURL!, password);
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await signOut(page);
     await expect(page).toHaveURL(`${baseURL}/sign-in`);
     await expect(otherPage.getByRole('heading', { name: 'Dashboard', exact: true })).toBeHidden();
     await privateInput(page, 'identifier', phone);
@@ -114,7 +114,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
         )
       ).rows.some((row) => row.is_remembered),
     ).toBe(true);
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await signOut(page);
     await expect(page).toHaveURL(`${baseURL}/sign-in`);
     await recoveryProof(page, { phone, password, seen, userId, database, baseURL: baseURL! });
   } finally {
