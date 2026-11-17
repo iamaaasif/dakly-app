@@ -11,6 +11,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { StoresService } from '../stores/stores.service';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
@@ -28,6 +29,28 @@ describe('ProductsService with Postgres', () => {
     transaction,
     new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => instant } as Clock,
+    {
+      settings: async (storeId: string) => ({
+        id: storeId,
+        name: 'Fixture store',
+        slug: null,
+        extensions: [],
+        legalName: null,
+        businessType: null,
+        phone: null,
+        email: null,
+        address: null,
+        district: null,
+        vatBin: null,
+        tradeLicenceNumber: null,
+        sending: {
+          quietHours: { startHour: 21, endHour: 9 },
+          frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+          onlyOwnersAndAdminsApprove: true,
+        },
+        stock: { lowStockThreshold: 3 },
+      }),
+    } as StoresService,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   beforeAll(() => f.setup());
@@ -257,8 +280,8 @@ describe('ProductsService with Postgres', () => {
     const read = repository.list.bind(repository);
     const interleave = vi
       .spyOn(repository, 'list')
-      .mockImplementationOnce(async (storeId, query) => {
-        const snapshot = await read(storeId, query);
+      .mockImplementationOnce(async (storeId, query, lowStockThreshold) => {
+        const snapshot = await read(storeId, query, lowStockThreshold);
         await service.edit(
           f.a,
           product.id,
@@ -327,6 +350,36 @@ describe('ProductsService with Postgres', () => {
         await service.list(f.a, { limit: 50, search: 'Readiness case', readiness: 'needs_photo' })
       ).items.map((item) => item.id),
     ).toEqual([overridden.id, inherited.id]);
+  });
+
+  it('computes readiness from effective price, photos, visibility and available stock', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Readiness labels', status: 'hidden' }),
+      actor,
+    );
+    expect(product.readiness).toEqual(['needs_price', 'needs_photo', 'hidden', 'running_low']);
+    await f.connection.pool.query('update product_variants set on_hand=5,reserved=1 where id=$1', [
+      product.variants[0]!.id,
+    ]);
+    await f.connection.pool.query(
+      'update products set image_file_ids=ARRAY[$1::uuid] where id=$2',
+      [randomUUID(), product.id],
+    );
+    const ready = await service.edit(
+      f.a,
+      product.id,
+      { pricePoisha: 10000, status: 'active' },
+      actor,
+    );
+    expect(ready.readiness).toEqual([]);
+    await f.connection.pool.query('update product_variants set on_hand=4 where id=$1', [
+      product.variants[0]!.id,
+    ]);
+    expect((await service.getById(f.a, product.id)).readiness).toEqual(['running_low']);
+    expect(
+      (await service.edit(f.a, product.id, { isStockTracked: false }, actor)).readiness,
+    ).toEqual([]);
   });
 
   it('lists by cursor with literal name searches and readiness filters', async () => {
