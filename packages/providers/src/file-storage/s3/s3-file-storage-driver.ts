@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 
-import type { FileStorageDriver } from '../file-storage-driver';
+import type { FileStorageDriver, UploadContent } from '../file-storage-driver';
 
 export type S3Configuration = {
   endpoint: string;
@@ -18,6 +18,8 @@ type PresignRequest = {
   secretAccessKey: string;
   signedAt: Date;
   expiresInSeconds: number;
+  // Lower-case names. Host is always signed.
+  headers?: Record<string, string>;
 };
 
 // Plain S3 with path-style URLs, so the same driver serves Cloudflare R2 and the local stand-in.
@@ -27,15 +29,23 @@ export class S3FileStorageDriver implements FileStorageDriver {
     private readonly clock: { now(): Date },
   ) {}
 
-  createUploadUrl(key: string, expiresInSeconds: number): string {
-    return this.presign('PUT', key, expiresInSeconds);
+  createUploadUrl(key: string, expiresInSeconds: number, content: UploadContent): string {
+    return this.presign('PUT', key, expiresInSeconds, {
+      'content-length': String(content.contentLength),
+      'content-type': content.contentType,
+    });
   }
 
   createDownloadUrl(key: string, expiresInSeconds: number): string {
     return this.presign('GET', key, expiresInSeconds);
   }
 
-  private presign(method: 'GET' | 'PUT', key: string, expiresInSeconds: number): string {
+  private presign(
+    method: 'GET' | 'PUT',
+    key: string,
+    expiresInSeconds: number,
+    headers: Record<string, string> = {},
+  ): string {
     const { endpoint, bucket, ...credentials } = this.configuration;
     const url = new URL(endpoint);
     url.pathname = `/${encodePath(bucket)}/${encodePath(key)}`;
@@ -45,6 +55,7 @@ export class S3FileStorageDriver implements FileStorageDriver {
       url,
       signedAt: this.clock.now(),
       expiresInSeconds,
+      headers,
     }).toString();
   }
 }
@@ -54,20 +65,23 @@ export function presignS3Url(request: PresignRequest): URL {
   const amzDate = request.signedAt.toISOString().replace(/[:-]|\.\d{3}/g, '');
   const date = amzDate.slice(0, 8);
   const scope = `${date}/${request.region}/s3/aws4_request`;
+  const headers: Record<string, string> = { ...request.headers, host: request.url.host };
+  const names = Object.keys(headers).sort();
+  const signedHeaders = names.join(';');
   const parameters: [string, string][] = [
     ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
     ['X-Amz-Credential', `${request.accessKeyId}/${scope}`],
     ['X-Amz-Date', amzDate],
     ['X-Amz-Expires', String(request.expiresInSeconds)],
-    ['X-Amz-SignedHeaders', 'host'],
+    ['X-Amz-SignedHeaders', signedHeaders],
   ];
   const query = parameters.map(([name, value]) => `${name}=${encodeRfc3986(value)}`).join('&');
   const canonicalRequest = [
     request.method,
     request.url.pathname,
     query,
-    `host:${request.url.host}\n`,
-    'host',
+    names.map((name) => `${name}:${headers[name]}\n`).join(''),
+    signedHeaders,
     'UNSIGNED-PAYLOAD',
   ].join('\n');
   const stringToSign = [

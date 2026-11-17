@@ -17,6 +17,7 @@ Module({ imports: [DatabaseModule, ImportsModule] })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
+const stores = [storeId];
 const userId = randomUUID();
 const owner = { kind: 'user', userId } as const;
 const start = {
@@ -42,8 +43,8 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
     try {
       await app?.close();
       for (const table of ['outbox_events', 'imports', 'files'])
-        await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
-      await admin.pool.query('delete from stores where id=$1', [storeId]);
+        await admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [stores]);
+      await admin.pool.query('delete from stores where id=any($1::uuid[])', [stores]);
       await admin.pool.query('delete from users where id=$1', [userId]);
     } finally {
       await admin.pool.end();
@@ -58,9 +59,12 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
       owner,
     );
     expect(new URL(uploadUrl).pathname).toMatch(
-      new RegExp(`^/dakly-local/stores/${storeId}/imports/[0-9a-f-]+\\.csv$`),
+      new RegExp(`^/dakly-local/imports/${storeId}/[0-9a-f-]+\\.csv$`),
     );
-    expect((await fetch(uploadUrl, { method: 'PUT', body })).status).toBe(200);
+    const upload = (contentType: string) =>
+      fetch(uploadUrl, { method: 'PUT', body, headers: { 'content-type': contentType } });
+    expect((await upload('text/plain')).status).toBe(403);
+    expect((await upload('text/csv')).status).toBe(200);
 
     const started = await service.start(storeId, importId, start, owner);
 
@@ -101,5 +105,17 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
     await expect(service.start(storeId, randomUUID(), start, owner)).rejects.toMatchObject({
       code: 'IMPORT_NOT_FOUND',
     });
+  });
+
+  it('lets a store start at most 20 imports an hour', async () => {
+    const otherStore = randomUUID();
+    await admin.pool.query("insert into stores(id,name) values($1,'করিমের দোকান')", [otherStore]);
+    stores.push(otherStore);
+    for (let count = 0; count < 20; count += 1)
+      await service.createCustomerImport(otherStore, { sizeBytes: 40 }, owner);
+
+    await expect(
+      service.createCustomerImport(otherStore, { sizeBytes: 40 }, owner),
+    ).rejects.toMatchObject({ code: 'IMPORT_RATE_LIMITED', status: 429 });
   });
 });

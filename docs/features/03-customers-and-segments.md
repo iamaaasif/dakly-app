@@ -109,7 +109,11 @@ contacts, with the consent evidence, comes in the next part, then undo.
 
 - Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
-  browser sends the file straight to R2 under `stores/<storeId>/imports/<uuid>.csv`.
+  browser sends the file straight to R2 under `imports/<storeId>/<uuid>.csv`, with
+  `Content-Type: text/csv` and exactly the declared size: both are signed into the URL, so R2
+  refuses any other body. A store starts at most 20 imports an hour (`IMPORT_RATE_LIMITED`).
+- The upload's `files` row has `expires_at` 7 days ahead, and an R2 lifecycle rule deletes
+  everything under `imports/` after 7 days.
 - Start: `POST /imports/:importId/start` takes the column mapping, the duplicate mode
   (`update` or `skip`) and the consent evidence. It moves the import to `importing` and queues
   the job through the `import.started` event. Only an uploaded import starts; a second start

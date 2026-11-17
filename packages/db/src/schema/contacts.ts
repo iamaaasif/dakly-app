@@ -22,9 +22,6 @@ import {
   contactKinds,
   contactSources,
   genders,
-  importDuplicateModes,
-  importKinds,
-  importStatuses,
   lifecycleStages,
   matchSuggestionReasons,
   matchSuggestionStatuses,
@@ -36,7 +33,7 @@ import { bdAreas } from './areas';
 import { users } from './auth';
 import { channelConnections } from './channels';
 import { citext, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
-import { files } from './platform';
+import { imports } from './imports';
 import { stores } from './stores';
 
 const phoneFormat = `'^01[3-9][0-9]{8}$'`;
@@ -82,13 +79,18 @@ export const contacts = pgTable(
     notes: text('notes'),
     externalRef: text('external_ref'),
     // The import that created this contact, so its undo removes only what it added.
-    importId: uuid('import_id').references((): AnyPgColumn => imports.id),
+    importId: uuid('import_id'),
     deletedAt: timestamptz('deleted_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex('contacts_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'contacts_import_id_store_fk',
+      columns: [table.storeId, table.importId],
+      foreignColumns: [imports.storeId, imports.id] as [AnyPgColumn, AnyPgColumn],
+    }),
 
     uniqueIndex('contacts_store_id_phone_key')
       .on(table.storeId, table.phone)
@@ -390,59 +392,5 @@ export const segments = pgTable(
       .on(table.storeId, table.readyMadeKey)
       .where(sql`${table.readyMadeKey} is not null`),
     index('segments_created_by_user_id_idx').on(table.createdByUserId),
-  ],
-);
-
-// A CSV import of customers, POS sales (D6), or products, with mapping, counts and an error report.
-export const imports = pgTable(
-  'imports',
-  {
-    id: id(),
-    storeId: uuid('store_id')
-      .notNull()
-      .references(() => stores.id),
-    kind: text('kind', { enum: importKinds }).notNull(),
-    status: text('status', { enum: importStatuses }).notNull().default('uploaded'),
-    fileId: uuid('file_id')
-      .notNull()
-      .references(() => files.id),
-    columnMapping: jsonb('column_mapping'),
-    duplicateMode: text('duplicate_mode', { enum: importDuplicateModes })
-      .notNull()
-      .default('update'),
-    // CUS-R4: consents are set to granted only when the owner confirmed they agreed.
-    hasConsentConfirmation: boolean('has_consent_confirmation').notNull().default(false),
-    consentEvidence: jsonb('consent_evidence'),
-    rowsTotal: integer('rows_total'),
-    rowsAdded: integer('rows_added'),
-    rowsUpdated: integer('rows_updated'),
-    rowsSkipped: integer('rows_skipped'),
-    rowsFailed: integer('rows_failed'),
-    reportFileId: uuid('report_file_id').references(() => files.id),
-    createdByUserId: uuid('created_by_user_id').references(() => users.id),
-    startedAt: timestamptz('started_at'),
-    finishedAt: timestamptz('finished_at'),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (table) => [
-    foreignKey({
-      name: 'imports_file_id_store_fk',
-      columns: [table.storeId, table.fileId],
-      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
-    }),
-    foreignKey({
-      name: 'imports_report_file_id_store_fk',
-      columns: [table.storeId, table.reportFileId],
-      foreignColumns: [files.storeId, files.id] as [AnyPgColumn, AnyPgColumn],
-    }),
-
-    index('imports_store_id_created_at_idx').on(table.storeId, table.createdAt),
-    index('imports_file_id_idx').on(table.fileId),
-    index('imports_report_file_id_idx').on(table.reportFileId),
-    index('imports_created_by_user_id_idx').on(table.createdByUserId),
-    check('imports_kind', isOneOf(table.kind, importKinds)),
-    check('imports_status', isOneOf(table.status, importStatuses)),
-    check('imports_duplicate_mode', isOneOf(table.duplicateMode, importDuplicateModes)),
   ],
 );
