@@ -186,8 +186,9 @@ async function transfer(
   await expect(owner.getByText(/Recipient account/)).toHaveCount(0);
   await recipient
     .getByRole('navigation', { name: 'Main navigation' })
-    .getByRole('link', { name: 'Ownership transfer' })
+    .getByRole('link', { name: 'Settings', exact: true })
     .click();
+  await recipient.getByRole('link', { name: 'Ownership transfer' }).click();
   await expect(recipient.getByRole('button', { name: 'Send ownership code' })).toBeHidden();
   await recipient.getByRole('button', { name: 'Review acceptance' }).click();
   await owner.goto('/team');
