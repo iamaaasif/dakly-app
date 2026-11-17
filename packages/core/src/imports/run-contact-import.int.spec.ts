@@ -6,15 +6,14 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
-
 import type { StartImportInput } from '@dakly/contracts/contacts';
 import { createDatabase } from '@dakly/db/client';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { DatabaseModule } from '../platform/database/database.module';
-import { FILE_STORAGE_DRIVER } from './file-storage-provider';
-import { ImportsRepository } from './imports.repository';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { ImportsModule } from './imports.module';
+import { ImportsRepository } from './imports.repository';
 import { ImportsService } from './imports.service';
 
 class TestModule {}
