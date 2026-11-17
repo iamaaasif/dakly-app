@@ -25,7 +25,12 @@ import {
 } from './imports.repository';
 
 type Actor = AuditEntry['actor'];
-type Outcome = { status: 'done' | 'failed'; counts?: ImportCounts; lines: ReportLine[] };
+type Outcome = {
+  status: 'done' | 'failed';
+  counts?: ImportCounts;
+  lines: ReportLine[];
+  stalled?: { before: Date; limit: number };
+};
 type ReportLine = {
   rowNumber?: number;
   field?: ContactImportField | 'sms' | 'whatsapp';
@@ -134,16 +139,11 @@ export class ImportsService {
           return true;
         });
         if (!requeued)
-          await this.finish(
-            storeId,
-            stuck.id,
-            stuck.claimedAt,
-            {
-              status: 'failed',
-              lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
-            },
-            { before, limit: MAX_REQUEUES },
-          );
+          await this.finish(storeId, stuck.id, stuck.claimedAt, {
+            status: 'failed',
+            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+            stalled: { before, limit: MAX_REQUEUES },
+          });
       }
   }
 
@@ -151,8 +151,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines }: Outcome,
-    stalled?: { before: Date; limit: number },
+    { status, counts, lines, stalled }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
