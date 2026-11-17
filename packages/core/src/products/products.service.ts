@@ -20,10 +20,10 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
-import { FILE_STORAGE_DRIVER } from './file-storage.provider';
 import { productError } from './products.errors';
 import {
   type CatalogueProduct,
