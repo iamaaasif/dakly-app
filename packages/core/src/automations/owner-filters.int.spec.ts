@@ -91,6 +91,9 @@ describe('automation filters without RLS assistance', () => {
     const step = { stepKey: 'welcome', kind: 'wait', outcome: 'scheduled' } as const;
 
     expect(await runs.findRun(f.b, runId)).toBeUndefined();
+    expect(await runs.startWork(f.b, claim)).toBeUndefined();
+    expect((await f.row('automation_runs', runId)).attempts).toBe(0);
+    expect(await runs.startWork(f.a, claim)).toBe(1);
     expect(await runs.moveRun(f.b, claim, { status: 'done' })).toBe(false);
     await expect(runs.insertStep(f.b, runId, contactId, step)).rejects.toThrow();
     expect((await f.row('automation_runs', runId)).status).toBe('running');
@@ -105,7 +108,7 @@ describe('automation filters without RLS assistance', () => {
     expect(await runs.findRun(f.a, runId)).toMatchObject({
       contactId,
       claimedAt,
-      attempts: 0,
+      attempts: 1,
       graph,
     });
     const sending = {
