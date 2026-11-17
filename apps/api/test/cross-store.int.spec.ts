@@ -134,6 +134,65 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('contacts', foreignId)).toEqual(before);
   });
+async function product(shop: Shop) {
+  const result = await success(shop, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+  });
+  expect(result.json().variants).toHaveLength(1);
+  return result.json().id as string;
+}
+fixture('POST /products', async () => {
+  const { a, b } = await pair(),
+    id = await product(a);
+  const before = await f.row('products', id),
+    own = await product(b);
+  expect((await f.row('products', own)).store_id).toBe(b.id);
+  expect(await f.row('products', id)).toEqual(before);
+  expect((await f.request(b.member, 'POST', '/products', { name: 'Forbidden' })).statusCode).toBe(
+    403,
+  );
+});
+fixture('GET /products', async () => {
+  const { a, b } = await pair(),
+    aId = await product(a),
+    bId = await product(b);
+  for (const [shop, id] of [
+    [a, aId],
+    [b, bId],
+  ] as const)
+    expect(
+      (await success(shop, 'GET', '/products', 200))
+        .json()
+        .items.map((row: { id: string }) => row.id),
+    ).toEqual([id]);
+});
+fixture('GET /products/:productId', async () => {
+  const { a, b } = await pair(),
+    id = await product(a);
+  expect((await success(a, 'GET', `/products/${id}`, 200)).json().id).toBe(id);
+  await hidden(b, 'GET', (value) => `/products/${value}`, id);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /products/:productId`, async () => {
+    const { a, b } = await pair(),
+      foreignId = await product(a),
+      own = await product(b);
+    const before = await f.row('products', foreignId);
+    const payload = method === 'PATCH' ? { name: 'লাল পাঞ্জাবি', status: 'hidden' } : undefined;
+    await success(b, method, `/products/${own}`, method === 'PATCH' ? 200 : 204, payload);
+    expect(await f.row('products', own)).toMatchObject(
+      method === 'PATCH' ? { name: 'লাল পাঞ্জাবি', status: 'hidden' } : { status: 'archived' },
+    );
+    await hidden(
+      b,
+      method,
+      (id) => `/products/${id}`,
+      foreignId,
+      () => payload ?? {},
+    );
+    expect(await f.row('products', foreignId)).toEqual(before);
+  });
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
     id = await contact(a);
