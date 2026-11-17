@@ -214,9 +214,9 @@ export const campaignRecipients = pgTable(
     readAt: timestamptz('read_at'),
     tappedAt: timestamptz('tapped_at'),
     failedAt: timestamptz('failed_at'),
-    // The sender's lease on a recipient in sending; an expired claim is reconciled, not resent blind.
+    // For the sender (CAMP-3): its lease on a recipient in sending, the credits the message used,
+    // and how many sends the provider refused.
     claimedAt: timestamptz('claimed_at'),
-    // One credit a part, set when the provider takes the message; the campaign settles their sum.
     smsCredits: integer('sms_credits'),
     sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),

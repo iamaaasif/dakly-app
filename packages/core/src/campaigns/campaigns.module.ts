@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { ClockModule } from '../platform/clock.module';
+import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
@@ -16,6 +17,7 @@ import { CampaignsService } from './campaigns.service';
 @Module({
   imports: [
     ClockModule,
+    ErrorReportingModule,
     OutboxModule,
     SegmentsModule,
     SendingModule,
