@@ -5,7 +5,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 
-import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AppError } from '../platform/errors/app-error';
@@ -21,7 +20,6 @@ const wallets = new WalletService(
   new WalletLedgerRepository(tenant),
   new StoreTransaction(tenant),
   new OutboxService(new OutboxRepository(app.db, tenant), new StoreTransaction(tenant)),
-  new Clock(),
 );
 const system = { kind: 'system' } as const;
 const storeIds: string[] = [];

@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
-import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -20,7 +19,6 @@ describe('wallet ledger filters without RLS assistance', () => {
       new OutboxRepository(f.connection.db, f.tenant),
       new StoreTransaction(f.tenant),
     ),
-    new Clock(),
   );
   const system = { kind: 'system' } as const;
   beforeAll(() => f.setup());

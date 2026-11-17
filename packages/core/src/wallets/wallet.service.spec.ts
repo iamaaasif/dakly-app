@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { WalletEntry, WalletLedgerRepository } from './wallet-ledger.repository';
@@ -28,7 +27,6 @@ describe('WalletService', () => {
       ledger as unknown as WalletLedgerRepository,
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async () => undefined } as unknown as OutboxService,
-      new Clock(),
     );
 
     await expect(

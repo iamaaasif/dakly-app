@@ -77,6 +77,14 @@ describe('automation filters without RLS assistance', () => {
   it('pauses and resumes for balance only in the selected store', async () => {
     const a = await published(f.a, f.userA);
     const b = await published(f.b, f.userB);
+    await f.connection.pool.query("update automations set status='active' where id=$1", [
+      a.automation.id,
+    ]);
+    expect(await repository.pauseForBalance(f.b, a.automation.id, now)).toBeUndefined();
+    expect(await f.row('automations', a.automation.id)).toMatchObject({
+      status: 'active',
+      balance_paused_at: null,
+    });
     for (const { automation } of [a, b])
       await f.connection.pool.query(
         "update automations set status='paused', pause_reason='balance', balance_paused_at=$2 where id=$1",

@@ -3,7 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type { MessagingWallet, WalletBalancesResponse } from '@dakly/contracts/wallets';
 
-import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -39,7 +38,7 @@ type LedgerWrite = {
   actor: ReturnType<typeof actorColumns>;
   changes: () => EntryChanges | Promise<EntryChanges>;
   // Runs in the same transaction for a new entry only, never for a replay.
-  afterInsert?: (entryId: string) => Promise<void>;
+  afterInsert?: (entryId: string, createdAt: Date) => Promise<void>;
 };
 // The entry is the row a write returns; a charge first releases its reservation.
 type EntryChanges = { release?: EntryChange; entry: EntryChange };
@@ -51,7 +50,6 @@ export class WalletService {
     @Inject(WalletLedgerRepository) private readonly ledger: WalletLedgerRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
-    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   async balance(storeId: string, wallet: MessagingWallet): Promise<number> {
@@ -134,11 +132,12 @@ export class WalletService {
             referenceId: input.staffAuditId,
           },
         }),
-        afterInsert: (entryId) =>
+        // The entry's database time, so a resume compares it with a pause by the same clock.
+        afterInsert: (entryId, createdAt) =>
           this.outbox.publish({
             type: 'wallet.credited',
             storeId,
-            occurredAt: this.clock.now().toISOString(),
+            occurredAt: createdAt.toISOString(),
             payload: { wallet: input.wallet, entryId },
           }),
       }),
@@ -184,9 +183,9 @@ export class WalletService {
       changed.map((change) => ({ ...change, ...actor, wallet })),
     );
     // The service check above normally prevents this; the database rule is the last guard.
-    if ((await this.ledger.insert(storeId, entries)) === 'balance_negative')
-      throw walletError('WALLET_BALANCE_TOO_LOW');
-    await afterInsert?.(entryId);
+    const createdAt = await this.ledger.insert(storeId, entries);
+    if (createdAt === 'balance_negative') throw walletError('WALLET_BALANCE_TOO_LOW');
+    await afterInsert?.(entryId, createdAt);
     return { entryId, balanceQuantity: balance };
   }
 }

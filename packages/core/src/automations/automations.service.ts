@@ -194,12 +194,7 @@ export class AutomationsService {
   // workflow; the owner gets a card now and an email from the automation.paused event.
   async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
     const now = this.clock.now();
-    const paused = await this.repository.change(storeId, automationId, ['active'], {
-      status: 'paused',
-      pauseReason: 'balance',
-      balancePausedAt: now,
-      updatedAt: now,
-    });
+    const paused = await this.repository.pauseForBalance(storeId, automationId, now);
     if (!paused) return;
     await this.notifications.notify(storeId, {
       type: 'automation.paused_for_balance',
@@ -218,7 +213,9 @@ export class AutomationsService {
   }
 
   // The email driver takes no idempotency key, so each owner's email for this event is claimed in
-  // Valkey first: a retry after some emails went out sends the rest only.
+  // Valkey first: a retry after some emails went out sends the rest only. Until the email is sent
+  // the claim is short and a retry that meets it fails, so the job's next retry sends the email
+  // of a worker that died mid-send.
   async emailBalancePause(storeId: string, automationId: string, eventId: string): Promise<void> {
     const automation = await this.repository.find(storeId, automationId);
     if (automation?.status !== 'paused' || automation.pauseReason !== 'balance') return;
@@ -232,12 +229,15 @@ export class AutomationsService {
       const key = `automation-pause-email:${eventId}:${id}`;
       const claim = await this.valkey.connection.set(
         key,
-        '1',
+        'sending',
         'EX',
-        PAUSE_EMAIL_CLAIM_SECONDS,
+        SENDING_CLAIM_SECONDS,
         'NX',
       );
-      if (!claim) continue;
+      if (!claim) {
+        if ((await this.valkey.connection.get(key)) === 'sent') continue;
+        throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
+      }
       try {
         await this.email.send({ to: email, subject: title, text });
       } catch (error) {
@@ -245,6 +245,7 @@ export class AutomationsService {
         await this.valkey.connection.del(key);
         throw error;
       }
+      await this.valkey.connection.set(key, 'sent', 'EX', SENT_CLAIM_SECONDS);
     }
   }
 
@@ -294,8 +295,11 @@ export class AutomationsService {
 
 // The shop app has no top-up screen until PAY-8; Settings is where billing will live.
 const TOP_UP_PATH = '/settings';
+// Longer than an email driver waits for its provider, and shorter than the event job's retries
+// (30 and 60 seconds apart), so a retry after a crash finds the claim gone.
+const SENDING_CLAIM_SECONDS = 60;
 // Longer than the outbox relay keeps retrying an event.
-const PAUSE_EMAIL_CLAIM_SECONDS = 7 * 24 * 60 * 60;
+const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
 
 function balancePauseNotice(name: string) {
   return {

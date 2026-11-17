@@ -55,7 +55,6 @@ type AutomationChange = {
   graph?: AutomationGraph;
   triggerType?: TriggerKey;
   publishedVersionId?: string;
-  balancePausedAt?: Date;
   updatedAt: Date;
   // Not a column: leaves a workflow paused for this reason as it is.
   unlessPausedFor?: AutomationPauseReason;
@@ -147,6 +146,34 @@ export class AutomationsRepository {
                 isNull(automations.pauseReason),
                 ne(automations.pauseReason, unlessPausedFor),
               ),
+          ),
+        )
+        .returning(automationColumns),
+    );
+    return row;
+  }
+
+  // The pause time is the database's, as is a top-up's, so the resume compares one clock. It is
+  // cut to milliseconds like the top-up time the event carries.
+  async pauseForBalance(
+    storeId: string,
+    id: string,
+    updatedAt: Date,
+  ): Promise<Automation | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automations)
+        .set({
+          status: 'paused',
+          pauseReason: 'balance',
+          balancePausedAt: sql`date_trunc('milliseconds', now())`,
+          updatedAt,
+        })
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            eq(automations.id, id),
+            eq(automations.status, 'active'),
           ),
         )
         .returning(automationColumns),
