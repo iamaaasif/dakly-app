@@ -1,5 +1,5 @@
 'use client';
-import { Users, ShieldCheck, LifeBuoy, LayoutDashboard, Layers } from 'lucide-react';
+import { House, Layers, LogOut, Settings, Users, UsersRound, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -8,89 +8,131 @@ import { cn } from '@dakly/ui/cn';
 
 import { CollapseNavigation } from './collapse-navigation';
 
+type NavigationLink = { href: string; label: string; icon: LucideIcon; visible?: boolean };
+type NavigationGroup = { heading: string; links: NavigationLink[] };
+
 type ShellNavigationProps = {
   session: SessionContext;
+  onSignOut: () => Promise<void>;
   collapsed?: boolean;
   onCollapse?: () => void;
   onNavigate?: () => void;
 };
 export function ShellNavigation({
   session,
+  onSignOut,
   collapsed,
   onCollapse,
   onNavigate,
 }: ShellNavigationProps) {
-  const pathname = usePathname();
-  const links = navigationLinks(session);
+  const groups = navigationGroups(session)
+    .map((group) => ({ ...group, links: group.links.filter((link) => link.visible) }))
+    .filter((group) => group.links.length > 0);
+  const settings = { href: '/settings', label: 'Settings', icon: Settings };
+  const linkProps = { collapsed, onNavigate };
   return (
-    <div className="flex h-full min-w-0 flex-col gap-6 p-3">
-      <p className="px-1 py-3 text-lg font-bold">{collapsed ? 'D' : 'Dakly'}</p>
-      <nav aria-label="Main navigation" className="space-y-2">
-        {links
-          .filter((link) => link.visible)
-          .map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              title={collapsed ? label : undefined}
-              aria-current={pathname === href ? 'page' : undefined}
+    <div className="flex h-full min-w-0 flex-col">
+      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4 max-md:pr-16">
+        <span
+          aria-hidden="true"
+          className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-md font-bold text-on-primary"
+        >
+          D
+        </span>
+        <div className={cn('min-w-0', collapsed && 'sr-only')}>
+          <p className="text-md leading-5 font-bold">Dakly</p>
+          <p className="truncate text-xs text-text-muted">Call customers. Grow sales.</p>
+        </div>
+      </div>
+      <nav aria-label="Main navigation" className="flex-1 space-y-4 overflow-y-auto p-3">
+        {groups.map((group) => (
+          <div key={group.heading} className="space-y-1">
+            <p
               className={cn(
-                'flex min-h-10 min-w-10 items-center gap-3 rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
-                pathname === href
-                  ? 'bg-primary-soft font-semibold text-action-hover'
-                  : 'hover:bg-surface-muted',
+                'px-2 pt-2 text-xs font-semibold tracking-wide text-text-muted uppercase',
+                collapsed && 'sr-only',
               )}
             >
-              <Icon aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
-              <span className={cn(collapsed && 'sr-only')}>{label}</span>
-            </Link>
-          ))}
+              {group.heading}
+            </p>
+            {group.links.map((link) => (
+              <NavigationItem key={link.href} {...link} {...linkProps} />
+            ))}
+          </div>
+        ))}
       </nav>
-      {onCollapse ? <CollapseNavigation collapsed={collapsed} onCollapse={onCollapse} /> : null}
+      <div className="shrink-0 space-y-1 border-t border-border p-3">
+        {session.currentStore ? <NavigationItem {...settings} {...linkProps} /> : null}
+        <button
+          type="button"
+          onClick={() => void onSignOut()}
+          className="flex min-h-10 w-full min-w-10 items-center gap-3 rounded-md p-2 font-medium text-danger hover:bg-danger-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          <LogOut aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+          <span className={cn(collapsed && 'sr-only')}>Log out</span>
+        </button>
+        {onCollapse ? <CollapseNavigation collapsed={collapsed} onCollapse={onCollapse} /> : null}
+      </div>
     </div>
   );
 }
 
-function navigationLinks(session: SessionContext) {
+function NavigationItem({
+  href,
+  label,
+  icon: Icon,
+  collapsed,
+  onNavigate,
+}: NavigationLink & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
+  const pathname = usePathname();
+  const current = pathname === href;
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
+      aria-current={current ? 'page' : undefined}
+      className={cn(
+        'flex min-h-10 min-w-10 items-center gap-3 rounded-md p-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+        current ? 'bg-primary-soft font-semibold text-action-hover' : 'hover:bg-surface-muted',
+      )}
+    >
+      <Icon aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+      <span className={cn(collapsed && 'sr-only')}>{label}</span>
+    </Link>
+  );
+}
+
+// Groups follow the design order. Sales, Marketing and Social auto post join when their screens exist.
+function navigationGroups(session: SessionContext): NavigationGroup[] {
+  const store = session.currentStore;
   return [
     {
-      href: '/dashboard',
-      label: 'Dashboard',
-      icon: LayoutDashboard,
-      visible: Boolean(session.currentStore),
+      heading: 'Workspace',
+      links: [{ href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) }],
     },
     {
-      href: '/customers',
-      label: 'Customers',
-      icon: Users,
-      visible: session.currentStore?.canViewCustomers,
+      heading: 'Customers',
+      links: [
+        {
+          href: '/customers',
+          label: 'All customers',
+          icon: Users,
+          visible: store?.canViewCustomers,
+        },
+        { href: '/segments', label: 'Segments', icon: Layers, visible: store?.canViewSegments },
+      ],
     },
     {
-      href: '/segments',
-      label: 'Segments',
-      icon: Layers,
-      visible: session.currentStore?.canViewSegments,
+      heading: 'Store information',
+      links: [
+        {
+          href: '/team',
+          label: 'Team and permissions',
+          icon: UsersRound,
+          visible: store?.canViewTeam,
+        },
+      ],
     },
-    {
-      href: '/support-access',
-      label: 'Support access',
-      icon: LifeBuoy,
-      visible: session.currentStore?.canApproveSupport,
-    },
-    { href: '/team', label: 'Team', icon: Users, visible: session.currentStore?.canViewTeam },
-    {
-      href: '/team/ownership',
-      label: 'Ownership transfer',
-      icon: ShieldCheck,
-      visible: Boolean(session.currentStore),
-    },
-    {
-      href: '/settings',
-      label: 'Store settings',
-      icon: ShieldCheck,
-      visible: session.currentStore?.canViewStoreSettings,
-    },
-    { href: '/security', label: 'Security', icon: ShieldCheck, visible: true },
   ];
 }
