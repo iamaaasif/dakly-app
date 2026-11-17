@@ -28,10 +28,14 @@ const settingsColumns = {
   vatBin: stores.vatBin,
   tradeLicenceNumber: stores.tradeLicenceNumber,
   sending: sql<unknown>`${stores.settings}->'sending'`,
+  stock: sql<unknown>`${stores.settings}->'stock'`,
 };
 
 // The service parses the sending section and fills its defaults.
-export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending'> & { sending: unknown };
+export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock'> & {
+  sending: unknown;
+  stock: unknown;
+};
 
 @Injectable()
 export class StoresRepository {
@@ -81,22 +85,20 @@ export class StoresRepository {
 
   async changeSettings(
     storeId: string,
-    { sending, ...columns }: ChangeStoreSettingsInput,
+    { sending, stock, ...columns }: ChangeStoreSettingsInput,
     updatedAt: Date,
   ): Promise<StoreSettingsRow | undefined> {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx
+    const [row] = await this.tenant.forStore(storeId, (tx) => {
+      let settings = sql`${stores.settings}`;
+      if (sending)
+        settings = sql`jsonb_set(${settings}, '{sending}', ${JSON.stringify(sending)}::jsonb)`;
+      if (stock) settings = sql`jsonb_set(${settings}, '{stock}', ${JSON.stringify(stock)}::jsonb)`;
+      return tx
         .update(stores)
-        .set({
-          ...columns,
-          updatedAt,
-          ...(sending && {
-            settings: sql`jsonb_set(${stores.settings}, '{sending}', ${JSON.stringify(sending)}::jsonb)`,
-          }),
-        })
+        .set({ ...columns, updatedAt, ...((sending || stock) && { settings }) })
         .where(eq(stores.id, storeId))
-        .returning(settingsColumns),
-    );
+        .returning(settingsColumns);
+    });
     return row;
   }
 

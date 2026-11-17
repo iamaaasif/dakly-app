@@ -66,6 +66,19 @@ describe('store settings patches', () => {
     };
     expect(contracts.changeStoreSettingsSchema.parse(input)).toEqual(input);
   });
+  it('defaults the stock threshold to three and accepts a whole stock section', () => {
+    expect(contracts.stockSettingsSchema.parse({})).toEqual({ lowStockThreshold: 3 });
+    expect(contracts.changeStoreSettingsSchema.parse({ stock: { lowStockThreshold: 5 } })).toEqual({
+      stock: { lowStockThreshold: 5 },
+    });
+    expect(
+      contracts.changeStoreSettingsSchema.safeParse({ stock: { lowStockThreshold: -1 } }).success,
+    ).toBe(false);
+    expect(
+      contracts.changeStoreSettingsSchema.safeParse({ stock: { lowStockThreshold: 1.5 } }).success,
+    ).toBe(false);
+  });
+
   it('accepts release 1 extensions or an empty selection', () => {
     expect(
       contracts.changeStoreExtensionsSchema.parse({
