@@ -1,7 +1,8 @@
 ALTER TABLE "campaigns" ADD COLUMN "settled_at" timestamp with time zone;--> statement-breakpoint
-CREATE INDEX "campaigns_unsettled_idx" ON "campaigns" USING btree ("id") WHERE "campaigns"."status" = 'cancelled' and "campaigns"."started_at" is not null and "campaigns"."settled_at" is null;--> statement-breakpoint
--- A cancelled campaign stays named until its reservation is settled, so the sender resolves its
--- recipients left in sending and then settles. Still one campaign per store, the earliest started.
+CREATE INDEX "campaigns_unsettled_idx" ON "campaigns" USING btree ("store_id","started_at","id") WHERE "campaigns"."status" = 'cancelled' and "campaigns"."started_at" is not null and "campaigns"."settled_at" is null;--> statement-breakpoint
+-- A cancelled campaign stays named until its reservation is settled, so the sender fails its
+-- recipients left in sending, never resending them, and then settles. Still one campaign per
+-- store, the earliest started.
 CREATE OR REPLACE FUNCTION sending_campaigns() RETURNS TABLE(store_id uuid, campaign_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$

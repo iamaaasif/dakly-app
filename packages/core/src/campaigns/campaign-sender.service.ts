@@ -139,14 +139,24 @@ export class CampaignSenderService {
       const campaign = await this.repository.lockSending(storeId, campaignId);
       if (!campaign) return { kind: 'stop' };
       const now = this.clock.now();
-      // A cancelled campaign sends nothing new: only a message that may already be with the
-      // provider, under an expired claim, is resent under its key.
+      // A cancelled campaign takes only messages left in sending under an expired claim.
       const recipient = await this.repository.lockNextRecipient(storeId, campaignId, {
         claimedBefore: new Date(now.getTime() - CLAIM_MS),
         onlyExpired: campaign.status === 'cancelled',
       });
       if (!recipient) return { kind: 'stop' };
       const { id, contactId, destinationAddress } = recipient;
+      // A cancelled campaign is never sent again (owner decision A); a message left in sending
+      // may be with the provider, so it is charged.
+      if (campaign.status === 'cancelled') {
+        await this.failUnknown(
+          storeId,
+          id,
+          { status: 'sending' },
+          await this.text(storeId, campaign, contactId),
+        );
+        return { kind: 'next' };
+      }
       const resend = recipient.status === 'sending';
       const decision = await this.decide(storeId, { contactId, destinationAddress, resend, now });
       if (decision.action === 'defer') return { kind: 'defer', until: decision.until };
@@ -335,7 +345,7 @@ export class CampaignSenderService {
     chargedCredits: number,
     actor: Actor,
   ): Promise<void> {
-    await this.repository.markSettled(storeId, campaign.id, this.clock.now());
+    if (!(await this.repository.markSettled(storeId, campaign.id, this.clock.now()))) return;
     // Approval sets the time before a campaign can send.
     const key = approvalKey(campaign.id, campaign.approvedAt!);
     const reservation = await this.wallets.findByIdempotencyKey(storeId, key);

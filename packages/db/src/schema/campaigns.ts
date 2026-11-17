@@ -166,8 +166,9 @@ export const campaigns = pgTable(
     index('campaigns_sending_idx')
       .on(table.storeId, table.startedAt, table.id)
       .where(sql`${table.status} = 'sending'`),
+    // The sweep also takes a cancelled campaign until its reservation is settled.
     index('campaigns_unsettled_idx')
-      .on(table.id)
+      .on(table.storeId, table.startedAt, table.id)
       .where(
         sql`${table.status} = 'cancelled' and ${table.startedAt} is not null and ${table.settledAt} is null`,
       ),

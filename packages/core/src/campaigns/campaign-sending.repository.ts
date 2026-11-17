@@ -153,15 +153,18 @@ export class CampaignSendingRepository {
     return row;
   }
 
-  async markSettled(storeId: string, id: string, now: Date): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
+  // Only the first settle stamps, so the caller touches the wallet only then.
+  async markSettled(storeId: string, id: string, now: Date): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(campaigns)
         .set({ settledAt: now })
         .where(
           and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), isNull(campaigns.settledAt)),
-        ),
+        )
+        .returning({ id: campaigns.id }),
     );
+    return rows.length > 0;
   }
 
   // Recipients not yet settled, and the credits to charge.

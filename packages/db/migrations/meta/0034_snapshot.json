@@ -1,6 +1,6 @@
 {
-  "id": "ae0f979e-1688-40ed-9f5b-561aadb765f4",
-  "prevId": "d10f02a3-0fbc-4167-a515-afc4eb777b7f",
+  "id": "65957704-3dc2-472d-a639-6e338ff26d5b",
+  "prevId": "4a2cd6d5-0692-4854-aa6a-16e1e617c93e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7585,6 +7585,18 @@
           "name": "campaigns_sending_idx",
           "columns": [
             {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
               "expression": "id",
               "isExpression": false,
               "asc": true,
@@ -7600,6 +7612,18 @@
         "campaigns_unsettled_idx": {
           "name": "campaigns_unsettled_idx",
           "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "id",
               "isExpression": false,

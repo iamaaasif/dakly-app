@@ -56,7 +56,7 @@ const STATUS_CHANGES = {
 } as const satisfies Record<string, StatusChange>;
 // Approval runs in one request until CAMP-13 makes it a job; this bounds that work.
 export const MAX_CAMPAIGN_AUDIENCE = 20_000;
-// CAMP-R7: a scheduled campaign can be edited or cancelled until 5 minutes before it sends.
+// CAMP-R7: a scheduled campaign can be edited until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
 @Injectable()
@@ -196,7 +196,8 @@ export class CampaignsService {
         await this.sender.cancelStarted(storeId, campaign, actor);
         return this.get(storeId, campaignId);
       }
-      this.assertBeforeSend(campaign);
+      // Cancel works right up to the send time (owner decision B); only an edit stops 5 minutes
+      // before it.
       await this.repository.cancelQueuedRecipients(storeId, campaignId);
       // Starts the 372-day recipient retention (growth.md).
       const cancelled = await this.changeStatus(storeId, campaignId, 'cancel', {
@@ -219,14 +220,10 @@ export class CampaignsService {
   private async lockBeforeSend(storeId: string, campaignId: string) {
     const campaign = await this.repository.lockScheduled(storeId, campaignId);
     if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_SCHEDULED');
-    this.assertBeforeSend(campaign);
-    return campaign;
-  }
-
-  private assertBeforeSend(campaign: Campaign): void {
     // Approval schedules a campaign only with a send time.
     const untilSend = campaign.scheduledFor!.getTime() - this.clock.now().getTime();
     if (untilSend < LAST_CHANGE_BEFORE_SEND_MS) throw campaignError('CAMPAIGN_CHANGE_TOO_LATE');
+    return campaign;
   }
 
   // Last, as in approve, so the wallet lock is held only until commit.

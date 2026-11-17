@@ -15,7 +15,7 @@ const CAMPAIGN_ERRORS = {
   CAMPAIGN_NOT_SCHEDULED: { status: 409, message: 'This campaign is not scheduled' },
   CAMPAIGN_CHANGE_TOO_LATE: {
     status: 409,
-    message: 'A campaign can be edited or cancelled until 5 minutes before it sends',
+    message: 'A campaign can be edited until 5 minutes before it sends',
   },
   CAMPAIGN_NOT_SENDING: { status: 409, message: 'This campaign is not sending' },
   CAMPAIGN_NOT_CANCELLABLE: {
