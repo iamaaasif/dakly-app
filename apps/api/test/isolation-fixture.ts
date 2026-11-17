@@ -213,6 +213,7 @@ export class IsolationFixture {
       'campaigns',
       'segments',
       'contacts',
+      'stock_movements',
       'delivery_zones',
       'product_variants',
       'products',
