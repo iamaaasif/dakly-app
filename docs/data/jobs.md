@@ -49,13 +49,13 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## campaign
 
-| Job                         | Started by                      | Payload                                     | Makes a rerun harmless                                     |
-| --------------------------- | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
-| `build-campaign-audience`   | Campaign scheduled or sent now  | `storeId`, `campaignId`                     | Unique `campaign_recipients (campaign_id, contact_id)`     |
-| `send-campaign-batch`       | Audience built, then each batch | `storeId`, `campaignId`, `afterRecipientId` | Only `queued` recipients are picked; status moves forward  |
-| sweep `start-due-campaigns` | Every minute                    | none                                        | `due_campaigns`; status moves `scheduled` → `sending` once |
+| Job                         | Started by                     | Payload                 | Makes a rerun harmless                                                                                                                     |
+| --------------------------- | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId` | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                     |
+| `send-campaign-batch`       | The sweep, then each batch     | `storeId`, `campaignId` | Recipients claimed with SKIP LOCKED; operation key `campaign-<recipientId>`                                                                |
+| sweep `start-due-campaigns` | Every minute                   | none                    | `due_campaigns`; status moves `scheduled` → `sending` once; `sending_campaigns` queues one batch per campaign, deduplicated by campaign id |
 
-Per-store cap: one running campaign batch per store.
+Per-store cap: one running campaign batch per store. The `campaign` queue runs one job at a time on a worker, and each batch queues the next behind other campaigns' batches; two workers may run two batches of one campaign at once, which the recipient claim makes safe.
 
 ## workflow
 
@@ -141,7 +141,8 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `contact.created`      | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
 | `consent.changed`      | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
 | `segment.saved`        | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
-| `campaign.approved`    | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
+| `campaign.approved`    | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None; the sender's sweep finds the campaign within a minute  |
+| `campaign.sent`        | CAMP-3, `CampaignSenderService` when the last recipient settles  | `campaignId`                                                            | None yet                                                     |
 | `conversation.started` | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
 | `message.received`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
 | `message.delivered`    | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |

@@ -12,6 +12,7 @@ import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-securi
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { SendCampaignBatchJob } from '@dakly/core/campaigns/jobs/send-campaign-batch.job';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
@@ -38,6 +39,7 @@ import { JobSchedulers } from './job-schedulers';
     BulkJobDispatcher,
     CampaignJobDispatcher,
     TransactionalJobDispatcher,
+    SendCampaignBatchJob,
     StartDueCampaignsJob,
     StaffAuditExportJob,
     StaffAuditMaintenanceJob,

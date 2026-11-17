@@ -11,23 +11,60 @@ describe('campaign sending filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new CampaignSendingRepository(f.tenant, f.connection.db);
   let campaignA: string;
+  let recipientA: string;
   beforeAll(async () => {
     await f.setup();
     campaignA = randomUUID();
+    recipientA = randomUUID();
+    const contactA = randomUUID();
+    await f.connection.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+      [contactA, f.a],
+    );
     await f.connection.pool.query(
       `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
        values($1,$2,'ঈদের অফার','sms','{"text":"ঈদ"}','scheduled',$3,$3)`,
       [campaignA, f.a, now],
     );
+    await f.connection.pool.query(
+      "insert into campaign_recipients(id,store_id,campaign_id,contact_id,status) values($1,$2,$3,$4,'queued')",
+      [recipientA, f.a, campaignA, contactA],
+    );
   });
   afterAll(() => f.close());
 
-  it('starts only the selected store’s campaigns', async () => {
+  it('starts, locks, claims and settles only the selected store’s campaigns', async () => {
     const before = await f.row('campaigns', campaignA);
+    const recipientBefore = await f.row('campaign_recipients', recipientA);
 
     await repository.start(f.b, campaignA, now);
     expect(await f.row('campaigns', campaignA)).toEqual(before);
     await repository.start(f.a, campaignA, now);
     expect((await f.row('campaigns', campaignA)).status).toBe('sending');
+
+    expect(await repository.lockSending(f.b, campaignA)).toBeUndefined();
+    expect(await repository.lockForFinish(f.b, campaignA)).toBeUndefined();
+    expect(await repository.lockNextRecipient(f.b, campaignA, now)).toBeUndefined();
+    expect(await repository.settlement(f.b, campaignA)).toEqual({
+      unsettled: 0,
+      chargedCredits: 0,
+    });
+    await repository.changeRecipient(
+      f.b,
+      recipientA,
+      { status: 'queued' },
+      { status: 'skipped', skipReason: 'blocked' },
+    );
+    expect(await f.row('campaign_recipients', recipientA)).toEqual(recipientBefore);
+
+    expect(await repository.lockSending(f.a, campaignA)).toMatchObject({ id: campaignA });
+    expect(await repository.lockNextRecipient(f.a, campaignA, now)).toMatchObject({
+      id: recipientA,
+      status: 'queued',
+    });
+    expect(await repository.settlement(f.a, campaignA)).toEqual({
+      unsettled: 1,
+      chargedCredits: 0,
+    });
   });
 });

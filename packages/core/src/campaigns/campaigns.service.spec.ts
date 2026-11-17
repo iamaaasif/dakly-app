@@ -6,6 +6,7 @@ import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { LinksService } from '../links/links.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -219,6 +220,7 @@ describe('CampaignsService', () => {
       new TeamService(undefined as never),
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
+      { sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000' } as LinksService,
       { now: () => clockNow } as Clock,
     );
   });
@@ -281,6 +283,17 @@ describe('CampaignsService', () => {
       code: 'CAMPAIGN_NOT_DRAFT',
     });
     expect(repository.rows.has(campaign.id)).toBe(true);
+  });
+
+  it('counts the opt-out link, so 150 characters that fit one part take two', async () => {
+    const { campaign } = audienceDraft(3);
+    campaign.content = { text: 'a'.repeat(150) };
+
+    expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
+      recipientsCount: 2,
+      smsParts: 2,
+      smsCredits: 4,
+    });
   });
 
   it('estimates the audience across pages, minus exclusions and skips, in credits', async () => {

@@ -98,6 +98,28 @@ export class LinksRepository {
     return link;
   }
 
+  async findOptOutLinkFor(
+    storeId: string,
+    { sourceType, sourceId, contactId }: OptOutLink,
+  ): Promise<{ id: string; code: string } | undefined> {
+    const [link] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ id: trackedLinks.id, code: trackedLinks.code })
+        .from(trackedLinks)
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.sourceType, sourceType),
+            sourceId === null ? undefined : eq(trackedLinks.sourceId, sourceId),
+            eq(trackedLinks.contactId, contactId),
+            eq(trackedLinks.kind, 'sms_opt_out'),
+          ),
+        )
+        .limit(1),
+    );
+    return link;
+  }
+
   // The row lock makes a second tap on the same link wait until the first one has committed.
   async lockOptOutLink(storeId: string, trackedLinkId: string): Promise<OptOutLink | undefined> {
     const [link] = await this.tenant.forStore(storeId, (tx) =>

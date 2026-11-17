@@ -40,6 +40,7 @@ export type FrozenRecipient = {
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
 );
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
+  startedAt: Date | null;
   approvedByUserId: string | null;
   approvedAt: Date;
   estimatedCostPoisha: number;
@@ -55,6 +56,8 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
+  startedAt?: Date;
+  finishedAt?: Date;
 };
 
 const campaignColumns = {
@@ -234,7 +237,7 @@ export function statusWhere(storeId: string, id: string, status: CampaignStatus)
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 
-function recipientsWhere(storeId: string, campaignId: string) {
+export function recipientsWhere(storeId: string, campaignId: string) {
   return and(
     eq(campaignRecipients.storeId, storeId),
     eq(campaignRecipients.campaignId, campaignId),
