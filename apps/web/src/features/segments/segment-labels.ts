@@ -1,9 +1,9 @@
 import type { ConsentChannel, ContactKind, ContactSource } from '@dakly/contracts/contacts';
 import type { SegmentCondition, SegmentRules } from '@dakly/contracts/segments';
 
-type SegmentField = SegmentCondition['field'];
+export type SegmentField = SegmentCondition['field'];
 
-const fieldLabels: Record<SegmentField, string> = {
+export const fieldLabels: Record<SegmentField, string> = {
   tag: 'Tag',
   district: 'District',
   source: 'Source',
@@ -11,7 +11,7 @@ const fieldLabels: Record<SegmentField, string> = {
   consent: 'Marketing consent',
 };
 
-const sourceLabels: Record<ContactSource, string> = {
+export const sourceLabels: Record<ContactSource, string> = {
   messenger: 'Messenger',
   instagram: 'Instagram',
   whatsapp: 'WhatsApp',
@@ -25,13 +25,13 @@ const sourceLabels: Record<ContactSource, string> = {
   pos: 'Shop counter',
 };
 
-const kindLabels: Record<Exclude<ContactKind, 'not_customer'>, string> = {
+export const kindLabels: Record<Exclude<ContactKind, 'not_customer'>, string> = {
   chat_only: 'Chat only',
   lead: 'Lead',
   customer: 'Customer',
 };
 
-const channelLabels: Record<ConsentChannel, string> = {
+export const channelLabels: Record<ConsentChannel, string> = {
   whatsapp: 'WhatsApp',
   sms: 'SMS',
   messenger: 'Messenger',
@@ -43,6 +43,13 @@ const valueLabels: Partial<Record<SegmentField, Record<string, string>>> = {
   source: sourceLabels,
   kind: kindLabels,
 };
+
+export function newCondition(field: SegmentField): SegmentCondition {
+  if (field === 'consent') return { field, channel: 'sms', granted: true };
+  if (field === 'source') return { field, operator: 'is_any_of', values: ['messenger'] };
+  if (field === 'kind') return { field, operator: 'is_any_of', values: ['customer'] };
+  return { field, operator: 'is_any_of', values: [''] };
+}
 
 export function describeRules(rules: SegmentRules): string {
   const parts = rules.conditions.map((item) =>
@@ -68,3 +75,8 @@ function describe(condition: SegmentCondition): string {
 export function matchText(count: number): string {
   return `${count} ${count === 1 ? 'customer matches' : 'customers match'}`;
 }
+
+export const matchOptions = [
+  ['all', 'All of these'],
+  ['any', 'Any of these'],
+] as const;

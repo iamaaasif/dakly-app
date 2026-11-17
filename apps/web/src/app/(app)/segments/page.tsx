@@ -5,12 +5,13 @@ import { requireSession } from '@/lib/require-session';
 
 const segmentsPageSchema = z.object({
   cursor: z.uuid().optional(),
+  edit: z.union([z.literal('new'), z.uuid()]).optional(),
 });
 
 export default async function SegmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cursor?: string }>;
+  searchParams: Promise<{ cursor?: string; edit?: string }>;
 }) {
   const session = await requireSession();
   if (!session.currentStore)
@@ -26,5 +27,11 @@ export default async function SegmentsPage({
         This segments page address is invalid. <a href="/segments">Open the segment list</a>.
       </p>
     );
-  return <SegmentsScreen cursor={parsed.data.cursor} />;
+  return (
+    <SegmentsScreen
+      cursor={parsed.data.cursor}
+      edit={parsed.data.edit}
+      canEdit={session.currentStore.canEditSegments}
+    />
+  );
 }
