@@ -138,14 +138,14 @@ atomically and retain business data when an extension is disabled.
 
 ## Products and stock (05)
 
-| Route                                                                                           | Permission |
-| ----------------------------------------------------------------------------------------------- | ---------- |
-| `GET /products`, `GET /products/:productId`                                                     | `products` |
-| `POST /products` (idem), `PATCH /products/:productId`, `DELETE /products/:productId` (archives) | `products` |
-| `POST /products/:productId/variants`, `PATCH /variants/:variantId`                              | `products` |
-| `POST /variants/:variantId/stock-adjustments`                                                   | `products` |
-| `GET /variants/:variantId/stock-movements`                                                      | `products` |
-| `GET /restock-requests`                                                                         | `products` |
+| Route                                                                                    | Permission |
+| ---------------------------------------------------------------------------------------- | ---------- |
+| `GET /products`, `GET /products/:productId`                                              | `products` |
+| `POST /products`, `PATCH /products/:productId`, `DELETE /products/:productId` (archives) | `products` |
+| `POST /products/:productId/variants`, `PATCH /variants/:variantId`                       | `products` |
+| `POST /variants/:variantId/stock-adjustments`                                            | `products` |
+| `GET /variants/:variantId/stock-movements`                                               | `products` |
+| `GET /restock-requests`                                                                  | `products` |
 
 ## Orders and delivery (06)
 
@@ -159,6 +159,7 @@ atomically and retain business data when an extension is disabled.
 | `GET /orders/return-risk?phone=`                                                                                                 | `orders`        |
 | `POST /orders/bulk-stage`                                                                                                        | `orders`        |
 | `GET /delivery-zones`, `POST /delivery-zones`, `PATCH /delivery-zones/:deliveryZoneId`, `DELETE /delivery-zones/:deliveryZoneId` | `storeSettings` |
+| `POST /delivery-zones/initialize-defaults` (empty stores only)                                                                   | `storeSettings` |
 | `GET /areas?parentId=`                                                                                                           | any member      |
 
 ## Payments and billing (07)
