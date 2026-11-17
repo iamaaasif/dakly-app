@@ -132,7 +132,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ------ | -------------------------------------- | ----------- | -------------- | ---- | ------------------------------------------------- |
 | PROD-1 | Products, options, variants            | Done        | ACC-3          | #121 |                                                   |
 | PROD-2 | Stock ledger and `moveStock`           | Done        | PROD-1         | #124 |                                                   |
-| PROD-3 | Photo upload to R2 with presigned URLs | In review   | PROD-1, FILE-1 | #125 |                                                   |
+| PROD-3 | Photo upload to R2 with presigned URLs | Done        | PROD-1, FILE-1 | #125 |                                                   |
 | PROD-4 | Web: products list and product editor  | In progress | PROD-2, WEB-2  |      | List and stock adjustment, then editor and photos |
 
 ## M6. Orders
