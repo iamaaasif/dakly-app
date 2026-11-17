@@ -151,6 +151,24 @@ ids, visibility and available stock. `settings.stock.lowStockThreshold` defaults
 A `variant.restocked` event means availability crossed from zero or less to positive;
 notification sending still waits for PROD-6.
 
+PROD-3 adds photo upload, confirmation, reorder and removal. Upload URLs last five
+minutes and sign the declared content type and exact byte length. Only JPEG, PNG
+and WebP are accepted, up to 5,242,880 bytes. Keys are
+`stores/<store_id>/products/<uuid>`.
+
+Confirmation checks the object size and type before opening a store transaction.
+It then records a ready `files` row and appends the photo to the product together
+with `product.updated`. Photo changes are serialized per store, including the
+limit of ten photos. Reordering includes every current photo id once. Removing a
+photo detaches it and sets its file expiry for later object cleanup; this task
+does not run the object purge. Unconfirmed uploads have no file row; their object
+cleanup is also unimplemented. Scanning and image re-encoding wait for OPS-4.
+
+Product detail and list responses include ordered `photos` with signed download
+URLs lasting fifteen minutes. File metadata, product details and variants are
+read in one SQL snapshot; rows from another store or file purpose are excluded.
+The API requires the four `R2_*` values listed in `.env.example`.
+
 ### Rules
 
 1. Price is an integer in poisha. A product with price 0 cannot be ordered or quoted by the AI.

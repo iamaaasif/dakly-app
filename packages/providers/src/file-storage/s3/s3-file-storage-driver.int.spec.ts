@@ -21,6 +21,41 @@ function request(url: string, init: RequestInit = {}): Promise<Response> {
 }
 
 describe('S3FileStorageDriver (SeaweedFS)', () => {
+  it('binds upload size and type and reads the stored object metadata', async () => {
+    const driver = driverAt(new Date());
+    const key = `stores/${randomUUID()}/products/${randomUUID()}`;
+    const url = driver.createUploadUrl(key, 300, { contentType: 'image/png', sizeBytes: 4 });
+    expect(
+      (
+        await request(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: '1234',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: '12345',
+        })
+      ).status,
+    ).toBe(403);
+    expect(await driver.getObjectMetadata(key)).toBeNull();
+    expect(
+      (
+        await request(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: '1234',
+        })
+      ).status,
+    ).toBe(200);
+    expect(await driver.getObjectMetadata(key)).toEqual({ contentType: 'image/png', sizeBytes: 4 });
+  });
+
   it('stores bytes through the upload URL and returns them through the download URL', async () => {
     const driver = driverAt(new Date());
     const key = `stores/${randomUUID()}/photos/${randomUUID()}.txt`;
