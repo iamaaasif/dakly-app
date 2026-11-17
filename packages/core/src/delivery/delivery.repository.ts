@@ -130,7 +130,7 @@ export class DeliveryRepository {
     id: string,
     input: ChangeDeliveryZoneInput,
     now: Date,
-  ): Promise<DeliveryZone | undefined> {
+  ): Promise<DeliveryZone> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(deliveryZones)
@@ -138,7 +138,7 @@ export class DeliveryRepository {
         .where(and(eq(deliveryZones.storeId, storeId), eq(deliveryZones.id, id)))
         .returning(zoneColumns),
     );
-    return rows[0];
+    return rows[0]!;
   }
 
   async clearDefault(storeId: string, now: Date): Promise<void> {
@@ -150,15 +150,13 @@ export class DeliveryRepository {
     );
   }
 
-  async remove(storeId: string, id: string): Promise<boolean | 'in_use'> {
+  async remove(storeId: string, id: string): Promise<'in_use' | void> {
     try {
-      const rows = await this.database.forStore(storeId, (tx) =>
+      await this.database.forStore(storeId, (tx) =>
         tx
           .delete(deliveryZones)
-          .where(and(eq(deliveryZones.storeId, storeId), eq(deliveryZones.id, id)))
-          .returning({ id: deliveryZones.id }),
+          .where(and(eq(deliveryZones.storeId, storeId), eq(deliveryZones.id, id))),
       );
-      return rows.length > 0;
     } catch (error) {
       if (
         isConstraintViolation(error, '23503', 'orders_delivery_zone_id_delivery_zones_id_fk') ||

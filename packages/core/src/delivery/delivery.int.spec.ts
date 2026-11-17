@@ -227,6 +227,7 @@ describe('DeliveryService with Postgres', () => {
 
   it('edits and lists only this store under RLS and owner connections', async () => {
     const id = defaults[0]!.id;
+    const before = await f.row('delivery_zones', id);
     await expect(service.changeZone(f.b, id, { chargePoisha: 1 }, actor)).rejects.toMatchObject({
       code: 'DELIVERY_ZONE_NOT_FOUND',
     });
@@ -235,7 +236,8 @@ describe('DeliveryService with Postgres', () => {
     });
     expect(await ownerRepository.findById(f.b, id)).toBeUndefined();
     expect(await ownerRepository.update(f.b, id, { chargePoisha: 1 }, now)).toBeUndefined();
-    expect(await ownerRepository.remove(f.b, id)).toBe(false);
+    expect(await ownerRepository.remove(f.b, id)).toBeUndefined();
+    expect(await f.row('delivery_zones', id)).toEqual(before);
     expect((await ownerRepository.list(f.b, { limit: 100 })).map((zone) => zone.id)).not.toContain(
       id,
     );

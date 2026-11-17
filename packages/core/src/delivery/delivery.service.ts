@@ -85,7 +85,6 @@ export class DeliveryService {
       if (input.bdAreaIds) await this.assertAreasAvailable(storeId, input.bdAreaIds, id);
       if (input.isDefault) await this.repository.clearDefault(storeId, this.clock.now());
       const updated = await this.repository.update(storeId, id, input, this.clock.now());
-      if (!updated) throw deliveryError('DELIVERY_ZONE_NOT_FOUND');
       return toResponse(updated);
     });
   }
@@ -97,7 +96,6 @@ export class DeliveryService {
       if (zone.isDefault) throw deliveryError('DELIVERY_DEFAULT_REQUIRED');
       const removed = await this.repository.remove(storeId, id);
       if (removed === 'in_use') throw deliveryError('DELIVERY_ZONE_IN_USE');
-      if (!removed) throw deliveryError('DELIVERY_ZONE_NOT_FOUND');
     });
   }
 
