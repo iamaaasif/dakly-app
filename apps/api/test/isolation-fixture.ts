@@ -214,6 +214,7 @@ export class IsolationFixture {
       'segments',
       'contacts',
       'stock_movements',
+      'delivery_zones',
       'product_variants',
       'products',
       'sms_sender_ids',
