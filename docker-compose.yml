@@ -1,4 +1,4 @@
-# Local development only: Postgres (with pgvector), Valkey and Mailpit. Production uses DigitalOcean managed services.
+# Local development only: Postgres (with pgvector), Valkey, Mailpit and SeaweedFS. Production uses DigitalOcean managed services.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -22,6 +22,21 @@ services:
       - '127.0.0.1:8025:8025'
     healthcheck:
       test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  # S3 stand-in for Cloudflare R2. The keys and bucket are local only and match .env.example.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.52
+    command: ['mini', '-master.telemetry=false']
+    environment:
+      AWS_ACCESS_KEY_ID: dakly-local
+      AWS_SECRET_ACCESS_KEY: dakly-local-secret
+      S3_BUCKET: dakly-local
+    ports:
+      - '127.0.0.1:8333:8333'
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:8333/healthz']
       interval: 5s
       timeout: 5s
       retries: 10
