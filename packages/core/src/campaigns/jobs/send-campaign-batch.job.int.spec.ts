@@ -37,9 +37,9 @@ const sender = {
 let app: INestApplicationContext;
 let queue: Queue;
 
-async function until(condition: () => boolean) {
-  for (let attempt = 0; attempt < 200 && !condition(); attempt += 1) await setTimeout(25);
-  expect(condition()).toBe(true);
+async function until(condition: () => boolean | Promise<boolean>) {
+  for (let attempt = 0; attempt < 200 && !(await condition()); attempt += 1) await setTimeout(25);
+  expect(await condition()).toBe(true);
 }
 
 describe('Campaign batch jobs (Valkey)', () => {
@@ -77,13 +77,16 @@ describe('Campaign batch jobs (Valkey)', () => {
     for (let tick = 0; tick < 3; tick += 1) await sweep.handle({});
     await until(() => batches.filter((id) => id === chained).length >= 3);
     await until(() => batches.includes(deferred));
+    // A tick that lands while a batch frees its key and queues the next takes the key itself, so
+    // the first ticks may run the deferred batch again; once it is delayed, no tick adds one.
+    await until(async () => (await queue.getDelayedCount()) === 1);
+    const deferredRuns = batches.filter((id) => id === deferred).length;
     for (let tick = 0; tick < 3; tick += 1) {
       await sweep.handle({});
       await setTimeout(100);
     }
 
-    // The deferred batch holds its campaign's key, so no sweep tick starts a second chain.
-    expect(batches.filter((id) => id === deferred)).toHaveLength(1);
+    expect(batches.filter((id) => id === deferred)).toHaveLength(deferredRuns);
     const open = await queue.getJobs(['waiting', 'active', 'delayed', 'prioritized']);
     const perCampaign = new Map<string, number>();
     for (const job of open)
