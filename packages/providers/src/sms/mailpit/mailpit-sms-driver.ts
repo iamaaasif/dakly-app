@@ -1,6 +1,6 @@
 import { createTransport } from 'nodemailer';
 
-import { type SmsDriver, type SmsMessage, type SmsSendResult } from '../sms-driver';
+import { type SmsDriver, type SmsMessage, type SmsSendResult, SmsSendRefused } from '../sms-driver';
 
 const SHARED_FROM = 'dakly@sms.dakly.test';
 
@@ -40,8 +40,10 @@ export class MailpitSmsDriver implements SmsDriver {
       const providerMessageId = /queued as ([\w-]+)$/u.exec(result.response)?.[1];
       if (!providerMessageId) throw new Error('Missing Mailpit message id');
       return { providerMessageId };
-    } catch {
-      // SMTP errors can contain the recipient or body. Keep them inside the driver.
+    } catch (error) {
+      // SMTP errors can contain the recipient or body. Keep them inside the driver. Only a
+      // permanent (5xx) SMTP answer is a refusal; a timeout or a lost connection is unknown.
+      if ((error as { permanent?: boolean }).permanent === true) throw new SmsSendRefused();
       throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
     }
   }

@@ -1,10 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
+import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
+
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService } from '../links/links.service';
 import { MessagingService, type SentMessage } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError } from '../platform/errors/app-error';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
@@ -35,6 +38,7 @@ type Claim =
       kind: 'send';
       recipientId: string;
       contactId: string;
+      destinationAddress: string | null;
       claimedAt: Date;
       sendAttempts: number;
       text: string;
@@ -99,13 +103,14 @@ export class CampaignSenderService {
         new Date(now.getTime() - CLAIM_MS),
       );
       if (!recipient) return { kind: 'stop' };
-      const { id, contactId } = recipient;
+      const { id, contactId, destinationAddress } = recipient;
+      // A queued recipient has not reached the provider, including one whose earlier send the
+      // provider refused, so every check runs again. The frozen phone is the one approved; a
+      // contact whose phone has changed since is not sent to another number (feature 09).
       if (recipient.status === 'queued') {
-        // The frozen phone is the one approved; a contact whose phone has changed since is not
-        // sent to another number (feature 09).
         const [contact] = await this.contacts.findRecipients(storeId, [contactId]);
         const decision: SendDecision =
-          contact?.phone === recipient.destinationAddress
+          contact?.phone === destinationAddress
             ? await this.sendPolicy.check(storeId, {
                 contactId,
                 channel: 'sms',
@@ -124,7 +129,8 @@ export class CampaignSenderService {
           return { kind: 'next' };
         }
       }
-      // A recipient already in sending may be with the provider, so it is resent, never skipped.
+      // A recipient in sending under an expired claim may be with the provider, so it is resent
+      // under the same key, never skipped.
       await this.repository.changeRecipient(
         storeId,
         id,
@@ -141,6 +147,7 @@ export class CampaignSenderService {
         kind: 'send',
         recipientId: id,
         contactId,
+        destinationAddress,
         claimedAt: now,
         sendAttempts: recipient.sendAttempts,
         text,
@@ -149,10 +156,14 @@ export class CampaignSenderService {
   }
 
   // The operation key makes a resend after a crash or an expired claim return the first provider
-  // message id. A thrown send means the provider did not take the message (the driver contract):
-  // it counts as an attempt, frees the claim and stops the batch so the job retries with back-off.
+  // message id. A refusal (the driver contract) or an AppError from messaging, which is raised
+  // before the provider call, says the provider did not take the message: it counts as an attempt
+  // and puts the recipient back in the queue, so its next claim runs every check again; after 3
+  // it fails and costs nothing. Any other error is an unknown outcome: the claim is left to
+  // expire and the same key is tried again, with no attempt counted.
   private async deliver(storeId: string, claim: Extract<Claim, { kind: 'send' }>): Promise<void> {
     const { recipientId, claimedAt } = claim;
+    const claimed = { status: 'sending', claimedAt } as const;
     let sent: SentMessage;
     try {
       sent = await this.messaging.send(storeId, {
@@ -160,14 +171,16 @@ export class CampaignSenderService {
         contactId: claim.contactId,
         body: claim.text,
         operationKey: `campaign-${recipientId}`,
+        destinationAddress: claim.destinationAddress,
       });
     } catch (error) {
+      if (!(error instanceof SmsSendRefused || error instanceof AppError)) throw error;
       const sendAttempts = claim.sendAttempts + 1;
       const exhausted = sendAttempts >= SEND_ATTEMPTS;
       await this.repository.changeRecipient(
         storeId,
         recipientId,
-        { status: 'sending', claimedAt },
+        claimed,
         exhausted
           ? {
               status: 'failed',
@@ -176,9 +189,10 @@ export class CampaignSenderService {
               claimedAt: null,
               sendAttempts,
             }
-          : { status: 'sending', claimedAt: null, sendAttempts },
+          : { status: 'queued', claimedAt: null, sendAttempts },
       );
-      if (exhausted) return;
+      // A refusal waits for the job's back-off; a recipient refused here is checked again now.
+      if (exhausted || error instanceof AppError) return;
       throw error;
     }
     // Guarded on sending only: whichever worker holds the provider's answer records it, and the
