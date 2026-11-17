@@ -127,12 +127,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M5. Products
 
-| ID     | Task                                   | Status    | Depends        | PR  | Notes |
-| ------ | -------------------------------------- | --------- | -------------- | --- | ----- |
-| PROD-1 | Products, options, variants            | In review | ACC-3          |     |       |
-| PROD-2 | Stock ledger and `moveStock`           | Todo      | PROD-1         |     |       |
-| PROD-3 | Photo upload to R2 with presigned URLs | Todo      | PROD-1, FILE-1 |     |       |
-| PROD-4 | Web: products list and product editor  | Todo      | PROD-2, WEB-2  |     |       |
+| ID     | Task                                   | Status    | Depends        | PR   | Notes                                               |
+| ------ | -------------------------------------- | --------- | -------------- | ---- | --------------------------------------------------- |
+| PROD-1 | Products, options, variants            | In review | ACC-3          | #121 | Archive guard and create retry contract need review |
+| PROD-2 | Stock ledger and `moveStock`           | Todo      | PROD-1         |      |                                                     |
+| PROD-3 | Photo upload to R2 with presigned URLs | Todo      | PROD-1, FILE-1 |      |                                                     |
+| PROD-4 | Web: products list and product editor  | Todo      | PROD-2, WEB-2  |      |                                                     |
 
 ## M6. Orders
 
