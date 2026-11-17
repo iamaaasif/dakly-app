@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { TrackedLinkKind, TrackedLinkSourceType } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -110,7 +110,7 @@ export class LinksRepository {
           and(
             eq(trackedLinks.storeId, storeId),
             eq(trackedLinks.sourceType, sourceType),
-            sourceId === null ? undefined : eq(trackedLinks.sourceId, sourceId),
+            sourceId === null ? isNull(trackedLinks.sourceId) : eq(trackedLinks.sourceId, sourceId),
             eq(trackedLinks.contactId, contactId),
             eq(trackedLinks.kind, 'sms_opt_out'),
           ),

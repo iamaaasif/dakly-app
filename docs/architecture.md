@@ -129,7 +129,7 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 ### 3. Campaign
 
 1. Owner approves. The approval takes a snapshot of the audience (segment rules evaluated now) into `campaign_recipients`, marking skipped people with a reason.
-2. A sweep every minute starts due campaigns; the sender then sends each campaign's recipients in batches of 200 on the `campaign` queue, one chain of batches per campaign, through the send gate and core messaging.
+2. A sweep every minute starts due campaigns; the sender then sends each campaign's recipients in batches of 200 on the `campaign` queue, one chain of batches per store, through the send gate and core messaging.
 3. Status callbacks update recipients once a provider sends them (ACC-14, CHAT-2); the campaign moves to Sent when no recipient is queued or sending.
 4. Pause stops feeding new batches; cancel marks unsent recipients cancelled.
 

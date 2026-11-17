@@ -18,15 +18,16 @@ import { CampaignSenderService } from '../campaign-sender.service';
 import { SendCampaignBatchJob } from './send-campaign-batch.job';
 import { StartDueCampaignsJob } from './start-due-campaigns.job';
 
-const storeId = randomUUID();
-// One campaign deferred to the end of quiet hours, one that sends three batches and finishes.
+// One store's campaign is deferred to the end of quiet hours; another store's sends three
+// batches and finishes.
+const [deferredStore, chainedStore] = [randomUUID(), randomUUID()];
 const deferred = randomUUID();
 const chained = randomUUID();
 const batches: string[] = [];
 const sender = {
   startDue: async () => [
-    { storeId, campaignId: deferred },
-    { storeId, campaignId: chained },
+    { storeId: deferredStore, campaignId: deferred },
+    { storeId: chainedStore, campaignId: chained },
   ],
   sendBatch: async (_storeId: string, campaignId: string) => {
     batches.push(campaignId);
@@ -72,7 +73,7 @@ describe('Campaign batch jobs (Valkey)', () => {
     await app.close();
   });
 
-  it('keeps one chain of batches per campaign across sweep ticks', async () => {
+  it('keeps one chain of batches per store across sweep ticks', async () => {
     const sweep = app.get(StartDueCampaignsJob);
     for (let tick = 0; tick < 3; tick += 1) await sweep.handle({});
     await until(() => batches.filter((id) => id === chained).length >= 3);
@@ -88,10 +89,10 @@ describe('Campaign batch jobs (Valkey)', () => {
 
     expect(batches.filter((id) => id === deferred)).toHaveLength(deferredRuns);
     const open = await queue.getJobs(['waiting', 'active', 'delayed', 'prioritized']);
-    const perCampaign = new Map<string, number>();
+    const perStore = new Map<string, number>();
     for (const job of open)
-      perCampaign.set(job.data.campaignId, (perCampaign.get(job.data.campaignId) ?? 0) + 1);
-    expect(perCampaign.get(deferred)).toBe(1);
-    expect(perCampaign.get(chained) ?? 0).toBeLessThanOrEqual(1);
+      perStore.set(job.data.storeId, (perStore.get(job.data.storeId) ?? 0) + 1);
+    expect(perStore.get(deferredStore)).toBe(1);
+    expect(perStore.get(chainedStore) ?? 0).toBeLessThanOrEqual(1);
   });
 });
