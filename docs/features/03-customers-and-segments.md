@@ -182,6 +182,10 @@ undo the contacts it added.
   both objects after 7 days.
 - Imported contacts do not emit `contact.created`, so a large import does not start welcome
   workflows for everyone in the file. This is the owner's decision, not missing work.
+- An import still publishes `consent.changed` with source `import`, so the consent history is
+  complete. The `consent_given` workflow trigger (CAMP-11) ignores source `import`, with no
+  setting to change that, for the same reason: one CSV import must not start a welcome
+  workflow for thousands of contacts. This is the owner's decision (17 Nov).
 - Undo: `POST /imports/:importId/undo` (Edit Customers) works on a `done` or `failed` import
   for 7 days after it finished (`finished_at`, which a failed import has too, because a
   crashed run may already have added contacts) and answers 202. A later call fails with
