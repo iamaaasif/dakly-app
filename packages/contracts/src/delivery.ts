@@ -4,8 +4,10 @@ import type { bdAreaKinds } from './orders';
 
 const name = z.string().trim().min(1).max(80);
 const chargePoisha = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+const areaId = z.number().int().positive().max(2147483647);
+const queryAreaId = z.coerce.number().pipe(areaId);
 const bdAreaIds = z
-  .array(z.number().int().positive().max(2147483647))
+  .array(areaId)
   .max(1000)
   .refine((ids) => new Set(ids).size === ids.length, 'Repeated area');
 
@@ -28,8 +30,8 @@ export const deliveryZoneListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export const areaListQuerySchema = z.strictObject({
-  parentId: z.coerce.number().int().positive().max(2147483647).optional(),
-  cursor: z.coerce.number().int().positive().max(2147483647).optional(),
+  parentId: queryAreaId.optional(),
+  cursor: queryAreaId.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type CreateDeliveryZoneInput = z.infer<typeof createDeliveryZoneSchema>;
