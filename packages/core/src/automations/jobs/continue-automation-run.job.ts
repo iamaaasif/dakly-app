@@ -5,7 +5,6 @@ import { z } from 'zod';
 
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
-import { JOB_POLL_INTERVAL_MS } from '../../platform/time';
 import type { RunClaim } from '../automation-runs.repository';
 import { AutomationRunsService } from '../automation-runs.service';
 
@@ -21,8 +20,8 @@ const payload = z.strictObject({
 // Deduplication on the run, step and claim drops a second job for the same claim. A new claim of
 // the step gets its own key, so a job kept after failing never blocks it.
 const stepJobOptions = {
-  attempts: 3,
-  backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
+  // The lease and the sweep are the retry: a retried job no longer holds the claim startWork renewed.
+  attempts: 1,
   removeOnComplete: true,
   removeOnFail: 100,
 } satisfies JobsOptions;
