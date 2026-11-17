@@ -112,7 +112,11 @@ export class DeliveryRepository {
     );
   }
 
-  insert(storeId: string, zones: CreateDeliveryZoneInput[], now: Date): Promise<DeliveryZone[]> {
+  insert(
+    storeId: string,
+    zones: (CreateDeliveryZoneInput & { position?: number })[],
+    now: Date,
+  ): Promise<DeliveryZone[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .insert(deliveryZones)

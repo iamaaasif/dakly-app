@@ -52,6 +52,15 @@ describe('DeliveryService with Postgres', () => {
       { name: 'Dhaka suburbs', chargePoisha: 10000, isDefault: false },
       { name: 'Outside Dhaka', chargePoisha: 12000, isDefault: true },
     ]);
+    const positions = await f.connection.pool.query<{ name: string; position: number }>(
+      'select name, position from delivery_zones where store_id=$1 order by position',
+      [f.a],
+    );
+    expect(positions.rows).toEqual([
+      { name: 'Inside Dhaka', position: 0 },
+      { name: 'Dhaka suburbs', position: 1 },
+      { name: 'Outside Dhaka', position: 2 },
+    ]);
     await expect(service.initializeDefaults(f.a, actor)).rejects.toMatchObject({
       code: 'DELIVERY_ZONES_ALREADY_CONFIGURED',
     });

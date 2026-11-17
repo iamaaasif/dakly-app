@@ -18,10 +18,16 @@ import { deliveryError } from './delivery.errors';
 import { DeliveryRepository, type DeliveryZone } from './delivery.repository';
 
 type Actor = AuditEntry['actor'];
-const DEFAULT_ZONES: CreateDeliveryZoneInput[] = [
-  { name: 'Inside Dhaka', chargePoisha: 6000, bdAreaIds: [301], isDefault: false },
-  { name: 'Dhaka suburbs', chargePoisha: 10000, bdAreaIds: [303, 309], isDefault: false },
-  { name: 'Outside Dhaka', chargePoisha: 12000, bdAreaIds: [], isDefault: true },
+const DEFAULT_ZONES = [
+  { name: 'Inside Dhaka', chargePoisha: 6000, bdAreaIds: [301], isDefault: false, position: 0 },
+  {
+    name: 'Dhaka suburbs',
+    chargePoisha: 10000,
+    bdAreaIds: [303, 309],
+    isDefault: false,
+    position: 1,
+  },
+  { name: 'Outside Dhaka', chargePoisha: 12000, bdAreaIds: [], isDefault: true, position: 2 },
 ];
 
 @Injectable()

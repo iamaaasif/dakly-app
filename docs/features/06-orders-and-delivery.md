@@ -288,7 +288,8 @@ before removal, and a zone used by orders cannot be deleted.
 at 6,000 poisha, Dhaka suburbs at 10,000 and Outside Dhaka at 12,000. It refuses to
 replace existing zones. The mappings use the seeded Dhaka, Gazipur and Narayanganj
 district ids. Savar needs the upazila reference data from DB-6; no upazila names
-are added here. GET routes never initialize or change settings.
+are added here. The three defaults use positions 0, 1 and 2, matching the seed.
+GET routes never initialize or change settings.
 
 This task adds the backend only. There is no delivery-settings image in the
 current design folder, and no delivery-settings screen is added here.
