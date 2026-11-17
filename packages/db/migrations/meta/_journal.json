@@ -239,6 +239,13 @@
       "when": 1794873027980,
       "tag": "0033_campaign_sender",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794881726486,
+      "tag": "0034_campaign_sender_cancelled",
+      "breakpoints": true
     }
   ]
 }

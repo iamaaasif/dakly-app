@@ -421,7 +421,7 @@ describe('Campaign sender (Postgres)', () => {
     });
   });
 
-  it('cancels a sending campaign, charging what was sent or may be with the provider', async () => {
+  it('cancels a sending campaign and settles once the message left in sending resolves', async () => {
     const before = await wallets.balance(storeId, 'sms_credits');
     const { id } = await sendingCampaign(3);
     const change = CampaignSendingRepository.prototype.changeRecipient;
@@ -451,14 +451,54 @@ describe('Campaign sender (Postgres)', () => {
       'sending',
       'sent',
     ]);
+    // The message in sending may be with the provider, so the reservation stays held.
+    expect(await settlementRows(id)).toEqual([]);
+    expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 1, skipped: 0 });
+    expect(await sender.startDue()).toContainEqual({ storeId, campaignId: id });
+
+    // Its claim expires and it is resent under the same key, which sends nothing new.
+    clockNow = new Date(noon.getTime() + 6 * MINUTE);
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+    expect(calls).toHaveLength(3);
+    expect(driver.messages).toHaveLength(2);
+    expect((await recipients(id)).map((row) => row.status).sort()).toEqual([
+      'cancelled',
+      'sent',
+      'sent',
+    ]);
+    expect(await campaignRow(id)).toMatchObject({ status: 'cancelled', finished_at: noon });
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 3 },
       { kind: 'charge', quantity_delta: -2 },
     ]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 2);
-    expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 1, skipped: 0 });
+    expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 2 });
+    expect(await sender.startDue()).not.toContainEqual({ storeId, campaignId: id });
+    // A later batch replays the same settlement and writes nothing.
     expect(await sender.sendBatch(storeId, id)).toBeNull();
-    expect(calls).toHaveLength(2);
+    expect(await settlementRows(id)).toHaveLength(2);
+  });
+
+  it('refuses to cancel a sent campaign and writes no wallet rows', async () => {
+    const { id } = await sendingCampaign(1);
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+    expect(await campaignRow(id)).toMatchObject({ status: 'sent' });
+    const ledger = async () =>
+      (
+        await admin.pool.query(
+          'select count(*)::int as count from wallet_ledger where store_id=$1',
+          [storeId],
+        )
+      ).rows[0].count;
+    const before = await ledger();
+
+    await expect(campaigns.cancel(storeId, id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_SCHEDULED',
+    });
+
+    expect(await ledger()).toBe(before);
+    expect(await campaignRow(id)).toMatchObject({ status: 'sent' });
   });
 
   it('cancels a paused campaign and gives back every credit', async () => {

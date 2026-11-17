@@ -245,6 +245,10 @@ export const campaignRecipients = pgTable(
 
     uniqueIndex('campaign_recipients_campaign_contact_key').on(table.campaignId, table.contactId),
     index('campaign_recipients_campaign_status_idx').on(table.campaignId, table.status, table.id),
+    // The sweep finds cancelled campaigns that still have a message to resolve.
+    index('campaign_recipients_sending_idx')
+      .on(table.campaignId)
+      .where(sql`${table.status} = 'sending'`),
     // Frequency cap and last-touch attribution look up a contact's recent sends.
     index('campaign_recipients_store_contact_idx').on(table.storeId, table.contactId, table.sentAt),
     // Global, for SMS delivery reports that carry only the provider's message id.

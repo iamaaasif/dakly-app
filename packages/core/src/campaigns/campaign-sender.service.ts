@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService } from '../links/links.service';
@@ -75,16 +74,17 @@ export class CampaignSenderService {
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
     const next = await this.sendRecipients(storeId, campaignId);
     const now = this.clock.now();
+    // A campaign that stopped sending is counted now, so its last counts are not left behind.
     await this.repository.refreshCounts(storeId, campaignId, {
       now,
-      countedBefore: new Date(now.getTime() - COUNTS_MS),
+      countedBefore: next ? new Date(now.getTime() - COUNTS_MS) : null,
     });
     return next;
   }
 
-  // Cancelling a started campaign: the queued recipients are cancelled and the reservation
-  // settled at once. A recipient in sending may already be with the provider, so its credits are
-  // charged; it still becomes sent or failed when its claim finishes.
+  // Cancelling a started campaign cancels its queued recipients. The reservation is settled now
+  // only when no recipient is in sending; otherwise the sender resolves those and settles once
+  // the last one is sent or failed, so a message the provider may hold is never charged on a guess.
   async cancelStarted(storeId: string, campaignId: string, actor: Actor): Promise<boolean> {
     return this.transaction.run(storeId, async () => {
       const campaign = await this.repository.lockStarted(storeId, campaignId);
@@ -98,13 +98,9 @@ export class CampaignSenderService {
         { status: campaign.status },
         { status: 'cancelled', pauseReason: null, finishedAt: now, updatedAt: now },
       );
-      const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
-      // Every message carries an opt-out link of the same length, so it has the estimate's parts.
-      const parts = countSmsParts(
-        marketingSmsText(campaign.content.text, this.links.sampleOptOutUrl()),
-      );
       await this.repository.refreshCounts(storeId, campaignId, { now, countedBefore: null });
-      await this.settle(storeId, campaign, chargedCredits + unsettled * parts, actor);
+      const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
+      if (unsettled === 0) await this.settle(storeId, campaign, chargedCredits, actor);
       return true;
     });
   }
@@ -243,22 +239,22 @@ export class CampaignSenderService {
       const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
       if (unsettled > 0) return;
       const now = this.clock.now();
-      await this.campaigns.changeStatus(
-        storeId,
-        campaignId,
-        { status: 'sending' },
-        {
-          status: 'sent',
-          finishedAt: now,
-          updatedAt: now,
-        },
-      );
-      await this.outbox.publish({
-        type: 'campaign.sent',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { campaignId },
-      });
+      // A cancelled campaign keeps its status and finish time; it only settles. Settling again
+      // replays the same wallet key, so a reservation already settled at cancel is left alone.
+      if (campaign.status === 'sending') {
+        await this.campaigns.changeStatus(
+          storeId,
+          campaignId,
+          { status: 'sending' },
+          { status: 'sent', finishedAt: now, updatedAt: now },
+        );
+        await this.outbox.publish({
+          type: 'campaign.sent',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { campaignId },
+        });
+      }
       await this.repository.refreshCounts(storeId, campaignId, { now, countedBefore: null });
       await this.settle(storeId, campaign, chargedCredits, SYSTEM);
     });

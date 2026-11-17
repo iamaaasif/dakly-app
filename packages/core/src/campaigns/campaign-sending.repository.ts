@@ -77,14 +77,11 @@ export class CampaignSendingRepository {
   }
 
   // A share lock: a pause, cancel or finish waits until this claim commits, and the claim after
-  // it sees the new status.
+  // it sees the new status. A cancelled campaign is still locked, so its recipients left in
+  // sending are resolved.
   async lockSending(storeId: string, id: string): Promise<SendingCampaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select(sendingColumns)
-        .from(campaigns)
-        .where(statusWhere(storeId, id, 'sending'))
-        .for('share'),
+      tx.select(sendingColumns).from(campaigns).where(sendingOrCancelled(storeId, id)).for('share'),
     );
     return row;
   }
@@ -146,12 +143,15 @@ export class CampaignSendingRepository {
     );
   }
 
-  async lockForFinish(storeId: string, id: string): Promise<SendingCampaign | undefined> {
+  async lockForFinish(
+    storeId: string,
+    id: string,
+  ): Promise<(SendingCampaign & { status: 'sending' | 'cancelled' }) | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select(sendingColumns)
+        .select({ ...sendingColumns, status: sql<'sending' | 'cancelled'>`${campaigns.status}` })
         .from(campaigns)
-        .where(statusWhere(storeId, id, 'sending'))
+        .where(sendingOrCancelled(storeId, id))
         .for('update'),
     );
     return row;
@@ -239,6 +239,14 @@ export class CampaignSendingRepository {
     );
     return row;
   }
+}
+
+function sendingOrCancelled(storeId: string, id: string) {
+  return and(
+    eq(campaigns.storeId, storeId),
+    eq(campaigns.id, id),
+    inArray(campaigns.status, ['sending', 'cancelled']),
+  );
 }
 
 function countOf(statuses: RecipientStatus[]) {
