@@ -6,6 +6,7 @@ import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
+import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -27,6 +28,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     SessionsModule,
     ContactsModule,
+    DeliveryModule,
     ProductsModule,
     ConsentsModule,
     LinksModule,
