@@ -165,11 +165,16 @@ export class CampaignSenderService {
       const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
       if (unsettled > 0) return;
       const now = this.clock.now();
-      await this.campaigns.changeStatus(storeId, campaignId, 'sending', {
-        status: 'sent',
-        finishedAt: now,
-        updatedAt: now,
-      });
+      await this.campaigns.changeStatus(
+        storeId,
+        campaignId,
+        { status: 'sending' },
+        {
+          status: 'sent',
+          finishedAt: now,
+          updatedAt: now,
+        },
+      );
       await this.outbox.publish({
         type: 'campaign.sent',
         storeId,

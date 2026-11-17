@@ -25,6 +25,7 @@ import type {
   CampaignApproval,
   CampaignsRepository,
   CampaignStatusChange,
+  CampaignStatusGuard,
   FrozenRecipient,
 } from './campaigns.repository';
 import { CampaignsService, MAX_CAMPAIGN_AUDIENCE } from './campaigns.service';
@@ -36,10 +37,17 @@ const now = new Date('2026-11-16T05:00:00Z');
 // Keeps one store's campaigns in memory; change and delete touch only drafts, as the
 // repository's guarded writes do.
 class FakeCampaignsRepository {
-  readonly rows = new Map<string, Campaign>();
+  readonly rows = new Map<
+    string,
+    Campaign & Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'>
+  >();
 
-  add(status: CampaignStatus, id = randomUUID()): Campaign {
-    const row: Campaign = {
+  add(
+    status: CampaignStatus,
+    id = randomUUID(),
+    pauseReason?: CampaignStatusChange['pauseReason'],
+  ): Campaign {
+    const row = {
       id,
       name: 'ঈদের অফার',
       goal: 'seasonal',
@@ -51,9 +59,14 @@ class FakeCampaignsRepository {
       status,
       createdAt: now,
       updatedAt: now,
+      pauseReason,
     };
     this.rows.set(id, row);
     return row;
+  }
+
+  async findPauseReason(_storeId: string, id: string) {
+    return this.rows.get(id)?.pauseReason ?? null;
   }
 
   async list(_storeId: string, query: { limit: number }) {
@@ -97,11 +110,12 @@ class FakeCampaignsRepository {
   async changeStatus(
     _storeId: string,
     id: string,
-    from: CampaignStatus,
+    from: CampaignStatusGuard,
     change: CampaignStatusChange,
   ) {
     const row = this.rows.get(id);
-    if (row?.status !== from) return undefined;
+    if (row?.status !== from.status) return undefined;
+    if (from.pauseReason && row.pauseReason !== from.pauseReason) return undefined;
     const changed = { ...row, ...change };
     this.rows.set(id, changed);
     return changed;
@@ -467,6 +481,7 @@ describe('CampaignsService', () => {
       const campaign = await scheduled(beforeSend);
 
       expect((await service.cancel(STORE_ID, campaign.id, actor)).status).toBe('cancelled');
+      expect(repository.rows.get(campaign.id)?.finishedAt).toEqual(clockNow);
       expect(balance).toBe(1000);
       expect(repository.recipients.map((recipient) => recipient.status)).toEqual([
         'cancelled',
@@ -530,6 +545,23 @@ describe('CampaignsService', () => {
         code: 'CAMPAIGN_NOT_SENDING',
       });
       expect(repository.rows.get(campaign.id)?.status).toBe(status);
+    },
+  );
+
+  it.each(['balance', 'whatsapp_quality', 'template_rejected', 'provider_error'] as const)(
+    'refuses to resume by hand a campaign paused for %s and names the reason',
+    async (reason) => {
+      const campaign = repository.add('paused', randomUUID(), reason);
+
+      await expect(service.resume(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_PAUSED_BY_SYSTEM',
+        status: 409,
+        fields: [{ path: 'pauseReason', message: reason }],
+      });
+      expect(repository.rows.get(campaign.id)).toMatchObject({
+        status: 'paused',
+        pauseReason: reason,
+      });
     },
   );
 
