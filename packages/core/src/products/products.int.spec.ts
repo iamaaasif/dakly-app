@@ -73,11 +73,11 @@ describe('ProductsService with Postgres', () => {
   it('edits variant prices while preserving variant ids and stock', async () => {
     const input = createProductSchema.parse({
       name: 'কুর্তি',
-      pricePoisha: 50000,
+      pricePoisha: 0,
       options: [{ name: 'Size', values: ['M', 'L'] }],
       variants: [
         { optionValues: { Size: 'M' }, priceOverridePoisha: 60000 },
-        { optionValues: { Size: 'L' }, priceOverridePoisha: 0 },
+        { optionValues: { Size: 'L' }, priceOverridePoisha: null },
       ],
     });
     const product = await service.create(f.a, input, actor);
@@ -90,6 +90,7 @@ describe('ProductsService with Postgres', () => {
       product.id,
       {
         ...input,
+        pricePoisha: 50000,
         variants: product.variants.map((variant) => ({ ...variant, priceOverridePoisha: null })),
       },
       actor,
@@ -244,8 +245,12 @@ describe('ProductsService with Postgres', () => {
       f.a,
       createProductSchema.parse({
         name: 'Snapshot list',
-        pricePoisha: 10000,
-        variants: [{ priceOverridePoisha: 0 }],
+        pricePoisha: 0,
+        options: [{ name: 'Size', values: ['M', 'L'] }],
+        variants: [
+          { optionValues: { Size: 'M' }, priceOverridePoisha: 20000 },
+          { optionValues: { Size: 'L' } },
+        ],
       }),
       actor,
     );
@@ -259,16 +264,11 @@ describe('ProductsService with Postgres', () => {
           product.id,
           {
             pricePoisha: 30000,
-            options: [],
-            variants: [
-              {
-                id: product.variants[0]!.id,
-                optionValues: {},
-                sku: null,
-                costPoisha: null,
-                priceOverridePoisha: null,
-              },
-            ],
+            options: product.options,
+            variants: product.variants.map((variant) => ({
+              ...variant,
+              priceOverridePoisha: null,
+            })),
           },
           actor,
         );
@@ -280,7 +280,7 @@ describe('ProductsService with Postgres', () => {
         search: 'Snapshot list',
         readiness: 'needs_price',
       });
-      expect(page.items.map((item) => item.variants[0]!.pricePoisha)).toEqual([0]);
+      expect(page.items.map((item) => item.variants[0]!.pricePoisha)).toEqual([20000]);
     } finally {
       interleave.mockRestore();
     }
@@ -293,14 +293,24 @@ describe('ProductsService with Postgres', () => {
       f.a,
       {
         ...input,
-        pricePoisha: 10000,
-        variants: [{ optionValues: {}, sku: null, costPoisha: null, priceOverridePoisha: 0 }],
+        options: [{ name: 'Size', values: ['M', 'L'] }],
+        variants: [
+          { optionValues: { Size: 'M' }, sku: null, costPoisha: null, priceOverridePoisha: 10000 },
+          { optionValues: { Size: 'L' }, sku: null, costPoisha: null, priceOverridePoisha: null },
+        ],
       },
       actor,
     );
-    const priced = await service.create(f.a, { ...input, pricePoisha: 10000 }, actor);
+    const priced = await service.create(
+      f.a,
+      {
+        ...input,
+        variants: [{ optionValues: {}, sku: null, costPoisha: null, priceOverridePoisha: 10000 }],
+      },
+      actor,
+    );
     await f.connection.pool.query(
-      "insert into product_variants(id,store_id,product_id,title,price_override_poisha,status) values($1,$2,$3,'Old size',0,'archived')",
+      "insert into product_variants(id,store_id,product_id,title,price_override_poisha,status) values($1,$2,$3,'Old size',null,'archived')",
       [randomUUID(), f.a, priced.id],
     );
     await f.connection.pool.query(

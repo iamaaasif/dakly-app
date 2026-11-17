@@ -25,7 +25,7 @@ const variantSchema = z.strictObject({
   id: z.uuid().optional(),
   optionValues: z.record(z.string(), text).default({}),
   sku: text.nullable().default(null),
-  priceOverridePoisha: money.nullable().default(null),
+  priceOverridePoisha: money.positive().nullable().default(null),
   costPoisha: money.nullable().default(null),
 });
 

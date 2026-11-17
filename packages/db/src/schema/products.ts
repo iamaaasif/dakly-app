@@ -145,7 +145,7 @@ export const productVariants = pgTable(
     check('product_variants_reserved', sql`${table.reserved} >= 0`),
     check(
       'product_variants_money',
-      sql`coalesce(${table.priceOverridePoisha}, 0) >= 0 and coalesce(${table.costPoisha}, 0) >= 0`,
+      sql`coalesce(${table.priceOverridePoisha}, 1) > 0 and coalesce(${table.costPoisha}, 0) >= 0`,
     ),
   ],
 );
