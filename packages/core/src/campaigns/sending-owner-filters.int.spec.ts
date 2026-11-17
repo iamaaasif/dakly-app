@@ -44,7 +44,12 @@ describe('campaign sending filters without RLS assistance', () => {
 
     expect(await repository.lockSending(f.b, campaignA)).toBeUndefined();
     expect(await repository.lockForFinish(f.b, campaignA)).toBeUndefined();
-    expect(await repository.lockNextRecipient(f.b, campaignA, now)).toBeUndefined();
+    expect(
+      await repository.lockNextRecipient(f.b, campaignA, {
+        claimedBefore: now,
+        onlyExpired: false,
+      }),
+    ).toBeUndefined();
     expect(await repository.settlement(f.b, campaignA)).toEqual({
       unsettled: 0,
       chargedCredits: 0,
@@ -58,7 +63,12 @@ describe('campaign sending filters without RLS assistance', () => {
     expect(await f.row('campaign_recipients', recipientA)).toEqual(recipientBefore);
 
     expect(await repository.lockSending(f.a, campaignA)).toMatchObject({ id: campaignA });
-    expect(await repository.lockNextRecipient(f.a, campaignA, now)).toMatchObject({
+    expect(
+      await repository.lockNextRecipient(f.a, campaignA, {
+        claimedBefore: now,
+        onlyExpired: false,
+      }),
+    ).toMatchObject({
       id: recipientA,
       status: 'queued',
     });
@@ -68,15 +78,16 @@ describe('campaign sending filters without RLS assistance', () => {
     });
   });
 
-  it('counts and locks for a cancel only the selected store’s campaigns', async () => {
+  it('counts and settles only the selected store’s campaigns', async () => {
     const before = await f.row('campaigns', campaignA);
 
-    expect(await repository.lockStarted(f.b, campaignA)).toBeUndefined();
+    await repository.markSettled(f.b, campaignA, now);
     await repository.refreshCounts(f.b, campaignA, { now, countedBefore: null });
     expect(await f.row('campaigns', campaignA)).toEqual(before);
 
-    expect(await repository.lockStarted(f.a, campaignA)).toMatchObject({ status: 'sending' });
     await repository.refreshCounts(f.a, campaignA, { now, countedBefore: null });
+    await repository.markSettled(f.a, campaignA, now);
+    expect((await f.row('campaigns', campaignA)).settled_at).not.toBeNull();
     expect((await f.row('campaigns', campaignA)).counts_at).not.toBeNull();
   });
 });

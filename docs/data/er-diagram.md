@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0034_snapshot.json`: **95 tables, 1247 columns, 372 explicit indexes and 295 foreign keys**.
+Built from `packages/db/migrations/meta/0034_snapshot.json`: **95 tables, 1248 columns, 372 explicit indexes and 295 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1367,6 +1367,7 @@ erDiagram
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone settled_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
         bigint reserved_poisha "NOT NULL; bigint"
         bigint actual_cost_poisha "NOT NULL; bigint"

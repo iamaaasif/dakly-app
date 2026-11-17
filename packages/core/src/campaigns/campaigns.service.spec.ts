@@ -116,6 +116,13 @@ class FakeCampaignsRepository {
     return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
   }
 
+  async lockCancellable(_storeId: string, id: string) {
+    const row = this.rows.get(id);
+    return row && ['scheduled', 'sending', 'paused'].includes(row.status)
+      ? (row as Campaign & { approvedAt: Date })
+      : undefined;
+  }
+
   async changeStatus(
     _storeId: string,
     id: string,
@@ -171,6 +178,7 @@ describe('CampaignsService', () => {
   let reservations: Map<string, { entryId: string; quantity: number; released: boolean }>;
   let clockNow: Date;
   let events: DaklyEvent[];
+  let startedCancels: string[];
 
   beforeEach(() => {
     repository = new FakeCampaignsRepository();
@@ -182,6 +190,7 @@ describe('CampaignsService', () => {
     reservations = new Map();
     clockNow = now;
     events = [];
+    startedCancels = [];
     const segments = {
       contactIds: async (
         _storeId: string,
@@ -244,8 +253,11 @@ describe('CampaignsService', () => {
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
       { sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000' } as LinksService,
-      // Only scheduled campaigns are cancelled here; the sender's cancel is in its own spec.
-      { cancelStarted: async () => false } as unknown as CampaignSenderService,
+      // The sender's cancel of a started campaign is tested with the sender.
+      {
+        cancelStarted: async (_storeId: string, campaign: Campaign) =>
+          void startedCancels.push(campaign.id),
+      } as unknown as CampaignSenderService,
       { now: () => clockNow } as Clock,
     );
   });
@@ -522,20 +534,43 @@ describe('CampaignsService', () => {
     expect(repository.recipients).toHaveLength(2);
   });
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s a campaign that is not scheduled',
-    async (change) => {
-      // A sending campaign can be cancelled (CAMP-3), so cancel is refused on a sent one.
-      const status = change === 'cancel' ? 'sent' : 'sending';
+  it('refuses to unschedule a campaign that is not scheduled', async () => {
+    const campaign = repository.add('sending');
+
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_SCHEDULED',
+    });
+    await expect(service.unschedule(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_FOUND',
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+  });
+
+  // A sending or paused campaign can be cancelled (CAMP-3), so cancel refuses only the others.
+  it.each(['draft', 'sent', 'cancelled'] as const)(
+    'refuses to cancel a %s campaign',
+    async (status) => {
       const campaign = repository.add(status);
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_NOT_SCHEDULED',
+      await expect(service.cancel(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_CANCELLABLE',
       });
-      await expect(service[change](STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      await expect(service.cancel(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_FOUND',
       });
       expect(repository.rows.get(campaign.id)?.status).toBe(status);
+      expect(startedCancels).toEqual([]);
+    },
+  );
+
+  it.each(['sending', 'paused'] as const)(
+    'hands the cancel of a %s campaign to the sender under the same lock',
+    async (status) => {
+      const campaign = repository.add(status);
+
+      await service.cancel(STORE_ID, campaign.id, actor);
+
+      expect(startedCancels).toEqual([campaign.id]);
     },
   );
 

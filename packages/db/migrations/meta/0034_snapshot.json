@@ -1,5 +1,5 @@
 {
-  "id": "3aca6041-e9e0-4c15-9e6c-515290cd6f72",
+  "id": "ae0f979e-1688-40ed-9f5b-561aadb765f4",
   "prevId": "d10f02a3-0fbc-4167-a515-afc4eb777b7f",
   "version": "7",
   "dialect": "postgresql",
@@ -7099,22 +7099,6 @@
           "method": "btree",
           "with": {}
         },
-        "campaign_recipients_sending_idx": {
-          "name": "campaign_recipients_sending_idx",
-          "columns": [
-            {
-              "expression": "campaign_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaign_recipients\".\"status\" = 'sending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "campaign_recipients_store_contact_idx": {
           "name": "campaign_recipients_store_contact_idx",
           "columns": [
@@ -7430,6 +7414,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "estimated_cost_poisha": {
           "name": "estimated_cost_poisha",
           "type": "bigint",
@@ -7603,6 +7593,22 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'sending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_unsettled_idx": {
+          "name": "campaigns_unsettled_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"campaigns\".\"status\" = 'cancelled' and \"campaigns\".\"started_at\" is not null and \"campaigns\".\"settled_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}

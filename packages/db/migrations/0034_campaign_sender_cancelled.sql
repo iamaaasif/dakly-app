@@ -1,14 +1,14 @@
-CREATE INDEX "campaign_recipients_sending_idx" ON "campaign_recipients" USING btree ("campaign_id") WHERE "campaign_recipients"."status" = 'sending';--> statement-breakpoint
--- A cancelled campaign whose recipients are still in sending is named too, so the sender resolves
--- them and settles the reservation once the last one is sent or failed.
+ALTER TABLE "campaigns" ADD COLUMN "settled_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "campaigns_unsettled_idx" ON "campaigns" USING btree ("id") WHERE "campaigns"."status" = 'cancelled' and "campaigns"."started_at" is not null and "campaigns"."settled_at" is null;--> statement-breakpoint
+-- A cancelled campaign stays named until its reservation is settled, so the sender resolves its
+-- recipients left in sending and then settles. Still one campaign per store, the earliest started.
 CREATE OR REPLACE FUNCTION sending_campaigns() RETURNS TABLE(store_id uuid, campaign_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
-  SELECT c.store_id, c.id FROM public.campaigns c WHERE c.status = 'sending'
-  UNION
-  SELECT DISTINCT r.store_id, r.campaign_id FROM public.campaign_recipients r
-  JOIN public.campaigns c ON c.id = r.campaign_id
-  WHERE r.status = 'sending' AND c.status = 'cancelled'
+  SELECT DISTINCT ON (c.store_id) c.store_id, c.id FROM public.campaigns c
+  WHERE c.status = 'sending'
+    OR (c.status = 'cancelled' AND c.started_at IS NOT NULL AND c.settled_at IS NULL)
+  ORDER BY c.store_id, c.started_at, c.id
 $$;--> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION sending_campaigns() FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION sending_campaigns() TO dakly_app;

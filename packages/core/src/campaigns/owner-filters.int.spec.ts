@@ -109,6 +109,8 @@ describe('campaign filters without RLS assistance', () => {
     const now = new Date('2026-11-16T05:00:00Z');
 
     expect(await repository.lockScheduled(f.b, a.id)).toBeUndefined();
+    expect(await repository.lockCancellable(f.b, a.id)).toBeUndefined();
+    expect(await repository.lockCancellable(f.a, a.id)).toMatchObject({ id: a.id });
     expect(
       await repository.changeStatus(
         f.b,

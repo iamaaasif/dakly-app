@@ -122,6 +122,8 @@ export const campaigns = pgTable(
     approvedAt: timestamptz('approved_at'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
+    // When the reservation was charged or released; a cancelled campaign stays open until then.
+    settledAt: timestamptz('settled_at'),
     estimatedCostPoisha: poisha('estimated_cost_poisha'),
     reservedPoisha: poisha('reserved_poisha').notNull().default(0),
     actualCostPoisha: poisha('actual_cost_poisha').notNull().default(0),
@@ -163,6 +165,11 @@ export const campaigns = pgTable(
     index('campaigns_sending_idx')
       .on(table.id)
       .where(sql`${table.status} = 'sending'`),
+    index('campaigns_unsettled_idx')
+      .on(table.id)
+      .where(
+        sql`${table.status} = 'cancelled' and ${table.startedAt} is not null and ${table.settledAt} is null`,
+      ),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -244,10 +251,6 @@ export const campaignRecipients = pgTable(
 
     uniqueIndex('campaign_recipients_campaign_contact_key').on(table.campaignId, table.contactId),
     index('campaign_recipients_campaign_status_idx').on(table.campaignId, table.status, table.id),
-    // The sweep finds cancelled campaigns that still have a message to resolve.
-    index('campaign_recipients_sending_idx')
-      .on(table.campaignId)
-      .where(sql`${table.status} = 'sending'`),
     // Frequency cap and last-touch attribution look up a contact's recent sends.
     index('campaign_recipients_store_contact_idx').on(table.storeId, table.contactId, table.sentAt),
     // Global, for SMS delivery reports that carry only the provider's message id.

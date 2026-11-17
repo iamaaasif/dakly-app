@@ -46,7 +46,7 @@ type StatusChange = { from: CampaignStatusGuard; to: CampaignStatus; refused: Ca
 // others when their cause clears (CAMP-3, CHN-3).
 const STATUS_CHANGES = {
   unschedule: { from: { status: 'scheduled' }, to: 'draft', refused: 'CAMPAIGN_NOT_SCHEDULED' },
-  cancel: { from: { status: 'scheduled' }, to: 'cancelled', refused: 'CAMPAIGN_NOT_SCHEDULED' },
+  cancel: { from: { status: 'scheduled' }, to: 'cancelled', refused: 'CAMPAIGN_NOT_CANCELLABLE' },
   pause: { from: { status: 'sending' }, to: 'paused', refused: 'CAMPAIGN_NOT_SENDING' },
   resume: {
     from: { status: 'paused', pauseReason: 'manual' },
@@ -186,13 +186,17 @@ export class CampaignsService {
     });
   }
 
-  // A started campaign charges what the provider has and releases the rest (CAMP-3); a scheduled
-  // one releases everything.
+  // One lock, then the path for the state: a scheduled campaign releases everything, a started one
+  // (CAMP-3) is settled by the sender for what the provider took.
   async cancel(storeId: string, campaignId: string, actor: Actor): Promise<CampaignResponse> {
-    if (await this.sender.cancelStarted(storeId, campaignId, actor))
-      return this.get(storeId, campaignId);
     return this.transaction.run(storeId, async () => {
-      const campaign = await this.lockBeforeSend(storeId, campaignId);
+      const campaign = await this.repository.lockCancellable(storeId, campaignId);
+      if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_CANCELLABLE');
+      if (campaign.status !== 'scheduled') {
+        await this.sender.cancelStarted(storeId, campaign, actor);
+        return this.get(storeId, campaignId);
+      }
+      this.assertBeforeSend(campaign);
       await this.repository.cancelQueuedRecipients(storeId, campaignId);
       // Starts the 372-day recipient retention (growth.md).
       const cancelled = await this.changeStatus(storeId, campaignId, 'cancel', {
@@ -215,10 +219,14 @@ export class CampaignsService {
   private async lockBeforeSend(storeId: string, campaignId: string) {
     const campaign = await this.repository.lockScheduled(storeId, campaignId);
     if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_SCHEDULED');
+    this.assertBeforeSend(campaign);
+    return campaign;
+  }
+
+  private assertBeforeSend(campaign: Campaign): void {
     // Approval schedules a campaign only with a send time.
     const untilSend = campaign.scheduledFor!.getTime() - this.clock.now().getTime();
     if (untilSend < LAST_CHANGE_BEFORE_SEND_MS) throw campaignError('CAMPAIGN_CHANGE_TOO_LATE');
-    return campaign;
   }
 
   // Last, as in approve, so the wallet lock is held only until commit.

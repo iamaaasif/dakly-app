@@ -151,7 +151,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     ).rows;
     expect(cancelled.finished_at).toEqual(clockNow);
     await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_NOT_SCHEDULED',
+      code: 'CAMPAIGN_NOT_CANCELLABLE',
     });
   });
 

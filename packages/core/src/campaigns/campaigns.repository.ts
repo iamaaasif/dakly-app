@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -216,6 +216,27 @@ export class CampaignsRepository {
         .select({ ...campaignColumns, approvedAt: campaigns.approvedAt })
         .from(campaigns)
         .where(statusWhere(storeId, id, 'scheduled'))
+        .for('update'),
+    );
+    return row;
+  }
+
+  // One lock for a cancel, whichever state it starts from; the sweep and the sender wait for it.
+  async lockCancellable(
+    storeId: string,
+    id: string,
+  ): Promise<(Campaign & { approvedAt: Date | null }) | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ ...campaignColumns, approvedAt: campaigns.approvedAt })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            eq(campaigns.id, id),
+            inArray(campaigns.status, ['scheduled', 'sending', 'paused']),
+          ),
+        )
         .for('update'),
     );
     return row;

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 
 import type { recipientSkipReasons, recipientStatuses } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -11,6 +11,7 @@ import { type Campaign, recipientsWhere, statusWhere } from './campaigns.reposit
 
 export type CampaignRef = { storeId: string; campaignId: string };
 export type SendingCampaign = Pick<Campaign, 'id' | 'content'> & { approvedAt: Date | null };
+export type OpenCampaign = SendingCampaign & { status: 'sending' | 'cancelled' };
 export type ClaimableRecipient = {
   id: string;
   contactId: string;
@@ -38,10 +39,11 @@ export type RecipientChange =
       sendAttempts: number;
     };
 
-const sendingColumns = {
+const openColumns = {
   id: campaigns.id,
   content: campaigns.content,
   approvedAt: campaigns.approvedAt,
+  status: sql<OpenCampaign['status']>`${campaigns.status}`,
 };
 
 // The sender's reads and writes: the sweeps, the recipient claims and the settlement.
@@ -78,11 +80,11 @@ export class CampaignSendingRepository {
   }
 
   // A share lock: a pause, cancel or finish waits until this claim commits, and the claim after
-  // it sees the new status. A cancelled campaign is still locked, so its recipients left in
-  // sending are resolved.
-  async lockSending(storeId: string, id: string): Promise<SendingCampaign | undefined> {
+  // it sees the new status. A cancelled campaign is locked until it is settled, so its recipients
+  // left in sending under an expired claim are resolved.
+  async lockSending(storeId: string, id: string): Promise<OpenCampaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx.select(sendingColumns).from(campaigns).where(sendingOrCancelled(storeId, id)).for('share'),
+      tx.select(openColumns).from(campaigns).where(openWhere(storeId, id)).for('share'),
     );
     return row;
   }
@@ -91,7 +93,7 @@ export class CampaignSendingRepository {
   async lockNextRecipient(
     storeId: string,
     campaignId: string,
-    claimedBefore: Date,
+    { claimedBefore, onlyExpired }: { claimedBefore: Date; onlyExpired: boolean },
   ): Promise<ClaimableRecipient | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -108,7 +110,7 @@ export class CampaignSendingRepository {
             recipientsWhere(storeId, campaignId),
             inArray(campaignRecipients.status, ['queued', 'sending']),
             or(
-              eq(campaignRecipients.status, 'queued'),
+              onlyExpired ? undefined : eq(campaignRecipients.status, 'queued'),
               lt(campaignRecipients.claimedAt, claimedBefore),
             ),
           ),
@@ -143,18 +145,22 @@ export class CampaignSendingRepository {
     );
   }
 
-  async lockForFinish(
-    storeId: string,
-    id: string,
-  ): Promise<(SendingCampaign & { status: 'sending' | 'cancelled' }) | undefined> {
+  async lockForFinish(storeId: string, id: string): Promise<OpenCampaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ ...sendingColumns, status: sql<'sending' | 'cancelled'>`${campaigns.status}` })
-        .from(campaigns)
-        .where(sendingOrCancelled(storeId, id))
-        .for('update'),
+      tx.select(openColumns).from(campaigns).where(openWhere(storeId, id)).for('update'),
     );
     return row;
+  }
+
+  async markSettled(storeId: string, id: string, now: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(campaigns)
+        .set({ settledAt: now })
+        .where(
+          and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), isNull(campaigns.settledAt)),
+        ),
+    );
   }
 
   // Recipients not yet settled, and the credits of those the provider took.
@@ -218,34 +224,21 @@ export class CampaignSendingRepository {
         .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)));
     });
   }
-
-  // Waits for a claim in progress, so a cancel sees every recipient the sender has claimed.
-  async lockStarted(
-    storeId: string,
-    id: string,
-  ): Promise<(SendingCampaign & { status: 'sending' | 'paused' }) | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ ...sendingColumns, status: sql<'sending' | 'paused'>`${campaigns.status}` })
-        .from(campaigns)
-        .where(
-          and(
-            eq(campaigns.storeId, storeId),
-            eq(campaigns.id, id),
-            inArray(campaigns.status, ['sending', 'paused']),
-          ),
-        )
-        .for('update'),
-    );
-    return row;
-  }
 }
 
-function sendingOrCancelled(storeId: string, id: string) {
+// Sending, or cancelled after it started and not yet settled.
+function openWhere(storeId: string, id: string) {
   return and(
     eq(campaigns.storeId, storeId),
     eq(campaigns.id, id),
-    inArray(campaigns.status, ['sending', 'cancelled']),
+    or(
+      eq(campaigns.status, 'sending'),
+      and(
+        eq(campaigns.status, 'cancelled'),
+        isNotNull(campaigns.startedAt),
+        isNull(campaigns.settledAt),
+      ),
+    ),
   );
 }
 

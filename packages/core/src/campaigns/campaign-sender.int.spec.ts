@@ -105,6 +105,13 @@ async function recipients(campaignId: string) {
   }[];
 }
 
+async function settledAt(campaignId: string) {
+  const { rows } = await admin.pool.query('select settled_at from campaigns where id=$1', [
+    campaignId,
+  ]);
+  return (rows[0] as { settled_at: Date | null }).settled_at;
+}
+
 async function sendAttempts(campaignId: string) {
   const { rows } = await admin.pool.query(
     `select r.send_attempts from campaign_recipients r join contacts c on c.id = r.contact_id
@@ -505,7 +512,7 @@ describe('Campaign sender (Postgres)', () => {
     // The message in sending may be with the provider, so the reservation stays held.
     expect(await settlementRows(id)).toEqual([]);
     expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 1, skipped: 0 });
-    expect(await sender.startDue()).toContainEqual({ storeId, campaignId: id });
+    expect(await settledAt(id)).toBeNull();
 
     // Its claim expires and it is resent under the same key, which sends nothing new.
     clockNow = new Date(noon.getTime() + 6 * MINUTE);
@@ -525,7 +532,7 @@ describe('Campaign sender (Postgres)', () => {
     ]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 2);
     expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 2 });
-    expect(await sender.startDue()).not.toContainEqual({ storeId, campaignId: id });
+    expect(await settledAt(id)).toEqual(new Date(noon.getTime() + 6 * MINUTE));
     // A later batch replays the same settlement and writes nothing.
     expect(await sender.sendBatch(storeId, id)).toBeNull();
     expect(await settlementRows(id)).toHaveLength(2);
@@ -545,11 +552,35 @@ describe('Campaign sender (Postgres)', () => {
     const before = await ledger();
 
     await expect(campaigns.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_NOT_SCHEDULED',
+      code: 'CAMPAIGN_NOT_CANCELLABLE',
     });
 
     expect(await ledger()).toBe(before);
     expect(await campaignRow(id)).toMatchObject({ status: 'sent' });
+  });
+
+  it('sends nothing after a cancel when the provider recovers from refusing', async () => {
+    const { id } = await sendingCampaign(2);
+    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+      calls.push({ ...message });
+      throw new SmsSendRefused();
+    });
+    await expect(sender.sendBatch(storeId, id)).rejects.toThrow(SmsSendRefused);
+    await campaigns.pause(storeId, id, actor);
+    await campaigns.cancel(storeId, id, actor);
+    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+      calls.push({ ...message });
+      return driver.send(message);
+    });
+
+    clockNow = new Date(noon.getTime() + 6 * MINUTE);
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+    expect(calls).toHaveLength(1);
+    expect(driver.messages).toEqual([]);
+    expect((await recipients(id)).map((row) => row.status)).toEqual(['cancelled', 'cancelled']);
+    expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
+    expect(await settledAt(id)).toEqual(noon);
   });
 
   it('cancels a paused campaign and gives back every credit', async () => {
@@ -570,7 +601,7 @@ describe('Campaign sender (Postgres)', () => {
     expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
     await expect(campaigns.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_NOT_SCHEDULED',
+      code: 'CAMPAIGN_NOT_CANCELLABLE',
     });
   });
 
