@@ -3,7 +3,7 @@
 |           |                                                                  |
 | --------- | ---------------------------------------------------------------- |
 | Release   | 1                                                                |
-| Status    | Not started                                                      |
+| Status    | In progress                                                      |
 | Extension | Sales                                                            |
 | Code      | `packages/core/src/products/`, `apps/web/src/features/products/` |
 | Tasks     | PROD-1 to PROD-6                                                 |
@@ -125,10 +125,18 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), 
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
-7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") and one search embedding, rebuilt by a job when the name, description or aliases change.
+7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") stored as a list. The search embedding rebuild job waits for AI-3.
 8. Restock: when a variant goes from 0 to available and people are on its waiting list, the owner is prompted to notify them. Sending is never automatic.
 
 Photos upload straight to R2 with a presigned URL; the API never streams files.
+
+PROD-1 adds product create, view, list, edit, hide and archive routes. Product edits preserve
+omitted fields; changes to options include the complete variant list. Variant ids
+keep their stock and ledger identity; omitted variants are archived. Products without options keep one
+default variant. Prices use the variant override when set, including zero, and the
+product price otherwise. Lists search names and filter missing prices, missing
+photos or hidden products. Pages use descending UUID v7 ids, and each read loads
+product details and variants in one database snapshot. Stock labels and adjustments come with PROD-2.
 
 ### Rules
 
