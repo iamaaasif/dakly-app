@@ -123,7 +123,6 @@ export class ProductsService {
 }
 
 function toResponse(product: Product, variants: Variant[]): ProductResponse {
-  if (product.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
   return {
     ...product,
     status: product.status,

@@ -24,7 +24,7 @@ const productColumns = {
   isStockTracked: products.isStockTracked,
   isVisibleInChats: products.isVisibleInChats,
   isVisibleInOrderLink: products.isVisibleInOrderLink,
-  status: products.status,
+  status: sql<'active' | 'hidden'>`${products.status}`,
   createdAt: products.createdAt,
   updatedAt: products.updatedAt,
 };
@@ -43,9 +43,8 @@ const variantColumns = {
 type CatalogueProduct = Product & { variants: Variant[] };
 
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
-export type Product = Omit<ProductDetails, 'status'> & {
+export type Product = ProductDetails & {
   id: string;
-  status: 'active' | 'hidden' | 'archived';
   imageFileIds: string[];
   createdAt: Date;
   updatedAt: Date;
