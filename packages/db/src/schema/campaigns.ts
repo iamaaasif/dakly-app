@@ -162,8 +162,9 @@ export const campaigns = pgTable(
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
+    // The sender's sweep takes each store's earliest started sending campaign.
     index('campaigns_sending_idx')
-      .on(table.id)
+      .on(table.storeId, table.startedAt, table.id)
       .where(sql`${table.status} = 'sending'`),
     index('campaigns_unsettled_idx')
       .on(table.id)
@@ -224,8 +225,9 @@ export const campaignRecipients = pgTable(
     // The sender's lease on a recipient in sending. A stale claim is resent under the same
     // operation key, so the SMS driver must return the first result for a key it has seen.
     claimedAt: timestamptz('claimed_at'),
+    // Credits of a message the provider took or may have taken; the campaign charges their sum.
     smsCredits: integer('sms_credits'),
-    // Provider calls that threw; an expired claim is not one.
+    // Counted so a message whose outcome never resolves stops being sent after a few calls.
     sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },
