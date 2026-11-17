@@ -11,9 +11,12 @@ import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
+import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
+import { ClockModule } from '@dakly/core/platform/clock.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
@@ -22,6 +25,7 @@ import { RelayOutboxJob } from '@dakly/core/platform/outbox/jobs/relay-outbox.jo
 import { OutboxRelayModule } from '@dakly/core/platform/outbox/outbox-relay.module';
 import {
   BulkJobDispatcher,
+  CampaignJobDispatcher,
   TransactionalJobDispatcher,
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
@@ -32,7 +36,9 @@ import { JobSchedulers } from './job-schedulers';
 @Module({
   providers: [
     BulkJobDispatcher,
+    CampaignJobDispatcher,
     TransactionalJobDispatcher,
+    StartDueCampaignsJob,
     StaffAuditExportJob,
     StaffAuditMaintenanceJob,
     StaffAlertDeliveryJob,
@@ -52,10 +58,13 @@ import { JobSchedulers } from './job-schedulers';
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
+    BullModule.registerQueue({ name: QUEUES.campaign }),
     DatabaseModule,
     SecurityNoticesModule,
     OutboxRelayModule,
     NotificationsModule,
+    CampaignsModule,
+    ClockModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();

@@ -230,7 +230,7 @@ export class CampaignsRepository {
   }
 }
 
-function statusWhere(storeId: string, id: string, status: CampaignStatus) {
+export function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 

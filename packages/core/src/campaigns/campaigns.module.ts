@@ -7,6 +7,8 @@ import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { CampaignSenderService } from './campaign-sender.service';
+import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsRepository } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
@@ -22,6 +24,12 @@ import { CampaignsService } from './campaigns.service';
     WalletsModule,
   ],
   controllers: [CampaignsController],
-  providers: [CampaignsRepository, CampaignsService],
+  providers: [
+    CampaignsRepository,
+    CampaignSendingRepository,
+    CampaignsService,
+    CampaignSenderService,
+  ],
+  exports: [CampaignSenderService],
 })
 export class CampaignsModule {}

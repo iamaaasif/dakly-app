@@ -12,9 +12,13 @@ import { QUEUES, type QueueName } from './queues';
 // Overlapping transactional runs are safe: each job claims its notice or alert under a lease first.
 const TRANSACTIONAL_JOBS_AT_ONCE = 5;
 const BULK_JOBS_AT_ONCE = 1;
+// One batch at a time, so one store's campaign never sends two batches at once on a worker, and
+// each batch queues the next behind other campaigns' batches.
+const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
   bulk: BULK_JOBS_AT_ONCE,
+  campaign: CAMPAIGN_JOBS_AT_ONCE,
 } satisfies Record<QueueName, number>;
 
 // BullMQ gives every job on a queue to that queue's one worker, so the worker routes by job name.
@@ -83,5 +87,15 @@ export class BulkJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.bulk, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.campaign, { concurrency: concurrency.campaign, autorun: false })
+export class CampaignJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.campaign, discovery, reporter);
   }
 }

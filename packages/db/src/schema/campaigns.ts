@@ -160,6 +160,9 @@ export const campaigns = pgTable(
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
+    index('campaigns_sending_idx')
+      .on(table.id)
+      .where(sql`${table.status} = 'sending'`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -211,6 +214,11 @@ export const campaignRecipients = pgTable(
     readAt: timestamptz('read_at'),
     tappedAt: timestamptz('tapped_at'),
     failedAt: timestamptz('failed_at'),
+    // The sender's lease on a recipient in sending; an expired claim is reconciled, not resent blind.
+    claimedAt: timestamptz('claimed_at'),
+    // One credit a part, set when the provider takes the message; the campaign settles their sum.
+    smsCredits: integer('sms_credits'),
+    sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [

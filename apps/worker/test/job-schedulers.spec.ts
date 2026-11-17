@@ -33,7 +33,8 @@ describe('Worker job schedulers', () => {
   it('registers each scheduled job on its queue at its interval under a fixed id', async () => {
     const transactional = recordingQueue();
     const bulk = recordingQueue();
-    const schedulers = new JobSchedulers(transactional.queue, bulk.queue);
+    const campaign = recordingQueue();
+    const schedulers = new JobSchedulers(transactional.queue, bulk.queue, campaign.queue);
     await schedulers.onApplicationBootstrap();
     await schedulers.onApplicationBootstrap();
     const sweeps = [
@@ -46,6 +47,10 @@ describe('Worker job schedulers', () => {
     expect(bulk.schedulers).toEqual([
       scheduler('staff-audit-maintenance'),
       scheduler('staff-audit-maintenance'),
+    ]);
+    expect(campaign.schedulers).toEqual([
+      scheduler('start-due-campaigns', 60000),
+      scheduler('start-due-campaigns', 60000),
     ]);
   });
 });

@@ -11,7 +11,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadEnv } from '../config/env';
 import { ErrorReporter } from '../logging/error-reporter';
 import { jobLogBindings } from '../logging/job-context';
-import { BulkJobDispatcher, TransactionalJobDispatcher } from './job-dispatcher';
+import {
+  BulkJobDispatcher,
+  CampaignJobDispatcher,
+  TransactionalJobDispatcher,
+} from './job-dispatcher';
 import { HandlesJob, type JobHandler } from './job-handler';
 import { scheduleJob } from './job-schedule';
 import { QUEUES, type QueueName } from './queues';
@@ -29,13 +33,16 @@ class TransactionalScheduledHandler implements JobHandler {
 }
 
 class BulkScheduledHandler extends TransactionalScheduledHandler {}
+class CampaignScheduledHandler extends TransactionalScheduledHandler {}
 
 HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalScheduledHandler);
 HandlesJob({ queue: QUEUES.bulk, name: SCHEDULED })(BulkScheduledHandler);
+HandlesJob({ queue: QUEUES.campaign, name: SCHEDULED })(CampaignScheduledHandler);
 
 const setups = {
   transactional: [TransactionalScheduledHandler, TransactionalJobDispatcher],
   bulk: [BulkScheduledHandler, BulkJobDispatcher],
+  campaign: [CampaignScheduledHandler, CampaignJobDispatcher],
 } satisfies Record<QueueName, unknown[]>;
 
 const reporter = new ErrorReporter(undefined);
@@ -79,96 +86,99 @@ afterEach(async () => {
   await Promise.all(applications.splice(0).map((application) => application.close()));
 });
 
-describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queueName) => {
-  it('runs one job per interval across two workers, each in its own job context', async () => {
-    const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
-    const first = await start(queueName, prefix);
-    const second = await start(queueName, prefix);
-    await Promise.all([
-      scheduleJob(first.queue, SCHEDULED),
-      scheduleJob(second.queue, SCHEDULED),
-      scheduleJob(first.queue, SCHEDULED),
-    ]);
-    expect(await first.queue.getJobSchedulers()).toEqual([
-      expect.objectContaining({ key: SCHEDULED, name: SCHEDULED, every: 30000 }),
-    ]);
-    await until(() => runs.length === 1);
-    await until(async () => (await first.queue.getDelayedCount()) === 1);
-    await setTimeout(300);
-    expect(runs).toHaveLength(1);
-    await promoteNextTick(second.queue);
-    await until(() => runs.length === 2);
-    await setTimeout(300);
-    expect(runs).toHaveLength(2);
-    expect(runs.every((jobId) => jobId.startsWith(`repeat:${SCHEDULED}:`))).toBe(true);
-    expect(runs[0]).not.toBe(runs[1]);
-    expect(jobLogBindings()).toEqual({});
-  });
-
-  // Transactional runs five jobs at once, so its next tick starts beside the active run.
-  const overlapping = queueName === QUEUES.transactional ? 2 : 1;
-  it(`runs ${overlapping} tick(s) at once on one worker and waits for them at shutdown`, async () => {
-    let finish!: () => void;
-    const pending = new Promise<void>((resolve) => {
-      finish = resolve;
+describe.each([QUEUES.transactional, QUEUES.bulk, QUEUES.campaign])(
+  'Scheduled job on %s',
+  (queueName) => {
+    it('runs one job per interval across two workers, each in its own job context', async () => {
+      const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
+      const first = await start(queueName, prefix);
+      const second = await start(queueName, prefix);
+      await Promise.all([
+        scheduleJob(first.queue, SCHEDULED),
+        scheduleJob(second.queue, SCHEDULED),
+        scheduleJob(first.queue, SCHEDULED),
+      ]);
+      expect(await first.queue.getJobSchedulers()).toEqual([
+        expect.objectContaining({ key: SCHEDULED, name: SCHEDULED, every: 30000 }),
+      ]);
+      await until(() => runs.length === 1);
+      await until(async () => (await first.queue.getDelayedCount()) === 1);
+      await setTimeout(300);
+      expect(runs).toHaveLength(1);
+      await promoteNextTick(second.queue);
+      await until(() => runs.length === 2);
+      await setTimeout(300);
+      expect(runs).toHaveLength(2);
+      expect(runs.every((jobId) => jobId.startsWith(`repeat:${SCHEDULED}:`))).toBe(true);
+      expect(runs[0]).not.toBe(runs[1]);
+      expect(jobLogBindings()).toEqual({});
     });
-    work = () => pending;
-    const { application, queue } = await start(
-      queueName,
-      `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
-    );
-    await scheduleJob(queue, SCHEDULED);
-    await until(() => runs.length === 1);
-    await until(async () => (await queue.getDelayedCount()) === 1);
-    await promoteNextTick(queue);
-    await until(() => runs.length === overlapping);
-    await setTimeout(300);
-    expect(runs).toHaveLength(overlapping);
-    let stopped = false;
-    const shutdown = application.close().then(() => {
-      stopped = true;
-    });
-    await setTimeout(300);
-    expect(stopped).toBe(false);
-    finish();
-    await shutdown;
-    applications.splice(applications.indexOf(application), 1);
-    expect(stopped).toBe(true);
-    await setTimeout(300);
-    expect(runs).toHaveLength(overlapping);
-  });
 
-  it('retries a failed run with bounded backoff and reports each failure once without its text', async () => {
-    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
-    const report = vi.spyOn(reporter, 'reportJob').mockImplementation(() => undefined);
-    work = async () => {
-      throw new Error('private-scheduled-failure');
-    };
-    const { queue } = await start(queueName, `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`);
-    await scheduleJob(queue, SCHEDULED);
-    await until(() => runs.length === 1);
-    const jobId = runs[0]!;
-    for (const attemptsMade of [1, 2]) {
-      await until(async () => (await queue.getJobState(jobId)) === 'delayed');
-      const job = (await queue.getJob(jobId))!;
-      expect(job.attemptsMade).toBe(attemptsMade);
-      expect(job.opts).toMatchObject({
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 30000 },
-        removeOnComplete: true,
-        removeOnFail: 100,
+    // Transactional runs five jobs at once, so its next tick starts beside the active run.
+    const overlapping = queueName === QUEUES.transactional ? 2 : 1;
+    it(`runs ${overlapping} tick(s) at once on one worker and waits for them at shutdown`, async () => {
+      let finish!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        finish = resolve;
       });
-      await job.promote();
-      await until(() => runs.length === attemptsMade + 1);
-    }
-    await until(async () => (await queue.getJobState(jobId)) === 'failed');
-    const failed = (await queue.getJob(jobId))!;
-    expect(failed.attemptsMade).toBe(3);
-    expect(failed.failedReason).toBe('Scheduled test job job failed');
-    expect(JSON.stringify(failed.stacktrace)).not.toContain('private-scheduled-failure');
-    expect(runs).toEqual([jobId, jobId, jobId]);
-    expect(report).toHaveBeenCalledTimes(3);
-    expect(report.mock.calls.map(([, reportedId]) => reportedId)).toEqual([jobId, jobId, jobId]);
-    expect(JSON.stringify(report.mock.calls)).not.toContain('private-scheduled-failure');
-  });
-});
+      work = () => pending;
+      const { application, queue } = await start(
+        queueName,
+        `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
+      );
+      await scheduleJob(queue, SCHEDULED);
+      await until(() => runs.length === 1);
+      await until(async () => (await queue.getDelayedCount()) === 1);
+      await promoteNextTick(queue);
+      await until(() => runs.length === overlapping);
+      await setTimeout(300);
+      expect(runs).toHaveLength(overlapping);
+      let stopped = false;
+      const shutdown = application.close().then(() => {
+        stopped = true;
+      });
+      await setTimeout(300);
+      expect(stopped).toBe(false);
+      finish();
+      await shutdown;
+      applications.splice(applications.indexOf(application), 1);
+      expect(stopped).toBe(true);
+      await setTimeout(300);
+      expect(runs).toHaveLength(overlapping);
+    });
+
+    it('retries a failed run with bounded backoff and reports each failure once without its text', async () => {
+      vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const report = vi.spyOn(reporter, 'reportJob').mockImplementation(() => undefined);
+      work = async () => {
+        throw new Error('private-scheduled-failure');
+      };
+      const { queue } = await start(queueName, `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`);
+      await scheduleJob(queue, SCHEDULED);
+      await until(() => runs.length === 1);
+      const jobId = runs[0]!;
+      for (const attemptsMade of [1, 2]) {
+        await until(async () => (await queue.getJobState(jobId)) === 'delayed');
+        const job = (await queue.getJob(jobId))!;
+        expect(job.attemptsMade).toBe(attemptsMade);
+        expect(job.opts).toMatchObject({
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 30000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        });
+        await job.promote();
+        await until(() => runs.length === attemptsMade + 1);
+      }
+      await until(async () => (await queue.getJobState(jobId)) === 'failed');
+      const failed = (await queue.getJob(jobId))!;
+      expect(failed.attemptsMade).toBe(3);
+      expect(failed.failedReason).toBe('Scheduled test job job failed');
+      expect(JSON.stringify(failed.stacktrace)).not.toContain('private-scheduled-failure');
+      expect(runs).toEqual([jobId, jobId, jobId]);
+      expect(report).toHaveBeenCalledTimes(3);
+      expect(report.mock.calls.map(([, reportedId]) => reportedId)).toEqual([jobId, jobId, jobId]);
+      expect(JSON.stringify(report.mock.calls)).not.toContain('private-scheduled-failure');
+    });
+  },
+);

@@ -342,6 +342,10 @@ Each change is a guarded update from one status, listed in a table in `Campaigns
 - No event is emitted for these changes; the [event catalogue](../data/jobs.md#events-in-m2-and-m3) lists none.
 - Cancelling a `sending` or `paused` campaign, which state-machines.md allows, waits for CAMP-3, because the credits for recipients already sent must be charged before the rest is released.
 
+### Sender (CAMP-3)
+
+The sender runs on the `campaign` queue in `apps/worker`. The `start-due-campaigns` sweep runs every minute and moves each campaign from `due_campaigns` to `sending` with `started_at`, guarded on `scheduled` and the send time, so a campaign edited meanwhile waits. The batch job that sends to the recipients comes next.
+
 ### Frozen destinations and final send checks
 
 At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each sendable recipient's `contact_identity_id` under that connection and freeze its address. A Messenger id is Page-scoped: a contact on two Pages must use the identity on the selected Page. Resolve or create a WhatsApp identity from the contact's own consented WhatsApp address under the selected business connection; this does not verify or merge a profile. The chosen template must belong to that connection. SMS stores a normalized phone and has no channel connection or channel identity. A skipped recipient with no address may have no identity.
