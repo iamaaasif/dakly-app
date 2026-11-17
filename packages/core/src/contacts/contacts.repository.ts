@@ -70,6 +70,8 @@ export type ImportMatch = {
   phone: string;
   importId: string | null;
   whatsappPhone: string | null;
+  // The contact has an answer on WhatsApp, which an empty WhatsApp number would reassign.
+  whatsappAnswered: boolean;
   tags: string[];
 };
 
@@ -236,6 +238,7 @@ export class ContactsRepository {
           phone: contacts.phone,
           importId: contacts.importId,
           whatsappPhone: contacts.whatsappPhone,
+          whatsappAnswered: sql<boolean>`exists (select 1 from ${contactConsentCurrent} where ${contactConsentCurrent.storeId} = ${storeId} and ${contactConsentCurrent.contactId} = ${contacts.id} and ${contactConsentCurrent.channel} = 'whatsapp')`,
           tags: contacts.tags,
         })
         .from(contacts)

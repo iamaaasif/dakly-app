@@ -18,6 +18,7 @@ const IMPORT_ERRORS = {
   IMPORT_FILE_TOO_LARGE: { status: 400, message: 'A file can be at most 10 MB' },
   IMPORT_NOT_FOUND: { status: 404, message: 'Import not found' },
   IMPORT_ALREADY_STARTED: { status: 409, message: 'This import has already started' },
+  IMPORT_BEING_RUN: { status: 409, message: 'Another run is still importing this file' },
   IMPORT_RATE_LIMITED: { status: 429, message: 'A shop can start at most 20 imports an hour' },
 } as const satisfies ErrorCatalog;
 

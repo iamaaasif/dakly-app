@@ -88,7 +88,7 @@ Per-store cap: one running campaign batch per store.
 | `merge-contacts`           | Staff confirms a merge           | `storeId`, `keptContactId`, `mergedContactId`, `operationKey` | Permanent unique `(store_id, operation_key)`; an undone or redacted operation stays a no-op                                        |
 | `undo-contact-merge`       | Staff undoes within 7 days (D29) | `storeId`, `contactMergeId`                                   | After-state checks preserve later edits; dependent merges block; withdrawals stay effective; `undone_at` set atomically            |
 | `purge-contact`            | Sweep `due_contact_purges`       | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots |
-| sweep `fail-stuck-imports` | Every 30 seconds                 | none                                                          | `stores_with_stuck_imports`, then a guarded update on the stale lease; a running import renews its lease                           |
+| sweep `fail-stuck-imports` | Every 30 seconds                 | none                                                          | `stores_with_stuck_imports`, then a guarded update on `last_progress_at` and `requeue_count`: queue again up to 4 times, then fail |
 
 ## payments
 

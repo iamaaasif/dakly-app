@@ -220,12 +220,14 @@ function importOutcome(
   return duplicateMode === 'update' ? 'updated' : 'skipped';
 }
 
-// A saved WhatsApp number is kept, because consent may rest on it and an import never moves
-// consent to a number nobody verified; changing it stays a profile edit.
+// A saved WhatsApp number is kept, and so is an empty one on a contact with a WhatsApp consent
+// answer: empty means "the phone", so filling it would move that answer to a number nobody
+// verified. Changing a number stays a profile edit.
 function importChange(contact: ImportMatch, { phone: _phone, ...row }: ContactImportRow) {
   const notChanged: ImportedContact['notChanged'] = [];
   const whatsappDiffers = row.whatsappPhone && row.whatsappPhone !== contact.whatsappPhone;
-  if (contact.whatsappPhone && whatsappDiffers)
+  const whatsappKept = Boolean(contact.whatsappPhone) || contact.whatsappAnswered;
+  if (whatsappKept && whatsappDiffers)
     notChanged.push({ field: 'whatsappPhone', message: 'WhatsApp number differs, not changed' });
   const newTags = [...new Set(row.tags ?? [])].filter((tag) => !contact.tags.includes(tag));
   const room = Math.max(0, MAX_CONTACT_TAGS - contact.tags.length);
@@ -237,7 +239,7 @@ function importChange(contact: ImportMatch, { phone: _phone, ...row }: ContactIm
   const change: ImportedChange = {
     ...row,
     id: contact.id,
-    whatsappPhone: contact.whatsappPhone ? undefined : row.whatsappPhone,
+    whatsappPhone: whatsappKept ? undefined : row.whatsappPhone,
     tags: newTags.slice(0, room),
   };
   return { change, notChanged };
