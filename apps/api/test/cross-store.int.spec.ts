@@ -134,6 +134,80 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('contacts', foreignId)).toEqual(before);
   });
+async function deliveryZone(shop: Shop) {
+  const result = await success(shop, 'POST', '/delivery-zones', 201, {
+    name: 'Outside Dhaka',
+    chargePoisha: 12000,
+    isDefault: true,
+  });
+  return result.json().id as string;
+}
+fixture('POST /delivery-zones', async () => {
+  const { a, b } = await pair(),
+    id = await deliveryZone(a),
+    before = await f.row('delivery_zones', id);
+  const own = await deliveryZone(b);
+  expect((await f.row('delivery_zones', own)).store_id).toBe(b.id);
+  expect(await f.row('delivery_zones', id)).toEqual(before);
+  expect(
+    (await f.request(b.member, 'POST', '/delivery-zones', { name: 'Forbidden', chargePoisha: 1 }))
+      .statusCode,
+  ).toBe(403);
+});
+fixture('POST /delivery-zones/initialize-defaults', async () => {
+  const { a, b } = await pair(),
+    id = await deliveryZone(a),
+    before = await f.row('delivery_zones', id);
+  const result = await success(b, 'POST', '/delivery-zones/initialize-defaults', 201, {});
+  expect(result.json().items).toHaveLength(3);
+  for (const zone of result.json().items)
+    expect((await f.row('delivery_zones', zone.id)).store_id).toBe(b.id);
+  expect(await f.row('delivery_zones', id)).toEqual(before);
+});
+fixture('GET /delivery-zones', async () => {
+  const { a, b } = await pair(),
+    aId = await deliveryZone(a),
+    bId = await deliveryZone(b);
+  for (const [shop, id] of [
+    [a, aId],
+    [b, bId],
+  ] as const)
+    expect(
+      (await success(shop, 'GET', '/delivery-zones', 200))
+        .json()
+        .items.map((zone: { id: string }) => zone.id),
+    ).toEqual([id]);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /delivery-zones/:deliveryZoneId`, async () => {
+    const { a, b } = await pair(),
+      foreignId = await deliveryZone(a);
+    await deliveryZone(b);
+    const own = (
+      await success(b, 'POST', '/delivery-zones', 201, { name: 'City', chargePoisha: 6000 })
+    ).json().id as string;
+    const payload = method === 'PATCH' ? { chargePoisha: 6500 } : undefined;
+    await success(b, method, `/delivery-zones/${own}`, method === 'PATCH' ? 200 : 204, payload);
+    expect(await f.row('delivery_zones', own)).toEqual(
+      method === 'PATCH' ? expect.objectContaining({ charge_poisha: 6500 }) : undefined,
+    );
+    const before = await f.row('delivery_zones', foreignId);
+    await hidden(
+      b,
+      method,
+      (id) => `/delivery-zones/${id}`,
+      foreignId,
+      () => payload ?? {},
+    );
+    expect(await f.row('delivery_zones', foreignId)).toEqual(before);
+  });
+fixture('GET /areas', async () => {
+  const { a, b } = await pair();
+  const own = (await success(a, 'GET', '/areas?parentId=3', 200)).json();
+  expect(own.items.map((area: { id: number }) => area.id)).toContain(301);
+  expect((await success(b, 'GET', '/areas?parentId=3', 200)).json()).toEqual(own);
+  expect((await f.request(b.member, 'GET', '/areas?parentId=3')).statusCode).toBe(200);
+});
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
     id = await contact(a);

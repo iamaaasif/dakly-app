@@ -213,6 +213,7 @@ export class IsolationFixture {
       'campaigns',
       'segments',
       'contacts',
+      'delivery_zones',
       'sms_sender_ids',
       'notifications',
       'outbox_events',

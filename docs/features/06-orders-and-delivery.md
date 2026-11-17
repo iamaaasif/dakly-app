@@ -3,7 +3,7 @@
 |           |                                                                                      |
 | --------- | ------------------------------------------------------------------------------------ |
 | Release   | 1                                                                                    |
-| Status    | Not started                                                                          |
+| Status    | In progress                                                                          |
 | Extension | Sales                                                                                |
 | Code      | `packages/core/src/{orders,delivery}/`, `apps/web/src/features/{orders,order-link}/` |
 | Tasks     | ORD-1 to ORD-6, ORD-9, ORD-10 (ORD-7 and ORD-8 are later)                            |
@@ -274,6 +274,24 @@ Sending with a courier (release 1): staff move the order to `with_courier` and m
 Later release (D21), kept here so the data model does not block it: courier connections with the shop's own keys, booking as an idempotent job per order, parcel status by webhook or polling, and COD reconciliation from courier payouts matched by consignment id. Do not build any of it in release 1.
 
 Order link: a public page per store and product (`dakly.shop/{store}/{product}`). It posts to a public endpoint that finds the store from the slug on the server, needs a Turnstile token, allows 5 orders per phone per day and 30 per IP per hour, and calls the same `createOrder`.
+
+### Delivery zones
+
+ORD-2 adds delivery-zone create, list, edit and delete routes under Store settings,
+and a paginated area list for any store member. Charges are integer poisha.
+A district or upazila can belong to one zone. A more specific area overrides its
+parent district; an unlisted area uses the default zone. Changing the default and
+assigning areas are serialized per store. The default zone needs a replacement
+before removal, and a zone used by orders cannot be deleted.
+
+`POST /delivery-zones/initialize-defaults` sets up an empty store with Inside Dhaka
+at 6,000 poisha, Dhaka suburbs at 10,000 and Outside Dhaka at 12,000. It refuses to
+replace existing zones. The mappings use the seeded Dhaka, Gazipur and Narayanganj
+district ids. Savar needs the upazila reference data from DB-6; no upazila names
+are added here. GET routes never initialize or change settings.
+
+This task adds the backend only. There is no delivery-settings image in the
+current design folder, and no delivery-settings screen is added here.
 
 ### Rules
 
