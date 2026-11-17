@@ -103,7 +103,7 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 
 - Cloudflare R2 bucket per environment; object keys `stores/<store_id>/<kind>/<uuid>`.
 - Uploads go from the browser straight to R2 with a short-lived presigned URL; the API records the file after upload.
-- `FileStorageDriver` in `packages/providers` makes the presigned PUT and GET URLs. `S3FileStorageDriver` signs them with AWS Signature Version 4 and path-style addresses, so it works with any S3 API. It reads `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Production refuses to start without all four; local runs fall back to the SeaweedFS bucket.
+- `FileStorageDriver` in `packages/providers` makes the presigned PUT and GET URLs, and reads and writes the files the API processes itself (an import and its report) through URLs signed for one request. A read stops at a size limit, so an oversized file is never held in memory. `S3FileStorageDriver` signs them with AWS Signature Version 4 and path-style addresses, so it works with any S3 API. It reads `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. Production refuses to start without all four; local runs fall back to the SeaweedFS bucket.
 - Local development and CI use SeaweedFS from `docker compose` (S3 API on port 8333, bucket `dakly-local`) in place of R2, the way Mailpit stands in for SMS and email.
 - Downloads use signed URLs valid 15 minutes. Public order-link product images are served through Cloudflare with a public, cache-friendly path that contains no personal data.
 - Lifecycle rules: exports deleted after 7 days, khata photos after 30 days.

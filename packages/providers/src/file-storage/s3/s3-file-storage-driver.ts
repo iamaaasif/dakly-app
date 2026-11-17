@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 
-import type { FileStorageDriver } from '../file-storage-driver';
+import type { FileStorageDriver, StoredText } from '../file-storage-driver';
 
 export type S3Configuration = {
   endpoint: string;
@@ -9,6 +9,10 @@ export type S3Configuration = {
   accessKeyId: string;
   secretAccessKey: string;
 };
+
+// The server's own reads and writes sign a URL for one request only.
+const REQUEST_SECONDS = 60;
+const REQUEST_TIMEOUT_MS = 60_000;
 
 type PresignRequest = {
   method: 'GET' | 'PUT';
@@ -33,6 +37,34 @@ export class S3FileStorageDriver implements FileStorageDriver {
 
   createDownloadUrl(key: string, expiresInSeconds: number): string {
     return this.presign('GET', key, expiresInSeconds);
+  }
+
+  // Counts the bytes as they arrive, so a file over the limit is never held in memory.
+  async readText(key: string, maxBytes: number): Promise<StoredText> {
+    const response = await fetch(this.presign('GET', key, REQUEST_SECONDS), {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status === 404) return { kind: 'missing' };
+    if (!response.ok || !response.body)
+      throw new Error(`File storage read failed with ${response.status}`);
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.byteLength;
+      if (size > maxBytes) return { kind: 'too_large' };
+      chunks.push(chunk);
+    }
+    return { kind: 'found', text: Buffer.concat(chunks).toString('utf8') };
+  }
+
+  async writeText(key: string, body: string, contentType: string): Promise<void> {
+    const response = await fetch(this.presign('PUT', key, REQUEST_SECONDS), {
+      method: 'PUT',
+      body,
+      headers: { 'content-type': contentType },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`File storage write failed with ${response.status}`);
   }
 
   private presign(method: 'GET' | 'PUT', key: string, expiresInSeconds: number): string {

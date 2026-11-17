@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContactImportRow, ImportConsentEvidence } from '@dakly/contracts/contacts';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
@@ -66,6 +66,14 @@ describe('ImportsService', () => {
   const storage: FileStorageDriver = {
     createUploadUrl: (key) => `https://files.test/put/${key}`,
     createDownloadUrl: (key) => `https://files.test/get/${key}`,
+    readText: async (key, maxBytes) => {
+      const text = objects.get(key);
+      if (text === undefined) return { kind: 'missing' };
+      return Buffer.byteLength(text) > maxBytes ? { kind: 'too_large' } : { kind: 'found', text };
+    },
+    writeText: async (key, body) => {
+      objects.set(key, body);
+    },
   };
 
   function importing(
@@ -95,15 +103,6 @@ describe('ImportsService', () => {
     knownPhones.clear();
     finished = undefined;
     granted = [];
-    vi.stubGlobal('fetch', async (url: string, init?: { method?: string; body?: string }) => {
-      const key = url.replace(/^https:\/\/files\.test\/(put|get)\//, '');
-      if (init?.method === 'PUT') {
-        objects.set(key, init.body!);
-        return new Response(null, { status: 200 });
-      }
-      const body = objects.get(key);
-      return body === undefined ? new Response(null, { status: 404 }) : new Response(body);
-    });
     service = new ImportsService(
       repository as unknown as ImportsRepository,
       contacts as unknown as ContactsService,
@@ -113,10 +112,6 @@ describe('ImportsService', () => {
       { now: () => new Date('2026-11-17T04:30:00Z') } as Clock,
       storage,
     );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   it('counts added, updated and failed rows and grants only the channels with evidence', async () => {
@@ -168,6 +163,7 @@ describe('ImportsService', () => {
   it.each([
     ['an unreadable file', 'Mobile\n017"12345678', 'not a readable CSV'],
     ['a file that never arrived', undefined, 'The file was not uploaded'],
+    ['a file over 10 MB', `Mobile\n${'01712345678\n'.repeat(1_000_000)}`, 'at most 10 MB'],
   ])('fails the import for %s and says why in the report', async (_case, file, reason) => {
     importing({});
     if (file) objects.set('stores/x/imports/upload.csv', file);

@@ -218,25 +218,16 @@ export class ImportsService {
   }
 
   private async download(objectKey: string): Promise<string> {
-    const response = await fetch(this.storage.createDownloadUrl(objectKey, LINK_SECONDS), {
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (response.status === 404) throw importError('IMPORT_FILE_NOT_UPLOADED');
-    if (!response.ok) throw new Error(`Import file download failed with ${response.status}`);
-    if (Number(response.headers.get('content-length')) > MAX_IMPORT_FILE_BYTES)
-      throw importError('IMPORT_FILE_TOO_LARGE');
-    return response.text();
+    const file = await this.storage.readText(objectKey, MAX_IMPORT_FILE_BYTES);
+    if (file.kind === 'missing') throw importError('IMPORT_FILE_NOT_UPLOADED');
+    if (file.kind === 'too_large') throw importError('IMPORT_FILE_TOO_LARGE');
+    return file.text;
   }
 
   private async uploadReport(storeId: string, lines: ReportLine[]): Promise<NewImportFile> {
     const body = reportCsv(lines);
     const report = this.newFile(storeId, Buffer.byteLength(body));
-    const response = await fetch(this.storage.createUploadUrl(report.objectKey, LINK_SECONDS), {
-      method: 'PUT',
-      body,
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok) throw new Error(`Import report upload failed with ${response.status}`);
+    await this.storage.writeText(report.objectKey, body, 'text/csv');
     return report;
   }
 }
