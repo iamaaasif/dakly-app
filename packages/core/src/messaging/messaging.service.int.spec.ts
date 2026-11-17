@@ -257,13 +257,13 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       { kind: 'system' },
     );
     const calls = watchDriver();
-    const approved = (destinationAddress: string) =>
+    const approved = (destination: string) =>
       messaging.send(storeA, {
         channel: 'sms',
         contactId: contact.id,
         body: 'নতুন কালেকশন এসেছে',
-        operationKey: `test-destination-${destinationAddress}`,
-        destinationAddress,
+        operationKey: `test-destination-${destination}`,
+        destination,
       });
 
     expect(await errorCode(approved('01712345600'))).toBe('MESSAGING_DESTINATION_CHANGED');
