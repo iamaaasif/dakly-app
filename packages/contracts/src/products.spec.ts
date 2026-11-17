@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { changeProductSchema, createProductSchema, productListQuerySchema } from './products';
+import {
+  changeProductSchema,
+  createProductSchema,
+  productListQuerySchema,
+  stockAdjustmentSchema,
+} from './products';
 
 const option = { name: 'Size', values: ['M', 'L'] };
 const variant = { optionValues: { Size: 'M' }, priceOverridePoisha: 60000 };
@@ -58,6 +63,18 @@ describe('product contracts', () => {
     expect(changeProductSchema.safeParse({}).success).toBe(false);
     expect(changeProductSchema.safeParse({ options: [] }).success).toBe(false);
     expect(changeProductSchema.safeParse({ variants: [] }).success).toBe(false);
+  });
+
+  it('accepts signed stock corrections and rejects zero or fractional quantities', () => {
+    expect(stockAdjustmentSchema.parse({ quantity: -2, reason: 'Count correction' })).toEqual({
+      quantity: -2,
+      reason: 'Count correction',
+    });
+    for (const quantity of [0, 0.5, 2147483648])
+      expect(
+        stockAdjustmentSchema.safeParse({ quantity, reason: 'Count correction' }).success,
+      ).toBe(false);
+    expect(stockAdjustmentSchema.safeParse({ quantity: 1, reason: '' }).success).toBe(false);
   });
 
   it('bounds lists and rejects unknown readiness filters', () => {
