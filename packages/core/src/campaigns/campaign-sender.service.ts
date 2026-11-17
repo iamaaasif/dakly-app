@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
+import { countSmsParts } from '@dakly/contracts/sms';
+
 import { LinksService } from '../links/links.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
@@ -14,14 +17,16 @@ import {
   type SendingCampaign,
 } from './campaign-sending.repository';
 import { CampaignsRepository } from './campaigns.repository';
-import { approvalKey, marketingSmsText } from './campaigns.service';
 
 const BATCH_SIZE = 200;
 // A worker that stopped after claiming leaves the recipient in sending; after this the claim
 // is taken again and the message resent under the same operation key.
 const CLAIM_MS = 5 * MINUTE_MS;
 const SEND_ATTEMPTS = 3;
+// The roll-up counts on campaigns refresh at most this often while sending.
+const COUNTS_MS = 10 * 1000;
 const SYSTEM = { kind: 'system' } as const;
+type Actor = AuditEntry['actor'];
 
 type Claim =
   | { kind: 'stop' }
@@ -55,6 +60,41 @@ export class CampaignSenderService {
   // Sends up to one batch and returns when the next batch should run, or null when the campaign
   // is finished, paused or cancelled.
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
+    const next = await this.sendRecipients(storeId, campaignId);
+    const now = this.clock.now();
+    await this.repository.refreshCounts(storeId, campaignId, {
+      now,
+      countedBefore: new Date(now.getTime() - COUNTS_MS),
+    });
+    return next;
+  }
+
+  // Cancelling a started campaign: the queued recipients are cancelled and the reservation
+  // settled at once. A recipient in sending may already be with the provider, so its credits are
+  // charged; it still becomes sent or failed when its claim finishes.
+  async cancelStarted(storeId: string, campaignId: string, actor: Actor): Promise<boolean> {
+    return this.transaction.run(storeId, async () => {
+      const campaign = await this.repository.lockStarted(storeId, campaignId);
+      if (!campaign) return false;
+      await this.campaigns.cancelQueuedRecipients(storeId, campaignId);
+      const now = this.clock.now();
+      await this.campaigns.changeStatus(storeId, campaignId, campaign.status, {
+        status: 'cancelled',
+        pauseReason: null,
+        updatedAt: now,
+      });
+      const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
+      // Every message carries an opt-out link of the same length, so it has the estimate's parts.
+      const parts = countSmsParts(
+        marketingSmsText(campaign.content.text, this.links.sampleOptOutUrl()),
+      );
+      await this.repository.refreshCounts(storeId, campaignId, { now, countedBefore: null });
+      await this.settle(storeId, campaign, chargedCredits + unsettled * parts, actor);
+      return true;
+    });
+  }
+
+  private async sendRecipients(storeId: string, campaignId: string): Promise<Date | null> {
     for (let claimed = 0; claimed < BATCH_SIZE; claimed += 1) {
       const claim = await this.claimNext(storeId, campaignId);
       if (claim.kind === 'stop') {
@@ -176,7 +216,8 @@ export class CampaignSenderService {
         occurredAt: now.toISOString(),
         payload: { campaignId },
       });
-      await this.settle(storeId, campaign, chargedCredits);
+      await this.repository.refreshCounts(storeId, campaignId, { now, countedBefore: null });
+      await this.settle(storeId, campaign, chargedCredits, SYSTEM);
     });
   }
 
@@ -185,6 +226,7 @@ export class CampaignSenderService {
     storeId: string,
     campaign: SendingCampaign,
     chargedCredits: number,
+    actor: Actor,
   ): Promise<void> {
     // Approval sets the time before a campaign can send.
     const key = approvalKey(campaign.id, campaign.approvedAt!);
@@ -194,14 +236,24 @@ export class CampaignSenderService {
       await this.wallets.release(storeId, {
         reservationId,
         idempotencyKey: `${key}:release`,
-        actor: SYSTEM,
+        actor,
       });
     else
       await this.wallets.charge(storeId, {
         reservationId,
         quantity: chargedCredits,
         idempotencyKey: `${key}:charge`,
-        actor: SYSTEM,
+        actor,
       });
   }
+}
+
+// Holds the approval time, so a campaign approved again after an edit reserves anew.
+export function approvalKey(campaignId: string, approvedAt: Date): string {
+  return `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
+}
+
+// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
+export function marketingSmsText(text: string, optOutUrl: string): string {
+  return `${text}\n${optOutUrl}`;
 }

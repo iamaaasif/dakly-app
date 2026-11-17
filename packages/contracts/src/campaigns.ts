@@ -152,8 +152,21 @@ export type CampaignResponse = {
   excludeSegmentIds: string[];
   scheduledFor: string | null;
   status: CampaignStatus;
+  counts: CampaignCounts;
   createdAt: string;
   updatedAt: string;
+};
+// Refreshed from the recipients at most every 10 seconds while sending. Sent includes the
+// delivered and read, and delivered includes the read.
+export type CampaignCounts = {
+  recipients: number;
+  skipped: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  tapped: number;
+  failed: number;
+  countedAt: string | null;
 };
 export type CampaignListResponse = { items: CampaignResponse[]; nextCursor: string | null };
 // SMS is counted in credits, one per part, and has no poisha rate yet, so costPoisha is 0.

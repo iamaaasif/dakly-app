@@ -193,10 +193,6 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     await expect(service.pause(storeId, id, actor)).rejects.toMatchObject({
       code: 'CAMPAIGN_NOT_SENDING',
     });
-    await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_NOT_SCHEDULED',
-    });
-
     expect((await service.resume(storeId, id, actor)).status).toBe('sending');
     const [resumed] = (
       await admin.pool.query('select status, pause_reason from campaigns where id=$1', [id])

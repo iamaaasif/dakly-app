@@ -67,4 +67,16 @@ describe('campaign sending filters without RLS assistance', () => {
       chargedCredits: 0,
     });
   });
+
+  it('counts and locks for a cancel only the selected store’s campaigns', async () => {
+    const before = await f.row('campaigns', campaignA);
+
+    expect(await repository.lockStarted(f.b, campaignA)).toBeUndefined();
+    await repository.refreshCounts(f.b, campaignA, { now, countedBefore: null });
+    expect(await f.row('campaigns', campaignA)).toEqual(before);
+
+    expect(await repository.lockStarted(f.a, campaignA)).toMatchObject({ status: 'sending' });
+    await repository.refreshCounts(f.a, campaignA, { now, countedBefore: null });
+    expect((await f.row('campaigns', campaignA)).counts_at).not.toBeNull();
+  });
 });

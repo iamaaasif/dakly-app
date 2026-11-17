@@ -20,6 +20,7 @@ import type {
 import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
+import type { CampaignSenderService } from './campaign-sender.service';
 import type {
   Campaign,
   CampaignApproval,
@@ -49,6 +50,14 @@ class FakeCampaignsRepository {
       excludeSegmentIds: [],
       scheduledFor: null,
       status,
+      recipientsCount: 0,
+      skippedCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      readCount: 0,
+      tappedCount: 0,
+      failedCount: 0,
+      countsAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -221,6 +230,8 @@ describe('CampaignsService', () => {
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
       { sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000' } as LinksService,
+      // Only scheduled campaigns are cancelled here; the sender's cancel is in its own spec.
+      { cancelStarted: async () => false } as unknown as CampaignSenderService,
       { now: () => clockNow } as Clock,
     );
   });
@@ -499,7 +510,9 @@ describe('CampaignsService', () => {
   it.each(['unschedule', 'cancel'] as const)(
     'refuses to %s a campaign that is not scheduled',
     async (change) => {
-      const campaign = repository.add('sending');
+      // A sending campaign can be cancelled (CAMP-3), so cancel is refused on a sent one.
+      const status = change === 'cancel' ? 'sent' : 'sending';
+      const campaign = repository.add(status);
 
       await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_SCHEDULED',
@@ -507,7 +520,7 @@ describe('CampaignsService', () => {
       await expect(service[change](STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_FOUND',
       });
-      expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+      expect(repository.rows.get(campaign.id)?.status).toBe(status);
     },
   );
 

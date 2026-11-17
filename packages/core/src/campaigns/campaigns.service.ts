@@ -26,6 +26,7 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { approvalKey, CampaignSenderService, marketingSmsText } from './campaign-sender.service';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
   type Campaign,
@@ -64,6 +65,7 @@ export class CampaignsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(LinksService) private readonly links: LinksService,
+    @Inject(CampaignSenderService) private readonly sender: CampaignSenderService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -178,7 +180,11 @@ export class CampaignsService {
     });
   }
 
+  // A started campaign charges what the provider has and releases the rest (CAMP-3); a scheduled
+  // one releases everything.
   async cancel(storeId: string, campaignId: string, actor: Actor): Promise<CampaignResponse> {
+    if (await this.sender.cancelStarted(storeId, campaignId, actor))
+      return this.get(storeId, campaignId);
     return this.transaction.run(storeId, async () => {
       const campaign = await this.lockBeforeSend(storeId, campaignId);
       await this.repository.cancelQueuedRecipients(storeId, campaignId);
@@ -188,7 +194,7 @@ export class CampaignsService {
     });
   }
 
-  // Only the status moves until the sender (CAMP-3) reads it.
+  // The sender stops claiming once the pause commits; the sweep picks a resumed campaign up.
   async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
     return this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
   }
@@ -317,16 +323,6 @@ export class CampaignsService {
   }
 }
 
-// Holds the approval time, so a campaign approved again after an edit reserves anew.
-export function approvalKey(campaignId: string, approvedAt: Date): string {
-  return `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
-}
-
-// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
-export function marketingSmsText(text: string, optOutUrl: string): string {
-  return `${text}\n${optOutUrl}`;
-}
-
 // Counts the opt-out link at its real length, so the reservation covers what the sender sends.
 function toEstimate(
   campaign: Campaign,
@@ -357,10 +353,30 @@ function toFrozenRecipient({ contactId, phone, decision }: AudienceDecision): Fr
     : { contactId, destinationAddress: phone, status: 'queued', skipReason: null };
 }
 
-function toCampaignResponse(campaign: Campaign): CampaignResponse {
+function toCampaignResponse({
+  recipientsCount,
+  skippedCount,
+  sentCount,
+  deliveredCount,
+  readCount,
+  tappedCount,
+  failedCount,
+  countsAt,
+  ...campaign
+}: Campaign): CampaignResponse {
   return {
     ...campaign,
     scheduledFor: campaign.scheduledFor?.toISOString() ?? null,
+    counts: {
+      recipients: recipientsCount,
+      skipped: skippedCount,
+      sent: sentCount,
+      delivered: deliveredCount,
+      read: readCount,
+      tapped: tappedCount,
+      failed: failedCount,
+      countedAt: countsAt?.toISOString() ?? null,
+    },
     createdAt: campaign.createdAt.toISOString(),
     updatedAt: campaign.updatedAt.toISOString(),
   };

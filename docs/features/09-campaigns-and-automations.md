@@ -328,19 +328,19 @@ The audience is every contact in any include segment and in no exclude segment, 
 
 Each change is a guarded update from one status, listed in a table in `CampaignsService`. All four routes need `campaigns.edit` and return the campaign.
 
-| Route                                    | From        | To          | Refused with             |
-| ---------------------------------------- | ----------- | ----------- | ------------------------ |
-| `POST /campaigns/:campaignId/unschedule` | `scheduled` | `draft`     | `CAMPAIGN_NOT_SCHEDULED` |
-| `POST /campaigns/:campaignId/cancel`     | `scheduled` | `cancelled` | `CAMPAIGN_NOT_SCHEDULED` |
-| `POST /campaigns/:campaignId/pause`      | `sending`   | `paused`    | `CAMPAIGN_NOT_SENDING`   |
-| `POST /campaigns/:campaignId/resume`     | `paused`    | `sending`   | `CAMPAIGN_NOT_PAUSED`    |
+| Route                                    | From                               | To          | Refused with             |
+| ---------------------------------------- | ---------------------------------- | ----------- | ------------------------ |
+| `POST /campaigns/:campaignId/unschedule` | `scheduled`                        | `draft`     | `CAMPAIGN_NOT_SCHEDULED` |
+| `POST /campaigns/:campaignId/cancel`     | `scheduled`, `sending` or `paused` | `cancelled` | `CAMPAIGN_NOT_SCHEDULED` |
+| `POST /campaigns/:campaignId/pause`      | `sending`                          | `paused`    | `CAMPAIGN_NOT_SENDING`   |
+| `POST /campaigns/:campaignId/resume`     | `paused`                           | `sending`   | `CAMPAIGN_NOT_PAUSED`    |
 
 - Edit and cancel (CAMP-R7) work until 5 minutes before `scheduledFor`, by the Clock; inside that, or past the send time, they are refused with `CAMPAIGN_CHANGE_TOO_LATE` (409). Each runs in one store transaction that locks the campaign and releases its credit reservation through `WalletService.release`, last, so the wallet lock is held only until commit.
 - Edit is its own action, because returning to draft lets go of the frozen audience and the credits, which a `PATCH` should not do on the side. It deletes the recipients and clears the approver, approval time, estimated cost and counts. The draft can then be changed and approved again, which freezes the audience and reserves anew. The reservation key holds the approval time, so a second approval is not taken for a replay of the first.
 - Cancel keeps the recipients and moves the queued ones to `cancelled`; skipped ones stay skipped.
 - Pause sets `pause_reason` to `manual`, and resume clears it. The sender stops claiming recipients once a pause commits; a recipient already claimed is still sent. After a resume the sweep picks the campaign up again within a minute.
 - No event is emitted for these changes; the [event catalogue](../data/jobs.md#events-in-m2-and-m3) lists none.
-- Cancelling a `sending` or `paused` campaign, which state-machines.md allows, waits for CAMP-3, because the credits for recipients already sent must be charged before the rest is released.
+- Cancelling a `sending` or `paused` campaign (CAMP-3) is `CampaignSenderService.cancelStarted`, in one store transaction that waits for a claim in progress. It cancels the queued recipients and settles the reservation at once: it charges the credits of recipients the provider took, and of each recipient still in `sending`, because that message may already be with the provider, at the estimate's parts per message. The rest is released. A recipient in `sending` still becomes `sent` or `failed` when its claim finishes. The scheduled path above stays as it was; the two paths are separate, so either can change alone.
 
 ### Sender (CAMP-3)
 
@@ -353,6 +353,8 @@ Each change is a guarded update from one status, listed in a table in `Campaigns
 - After the commit, `MessagingService.send` sends with operation key `campaign-<recipientId>`; the driver returns the first provider message id for a key it has seen. The recipient is then marked `sent` with the provider message id, `sent_at` and the `sms_credits` it used, guarded on its claim, so a stale worker cannot overwrite a newer claim.
 - A send error stops the batch and the job retries with back-off. The claim expires and the message is sent again under the same key; after 3 attempts the recipient is `failed` with `send_attempts_exhausted` and costs nothing.
 - When no recipient is `queued` or `sending`, the campaign moves to `sent` with `finished_at`, emits `campaign.sent` and settles its one reservation: `WalletService.charge` with the sum of `sms_credits` of recipients the provider took, which releases the rest, or `release` when none was taken. Skipped and failed recipients are refunded this way, once.
+- The roll-up counts on `campaigns` refresh from the recipients at the end of each batch, at most every 10 seconds (a guarded `counts_at` stamp), and always when the campaign finishes or is cancelled. Every campaign response has `counts`: recipients (queued at approval), skipped, sent (with delivered and read), delivered (with read), read, tapped, failed, and `countedAt`.
+- A short balance cannot pause an SMS campaign: approval reserves the credits of every queued recipient with the opt-out link counted, and the sender charges only from that reservation. The `balance` pause and its resume on top-up are not built.
 - Delivery, read and failure receipts wait for a provider that sends them (ACC-14) and for core messaging to report them (CHAT-2). Mailpit sends none, so a recipient stays `sent`.
 
 ### Frozen destinations and final send checks

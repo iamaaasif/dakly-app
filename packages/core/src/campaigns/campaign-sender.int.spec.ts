@@ -337,4 +337,87 @@ describe('Campaign sender (Postgres)', () => {
     expect(await sender.startDue()).toContainEqual({ storeId, campaignId: id });
     expect(await campaignRow(id)).toMatchObject({ status: 'sending', started_at: sendAt });
   });
+
+  it('keeps the counts on the campaign equal to its recipient rows', async () => {
+    const { id, phones } = await sendingCampaign(3);
+    await admin.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) select gen_random_uuid(),$1,id,'sms','withdrawn','opt_out_link',now()+interval '1 second' from contacts where store_id=$1 and phone=$2",
+      [storeId, phones[0]],
+    );
+
+    await sender.sendBatch(storeId, id);
+
+    const { rows } = await admin.pool.query(
+      'select status, count(*)::int as count from campaign_recipients where campaign_id=$1 group by status order by status',
+      [id],
+    );
+    expect(rows).toEqual([
+      { status: 'sent', count: 2 },
+      { status: 'skipped', count: 1 },
+    ]);
+    expect((await campaigns.get(storeId, id)).counts).toEqual({
+      recipients: 3,
+      skipped: 1,
+      sent: 2,
+      delivered: 0,
+      read: 0,
+      tapped: 0,
+      failed: 0,
+      countedAt: noon.toISOString(),
+    });
+  });
+
+  it('cancels a sending campaign, charging what was sent or may be with the provider', async () => {
+    const before = await wallets.balance(storeId, 'sms_credits');
+    const { id } = await sendingCampaign(3);
+    const change = CampaignSendingRepository.prototype.changeRecipient;
+    const passThrough = function (
+      this: CampaignSendingRepository,
+      ...args: Parameters<typeof change>
+    ) {
+      return change.apply(this, args);
+    };
+    // The second message reaches the provider, then the worker stops before recording it.
+    const crash = vi
+      .spyOn(CampaignSendingRepository.prototype, 'changeRecipient')
+      .mockImplementationOnce(passThrough)
+      .mockImplementationOnce(passThrough)
+      .mockImplementationOnce(passThrough)
+      .mockImplementationOnce(async () => {
+        throw new Error('worker stopped');
+      });
+    await expect(sender.sendBatch(storeId, id)).rejects.toThrow('worker stopped');
+    crash.mockRestore();
+
+    expect((await campaigns.cancel(storeId, id, actor)).status).toBe('cancelled');
+
+    expect((await recipients(id)).map((row) => row.status).sort()).toEqual([
+      'cancelled',
+      'sending',
+      'sent',
+    ]);
+    expect(await settlementRows(id)).toEqual([
+      { kind: 'release', quantity_delta: 3 },
+      { kind: 'charge', quantity_delta: -2 },
+    ]);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 2);
+    expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 1, skipped: 0 });
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+    expect(calls).toHaveLength(2);
+  });
+
+  it('cancels a paused campaign and gives back every credit', async () => {
+    const before = await wallets.balance(storeId, 'sms_credits');
+    const { id } = await sendingCampaign(2);
+    await campaigns.pause(storeId, id, actor);
+
+    expect((await campaigns.cancel(storeId, id, actor)).status).toBe('cancelled');
+
+    expect((await recipients(id)).map((row) => row.status)).toEqual(['cancelled', 'cancelled']);
+    expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
+    await expect(campaigns.cancel(storeId, id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_SCHEDULED',
+    });
+  });
 });

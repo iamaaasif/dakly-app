@@ -24,6 +24,14 @@ export type Campaign = {
   excludeSegmentIds: string[];
   scheduledFor: Date | null;
   status: CampaignStatus;
+  recipientsCount: number;
+  skippedCount: number;
+  sentCount: number;
+  deliveredCount: number;
+  readCount: number;
+  tappedCount: number;
+  failedCount: number;
+  countsAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -70,6 +78,14 @@ const campaignColumns = {
   excludeSegmentIds: campaigns.excludeSegmentIds,
   scheduledFor: campaigns.scheduledFor,
   status: campaigns.status,
+  recipientsCount: campaigns.recipientsCount,
+  skippedCount: campaigns.skippedCount,
+  sentCount: campaigns.sentCount,
+  deliveredCount: campaigns.deliveredCount,
+  readCount: campaigns.readCount,
+  tappedCount: campaigns.tappedCount,
+  failedCount: campaigns.failedCount,
+  countsAt: campaigns.countsAt,
   createdAt: campaigns.createdAt,
   updatedAt: campaigns.updatedAt,
 };

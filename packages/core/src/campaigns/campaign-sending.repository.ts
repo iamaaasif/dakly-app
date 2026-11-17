@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 
 import type { recipientSkipReasons, recipientStatuses } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -170,4 +170,70 @@ export class CampaignSendingRepository {
     );
     return row!;
   }
+
+  // At most one refresh an interval: the guarded stamp lets one caller through, which counts.
+  async refreshCounts(
+    storeId: string,
+    id: string,
+    { now, countedBefore }: { now: Date; countedBefore: Date | null },
+  ): Promise<void> {
+    await this.database.forStore(storeId, async (tx) => {
+      const stamped = await tx
+        .update(campaigns)
+        .set({ countsAt: now })
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            eq(campaigns.id, id),
+            countedBefore
+              ? or(isNull(campaigns.countsAt), lte(campaigns.countsAt, countedBefore))
+              : undefined,
+          ),
+        )
+        .returning({ id: campaigns.id });
+      if (stamped.length === 0) return;
+      const [counts] = await tx
+        .select({
+          skippedCount: countOf(['skipped']),
+          sentCount: countOf(['sent', 'delivered', 'read']),
+          deliveredCount: countOf(['delivered', 'read']),
+          readCount: countOf(['read']),
+          failedCount: countOf(['failed']),
+          tappedCount: sql<number>`count(${campaignRecipients.tappedAt})`.mapWith(Number),
+        })
+        .from(campaignRecipients)
+        .where(recipientsWhere(storeId, id));
+      await tx
+        .update(campaigns)
+        .set(counts!)
+        .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)));
+    });
+  }
+
+  // Waits for a claim in progress, so a cancel sees every recipient the sender has claimed.
+  async lockStarted(
+    storeId: string,
+    id: string,
+  ): Promise<(SendingCampaign & { status: 'sending' | 'paused' }) | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ ...sendingColumns, status: sql<'sending' | 'paused'>`${campaigns.status}` })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            eq(campaigns.id, id),
+            inArray(campaigns.status, ['sending', 'paused']),
+          ),
+        )
+        .for('update'),
+    );
+    return row;
+  }
+}
+
+function countOf(statuses: RecipientStatus[]) {
+  return sql<number>`count(*) filter (where ${inArray(campaignRecipients.status, statuses)})`.mapWith(
+    Number,
+  );
 }

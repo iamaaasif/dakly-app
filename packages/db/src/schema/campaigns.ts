@@ -89,8 +89,8 @@ export const whatsappTemplates = pgTable(
   ],
 );
 
-// One message to a frozen audience, once, after approval. Counts are roll-ups refreshed every
-// minute from campaign_recipients so the list page never counts recipients.
+// One message to a frozen audience, once, after approval. Counts are roll-ups refreshed at most
+// every 10 seconds from campaign_recipients so the list page never counts recipients.
 export const campaigns = pgTable(
   'campaigns',
   {
