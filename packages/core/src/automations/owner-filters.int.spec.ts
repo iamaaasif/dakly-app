@@ -121,11 +121,15 @@ describe('automation filters without RLS assistance', () => {
       sentAt: claimedAt,
     } as const;
     await runs.insertStep(f.a, runId, contactId, sending);
-    expect(await runs.hasSendingStep(f.b, runId, 'offer')).toBe(false);
+    expect(await runs.findSendingStep(f.b, runId, 'offer')).toBeUndefined();
     await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
-    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(true);
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
+      sentAt: claimedAt,
+      optOutCode: null,
+      destination: null,
+    });
     await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
-    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(false);
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toBeUndefined();
     expect(await runs.moveRun(f.a, claim, { status: 'done' })).toBe(true);
   });
 });

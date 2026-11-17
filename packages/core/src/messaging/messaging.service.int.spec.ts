@@ -156,6 +156,46 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(sent).toMatchObject({ parts: 2, credits: 2 });
   });
 
+  it('refuses before the provider a destination the contact no longer has', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Sumi Akter', phone: '01712345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const changed = messaging.send(storeA, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `test-${contact.id}`,
+      destination: '01712345610',
+    });
+
+    expect(await errorCode(changed)).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a phone the contact did not have when the send was decided', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Rina Begum', phone: '01712345611' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const changed = messaging.send(storeA, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `test-${contact.id}`,
+      destination: null,
+    });
+
+    expect(await errorCode(changed)).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
   it('sends one SMS for the same operation key twice', async () => {
     const contact = await contacts.create(
       storeA,

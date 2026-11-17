@@ -53,10 +53,19 @@ export type NewRunStep = {
   outcome: string;
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
+  optOutCode?: string | null;
+  destination?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
 };
-export type RunStepChange = { outcome: string; providerMessageId?: string; sentAt?: Date };
+export type RunStepChange = {
+  outcome: string;
+  providerMessageId?: string;
+  skipReason?: SkipReason;
+  sentAt?: Date;
+};
+// A send handed to the provider whose outcome is not known yet.
+export type SendingStep = { sentAt: Date; optOutCode: string | null; destination: string | null };
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -126,11 +135,18 @@ export class AutomationRunsRepository {
     return rows.map((row) => row.stepKey);
   }
 
-  // A send handed to the provider whose outcome is not known yet.
-  async hasSendingStep(storeId: string, runId: string, stepKey: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
+  async findSendingStep(
+    storeId: string,
+    runId: string,
+    stepKey: string,
+  ): Promise<SendingStep | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: automationRunSteps.id })
+        .select({
+          sentAt: automationRunSteps.sentAt,
+          optOutCode: automationRunSteps.optOutCode,
+          destination: automationRunSteps.destination,
+        })
         .from(automationRunSteps)
         .where(
           and(
@@ -142,7 +158,7 @@ export class AutomationRunsRepository {
         )
         .limit(1),
     );
-    return rows.length > 0;
+    return row?.sentAt ? { ...row, sentAt: row.sentAt } : undefined;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {

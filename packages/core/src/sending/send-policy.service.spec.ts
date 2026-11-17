@@ -207,6 +207,22 @@ describe('SendPolicyService', () => {
     expect(await service.check(STORE_ID, request({ at: new Date(at) }))).toEqual(decision);
   });
 
+  it('rechecks consent and quiet hours but not the cap before a resend', async () => {
+    sends = [{ channel: 'sms', sentAt: new Date(NOON_DHAKA.getTime() - HOUR) }];
+    expect(await service.recheck(STORE_ID, request())).toEqual({ action: 'send' });
+    expect(
+      await service.recheck(STORE_ID, request({ at: new Date('2026-11-16T20:00:00Z') })),
+    ).toEqual({
+      action: 'defer',
+      until: new Date('2026-11-17T03:00:00Z'),
+    });
+    consent = 'withdrawn';
+    expect(await service.recheck(STORE_ID, request())).toEqual({
+      action: 'skip',
+      reason: 'no_consent',
+    });
+  });
+
   it('checks quiet hours before the cap', async () => {
     sends.push(sentBefore(1));
 
