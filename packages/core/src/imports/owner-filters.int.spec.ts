@@ -60,4 +60,17 @@ describe('import filters without RLS assistance', () => {
     });
     expect((await f.row('imports', importB)).status).toBe('uploaded');
   });
+
+  it('marks an import undone only in the selected store and only once', async () => {
+    const importId = randomUUID();
+    await repository.createCustomerImport(f.a, importId, upload(f.a), f.userA);
+    expect(await repository.markUndone(f.a, importId)).toBe(false);
+    await f.connection.pool.query("update imports set status='done' where id=$1", [importId]);
+
+    expect(await repository.markUndone(f.b, importId)).toBe(false);
+    expect((await f.row('imports', importId)).status).toBe('done');
+    expect(await repository.markUndone(f.a, importId)).toBe(true);
+    expect(await repository.markUndone(f.a, importId)).toBe(false);
+    expect((await f.row('imports', importId)).status).toBe('undone');
+  });
 });

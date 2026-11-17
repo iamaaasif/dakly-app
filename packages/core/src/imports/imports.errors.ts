@@ -18,6 +18,14 @@ const IMPORT_ERRORS = {
   IMPORT_FILE_TOO_LARGE: { status: 400, message: 'A file can be at most 10 MB' },
   IMPORT_NOT_FOUND: { status: 404, message: 'Import not found' },
   IMPORT_ALREADY_STARTED: { status: 409, message: 'This import has already started' },
+  IMPORT_NOT_UNDOABLE: {
+    status: 409,
+    message: 'Only an import that has finished can be undone, and only once',
+  },
+  IMPORT_UNDO_EXPIRED: {
+    status: 409,
+    message: 'An import can be undone for 7 days after it finishes',
+  },
 } as const satisfies ErrorCatalog;
 
 export function importError(code: keyof typeof IMPORT_ERRORS): AppError {

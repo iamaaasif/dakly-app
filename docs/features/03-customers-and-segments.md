@@ -104,8 +104,8 @@ The web app has two customer screens.
   export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
   tabs, and the current consent answer per channel.
 
-Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts. Undo
-comes in the next part.
+Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts, and can
+undo the contacts it added.
 
 - Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
@@ -154,7 +154,17 @@ comes in the next part.
   the upload.
 - Imported contacts do not emit `contact.created`, so a large import does not start welcome
   workflows for everyone in the file. This is the owner's decision, not missing work.
-- Not built yet: undo, the import screens, a preview before start, and upload scanning
+- Undo: `POST /imports/:importId/undo` (Edit Customers) works on a `done` import for 7 days
+  after it finished. A later call fails with `IMPORT_UNDO_EXPIRED`, and an import that is not
+  `done`, or was already undone, fails with `IMPORT_NOT_UNDOABLE`. It moves the import to
+  `undone` and soft deletes, through the contacts service, the contacts whose `import_id` is
+  this import and whose `updated_at` is not after the import finished. A contact edited since
+  stays, and so does one the import only updated, because that one has no `import_id`. It runs
+  in one short transaction, since a file holds at most 50,000 rows and the work is one indexed
+  statement with no vendor call. Consent rows the import wrote are not touched: they are
+  append-only, and a deleted contact is never messaged. The phone of a removed contact can be
+  imported again. Undo emits no event.
+- Not built yet: the import screens, a preview before start, and upload scanning
   (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,

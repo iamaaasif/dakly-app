@@ -130,4 +130,36 @@ describe('contact filters without RLS assistance', () => {
     expect(await f.row('contacts', added!.id)).toMatchObject({ name: 'শাহনাজ', tags: ['ঈদ'] });
     expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
   });
+
+  it('soft deletes a contact an import created only in the selected store and only if unedited', async () => {
+    const importId = randomUUID();
+    const fileId = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileId, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importId, f.a, fileId],
+    );
+    const [untouched, edited] = await repository.insertImported(f.a, importId, [
+      { phone: '01711000021' },
+      { phone: '01711000022' },
+    ]);
+    const finishedAt = new Date();
+    await f.connection.pool.query(
+      "update contacts set updated_at = $2::timestamptz + interval '1 minute' where id = $1",
+      [edited!.id, finishedAt],
+    );
+
+    expect(await repository.softDeleteCreatedByImport(f.b, importId, finishedAt, new Date())).toBe(
+      0,
+    );
+    expect(await f.row('contacts', untouched!.id)).toMatchObject({ deleted_at: null });
+    expect(await repository.softDeleteCreatedByImport(f.a, importId, finishedAt, new Date())).toBe(
+      1,
+    );
+    expect((await f.row('contacts', untouched!.id)).deleted_at).not.toBeNull();
+    expect((await f.row('contacts', edited!.id)).deleted_at).toBeNull();
+  });
 });

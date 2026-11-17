@@ -50,6 +50,17 @@ export class ImportsController {
     return this.importsService.start(storeId, importId, input, { kind: 'user', userId });
   }
 
+  @Post(':importId/undo')
+  @RequirePermission('customers.edit')
+  @HttpCode(200)
+  undo(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('importId', ParseUUIDPipe) importId: string,
+  ): Promise<ImportResponse> {
+    return this.importsService.undo(storeId, importId, { kind: 'user', userId });
+  }
+
   @Get(':importId')
   @RequirePermission('customers.view')
   get(

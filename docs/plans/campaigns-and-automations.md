@@ -35,15 +35,6 @@ Until Orders exists, segments, triggers and results have no order fields. Each t
 
 Each task is one PR under about 500 lines, in this order, on the branch named under its heading. The order of work is in [customers-to-automations.md](customers-to-automations.md). "Tests" lists what the reviewer looks for. Every PR also sets its row in [tasks.md](../tasks.md) and updates the feature doc when behaviour changes.
 
-### Group 1: who to send to
-
-### CUS-8 · Customer import
-
-Branch: `feat/cus-8-customer-import`
-
-- Scope: CSV and XLSX upload to R2, preview of the first 20 rows, column mapping, consent evidence per channel (the shop must state where consent came from, or the rows import with no marketing consent), row errors in a downloadable report, undo within 7 days for contacts the import created. An `imports` row tracks each run; the work runs in a bulk job in batches of 500.
-- Tests (integration): bad phones are reported, not dropped silently; an existing phone updates allowed fields and never changes consent without evidence; undo removes only contacts the import created and nothing a later edit touched; a 10,000-row file finishes in batches without one long transaction.
-
 ### Group 2: campaigns
 
 ### CAMP-9 · Final send checks

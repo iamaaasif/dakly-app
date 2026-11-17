@@ -13,6 +13,7 @@ import {
   inArray,
   isNull,
   like,
+  lte,
   ne,
   not,
   or,
@@ -300,6 +301,30 @@ export class ContactsRepository {
         .returning({ id: contacts.id }),
     );
     return rows.length > 0;
+  }
+
+  // A contact edited after `createdUntil` is the shop's now, so it stays.
+  async softDeleteCreatedByImport(
+    storeId: string,
+    importId: string,
+    createdUntil: Date,
+    deletedAt: Date,
+  ): Promise<number> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contacts)
+        .set({ deletedAt })
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.importId, importId),
+            isNull(contacts.deletedAt),
+            lte(contacts.updatedAt, createdUntil),
+          ),
+        )
+        .returning({ id: contacts.id }),
+    );
+    return rows.length;
   }
 
   async countMatching(storeId: string, rules: SegmentRules): Promise<number> {

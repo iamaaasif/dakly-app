@@ -231,4 +231,88 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     expect(result.status).toBe('failed');
     expect(await report(result.reportUrl)).toContain('The file was not uploaded');
   });
+
+  describe('undo', () => {
+    const lines = (...rows: string[]) => ['Name,Mobile,Email,Tags', ...rows].join('\n');
+
+    async function deletedAt(contactId: string) {
+      const result = await admin.pool.query('select deleted_at from contacts where id=$1', [
+        contactId,
+      ]);
+      return result.rows[0].deleted_at as Date | null;
+    }
+
+    it('removes the contacts the import created, keeps one edited after it finished and any it only updated', async () => {
+      const created = phone();
+      const editedLater = phone();
+      const known = phone();
+      const leadId = await existingLead(known);
+      const { importId } = await runImport(
+        lines(`রাবেয়া,${created},,`, `করিম,${editedLater},,`, `সুমি,${known},,`),
+      );
+      const createdId = (await contactByPhone(created)).id;
+      const editedId = (await contactByPhone(editedLater)).id;
+      await admin.pool.query(
+        "update contacts set name='নতুন নাম', updated_at=now() + interval '1 hour' where id=$1",
+        [editedId],
+      );
+
+      const result = await service.undo(storeId, importId, owner);
+
+      expect(result.status).toBe('undone');
+      expect(await deletedAt(createdId)).not.toBeNull();
+      expect(await deletedAt(editedId)).toBeNull();
+      expect(await deletedAt(leadId)).toBeNull();
+      expect(await contactByPhone(known)).toMatchObject({ name: 'সুমি', import_id: null });
+      expect(await consentRows(createdId)).toHaveLength(2);
+    });
+
+    it('frees the phone of a removed contact for a new import', async () => {
+      const value = phone();
+      const { importId } = await runImport(lines(`রাবেয়া,${value},,`));
+      await service.undo(storeId, importId, owner);
+
+      const again = await runImport(lines(`রাবেয়া,${value},,`));
+
+      expect(again.result).toMatchObject({ status: 'done', rowsAdded: 1 });
+    });
+
+    it('refuses a second undo and leaves the first result', async () => {
+      const { importId } = await runImport(lines(`রাবেয়া,${phone()},,`));
+      await service.undo(storeId, importId, owner);
+
+      await expect(service.undo(storeId, importId, owner)).rejects.toMatchObject({
+        code: 'IMPORT_NOT_UNDOABLE',
+      });
+      expect((await service.get(storeId, importId)).status).toBe('undone');
+    });
+
+    it('refuses an import that has not finished', async () => {
+      const { importId } = await service.createCustomerImport(storeId, { sizeBytes: 40 }, owner);
+      await service.start(
+        storeId,
+        importId,
+        { mapping, duplicateMode: 'update', consentEvidence: {} },
+        owner,
+      );
+
+      await expect(service.undo(storeId, importId, owner)).rejects.toMatchObject({
+        code: 'IMPORT_NOT_UNDOABLE',
+      });
+    });
+
+    it('refuses an import that finished more than 7 days ago and removes nothing', async () => {
+      const value = phone();
+      const { importId } = await runImport(lines(`রাবেয়া,${value},,`));
+      await admin.pool.query(
+        "update imports set finished_at=now() - interval '7 days 1 minute' where id=$1",
+        [importId],
+      );
+
+      await expect(service.undo(storeId, importId, owner)).rejects.toMatchObject({
+        code: 'IMPORT_UNDO_EXPIRED',
+      });
+      expect(await deletedAt((await contactByPhone(value)).id)).toBeNull();
+    });
+  });
 });

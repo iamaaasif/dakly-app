@@ -38,6 +38,7 @@ type ReportLine = {
 const LINK_SECONDS = 15 * 60;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
+const UNDO_MILLISECONDS = FILE_DAYS * 24 * 60 * 60 * 1000;
 const BATCH_ROWS = 500;
 const COUNT_FOR_OUTCOME = {
   added: 'rowsAdded',
@@ -95,6 +96,21 @@ export class ImportsService {
         occurredAt: now.toISOString(),
         payload: { importId },
       });
+    });
+    return this.get(storeId, importId);
+  }
+
+  // Up to 50,000 contacts go in one indexed statement inside one short transaction, with no
+  // vendor call, so this needs no job. Contacts the import only updated have no import_id.
+  async undo(storeId: string, importId: string, actor: Actor): Promise<ImportResponse> {
+    await this.transaction.run(storeId, async () => {
+      const found = await this.findImport(storeId, importId);
+      if (found.status !== 'done') throw importError('IMPORT_NOT_UNDOABLE');
+      if (this.clock.now().getTime() > found.finishedAt!.getTime() + UNDO_MILLISECONDS)
+        throw importError('IMPORT_UNDO_EXPIRED');
+      if (!(await this.repository.markUndone(storeId, importId)))
+        throw importError('IMPORT_NOT_UNDOABLE');
+      await this.contacts.removeCreatedByImport(storeId, importId, found.finishedAt!, actor);
     });
     return this.get(storeId, importId);
   }

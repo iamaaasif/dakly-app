@@ -38,6 +38,7 @@ const importColumns = {
   duplicateMode: imports.duplicateMode,
   consentEvidence: sql<ImportConsentEvidence | null>`${imports.consentEvidence}`,
   createdByUserId: imports.createdByUserId,
+  finishedAt: imports.finishedAt,
   rowsTotal: imports.rowsTotal,
   rowsAdded: imports.rowsAdded,
   rowsUpdated: imports.rowsUpdated,
@@ -54,6 +55,7 @@ export type Import = {
   duplicateMode: ImportDuplicateMode;
   consentEvidence: ImportConsentEvidence | null;
   createdByUserId: string | null;
+  finishedAt: Date | null;
   uploadKey: string;
   reportKey: string | null;
 } & { [Count in keyof ImportCounts]: number | null };
@@ -150,6 +152,18 @@ export class ImportsRepository {
         })
         .where(guard(storeId, importId, 'importing'));
     });
+  }
+
+  // Only a finished import moves to undone, so a second undo changes nothing.
+  async markUndone(storeId: string, importId: string): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ status: 'undone' })
+        .where(guard(storeId, importId, 'done'))
+        .returning({ id: imports.id }),
+    );
+    return rows.length > 0;
   }
 }
 

@@ -151,6 +151,21 @@ export class ContactsService {
       throw contactError('CONTACT_NOT_FOUND');
   }
 
+  // The contacts an import added and nobody has edited since it finished.
+  removeCreatedByImport(
+    storeId: string,
+    importId: string,
+    finishedAt: Date,
+    _actor: Actor,
+  ): Promise<number> {
+    return this.contactsRepository.softDeleteCreatedByImport(
+      storeId,
+      importId,
+      finishedAt,
+      this.clock.now(),
+    );
+  }
+
   // A deleted contact reads as undefined.
   findRecipient(storeId: string, id: string): Promise<ContactRecipient | undefined> {
     return this.contactsRepository.findRecipient(storeId, id);
