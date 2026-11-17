@@ -66,12 +66,13 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 
 ## M2. Shared plumbing
 
-| ID     | Task                                                    | Status | Depends     | PR            | Notes                                                                |
-| ------ | ------------------------------------------------------- | ------ | ----------- | ------------- | -------------------------------------------------------------------- |
-| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Done   | DB-2, ACC-3 | #83, #87, #90 | Q10                                                                  |
-| HOME-2 | Web: notification bell and list                         | Done   | HOME-1      | #85, #92      |                                                                      |
-| PAY-1  | Usage service: units, allowances, usage events          | Done   | ACC-3       | #84           | AI top-ups not drawn yet                                             |
-| PAY-11 | Wallets: reserve, release, charge and staff credit      | Done   | ADM-6       | #82, #86      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8 |
+| ID     | Task                                                    | Status    | Depends     | PR            | Notes                                                                              |
+| ------ | ------------------------------------------------------- | --------- | ----------- | ------------- | ---------------------------------------------------------------------------------- |
+| HOME-1 | Notifications: table, dedupe, Server-Sent Events stream | Done      | DB-2, ACC-3 | #83, #87, #90 | Q10                                                                                |
+| HOME-2 | Web: notification bell and list                         | Done      | HOME-1      | #85, #92      |                                                                                    |
+| PAY-1  | Usage service: units, allowances, usage events          | Done      | ACC-3       | #84           | AI top-ups not drawn yet                                                           |
+| PAY-11 | Wallets: reserve, release, charge and staff credit      | Done      | ADM-6       | #82, #86      | [plan](plans/plumbing-channels-contacts.md); P4 credits before PAY-8               |
+| FILE-1 | R2 storage driver with presigned PUT and GET            | In review |             |               | CUS-8 part 2 and PROD-3 depend on it; SeaweedFS stands in for R2 locally and in CI |
 
 ## M3. Channels and customers
 
@@ -99,6 +100,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | CUS-6   | Segments: condition tree, compiler, counts                                                          | Done        | CUS-2                          | #100, #101             | Order fields wait for CUS-3                                                                                                                        |
 | CUS-7   | Web: Segments list and builder                                                                      | Done        | CUS-6, WEB-2                   | #109, #111             | Ready-made segments wait for CUS-3; duplicate, reachable counts and the 10-customer preview not built                                              |
 | CUS-8   | Customer CSV/XLSX import with mapping, consent evidence, row errors and undo                        | In progress | CUS-1, CUS-2                   | #104                   | Existing phone: update allowed fields, consent only with evidence (D42)                                                                            |
+| CUS-16  | XLSX import and export                                                                              | Todo        | CUS-8                          |                        | XLSX stays in release 1; CUS-8 reads CSV only; CUS-R3 exports .xlsx                                                                                |
 | MSG-1   | Core send step for SMS: `MessagingService.send` with the SMS driver and part counting               | Done        | CUS-1                          | #94                    | D40; CHAT-2 adds Messenger and receipts                                                                                                            |
 | CAMP-9  | Final send checks: consent, window, block, quiet hours, frequency cap                               | Done        | CUS-2, PAY-11                  | #98                    | [plan](plans/campaigns-and-automations.md)                                                                                                         |
 | CAMP-10 | Tracked links and the SMS opt-out page                                                              | Done        | CUS-2, DB-2                    | #106                   | D31 visitor hash only                                                                                                                              |
@@ -125,12 +127,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M5. Products
 
-| ID     | Task                                   | Status | Depends       | PR  | Notes |
-| ------ | -------------------------------------- | ------ | ------------- | --- | ----- |
-| PROD-1 | Products, options, variants            | Todo   | ACC-3         |     |       |
-| PROD-2 | Stock ledger and `moveStock`           | Todo   | PROD-1        |     |       |
-| PROD-3 | Photo upload to R2 with presigned URLs | Todo   | PROD-1        |     |       |
-| PROD-4 | Web: products list and product editor  | Todo   | PROD-2, WEB-2 |     |       |
+| ID     | Task                                   | Status | Depends        | PR  | Notes |
+| ------ | -------------------------------------- | ------ | -------------- | --- | ----- |
+| PROD-1 | Products, options, variants            | Todo   | ACC-3          |     |       |
+| PROD-2 | Stock ledger and `moveStock`           | Todo   | PROD-1         |     |       |
+| PROD-3 | Photo upload to R2 with presigned URLs | Todo   | PROD-1, FILE-1 |     |       |
+| PROD-4 | Web: products list and product editor  | Todo   | PROD-2, WEB-2  |     |       |
 
 ## M6. Orders
 
