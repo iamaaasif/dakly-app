@@ -71,10 +71,25 @@ describe('LinksService', () => {
 
     expect(saved.map((row) => row.kind)).toEqual(['sms_opt_out', 'redirect']);
     expect(created).toEqual([
-      { id: saved[1]!.id, url: `https://links.dakly.test/${saved[1]!.code}` },
-      { id: saved[0]!.id, url: `https://links.dakly.test/s/${saved[0]!.code}` },
+      {
+        id: saved[1]!.id,
+        code: saved[1]!.code,
+        url: `https://links.dakly.test/${saved[1]!.code}`,
+      },
+      {
+        id: saved[0]!.id,
+        code: saved[0]!.code,
+        url: `https://links.dakly.test/s/${saved[0]!.code}`,
+      },
     ]);
     expect(saved.every((row) => /^[0-9A-Za-z]{8}$/.test(row.code))).toBe(true);
+  });
+
+  it('builds the same opt-out address again from a kept code', async () => {
+    const { service } = serviceWith(() => false);
+    const [, optOut] = await service.create(STORE_ID, links, system);
+
+    expect(service.optOutUrl(optOut!.code)).toBe(optOut!.url);
   });
 
   it('gives up when every code it tries is taken', async () => {

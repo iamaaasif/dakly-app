@@ -3,50 +3,55 @@ import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
+import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { LinksService, TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
+import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
+import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError } from '../platform/errors/app-error';
+import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
-import { SendPolicyService } from '../sending/send-policy.service';
+import { type SendDecision, SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
+import { WalletService } from '../wallets/wallet.service';
 import {
   AutomationRunsRepository,
   type ClaimedRun,
   type DueRun,
-  type NewRunStep,
-  type RunChange,
   type RunClaim,
 } from './automation-runs.repository';
+import {
+  type CreditSettlement,
+  type Delivery,
+  endWithUnknownOutcome,
+  exited,
+  type GateResult,
+  failed,
+  goOn,
+  holdOrEnd,
+  ifNotReachable,
+  messageBody,
+  noCredits,
+  operationKey,
+  type RunFacts,
+  type SendStep,
+  type StepResult,
+} from './automation-step-rules';
 import { wakeTime } from './automation-waits';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
 // And at most this many of one store's runs, so a backlog cannot hold back other stores.
 const CLAIMS_PER_STORE = 100;
-// Step jobs that started on a claim and committed nothing: a job that keeps failing.
-const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 const system = { kind: 'system' } as const;
 
 type Condition = AutomationGraph['workflowFilters'][number];
 type ExitCondition = AutomationGraph['exitConditions'][number];
-// What the person has done in this run so far, read once per step.
-type RunFacts = {
-  storeId: string;
-  runId: string;
-  contactId: string;
-  tags: string[];
-  tappedStepKeys: string[];
-};
 type PathChoice = { outcome: string; next: string };
-// The run's next state, the step row and a tag change, written together under the claim, and the
-// next step's claim when the run goes straight on.
-type StepResult = {
-  run: RunChange;
-  step?: NewRunStep;
-  tagChange?: Parameters<ContactsService['changeTag']>[2];
-  next?: Omit<RunClaim, 'runId'>;
-};
+const NO_ANSWER = 'The SMS provider did not answer';
 
 @Injectable()
 export class AutomationRunsService {
@@ -58,6 +63,9 @@ export class AutomationRunsService {
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(MessagingService) private readonly messaging: MessagingService,
+    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(WalletService) private readonly wallets: WalletService,
   ) {}
 
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
@@ -79,22 +87,36 @@ export class AutomationRunsService {
     const claim = { ...queued, claimedAt: started.claimedAt };
     const run = { ...found, ...started };
     const result = await this.runStep(storeId, claim, run);
+    if (!result) return undefined;
     // Every committed step starts the count of claims without progress again.
     const change = { attempts: 0, lastError: null, ...result.run };
     const isMoved = await this.transaction.run(storeId, async () => {
-      if (!(await this.repository.moveRun(storeId, claim, change))) return false;
+      if (!(await this.repository.moveRun(storeId, result.claim ?? claim, change))) return false;
       if (result.step)
         await this.repository.insertStep(storeId, claim.runId, run.contactId, result.step);
+      if (result.stepChange)
+        await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
         await this.contacts.changeTag(storeId, run.contactId, result.tagChange, system);
+      if (result.credits) await this.settleCredits(storeId, claim, result.credits);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
   }
 
-  private async runStep(storeId: string, claim: RunClaim, run: ClaimedRun): Promise<StepResult> {
+  private async runStep(
+    storeId: string,
+    claim: RunClaim,
+    run: ClaimedRun,
+  ): Promise<StepResult | undefined> {
     const now = this.clock.now();
+    const step = run.graph.steps[claim.stepKey]!;
+    const isSending =
+      step.kind === 'send' &&
+      (await this.repository.hasSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
+    // A send handed to the provider by an earlier claim is not sent again; its run ends.
+    if (isSending) return endWithUnknownOutcome(held ?? failed(NO_ANSWER, now));
     if (held) return held;
     const facts: RunFacts = {
       storeId,
@@ -102,10 +124,11 @@ export class AutomationRunsService {
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
+      wakeAt: run.wakeAt,
     };
     const exitReason = await this.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
-    return this.runKind(claim, run.graph.steps[claim.stepKey]!, facts, now);
+    return this.runKind(claim, step, facts, now);
   }
 
   private async runKind(
@@ -113,7 +136,7 @@ export class AutomationRunsService {
     step: AutomationStep,
     facts: RunFacts,
     now: Date,
-  ): Promise<StepResult> {
+  ): Promise<StepResult | undefined> {
     const { stepKey } = claim;
     switch (step.kind) {
       case 'wait': {
@@ -145,7 +168,7 @@ export class AutomationRunsService {
         };
       }
       case 'send':
-        return failed('This step cannot run yet', now);
+        return this.startSend(claim, step, facts, now);
       case 'action':
         return runAction(stepKey, step, now);
       case 'exit':
@@ -205,6 +228,163 @@ export class AutomationRunsService {
         return false;
     }
   }
+
+  // The gate decides, the opt-out link is made and the send row is written in one short
+  // transaction that also renews the claim, so the frequency cap counts this send before another
+  // check for the contact can run.
+  private async startSend(
+    claim: RunClaim,
+    step: SendStep,
+    facts: RunFacts,
+    now: Date,
+  ): Promise<StepResult | undefined> {
+    const { storeId, contactId } = facts;
+    // Publish refuses it; a version published before that refusal still fails here.
+    if (step.reviewBeforeSending) return failed('Review before sending is not available yet', now);
+    const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
+    // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
+    if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
+      return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
+    const renewed = { ...claim, claimedAt: now };
+    const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
+      const renewal = { status: 'running', claimedAt: now } as const;
+      if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
+      // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
+      const decision: SendDecision = step.channels.includes('sms')
+        ? await this.sendPolicy.check(storeId, {
+            contactId,
+            channel: 'sms',
+            category: step.category,
+            at: now,
+          })
+        : { action: 'skip', reason: 'window_closed' };
+      if (decision.action !== 'send') return { decision };
+      const body = await this.writeSend({ storeId, claim, contactId, step }, now);
+      if (body === undefined) return { decision: noCredits };
+      return { decision, body };
+    });
+    // A pause, stop or archive, or another claim, came first: nothing was reserved.
+    if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
+    const { decision } = started;
+    if ('body' in started)
+      return this.deliver({ storeId, claim: renewed, contactId, step, body: started.body }, now);
+    if (decision.action === 'defer')
+      return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
+    if (decision.action === 'skip')
+      return {
+        ...ifNotReachable(step, now),
+        claim: renewed,
+        step: { ...row, outcome: 'skipped', skipReason: decision.reason },
+      };
+    return undefined;
+  }
+
+  private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
+    const run = await this.repository.findRun(storeId, claim.runId);
+    return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
+  }
+
+  // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
+  // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
+  private async writeSend(
+    { storeId, claim, contactId, step }: Omit<Delivery, 'body'>,
+    now: Date,
+  ): Promise<string | undefined> {
+    const isMarketing = step.category === 'marketing';
+    const standIn = isMarketing
+      ? this.links.optOutUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH))
+      : undefined;
+    if (!(await this.reserveCredits(storeId, claim, countSmsParts(messageBody(step, standIn)))))
+      return undefined;
+    const id = newId();
+    // CAMP-R4: every marketing SMS ends with its one-tap opt-out link.
+    const [optOut] = isMarketing
+      ? await this.links.create(
+          storeId,
+          [{ kind: 'sms_opt_out', sourceType: 'automation', sourceId: id, contactId }],
+          system,
+        )
+      : [];
+    await this.repository.insertStep(storeId, claim.runId, contactId, {
+      stepKey: claim.stepKey,
+      kind: 'send',
+      category: step.category,
+      id,
+      outcome: 'sending',
+      channel: 'sms',
+      sentAt: now,
+    });
+    return messageBody(step, optOut?.url);
+  }
+
+  // A balance that changes between the check and the write fails the transaction instead; the run
+  // is claimed again later.
+  private async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
+    try {
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity,
+        idempotencyKey: operationKey(claim),
+        actor: system,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return false;
+      throw error;
+    }
+  }
+
+  private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
+    const key = operationKey(claim);
+    // Every send row was written with its reservation, in the same transaction.
+    const reservationId = (await this.wallets.findByIdempotencyKey(storeId, key))!.entryId;
+    if (credits.settle === 'charge')
+      await this.wallets.charge(storeId, {
+        reservationId,
+        quantity: credits.quantity,
+        idempotencyKey: `${key}:charge`,
+        actor: system,
+      });
+    else
+      await this.wallets.release(storeId, {
+        reservationId,
+        idempotencyKey: `${key}:release`,
+        actor: system,
+      });
+  }
+
+  // Called with no transaction open, with the operation key the provider deduplicates on.
+  private async deliver(
+    { storeId, claim, contactId, step, body }: Delivery,
+    now: Date,
+  ): Promise<StepResult> {
+    try {
+      const message = {
+        channel: 'sms',
+        contactId,
+        body,
+        operationKey: operationKey(claim),
+      } as const;
+      const { providerMessageId, credits } = await this.messaging.send(storeId, message);
+      return {
+        ...goOn(step.next, now),
+        claim,
+        stepChange: { outcome: 'sent', providerMessageId, sentAt: now },
+        credits: { settle: 'charge', quantity: credits },
+      };
+    } catch (error) {
+      // MessagingService refuses before it calls the provider, so a refusal never reached it.
+      if (error instanceof AppError)
+        return {
+          ...failed(error.message, now),
+          claim,
+          stepChange: { outcome: 'failed' },
+          credits: { settle: 'release' },
+        };
+      // Any other error may come after the provider took the message.
+      return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim });
+    }
+  }
 }
 
 // Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
@@ -233,17 +413,13 @@ function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   return false;
 }
 
-// Checked before every step.
-function holdOrEnd(run: ClaimedRun, now: Date): StepResult | undefined {
-  if (run.attempts > MAX_CLAIMS_WITHOUT_PROGRESS)
-    return failed('This step failed too many times in a row', now);
-  // Pausing holds everyone where they are; the sweep skips the run until the workflow is enabled.
-  if (run.automationStatus === 'paused')
-    return { run: { status: 'waiting', wakeAt: run.wakeAt ?? now } };
-  // "Stop the old version" and archiving both remove everyone still inside at their next step.
-  if (run.isVersionStopped) return exited('version_stopped', now);
-  if (run.automationStatus === 'archived') return exited('archived', now);
-  return undefined;
+// A hash of the run and the step, so a retry takes the same path and two splits are independent.
+// The graph schema makes the percents add up to 100, so the last path takes the rest.
+function randomPath(runId: string, stepKey: string, paths: { percent: number; next: string }[]) {
+  const bucket = createHash('sha256').update(`${runId}:${stepKey}`).digest().readUInt32BE(0) % 100;
+  let upTo = 0;
+  const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
+  return { outcome: `path_${index + 1}`, next: paths[index]!.next };
 }
 
 function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
@@ -252,29 +428,4 @@ function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
     run.currentStepKey === claim.stepKey &&
     run.claimedAt?.getTime() === claim.claimedAt.getTime()
   );
-}
-
-// The next step's job takes over the claim with a fresh time, which also renews the lease.
-function goOn(next: string, now: Date) {
-  return {
-    run: { status: 'running', currentStepKey: next, claimedAt: now },
-    next: { stepKey: next, claimedAt: now },
-  } as const;
-}
-
-function exited(exitReason: string, now: Date) {
-  return { run: { status: 'exited', exitReason, finishedAt: now } } as const;
-}
-
-function failed(reason: string, now: Date) {
-  return { run: { status: 'failed', lastError: reason, finishedAt: now } } as const;
-}
-
-// A hash of the run and the step, so a retry takes the same path and two splits are independent.
-// The graph schema makes the percents add up to 100, so the last path takes the rest.
-function randomPath(runId: string, stepKey: string, paths: { percent: number; next: string }[]) {
-  const bucket = createHash('sha256').update(`${runId}:${stepKey}`).digest().readUInt32BE(0) % 100;
-  let upTo = 0;
-  const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
-  return { outcome: `path_${index + 1}`, next: paths[index]!.next };
 }
