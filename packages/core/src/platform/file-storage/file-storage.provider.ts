@@ -1,7 +1,7 @@
 import { S3FileStorageDriver } from '@dakly/providers/file-storage/s3/s3-file-storage-driver';
 
-import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
+import { Clock } from '../clock';
+import { loadEnv } from '../config/env';
 
 export const FILE_STORAGE_DRIVER = Symbol('FILE_STORAGE_DRIVER');
 
