@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, lt, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
@@ -8,9 +8,11 @@ import type {
   ImportDuplicateMode,
   ImportStatus,
 } from '@dakly/contracts/contacts';
+import type { Database } from '@dakly/db/client';
 import { imports } from '@dakly/db/schema/imports';
 import { files } from '@dakly/db/schema/platform';
 
+import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type ImportCounts = {
@@ -24,9 +26,13 @@ export type ImportCounts = {
 export type NewImportFile = {
   id: string;
   objectKey: string;
+  contentType: string;
   sizeBytes: number;
+  status: 'pending' | 'ready';
   expiresAt: Date;
 };
+
+export type ImportResult = { status: 'done' | 'failed'; counts?: ImportCounts; finishedAt: Date };
 
 const uploads = alias(files, 'uploads');
 const reports = alias(files, 'reports');
@@ -65,7 +71,10 @@ export type StartedImport = Pick<
 
 @Injectable()
 export class ImportsRepository {
-  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+  constructor(
+    @Inject(TenantDatabase) private readonly database: TenantDatabase,
+    @Inject(DATABASE) private readonly global: Database,
+  ) {}
 
   createCustomerImport(
     storeId: string,
@@ -74,13 +83,9 @@ export class ImportsRepository {
     createdByUserId: string | null,
   ): Promise<void> {
     return this.database.forStore(storeId, async (tx) => {
-      await tx.insert(files).values({
-        ...upload,
-        storeId,
-        purpose: 'import',
-        contentType: 'text/csv',
-        uploadedByUserId: createdByUserId,
-      });
+      await tx
+        .insert(files)
+        .values({ ...upload, storeId, purpose: 'import', uploadedByUserId: createdByUserId });
       await tx.insert(imports).values({
         id: importId,
         storeId,
@@ -114,6 +119,61 @@ export class ImportsRepository {
         .returning({ id: imports.id }),
     );
     return rows.length > 0;
+  }
+
+  // Finishes only while `lease` is still the import's lease; a null lease matches an import that
+  // was never claimed. The report row is saved only when the import matched.
+  finish(
+    storeId: string,
+    importId: string,
+    { lease, result, report }: { lease: Date | null; result: ImportResult; report?: NewImportFile },
+  ): Promise<boolean> {
+    return this.database.forStore(storeId, async (tx) => {
+      const held = lease ? eq(imports.claimedAt, lease) : isNull(imports.claimedAt);
+      const rows = await tx
+        .update(imports)
+        .set({
+          ...result.counts,
+          status: result.status,
+          finishedAt: result.finishedAt,
+          claimedAt: null,
+        })
+        .where(and(guard(storeId, importId, 'importing'), held))
+        .returning({ id: imports.id });
+      if (rows.length === 0) return false;
+      if (report) {
+        await tx.insert(files).values({ ...report, storeId, purpose: 'import' });
+        await tx
+          .update(imports)
+          .set({ reportFileId: report.id })
+          .where(and(eq(imports.storeId, storeId), eq(imports.id, importId)));
+      }
+      return true;
+    });
+  }
+
+  // The sweep runs across stores without turning RLS off: the definer function names the stores,
+  // and each store's imports are read as dakly_app.
+  async storesWithStuckImports(before: Date): Promise<string[]> {
+    const result = await this.global.execute<{ storeId: string }>(
+      sql`select store_id as "storeId" from stores_with_stuck_imports(${before.toISOString()}::timestamptz)`,
+    );
+    return result.rows.map((row) => row.storeId);
+  }
+
+  listStuck(storeId: string, before: Date): Promise<{ id: string; claimedAt: Date | null }[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: imports.id, claimedAt: imports.claimedAt })
+        .from(imports)
+        .where(
+          and(
+            eq(imports.storeId, storeId),
+            eq(imports.status, 'importing'),
+            lt(sql`coalesce(${imports.claimedAt}, ${imports.startedAt})`, before),
+          ),
+        ),
+    );
   }
 }
 

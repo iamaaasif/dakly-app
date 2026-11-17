@@ -138,6 +138,12 @@ contacts, with the consent evidence, comes in the next part, then undo.
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
 - Only CSV is read. XLSX comes with CUS-16.
+- The reader is one pass over the text. It drops blank lines as it goes, stops at 50,000
+  rows and keeps at most 200 cells a row, so neither a file of empty lines nor a quote that
+  never closes builds a large list.
+- The `fail-stuck-imports` sweep fails an import still `importing` an hour after its last
+  progress (`imports.claimed_at`, else `started_at`), with a line in its report. The report is
+  a CSV in R2 whose `files` row expires after 7 days, like the upload.
 - The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
   agreed. It applies to every row, for the channels it names.
 - Not built yet: the job that applies the rows, undo, the import screens, a preview before

@@ -66,6 +66,31 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
     expect(download.status).toBe(404);
   });
 
+  it('writes text the server makes and reads it back with its content type', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    const report = 'Row,Field,Problem\r\n"2","phone","ফোন নম্বর দিন"\r\n';
+
+    await driver.writeText(key, report, 'text/csv');
+
+    expect(await driver.readText(key, 1_000)).toEqual({ kind: 'found', text: report });
+    const download = await request(driver.createDownloadUrl(key, 60));
+    expect(download.headers.get('content-type')).toBe('text/csv');
+  });
+
+  it('reads a missing file as missing and stops reading past the size limit', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    await driver.writeText(key, 'Mobile\n01712345678\n', 'text/csv');
+
+    expect(await driver.readText(`${key}-missing`, 1_000)).toEqual({ kind: 'missing' });
+    expect(await driver.readText(key, 10)).toEqual({ kind: 'too_large' });
+    expect(await driver.readText(key, 19)).toEqual({
+      kind: 'found',
+      text: 'Mobile\n01712345678\n',
+    });
+  });
+
   it('refuses an upload whose length or type differs from the signed one', async () => {
     const driver = driverAt(new Date());
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;

@@ -118,7 +118,12 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
-const importColumn = z.int().min(0).max(199);
+// A file column the mapping can name; the reader keeps no cells past this.
+export const MAX_IMPORT_COLUMNS = 200;
+const importColumn = z
+  .int()
+  .min(0)
+  .max(MAX_IMPORT_COLUMNS - 1);
 
 // The file column for each field, by position, so two columns with the same header stay apart.
 // The phone finds an existing contact, so an import never replaces it.

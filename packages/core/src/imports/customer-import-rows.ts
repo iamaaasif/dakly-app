@@ -3,6 +3,7 @@ import {
   type ContactImportMapping,
   type ContactImportRow,
   contactImportRowSchema,
+  MAX_IMPORT_COLUMNS,
 } from '@dakly/contracts/contacts';
 
 import { importError, MAX_IMPORT_ROWS } from './imports.errors';
@@ -24,12 +25,8 @@ export function readCustomerImportRows(
   file: string,
   mapping: ContactImportMapping,
 ): CustomerImportRows {
-  const [header = [], ...records] = parseCsv(file);
-  const lines = records
-    .map((cells, index) => ({ rowNumber: index + 2, cells }))
-    .filter(({ cells }) => cells.some((cell) => cell.trim()));
+  const { header, lines } = readLines(file);
   if (lines.length === 0) throw importError('IMPORT_FILE_EMPTY');
-  if (lines.length > MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
   if (Object.values(mapping).some((column) => column >= header.length))
     throw importError('IMPORT_COLUMN_MISSING');
 
@@ -72,23 +69,68 @@ function mappedCells(cells: string[], mapping: ContactImportMapping): Record<str
   return mapped;
 }
 
-// RFC 4180: a quoted cell may hold commas, line breaks and doubled quotes. Anything else, such
-// as a stray quote inside a plain cell, makes the file unreadable rather than silently wrong.
-function parseCsv(file: string): string[][] {
-  const text = file.replace(/^\uFEFF/, '');
-  const cellPattern = /(?:"((?:[^"]|"")*)"|([^",\r\n]*))(,|\r\n|\n|\r|$)/y;
-  const records: string[][] = [];
-  let record: string[] = [];
-  while (cellPattern.lastIndex < text.length) {
-    const match = cellPattern.exec(text);
-    if (!match) throw importError('IMPORT_FILE_UNREADABLE');
-    const [, quoted, plain = '', end] = match;
-    record.push(quoted === undefined ? plain : quoted.replaceAll('""', '"'));
-    if (end !== ',') {
-      records.push(record);
-      record = [];
-    }
+// Blank records are dropped as they are read and the count stops at the row limit, so a file of
+// empty lines never builds a list of empty rows.
+function readLines(file: string) {
+  const records = csvRecords(file.replace(/^\uFEFF/, ''));
+  const header = records.next().value ?? [];
+  const lines: { rowNumber: number; cells: string[] }[] = [];
+  let rowNumber = 1;
+  for (const cells of records) {
+    rowNumber += 1;
+    if (!cells.some((cell) => cell.trim())) continue;
+    if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
+    lines.push({ rowNumber, cells });
   }
-  if (record.length > 0) records.push([...record, '']);
-  return records;
+  return { header, lines };
+}
+
+// RFC 4180 in one pass: a quoted cell may hold commas, line breaks and doubled quotes. Anything
+// else, such as a stray quote inside a plain cell, makes the file unreadable rather than wrong.
+function* csvRecords(text: string): Generator<string[], undefined> {
+  let record: string[] = [];
+  let position = 0;
+  while (position < text.length) {
+    const { cell, end } =
+      text[position] === '"' ? quotedCell(text, position) : plainCell(text, position);
+    if (record.length < MAX_IMPORT_COLUMNS) record.push(cell);
+    position = end + 1;
+    if (text[end] === ',') {
+      if (position === text.length) record.push('');
+      continue;
+    }
+    if (text[end] === '\r' && text[position] === '\n') position += 1;
+    yield record;
+    record = [];
+  }
+  if (record.length > 0) yield record;
+  return undefined;
+}
+
+// `end` is the index of the separator after the cell, or the text length.
+function plainCell(text: string, start: number) {
+  let end = start;
+  while (end < text.length && !',\r\n'.includes(text[end]!)) {
+    if (text[end] === '"') throw importError('IMPORT_FILE_UNREADABLE');
+    end += 1;
+  }
+  return { cell: text.slice(start, end), end };
+}
+
+function quotedCell(text: string, start: number) {
+  let cell = '';
+  let from = start + 1;
+  for (;;) {
+    const quote = text.indexOf('"', from);
+    if (quote === -1) throw importError('IMPORT_FILE_UNREADABLE');
+    cell += text.slice(from, quote);
+    if (text[quote + 1] !== '"') {
+      const end = quote + 1;
+      if (end < text.length && !',\r\n'.includes(text[end]!))
+        throw importError('IMPORT_FILE_UNREADABLE');
+      return { cell, end };
+    }
+    cell += '"';
+    from = quote + 2;
+  }
 }

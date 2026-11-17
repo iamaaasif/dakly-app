@@ -157,6 +157,29 @@ describe('readCustomerImportRows', () => {
     );
   });
 
+  it('reads a file of ten million empty lines as empty without keeping them', () => {
+    const file = `Mobile${'\n'.repeat(10_000_000)}`;
+
+    expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_EMPTY' }),
+    );
+  });
+
+  it('refuses a quote that never closes over 10 MB of text', () => {
+    const file = `Mobile\n"${'0'.repeat(10 * 1024 * 1024)}`;
+
+    expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
+    );
+  });
+
+  it('keeps no cells past the last column a mapping can name', () => {
+    const file = `Mobile${',x'.repeat(1_000)}\n01712345678${',y'.repeat(1_000)}`;
+
+    expect(readCustomerImportRows(file, { phone: 0 }).rows).toHaveLength(1);
+    expect(() => readCustomerImportRows(file, { phone: 0, name: 199 })).not.toThrow();
+  });
+
   it('refuses more than 50,000 customer rows', () => {
     const file = `Mobile\n${'01712345678\n'.repeat(50_001)}`;
 
