@@ -66,18 +66,18 @@ All branches below are pushed. No PR is open for any of them yet.
 
 | Task | Branch (in stack order) | Lines | State |
 |---|---|---|---|
-| CUS-8 import, part 2a | `feat/cus-8-import-upload` | 589 | Ready for its last review |
-| CUS-8 part 2b-1 | `feat/cus-8-import-reader` | 383 | Same |
-| CUS-8 part 2b-2 | `feat/cus-8-import-job` | 553 | Same |
-| CUS-8 part 3 | `feat/cus-8-import-undo` | 197 | Same |
+| CUS-8 import, part 2a | `feat/cus-8-import-upload` | 589 | Second review's findings to fix |
+| CUS-8 part 2b-1 | `feat/cus-8-import-reader` | 383 | Same as 2a |
+| CUS-8 part 2b-2 | `feat/cus-8-import-job` | 553 | Same as 2a |
+| CUS-8 part 3 | `feat/cus-8-import-undo` | 197 | Same as 2a |
 | CAMP-5 runner, part 1 | `feat/camp-5-automation-runner` | 458 | Approved by the second review. Its main merge since then needs review. |
 | CAMP-5 part 2 | `feat/camp-5-automation-steps` | 411 | Same as part 1 |
 | CAMP-5 part 3a | `feat/camp-5-automation-send-costs` | 485 | Split just finished; checks not run on the new tips |
 | CAMP-5 part 3b | `feat/camp-5-automation-send-retries` | 506 | Same as 3a |
 | CAMP-5 part 4 | `feat/camp-5-automation-balance-pause` | 429 | Same as 3a; holds the second review's fixes |
 | CAMP-3, part 1 | `feat/camp-3-campaign-queue` | 149 | Review fixes in progress |
-| CAMP-3, part 2 | `feat/camp-3-campaign-sender` | 668 | Same |
-| CAMP-3, part 3 | `feat/camp-3-campaign-results` | 326 | Same |
+| CAMP-3, part 2 | `feat/camp-3-campaign-sender` | 668 | Same as part 1 |
+| CAMP-3, part 3 | `feat/camp-3-campaign-results` | 326 | Same as part 1 |
 | CAMP-3 WIP | `wip/camp-3-review-fixes` | 41 | Uncommitted fix work, not checked. Never open a PR from it. |
 | WEB-7 | merged as #123 (part 1, app frame) | n/a | Stays In progress; each screen PR matches its image |
 | CAMP-4, CAMP-11, CAMP-12, CAMP-6 | not started | n/a | See "Remaining tasks" |
@@ -100,11 +100,39 @@ All branches below are pushed. No PR is open for any of them yet.
 
 On the tips, `pnpm check` passed on all four, and `test:int` and `test:e2e` passed on the undo tip.
 
-**The second review was still running when this file was written.** If its findings are not in a comment here or on the PR, run a new fresh review of all four branches.
+**The second fresh review finished: 1 blocking, 6 should-fix, 6 nits.** Fix all of them, then get a third fresh review of the fix commits.
 
-**Check this in the review: the builder edited `docs/rules/module-boundaries.md`.** It added `contacts` to the read-only-reads row so the import can read a WhatsApp consent answer. Changing a rule to fit the code needs the owner's approval. Either route the read through an exported consents service method, or ask the owner.
+**Blocking**
 
-**Known gap:** the WhatsApp-answer read in `saveImportedRows` does not run under `lockForConsent`. `contacts.repository.ts` is at the 400-line lint limit.
+1. **Job branch: the import reads another feature's table, and a rule was edited to allow it.** `contacts.repository.ts` `findByPhones` reads the consents table `contact_consent_current`, and merge `ba4fece` edited `docs/rules/module-boundaries.md:39` to permit it. Revert that rule edit. Then, in `ImportsService` inside the batch transaction:
+   1. `contacts.findImportMatches(phones)`
+   2. `contacts.lockForConsent(ids)` (in id order)
+   3. `consents.currentForAudience(ids, 'whatsapp')`
+   4. pass the set of contacts that have an answer into `saveImportedRows`.
+
+   `ContactsService` can't call `ConsentService` itself, because that would be a dependency cycle.
+
+**Should-fix**
+
+2. **Job branch: the WhatsApp-answer read takes no lock.** Finding 1's lock-then-read order closes this. Also lock rows in id order in `updateImported`, so two imports can't deadlock.
+3. **Reader branch: the sweep can fail a live import.** `requeue` also returns false when the import is no longer stalled, and two sweeps can overlap. Fail an import only in one guarded update: stalled, `requeue_count >= limit` and `claimed_at IS NOT DISTINCT FROM lease`. Don't leave an orphan report object when that update matches nothing.
+4. **Reader branch: NUL and C0 control bytes break a batch.** They are valid UTF-8 and pass the decoder, but Postgres rejects `\u0000`, so the batch fails on every retry. `decodeCustomerImportFile` must reject NUL and C0 controls other than tab, CR and LF with `IMPORT_FILE_UNREADABLE`. Add a test for UTF-16 with no BOM.
+5. **Undo branch: an undo whose job failed is finished only by the shop clicking again, which is refused after day 7.** The sweep must re-queue `undone` imports where `undo_finished_at` is null, with no 7-day cutoff once the undo was accepted. Add `undoFinishedAt` (or an "undoing" state) to `ImportResponse`.
+6. **Undo branch, owner question: should undo cancel the consents the import granted to existing contacts?** Today undo removes only the contacts the import created. Grants it gave to existing contacts stay. Ask the owner whether undo should record an "import undone" answer for those grants. In any case, state the behaviour in feature 03 and `docs/product/open-questions.md`.
+7. **Job branch, owner question: a WhatsApp grant can attach to a number the file never named.** When an existing contact's saved WhatsApp number differs from the file and is kept, the import still grants WhatsApp consent, so the grant lands on the saved number. Proposed: skip that grant and report it on the row. Confirm with the owner first, since it is close to D42.
+
+**Process and nits**
+
+8. **The job branch's review fixes are inside merge commit `ba4fece`.** It holds the lease throw, finished-after-write, the WhatsApp rule, labels and the rule edit. The undo merges `be5a3b2` and `919c548` are the same. These are pushed, so do not rewrite them. List them in the PR bodies so reviewers check them, and put future fixes in normal `fix(cus-8): ...` commits.
+9. **Job branch, feature 03 lines 148-150.** After a crash every retry fails, because the lease (5 min) outlasts the retries (about 90 s). Recovery comes from the sweep after 15 minutes. Say so.
+10. **Undo branch, `packages/db/src/schema/imports.ts:56-59`.** The comment sits above the wrong column.
+11. **Upload and undo branches, `docs/data/state-machines.md:151`.** Spell out `done` or `failed` → `undone` within 7 days, finished when `undo_finished_at` is set.
+12. **Job branch, `saveImportedRows`.** Pass the import's actor (services.md rule 2).
+13. **Job branch, `contacts.repository.ts:288`.** Drop the duplicated `coalesce(contacts.whatsapp_phone, ...)` rule, or say why it is a second guard.
+14. **Undo branch.** A repeated POST undo publishes a bulk job each time. Rate-limit it, or skip publishing when one is pending.
+15. **Undo branch, later tasks.** Orders, chats, identities and merges must bump `contacts.updated_at`, or undo must check them. Add this to `docs/product/open-questions.md` or the ORD and CHAT task notes.
+
+`contacts.repository.ts` is at the 400-line lint limit, so split it before adding to it.
 
 **Then open 4 stacked PRs.** Each PR body says:
 - 0033 has a unique-index line that was moved above the FK by hand, and the migration is not yet on main;
