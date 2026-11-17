@@ -415,6 +415,12 @@ describe('Campaign sender (Postgres)', () => {
     expect((await campaigns.cancel(storeId, id, actor)).status).toBe('cancelled');
 
     expect(await campaignRow(id)).toMatchObject({ status: 'cancelled', finished_at: noon });
+    // A cancelled campaign keeps no pause reason, so nothing reads it as a system pause later.
+    const { rows: paused } = await admin.pool.query(
+      'select pause_reason from campaigns where id=$1',
+      [id],
+    );
+    expect(paused).toEqual([{ pause_reason: null }]);
     expect((await recipients(id)).map((row) => row.status)).toEqual(['cancelled', 'cancelled']);
     expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
