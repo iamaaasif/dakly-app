@@ -182,6 +182,10 @@ comes in the next part.
   both objects after 7 days.
 - Imported contacts do not emit `contact.created`, so a large import does not start welcome
   workflows for everyone in the file. This is the owner's decision, not missing work.
+- An import still publishes `consent.changed` with source `import`, so the consent history is
+  complete. The `consent_given` workflow trigger (CAMP-11) ignores source `import`, with no
+  setting to change that, for the same reason: one CSV import must not start a welcome
+  workflow for thousands of contacts. This is the owner's decision (17 Nov).
 - Not built yet: undo, the import screens, a preview before start, and upload scanning
   (OPS-4).
 
