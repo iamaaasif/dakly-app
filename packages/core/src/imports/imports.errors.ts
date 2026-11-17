@@ -14,6 +14,8 @@ const IMPORT_ERRORS = {
     message: 'A file can hold at most 50,000 customers',
   },
   IMPORT_COLUMN_MISSING: { status: 400, message: 'A mapped column is not in this file' },
+  IMPORT_FILE_NOT_UPLOADED: { status: 400, message: 'The file was not uploaded. Upload it again' },
+  IMPORT_FILE_TOO_LARGE: { status: 400, message: 'A file can be at most 10 MB' },
   IMPORT_NOT_FOUND: { status: 404, message: 'Import not found' },
   IMPORT_ALREADY_STARTED: { status: 409, message: 'This import has already started' },
 } as const satisfies ErrorCatalog;

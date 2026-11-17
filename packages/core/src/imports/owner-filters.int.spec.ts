@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { ImportsRepository } from './imports.repository';
 
+const counts = { rowsTotal: 3, rowsAdded: 2, rowsUpdated: 1, rowsSkipped: 0, rowsFailed: 0 };
 const mapping = { phone: 0, name: 1 };
 
 function upload(storeId: string) {
@@ -23,7 +24,7 @@ describe('import filters without RLS assistance', () => {
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
-  it('creates, reads and starts an import only in the selected store', async () => {
+  it('creates, starts, counts and finishes an import only in the selected store', async () => {
     const importA = randomUUID();
     const importB = randomUUID();
     const fileA = upload(f.a);
@@ -45,6 +46,18 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.start(f.a, importA, started)).toBe(true);
     expect(await repository.start(f.a, importA, started)).toBe(false);
 
+    await repository.saveProgress(f.b, importA, counts);
+    expect((await f.row('imports', importA)).rows_total).toBeNull();
+    const report = upload(f.a);
+    const finishedAt = new Date('2026-11-17T04:31:00Z');
+    await repository.finish(f.b, importA, { status: 'done', counts, finishedAt }, undefined);
+    expect((await f.row('imports', importA)).status).toBe('importing');
+    await repository.finish(f.a, importA, { status: 'done', counts, finishedAt }, report);
+    expect(await repository.findById(f.a, importA)).toMatchObject({
+      status: 'done',
+      rowsAdded: 2,
+      reportKey: report.objectKey,
+    });
     expect((await f.row('imports', importB)).status).toBe('uploaded');
   });
 });

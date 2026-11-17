@@ -99,4 +99,35 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.countMatching(f.b, rules)).toBe(1);
     expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
   });
+
+  it('finds, adds and updates imported contacts only in the selected store', async () => {
+    const importA = randomUUID();
+    const fileA = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileA, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importA, f.a, fileA],
+    );
+    const phone = '01711000009';
+    const [added] = await repository.insertImported(f.a, importA, [
+      { phone, name: 'শাহনাজ', tags: ['ঈদ'] },
+    ]);
+    const b = await repository.insert(f.b, { ...manualCustomer, name: 'করিম', phone });
+    expect(await f.row('contacts', added!.id)).toMatchObject({
+      store_id: f.a,
+      import_id: importA,
+      source: 'import',
+    });
+    expect(await repository.findByPhones(f.b, [phone])).toEqual([
+      { id: b!.id, phone, importId: null },
+    ]);
+
+    await repository.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
+    await repository.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
+    expect(await f.row('contacts', added!.id)).toMatchObject({ name: 'শাহনাজ', tags: ['ঈদ'] });
+    expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
+  });
 });

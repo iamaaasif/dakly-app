@@ -104,8 +104,8 @@ The web app has two customer screens.
   export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
   tabs, and the current consent answer per channel.
 
-Customer import (CUS-8) takes a CSV file the shop uploads. The job that saves its rows as
-contacts, with the consent evidence, comes in the next part, then undo.
+Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts. Undo
+comes in the next part.
 
 - Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
@@ -134,10 +134,26 @@ contacts, with the consent evidence, comes in the next part, then undo.
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
 - Only CSV is read. XLSX comes with CUS-16.
-- The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
-  agreed. It applies to every row, for the channels it names.
-- Not built yet: the job that applies the rows, undo, the import screens, a preview before
-  start, and upload scanning (OPS-4).
+- The job (`run-contact-import` on the bulk queue) reads the file through a presigned GET
+  before any transaction opens, then applies the rows in batches of 500. Each batch commits in
+  its own short transaction and saves the counts so far. A file that cannot be read, never
+  arrived or is over 10 MB fails the import, with the reason in the report.
+- Existing phone (D42): a row whose phone a contact already has changes it only this way.
+  Phone, kind, source, verification and consent never change. Name, WhatsApp number, email,
+  address, district and notes take a non-blank cell. Tags are added to the contact's own. The
+  duplicate mode `skip` leaves the contact as it is, consent included. A new phone becomes a
+  customer with source `import` and the import's id in `contacts.import_id`.
+- Consent evidence (CUS-R4, D42): for SMS and WhatsApp the shop writes where its customers
+  agreed. The evidence applies to every row, for the channels it names; a channel without
+  evidence gets no consent. The import never grants a channel the customer withdrew: that
+  channel is skipped for that contact and its row in the report says so. A channel already
+  granted gets no new row, so importing the same file again records nothing new.
+- A retried job finds the contacts this import already added and does not write them again,
+  so the counts and consent come out the same.
+- The report is a CSV with the row, the field and the problem, stored in R2 for 7 days like
+  the upload.
+- Not built yet: undo, the import screens, a preview before start, upload scanning (OPS-4),
+  and `contact.created` events for imported contacts.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

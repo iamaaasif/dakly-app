@@ -3,10 +3,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   ContactDetailResponse,
+  ContactImportRow,
   ContactListQuery,
   ContactListResponse,
   ContactResponse,
   CreateContactInput,
+  ImportDuplicateMode,
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
@@ -23,11 +25,18 @@ import {
   type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
+  type ImportMatch,
 } from './contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 // Writes take the actor (services.md); nothing records it for contacts yet.
 type Actor = AuditEntry['actor'];
+
+export type ImportedContact = {
+  contactId: string;
+  phone: string;
+  outcome: 'added' | 'updated' | 'skipped';
+};
 
 @Injectable()
 export class ContactsService {
@@ -104,6 +113,39 @@ export class ContactsService {
     return toContactResponse(updated, editor.access.seeFullPhone);
   }
 
+  // D42: an import never changes the phone, kind, source, verification or consent of a contact the
+  // store already has. A filled cell replaces that field and tags are added; `skip` leaves it as it
+  // is. A contact this import already added is not written again, so a rerun changes nothing.
+  saveImportedRows(
+    storeId: string,
+    importId: string,
+    rows: ContactImportRow[],
+    duplicateMode: ImportDuplicateMode,
+  ): Promise<ImportedContact[]> {
+    return this.transaction.run(storeId, async () => {
+      const phones = rows.map((row) => row.phone);
+      const existing = await this.contactsRepository.findByPhones(storeId, phones);
+      const byPhone = new Map(existing.map((contact) => [contact.phone, contact]));
+      const added = await this.contactsRepository.insertImported(
+        storeId,
+        importId,
+        rows.filter((row) => !byPhone.has(row.phone)),
+      );
+      const outcomes = existing.map((contact) => importOutcome(contact, importId, duplicateMode));
+      const updated = new Set(outcomes.filter((o) => o.outcome === 'updated').map((o) => o.phone));
+      await this.contactsRepository.updateImported(
+        storeId,
+        rows
+          .filter((row) => updated.has(row.phone))
+          .map(({ phone, ...change }) => ({ ...change, id: byPhone.get(phone)!.id })),
+      );
+      return [
+        ...added.map(({ id, phone }) => ({ contactId: id, phone, outcome: 'added' as const })),
+        ...outcomes,
+      ];
+    });
+  }
+
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');
@@ -151,6 +193,16 @@ function searchFilter(
   // The trigram name index cannot narrow a search shorter than one trigram.
   if (search.length < 3) throw contactError('CONTACT_SEARCH_TOO_SHORT');
   return { name: search };
+}
+
+function importOutcome(
+  contact: ImportMatch,
+  importId: string,
+  duplicateMode: ImportDuplicateMode,
+): ImportedContact {
+  const { id: contactId, phone } = contact;
+  if (contact.importId === importId) return { contactId, phone, outcome: 'added' };
+  return { contactId, phone, outcome: duplicateMode === 'update' ? 'updated' : 'skipped' };
 }
 
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {

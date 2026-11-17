@@ -115,6 +115,42 @@ export class ImportsRepository {
     );
     return rows.length > 0;
   }
+
+  async saveProgress(storeId: string, importId: string, counts: ImportCounts): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set(counts)
+        .where(guard(storeId, importId, 'importing')),
+    );
+  }
+
+  finish(
+    storeId: string,
+    importId: string,
+    result: { status: 'done' | 'failed'; counts?: ImportCounts; finishedAt: Date },
+    report: NewImportFile | undefined,
+  ): Promise<void> {
+    return this.database.forStore(storeId, async (tx) => {
+      if (report)
+        await tx.insert(files).values({
+          ...report,
+          storeId,
+          purpose: 'import',
+          contentType: 'text/csv',
+          status: 'ready',
+        });
+      await tx
+        .update(imports)
+        .set({
+          ...result.counts,
+          status: result.status,
+          finishedAt: result.finishedAt,
+          reportFileId: report?.id,
+        })
+        .where(guard(storeId, importId, 'importing'));
+    });
+  }
 }
 
 function guard(storeId: string, importId: string, status: ImportStatus) {
