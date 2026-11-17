@@ -21,8 +21,8 @@ export type ClaimableRecipient = {
 type RecipientStatus = (typeof recipientStatuses)[number];
 export type RecipientChange =
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
-  | { status: 'sending'; claimedAt: Date }
-  | { status: 'queued'; claimedAt: null; sendAttempts?: number }
+  | { status: 'sending'; claimedAt: Date; sendAttempts: number }
+  | { status: 'queued'; claimedAt: null }
   | {
       status: 'sent';
       providerMessageId: string;
@@ -30,12 +30,13 @@ export type RecipientChange =
       sentAt: Date;
       claimedAt: null;
     }
+  // Credits are kept for a message the provider may have taken, null for one it did not.
   | {
       status: 'failed';
       errorCode: string;
       failedAt: Date;
       claimedAt: null;
-      sendAttempts: number;
+      smsCredits: number | null;
     };
 
 const sendingColumns = {
@@ -157,7 +158,7 @@ export class CampaignSendingRepository {
     return row;
   }
 
-  // Recipients not yet settled, and the credits of those the provider took.
+  // Recipients not yet settled, and the credits to charge.
   async settlement(
     storeId: string,
     campaignId: string,
@@ -169,10 +170,10 @@ export class CampaignSendingRepository {
             sql<number>`count(*) filter (where ${campaignRecipients.status} in ('queued', 'sending'))`.mapWith(
               Number,
             ),
-          chargedCredits:
-            sql<number>`coalesce(sum(${campaignRecipients.smsCredits}) filter (where ${campaignRecipients.status} in ('sent', 'delivered', 'read')), 0)`.mapWith(
-              Number,
-            ),
+          // Credits are set only on a message the provider took or may have taken.
+          chargedCredits: sql<number>`coalesce(sum(${campaignRecipients.smsCredits}), 0)`.mapWith(
+            Number,
+          ),
         })
         .from(campaignRecipients)
         .where(recipientsWhere(storeId, campaignId)),

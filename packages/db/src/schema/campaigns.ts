@@ -218,8 +218,9 @@ export const campaignRecipients = pgTable(
     // The sender's lease on a recipient in sending. A stale claim is resent under the same
     // operation key, so the SMS driver must return the first result for a key it has seen.
     claimedAt: timestamptz('claimed_at'),
+    // Credits of a message the provider took or may have taken; the campaign charges their sum.
     smsCredits: integer('sms_credits'),
-    // Provider calls that threw; an expired claim is not one.
+    // Counted so a message whose outcome never resolves stops being sent after a few calls.
     sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },

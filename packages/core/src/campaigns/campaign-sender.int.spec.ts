@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
+import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { type SmsMessage, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { Clock } from '../platform/clock';
@@ -16,7 +17,6 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { runWithJobContext } from '../platform/logging/job-context';
 import { SegmentsService } from '../segments/segments.service';
-import { SmsService } from '../sms/sms.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
@@ -152,14 +152,14 @@ describe('Campaign sender (Postgres)', () => {
     clockNow = noon;
     driver = new FakeSmsDriver();
     calls = [];
-    vi.spyOn(SmsService.prototype, 'send').mockImplementation((message) => {
+    vi.spyOn(MailpitSmsDriver.prototype, 'send').mockImplementation((message) => {
       calls.push({ ...message });
       return driver.send(message);
     });
   });
 
   afterEach(() => {
-    vi.mocked(SmsService.prototype.send).mockRestore();
+    vi.mocked(MailpitSmsDriver.prototype.send).mockRestore();
   });
 
   afterAll(async () => {
@@ -247,8 +247,8 @@ describe('Campaign sender (Postgres)', () => {
     expect(resends).toHaveLength(1);
     expect(resends[0]).toEqual(first);
     expect((await recipients(id)).map((row) => row.status)).toEqual(['sent', 'sent']);
-    // An expired claim is not a failed attempt.
-    expect(await sendAttempts(id)).toEqual([0, 0]);
+    // Each provider call counts toward the ceiling, the resend included.
+    expect((await sendAttempts(id)).sort()).toEqual([1, 2]);
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 2 },
       { kind: 'charge', quantity_delta: -2 },
@@ -257,7 +257,7 @@ describe('Campaign sender (Postgres)', () => {
 
   it('records the provider answer of a worker whose claim was taken meanwhile', async () => {
     const { id, phones } = await sendingCampaign(1);
-    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation(async (message) => {
       calls.push({ ...message });
       // Another worker takes the claim while this one waits for the provider.
       await admin.pool.query(
@@ -350,7 +350,7 @@ describe('Campaign sender (Postgres)', () => {
   it('fails a message the provider refuses three times and refunds its credit', async () => {
     const before = await wallets.balance(storeId, 'sms_credits');
     const { id, phones } = await sendingCampaign(2);
-    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation(async (message) => {
       calls.push({ ...message });
       if (message.to === phones[0]) throw new SmsSendRefused();
       return driver.send(message);
@@ -358,13 +358,15 @@ describe('Campaign sender (Postgres)', () => {
 
     // Each refusal puts the recipient back in the queue, so the job's retry tries it at once.
     for (let attempt = 0; attempt < 2; attempt += 1)
-      await expect(sender.sendBatch(storeId, id)).rejects.toThrow(SmsSendRefused);
-    expect(await sendAttempts(id)).toEqual([2, 0]);
+      await expect(sender.sendBatch(storeId, id)).rejects.toMatchObject({
+        code: 'SMS_SEND_REFUSED',
+      });
+    expect((await sendAttempts(id))[0]).toBe(2);
     expect(await sender.sendBatch(storeId, id)).toBeNull();
 
     expect(calls.filter((call) => call.to === phones[0])).toHaveLength(3);
     expect((await recipients(id)).map((row) => row.status)).toEqual(['failed', 'sent']);
-    expect(await sendAttempts(id)).toEqual([3, 0]);
+    expect(await sendAttempts(id)).toEqual([3, 1]);
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 2 },
       { kind: 'charge', quantity_delta: -1 },
@@ -374,11 +376,11 @@ describe('Campaign sender (Postgres)', () => {
 
   it('checks consent again after a refusal and skips a contact who withdrew meanwhile', async () => {
     const { id, phones } = await sendingCampaign(1);
-    vi.mocked(SmsService.prototype.send).mockImplementation(async (message) => {
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation(async (message) => {
       calls.push({ ...message });
       throw new SmsSendRefused();
     });
-    await expect(sender.sendBatch(storeId, id)).rejects.toThrow(SmsSendRefused);
+    await expect(sender.sendBatch(storeId, id)).rejects.toMatchObject({ code: 'SMS_SEND_REFUSED' });
     await admin.pool.query(
       "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) select gen_random_uuid(),$1,id,'sms','withdrawn','opt_out_link',now()+interval '1 second' from contacts where store_id=$1 and phone=$2",
       [storeId, phones[0]],
@@ -393,15 +395,15 @@ describe('Campaign sender (Postgres)', () => {
     expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
   });
 
-  it('counts no attempt for an unknown outcome and resends it under the same key later', async () => {
+  it('leaves an unknown outcome to expire and resends it under the same key later', async () => {
     const { id, phones } = await sendingCampaign(1);
-    vi.mocked(SmsService.prototype.send).mockImplementationOnce(async (message) => {
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
       calls.push({ ...message });
       throw new Error('provider timed out');
     });
     await expect(sender.sendBatch(storeId, id)).rejects.toThrow('provider timed out');
     expect((await recipients(id)).map((row) => row.status)).toEqual(['sending']);
-    expect(await sendAttempts(id)).toEqual([0]);
+    expect(await sendAttempts(id)).toEqual([1]);
     // The claim holds the recipient until it expires.
     expect(await sender.sendBatch(storeId, id)).toBeNull();
     expect(calls).toHaveLength(1);
@@ -414,11 +416,108 @@ describe('Campaign sender (Postgres)', () => {
       [phones[0], calls[0]!.idempotencyKey],
     ]);
     expect((await recipients(id)).map((row) => row.status)).toEqual(['sent']);
-    expect(await sendAttempts(id)).toEqual([0]);
+    expect(await sendAttempts(id)).toEqual([2]);
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 1 },
       { kind: 'charge', quantity_delta: -1 },
     ]);
+  });
+
+  describe('a resend after an expired claim (owner decision A)', () => {
+    // The first call's outcome is unknown, so the provider may have sent and billed it.
+    async function unknownFirstSend() {
+      const campaign = await sendingCampaign(1);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        calls.push({ ...message });
+        throw new Error('provider timed out');
+      });
+      await expect(sender.sendBatch(storeId, campaign.id)).rejects.toThrow('provider timed out');
+      return campaign;
+    }
+
+    async function outcome(campaignId: string) {
+      const { rows } = await admin.pool.query(
+        'select status, error_code, sms_credits from campaign_recipients where campaign_id=$1',
+        [campaignId],
+      );
+      return rows;
+    }
+
+    const charged = [
+      { kind: 'release', quantity_delta: 1 },
+      { kind: 'charge', quantity_delta: -1 },
+    ];
+
+    it('fails a resend whose contact withdrew meanwhile, charged and not sent', async () => {
+      const { id, phones } = await unknownFirstSend();
+      await admin.pool.query(
+        "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) select gen_random_uuid(),$1,id,'sms','withdrawn','opt_out_link',now()+interval '1 second' from contacts where store_id=$1 and phone=$2",
+        [storeId, phones[0]],
+      );
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+      expect(calls).toHaveLength(1);
+      expect(await outcome(id)).toEqual([
+        { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+      ]);
+      expect(await settlementRows(id)).toEqual(charged);
+    });
+
+    it('defers a resend in quiet hours and sends it once they end', async () => {
+      const { id } = await unknownFirstSend();
+      // 21:30 in Dhaka.
+      clockNow = new Date(noon.getTime() + 9.5 * 60 * MINUTE);
+
+      const next = await sender.sendBatch(storeId, id);
+
+      expect(next).toEqual(new Date(noon.getTime() + 21 * 60 * MINUTE));
+      expect(calls).toHaveLength(1);
+      clockNow = next!;
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls).toHaveLength(2);
+      expect(await outcome(id)).toEqual([{ status: 'sent', error_code: null, sms_credits: 1 }]);
+    });
+
+    it('stops at the ceiling and fails the recipient, charged', async () => {
+      const { id } = await unknownFirstSend();
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation(async (message) => {
+        calls.push({ ...message });
+        throw new Error('provider timed out');
+      });
+      for (const minutes of [6, 12]) {
+        clockNow = new Date(noon.getTime() + minutes * MINUTE);
+        await expect(sender.sendBatch(storeId, id)).rejects.toThrow('provider timed out');
+      }
+      clockNow = new Date(noon.getTime() + 18 * MINUTE);
+
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+      expect(calls).toHaveLength(3);
+      expect(await sendAttempts(id)).toEqual([3]);
+      expect(await outcome(id)).toEqual([
+        { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+      ]);
+      expect(await settlementRows(id)).toEqual(charged);
+    });
+
+    it('never queues a resend again when messaging refuses it', async () => {
+      const { id, phones } = await unknownFirstSend();
+      await admin.pool.query(
+        "update contacts set phone='01999000002' where store_id=$1 and phone=$2",
+        [storeId, phones[0]],
+      );
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+      expect(calls).toHaveLength(1);
+      expect(await outcome(id)).toEqual([
+        { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+      ]);
+      expect(await settlementRows(id)).toEqual(charged);
+    });
   });
 
   it('sends nothing for a paused campaign and keeps its reservation', async () => {

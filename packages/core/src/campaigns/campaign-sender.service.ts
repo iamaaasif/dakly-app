@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
-import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
+import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService } from '../links/links.service';
@@ -25,8 +25,10 @@ import { approvalKey, marketingSmsText } from './campaigns.service';
 
 const BATCH_SIZE = 200;
 // A worker that stopped after claiming leaves the recipient in sending; after this the claim
-// is taken again and the message resent under the same operation key. It is not an attempt.
+// is taken again and the message resent under the same operation key.
 const CLAIM_MS = 5 * MINUTE_MS;
+// Provider calls per recipient, first sends and resends together, so a message that never
+// resolves stops being tried.
 const SEND_ATTEMPTS = 3;
 const SYSTEM = { kind: 'system' } as const;
 
@@ -41,6 +43,8 @@ type Claim =
       destinationAddress: string | null;
       claimedAt: Date;
       sendAttempts: number;
+      // An earlier call under the same key may have reached the provider.
+      resend: boolean;
       text: string;
     };
 
@@ -104,63 +108,104 @@ export class CampaignSenderService {
       );
       if (!recipient) return { kind: 'stop' };
       const { id, contactId, destinationAddress } = recipient;
-      // A queued recipient has not reached the provider, including one whose earlier send the
-      // provider refused, so every check runs again. The frozen phone is the one approved; a
-      // contact whose phone has changed since is not sent to another number (feature 09).
-      if (recipient.status === 'queued') {
-        const [contact] = await this.contacts.findRecipients(storeId, [contactId]);
-        const decision: SendDecision =
-          contact?.phone === destinationAddress
-            ? await this.sendPolicy.check(storeId, {
-                contactId,
-                channel: 'sms',
-                category: 'marketing',
-                at: now,
-              })
-            : { action: 'skip', reason: 'no_address' };
-        if (decision.action === 'defer') return { kind: 'defer', until: decision.until };
-        if (decision.action === 'skip') {
-          await this.repository.changeRecipient(
-            storeId,
-            id,
-            { status: 'queued' },
-            { status: 'skipped', skipReason: decision.reason },
-          );
-          return { kind: 'next' };
-        }
+      const resend = recipient.status === 'sending';
+      const decision = await this.decide(storeId, { contactId, destinationAddress, resend, now });
+      if (decision.action === 'defer') return { kind: 'defer', until: decision.until };
+      if (!resend && decision.action === 'skip') {
+        await this.repository.changeRecipient(
+          storeId,
+          id,
+          { status: 'queued' },
+          { status: 'skipped', skipReason: decision.reason },
+        );
+        return { kind: 'next' };
       }
-      // A recipient in sending under an expired claim may be with the provider, so it is resent
-      // under the same key, never skipped.
+      const text = await this.text(storeId, campaign, contactId);
+      if (resend && (decision.action === 'skip' || recipient.sendAttempts >= SEND_ATTEMPTS)) {
+        await this.failUnknown(storeId, id, { status: 'sending' }, text);
+        return { kind: 'next' };
+      }
+      const sendAttempts = recipient.sendAttempts + 1;
       await this.repository.changeRecipient(
         storeId,
         id,
         { status: recipient.status },
-        { status: 'sending', claimedAt: now },
+        { status: 'sending', claimedAt: now, sendAttempts },
       );
-      const link = await this.links.optOutLink(
-        storeId,
-        { sourceType: 'campaign', sourceId: campaignId, contactId },
-        SYSTEM,
-      );
-      const text = marketingSmsText(campaign.content.text, link.url);
       return {
         kind: 'send',
         recipientId: id,
         contactId,
         destinationAddress,
         claimedAt: now,
-        sendAttempts: recipient.sendAttempts,
+        sendAttempts,
+        resend,
         text,
       };
     });
   }
 
+  // A queued recipient has not reached the provider, including one the provider refused, so the
+  // frozen phone and the send gate are checked; a phone changed since approval is never sent to.
+  // A resend after an expired claim may follow a message the provider took (feature 09): quiet
+  // hours defer it, and a withdrawal or block stops it for good; nothing else does.
+  private async decide(
+    storeId: string,
+    {
+      contactId,
+      destinationAddress,
+      resend,
+      now,
+    }: { contactId: string; destinationAddress: string | null; resend: boolean; now: Date },
+  ): Promise<SendDecision> {
+    if (!resend) {
+      const [contact] = await this.contacts.findRecipients(storeId, [contactId]);
+      if (contact?.phone !== destinationAddress) return { action: 'skip', reason: 'no_address' };
+    }
+    const decision = await this.sendPolicy.check(storeId, {
+      contactId,
+      channel: 'sms',
+      category: 'marketing',
+      at: now,
+    });
+    if (!resend || decision.action !== 'skip') return decision;
+    return decision.reason === 'no_consent' || decision.reason === 'blocked'
+      ? decision
+      : { action: 'send' };
+  }
+
+  // Finds the contact's one opt-out link for the campaign, so a resend carries the same text.
+  private async text(storeId: string, campaign: SendingCampaign, contactId: string) {
+    const link = await this.links.optOutLink(
+      storeId,
+      { sourceType: 'campaign', sourceId: campaign.id, contactId },
+      SYSTEM,
+    );
+    return marketingSmsText(campaign.content.text, link.url);
+  }
+
+  // The provider may have sent and billed the message, so it is charged and never sent again.
+  private failUnknown(
+    storeId: string,
+    recipientId: string,
+    from: { status: 'sending'; claimedAt?: Date },
+    text: string,
+  ): Promise<void> {
+    return this.repository.changeRecipient(storeId, recipientId, from, {
+      status: 'failed',
+      errorCode: 'outcome_unknown',
+      failedAt: this.clock.now(),
+      claimedAt: null,
+      smsCredits: countSmsParts(text),
+    });
+  }
+
   // The operation key makes a resend after a crash or an expired claim return the first provider
-  // message id. A refusal (the driver contract) or an AppError from messaging, which is raised
-  // before the provider call, says the provider did not take the message: it counts as an attempt
-  // and puts the recipient back in the queue, so its next claim runs every check again; after 3
-  // it fails and costs nothing. Any other error is an unknown outcome: the claim is left to
-  // expire and the same key is tried again, with no attempt counted.
+  // message id. An AppError from messaging means the provider did not take this call: a refusal
+  // (SMS_SEND_REFUSED, the driver contract) or a check before the call. A first send then goes
+  // back to the queue, so its next claim runs every check again, and fails at no cost after the
+  // last attempt. A resend never goes back: an earlier call may have been taken. Any other error
+  // is an unknown outcome: the claim is left to expire and the same key is tried again.
   private async deliver(storeId: string, claim: Extract<Claim, { kind: 'send' }>): Promise<void> {
     const { recipientId, claimedAt } = claim;
     const claimed = { status: 'sending', claimedAt } as const;
@@ -174,9 +219,9 @@ export class CampaignSenderService {
         destination: claim.destinationAddress,
       });
     } catch (error) {
-      if (!(error instanceof SmsSendRefused || error instanceof AppError)) throw error;
-      const sendAttempts = claim.sendAttempts + 1;
-      const exhausted = sendAttempts >= SEND_ATTEMPTS;
+      if (!(error instanceof AppError)) throw error;
+      if (claim.resend) return this.failUnknown(storeId, recipientId, claimed, claim.text);
+      const exhausted = claim.sendAttempts >= SEND_ATTEMPTS;
       await this.repository.changeRecipient(
         storeId,
         recipientId,
@@ -187,12 +232,12 @@ export class CampaignSenderService {
               errorCode: 'send_attempts_exhausted',
               failedAt: this.clock.now(),
               claimedAt: null,
-              sendAttempts,
+              smsCredits: null,
             }
-          : { status: 'queued', claimedAt: null, sendAttempts },
+          : { status: 'queued', claimedAt: null },
       );
-      // A refusal waits for the job's back-off; a recipient refused here is checked again now.
-      if (exhausted || error instanceof AppError) return;
+      // A refusal waits for the job's back-off; a check that refused is run again now.
+      if (exhausted || error.code !== 'SMS_SEND_REFUSED') return;
       throw error;
     }
     // Guarded on sending only: whichever worker holds the provider's answer records it, and the
