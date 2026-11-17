@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { billingCycles } from './billing';
 import { bdMobileSchema } from './phone';
+import { MAX_STOCK_QUANTITY } from './products';
 
 // Allowed values for the stores and team tables. The database CHECK constraints are built
 // from these lists, so the API, the web app and Postgres accept exactly the same values.
@@ -53,6 +54,11 @@ export const sendingSettingsSchema = z.strictObject({
 });
 export type SendingSettings = z.infer<typeof sendingSettingsSchema>;
 
+export const stockSettingsSchema = z.strictObject({
+  lowStockThreshold: z.number().int().min(0).max(MAX_STOCK_QUANTITY).default(3),
+});
+type StockSettings = z.infer<typeof stockSettingsSchema>;
+
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
   businessType: z.string().trim().min(1).max(100),
@@ -82,6 +88,7 @@ export const changeStoreSettingsSchema = z
     tradeLicenceNumber: z.string().trim().min(1).max(100).nullable().optional(),
     // The whole section, as GET /store returns it, so a save never resets a part to its default.
     sending: sendingSettingsSchema.required().optional(),
+    stock: stockSettingsSchema.required().optional(),
   })
   .refine(
     (input) => Object.values(input).some((value) => value !== undefined),
@@ -107,4 +114,5 @@ export type StoreSettingsResponse = StoreResponse & {
   vatBin: string | null;
   tradeLicenceNumber: string | null;
   sending: SendingSettings;
+  stock: StockSettings;
 };
