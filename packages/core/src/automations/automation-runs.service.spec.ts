@@ -78,10 +78,10 @@ class FakeRunsRepository {
     return this.moveRun(storeId, claim, change);
   }
 
-  async startWork(_storeId: string, claim: RunClaim) {
-    if (!(await this.moveRun(_storeId, claim, { status: 'running' }))) return undefined;
+  async startWork(storeId: string, claim: RunClaim, claimedAt: Date) {
+    if (!(await this.moveRun(storeId, claim, { status: 'running', claimedAt }))) return undefined;
     this.run = { ...this.run, attempts: this.run.attempts + 1 };
-    return this.run.attempts;
+    return { attempts: this.run.attempts, claimedAt };
   }
 
   async insertStep(_storeId: string, _runId: string, _contactId: string, step: NewRunStep) {

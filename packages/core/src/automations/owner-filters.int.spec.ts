@@ -91,9 +91,11 @@ describe('automation filters without RLS assistance', () => {
     const step = { stepKey: 'welcome', kind: 'wait', outcome: 'scheduled' } as const;
 
     expect(await runs.findRun(f.b, runId)).toBeUndefined();
-    expect(await runs.startWork(f.b, claim)).toBeUndefined();
+    const renewedAt = new Date('2026-11-16T05:01:00.000Z');
+    expect(await runs.startWork(f.b, claim, renewedAt)).toBeUndefined();
     expect((await f.row('automation_runs', runId)).attempts).toBe(0);
-    expect(await runs.startWork(f.a, claim)).toBe(1);
+    // Renewing to the same time keeps the claim the rest of this test uses.
+    expect(await runs.startWork(f.a, claim, claimedAt)).toEqual({ attempts: 1, claimedAt });
     expect(await runs.moveRun(f.b, claim, { status: 'done' })).toBe(false);
     expect(await runs.moveRunIfLive(f.b, claim, { status: 'done' })).toBe(false);
     await expect(runs.insertStep(f.b, runId, contactId, step)).rejects.toThrow();

@@ -75,10 +75,10 @@ export class AutomationRunsRepository {
 
   // Across stores through the SECURITY DEFINER function; each claim then runs inside its store.
   // A raw query returns timestamps as text.
-  async claimDue(limit: number): Promise<DueRun[]> {
+  async claimDue(limit: number, perStore: number): Promise<DueRun[]> {
     const result = await this.global.execute<Omit<DueRun, 'claimedAt'> & { claimedAt: string }>(
       sql`select store_id as "storeId", automation_run_id as "runId", step_key as "stepKey",
-        claimed_at as "claimedAt" from due_automation_runs(${limit})`,
+        claimed_at as "claimedAt" from due_automation_runs(${limit}, ${perStore})`,
     );
     return result.rows.map((row) => ({ ...row, claimedAt: new Date(row.claimedAt) }));
   }
@@ -171,16 +171,21 @@ export class AutomationRunsRepository {
     );
   }
 
-  // A step job counts its attempt once it holds the claim and starts, not when the sweep claims.
-  async startWork(storeId: string, claim: RunClaim): Promise<number | undefined> {
+  // A step job counts its attempt once it holds the claim and starts, not when the sweep claims,
+  // and renews the lease.
+  async startWork(
+    storeId: string,
+    claim: RunClaim,
+    claimedAt: Date,
+  ): Promise<{ attempts: number; claimedAt: Date } | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)
-        .set({ attempts: sql`least(${automationRuns.attempts} + 1, 32767)` })
+        .set({ attempts: sql`least(${automationRuns.attempts} + 1, 32767)`, claimedAt })
         .where(heldBy(storeId, claim))
         .returning({ attempts: automationRuns.attempts }),
     );
-    return row?.attempts;
+    return row && { attempts: row.attempts, claimedAt };
   }
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read
