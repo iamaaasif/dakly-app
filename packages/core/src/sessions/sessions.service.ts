@@ -53,6 +53,7 @@ export class SessionsService {
               canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
               canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
               canViewSegments: this.team.canAccess(access, 'segments', 'view'),
+              canEditSegments: this.team.canAccess(access, 'segments', 'edit'),
               canApproveSupport: this.team.canApproveSupport(access),
               canViewStoreSettings: this.team.canAccess(access, 'storeSettings', 'view'),
               canEditStoreSettings: this.team.canAccess(access, 'storeSettings', 'edit'),
