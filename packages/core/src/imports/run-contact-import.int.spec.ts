@@ -4,12 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
 import { createDatabase } from '@dakly/db/client';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
 import { DatabaseModule } from '../platform/database/database.module';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
@@ -104,6 +105,11 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ImportsService);
+  });
+
+  // Each test starts several imports, more than a store may start in an hour.
+  beforeEach(async () => {
+    await app.get(ValkeyClient).connection.del(`customer-import:${storeId}`);
   });
 
   afterEach(() => {

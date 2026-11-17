@@ -114,6 +114,6 @@ describe('import filters without RLS assistance', () => {
     await repository.markUndoFinished(f.b, importId, at);
     expect((await f.row('imports', importId)).undo_finished_at).toBeNull();
     await repository.markUndoFinished(f.a, importId, at);
-    expect((await f.row('imports', importId)).undo_finished_at).toEqual(at);
+    expect(new Date((await f.row('imports', importId)).undo_finished_at as string)).toEqual(at);
   });
 });
