@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { changeProductSchema, createProductSchema, productListQuerySchema } from './products';
 
 const option = { name: 'Size', values: ['M', 'L'] };
-const variant = { optionValues: { Size: 'M' }, priceOverridePoisha: 0 };
+const variant = { optionValues: { Size: 'M' }, priceOverridePoisha: 60000 };
 
 describe('product contracts', () => {
-  it('accepts no options and integer poisha, including a zero override', () => {
+  it('accepts no options and integer poisha, with a positive override', () => {
     expect(createProductSchema.parse({ name: ' পাঞ্জাবি ', pricePoisha: 125050 })).toMatchObject({
       name: 'পাঞ্জাবি',
       pricePoisha: 125050,
@@ -37,6 +37,20 @@ describe('product contracts', () => {
     { variants: [{ onHand: 5 }] },
   ])('rejects inconsistent or unowned product fields: %j', (change) => {
     expect(createProductSchema.safeParse({ name: 'পাঞ্জাবি', ...change }).success).toBe(false);
+  });
+
+  it('accepts variant ids only on edits and rejects zero overrides', () => {
+    const id = '019c01ea-cf15-7d31-a7f5-d73d66007ae2';
+    expect(createProductSchema.safeParse({ name: 'পাঞ্জাবি', variants: [{ id }] }).success).toBe(
+      false,
+    );
+    expect(
+      createProductSchema.safeParse({ name: 'পাঞ্জাবি', variants: [{ priceOverridePoisha: 0 }] })
+        .success,
+    ).toBe(false);
+    expect(changeProductSchema.parse({ options: [], variants: [{ id }] }).variants?.[0]?.id).toBe(
+      id,
+    );
   });
 
   it('keeps omitted PATCH fields absent and requires option changes with variants', () => {

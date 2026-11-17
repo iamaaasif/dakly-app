@@ -22,12 +22,13 @@ const optionSchema = z.strictObject({
     .refine((values) => new Set(values).size === values.length, 'Repeated option value'),
 });
 const variantSchema = z.strictObject({
-  id: z.uuid().optional(),
   optionValues: z.record(z.string(), text).default({}),
   sku: text.nullable().default(null),
   priceOverridePoisha: money.positive().nullable().default(null),
   costPoisha: money.nullable().default(null),
 });
+
+const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
 
 export const createProductSchema = z
   .strictObject({
@@ -47,7 +48,10 @@ export const createProductSchema = z
   .superRefine(validateVariants);
 
 function validateVariants(
-  product: { options: z.infer<typeof optionSchema>[]; variants: z.infer<typeof variantSchema>[] },
+  product: {
+    options: z.infer<typeof optionSchema>[];
+    variants: z.infer<typeof editVariantSchema>[];
+  },
   context: z.RefinementCtx,
 ) {
   const names = product.options.map((option) => option.name);
@@ -84,7 +88,7 @@ export const changeProductSchema = z
     pricePoisha: money.optional(),
     compareAtPricePoisha: money.nullable().optional(),
     options: z.array(optionSchema).max(3).optional(),
-    variants: z.array(variantSchema).max(100).optional(),
+    variants: z.array(editVariantSchema).max(100).optional(),
     isStockTracked: z.boolean().optional(),
     isVisibleInChats: z.boolean().optional(),
     isVisibleInOrderLink: z.boolean().optional(),
@@ -115,7 +119,7 @@ export const productListQuerySchema = z.strictObject({
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
 export type ProductOption = z.infer<typeof optionSchema>;
-export type ProductVariantResponse = Omit<z.infer<typeof variantSchema>, 'id'> & {
+export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   id: string;
   title: string;
   isDefault: boolean;

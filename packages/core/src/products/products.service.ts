@@ -29,7 +29,6 @@ export class ProductsService {
   create(storeId: string, input: CreateProductInput, _actor: Actor): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       const { variants, ...details } = input;
-      if (variants.some((variant) => variant.id)) throw productError('PRODUCT_VARIANT_NOT_FOUND');
       const product = await this.repository.insert(storeId, details, this.clock.now());
       await this.saveVariants(storeId, product, variants, []);
       await this.publishUpdated(storeId, product.id);
@@ -80,7 +79,7 @@ export class ProductsService {
   private async saveVariants(
     storeId: string,
     product: Product,
-    input: CreateProductInput['variants'],
+    input: NonNullable<ChangeProductInput['variants']>,
     current: Variant[],
   ) {
     const variants = input.length
