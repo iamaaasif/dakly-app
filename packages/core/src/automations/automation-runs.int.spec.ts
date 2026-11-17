@@ -18,6 +18,7 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { WalletService } from '../wallets/wallet.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationsModule } from './automations.module';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
@@ -29,6 +30,7 @@ const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
 const contactId = randomUUID();
 const ownerId = randomUUID();
+const staffUserId = randomUUID();
 const ownerEmail = `owner-${ownerId}@example.test`;
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
@@ -71,6 +73,7 @@ async function worker() {
     emailOwner: (data: unknown) => application.get(EmailOwnerOnAutomationPaused).handle(data),
     resumeOnCredit: (data: unknown) =>
       application.get(ResumeWorkflowsOnWalletCredited).handle(data),
+    wallets: application.get(WalletService),
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
 }
@@ -100,8 +103,8 @@ function graphWith(first: AutomationStep): AutomationGraph {
 async function workflow(status = 'active') {
   const automationId = randomUUID();
   await admin.pool.query(
-    "insert into automations(id,store_id,name,trigger_type,draft_graph,status) values($1,$2,'স্বাগতম','consent_given','{}',$3)",
-    [automationId, storeId, status],
+    "insert into automations(id,store_id,name,trigger_type,draft_graph,status,pause_reason) values($1,$2,'স্বাগতম','consent_given','{}',$3,$4)",
+    [automationId, storeId, status, status === 'paused' ? 'manual' : null],
   );
   return automationId;
 }
@@ -174,6 +177,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'সুমি আক্তার','01711000201','manual','customer')",
       [contactId, storeId],
     );
+    await admin.pool.query(
+      "insert into staff_users(id,email,name,role) values($1,$2,'Wallet staff','super_admin')",
+      [staffUserId, `${staffUserId}@example.test`],
+    );
     await admin.pool.query("insert into users(id,name,email) values($1,'রিনা',$2)", [
       ownerId,
       ownerEmail,
@@ -205,6 +212,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from tracked_links where store_id=$1', [storeId]);
       await admin.pool.query('delete from contacts where store_id=$1', [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
+      await admin.pool.query('delete from staff_users where id=$1', [staffUserId]);
     } finally {
       await admin.pool.end();
     }
@@ -340,7 +348,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       runId,
     );
 
-    await admin.pool.query("update automations set status='active' where id=$1", [automationId]);
+    await admin.pool.query(
+      "update automations set status='active', pause_reason=null where id=$1",
+      [automationId],
+    );
     await runner.sweep();
     expect(await queuedStep(runner.queue, runId!)).toMatchObject({ stepKey: 'first' });
   });
@@ -582,6 +593,36 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       return found.messages.map((message) => message.Subject);
     }
 
+    // Credits the store as staff do, then hands the outbox row to the resume subscriber.
+    async function creditThrough(
+      runner: Awaited<ReturnType<typeof worker>>,
+      wallet: 'sms_credits' | 'whatsapp_poisha',
+      key: string,
+      deliveries = 1,
+    ) {
+      const credit = await runner.wallets.credit(storeId, {
+        wallet,
+        quantity: 100,
+        idempotencyKey: `top-up-${wallet}-${key}`,
+        staffUserId,
+        staffAuditId: randomUUID(),
+      });
+      const events = await admin.pool.query(
+        "select id,payload,occurred_at from outbox_events where store_id=$1 and type='wallet.credited' and payload->>'entryId'=$2",
+        [storeId, credit.entryId],
+      );
+      expect(events.rows).toHaveLength(1);
+      const [event] = events.rows;
+      for (let delivery = 0; delivery < deliveries; delivery++)
+        await runner.resumeOnCredit({
+          id: event.id,
+          type: 'wallet.credited',
+          storeId,
+          occurredAt: event.occurred_at.toISOString(),
+          payload: event.payload,
+        });
+    }
+
     function sentFor(runId: string) {
       return sms.messages.filter((message) => message.idempotencyKey?.startsWith(`run:${runId}:`));
     }
@@ -730,7 +771,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
 
       clockNow = new Date(daytime.getTime() + 25 * HOUR);
-      await admin.pool.query("update automations set status='active' where id=$1", [automationId]);
+      await admin.pool.query(
+        "update automations set status='active', pause_reason=null where id=$1",
+        [automationId],
+      );
       await runDueStep(runner, runId!);
 
       expect(sentFor(runId!)).toEqual([]);
@@ -893,8 +937,13 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         automationId,
         runIds: [recent, old],
       } = await dueRuns(send('transactional'), 2, 'active', contact);
-      await runDueStep(runner, recent!);
-      await runner.runStep(await queuedStep(runner.queue, old!));
+      // Both runs reach the gate at the same moment.
+      await runner.sweep();
+      await Promise.all([
+        runner.runStep(await queuedStep(runner.queue, recent!)),
+        runner.runStep(await queuedStep(runner.queue, old!)),
+      ]);
+      for (const job of await runner.queue.getJobs(['waiting'])) await job.remove();
 
       for (const runId of [recent!, old!])
         expect(await run(runId)).toMatchObject({
@@ -918,31 +967,29 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
       expect(events.rows).toHaveLength(1);
       const [event] = events.rows;
-      await runner.emailOwner({
+      const pausedEvent = {
         id: event.id,
         type: event.type,
         storeId,
         occurredAt: event.occurred_at.toISOString(),
         payload: event.payload,
-      });
+      };
+      // A retry after the owner's email went out sends that owner nothing more.
+      await runner.emailOwner(pausedEvent);
+      await runner.emailOwner(pausedEvent);
       expect(await mailTo(ownerEmail)).toEqual([expect.stringContaining('SMS credits ran out')]);
       // A paused workflow's runs are not swept.
       await runner.sweep();
       expect((await run(old!)).status).toBe('waiting');
 
-      await admin.pool.query(
-        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',(select max(revision)+1 from wallet_ledger where store_id=$1 and wallet='sms_credits'),'top_up',100,100,$2,'system')",
-        [storeId, `top-up-${automationId}`],
-      );
-      const credited = {
-        id: randomUUID(),
-        type: 'wallet.credited',
-        storeId,
-        occurredAt: new Date().toISOString(),
-        payload: { wallet: 'sms_credits', entryId: randomUUID() },
-      };
-      await runner.resumeOnCredit(credited);
-      await runner.resumeOnCredit(credited);
+      // A WhatsApp top-up resumes nothing; an SMS top-up resumes it, and a repeated event changes
+      // nothing more.
+      await creditThrough(runner, 'whatsapp_poisha', automationId);
+      const stillPaused = await admin.pool.query('select status from automations where id=$1', [
+        automationId,
+      ]);
+      expect(stillPaused.rows).toEqual([{ status: 'paused' }]);
+      await creditThrough(runner, 'sms_credits', automationId, 2);
       const resumed = await admin.pool.query(
         'select status,pause_reason from automations where id=$1',
         [automationId],

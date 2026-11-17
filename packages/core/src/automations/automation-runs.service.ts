@@ -128,7 +128,7 @@ export class AutomationRunsService {
       storeId,
       runId: claim.runId,
       automationId: run.automationId,
-      balancePausedAt: run.balancePausedAt,
+      balanceResumedAt: run.balanceResumedAt,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),

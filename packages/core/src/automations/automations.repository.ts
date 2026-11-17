@@ -55,7 +55,6 @@ type AutomationChange = {
   graph?: AutomationGraph;
   triggerType?: TriggerKey;
   publishedVersionId?: string;
-  balancePausedAt?: Date;
   updatedAt: Date;
   // Not a column: leaves a workflow paused for this reason as it is.
   unlessPausedFor?: AutomationPauseReason;
@@ -154,22 +153,25 @@ export class AutomationsRepository {
     return row;
   }
 
-  // Every workflow of the store paused for a short balance becomes active again.
-  async resumeBalancePaused(storeId: string, updatedAt: Date): Promise<string[]> {
-    const rows = await this.database.forStore(storeId, (tx) =>
+  // Every workflow of the store paused for a short balance becomes active again, and records when.
+  async resumeBalancePaused(storeId: string, resumedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
       tx
         .update(automations)
-        .set({ status: 'active', pauseReason: null, updatedAt })
+        .set({
+          status: 'active',
+          pauseReason: null,
+          balanceResumedAt: resumedAt,
+          updatedAt: resumedAt,
+        })
         .where(
           and(
             eq(automations.storeId, storeId),
             eq(automations.status, 'paused'),
             eq(automations.pauseReason, 'balance'),
           ),
-        )
-        .returning({ id: automations.id }),
+        ),
     );
-    return rows.map((row) => row.id);
   }
 
   // The caller holds the workflow's row lock from its status update, so two publishes cannot

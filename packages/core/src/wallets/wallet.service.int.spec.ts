@@ -313,13 +313,12 @@ describe('WalletService (Postgres)', () => {
         reference_id: staffAuditId,
       },
     ]);
-    // Each credit tells the workflows that wait for one; a replay announces the same entry.
+    // A new credit tells the workflows that wait for one; the replay writes no event.
     const events = await admin.pool.query(
       "select payload from outbox_events where store_id=$1 and type='wallet.credited'",
       [storeId],
     );
     expect(events.rows).toEqual([
-      { payload: { wallet: 'whatsapp_poisha', entryId: credit.entryId } },
       { payload: { wallet: 'whatsapp_poisha', entryId: credit.entryId } },
     ]);
   });

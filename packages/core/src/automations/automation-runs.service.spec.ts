@@ -142,7 +142,7 @@ describe('AutomationRunsService', () => {
       graph: graphWith(first),
       isVersionStopped: false,
       automationStatus: 'active',
-      balancePausedAt: null,
+      balanceResumedAt: null,
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
@@ -690,27 +690,42 @@ describe('AutomationRunsService', () => {
     it('after a balance pause, skips a send due over a day ago as no_credits and sends a newer one', async () => {
       clockNow = new Date(claimedAt.getTime() + 25 * HOUR);
       const pausedAt = new Date(claimedAt.getTime() + HOUR);
-      expect(await start(send, { balancePausedAt: pausedAt })).toMatchObject({ stepKey: 'end' });
+      expect(await start(send, { balanceResumedAt: pausedAt })).toMatchObject({ stepKey: 'end' });
       expect(repository.steps).toEqual([
         expect.objectContaining({ outcome: 'skipped', skipReason: 'no_credits' }),
       ]);
 
       repository.steps = [];
-      await start({ ...send, ifNotReachable: 'exit' }, { balancePausedAt: pausedAt });
+      await start({ ...send, ifNotReachable: 'exit' }, { balanceResumedAt: pausedAt });
       expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'not_reachable' });
 
       repository.steps = [];
       clockNow = new Date(claimedAt.getTime() + 23 * HOUR);
-      await start(send, { balancePausedAt: pausedAt });
+      await start(send, { balanceResumedAt: pausedAt });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(sent).toHaveLength(1);
     });
 
-    it('keeps the late rule for a send due before an older balance pause', async () => {
+    it('keeps the late rule for a send due after the last balance resume', async () => {
       clockNow = new Date(claimedAt.getTime() + 25 * HOUR);
 
-      await start(send, { balancePausedAt: new Date(claimedAt.getTime() - HOUR) });
+      await start(send, { balanceResumedAt: new Date(claimedAt.getTime() - HOUR) });
 
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
+    });
+
+    it('skips as no_credits a send that came due during a balance pause, also after two pauses', async () => {
+      // Due 30 hours ago, during the second of two balance pauses; the first ended before it.
+      const firstResume = new Date(claimedAt.getTime() - 2 * HOUR);
+      const secondResume = new Date(claimedAt.getTime() + 29 * HOUR);
+      clockNow = new Date(claimedAt.getTime() + 30 * HOUR);
+      await start(send, { balanceResumedAt: secondResume });
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skipReason: 'no_credits' }),
+      ]);
+
+      repository.steps = [];
+      await start(send, { balanceResumedAt: firstResume });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
     });
   });

@@ -24,7 +24,7 @@ export type RunFacts = {
   storeId: string;
   runId: string;
   automationId: string;
-  balancePausedAt: Date | null;
+  balanceResumedAt: Date | null;
   contactId: string;
   tags: string[];
   tappedStepKeys: string[];
@@ -91,18 +91,19 @@ export function operationKey({ runId, stepKey }: RunClaim) {
   return `run:${runId}:${stepKey}`;
 }
 
-// A send due more than a day before it runs is skipped (feature 09): as no_credits when a short
-// balance paused the workflow after it was due, else as late after a manual pause.
+// A send due more than a day before it runs is skipped (feature 09): as no_credits when it was due
+// before the last top-up that ended a pause for balance, so it waited through that pause, else as
+// late after a manual pause.
 export function lateSend(
   step: SendStep,
   stepKey: string,
   facts: RunFacts,
   now: Date,
 ): StepResult | undefined {
-  const { wakeAt, balancePausedAt } = facts;
+  const { wakeAt, balanceResumedAt } = facts;
   if (!wakeAt || now.getTime() - wakeAt.getTime() <= DAY_MS) return undefined;
   const row = { stepKey, kind: 'send', category: step.category } as const;
-  if (balancePausedAt && balancePausedAt > wakeAt)
+  if (balanceResumedAt && balanceResumedAt > wakeAt)
     return {
       ...ifNotReachable(step, now),
       step: { ...row, outcome: 'skipped', skipReason: 'no_credits' },

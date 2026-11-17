@@ -9,13 +9,15 @@ import { QUEUES } from '../../platform/queue/queues';
 import { AutomationsService } from '../automations.service';
 
 // The in-app card was written with the pause; the email waits for the commit, with no
-// transaction open. A workflow already resumed gets no email.
+// transaction open. A workflow already resumed gets no email, and a rerun emails each owner once.
 @HandlesEvent('automation.paused', { queue: QUEUES.transactional })
 export class EmailOwnerOnAutomationPaused implements JobHandler {
   constructor(@Inject(AutomationsService) private readonly automations: AutomationsService) {}
 
   async handle(data: unknown) {
-    const { storeId, payload } = automationPausedEventSchema.extend({ id: z.uuid() }).parse(data);
-    await this.automations.emailBalancePause(storeId, payload.automationId);
+    const { id, storeId, payload } = automationPausedEventSchema
+      .extend({ id: z.uuid() })
+      .parse(data);
+    await this.automations.emailBalancePause(storeId, payload.automationId, id);
   }
 }

@@ -38,6 +38,8 @@ type LedgerWrite = {
   idempotencyKey: string;
   actor: ReturnType<typeof actorColumns>;
   changes: () => EntryChanges | Promise<EntryChanges>;
+  // Runs in the same transaction for a new entry only, never for a replay.
+  afterInsert?: (entryId: string) => Promise<void>;
 };
 // The entry is the row a write returns; a charge first releases its reservation.
 type EntryChanges = { release?: EntryChange; entry: EntryChange };
@@ -118,8 +120,8 @@ export class WalletService {
 
   async credit(storeId: string, input: CreditInput): Promise<WalletWriteResult> {
     const quantity = positiveQuantity(input.quantity);
-    return this.transaction.run(storeId, async () => {
-      const credited = await this.append(storeId, {
+    return this.transaction.run(storeId, () =>
+      this.append(storeId, {
         wallet: input.wallet,
         idempotencyKey: input.idempotencyKey,
         actor: actorColumns({ kind: 'staff', staffUserId: input.staffUserId }),
@@ -132,16 +134,15 @@ export class WalletService {
             referenceId: input.staffAuditId,
           },
         }),
-      });
-      // A replayed credit publishes again; its listeners change nothing the second time.
-      await this.outbox.publish({
-        type: 'wallet.credited',
-        storeId,
-        occurredAt: this.clock.now().toISOString(),
-        payload: { wallet: input.wallet, entryId: credited.entryId },
-      });
-      return credited;
-    });
+        afterInsert: (entryId) =>
+          this.outbox.publish({
+            type: 'wallet.credited',
+            storeId,
+            occurredAt: this.clock.now().toISOString(),
+            payload: { wallet: input.wallet, entryId },
+          }),
+      }),
+    );
   }
 
   private settle(
@@ -169,7 +170,7 @@ export class WalletService {
   // the insert one step per wallet.
   private async append(
     storeId: string,
-    { wallet, idempotencyKey, actor, changes }: LedgerWrite,
+    { wallet, idempotencyKey, actor, changes, afterInsert }: LedgerWrite,
   ): Promise<WalletWriteResult> {
     await this.ledger.lockWallet(storeId, wallet);
     const replay = await this.ledger.findByIdempotencyKey(storeId, idempotencyKey);
@@ -189,6 +190,7 @@ export class WalletService {
     // The service check above normally prevents this; the database rule is the last guard.
     if ((await this.ledger.insert(storeId, entries)) === 'balance_negative')
       throw walletError('WALLET_BALANCE_TOO_LOW');
+    await afterInsert?.(entryId);
     return { entryId, balanceQuantity: balance };
   }
 }

@@ -1440,7 +1440,7 @@ erDiagram
         text trigger_type "NOT NULL; text"
         text status "NOT NULL; text"
         text pause_reason "NULL; text"
-        timestamp_with_time_zone balance_paused_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone balance_resumed_at "NULL; timestamp with time zone"
         boolean is_transactional "NOT NULL; boolean"
         smallint priority "NOT NULL; smallint"
         jsonb draft_graph "NOT NULL; jsonb"

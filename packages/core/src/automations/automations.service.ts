@@ -24,6 +24,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { UsersService } from '../auth/users.service';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -45,12 +46,12 @@ const STATUS_MOVES = {
   archive: { from: ['draft', 'active', 'paused'], to: 'archived' },
 } as const satisfies Record<string, { from: readonly AutomationStatus[]; to: AutomationStatus }>;
 type StatusMove = keyof typeof STATUS_MOVES;
-// The Pause button records a manual pause; moving to active clears either reason.
+// The Pause button records a manual pause; moving to active or archiving clears either reason.
 const PAUSE_REASONS = {
   publish: { pauseReason: null },
   enable: { pauseReason: null },
   pause: { pauseReason: 'manual' },
-  archive: {},
+  archive: { pauseReason: null },
 } as const satisfies Record<StatusMove, { pauseReason?: AutomationPauseReason | null }>;
 
 // An archived workflow is deleted for the shop; its versions stay for the runs on them.
@@ -72,6 +73,7 @@ export class AutomationsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(EmailService) private readonly email: EmailService,
+    @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
@@ -195,7 +197,6 @@ export class AutomationsService {
     const paused = await this.repository.change(storeId, automationId, ['active'], {
       status: 'paused',
       pauseReason: 'balance',
-      balancePausedAt: now,
       updatedAt: now,
     });
     if (!paused) return;
@@ -215,17 +216,27 @@ export class AutomationsService {
     });
   }
 
-  // A repeated delivery may email twice; the email driver takes no idempotency key.
-  async emailBalancePause(storeId: string, automationId: string): Promise<void> {
+  // The email driver takes no idempotency key, so each owner's email for this event is claimed in
+  // Valkey first: a retry after some emails went out sends the rest only.
+  async emailBalancePause(storeId: string, automationId: string, eventId: string): Promise<void> {
     const automation = await this.repository.find(storeId, automationId);
-    if (automation?.pauseReason !== 'balance') return;
+    if (automation?.status !== 'paused' || automation.pauseReason !== 'balance') return;
     const { title, body } = balancePauseNotice(automation.name);
     const text = `${body}\n${loadEnv().WEB_ORIGINS[0]}${TOP_UP_PATH}`;
     const owners = await this.users.profiles(
       await this.team.userIdsWithPermission(storeId, 'billing.edit'),
     );
-    for (const { email } of owners)
-      if (email) await this.email.send({ to: email, subject: title, text });
+    for (const { id, email } of owners) {
+      if (!email) continue;
+      const claim = await this.valkey.connection.set(
+        `automation-pause-email:${eventId}:${id}`,
+        '1',
+        'EX',
+        PAUSE_EMAIL_CLAIM_SECONDS,
+        'NX',
+      );
+      if (claim) await this.email.send({ to: email, subject: title, text });
+    }
   }
 
   // A top-up ends every pause for a short balance (feature 09); a repeated event finds none.
@@ -273,6 +284,8 @@ export class AutomationsService {
 
 // The shop app has no top-up screen until PAY-8; Settings is where billing will live.
 const TOP_UP_PATH = '/settings';
+// Longer than the outbox relay keeps retrying an event.
+const PAUSE_EMAIL_CLAIM_SECONDS = 7 * 24 * 60 * 60;
 
 function balancePauseNotice(name: string) {
   return {

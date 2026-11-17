@@ -34,7 +34,7 @@ export type ClaimedRun = {
   graph: AutomationGraph;
   isVersionStopped: boolean;
   automationStatus: AutomationStatus;
-  balancePausedAt: Date | null;
+  balanceResumedAt: Date | null;
 };
 
 export type RunChange = {
@@ -99,7 +99,7 @@ export class AutomationRunsRepository {
           graph: automationVersions.graph,
           isVersionStopped: automationVersions.isStopped,
           automationStatus: automations.status,
-          balancePausedAt: automations.balancePausedAt,
+          balanceResumedAt: automations.balanceResumedAt,
         })
         .from(automationRuns)
         .innerJoin(
