@@ -4,11 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
 import { createDatabase } from '@dakly/db/client';
 
+import { ContactsService } from '../contacts/contacts.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
@@ -28,14 +29,18 @@ let phoneNumber = 10_000_000;
 
 const phone = () => `016${phoneNumber++}`;
 
-async function runImport(file: string, start: Partial<StartImportInput> = {}) {
+async function prepareImport(file: string, start: Partial<StartImportInput> = {}) {
   const body = new TextEncoder().encode(file);
   const { importId, uploadUrl } = await service.createCustomerImport(
     storeId,
     { sizeBytes: body.length },
     owner,
   );
-  const upload = await fetch(uploadUrl, { method: 'PUT', body });
+  const upload = await fetch(uploadUrl, {
+    method: 'PUT',
+    body,
+    headers: { 'content-type': 'text/csv' },
+  });
   expect(upload.status).toBe(200);
   await service.start(
     storeId,
@@ -43,13 +48,26 @@ async function runImport(file: string, start: Partial<StartImportInput> = {}) {
     { mapping, duplicateMode: 'update', consentEvidence: evidence, ...start },
     owner,
   );
+  return importId;
+}
+
+async function runImport(file: string, start: Partial<StartImportInput> = {}) {
+  const importId = await prepareImport(file, start);
   await service.runCustomerImport(storeId, importId);
   return { importId, result: await service.get(storeId, importId) };
 }
 
+async function committedCount(importId: string) {
+  const result = await admin.pool.query<{ added: number | null; contacts: number }>(
+    'select rows_added as added, (select count(*)::int from contacts where import_id=$1) as contacts from imports where id=$1',
+    [importId],
+  );
+  return result.rows[0];
+}
+
 async function contactByPhone(value: string) {
   const result = await admin.pool.query(
-    'select id,name,email,kind,source,tags,import_id from contacts where store_id=$1 and phone=$2',
+    'select id,name,email,whatsapp_phone,kind,source,tags,import_id from contacts where store_id=$1 and phone=$2',
     [storeId, value],
   );
   return result.rows[0];
@@ -86,6 +104,10 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ImportsService);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
@@ -202,18 +224,127 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     expect(await consentRows(contact.id)).toHaveLength(2);
   });
 
-  it('applies a large file in batches', async () => {
-    const rows = Array.from({ length: 1_201 }, (_, index) => `ক্রেতা ${index},${phone()},,`);
+  it('commits each batch of a 10,000-row file before the next one starts', async () => {
+    const rows = Array.from({ length: 10_000 }, (_, index) => `ক্রেতা ${index},${phone()},,`);
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\n${rows.join('\n')}`, {
+      consentEvidence: {},
+    });
+    const contacts = app.get(ContactsService);
+    const save = contacts.saveImportedRows.bind(contacts);
+    const seen: { added: number | null; contacts: number }[] = [];
+    vi.spyOn(contacts, 'saveImportedRows').mockImplementation(async (...args) => {
+      seen.push((await committedCount(importId))!);
+      return save(...args);
+    });
 
-    const { importId, result } = await runImport(`Name,Mobile,Email,Tags\n${rows.join('\n')}`, {
+    await service.runCustomerImport(storeId, importId);
+
+    expect(seen.map((count) => count.contacts)).toEqual(
+      Array.from({ length: 20 }, (_, batch) => batch * 500),
+    );
+    expect(seen.slice(1).map((count) => count.added)).toEqual(
+      Array.from({ length: 19 }, (_, batch) => (batch + 1) * 500),
+    );
+    expect(await service.get(storeId, importId)).toMatchObject({
+      status: 'done',
+      rowsTotal: 10_000,
+      rowsAdded: 10_000,
+    });
+  });
+
+  it('finishes a run that failed mid-file on its retry, adding nothing twice', async () => {
+    const rows = Array.from({ length: 1_000 }, (_, index) => `ক্রেতা ${index},${phone()},,`);
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\n${rows.join('\n')}`);
+    const contacts = app.get(ContactsService);
+    const save = contacts.saveImportedRows.bind(contacts);
+    let calls = 0;
+    vi.spyOn(contacts, 'saveImportedRows').mockImplementation(async (...args) => {
+      calls += 1;
+      if (calls === 2) throw new Error('Database connection lost');
+      return save(...args);
+    });
+
+    await expect(service.runCustomerImport(storeId, importId)).rejects.toThrow();
+    expect(await committedCount(importId)).toEqual({ added: 500, contacts: 500 });
+    await service.runCustomerImport(storeId, importId);
+
+    expect(await service.get(storeId, importId)).toMatchObject({
+      status: 'done',
+      rowsAdded: 1_000,
+    });
+    expect((await committedCount(importId))!.contacts).toBe(1_000);
+    const consents = await admin.pool.query(
+      'select count(*)::int from consents c join contacts k on k.id=c.contact_id where k.import_id=$1',
+      [importId],
+    );
+    expect(consents.rows[0].count).toBe(2_000);
+    const upload = await admin.pool.query(
+      'select f.status from files f join imports i on i.file_id=f.id where i.id=$1',
+      [importId],
+    );
+    expect(upload.rows[0].status).toBe('ready');
+  });
+
+  it('keeps a saved WhatsApp number and fills an empty one', async () => {
+    const [differs, same, empty] = [phone(), phone(), phone()];
+    const [saved, sameNumber, filled] = ['01912345678', '01912345679', '01912345670'];
+    for (const [value, whatsapp] of [
+      [differs, saved],
+      [same, sameNumber],
+      [empty, null],
+    ] as const) {
+      const id = await existingLead(value);
+      await admin.pool.query('update contacts set whatsapp_phone=$2 where id=$1', [id, whatsapp]);
+    }
+    const file = [
+      'Name,Mobile,WhatsApp',
+      `,${differs},01812345678`,
+      `,${same},${sameNumber}`,
+      `,${empty},${filled}`,
+    ].join('\n');
+
+    const { result } = await runImport(file, {
+      mapping: { name: 0, phone: 1, whatsappPhone: 2 },
       consentEvidence: {},
     });
 
-    expect(result).toMatchObject({ status: 'done', rowsTotal: 1_201, rowsAdded: 1_201 });
-    const count = await admin.pool.query('select count(*)::int from contacts where import_id=$1', [
-      importId,
+    expect((await contactByPhone(differs)).whatsapp_phone).toBe(saved);
+    expect((await contactByPhone(same)).whatsapp_phone).toBe(sameNumber);
+    expect((await contactByPhone(empty)).whatsapp_phone).toBe(filled);
+    expect((await report(result.reportUrl)).trim().split('\r\n')).toEqual([
+      'Row,Field,Problem',
+      '"2","whatsappPhone","WhatsApp number differs, not changed"',
     ]);
-    expect(count.rows[0].count).toBe(1_201);
+  });
+
+  it('adds tags up to 50 and reports the ones left out', async () => {
+    const value = phone();
+    const id = await existingLead(value);
+    const tags = Array.from({ length: 49 }, (_, index) => `ট্যাগ ${index}`);
+    await admin.pool.query('update contacts set tags=$2 where id=$1', [id, tags]);
+    const file = `Name,Mobile,Email,Tags\n,${value},,"ঈদ, পূজা, ট্যাগ 3, বৈশাখ"`;
+
+    const { result } = await runImport(file, { consentEvidence: {} });
+
+    expect((await contactByPhone(value)).tags).toEqual([...tags, 'ঈদ']);
+    expect(await report(result.reportUrl)).toContain('"2","tags","2 tags not added');
+  });
+
+  it('fails an import whose run stopped an hour ago and leaves a running one alone', async () => {
+    const stopped = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${phone()},,`);
+    const running = await prepareImport(`Name,Mobile,Email,Tags\nশিরিন,${phone()},,`);
+    // The app writes leases from its clock, in whole milliseconds.
+    await admin.pool.query(
+      "update imports set started_at=now() - interval '2 hours', claimed_at=date_trunc('milliseconds', now() - interval '61 minutes') where id=$1",
+      [stopped],
+    );
+
+    await service.failStuckImports();
+
+    const result = await service.get(storeId, stopped);
+    expect(result.status).toBe('failed');
+    expect(await report(result.reportUrl)).toContain('The import stopped before it finished');
+    expect((await service.get(storeId, running)).status).toBe('importing');
   });
 
   it('fails an import whose file never arrived, with the reason in the report', async () => {

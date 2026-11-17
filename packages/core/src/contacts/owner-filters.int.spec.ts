@@ -112,8 +112,15 @@ describe('contact filters without RLS assistance', () => {
       [importA, f.a, fileA],
     );
     const phone = '01711000009';
-    const [added] = await repository.insertImported(f.a, importA, [
-      { phone, name: 'শাহনাজ', tags: ['ঈদ'] },
+    const [added] = await repository.insertImported(f.a, [
+      {
+        phone,
+        name: 'শাহনাজ',
+        tags: ['ঈদ'],
+        importId: importA,
+        source: 'import',
+        kind: 'customer',
+      },
     ]);
     const b = await repository.insert(f.b, { ...manualCustomer, name: 'করিম', phone });
     expect(await f.row('contacts', added!.id)).toMatchObject({
@@ -122,8 +129,9 @@ describe('contact filters without RLS assistance', () => {
       source: 'import',
     });
     expect(await repository.findByPhones(f.b, [phone])).toEqual([
-      { id: b!.id, phone, importId: null },
+      { id: b!.id, phone, importId: null, whatsappPhone: null, tags: [] },
     ]);
+    expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([b!.id]);
 
     await repository.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
     await repository.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
@@ -142,10 +150,11 @@ describe('contact filters without RLS assistance', () => {
       "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
       [importId, f.a, fileId],
     );
-    const [first, second, edited] = await repository.insertImported(f.a, importId, [
-      { phone: '01711000021' },
-      { phone: '01711000022' },
-      { phone: '01711000023' },
+    const imported = { importId, source: 'import', kind: 'customer' } as const;
+    const [first, second, edited] = await repository.insertImported(f.a, [
+      { ...imported, phone: '01711000021' },
+      { ...imported, phone: '01711000022' },
+      { ...imported, phone: '01711000023' },
     ]);
     await f.connection.pool.query(
       "update contacts set updated_at = created_at + interval '1 minute' where id = $1",

@@ -12,6 +12,7 @@ import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-securi
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
+import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
@@ -43,6 +44,7 @@ import { JobSchedulers } from './job-schedulers';
     SendDueSecurityNoticesJob,
     SendSecurityNoticeJob,
     RelayOutboxJob,
+    FailStuckImportsJob,
     RunContactImport,
     UndoContactImport,
     StreamNotificationOnCreated,

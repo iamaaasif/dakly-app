@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { contactImportMappingSchema } from '@dakly/contracts/contacts';
+import { contactImportMappingSchema, createImportSchema } from '@dakly/contracts/contacts';
 
 import { readCustomerImportRows } from './customer-import-rows';
 
@@ -20,6 +20,13 @@ describe('contactImportMappingSchema', () => {
 
   it('refuses a field it does not know', () => {
     expect(contactImportMappingSchema.safeParse({ phone: 1, storeId: 2 }).success).toBe(false);
+  });
+});
+
+describe('createImportSchema', () => {
+  it('refuses a file over 10 MB before an upload URL is signed', () => {
+    expect(createImportSchema.safeParse({ sizeBytes: 10 * 1024 * 1024 }).success).toBe(true);
+    expect(createImportSchema.safeParse({ sizeBytes: 10 * 1024 * 1024 + 1 }).success).toBe(false);
   });
 });
 
@@ -148,6 +155,30 @@ describe('readCustomerImportRows', () => {
     expect(() => readCustomerImportRows('Mobile\n01712345678', { phone: 0, name: 1 })).toThrow(
       expect.objectContaining({ code: 'IMPORT_COLUMN_MISSING' }),
     );
+  });
+
+  // These two read 10 MB for real, which takes a few seconds while the whole suite runs at once.
+  it('reads a file of ten million empty lines as empty without keeping them', () => {
+    const file = `Mobile${'\n'.repeat(10_000_000)}`;
+
+    expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_EMPTY' }),
+    );
+  }, 30_000);
+
+  it('refuses a quote that never closes over 10 MB of text', () => {
+    const file = `Mobile\n"${'0'.repeat(10 * 1024 * 1024)}`;
+
+    expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
+    );
+  }, 30_000);
+
+  it('keeps no cells past the last column a mapping can name', () => {
+    const file = `Mobile${',x'.repeat(1_000)}\n01712345678${',y'.repeat(1_000)}`;
+
+    expect(readCustomerImportRows(file, { phone: 0 }).rows).toHaveLength(1);
+    expect(() => readCustomerImportRows(file, { phone: 0, name: 199 })).not.toThrow();
   });
 
   it('refuses more than 50,000 customer rows', () => {

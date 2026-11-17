@@ -155,7 +155,7 @@ fixture('POST /contacts/:contactId/consents', async () => {
 });
 async function customerImport(shop: Shop) {
   const result = await success(shop, 'POST', '/imports', 201, { sizeBytes: 120 });
-  expect(result.json().uploadUrl).toContain(`/stores/${shop.id}/imports/`);
+  expect(result.json().uploadUrl).toContain(`/imports/${shop.id}/`);
   return result.json().importId as string;
 }
 const startImport = { mapping: { phone: 0 }, duplicateMode: 'update', consentEvidence: {} };

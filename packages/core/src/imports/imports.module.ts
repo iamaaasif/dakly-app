@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { ConsentsModule } from '../consents/consents.module';
 import { ContactsModule } from '../contacts/contacts.module';
+import { CacheModule } from '../platform/cache/cache.module';
 import { Clock } from '../platform/clock';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
@@ -11,7 +12,7 @@ import { ImportsRepository } from './imports.repository';
 import { ImportsService } from './imports.service';
 
 @Module({
-  imports: [ClockModule, ContactsModule, ConsentsModule, OutboxModule],
+  imports: [CacheModule, ClockModule, ContactsModule, ConsentsModule, OutboxModule],
   controllers: [ImportsController],
   providers: [
     ImportsRepository,

@@ -13,6 +13,7 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 
 import { ConsentService } from '../consents/consent.service';
 import { type ImportedContact, ContactsService } from '../contacts/contacts.service';
+import { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -29,6 +30,8 @@ import {
 } from './imports.repository';
 
 type Actor = AuditEntry['actor'];
+type Run = { storeId: string; found: Import; lease: Date; finished: boolean };
+type Outcome = { status: 'done' | 'failed'; counts?: ImportCounts; lines: ReportLine[] };
 type ReportLine = {
   rowNumber?: number;
   field?: ContactImportField | 'sms' | 'whatsapp';
@@ -36,11 +39,17 @@ type ReportLine = {
 };
 
 const LINK_SECONDS = 15 * 60;
+// Each import is a file in R2 and a bulk job, so a store starts at most 20 an hour.
+const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
 const UNDO_MILLISECONDS = FILE_DAYS * 24 * 60 * 60 * 1000;
 const BATCH_ROWS = 500;
 const UNDO_BATCH_ROWS = 1_000;
+const CSV = 'text/csv';
+// Each batch renews the lease; a run that has not renewed it for 5 minutes is gone.
+const LEASE_MS = 5 * 60 * 1000;
+const STUCK_MS = 60 * 60 * 1000;
 const COUNT_FOR_OUTCOME = {
   added: 'rowsAdded',
   updated: 'rowsUpdated',
@@ -58,6 +67,7 @@ export class ImportsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
+    @Inject(RateLimiter) private readonly limiter: RateLimiter,
   ) {}
 
   async createCustomerImport(
@@ -65,11 +75,17 @@ export class ImportsService {
     input: CreateImportInput,
     actor: Actor,
   ): Promise<ImportUploadResponse> {
+    if (!(await this.limiter.consume(`customer-import:${storeId}`, IMPORTS_PER_HOUR, 3600)).allowed)
+      throw importError('IMPORT_RATE_LIMITED');
     const importId = newId();
-    const upload = this.newFile(storeId, input.sizeBytes);
+    const upload = this.newFile(storeId, input.sizeBytes, 'pending');
     const userId = actor.kind === 'user' ? actor.userId : null;
     await this.repository.createCustomerImport(storeId, importId, upload, userId);
-    return { importId, uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS) };
+    const content = { contentLength: input.sizeBytes, contentType: CSV };
+    return {
+      importId,
+      uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS, content),
+    };
   }
 
   async start(
@@ -158,16 +174,41 @@ export class ImportsService {
   async runCustomerImport(storeId: string, importId: string): Promise<void> {
     const found = await this.repository.findById(storeId, importId);
     if (found?.status !== 'importing') return;
+    const now = this.clock.now();
+    const staleBefore = new Date(now.getTime() - LEASE_MS);
+    // Another run holds a fresh lease: it finishes the import, or the sweep fails it.
+    if (!(await this.repository.claim(storeId, importId, now, staleBefore))) return;
+    const run: Run = { storeId, found, lease: now, finished: false };
+    try {
+      await this.importFile(run);
+    } finally {
+      // A failed run lets go at once, so the queue's retry need not wait for the lease to go stale.
+      if (!run.finished) await this.repository.releaseClaim(storeId, importId, run.lease);
+    }
+  }
+
+  // An import still running an hour after its last batch lost its job; it fails with a report.
+  async failStuckImports(): Promise<void> {
+    const before = new Date(this.clock.now().getTime() - STUCK_MS);
+    for (const storeId of await this.repository.storesWithStuckImports(before))
+      for (const stuck of await this.repository.listStuck(storeId, before))
+        await this.finish(storeId, stuck.id, stuck.claimedAt, {
+          status: 'failed',
+          lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+        });
+  }
+
+  private async importFile(run: Run): Promise<void> {
+    const { storeId, found } = run;
     let file: CustomerImportRows;
     try {
-      file = readCustomerImportRows(await this.download(found.uploadKey), found.columnMapping!);
+      const text = await this.download(found.uploadKey);
+      await this.repository.markUploadReady(storeId, found.uploadFileId);
+      file = readCustomerImportRows(text, found.columnMapping!);
     } catch (error) {
       // A file that cannot be read fails the import with the reason in its report; nothing to retry.
       if (!(error instanceof AppError)) throw error;
-      return this.finish(storeId, importId, {
-        status: 'failed',
-        lines: [{ message: error.message }],
-      });
+      return this.finishRun(run, { status: 'failed', lines: [{ message: error.message }] });
     }
     const failedRows = new Set(file.errors.map((error) => error.rowNumber)).size;
     const counts = {
@@ -180,29 +221,47 @@ export class ImportsService {
     const report: ReportLine[] = [...file.errors];
     for (let first = 0; first < file.rows.length; first += BATCH_ROWS) {
       const batch = file.rows.slice(first, first + BATCH_ROWS);
-      await this.transaction.run(storeId, async () => {
-        const saved = await this.contacts.saveImportedRows(
-          storeId,
-          importId,
-          batch.map((row) => row.contact),
-          found.duplicateMode,
-        );
-        for (const contact of saved) counts[COUNT_FOR_OUTCOME[contact.outcome]] += 1;
-        report.push(...(await this.grantConsent(storeId, found, batch, saved)));
-        await this.repository.saveProgress(storeId, importId, counts);
+      run.lease = await this.transaction.run(storeId, async () => {
+        report.push(...(await this.applyBatch(run, batch, counts)));
+        const renewed = this.clock.now();
+        const lease = { held: run.lease, renewed };
+        if (!(await this.repository.saveProgress(storeId, found.id, counts, lease)))
+          throw new Error('Another run took over this import');
+        return renewed;
       });
     }
-    await this.finish(storeId, importId, { status: 'done', counts, lines: report });
+    await this.finishRun(run, { status: 'done', counts, lines: report });
+  }
+
+  private async applyBatch(
+    { storeId, found }: Run,
+    batch: CustomerImportRows['rows'],
+    counts: ImportCounts,
+  ): Promise<ReportLine[]> {
+    const saved = await this.contacts.saveImportedRows(
+      storeId,
+      found.id,
+      batch.map((row) => row.contact),
+      found.duplicateMode,
+    );
+    const rowNumbers = new Map(batch.map((row) => [row.contact.phone, row.rowNumber]));
+    const lines: ReportLine[] = [];
+    for (const contact of saved) {
+      counts[COUNT_FOR_OUTCOME[contact.outcome]] += 1;
+      const rowNumber = rowNumbers.get(contact.phone)!;
+      lines.push(...contact.notChanged.map((cell) => ({ rowNumber, ...cell })));
+    }
+    lines.push(...(await this.grantConsent(storeId, found, rowNumbers, saved)));
+    return lines;
   }
 
   // Skipped contacts keep their consent too: `skip` leaves an existing customer as it is.
   private async grantConsent(
     storeId: string,
     found: Import,
-    batch: CustomerImportRows['rows'],
+    rowNumbers: Map<string, number>,
     saved: ImportedContact[],
   ): Promise<ReportLine[]> {
-    const rowNumbers = new Map(batch.map((row) => [row.contact.phone, row.rowNumber]));
     const written = saved.filter((contact) => contact.outcome !== 'skipped');
     const actor: Actor = found.createdByUserId
       ? { kind: 'user', userId: found.createdByUserId }
@@ -231,18 +290,20 @@ export class ImportsService {
     return lines;
   }
 
+  private async finishRun(run: Run, outcome: Outcome): Promise<void> {
+    run.finished = true;
+    await this.finish(run.storeId, run.found.id, run.lease, outcome);
+  }
+
   private async finish(
     storeId: string,
     importId: string,
-    {
-      status,
-      counts,
-      lines,
-    }: { status: 'done' | 'failed'; counts?: ImportCounts; lines: ReportLine[] },
+    lease: Date | null,
+    { status, counts, lines }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
-    const finishedAt = this.clock.now();
-    await this.repository.finish(storeId, importId, { status, counts, finishedAt }, report);
+    const result = { status, counts, finishedAt: this.clock.now() };
+    await this.repository.finish(storeId, importId, { lease, result, report });
   }
 
   private async findImport(storeId: string, importId: string): Promise<Import> {
@@ -251,10 +312,16 @@ export class ImportsService {
     return found;
   }
 
-  private newFile(storeId: string, sizeBytes: number): NewImportFile {
+  private newFile(
+    storeId: string,
+    sizeBytes: number,
+    status: NewImportFile['status'],
+  ): NewImportFile {
     const id = newId();
     const expiresAt = new Date(this.clock.now().getTime() + FILE_DAYS * 24 * 60 * 60 * 1000);
-    return { id, objectKey: `stores/${storeId}/imports/${id}.csv`, sizeBytes, expiresAt };
+    // One R2 lifecycle rule on `imports/` deletes these after 7 days for every store.
+    const objectKey = `imports/${storeId}/${id}.csv`;
+    return { id, objectKey, contentType: CSV, sizeBytes, status, expiresAt };
   }
 
   private async download(objectKey: string): Promise<string> {
@@ -266,8 +333,8 @@ export class ImportsService {
 
   private async uploadReport(storeId: string, lines: ReportLine[]): Promise<NewImportFile> {
     const body = reportCsv(lines);
-    const report = this.newFile(storeId, Buffer.byteLength(body));
-    await this.storage.writeText(report.objectKey, body, 'text/csv');
+    const report = this.newFile(storeId, Buffer.byteLength(body), 'ready');
+    await this.storage.writeText(report.objectKey, body, CSV);
     return report;
   }
 }

@@ -43,9 +43,7 @@ describe('Worker job schedulers', () => {
       scheduler('wake-snoozed-notifications'),
     ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
-    expect(bulk.schedulers).toEqual([
-      scheduler('staff-audit-maintenance'),
-      scheduler('staff-audit-maintenance'),
-    ]);
+    const bulkSweeps = [scheduler('staff-audit-maintenance'), scheduler('fail-stuck-imports')];
+    expect(bulk.schedulers).toEqual([...bulkSweeps, ...bulkSweeps]);
   });
 });

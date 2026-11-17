@@ -65,9 +65,22 @@ export type NewContact = CreateContactInput & { source: ContactSource; kind: Con
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
 
-export type ImportMatch = { id: string; phone: string; importId: string | null };
+export type ImportMatch = {
+  id: string;
+  phone: string;
+  importId: string | null;
+  whatsappPhone: string | null;
+  tags: string[];
+};
 
-// Undefined fields keep what the contact has; tags are added to its own.
+export type ImportedContactRow = ContactImportRow & {
+  importId: string;
+  source: ContactSource;
+  kind: ContactKind;
+};
+
+// Undefined fields keep what the contact has, a saved WhatsApp number is kept, and tags are
+// added to its own.
 export type ImportedChange = Omit<ContactImportRow, 'phone'> & { id: string };
 
 // The service decides what a search means; each search field has its own index.
@@ -218,7 +231,13 @@ export class ContactsRepository {
   async findByPhones(storeId: string, phones: string[]): Promise<ImportMatch[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: contacts.id, phone: contacts.phone, importId: contacts.importId })
+        .select({
+          id: contacts.id,
+          phone: contacts.phone,
+          importId: contacts.importId,
+          whatsappPhone: contacts.whatsappPhone,
+          tags: contacts.tags,
+        })
         .from(contacts)
         .where(
           and(
@@ -235,23 +254,13 @@ export class ContactsRepository {
   // and its retry finds that contact instead.
   async insertImported(
     storeId: string,
-    importId: string,
-    rows: ContactImportRow[],
+    rows: ImportedContactRow[],
   ): Promise<{ id: string; phone: string }[]> {
     if (rows.length === 0) return [];
     const inserted = await this.database.forStore(storeId, (tx) =>
       tx
         .insert(contacts)
-        .values(
-          rows.map((row) => ({
-            ...row,
-            storeId,
-            importId,
-            source: 'import' as const,
-            kind: 'customer' as const,
-            tags: row.tags ?? [],
-          })),
-        )
+        .values(rows.map((row) => ({ ...row, storeId, tags: row.tags ?? [] })))
         .returning({ id: contacts.id, phone: contacts.phone }),
     );
     return inserted.map((row) => ({ ...row, phone: row.phone! }));
@@ -273,7 +282,7 @@ export class ContactsRepository {
       tx.execute(sql`
         update contacts set
           name = coalesce(v.name, contacts.name),
-          whatsapp_phone = coalesce(v.whatsapp_phone, contacts.whatsapp_phone),
+          whatsapp_phone = coalesce(contacts.whatsapp_phone, v.whatsapp_phone),
           email = coalesce(v.email::citext, contacts.email),
           address = coalesce(v.address, contacts.address),
           district = coalesce(v.district, contacts.district),
@@ -289,6 +298,20 @@ export class ContactsRepository {
         where contacts.store_id = ${storeId} and contacts.id = v.id and contacts.deleted_at is null
       `),
     );
+  }
+
+  async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(eq(contacts.storeId, storeId), inArray(contacts.id, ids), isNull(contacts.deletedAt)),
+        )
+        .orderBy(contacts.id)
+        .for('no key update'),
+    );
+    return rows.map((row) => row.id);
   }
 
   async softDelete(storeId: string, id: string, deletedAt: Date): Promise<boolean> {
@@ -310,33 +333,18 @@ export class ContactsRepository {
     limit: number,
     deletedAt: Date,
   ): Promise<number> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .update(contacts)
-        .set({ deletedAt })
-        .where(
-          and(
-            eq(contacts.storeId, storeId),
-            inArray(
-              contacts.id,
-              tx
-                .select({ id: contacts.id })
-                .from(contacts)
-                .where(
-                  and(
-                    eq(contacts.storeId, storeId),
-                    eq(contacts.importId, importId),
-                    isNull(contacts.deletedAt),
-                    eq(contacts.updatedAt, contacts.createdAt),
-                  ),
-                )
-                .limit(limit),
-            ),
-          ),
+    const result = await this.database.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        update contacts set deleted_at = ${deletedAt.toISOString()}::timestamptz
+        where store_id = ${storeId} and id in (
+          select id from contacts
+          where store_id = ${storeId} and import_id = ${importId} and deleted_at is null
+            and updated_at = created_at
+          limit ${limit}
         )
-        .returning({ id: contacts.id }),
+      `),
     );
-    return rows.length;
+    return result.rowCount ?? 0;
   }
 
   async countMatching(storeId: string, rules: SegmentRules): Promise<number> {

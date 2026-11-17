@@ -26,6 +26,7 @@ const IMPORT_ERRORS = {
     status: 409,
     message: 'An import can be undone for 7 days after it finishes',
   },
+  IMPORT_RATE_LIMITED: { status: 429, message: 'A shop can start at most 20 imports an hour' },
 } as const satisfies ErrorCatalog;
 
 export function importError(code: keyof typeof IMPORT_ERRORS): AppError {
