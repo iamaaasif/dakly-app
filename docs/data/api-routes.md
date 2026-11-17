@@ -192,7 +192,8 @@ atomically and retain business data when an extension is disabled.
 | `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`        | `campaigns`   |
 | `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                    | `campaigns`   |
 | `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                               | `campaigns`   |
-| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`, `POST /campaigns/:campaignId/cancel`                                    | `campaigns`   |
+| `POST /campaigns/:campaignId/unschedule`, `POST /campaigns/:campaignId/cancel` (scheduled, until 5 minutes before the send)                        | `campaigns`   |
+| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                          | `campaigns`   |
 | `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                               | `campaigns`   |
 | `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                      | `automations` |
 | `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable` (also Owner or Admin while the store's approval setting is on) | `automations` |
@@ -200,6 +201,8 @@ atomically and retain business data when an extension is disabled.
 | `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                  | `automations` |
 | `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                       | `automations` |
 | `GET /automations/:automationId/runs`                                                                                                              | `automations` |
+
+`POST /campaigns/:campaignId/approve` takes no `Idempotency-Key` header: the draft row lock, `CAMPAIGN_NOT_DRAFT` (409) on a repeat and the wallet reservation key make a retry safe. A send-now route outside approval (CAMP-3) takes a real key.
 
 ## Dashboard, notifications and assistant (10)
 

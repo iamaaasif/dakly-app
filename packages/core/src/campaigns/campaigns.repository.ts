@@ -5,6 +5,7 @@ import type {
   CampaignChannel,
   CampaignGoal,
   CampaignListQuery,
+  campaignPauseReasons,
   CampaignStatus,
   recipientSkipReasons,
   SmsCampaignContent,
@@ -44,6 +45,16 @@ export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
   estimatedCostPoisha: number;
   recipientsCount: number;
   skippedCount: number;
+};
+
+// A state change; returning to draft also clears the approval.
+export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
+  pauseReason?: (typeof campaignPauseReasons)[number] | null;
+  approvedByUserId?: null;
+  approvedAt?: null;
+  estimatedCostPoisha?: null;
+  recipientsCount?: 0;
+  skippedCount?: 0;
 };
 
 const campaignColumns = {
@@ -112,7 +123,11 @@ export class CampaignsRepository {
     change: Partial<CampaignDraft> & Pick<Campaign, 'updatedAt'>,
   ): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx.update(campaigns).set(change).where(draftWhere(storeId, id)).returning(campaignColumns),
+      tx
+        .update(campaigns)
+        .set(change)
+        .where(statusWhere(storeId, id, 'draft'))
+        .returning(campaignColumns),
     );
     return row;
   }
@@ -120,7 +135,11 @@ export class CampaignsRepository {
   // Holds the draft until the approval commits, so two approvals cannot both freeze it.
   async lockDraft(storeId: string, id: string): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx.select(campaignColumns).from(campaigns).where(draftWhere(storeId, id)).for('update'),
+      tx
+        .select(campaignColumns)
+        .from(campaigns)
+        .where(statusWhere(storeId, id, 'draft'))
+        .for('update'),
     );
     return row;
   }
@@ -143,19 +162,81 @@ export class CampaignsRepository {
     approval: CampaignApproval,
   ): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
-      tx.update(campaigns).set(approval).where(draftWhere(storeId, id)).returning(campaignColumns),
+      tx
+        .update(campaigns)
+        .set(approval)
+        .where(statusWhere(storeId, id, 'draft'))
+        .returning(campaignColumns),
     );
     return row;
   }
 
+  // Holds a scheduled campaign while it goes back to draft or is cancelled, so the sweep that
+  // starts due campaigns (CAMP-3) waits for the change.
+  async lockScheduled(
+    storeId: string,
+    id: string,
+  ): Promise<(Campaign & { approvedAt: Date | null }) | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ ...campaignColumns, approvedAt: campaigns.approvedAt })
+        .from(campaigns)
+        .where(statusWhere(storeId, id, 'scheduled'))
+        .for('update'),
+    );
+    return row;
+  }
+
+  // Guarded on the status the change starts from, so a campaign moved meanwhile is left alone.
+  async changeStatus(
+    storeId: string,
+    id: string,
+    from: CampaignStatus,
+    change: CampaignStatusChange,
+  ): Promise<Campaign | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(campaigns)
+        .set(change)
+        .where(statusWhere(storeId, id, from))
+        .returning(campaignColumns),
+    );
+    return row;
+  }
+
+  async removeRecipients(storeId: string, campaignId: string): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx.delete(campaignRecipients).where(recipientsWhere(storeId, campaignId)),
+    );
+  }
+
+  async cancelQueuedRecipients(storeId: string, campaignId: string): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(campaignRecipients)
+        .set({ status: 'cancelled' })
+        .where(and(recipientsWhere(storeId, campaignId), eq(campaignRecipients.status, 'queued'))),
+    );
+  }
+
   async removeDraft(storeId: string, id: string): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
-      tx.delete(campaigns).where(draftWhere(storeId, id)).returning({ id: campaigns.id }),
+      tx
+        .delete(campaigns)
+        .where(statusWhere(storeId, id, 'draft'))
+        .returning({ id: campaigns.id }),
     );
     return rows.length > 0;
   }
 }
 
-function draftWhere(storeId: string, id: string) {
-  return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, 'draft'));
+function statusWhere(storeId: string, id: string, status: CampaignStatus) {
+  return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
+}
+
+function recipientsWhere(storeId: string, campaignId: string) {
+  return and(
+    eq(campaignRecipients.storeId, storeId),
+    eq(campaignRecipients.campaignId, campaignId),
+  );
 }
