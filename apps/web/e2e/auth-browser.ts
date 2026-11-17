@@ -16,6 +16,11 @@ export async function privateInput(page: Page, name: string, value: string) {
   );
 }
 
+export async function signOut(page: Page) {
+  await page.getByRole('button', { name: 'Account menu' }).click();
+  await page.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
+}
+
 export async function scrubPage(page: Page) {
   if (page.isClosed()) return;
   await page

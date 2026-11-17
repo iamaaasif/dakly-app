@@ -3,7 +3,7 @@
 |           |                                                                  |
 | --------- | ---------------------------------------------------------------- |
 | Release   | 1                                                                |
-| Status    | Not started                                                      |
+| Status    | In progress                                                      |
 | Extension | Sales                                                            |
 | Code      | `packages/core/src/products/`, `apps/web/src/features/products/` |
 | Tasks     | PROD-1 to PROD-6                                                 |
@@ -125,10 +125,18 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), 
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
-7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") and one search embedding, rebuilt by a job when the name, description or aliases change.
+7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") stored as a list. The search embedding rebuild job waits for AI-3.
 8. Restock: when a variant goes from 0 to available and people are on its waiting list, the owner is prompted to notify them. Sending is never automatic.
 
 Photos upload straight to R2 with a presigned URL; the API never streams files.
+
+PROD-1 adds product create, view, list, edit, hide and archive routes. Product edits preserve
+omitted fields; changes to options include the complete variant list. Variant ids
+keep their stock and ledger identity; omitted variants are archived. Products without options keep one
+default variant. Prices use the variant override when set, and the
+product price otherwise. Lists search names and filter missing prices, missing
+photos or hidden products. Pages use descending UUID v7 ids, and each read loads
+product details and variants in one database snapshot. Stock labels and adjustments come with PROD-2.
 
 ### Rules
 
@@ -151,6 +159,8 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
 
 Variant external identity is `(store_id, external_source, external_account_id, external_ref)`. Source names the provider; account is its stable shop/account ID, never a display name. All three external fields are supplied together or all are null. Provider synchronization remains planned work.
+
+The open-order guard on archive comes with ORD-1.
 
 ### Edge cases to test
 
