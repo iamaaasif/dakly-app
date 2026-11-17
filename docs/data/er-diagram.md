@@ -422,6 +422,7 @@ erDiagram
     files ||..o{ imports : "file_id"
     files |o..o{ imports : "report_file_id"
     users |o..o{ imports : "created_by_user_id"
+    users |o..o{ imports : "started_by_user_id"
     files ||..o{ imports : "store_id, file_id"
     files |o..o{ imports : "store_id, report_file_id"
     contacts ||--o| contact_memories : "contact_id"
@@ -620,6 +621,7 @@ erDiagram
         uuid report_file_id FK "NULL; uuid"
         uuid created_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
+        uuid started_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone last_progress_at "NULL; timestamp with time zone"
@@ -2000,6 +2002,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
 | `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |
 | `imports_created_by_user_id_users_id_fk`                             | `imports(created_by_user_id)`                             | `users(id)`                                 | no action |
+| `imports_started_by_user_id_users_id_fk`                             | `imports(started_by_user_id)`                             | `users(id)`                                 | no action |
 | `imports_file_id_store_fk`                                           | `imports(store_id, file_id)`                              | `files(store_id, id)`                       | no action |
 | `imports_report_file_id_store_fk`                                    | `imports(store_id, report_file_id)`                       | `files(store_id, id)`                       | no action |
 | `delivery_zones_store_id_stores_id_fk`                               | `delivery_zones(store_id)`                                | `stores(id)`                                | no action |

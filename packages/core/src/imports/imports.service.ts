@@ -14,8 +14,8 @@ import { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { FILE_STORAGE_DRIVER } from './file-storage-provider';
 import { importError } from './imports.errors';
 import {
   type Import,
@@ -75,7 +75,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     input: StartImportInput,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<ImportResponse> {
     await this.transaction.run(storeId, async () => {
       const now = this.clock.now();
@@ -85,6 +85,7 @@ export class ImportsService {
         consentEvidence: input.consentEvidence,
         hasConsentConfirmation: Object.keys(input.consentEvidence).length > 0,
         startedAt: now,
+        startedByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       if (!started) {
         await this.findImport(storeId, importId);

@@ -44,6 +44,7 @@ const importColumns = {
   duplicateMode: imports.duplicateMode,
   consentEvidence: sql<ImportConsentEvidence | null>`${imports.consentEvidence}`,
   createdByUserId: imports.createdByUserId,
+  startedByUserId: imports.startedByUserId,
   rowsTotal: imports.rowsTotal,
   rowsAdded: imports.rowsAdded,
   rowsUpdated: imports.rowsUpdated,
@@ -60,13 +61,19 @@ export type Import = {
   duplicateMode: ImportDuplicateMode;
   consentEvidence: ImportConsentEvidence | null;
   createdByUserId: string | null;
+  startedByUserId: string | null;
   uploadKey: string;
   reportKey: string | null;
 } & { [Count in keyof ImportCounts]: number | null };
 
 export type StartedImport = Pick<
   typeof imports.$inferInsert,
-  'columnMapping' | 'duplicateMode' | 'consentEvidence' | 'hasConsentConfirmation' | 'startedAt'
+  | 'columnMapping'
+  | 'duplicateMode'
+  | 'consentEvidence'
+  | 'hasConsentConfirmation'
+  | 'startedAt'
+  | 'startedByUserId'
 >;
 
 @Injectable()

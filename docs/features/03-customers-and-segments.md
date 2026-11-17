@@ -119,7 +119,8 @@ contacts, with the consent evidence, comes in the next part, then undo.
   the job through the `import.started` event. Only an uploaded import starts; a second start
   fails with `IMPORT_ALREADY_STARTED`. `GET /imports/:importId` returns the status, the counts
   and a 15-minute link to the error report. Upload and start need Edit Customers, the read
-  View Customers.
+  View Customers. The member who starts it and confirms the consent evidence is stored
+  separately from the uploader.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
   fills one field at most, so two columns with the same header stay apart.
