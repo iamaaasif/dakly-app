@@ -10,4 +10,7 @@ describe('initialsOf', () => {
   it('keeps a Bangla letter together with its vowel sign', () => {
     expect(initialsOf('সাবিনা আক্তার')).toBe('সাআ');
   });
+  it('keeps a conjunct together', () => {
+    expect(initialsOf('ক্ষমা')).toBe('ক্ষ');
+  });
 });

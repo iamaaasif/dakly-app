@@ -15,6 +15,7 @@ export function CollapseNavigation({
       className="flex min-h-10 min-w-10 items-center gap-3 rounded-md p-2 text-text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       onClick={onCollapse}
       aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+      title={collapsed ? 'Expand navigation' : undefined}
       aria-expanded={!collapsed}
     >
       {collapsed ? (

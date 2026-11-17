@@ -15,20 +15,22 @@ export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
   if (!session.hasMemberships) return <p className="text-text-muted">No shop yet</p>;
   return (
     <div className="order-last w-full min-w-0 basis-full space-y-2 md:order-none md:w-auto md:max-w-xs md:basis-auto">
-      <div className="relative flex min-h-12 items-center gap-3 rounded-lg border border-input-border bg-surface px-2 py-1 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus">
+      <div className="relative flex min-h-12 items-center gap-3 rounded-lg border border-input-border bg-surface px-2 py-1 has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
         <span
           aria-hidden="true"
           className="grid size-8 shrink-0 place-items-center rounded-md bg-inverse text-xs font-semibold text-on-primary"
         >
           {current ? initialsOf(current.name) : ''}
         </span>
-        <p aria-hidden="true" className="min-w-0 flex-1 font-semibold break-words">
-          {current?.name ?? 'Choose a shop'}
-        </p>
+        <div className="min-w-0 flex-1">
+          <label htmlFor="active-shop" className="block text-xs text-text-muted">
+            Current shop
+          </label>
+          <p aria-hidden="true" className="font-semibold break-words">
+            {current?.name ?? 'Choose a shop'}
+          </p>
+        </div>
         <ChevronDown aria-hidden="true" size={16} className="shrink-0 text-text-muted" />
-        <label htmlFor="active-shop" className="sr-only">
-          Current shop
-        </label>
         <select
           id="active-shop"
           value={session.currentStore?.storeId ?? ''}

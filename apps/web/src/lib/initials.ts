@@ -1,5 +1,6 @@
-// A Bangla letter carries vowel signs, which are combining marks: keep them with it.
-const firstLetter = /^\P{M}\p{M}*/u;
+// A Bangla letter carries vowel signs, and a conjunct joins letters with a virama (U+09CD):
+// keep both with the base letter.
+const firstLetter = /^\P{M}(?:\u09CD\P{M}|\p{M})*/u;
 
 export function initialsOf(name: string) {
   return name

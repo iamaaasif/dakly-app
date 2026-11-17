@@ -12,7 +12,8 @@ export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
   const { data } = useSessionContext();
   const access = data?.currentStore;
   const account: SettingsLink[] = [
-    { href: '/security', label: 'Security' },
+    { href: '/security?tab=profile', label: 'My profile' },
+    { href: '/security?tab=two-step', label: 'Security' },
     { href: '/team/ownership', label: 'Ownership transfer' },
     ...(access?.canApproveSupport ? [{ href: '/support-access', label: 'Support access' }] : []),
   ];
@@ -35,7 +36,7 @@ export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
           {access?.canViewStoreSettings ? (
             <SettingsContent tab={tab} />
           ) : (
-            <p role="status">You do not have settings access in this shop.</p>
+            <p role="status">Store details need Store settings access.</p>
           )}
         </div>
       </div>

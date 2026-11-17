@@ -125,7 +125,10 @@ async function settings(page: Page) {
   await expect(page.getByLabel('Store name')).toHaveValue('Security browser shop');
   await expect(page.getByLabel('Legal name')).toHaveValue('');
   await pictures(page, 'settings-store');
-  await page.getByRole('link', { name: 'Extensions', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('link', { name: 'Extensions', exact: true })
+    .click();
   await page.getByLabel('Sales', { exact: true }).check();
   await page.getByLabel('Chats', { exact: true }).uncheck();
   await page.getByLabel('Social auto-post', { exact: true }).uncheck();
