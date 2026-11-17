@@ -152,8 +152,10 @@ comes in the next part.
   so the counts and consent come out the same.
 - The report is a CSV with the row, the field and the problem, stored in R2 for 7 days like
   the upload.
-- Not built yet: undo, the import screens, a preview before start, upload scanning (OPS-4),
-  and `contact.created` events for imported contacts.
+- Imported contacts do not emit `contact.created`, so a large import does not start welcome
+  workflows for everyone in the file. This is the owner's decision, not missing work.
+- Not built yet: undo, the import screens, a preview before start, and upload scanning
+  (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
