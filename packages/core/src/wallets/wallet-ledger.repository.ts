@@ -92,7 +92,7 @@ export class WalletLedgerRepository {
   // the check constraint refuses a balance below zero.
   async insert(storeId: string, entries: NewWalletEntry[]): Promise<Date | 'balance_negative'> {
     try {
-      const rows = await this.database.inTransaction(storeId, (tx) =>
+      const [written] = await this.database.inTransaction(storeId, (tx) =>
         tx
           .insert(walletLedger)
           .values(
@@ -100,7 +100,8 @@ export class WalletLedgerRepository {
           )
           .returning({ createdAt: walletLedger.createdAt }),
       );
-      return rows.at(-1)!.createdAt;
+      if (!written) throw new Error('The wallet insert returned no row');
+      return written.createdAt;
     } catch (error) {
       if (isConstraintViolation(error, '23514', 'wallet_ledger_balance')) return 'balance_negative';
       throw error;

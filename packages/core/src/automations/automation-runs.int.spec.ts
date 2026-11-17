@@ -20,6 +20,8 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { TeamService } from '../team/team.service';
+import { WalletLedgerRepository } from '../wallets/wallet-ledger.repository';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationsModule } from './automations.module';
@@ -34,6 +36,7 @@ const contactId = randomUUID();
 const ownerId = randomUUID();
 const staffUserId = randomUUID();
 const ownerEmail = `owner-${ownerId}@example.test`;
+const coOwnerId = randomUUID();
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
 const applications: INestApplicationContext[] = [];
@@ -205,7 +208,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
       await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
       await admin.pool.query('delete from memberships where store_id=$1', [storeId]);
-      await admin.pool.query('delete from users where id=$1', [ownerId]);
+      await admin.pool.query('delete from users where id=any($1::uuid[])', [[ownerId, coOwnerId]]);
       await admin.pool.query('update automations set published_version_id=null where store_id=$1', [
         storeId,
       ]);
@@ -628,16 +631,21 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       return result.rows[0].balance as number;
     }
 
-    async function drainCredits() {
+    // Sets the store's SMS credits with one adjustment, outside the services.
+    async function setCredits(
+      target: number,
+    ): Promise<{ id: string; created_at: Date } | undefined> {
       const latest = await admin.pool.query(
         "select revision,balance_quantity_after::int as balance from wallet_ledger where store_id=$1 and wallet='sms_credits' order by revision desc limit 1",
         [storeId],
       );
       const { revision, balance } = latest.rows[0];
-      await admin.pool.query(
-        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',$2,'adjustment',$3,0,$4,'system')",
-        [storeId, revision + 1, -balance, `drain-${randomUUID()}`],
+      if (target === balance) return undefined;
+      const entry = await admin.pool.query(
+        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',$2,'adjustment',$3,$4,$5,'system') returning id,created_at",
+        [storeId, revision + 1, target - balance, target, `adjust-${randomUUID()}`],
       );
+      return entry.rows[0];
     }
 
     async function mailTo(address: string): Promise<string[]> {
@@ -967,7 +975,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         { kind: 'charge', delta: -1 },
       ]);
 
-      await drainCredits();
+      await setCredits(0);
       const {
         runIds: [unpaid],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
@@ -1037,7 +1045,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       vi.spyOn(EmailService.prototype, 'send').mockReturnValueOnce(new Promise(() => {}));
       void runner.emailOwner(crashed);
       await vi.waitFor(async () => expect(await runner.valkey.get(claimKey)).toBe('sending'));
-      expect(await runner.valkey.ttl(claimKey)).toBeLessThanOrEqual(60);
+      expect(await runner.valkey.ttl(claimKey)).toBeLessThanOrEqual(20);
       await expect(runner.emailOwner(crashed)).rejects.toMatchObject({
         code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
       });
@@ -1045,6 +1053,29 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runner.emailOwner(crashed);
       expect(await mailTo(ownerEmail)).toHaveLength(2);
       expect(await runner.valkey.ttl(claimKey)).toBeGreaterThan(6 * 24 * 60 * 60);
+      // An owner whose email is still in flight does not hold back another owner's email.
+      const coOwnerEmail = `owner-${coOwnerId}@example.test`;
+      await admin.pool.query("insert into users(id,name,email) values($1,'ফাহিম',$2)", [
+        coOwnerId,
+        coOwnerEmail,
+      ]);
+      // A store has one owner today; the email goes to everyone who may edit billing.
+      vi.spyOn(TeamService.prototype, 'userIdsWithPermission').mockResolvedValueOnce([
+        ownerId,
+        coOwnerId,
+      ]);
+      const inFlight = { ...pausedEvent, id: randomUUID() };
+      await runner.valkey.set(
+        `automation-pause-email:${inFlight.id}:${ownerId}`,
+        'sending',
+        'EX',
+        20,
+      );
+      await expect(runner.emailOwner(inFlight)).rejects.toMatchObject({
+        code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
+      });
+      expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS credits ran out')]);
+      expect(await mailTo(ownerEmail)).toHaveLength(2);
       // A paused workflow's runs are not swept.
       await runner.sweep();
       expect((await run(old!)).status).toBe('waiting');
@@ -1081,7 +1112,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     });
 
     it('resumes after a top-up when the host that credits runs an hour behind the worker', async () => {
-      await drainCredits();
+      await setCredits(0);
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
@@ -1098,6 +1129,43 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await creditThrough(runner, 'sms_credits', `behind-${automationId}`);
 
       expect((await status()).rows).toEqual([{ status: 'active', pause_reason: null }]);
+    });
+
+    it('keeps a pause whose gate already saw a credit that committed while it waited for the lock', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const twoParts = {
+        ...send('transactional'),
+        message: { text: 'ক'.repeat(100), buttons: [] },
+      };
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(twoParts, 1, 'active', contact);
+      // One credit, too few for two parts, commits after the gate's transaction began.
+      let credit: { id: string; created_at: Date } | undefined;
+      const lockWallet = WalletLedgerRepository.prototype.lockWallet;
+      vi.spyOn(WalletLedgerRepository.prototype, 'lockWallet').mockImplementationOnce(
+        async function (this: WalletLedgerRepository, ...args) {
+          credit = await setCredits(1);
+          return lockWallet.apply(this, args);
+        },
+      );
+      await runDueStep(runner, runId!);
+      const status = () =>
+        admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
+      expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
+
+      await runner.resumeOnCredit({
+        id: randomUUID(),
+        type: 'wallet.credited',
+        storeId,
+        occurredAt: credit!.created_at.toISOString(),
+        payload: { wallet: 'sms_credits', entryId: credit!.id },
+      });
+
+      expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
     });
   });
 });

@@ -154,7 +154,7 @@ export class AutomationsRepository {
   }
 
   // The pause time is the database's, as is a top-up's, so the resume compares one clock. It is
-  // cut to milliseconds like the top-up time the event carries.
+  // read after reserve took the wallet lock, and cut to milliseconds like the top-up time.
   async pauseForBalance(
     storeId: string,
     id: string,
@@ -166,7 +166,7 @@ export class AutomationsRepository {
         .set({
           status: 'paused',
           pauseReason: 'balance',
-          balancePausedAt: sql`date_trunc('milliseconds', now())`,
+          balancePausedAt: sql`date_trunc('milliseconds', clock_timestamp())`,
           updatedAt,
         })
         .where(

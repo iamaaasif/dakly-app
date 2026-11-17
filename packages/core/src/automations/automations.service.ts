@@ -214,8 +214,8 @@ export class AutomationsService {
 
   // The email driver takes no idempotency key, so each owner's email for this event is claimed in
   // Valkey first: a retry after some emails went out sends the rest only. Until the email is sent
-  // the claim is short and a retry that meets it fails, so the job's next retry sends the email
-  // of a worker that died mid-send.
+  // the claim is short; a retry that meets it emails the other owners and then fails, so a later
+  // retry sends the email of a worker that died mid-send.
   async emailBalancePause(storeId: string, automationId: string, eventId: string): Promise<void> {
     const automation = await this.repository.find(storeId, automationId);
     if (automation?.status !== 'paused' || automation.pauseReason !== 'balance') return;
@@ -224,19 +224,20 @@ export class AutomationsService {
     const owners = await this.users.profiles(
       await this.team.userIdsWithPermission(storeId, 'billing.edit'),
     );
+    let stillSending = false;
     for (const { id, email } of owners) {
       if (!email) continue;
       const key = `automation-pause-email:${eventId}:${id}`;
-      const claim = await this.valkey.connection.set(
+      const claimed = await this.valkey.connection.set(
         key,
         'sending',
         'EX',
         SENDING_CLAIM_SECONDS,
         'NX',
       );
-      if (!claim) {
-        if ((await this.valkey.connection.get(key)) === 'sent') continue;
-        throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
+      if (!claimed) {
+        stillSending ||= (await this.valkey.connection.get(key)) !== 'sent';
+        continue;
       }
       try {
         await this.email.send({ to: email, subject: title, text });
@@ -247,6 +248,7 @@ export class AutomationsService {
       }
       await this.valkey.connection.set(key, 'sent', 'EX', SENT_CLAIM_SECONDS);
     }
+    if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
   }
 
   // A top-up ends every pause for a short balance that began before it (feature 09); a repeated
@@ -295,9 +297,9 @@ export class AutomationsService {
 
 // The shop app has no top-up screen until PAY-8; Settings is where billing will live.
 const TOP_UP_PATH = '/settings';
-// Longer than an email driver waits for its provider, and shorter than the event job's retries
-// (30 and 60 seconds apart), so a retry after a crash finds the claim gone.
-const SENDING_CLAIM_SECONDS = 60;
+// Longer than an email driver waits for its provider (5 seconds), and short enough to lapse
+// before a crashed job's stall retry, which BullMQ starts 30 to 60 seconds later.
+const SENDING_CLAIM_SECONDS = 20;
 // Longer than the outbox relay keeps retrying an event.
 const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
 
