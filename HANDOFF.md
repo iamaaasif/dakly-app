@@ -118,8 +118,17 @@ On the tips, `pnpm check` passed on all four, and `test:int` and `test:e2e` pass
 3. **Reader branch: the sweep can fail a live import.** `requeue` also returns false when the import is no longer stalled, and two sweeps can overlap. Fail an import only in one guarded update: stalled, `requeue_count >= limit` and `claimed_at IS NOT DISTINCT FROM lease`. Don't leave an orphan report object when that update matches nothing.
 4. **Reader branch: NUL and C0 control bytes break a batch.** They are valid UTF-8 and pass the decoder, but Postgres rejects `\u0000`, so the batch fails on every retry. `decodeCustomerImportFile` must reject NUL and C0 controls other than tab, CR and LF with `IMPORT_FILE_UNREADABLE`. Add a test for UTF-16 with no BOM.
 5. **Undo branch: an undo whose job failed is finished only by the shop clicking again, which is refused after day 7.** The sweep must re-queue `undone` imports where `undo_finished_at` is null, with no 7-day cutoff once the undo was accepted. Add `undoFinishedAt` (or an "undoing" state) to `ImportResponse`.
-6. **Undo branch, owner question: should undo cancel the consents the import granted to existing contacts?** Today undo removes only the contacts the import created. Grants it gave to existing contacts stay. Ask the owner whether undo should record an "import undone" answer for those grants. In any case, state the behaviour in feature 03 and `docs/product/open-questions.md`.
-7. **Job branch, owner question: a WhatsApp grant can attach to a number the file never named.** When an existing contact's saved WhatsApp number differs from the file and is kept, the import still grants WhatsApp consent, so the grant lands on the saved number. Proposed: skip that grant and report it on the row. Confirm with the owner first, since it is close to D42.
+6. **Undo branch: undo must reverse the consents the import granted to existing contacts.** The owner decided this on 17 Nov.
+   - For each consent grant the import made to an existing contact, undo adds a new consent row that restores the state the contact had before the import.
+   - If the contact changed that channel's consent after the import (opted in by message, or withdrew), leave it alone. The later action wins.
+   - Never rewrite old consent rows, and never grant from an old snapshot. Merge undo already works this way; copy its approach.
+   - Go through `ConsentService`, which exposes a method if one is missing. Test both cases: a grant reversed, and a later answer left untouched.
+   - Say this in feature 03.
+7. **Job branch: skip the WhatsApp grant when the number differs.** The owner decided this on 17 Nov.
+   - When an existing contact's saved WhatsApp number differs from the file and is kept, do not grant WhatsApp consent for that row.
+   - Report the row as "WhatsApp consent skipped: number differs".
+   - The import still applies the other channels' consent for that row, wherever the file gives evidence for them.
+   - Add a test and update feature 03.
 
 **Process and nits**
 
@@ -220,6 +229,9 @@ The owner's answers (17 Nov) are in the brief below. What is done and what is le
 - An empty WhatsApp number is filled only when the contact has no WhatsApp consent answer. Otherwise the row report says "WhatsApp number differs, not changed" (D42).
 - Files are capped at 10 MB and 50,000 rows and read whole (see `docs/scale.md`). The 10 MB limit is enforced in the signed URL and again before parsing.
 - The R2 lifecycle rule (delete `imports/` after 7 days) is on the "Open for Asif before beta" list in `architecture.md`.
+
+- **Undo and consent.** Undo reverses the consents the import granted to existing contacts. It adds a new row restoring the state before the import, unless the contact changed that consent afterwards; the later action wins. It never rewrites old rows.
+- **WhatsApp grant.** If the saved WhatsApp number differs from the file, the import skips the WhatsApp grant and reports "WhatsApp consent skipped: number differs". It still applies the other channels' consent when the file gives evidence for them.
 
 **Process**
 - CAMP-5 part 3 must be split. CI's line limit is never raised.
