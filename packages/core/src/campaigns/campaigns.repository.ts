@@ -56,16 +56,20 @@ export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
   skippedCount: number;
 };
 
+type CampaignPauseReason = (typeof campaignPauseReasons)[number];
+
+// The state a change starts from; resume also needs the pause to be a manual one.
+export type CampaignStatusGuard = { status: CampaignStatus; pauseReason?: CampaignPauseReason };
+
 // A state change; returning to draft also clears the approval.
 export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
-  pauseReason?: (typeof campaignPauseReasons)[number] | null;
+  pauseReason?: CampaignPauseReason | null;
+  finishedAt?: Date;
   approvedByUserId?: null;
   approvedAt?: null;
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
-  startedAt?: Date;
-  finishedAt?: Date;
 };
 
 const campaignColumns = {
@@ -120,6 +124,17 @@ export class CampaignsRepository {
         .limit(1),
     );
     return row;
+  }
+
+  async findPauseReason(storeId: string, id: string): Promise<CampaignPauseReason | null> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ pauseReason: campaigns.pauseReason })
+        .from(campaigns)
+        .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)))
+        .limit(1),
+    );
+    return row?.pauseReason ?? null;
   }
 
   async insert(
@@ -206,18 +221,23 @@ export class CampaignsRepository {
     return row;
   }
 
-  // Guarded on the status the change starts from, so a campaign moved meanwhile is left alone.
+  // Guarded on the state the change starts from, so a campaign moved meanwhile is left alone.
   async changeStatus(
     storeId: string,
     id: string,
-    from: CampaignStatus,
+    from: CampaignStatusGuard,
     change: CampaignStatusChange,
   ): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(campaigns)
         .set(change)
-        .where(statusWhere(storeId, id, from))
+        .where(
+          and(
+            statusWhere(storeId, id, from.status),
+            from.pauseReason ? eq(campaigns.pauseReason, from.pauseReason) : undefined,
+          ),
+        )
         .returning(campaignColumns),
     );
     return row;

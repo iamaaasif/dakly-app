@@ -1,3 +1,5 @@
+import type { ValidationField } from '@dakly/contracts/errors';
+
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const CAMPAIGN_ERRORS = {
@@ -17,6 +19,10 @@ const CAMPAIGN_ERRORS = {
   },
   CAMPAIGN_NOT_SENDING: { status: 409, message: 'This campaign is not sending' },
   CAMPAIGN_NOT_PAUSED: { status: 409, message: 'This campaign is not paused' },
+  CAMPAIGN_PAUSED_BY_SYSTEM: {
+    status: 409,
+    message: 'This campaign resumes on its own once the reason it paused is fixed',
+  },
   CAMPAIGN_APPROVAL_DENIED: {
     status: 403,
     message: 'Only an owner or admin can approve sends in this shop',
@@ -25,6 +31,6 @@ const CAMPAIGN_ERRORS = {
 
 export type CampaignErrorCode = keyof typeof CAMPAIGN_ERRORS;
 
-export function campaignError(code: CampaignErrorCode): AppError {
-  return new AppError(code, CAMPAIGN_ERRORS[code]);
+export function campaignError(code: CampaignErrorCode, fields?: ValidationField[]): AppError {
+  return new AppError(code, CAMPAIGN_ERRORS[code], fields);
 }

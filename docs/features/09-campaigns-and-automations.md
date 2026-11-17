@@ -326,19 +326,20 @@ The audience is every contact in any include segment and in no exclude segment, 
 
 ### Edit, cancel, pause and resume (CAMP-2)
 
-Each change is a guarded update from one status, listed in a table in `CampaignsService`. All four routes need `campaigns.edit` and return the campaign.
+Each change is a guarded update from one state, listed in a table in `CampaignsService`. All four routes need `campaigns.edit` and return the campaign.
 
-| Route                                    | From                               | To          | Refused with             |
-| ---------------------------------------- | ---------------------------------- | ----------- | ------------------------ |
-| `POST /campaigns/:campaignId/unschedule` | `scheduled`                        | `draft`     | `CAMPAIGN_NOT_SCHEDULED` |
-| `POST /campaigns/:campaignId/cancel`     | `scheduled`, `sending` or `paused` | `cancelled` | `CAMPAIGN_NOT_SCHEDULED` |
-| `POST /campaigns/:campaignId/pause`      | `sending`                          | `paused`    | `CAMPAIGN_NOT_SENDING`   |
-| `POST /campaigns/:campaignId/resume`     | `paused`                           | `sending`   | `CAMPAIGN_NOT_PAUSED`    |
+| Route                                    | From                                  | To          | Refused with                                                            |
+| ---------------------------------------- | ------------------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `POST /campaigns/:campaignId/unschedule` | `scheduled`                           | `draft`     | `CAMPAIGN_NOT_SCHEDULED`                                                |
+| `POST /campaigns/:campaignId/cancel`     | `scheduled`, `sending` or `paused`    | `cancelled` | `CAMPAIGN_NOT_SCHEDULED`                                                |
+| `POST /campaigns/:campaignId/pause`      | `sending`                             | `paused`    | `CAMPAIGN_NOT_SENDING`                                                  |
+| `POST /campaigns/:campaignId/resume`     | `paused` with `pause_reason` `manual` | `sending`   | `CAMPAIGN_NOT_PAUSED`; `CAMPAIGN_PAUSED_BY_SYSTEM` for any other reason |
 
 - Edit and cancel (CAMP-R7) work until 5 minutes before `scheduledFor`, by the Clock; inside that, or past the send time, they are refused with `CAMPAIGN_CHANGE_TOO_LATE` (409). Each runs in one store transaction that locks the campaign and releases its credit reservation through `WalletService.release`, last, so the wallet lock is held only until commit.
 - Edit is its own action, because returning to draft lets go of the frozen audience and the credits, which a `PATCH` should not do on the side. It deletes the recipients and clears the approver, approval time, estimated cost and counts. The draft can then be changed and approved again, which freezes the audience and reserves anew. The reservation key holds the approval time, so a second approval is not taken for a replay of the first.
-- Cancel keeps the recipients and moves the queued ones to `cancelled`; skipped ones stay skipped.
+- Cancel keeps the recipients and moves the queued ones to `cancelled`; skipped ones stay skipped. It sets `finished_at`, which starts the 372-day recipient retention ([growth.md](../data/growth.md)).
 - Pause sets `pause_reason` to `manual`, and resume clears it. The sender stops claiming recipients once a pause commits; a recipient already claimed is still sent. After a resume the sweep picks the campaign up again within a minute.
+- Only a `manual` pause resumes by hand. Resume is guarded on `status = 'paused'` and `pause_reason = 'manual'`, so it cannot race a system pause; any other reason is refused with `CAMPAIGN_PAUSED_BY_SYSTEM` (409), with the reason in the error's `fields` under `pauseReason`. Each other reason resumes through its own rule: balance on top-up (CAMP-3), and quality, template and provider pauses when their cause clears (CAMP-3 and CHN-3).
 - No event is emitted for these changes; the [event catalogue](../data/jobs.md#events-in-m2-and-m3) lists none.
 - Cancelling a `sending` or `paused` campaign (CAMP-3) is `CampaignSenderService.cancelStarted`, in one store transaction that waits for a claim in progress. It cancels the queued recipients and settles the reservation at once: it charges the credits of recipients the provider took, and of each recipient still in `sending`, because that message may already be with the provider, at the estimate's parts per message. The rest is released. A recipient in `sending` still becomes `sent` or `failed` when its claim finishes. The scheduled path above stays as it was; the two paths are separate, so either can change alone.
 

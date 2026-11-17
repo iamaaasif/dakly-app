@@ -78,11 +78,16 @@ export class CampaignSenderService {
       if (!campaign) return false;
       await this.campaigns.cancelQueuedRecipients(storeId, campaignId);
       const now = this.clock.now();
-      await this.campaigns.changeStatus(storeId, campaignId, campaign.status, {
-        status: 'cancelled',
-        pauseReason: null,
-        updatedAt: now,
-      });
+      await this.campaigns.changeStatus(
+        storeId,
+        campaignId,
+        { status: campaign.status },
+        {
+          status: 'cancelled',
+          pauseReason: null,
+          updatedAt: now,
+        },
+      );
       const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
       // Every message carries an opt-out link of the same length, so it has the estimate's parts.
       const parts = countSmsParts(
@@ -205,11 +210,16 @@ export class CampaignSenderService {
       const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
       if (unsettled > 0) return;
       const now = this.clock.now();
-      await this.campaigns.changeStatus(storeId, campaignId, 'sending', {
-        status: 'sent',
-        finishedAt: now,
-        updatedAt: now,
-      });
+      await this.campaigns.changeStatus(
+        storeId,
+        campaignId,
+        { status: 'sending' },
+        {
+          status: 'sent',
+          finishedAt: now,
+          updatedAt: now,
+        },
+      );
       await this.outbox.publish({
         type: 'campaign.sent',
         storeId,

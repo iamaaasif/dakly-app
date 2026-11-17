@@ -146,6 +146,10 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     const rows = await recipientRows(id);
     expect(rows).toHaveLength(3);
     expect(rows.every((row) => row.status === 'cancelled')).toBe(true);
+    const [cancelled] = (
+      await admin.pool.query('select finished_at from campaigns where id=$1', [id])
+    ).rows;
+    expect(cancelled.finished_at).toEqual(clockNow);
     await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
       code: 'CAMPAIGN_NOT_SCHEDULED',
     });
@@ -198,5 +202,23 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
       await admin.pool.query('select status, pause_reason from campaigns where id=$1', [id])
     ).rows;
     expect(resumed).toEqual({ status: 'sending', pause_reason: null });
+  });
+
+  it('refuses to resume by hand a campaign paused for its balance', async () => {
+    const id = await approvedCampaign(null);
+    await admin.pool.query(
+      "update campaigns set status='paused', pause_reason='balance' where id=$1",
+      [id],
+    );
+
+    await expect(service.resume(storeId, id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_PAUSED_BY_SYSTEM',
+      status: 409,
+      fields: [{ path: 'pauseReason', message: 'balance' }],
+    });
+    const [paused] = (
+      await admin.pool.query('select status, pause_reason from campaigns where id=$1', [id])
+    ).rows;
+    expect(paused).toEqual({ status: 'paused', pause_reason: 'balance' });
   });
 });
