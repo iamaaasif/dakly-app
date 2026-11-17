@@ -59,7 +59,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     input: StartImportInput,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<ImportResponse> {
     await this.transaction.run(storeId, async () => {
       const now = this.clock.now();
@@ -69,6 +69,7 @@ export class ImportsService {
         consentEvidence: input.consentEvidence,
         hasConsentConfirmation: Object.keys(input.consentEvidence).length > 0,
         startedAt: now,
+        startedByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       if (!started) {
         await this.findImport(storeId, importId);
