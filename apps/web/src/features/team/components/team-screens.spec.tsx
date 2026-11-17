@@ -27,6 +27,7 @@ function show(child: ReactNode, edit = false) {
       canViewCustomers: false,
       canCreateCustomer: false,
       canViewSegments: false,
+      canEditSegments: false,
       canApproveSupport: false,
       canTransferOwnership: false,
       canViewStoreSettings: false,
