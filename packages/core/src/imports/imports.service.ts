@@ -14,7 +14,7 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { FILE_STORAGE_DRIVER } from './file-storage-provider';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { importError } from './imports.errors';
 import { type Import, ImportsRepository, type NewImportFile } from './imports.repository';
 

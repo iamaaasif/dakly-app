@@ -4,16 +4,20 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
+
+import { FileStorageModule } from '../platform/file-storage/file-storage.module';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { DatabaseModule } from '../platform/database/database.module';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, ImportsModule] })(TestModule);
+Module({ imports: [DatabaseModule, ImportsModule, FileStorageModule] })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
@@ -113,6 +117,18 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
       uploaded_by_user_id: userId,
       started_by_user_id: starterId,
     });
+  });
+
+  it('uses the shared storage driver for its upload URL', async () => {
+    const storage = app.get<FileStorageDriver>(FILE_STORAGE_DRIVER);
+    const uploadUrl = 'https://files.example.test/import.csv';
+    const signed = vi.spyOn(storage, 'createUploadUrl').mockReturnValue(uploadUrl);
+    try {
+      const result = await service.createCustomerImport(storeId, { sizeBytes: 40 }, owner);
+      expect(result.uploadUrl).toBe(uploadUrl);
+    } finally {
+      signed.mockRestore();
+    }
   });
 
   it('refuses to start an import twice and answers a missing one with not found', async () => {
