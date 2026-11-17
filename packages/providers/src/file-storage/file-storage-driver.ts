@@ -4,6 +4,7 @@ export type FileStorageDriver = {
   createUploadUrl(key: string, expiresInSeconds: number, upload?: FileObjectMetadata): string;
   createDownloadUrl(key: string, expiresInSeconds: number): string;
   getObjectMetadata(key: string): Promise<FileObjectMetadata | null>;
+  deleteObject(key: string): Promise<void>;
   readBytes(key: string, maxBytes: number): Promise<StoredFile>;
   writeText(key: string, body: string, contentType: string): Promise<void>;
 };

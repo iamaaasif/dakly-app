@@ -101,6 +101,15 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
     expect(download.status).toBe(404);
   });
 
+  it('deletes a rejected report object and accepts repeating its cleanup', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    await driver.writeText(key, 'Row,Field,Problem\r\n', 'text/csv');
+    await driver.deleteObject(key);
+    expect(await driver.getObjectMetadata(key)).toBeNull();
+    await expect(driver.deleteObject(key)).resolves.toBeUndefined();
+  });
+
   it('writes text the server makes and reads it back with its content type', async () => {
     const driver = driverAt(new Date());
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;

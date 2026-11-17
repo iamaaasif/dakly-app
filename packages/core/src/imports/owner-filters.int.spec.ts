@@ -26,6 +26,35 @@ describe('import filters without RLS assistance', () => {
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
+  it.each([
+    ['recent progress', 4, '2026-11-17T06:00:00Z'],
+    ['retries remaining', 3, '2026-11-17T04:30:00Z'],
+  ])(
+    'does not fail an import with %s after the sweep read it',
+    async (_case, retries, progress) => {
+      const importId = randomUUID();
+      const lease = new Date('2026-11-17T04:30:00Z');
+      const now = new Date('2026-11-17T06:00:00Z');
+      await repository.createCustomerImport(f.a, importId, upload(f.a), f.userA);
+      await f.connection.pool.query(
+        "update imports set status='importing', claimed_at=$2, last_progress_at=$3, requeue_count=$4 where id=$1",
+        [importId, lease, progress, retries],
+      );
+      const report = { ...upload(f.a), status: 'ready' as const };
+      expect(
+        await repository.finish(f.a, importId, {
+          lease,
+          result: { status: 'failed', finishedAt: now },
+          report,
+          stalled: { before: new Date('2026-11-17T05:45:00Z'), limit: 4 },
+        }),
+      ).toBe(false);
+      expect((await repository.findById(f.a, importId))?.status).toBe('importing');
+      expect(await f.row('files', report.id)).toBeUndefined();
+      await f.connection.pool.query('delete from imports where id=$1', [importId]);
+    },
+  );
+
   it('creates, starts and finishes an import only in the selected store', async () => {
     const importA = randomUUID();
     const importB = randomUUID();

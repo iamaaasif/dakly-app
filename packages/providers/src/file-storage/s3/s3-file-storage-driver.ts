@@ -15,7 +15,7 @@ const REQUEST_SECONDS = 60;
 const REQUEST_TIMEOUT_MS = 60_000;
 
 type PresignRequest = {
-  method: 'GET' | 'PUT' | 'HEAD';
+  method: 'GET' | 'PUT' | 'HEAD' | 'DELETE';
   url: URL;
   region: string;
   accessKeyId: string;
@@ -94,6 +94,15 @@ export class S3FileStorageDriver implements FileStorageDriver {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`File storage write failed with ${response.status}`);
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    const response = await fetch(this.presign('DELETE', key, REQUEST_SECONDS), {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok && response.status !== 404)
+      throw new Error(`File storage delete failed with ${response.status}`);
   }
 
   private presign(

@@ -133,10 +133,16 @@ export class ImportsService {
           return true;
         });
         if (!requeued)
-          await this.finish(storeId, stuck.id, stuck.claimedAt, {
-            status: 'failed',
-            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
-          });
+          await this.finish(
+            storeId,
+            stuck.id,
+            stuck.claimedAt,
+            {
+              status: 'failed',
+              lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+            },
+            { before, limit: MAX_REQUEUES },
+          );
       }
   }
 
@@ -145,10 +151,17 @@ export class ImportsService {
     importId: string,
     lease: Date | null,
     { status, counts, lines }: Outcome,
+    stalled?: { before: Date; limit: number },
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
-    await this.repository.finish(storeId, importId, { lease, result, report });
+    const finished = await this.repository.finish(storeId, importId, {
+      lease,
+      result,
+      report,
+      stalled,
+    });
+    if (!finished && report) await this.storage.deleteObject(report.objectKey);
   }
 
   private async findImport(storeId: string, importId: string): Promise<Import> {

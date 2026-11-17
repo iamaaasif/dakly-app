@@ -4,12 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
+import { FILE_STORAGE_DRIVER } from './file-storage-provider';
+import { ImportsRepository } from './imports.repository';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
 
@@ -75,6 +79,36 @@ describe('ImportsService imports (Postgres and SeaweedFS)', () => {
       await admin.pool.query('delete from users where id=$1', [userId]);
     } finally {
       await admin.pool.end();
+    }
+  });
+
+  it('keeps a resumed import alive and removes the report from a lost sweep race', async () => {
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${phone()},,`);
+    await admin.pool.query(
+      "update imports set started_at=now() - interval '2 hours', last_progress_at=now() - interval '20 minutes' where id=$1",
+      [importId],
+    );
+    const repository = app.get(ImportsRepository);
+    const storage = app.get<FileStorageDriver>(FILE_STORAGE_DRIVER);
+    const requeue = repository.requeue.bind(repository);
+    const write = storage.writeText.bind(storage);
+    const objects: string[] = [];
+    const writeSpy = vi.spyOn(storage, 'writeText').mockImplementation(async (key, body, type) => {
+      objects.push(key);
+      await write(key, body, type);
+    });
+    const requeueSpy = vi.spyOn(repository, 'requeue').mockImplementationOnce(async (...args) => {
+      await admin.pool.query('update imports set last_progress_at=now() where id=$1', [importId]);
+      return requeue(...args);
+    });
+    try {
+      await service.sweepStuckImports();
+      expect((await service.get(storeId, importId)).status).toBe('importing');
+      for (const key of objects) expect(await storage.getObjectMetadata(key)).toBeNull();
+      expect((await service.get(storeId, importId)).reportUrl).toBeNull();
+    } finally {
+      requeueSpy.mockRestore();
+      writeSpy.mockRestore();
     }
   });
 

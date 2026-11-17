@@ -148,7 +148,9 @@ contacts, with the consent evidence, comes in the next part, then undo.
   15 minutes (`imports.last_progress_at`, else `started_at`). Their job may have died with its
   worker or may still wait behind others, so each is queued again with a new `import.started`
   event, up to 4 times, and failed only after that, with a line in its report. The report is a
-  CSV in R2 whose `files` row expires after 7 days, like the upload.
+  CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
+  progress time, retry limit and observed lease in one update. A report from a sweep
+  that loses this check is deleted.
 - A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
   the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
   being read as records, so 10 MB of line breaks costs no memory.
