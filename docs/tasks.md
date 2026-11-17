@@ -127,18 +127,18 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M5. Products
 
-| ID     | Task                                   | Status | Depends        | PR  | Notes |
-| ------ | -------------------------------------- | ------ | -------------- | --- | ----- |
-| PROD-1 | Products, options, variants            | Todo   | ACC-3          |     |       |
-| PROD-2 | Stock ledger and `moveStock`           | Todo   | PROD-1         |     |       |
-| PROD-3 | Photo upload to R2 with presigned URLs | Todo   | PROD-1, FILE-1 |     |       |
-| PROD-4 | Web: products list and product editor  | Todo   | PROD-2, WEB-2  |     |       |
+| ID     | Task                                   | Status    | Depends        | PR   | Notes |
+| ------ | -------------------------------------- | --------- | -------------- | ---- | ----- |
+| PROD-1 | Products, options, variants            | In review | ACC-3          | #121 |       |
+| PROD-2 | Stock ledger and `moveStock`           | Todo      | PROD-1         |      |       |
+| PROD-3 | Photo upload to R2 with presigned URLs | Todo      | PROD-1, FILE-1 |      |       |
+| PROD-4 | Web: products list and product editor  | Todo      | PROD-2, WEB-2  |      |       |
 
 ## M6. Orders
 
 | ID    | Task                                                                             | Status | Depends        | PR  | Notes                                                                         |
 | ----- | -------------------------------------------------------------------------------- | ------ | -------------- | --- | ----------------------------------------------------------------------------- |
-| ORD-1 | Orders, items, stage table, stage events, order numbers                          | Todo   | PROD-2, CUS-1  |     | Q7                                                                            |
+| ORD-1 | Orders, items, stage table, stage events, order numbers                          | Todo   | PROD-2, CUS-1  |     | Q7; open-order product archive guard through OrdersService                    |
 | ORD-2 | Delivery zones, areas and charges                                                | Todo   | ACC-3          |     |                                                                               |
 | ORD-3 | Create order from chat and from staff                                            | Todo   | ORD-1, ORD-2   |     | D26/D27: buyer and recipient snapshot; self phone save; conflicts allow order |
 | ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo   | ORD-3, CAMP-11 |     | Was a separate confirmation sender; now runs on the workflow engine           |

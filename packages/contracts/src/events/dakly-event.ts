@@ -17,10 +17,12 @@ import {
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
+import { productUpdatedEventSchema } from './products';
 import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactCreatedEventSchema,
+  productUpdatedEventSchema,
   consentChangedEventSchema,
   segmentSavedEventSchema,
   campaignApprovedEventSchema,
