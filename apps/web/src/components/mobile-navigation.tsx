@@ -7,13 +7,12 @@ import { Button } from '@dakly/ui/button';
 
 import { ShellNavigation } from './shell-navigation';
 
-export function MobileNavigation({
-  session,
-  blocked,
-}: {
+type MobileNavigationProps = {
   session: SessionContext;
   blocked: boolean;
-}) {
+  onSignOut: () => Promise<void>;
+};
+export function MobileNavigation({ session, blocked, onSignOut }: MobileNavigationProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -45,20 +44,22 @@ export function MobileNavigation({
         onClose={() => trigger.current?.focus()}
         className="fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-62 max-w-full border-r border-border bg-surface text-text backdrop:bg-inverse/50"
       >
-        <div className="flex items-center justify-between p-3">
-          <h2 id="navigation-title" className="font-semibold">
-            Navigation
-          </h2>
-          <Button
-            variant="secondary"
-            className="px-2"
-            aria-label="Close navigation"
-            onClick={() => dialog.current?.close()}
-          >
-            <X aria-hidden="true" size={20} />
-          </Button>
-        </div>
-        <ShellNavigation session={session} onNavigate={() => dialog.current?.close()} />
+        <h2 id="navigation-title" className="sr-only">
+          Navigation
+        </h2>
+        <Button
+          variant="secondary"
+          className="absolute top-3 right-3 px-2"
+          aria-label="Close navigation"
+          onClick={() => dialog.current?.close()}
+        >
+          <X aria-hidden="true" size={20} />
+        </Button>
+        <ShellNavigation
+          session={session}
+          onSignOut={onSignOut}
+          onNavigate={() => dialog.current?.close()}
+        />
       </dialog>
     </>
   );
