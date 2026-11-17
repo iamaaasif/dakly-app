@@ -174,6 +174,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const [first, second] = [await worker(), await worker()];
 
     await Promise.all([first.sweep(), second.sweep()]);
+    // A sweep takes at most 100 of one store's runs, so the rest come in the next sweep.
+    await first.sweep();
 
     const queued = [
       ...(await queuedSteps(first.queue)),
@@ -411,5 +413,45 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       current_step_key: 'end',
       attempts: 0,
     });
+  });
+
+  it('claims another store’s due run in the same sweep as a large backlog', async () => {
+    const { runIds: backlog } = await dueRuns(wait, 150);
+    const otherStore = randomUUID();
+    const otherContact = randomUUID();
+    await admin.pool.query("insert into stores(id,name) values($1,'করিমের দোকান')", [otherStore]);
+    await admin.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'করিম','manual','customer')",
+      [otherContact, otherStore],
+    );
+    const automationId = randomUUID();
+    const versionId = randomUUID();
+    const graph = JSON.stringify(graphWith(wait));
+    await admin.pool.query(
+      "insert into automations(id,store_id,name,trigger_type,draft_graph,status) values($1,$2,'স্বাগতম','consent_given','{}','active')",
+      [automationId, otherStore],
+    );
+    await admin.pool.query(
+      'insert into automation_versions(id,store_id,automation_id,version,graph) values($1,$2,$3,1,$4)',
+      [versionId, otherStore, automationId, graph],
+    );
+    const other = await admin.pool.query<{ id: string }>(
+      "insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at) values(gen_random_uuid(),$1,$2,$3,$4,'k','first','waiting',now() - interval '1 minute') returning id",
+      [otherStore, automationId, versionId, otherContact],
+    );
+    const runner = await worker();
+    try {
+      await runner.sweep();
+
+      const queued = (await queuedSteps(runner.queue)).map((step) => step.automationRunId);
+      expect(queued).toContain(other.rows[0]!.id);
+      expect(queued.filter((runId) => backlog.includes(runId))).toHaveLength(100);
+    } finally {
+      await admin.pool.query('delete from automation_runs where store_id=$1', [otherStore]);
+      await admin.pool.query('delete from automation_versions where store_id=$1', [otherStore]);
+      await admin.pool.query('delete from automations where store_id=$1', [otherStore]);
+      await admin.pool.query('delete from contacts where store_id=$1', [otherStore]);
+      await admin.pool.query('delete from stores where id=$1', [otherStore]);
+    }
   });
 });

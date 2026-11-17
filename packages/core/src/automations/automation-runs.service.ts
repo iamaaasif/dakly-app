@@ -16,9 +16,10 @@ import {
   type RunClaim,
 } from './automation-runs.repository';
 
-const CLAIM_BATCH_SIZE = 100;
-// One sweep claims at most this many batches, so a backlog spreads over the next ticks.
-const CLAIM_BATCHES_PER_SWEEP = 10;
+// One sweep claims at most this many runs, and no more than the queue has room for.
+const MAX_QUEUED_STEPS = 1000;
+// And at most this many of one store's runs, so a backlog cannot hold back other stores.
+const CLAIMS_PER_STORE = 100;
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 
@@ -36,22 +37,23 @@ export class AutomationRunsService {
   ) {}
 
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
-  // claims that a later sweep takes again once they are five minutes old.
-  async wakeDueRuns(queueSteps: (claims: DueRun[]) => Promise<void>) {
-    for (let batch = 0; batch < CLAIM_BATCHES_PER_SWEEP; batch++) {
-      const claims = await this.repository.claimDue(CLAIM_BATCH_SIZE);
-      await queueSteps(claims);
-      if (claims.length < CLAIM_BATCH_SIZE) return;
-    }
+  // claims that a later sweep takes again once they are five minutes old. Claiming only what the
+  // queue has room for keeps a lease from running out while its job waits.
+  async wakeDueRuns(queuedSteps: number, queueSteps: (claims: DueRun[]) => Promise<void>) {
+    const room = MAX_QUEUED_STEPS - queuedSteps;
+    if (room <= 0) return;
+    await queueSteps(await this.repository.claimDue(room, CLAIMS_PER_STORE));
   }
 
   // Returns the claim on the next step when the run goes straight on, for its job to queue.
-  async continueRun(storeId: string, claim: RunClaim): Promise<RunClaim | undefined> {
-    const found = await this.repository.findRun(storeId, claim.runId);
-    if (!found || !holdsClaim(found, claim)) return undefined;
-    const attempts = await this.repository.startWork(storeId, claim);
-    if (attempts === undefined) return undefined;
-    const run = { ...found, attempts };
+  async continueRun(storeId: string, queued: RunClaim): Promise<RunClaim | undefined> {
+    const found = await this.repository.findRun(storeId, queued.runId);
+    if (!found || !holdsClaim(found, queued)) return undefined;
+    // A job that starts late takes a fresh lease and works under it.
+    const started = await this.repository.startWork(storeId, queued, this.clock.now());
+    if (!started) return undefined;
+    const claim = { ...queued, claimedAt: started.claimedAt };
+    const run = { ...found, ...started };
     const result = await this.runStep(claim, run);
     // Every committed step starts the count of claims without progress again.
     const change = { attempts: 0, lastError: null, ...result.run };
