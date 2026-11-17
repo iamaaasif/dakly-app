@@ -78,15 +78,12 @@ export class CampaignSenderService {
       if (!campaign) return false;
       await this.campaigns.cancelQueuedRecipients(storeId, campaignId);
       const now = this.clock.now();
+      // As for a scheduled cancel, this starts the recipient retention (growth.md).
       await this.campaigns.changeStatus(
         storeId,
         campaignId,
         { status: campaign.status },
-        {
-          status: 'cancelled',
-          pauseReason: null,
-          updatedAt: now,
-        },
+        { status: 'cancelled', pauseReason: null, finishedAt: now, updatedAt: now },
       );
       const { unsettled, chargedCredits } = await this.repository.settlement(storeId, campaignId);
       // Every message carries an opt-out link of the same length, so it has the estimate's parts.

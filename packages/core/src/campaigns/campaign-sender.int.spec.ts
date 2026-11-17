@@ -391,6 +391,7 @@ describe('Campaign sender (Postgres)', () => {
 
     expect((await campaigns.cancel(storeId, id, actor)).status).toBe('cancelled');
 
+    expect(await campaignRow(id)).toMatchObject({ finished_at: noon });
     expect((await recipients(id)).map((row) => row.status).sort()).toEqual([
       'cancelled',
       'sending',
@@ -413,6 +414,7 @@ describe('Campaign sender (Postgres)', () => {
 
     expect((await campaigns.cancel(storeId, id, actor)).status).toBe('cancelled');
 
+    expect(await campaignRow(id)).toMatchObject({ status: 'cancelled', finished_at: noon });
     expect((await recipients(id)).map((row) => row.status)).toEqual(['cancelled', 'cancelled']);
     expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
