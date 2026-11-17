@@ -110,15 +110,25 @@ describe('campaign filters without RLS assistance', () => {
 
     expect(await repository.lockScheduled(f.b, a.id)).toBeUndefined();
     expect(
-      await repository.changeStatus(f.b, a.id, 'scheduled', {
-        status: 'cancelled',
-        updatedAt: now,
-      }),
+      await repository.changeStatus(
+        f.b,
+        a.id,
+        { status: 'scheduled' },
+        {
+          status: 'cancelled',
+          updatedAt: now,
+        },
+      ),
     ).toBeUndefined();
     await repository.cancelQueuedRecipients(f.b, a.id);
     await repository.removeRecipients(f.b, a.id);
     expect(
-      await repository.changeStatus(f.b, b.id, 'draft', { status: 'cancelled', updatedAt: now }),
+      await repository.changeStatus(
+        f.b,
+        b.id,
+        { status: 'draft' },
+        { status: 'cancelled', updatedAt: now },
+      ),
     ).toMatchObject({ status: 'cancelled' });
 
     expect(await f.row('campaigns', a.id)).toEqual(before);
@@ -128,5 +138,27 @@ describe('campaign filters without RLS assistance', () => {
     );
     expect(rows).toEqual([{ status: 'queued' }]);
     await f.connection.pool.query('delete from contacts where id=$1', [contactA]);
+  });
+
+  it('reads the pause reason of and resumes only the selected store’s campaigns', async () => {
+    const a = await repository.insert(f.a, { ...draft, createdByUserId: f.userA });
+    await f.connection.pool.query(
+      "update campaigns set status='paused', pause_reason='manual' where id=$1",
+      [a.id],
+    );
+    const before = await f.row('campaigns', a.id);
+    const now = new Date('2026-11-16T05:00:00Z');
+
+    expect(await repository.findPauseReason(f.b, a.id)).toBeNull();
+    expect(await repository.findPauseReason(f.a, a.id)).toBe('manual');
+    expect(
+      await repository.changeStatus(
+        f.b,
+        a.id,
+        { status: 'paused', pauseReason: 'manual' },
+        { status: 'sending', pauseReason: null, updatedAt: now },
+      ),
+    ).toBeUndefined();
+    expect(await f.row('campaigns', a.id)).toEqual(before);
   });
 });

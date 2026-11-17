@@ -30,22 +30,28 @@ import {
   type Campaign,
   CampaignsRepository,
   type CampaignStatusChange,
+  type CampaignStatusGuard,
   type FrozenRecipient,
 } from './campaigns.repository';
 
 // Writes take the actor (services.md); nothing records it for drafts yet.
 type Actor = AuditEntry['actor'];
 
+type StatusChange = { from: CampaignStatusGuard; to: CampaignStatus; refused: CampaignErrorCode };
+
 // The changes a member makes by hand (state-machines.md); the sender (CAMP-3) makes the rest.
+// Only a manual pause resumes by hand: a balance pause resumes on top-up (CAMP-3), and the
+// others when their cause clears (CAMP-3, CHN-3).
 const STATUS_CHANGES = {
-  unschedule: { from: 'scheduled', to: 'draft', refused: 'CAMPAIGN_NOT_SCHEDULED' },
-  cancel: { from: 'scheduled', to: 'cancelled', refused: 'CAMPAIGN_NOT_SCHEDULED' },
-  pause: { from: 'sending', to: 'paused', refused: 'CAMPAIGN_NOT_SENDING' },
-  resume: { from: 'paused', to: 'sending', refused: 'CAMPAIGN_NOT_PAUSED' },
-} as const satisfies Record<
-  string,
-  { from: CampaignStatus; to: CampaignStatus; refused: CampaignErrorCode }
->;
+  unschedule: { from: { status: 'scheduled' }, to: 'draft', refused: 'CAMPAIGN_NOT_SCHEDULED' },
+  cancel: { from: { status: 'scheduled' }, to: 'cancelled', refused: 'CAMPAIGN_NOT_SCHEDULED' },
+  pause: { from: { status: 'sending' }, to: 'paused', refused: 'CAMPAIGN_NOT_SENDING' },
+  resume: {
+    from: { status: 'paused', pauseReason: 'manual' },
+    to: 'sending',
+    refused: 'CAMPAIGN_NOT_PAUSED',
+  },
+} as const satisfies Record<string, StatusChange>;
 // Approval runs in one request until CAMP-13 makes it a job; this bounds that work.
 export const MAX_CAMPAIGN_AUDIENCE = 20_000;
 // CAMP-R7: a scheduled campaign can be edited or cancelled until 5 minutes before it sends.
@@ -176,7 +182,10 @@ export class CampaignsService {
     return this.transaction.run(storeId, async () => {
       const campaign = await this.lockBeforeSend(storeId, campaignId);
       await this.repository.cancelQueuedRecipients(storeId, campaignId);
-      const cancelled = await this.changeStatus(storeId, campaignId, 'cancel');
+      // Starts the 372-day recipient retention (growth.md).
+      const cancelled = await this.changeStatus(storeId, campaignId, 'cancel', {
+        finishedAt: this.clock.now(),
+      });
       await this.releaseCredits(storeId, campaign, actor);
       return cancelled;
     });
@@ -221,14 +230,22 @@ export class CampaignsService {
     name: keyof typeof STATUS_CHANGES,
     change: Omit<CampaignStatusChange, 'status' | 'updatedAt'> = {},
   ): Promise<CampaignResponse> {
-    const { from, to, refused } = STATUS_CHANGES[name];
+    const { from, to, refused }: StatusChange = STATUS_CHANGES[name];
     const campaign = await this.repository.changeStatus(storeId, campaignId, from, {
       ...change,
       status: to,
       updatedAt: this.clock.now(),
     });
-    if (!campaign) throw await this.refusal(storeId, campaignId, refused);
-    return toCampaignResponse(campaign);
+    if (campaign) return toCampaignResponse(campaign);
+    // Read only to name the refusal; the guarded update has already decided.
+    const pauseReason =
+      from.pauseReason && (await this.repository.findPauseReason(storeId, campaignId));
+    if (pauseReason && pauseReason !== from.pauseReason) {
+      throw campaignError('CAMPAIGN_PAUSED_BY_SYSTEM', [
+        { path: 'pauseReason', message: pauseReason },
+      ]);
+    }
+    throw await this.refusal(storeId, campaignId, refused);
   }
 
   private async markApproved(
