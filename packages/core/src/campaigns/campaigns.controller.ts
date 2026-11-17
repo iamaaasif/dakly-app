@@ -109,4 +109,48 @@ export class CampaignsController {
       actor: { kind: 'user', userId },
     });
   }
+
+  @Post(':campaignId/unschedule')
+  @HttpCode(200)
+  @RequirePermission('campaigns.edit')
+  unschedule(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.campaigns.unschedule(storeId, campaignId, { kind: 'user', userId });
+  }
+
+  @Post(':campaignId/cancel')
+  @HttpCode(200)
+  @RequirePermission('campaigns.edit')
+  cancel(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.campaigns.cancel(storeId, campaignId, { kind: 'user', userId });
+  }
+
+  @Post(':campaignId/pause')
+  @HttpCode(200)
+  @RequirePermission('campaigns.edit')
+  pause(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.campaigns.pause(storeId, campaignId, { kind: 'user', userId });
+  }
+
+  @Post(':campaignId/resume')
+  @HttpCode(200)
+  @RequirePermission('campaigns.edit')
+  resume(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.campaigns.resume(storeId, campaignId, { kind: 'user', userId });
+  }
 }
