@@ -1,0 +1,1 @@
+ALTER TABLE "imports" ADD COLUMN "undo_finished_at" timestamp with time zone;

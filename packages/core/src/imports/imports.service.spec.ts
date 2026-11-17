@@ -30,16 +30,20 @@ describe('ImportsService', () => {
   let failBatch: boolean;
   let removed: string[];
   let published: string[];
-  let leftToRemove: number;
+  let pool: string[];
+  let answers: { contactId: string; channel: string; status: string; source: string }[];
   let failReport: boolean;
   let service: ImportsService;
 
   const repository = {
     findById: async () => found,
     markUndone: async () => {
-      if (found?.status !== 'done') return false;
+      if (found?.status !== 'done' && found?.status !== 'failed') return false;
       found = { ...found, status: 'undone' };
       return true;
+    },
+    markUndoFinished: async (_s: string, _i: string, at: Date) => {
+      found = { ...found!, undoFinishedAt: at };
     },
     claim: async (_s: string, _i: string, now: Date, staleBefore: Date) => {
       if (lease && lease >= staleBefore) return false;
@@ -65,11 +69,14 @@ describe('ImportsService', () => {
     },
   };
   const contacts = {
-    removeUneditedByImport: async (_storeId: string, importId: string, limit: number) => {
-      removed.push(importId);
-      const batch = Math.min(limit, leftToRemove);
-      leftToRemove -= batch;
-      return batch;
+    lockUneditedByImport: async (
+      _storeId: string,
+      _importId: string,
+      page: { after?: string; limit: number },
+    ) => pool.filter((id) => !page.after || id > page.after).slice(0, page.limit),
+    removeAll: async (_storeId: string, ids: string[]) => {
+      removed.push(...ids);
+      pool = pool.filter((id) => !ids.includes(id));
     },
     saveImportedRows: async (
       _storeId: string,
@@ -90,6 +97,8 @@ describe('ImportsService', () => {
     },
   };
   const consents = {
+    currentForAudience: async (_storeId: string, ids: string[], channel: string) =>
+      answers.filter((answer) => answer.channel === channel && ids.includes(answer.contactId)),
     grantFromImport: async (_storeId: string, grant: { contactIds: string[]; channel: string }) => {
       const withdrawnContactIds: string[] = [];
       for (const contactId of grant.contactIds) {
@@ -127,6 +136,7 @@ describe('ImportsService', () => {
       consentEvidence,
       createdByUserId: USER_ID,
       finishedAt: null,
+      undoFinishedAt: null,
       uploadFileId: '019c01ea-cf15-7d31-a7f5-d73d66007ad8',
       uploadKey: UPLOAD,
       reportKey: null,
@@ -147,7 +157,8 @@ describe('ImportsService', () => {
     failBatch = false;
     removed = [];
     published = [];
-    leftToRemove = 0;
+    pool = [];
+    answers = [];
     service = new ImportsService(
       repository as unknown as ImportsRepository,
       contacts as unknown as ContactsService,
@@ -283,81 +294,112 @@ describe('ImportsService', () => {
 
   describe('undo', () => {
     const finishedAt = new Date('2026-11-14T04:30:00Z');
+    const actor = { kind: 'user', userId: USER_ID } as const;
+    const ids = (count: number) =>
+      Array.from({ length: count }, (_, index) => `contact-${String(index).padStart(5, '0')}`);
 
     function finishedImport(status: Import['status'] = 'done', at: Date | null = finishedAt) {
       importing({});
       found = { ...found!, status, finishedAt: at };
     }
 
-    it('marks the import undone and queues the removal without deleting yet', async () => {
-      finishedImport();
-
-      const result = await service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID });
-
-      expect(result.status).toBe('undone');
-      expect(published).toEqual(['import.undo_requested']);
-      expect(removed).toEqual([]);
-    });
-
-    it('removes the contacts in batches until none are left', async () => {
-      finishedImport('undone');
-      leftToRemove = 2_500;
-
-      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
-
-      expect(leftToRemove).toBe(0);
-      expect(removed).toHaveLength(3);
-    });
-
-    it('removes nothing for an import that is not undone', async () => {
-      finishedImport('done');
-      leftToRemove = 5;
-
-      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
-
-      expect(removed).toEqual([]);
-    });
-
-    it.each(['uploaded', 'importing', 'failed', 'undone'] as const)(
-      'refuses an import that is %s',
+    it.each(['done', 'failed'] as const)(
+      'marks a %s import undone and queues the removal without deleting yet',
       async (status) => {
         finishedImport(status);
+        pool = ids(3);
 
-        await expect(
-          service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
-        ).rejects.toMatchObject({ code: 'IMPORT_NOT_UNDOABLE' });
-        expect(published).toEqual([]);
+        const result = await service.undo(STORE_ID, IMPORT_ID, actor);
+
+        expect(result.status).toBe('undone');
+        expect(published).toEqual(['import.undo_requested']);
+        expect(removed).toEqual([]);
       },
     );
 
-    it('refuses a second undo', async () => {
+    it('removes the contacts in batches until none are left and then finishes the undo', async () => {
+      finishedImport('undone');
+      pool = ids(1_200);
+
+      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
+
+      expect(removed).toEqual(ids(1_200));
+      expect(found?.undoFinishedAt).toEqual(new Date('2026-11-17T04:30:00Z'));
+    });
+
+    it('keeps a contact whose consent answer is not the import grant', async () => {
+      finishedImport('undone');
+      pool = ids(4);
+      const [granted, optedOut, manual, whatsappOptOut] = pool;
+      answers = [
+        { contactId: granted!, channel: 'sms', status: 'granted', source: 'import' },
+        { contactId: optedOut!, channel: 'sms', status: 'withdrawn', source: 'opt_out_link' },
+        { contactId: manual!, channel: 'sms', status: 'granted', source: 'manual' },
+        { contactId: whatsappOptOut!, channel: 'whatsapp', status: 'withdrawn', source: 'stop' },
+      ];
+
+      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
+
+      expect(removed).toEqual([granted]);
+      expect(pool).toEqual([optedOut, manual, whatsappOptOut]);
+      expect(found?.undoFinishedAt).not.toBeNull();
+    });
+
+    it('removes nothing for an import that is not undone or whose removal finished', async () => {
+      pool = ids(5);
+      finishedImport('done');
+      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
+      finishedImport('undone');
+      found = { ...found!, undoFinishedAt: finishedAt };
+      await service.removeContactsOfUndoneImport(STORE_ID, IMPORT_ID);
+
+      expect(removed).toEqual([]);
+    });
+
+    it.each(['uploaded', 'importing'] as const)('refuses an import that is %s', async (status) => {
+      finishedImport(status);
+
+      await expect(service.undo(STORE_ID, IMPORT_ID, actor)).rejects.toMatchObject({
+        code: 'IMPORT_NOT_UNDOABLE',
+      });
+      expect(published).toEqual([]);
+    });
+
+    it('queues the removal again while it has not finished and refuses once it has', async () => {
       finishedImport();
-      await service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID });
+      await service.undo(STORE_ID, IMPORT_ID, actor);
+      await service.undo(STORE_ID, IMPORT_ID, actor);
+      expect(published).toHaveLength(2);
 
-      await expect(
-        service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
-      ).rejects.toMatchObject({ code: 'IMPORT_NOT_UNDOABLE' });
-      expect(published).toHaveLength(1);
+      found = { ...found!, undoFinishedAt: finishedAt };
+
+      await expect(service.undo(STORE_ID, IMPORT_ID, actor)).rejects.toMatchObject({
+        code: 'IMPORT_NOT_UNDOABLE',
+      });
+      expect(published).toHaveLength(2);
     });
 
-    it('allows an undo exactly 7 days after the import finished and refuses a later one', async () => {
-      finishedImport('done', new Date('2026-11-10T04:30:00Z'));
-      await expect(
-        service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
-      ).resolves.toMatchObject({ status: 'undone' });
+    it.each(['done', 'failed'] as const)(
+      'allows an undo of a %s import exactly 7 days after it finished and refuses a later one',
+      async (status) => {
+        finishedImport(status, new Date('2026-11-10T04:30:00Z'));
+        await expect(service.undo(STORE_ID, IMPORT_ID, actor)).resolves.toMatchObject({
+          status: 'undone',
+        });
 
-      finishedImport('done', new Date('2026-11-10T04:29:59Z'));
-      await expect(
-        service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
-      ).rejects.toMatchObject({ code: 'IMPORT_UNDO_EXPIRED' });
-    });
+        finishedImport(status, new Date('2026-11-10T04:29:59Z'));
+        await expect(service.undo(STORE_ID, IMPORT_ID, actor)).rejects.toMatchObject({
+          code: 'IMPORT_UNDO_EXPIRED',
+        });
+      },
+    );
 
     it('answers a missing import with IMPORT_NOT_FOUND', async () => {
       found = undefined;
 
-      await expect(
-        service.undo(STORE_ID, IMPORT_ID, { kind: 'user', userId: USER_ID }),
-      ).rejects.toMatchObject({ code: 'IMPORT_NOT_FOUND' });
+      await expect(service.undo(STORE_ID, IMPORT_ID, actor)).rejects.toMatchObject({
+        code: 'IMPORT_NOT_FOUND',
+      });
     });
   });
 });

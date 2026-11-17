@@ -463,11 +463,12 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
       expect(await consentRows(createdId)).toHaveLength(2);
     });
 
-    it('queues the removal in the same transaction and a rerun of it is harmless', async () => {
+    it('queues the removal in the same transaction, asks again until it finishes, and a rerun is harmless', async () => {
       const value = phone();
       const { importId } = await runImport(lines(`রাবেয়া,${value},,`));
       const contactId = (await contactByPhone(value)).id;
 
+      await service.undo(storeId, importId, owner);
       await service.undo(storeId, importId, owner);
 
       expect(await deletedAt(contactId)).toBeNull();
@@ -475,10 +476,63 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
         "select payload from outbox_events where type='import.undo_requested' and store_id=$1 and payload->>'importId'=$2",
         [storeId, importId],
       );
-      expect(events.rows).toEqual([{ payload: { importId } }]);
+      expect(events.rows).toEqual([{ payload: { importId } }, { payload: { importId } }]);
       await service.removeContactsOfUndoneImport(storeId, importId);
       await service.removeContactsOfUndoneImport(storeId, importId);
       expect(await deletedAt(contactId)).not.toBeNull();
+      await expect(service.undo(storeId, importId, owner)).rejects.toMatchObject({
+        code: 'IMPORT_NOT_UNDOABLE',
+      });
+    });
+
+    it('keeps a contact who opted out after the import, and a new import leaves SMS withdrawn', async () => {
+      const [kept, removed] = [phone(), phone()];
+      const { importId } = await runImport(lines(`রাবেয়া,${kept},,`, `করিম,${removed},,`));
+      const keptId = (await contactByPhone(kept)).id;
+      await admin.pool.query(
+        "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) values(gen_random_uuid(),$1,$2,'sms','withdrawn','opt_out_link',now() + interval '1 minute')",
+        [storeId, keptId],
+      );
+
+      await undo(importId);
+
+      expect(await deletedAt(keptId)).toBeNull();
+      expect(await deletedAt((await contactByPhone(removed)).id)).not.toBeNull();
+      const again = await runImport(lines(`রাবেয়া,${kept},,`));
+      const current = await admin.pool.query(
+        "select status from contact_consent_current where contact_id=$1 and channel='sms'",
+        [keptId],
+      );
+      expect(current.rows).toEqual([{ status: 'withdrawn' }]);
+      expect(await report(again.result.reportUrl)).toContain('said no to SMS messages');
+    });
+
+    it('undoes an import that was killed mid-file and then failed by the sweep', async () => {
+      const rows = Array.from({ length: 1_000 }, (_, index) => `ক্রেতা ${index},${phone()},,`);
+      const importId = await prepareImport(`Name,Mobile,Email,Tags\n${rows.join('\n')}`);
+      const contacts = app.get(ContactsService);
+      const save = contacts.saveImportedRows.bind(contacts);
+      let calls = 0;
+      vi.spyOn(contacts, 'saveImportedRows').mockImplementation(async (...args) => {
+        calls += 1;
+        if (calls === 2) throw new Error('Database connection lost');
+        return save(...args);
+      });
+      await expect(service.runCustomerImport(storeId, importId)).rejects.toThrow();
+      await admin.pool.query(
+        "update imports set last_progress_at=now() - interval '20 minutes', requeue_count=4 where id=$1",
+        [importId],
+      );
+      await service.sweepStuckImports();
+      expect((await service.get(storeId, importId)).status).toBe('failed');
+
+      await undo(importId);
+
+      const left = await admin.pool.query(
+        'select count(*) filter (where deleted_at is null)::int as live, count(*)::int as total from contacts where import_id=$1',
+        [importId],
+      );
+      expect(left.rows).toEqual([{ live: 0, total: 500 }]);
     });
 
     it('frees the phone of a removed contact for a new import', async () => {

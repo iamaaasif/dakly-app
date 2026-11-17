@@ -182,21 +182,31 @@ undo the contacts it added.
   both objects after 7 days.
 - Imported contacts do not emit `contact.created`, so a large import does not start welcome
   workflows for everyone in the file. This is the owner's decision, not missing work.
-- Undo: `POST /imports/:importId/undo` (Edit Customers) works on a `done` import for 7 days
-  after it finished and answers 202. A later call fails with `IMPORT_UNDO_EXPIRED`, and an
-  import that is not `done`, or was already undone, fails with `IMPORT_NOT_UNDOABLE`. In one
-  transaction it moves the import to `undone` and publishes `import.undo_requested`. The
-  `undo-contact-import` job (bulk queue) then soft deletes, through the contacts service, the
-  contacts whose `import_id` is this import and that nobody has edited: `updated_at` still
-  equals `created_at`, both written by the database, so no two clocks are compared. It
-  deletes 1,000 per statement until none are left. A rerun, for example after a crash between
-  batches or after `undone` was set, deletes what remains. A contact edited since stays, and so
-  does one the import only updated, because that one has no `import_id`. Chats and orders do
-  not change `updated_at`, so a removed contact may have had them. Consent rows the import
-  wrote are not touched: they are append-only, and a deleted contact is never messaged. The
-  phone of a removed contact can be imported again.
-- Not built yet: the import screens, a preview before start, and upload scanning
-  (OPS-4).
+- Undo: `POST /imports/:importId/undo` (Edit Customers) works on a `done` or `failed` import
+  for 7 days after it finished (`finished_at`, which a failed import has too, because a
+  crashed run may already have added contacts) and answers 202. A later call fails with
+  `IMPORT_UNDO_EXPIRED`, and an import still being read, or one whose undo has finished, fails
+  with `IMPORT_NOT_UNDOABLE`. In one transaction it moves the import to `undone` and publishes
+  `import.undo_requested`. The `undo-contact-import` job (bulk queue) then works through the
+  contacts whose `import_id` is this import, 500 at a time, each batch in one short
+  transaction that locks its rows. It soft deletes, through the contacts service, only the
+  ones nobody has edited and nobody has answered consent for:
+  - `updated_at` still equals `created_at`. An insert writes both from the database clock and
+    every later edit writes a different `updated_at`, so no two clocks are compared.
+  - Every SMS and WhatsApp answer the contact has is the import's own grant. A contact who
+    opted out after the import, or whose answer came from anywhere else, stays, so a new import
+    can never grant it again. Consent changes do not touch the contact row, which is why this
+    is checked on its own.
+  - A contact the import only updated has no `import_id`, so it stays.
+    Chats and orders do not change `updated_at`, so a removed contact may have had them.
+    Consent rows are not touched: they are append-only, and a deleted contact is never
+    messaged. The phone of a removed contact can be imported again.
+- The undo finishes by setting `imports.undo_finished_at`. A rerun of the job, for example after
+  a crash between batches, deletes what remains. If the job failed every attempt, asking for
+  the undo again while `undo_finished_at` is empty and the 7 days have not passed queues the job
+  again; after it has finished, asking is refused.
+- Not built yet: the import screens and the preview of the first 20 rows before start (a later
+  CUS-8 part), and upload scanning (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

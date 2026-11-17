@@ -98,16 +98,22 @@ describe('import filters without RLS assistance', () => {
     expect((await f.row('imports', importB)).status).toBe('uploaded');
   });
 
-  it('marks an import undone only in the selected store and only once', async () => {
+  it('marks an import undone and finished only in the selected store and only once', async () => {
     const importId = randomUUID();
     await repository.createCustomerImport(f.a, importId, upload(f.a), f.userA);
     expect(await repository.markUndone(f.a, importId)).toBe(false);
-    await f.connection.pool.query("update imports set status='done' where id=$1", [importId]);
+    await f.connection.pool.query("update imports set status='failed' where id=$1", [importId]);
 
     expect(await repository.markUndone(f.b, importId)).toBe(false);
-    expect((await f.row('imports', importId)).status).toBe('done');
+    expect((await f.row('imports', importId)).status).toBe('failed');
     expect(await repository.markUndone(f.a, importId)).toBe(true);
     expect(await repository.markUndone(f.a, importId)).toBe(false);
     expect((await f.row('imports', importId)).status).toBe('undone');
+
+    const at = new Date('2026-11-17T04:30:00Z');
+    await repository.markUndoFinished(f.b, importId, at);
+    expect((await f.row('imports', importId)).undo_finished_at).toBeNull();
+    await repository.markUndoFinished(f.a, importId, at);
+    expect((await f.row('imports', importId)).undo_finished_at).toEqual(at);
   });
 });

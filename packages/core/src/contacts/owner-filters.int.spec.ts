@@ -139,7 +139,7 @@ describe('contact filters without RLS assistance', () => {
     expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
   });
 
-  it('soft deletes unedited contacts of an import only in the selected store, one batch at a time', async () => {
+  it('locks and soft deletes unedited contacts of an import only in the selected store', async () => {
     const importId = randomUUID();
     const fileId = randomUUID();
     await f.connection.pool.query(
@@ -151,23 +151,31 @@ describe('contact filters without RLS assistance', () => {
       [importId, f.a, fileId],
     );
     const imported = { importId, source: 'import', kind: 'customer' } as const;
-    const [first, second, edited] = await repository.insertImported(f.a, [
-      { ...imported, phone: '01711000021' },
-      { ...imported, phone: '01711000022' },
-      { ...imported, phone: '01711000023' },
-    ]);
+    const [first, second, edited] = (
+      await repository.insertImported(f.a, [
+        { ...imported, phone: '01711000021' },
+        { ...imported, phone: '01711000022' },
+        { ...imported, phone: '01711000023' },
+      ])
+    )
+      .map((row) => row.id)
+      .sort();
     await f.connection.pool.query(
       "update contacts set updated_at = created_at + interval '1 minute' where id = $1",
-      [edited!.id],
+      [edited],
     );
 
-    expect(await repository.softDeleteUneditedByImport(f.b, importId, 10, new Date())).toBe(0);
-    expect(await f.row('contacts', first!.id)).toMatchObject({ deleted_at: null });
-    expect(await repository.softDeleteUneditedByImport(f.a, importId, 1, new Date())).toBe(1);
-    expect(await repository.softDeleteUneditedByImport(f.a, importId, 10, new Date())).toBe(1);
-    expect(await repository.softDeleteUneditedByImport(f.a, importId, 10, new Date())).toBe(0);
-    expect((await f.row('contacts', first!.id)).deleted_at).not.toBeNull();
-    expect((await f.row('contacts', second!.id)).deleted_at).not.toBeNull();
-    expect((await f.row('contacts', edited!.id)).deleted_at).toBeNull();
+    expect(await repository.lockUneditedByImport(f.b, importId, { limit: 10 })).toEqual([]);
+    const page = await repository.lockUneditedByImport(f.a, importId, { limit: 1 });
+    expect(page).toEqual([first]);
+    expect(
+      await repository.lockUneditedByImport(f.a, importId, { after: first, limit: 10 }),
+    ).toEqual([second]);
+    await repository.softDeleteAll(f.b, [first!], new Date());
+    expect(await f.row('contacts', first!)).toMatchObject({ deleted_at: null });
+    await repository.softDeleteAll(f.a, [first!, second!], new Date());
+    expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([]);
+    expect((await f.row('contacts', second!)).deleted_at).not.toBeNull();
+    expect((await f.row('contacts', edited!)).deleted_at).toBeNull();
   });
 });

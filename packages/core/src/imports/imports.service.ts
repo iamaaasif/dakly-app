@@ -49,7 +49,8 @@ const IMPORTS_PER_HOUR = 20;
 const FILE_DAYS = 7;
 const UNDO_MILLISECONDS = FILE_DAYS * 24 * 60 * 60 * 1000;
 const BATCH_ROWS = 500;
-const UNDO_BATCH_ROWS = 1_000;
+// The consent lookup takes at most 500 contacts.
+const UNDO_BATCH_ROWS = 500;
 const CSV = 'text/csv';
 // Each batch renews the lease; a run that has not renewed it for 5 minutes is gone.
 const LEASE_MS = 5 * 60 * 1000;
@@ -136,15 +137,19 @@ export class ImportsService {
   }
 
   // The status moves and the event is queued in one transaction, so a crash before the job
-  // finishes is covered by the job's rerun: it deletes whatever is still left.
+  // finishes is covered by the job's rerun: it deletes whatever is still left. Asking again for
+  // an import whose removal has not finished queues the job again, which finishes it after a
+  // job that failed every attempt. A failed import can be undone too: it may have added contacts.
   async undo(storeId: string, importId: string, _actor: Actor): Promise<ImportResponse> {
     await this.transaction.run(storeId, async () => {
       const found = await this.findImport(storeId, importId);
-      if (found.status !== 'done') throw importError('IMPORT_NOT_UNDOABLE');
       const now = this.clock.now();
+      const removing = found.status === 'undone' && !found.undoFinishedAt;
+      if (!removing && !['done', 'failed'].includes(found.status))
+        throw importError('IMPORT_NOT_UNDOABLE');
       if (now.getTime() > found.finishedAt!.getTime() + UNDO_MILLISECONDS)
         throw importError('IMPORT_UNDO_EXPIRED');
-      if (!(await this.repository.markUndone(storeId, importId)))
+      if (!removing && !(await this.repository.markUndone(storeId, importId)))
         throw importError('IMPORT_NOT_UNDOABLE');
       await this.outbox.publish({
         type: 'import.undo_requested',
@@ -156,21 +161,41 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
-  // Each batch is its own statement; a retry deletes only what is still there.
+  // Each batch locks its contacts, keeps the ones with a consent answer that is not the import's
+  // own grant, and removes the rest in one short transaction. A rerun finds only what is left.
   async removeContactsOfUndoneImport(storeId: string, importId: string): Promise<void> {
     const found = await this.repository.findById(storeId, importId);
-    if (found?.status !== 'undone') return;
+    if (found?.status !== 'undone' || found.undoFinishedAt) return;
+    let after: string | undefined;
     for (;;) {
-      const removed = await this.contacts.removeUneditedByImport(
-        storeId,
-        importId,
-        UNDO_BATCH_ROWS,
-        {
-          kind: 'system',
-        },
-      );
-      if (removed < UNDO_BATCH_ROWS) return;
+      const batch = await this.transaction.run(storeId, async () => {
+        const ids = await this.contacts.lockUneditedByImport(storeId, importId, {
+          after,
+          limit: UNDO_BATCH_ROWS,
+        });
+        if (ids.length === 0) return ids;
+        const answered = await this.contactsWithOwnAnswer(storeId, ids);
+        await this.contacts.removeAll(
+          storeId,
+          ids.filter((id) => !answered.has(id)),
+          { kind: 'system' },
+        );
+        return ids;
+      });
+      after = batch.at(-1);
+      if (batch.length < UNDO_BATCH_ROWS) break;
     }
+    await this.repository.markUndoFinished(storeId, importId, this.clock.now());
+  }
+
+  // Consent never changes the contact row, so an opt-out after the import shows only here.
+  private async contactsWithOwnAnswer(storeId: string, ids: string[]): Promise<Set<string>> {
+    const answered = new Set<string>();
+    for (const channel of ['sms', 'whatsapp'] as const)
+      for (const answer of await this.consents.currentForAudience(storeId, ids, channel))
+        if (answer.source !== 'import' || answer.status !== 'granted')
+          answered.add(answer.contactId);
+    return answered;
   }
 
   async get(storeId: string, importId: string): Promise<ImportResponse> {

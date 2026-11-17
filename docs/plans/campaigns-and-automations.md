@@ -35,6 +35,16 @@ Until Orders exists, segments, triggers and results have no order fields. Each t
 
 Each task is one PR under about 500 lines, in this order, on the branch named under its heading. The order of work is in [customers-to-automations.md](customers-to-automations.md). "Tests" lists what the reviewer looks for. Every PR also sets its row in [tasks.md](../tasks.md) and updates the feature doc when behaviour changes.
 
+### Group 1: who to send to
+
+### CUS-8 · Customer import, what is left
+
+Branch: to be named when the part starts.
+
+- Built and described in [feature 03](../features/03-customers-and-segments.md): CSV upload, column mapping, consent evidence per channel, the import job, row errors in a report and undo.
+- Still to build: the import screens in the web app, and a preview of the first 20 rows before the import starts. XLSX comes with CUS-16.
+- Tests: the preview reads the uploaded file without starting the import, never shows a full phone to a member without "See full phone numbers", and refuses a file that is not UTF-8.
+
 ### Group 2: campaigns
 
 ### CAMP-9 · Final send checks

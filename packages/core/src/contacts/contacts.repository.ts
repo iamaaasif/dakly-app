@@ -328,26 +328,35 @@ export class ContactsRepository {
     return rows.length > 0;
   }
 
-  // A contact whose updated_at still equals its created_at was never edited. Both come from the
-  // database clock, so no app clock is compared. One batch at a time keeps each statement short.
-  async softDeleteUneditedByImport(
+  // An insert writes updated_at and created_at from the same database clock, so they are equal,
+  // and every later edit writes a different updated_at: that contact is no longer the import's.
+  // The rows are locked, so an edit or consent change in flight waits and is judged by the
+  // caller's next step instead of racing it.
+  async lockUneditedByImport(
     storeId: string,
     importId: string,
-    limit: number,
-    deletedAt: Date,
-  ): Promise<number> {
+    page: { after?: string; limit: number },
+  ): Promise<string[]> {
+    const after = page.after ?? '00000000-0000-0000-0000-000000000000';
     const result = await this.database.forStore(storeId, (tx) =>
-      tx.execute(sql`
-        update contacts set deleted_at = ${deletedAt.toISOString()}::timestamptz
-        where store_id = ${storeId} and id in (
-          select id from contacts
-          where store_id = ${storeId} and import_id = ${importId} and deleted_at is null
-            and updated_at = created_at
-          limit ${limit}
-        )
+      tx.execute<{ id: string }>(sql`
+        select id from contacts
+        where store_id = ${storeId} and import_id = ${importId} and deleted_at is null
+          and updated_at = created_at and id > ${after}::uuid
+        order by id limit ${page.limit} for no key update
       `),
     );
-    return result.rowCount ?? 0;
+    return result.rows.map((row) => row.id);
+  }
+
+  // For ids that lockUneditedByImport returned in the same transaction, so all are still live.
+  async softDeleteAll(storeId: string, ids: string[], deletedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contacts)
+        .set({ deletedAt })
+        .where(and(eq(contacts.storeId, storeId), inArray(contacts.id, ids))),
+    );
   }
 
   async countMatching(storeId: string, rules: SegmentRules): Promise<number> {

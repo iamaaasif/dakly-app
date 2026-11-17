@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
@@ -45,6 +45,7 @@ const importColumns = {
   consentEvidence: sql<ImportConsentEvidence | null>`${imports.consentEvidence}`,
   createdByUserId: imports.createdByUserId,
   finishedAt: imports.finishedAt,
+  undoFinishedAt: imports.undoFinishedAt,
   rowsTotal: imports.rowsTotal,
   rowsAdded: imports.rowsAdded,
   rowsUpdated: imports.rowsUpdated,
@@ -63,6 +64,7 @@ export type Import = {
   consentEvidence: ImportConsentEvidence | null;
   createdByUserId: string | null;
   finishedAt: Date | null;
+  undoFinishedAt: Date | null;
   uploadFileId: string;
   uploadKey: string;
   reportKey: string | null;
@@ -245,16 +247,31 @@ export class ImportsRepository {
     return rows.length > 0;
   }
 
-  // Only a finished import moves to undone, so a second undo changes nothing.
+  // A finished or failed import moves to undone once, so a second undo changes nothing.
   async markUndone(storeId: string, importId: string): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(imports)
         .set({ status: 'undone' })
-        .where(guard(storeId, importId, 'done'))
+        .where(
+          and(
+            eq(imports.storeId, storeId),
+            eq(imports.id, importId),
+            inArray(imports.status, ['done', 'failed']),
+          ),
+        )
         .returning({ id: imports.id }),
     );
     return rows.length > 0;
+  }
+
+  async markUndoFinished(storeId: string, importId: string, at: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ undoFinishedAt: at })
+        .where(and(guard(storeId, importId, 'undone'), isNull(imports.undoFinishedAt))),
+    );
   }
 }
 

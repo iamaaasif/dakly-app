@@ -54,6 +54,8 @@ export const imports = pgTable(
     // The last time a run made progress; the sweep judges a stalled import from it.
     lastProgressAt: timestamptz('last_progress_at'),
     // How often the sweep re-queued the import after it stalled.
+    // Set when the undo job has removed every contact it may; until then undo can be asked again.
+    undoFinishedAt: timestamptz('undo_finished_at'),
     requeueCount: integer('requeue_count').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
