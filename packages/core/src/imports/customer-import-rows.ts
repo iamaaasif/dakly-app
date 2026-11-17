@@ -21,6 +21,16 @@ export type CustomerImportRows = {
   errors: CustomerImportRowError[];
 };
 
+// A file that is not valid UTF-8, such as UTF-16 from Excel, is refused rather than read as
+// garbled text.
+export function decodeCustomerImportFile(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw importError('IMPORT_FILE_UNREADABLE');
+  }
+}
+
 export function readCustomerImportRows(
   file: string,
   mapping: ContactImportMapping,
@@ -73,11 +83,9 @@ function mappedCells(cells: string[], mapping: ContactImportMapping): Record<str
 // empty lines never builds a list of empty rows.
 function readLines(file: string) {
   const records = csvRecords(file.replace(/^\uFEFF/, ''));
-  const header = records.next().value ?? [];
+  const header = records.next().value?.cells ?? [];
   const lines: { rowNumber: number; cells: string[] }[] = [];
-  let rowNumber = 1;
-  for (const cells of records) {
-    rowNumber += 1;
+  for (const { rowNumber, cells } of records) {
     if (!cells.some((cell) => cell.trim())) continue;
     if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
     lines.push({ rowNumber, cells });
@@ -87,10 +95,19 @@ function readLines(file: string) {
 
 // RFC 4180 in one pass: a quoted cell may hold commas, line breaks and doubled quotes. Anything
 // else, such as a stray quote inside a plain cell, makes the file unreadable rather than wrong.
-function* csvRecords(text: string): Generator<string[], undefined> {
+// Lines with nothing on them are counted and skipped in a tight loop, so 10 MB of line breaks
+// does not allocate a record each.
+function* csvRecords(text: string): Generator<{ rowNumber: number; cells: string[] }, undefined> {
   let record: string[] = [];
   let position = 0;
+  let rowNumber = 0;
   while (position < text.length) {
+    while (record.length === 0 && (text[position] === '\n' || text[position] === '\r')) {
+      if (text[position] === '\r' && text[position + 1] === '\n') position += 1;
+      position += 1;
+      rowNumber += 1;
+    }
+    if (position >= text.length) break;
     const { cell, end } =
       text[position] === '"' ? quotedCell(text, position) : plainCell(text, position);
     if (record.length < MAX_IMPORT_COLUMNS) record.push(cell);
@@ -100,10 +117,11 @@ function* csvRecords(text: string): Generator<string[], undefined> {
       continue;
     }
     if (text[end] === '\r' && text[position] === '\n') position += 1;
-    yield record;
+    rowNumber += 1;
+    yield { rowNumber, cells: record };
     record = [];
   }
-  if (record.length > 0) yield record;
+  if (record.length > 0) yield { rowNumber: rowNumber + 1, cells: record };
   return undefined;
 }
 

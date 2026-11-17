@@ -1,5 +1,5 @@
 {
-  "id": "2407b14e-070b-46f9-b145-5fe73d79e0e9",
+  "id": "58c6b6db-b405-486c-90aa-d548b5263ff2",
   "prevId": "a6485deb-fb7b-46b2-ac7d-d1c4ebaf6806",
   "version": "7",
   "dialect": "postgresql",
@@ -13514,6 +13514,19 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "last_progress_at": {
+          "name": "last_progress_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requeue_count": {
+          "name": "requeue_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",

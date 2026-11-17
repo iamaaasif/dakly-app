@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0034_snapshot.json`: **95 tables, 1247 columns, 373 explicit indexes and 296 foreign keys**.
+Built from `packages/db/migrations/meta/0034_snapshot.json`: **95 tables, 1249 columns, 373 explicit indexes and 296 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -622,6 +622,8 @@ erDiagram
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone last_progress_at "NULL; timestamp with time zone"
+        integer requeue_count "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }

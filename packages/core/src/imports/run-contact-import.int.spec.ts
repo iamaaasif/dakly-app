@@ -78,16 +78,31 @@ describe('ImportsService imports (Postgres and SeaweedFS)', () => {
     }
   });
 
-  it('fails an import whose run stopped an hour ago and leaves a running one alone', async () => {
+  it('queues a stalled import again, fails it after the limit and leaves a running one alone', async () => {
     const stopped = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${phone()},,`);
     const running = await prepareImport(`Name,Mobile,Email,Tags\nশিরিন,${phone()},,`);
-    // The app writes leases from its clock, in whole milliseconds.
-    await admin.pool.query(
-      "update imports set started_at=now() - interval '2 hours', claimed_at=date_trunc('milliseconds', now() - interval '61 minutes') where id=$1",
-      [stopped],
-    );
+    const stall = (requeues: number) =>
+      admin.pool.query(
+        "update imports set started_at=now() - interval '2 hours', last_progress_at=now() - interval '20 minutes', requeue_count=$2 where id=$1",
+        [stopped, requeues],
+      );
+    const queued = async (importId: string) =>
+      (
+        await admin.pool.query(
+          "select count(*)::int as count from outbox_events where type='import.started' and payload->>'importId'=$1",
+          [importId],
+        )
+      ).rows[0].count;
+    await stall(0);
 
-    await service.failStuckImports();
+    await service.sweepStuckImports();
+
+    expect(await queued(stopped)).toBe(2);
+    expect(await queued(running)).toBe(1);
+    expect((await service.get(storeId, stopped)).status).toBe('importing');
+    await stall(4);
+
+    await service.sweepStuckImports();
 
     const result = await service.get(storeId, stopped);
     expect(result.status).toBe('failed');

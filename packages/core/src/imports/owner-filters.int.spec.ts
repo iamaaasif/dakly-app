@@ -55,6 +55,11 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.storesWithStuckImports(late)).toContain(f.a);
     expect(await repository.listStuck(f.b, late)).toEqual([]);
     expect(await repository.listStuck(f.a, late)).toEqual([{ id: importA, claimedAt: lease }]);
+    const requeue = { before: late, now: late, limit: 1 };
+    expect(await repository.requeue(f.b, importA, requeue)).toBe(false);
+    expect(await repository.requeue(f.a, importA, requeue)).toBe(true);
+    expect(await repository.requeue(f.a, importA, requeue)).toBe(false);
+    expect(await f.row('imports', importA)).toMatchObject({ requeue_count: 1 });
 
     const report = { ...upload(f.a), status: 'ready' as const };
     const done = { status: 'failed', counts, finishedAt: late } as const;

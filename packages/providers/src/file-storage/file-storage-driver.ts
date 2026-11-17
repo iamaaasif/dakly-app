@@ -4,11 +4,11 @@ export type FileStorageDriver = {
   // The upload must carry exactly this length and type, so the browser cannot send another file.
   createUploadUrl(key: string, expiresInSeconds: number, content: UploadContent): string;
   createDownloadUrl(key: string, expiresInSeconds: number): string;
-  readText(key: string, maxBytes: number): Promise<StoredText>;
+  readBytes(key: string, maxBytes: number): Promise<StoredFile>;
   writeText(key: string, body: string, contentType: string): Promise<void>;
 };
 
-export type StoredText =
-  { kind: 'found'; text: string } | { kind: 'missing' } | { kind: 'too_large' };
+export type StoredFile =
+  { kind: 'found'; bytes: Uint8Array } | { kind: 'missing' } | { kind: 'too_large' };
 
 export type UploadContent = { contentLength: number; contentType: string };

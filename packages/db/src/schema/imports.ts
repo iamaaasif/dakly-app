@@ -51,6 +51,10 @@ export const imports = pgTable(
     finishedAt: timestamptz('finished_at'),
     // The running job's lease, renewed after each batch, so a redelivered job never runs beside it.
     claimedAt: timestamptz('claimed_at'),
+    // The last time a run made progress; the sweep judges a stalled import from it.
+    lastProgressAt: timestamptz('last_progress_at'),
+    // How often the sweep re-queued the import after it stalled.
+    requeueCount: integer('requeue_count').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -38,7 +38,9 @@ const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
 const CSV = 'text/csv';
-const STUCK_MS = 60 * 60 * 1000;
+// An import with no progress for this long lost its job, or still waits behind a long queue.
+const STUCK_MS = 15 * 60 * 1000;
+const MAX_REQUEUES = 4;
 
 @Injectable()
 export class ImportsService {
@@ -112,15 +114,30 @@ export class ImportsService {
     };
   }
 
-  // An import still running an hour after its last batch lost its job; it fails with a report.
-  async failStuckImports(): Promise<void> {
-    const before = new Date(this.clock.now().getTime() - STUCK_MS);
+  // A stalled import is queued again up to MAX_REQUEUES times, because its job may only be waiting
+  // behind others or may have died with its worker. After that it fails, with a report.
+  async sweepStuckImports(): Promise<void> {
+    const now = this.clock.now();
+    const before = new Date(now.getTime() - STUCK_MS);
     for (const storeId of await this.repository.storesWithStuckImports(before))
-      for (const stuck of await this.repository.listStuck(storeId, before))
-        await this.finish(storeId, stuck.id, stuck.claimedAt, {
-          status: 'failed',
-          lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+      for (const stuck of await this.repository.listStuck(storeId, before)) {
+        const requeued = await this.transaction.run(storeId, async () => {
+          const requeue = { before, now, limit: MAX_REQUEUES };
+          if (!(await this.repository.requeue(storeId, stuck.id, requeue))) return false;
+          await this.outbox.publish({
+            type: 'import.started',
+            storeId,
+            occurredAt: now.toISOString(),
+            payload: { importId: stuck.id },
+          });
+          return true;
         });
+        if (!requeued)
+          await this.finish(storeId, stuck.id, stuck.claimedAt, {
+            status: 'failed',
+            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+          });
+      }
   }
 
   private async finish(

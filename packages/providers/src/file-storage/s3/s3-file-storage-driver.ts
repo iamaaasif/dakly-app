@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 
-import type { FileStorageDriver, StoredText, UploadContent } from '../file-storage-driver';
+import type { FileStorageDriver, StoredFile, UploadContent } from '../file-storage-driver';
 
 export type S3Configuration = {
   endpoint: string;
@@ -45,7 +45,7 @@ export class S3FileStorageDriver implements FileStorageDriver {
   }
 
   // Counts the bytes as they arrive, so a file over the limit is never held in memory.
-  async readText(key: string, maxBytes: number): Promise<StoredText> {
+  async readBytes(key: string, maxBytes: number): Promise<StoredFile> {
     const response = await fetch(this.presign('GET', key, REQUEST_SECONDS), {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -59,7 +59,7 @@ export class S3FileStorageDriver implements FileStorageDriver {
       if (size > maxBytes) return { kind: 'too_large' };
       chunks.push(chunk);
     }
-    return { kind: 'found', text: Buffer.concat(chunks).toString('utf8') };
+    return { kind: 'found', bytes: Buffer.concat(chunks) };
   }
 
   async writeText(key: string, body: string, contentType: string): Promise<void> {

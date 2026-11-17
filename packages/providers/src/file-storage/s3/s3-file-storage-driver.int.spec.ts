@@ -73,7 +73,10 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
 
     await driver.writeText(key, report, 'text/csv');
 
-    expect(await driver.readText(key, 1_000)).toEqual({ kind: 'found', text: report });
+    expect(await driver.readBytes(key, 1_000)).toEqual({
+      kind: 'found',
+      bytes: Buffer.from(report),
+    });
     const download = await request(driver.createDownloadUrl(key, 60));
     expect(download.headers.get('content-type')).toBe('text/csv');
   });
@@ -83,11 +86,11 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
     await driver.writeText(key, 'Mobile\n01712345678\n', 'text/csv');
 
-    expect(await driver.readText(`${key}-missing`, 1_000)).toEqual({ kind: 'missing' });
-    expect(await driver.readText(key, 10)).toEqual({ kind: 'too_large' });
-    expect(await driver.readText(key, 19)).toEqual({
+    expect(await driver.readBytes(`${key}-missing`, 1_000)).toEqual({ kind: 'missing' });
+    expect(await driver.readBytes(key, 10)).toEqual({ kind: 'too_large' });
+    expect(await driver.readBytes(key, 19)).toEqual({
       kind: 'found',
-      text: 'Mobile\n01712345678\n',
+      bytes: Buffer.from('Mobile\n01712345678\n'),
     });
   });
 

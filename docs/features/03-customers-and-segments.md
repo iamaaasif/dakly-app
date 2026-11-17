@@ -141,9 +141,14 @@ contacts, with the consent evidence, comes in the next part, then undo.
 - The reader is one pass over the text. It drops blank lines as it goes, stops at 50,000
   rows and keeps at most 200 cells a row, so neither a file of empty lines nor a quote that
   never closes builds a large list.
-- The `fail-stuck-imports` sweep fails an import still `importing` an hour after its last
-  progress (`imports.claimed_at`, else `started_at`), with a line in its report. The report is
-  a CSV in R2 whose `files` row expires after 7 days, like the upload.
+- The `fail-stuck-imports` sweep looks at imports still `importing` that made no progress for
+  15 minutes (`imports.last_progress_at`, else `started_at`). Their job may have died with its
+  worker or may still wait behind others, so each is queued again with a new `import.started`
+  event, up to 4 times, and failed only after that, with a line in its report. The report is a
+  CSV in R2 whose `files` row expires after 7 days, like the upload.
+- A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
+  the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
+  being read as records, so 10 MB of line breaks costs no memory.
 - The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
   agreed. It applies to every row, for the channels it names.
 - Not built yet: the job that applies the rows, undo, the import screens, a preview before
