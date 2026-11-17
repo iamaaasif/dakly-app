@@ -151,6 +151,7 @@ describe('Segments screen', () => {
     ).toBeTruthy();
   });
 
+  // Typing, five Radix select choices and the 400 ms count wait take about 2 s here and over 5 s on a busy CI runner.
   it('builds a valid two-level tree and saves it', async () => {
     const user = userEvent.setup();
     const requests = serve(({ path, method }) => {
@@ -197,7 +198,7 @@ describe('Segments screen', () => {
       },
     });
     expect(createSegmentSchema.safeParse(saved?.body).success).toBe(true);
-  });
+  }, 15_000);
 
   it('refuses an empty value and shows a taken name on the name field', async () => {
     const user = userEvent.setup();
