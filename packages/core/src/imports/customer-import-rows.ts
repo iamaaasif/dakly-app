@@ -21,6 +21,16 @@ export type CustomerImportRows = {
   errors: CustomerImportRowError[];
 };
 
+// A file that is not valid UTF-8, such as UTF-16 from Excel, is refused rather than read as
+// garbled text.
+export function decodeCustomerImportFile(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw importError('IMPORT_FILE_UNREADABLE');
+  }
+}
+
 export function readCustomerImportRows(
   file: string,
   mapping: ContactImportMapping,
@@ -73,11 +83,9 @@ function mappedCells(cells: string[], mapping: ContactImportMapping): Record<str
 // empty lines never builds a list of empty rows.
 function readLines(file: string) {
   const records = csvRecords(file.replace(/^\uFEFF/, ''));
-  const header = records.next().value ?? [];
+  const header = records.next().value?.cells ?? [];
   const lines: { rowNumber: number; cells: string[] }[] = [];
-  let rowNumber = 1;
-  for (const cells of records) {
-    rowNumber += 1;
+  for (const { rowNumber, cells } of records) {
     if (!cells.some((cell) => cell.trim())) continue;
     if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
     lines.push({ rowNumber, cells });
@@ -87,24 +95,47 @@ function readLines(file: string) {
 
 // RFC 4180 in one pass: a quoted cell may hold commas, line breaks and doubled quotes. Anything
 // else, such as a stray quote inside a plain cell, makes the file unreadable rather than wrong.
-function* csvRecords(text: string): Generator<string[], undefined> {
-  let record: string[] = [];
+// Lines with nothing on them are counted and skipped in a tight loop, so 10 MB of line breaks
+// does not allocate a record each.
+function* csvRecords(text: string): Generator<{ rowNumber: number; cells: string[] }, undefined> {
   let position = 0;
-  while (position < text.length) {
+  let rowNumber = 0;
+  for (;;) {
+    const blank = skipBlankLines(text, position);
+    if (blank.position >= text.length) return undefined;
+    const { cells, next } = readRecord(text, blank.position);
+    position = next;
+    rowNumber += blank.lines + 1;
+    yield { rowNumber, cells };
+  }
+}
+
+function skipBlankLines(text: string, start: number) {
+  let position = start;
+  let lines = 0;
+  while (text[position] === '\n' || text[position] === '\r') {
+    position += text[position] === '\r' && text[position + 1] === '\n' ? 2 : 1;
+    lines += 1;
+  }
+  return { position, lines };
+}
+
+function readRecord(text: string, start: number) {
+  const cells: string[] = [];
+  let position = start;
+  for (;;) {
     const { cell, end } =
       text[position] === '"' ? quotedCell(text, position) : plainCell(text, position);
-    if (record.length < MAX_IMPORT_COLUMNS) record.push(cell);
+    if (cells.length < MAX_IMPORT_COLUMNS) cells.push(cell);
     position = end + 1;
-    if (text[end] === ',') {
-      if (position === text.length) record.push('');
-      continue;
+    if (text[end] !== ',') break;
+    if (position >= text.length) {
+      cells.push('');
+      break;
     }
-    if (text[end] === '\r' && text[position] === '\n') position += 1;
-    yield record;
-    record = [];
   }
-  if (record.length > 0) yield record;
-  return undefined;
+  const crlf = text[position - 1] === '\r' && text[position] === '\n';
+  return { cells, next: crlf ? position + 1 : position };
 }
 
 // `end` is the index of the separator after the cell, or the text length.

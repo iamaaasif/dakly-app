@@ -130,7 +130,7 @@ export class ImportsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(imports)
-        .set({ claimedAt: lease })
+        .set({ claimedAt: lease, lastProgressAt: lease })
         .where(
           and(
             guard(storeId, importId, 'importing'),
@@ -161,7 +161,7 @@ export class ImportsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(imports)
-        .set({ ...counts, claimedAt: lease.renewed })
+        .set({ ...counts, claimedAt: lease.renewed, lastProgressAt: lease.renewed })
         .where(and(guard(storeId, importId, 'importing'), eq(imports.claimedAt, lease.held)))
         .returning({ id: imports.id }),
     );
@@ -217,19 +217,32 @@ export class ImportsRepository {
     return result.rows.map((row) => row.storeId);
   }
 
+  // The last time a run made progress, or the start for an import no run has claimed yet.
   listStuck(storeId: string, before: Date): Promise<{ id: string; claimedAt: Date | null }[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: imports.id, claimedAt: imports.claimedAt })
         .from(imports)
-        .where(
-          and(
-            eq(imports.storeId, storeId),
-            eq(imports.status, 'importing'),
-            lt(sql`coalesce(${imports.claimedAt}, ${imports.startedAt})`, before),
-          ),
-        ),
+        .where(stalled(storeId, before)),
     );
+  }
+
+  // Counts a re-queue and restarts the wait, so each re-queue gets a full interval.
+  async requeue(
+    storeId: string,
+    importId: string,
+    { before, now, limit }: { before: Date; now: Date; limit: number },
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ requeueCount: sql`${imports.requeueCount} + 1`, lastProgressAt: now })
+        .where(
+          and(stalled(storeId, before), eq(imports.id, importId), lt(imports.requeueCount, limit)),
+        )
+        .returning({ id: imports.id }),
+    );
+    return rows.length > 0;
   }
 
   // Only a finished import moves to undone, so a second undo changes nothing.
@@ -243,6 +256,14 @@ export class ImportsRepository {
     );
     return rows.length > 0;
   }
+}
+
+function stalled(storeId: string, before: Date) {
+  return and(
+    eq(imports.storeId, storeId),
+    eq(imports.status, 'importing'),
+    lt(sql`coalesce(${imports.lastProgressAt}, ${imports.startedAt})`, before),
+  );
 }
 
 function guard(storeId: string, importId: string, status: ImportStatus) {

@@ -129,7 +129,7 @@ describe('contact filters without RLS assistance', () => {
       source: 'import',
     });
     expect(await repository.findByPhones(f.b, [phone])).toEqual([
-      { id: b!.id, phone, importId: null, whatsappPhone: null, tags: [] },
+      { id: b!.id, phone, importId: null, whatsappPhone: null, whatsappAnswered: false, tags: [] },
     ]);
     expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([b!.id]);
 

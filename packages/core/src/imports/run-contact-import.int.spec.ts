@@ -173,8 +173,8 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     const lines = (await report(result.reportUrl)).trim().split('\r\n');
     expect(lines).toEqual([
       'Row,Field,Problem',
-      expect.stringMatching(/^"3","sms","This customer said no to SMS messages/),
-      expect.stringMatching(/^"4","phone",/),
+      expect.stringMatching(/^"3","SMS","This customer said no to SMS messages/),
+      expect.stringMatching(/^"4","Phone",/),
     ]);
     expect(lines.join()).not.toContain('01212345678');
   });
@@ -313,8 +313,52 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     expect((await contactByPhone(empty)).whatsapp_phone).toBe(filled);
     expect((await report(result.reportUrl)).trim().split('\r\n')).toEqual([
       'Row,Field,Problem',
-      '"2","whatsappPhone","WhatsApp number differs, not changed"',
+      '"2","WhatsApp number","WhatsApp number differs, not changed"',
     ]);
+  });
+
+  it('does not fill an empty WhatsApp number on a contact that has a WhatsApp answer', async () => {
+    const [answered, unanswered] = [phone(), phone()];
+    const answeredId = await existingLead(answered);
+    await existingLead(unanswered);
+    await admin.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'whatsapp','granted','manual')",
+      [storeId, answeredId],
+    );
+    const file = ['Name,Mobile,WhatsApp', `,${answered},01912345678`, `,${unanswered},01912345679`];
+
+    const { result } = await runImport(file.join('\n'), {
+      mapping: { name: 0, phone: 1, whatsappPhone: 2 },
+      consentEvidence: {},
+    });
+
+    expect((await contactByPhone(answered)).whatsapp_phone).toBeNull();
+    expect((await contactByPhone(unanswered)).whatsapp_phone).toBe('01912345679');
+    expect((await report(result.reportUrl)).trim().split('\r\n')).toEqual([
+      'Row,Field,Problem',
+      '"2","WhatsApp number","WhatsApp number differs, not changed"',
+    ]);
+  });
+
+  it('completes an import whose run was killed once its lease is stale, and refuses it while fresh', async () => {
+    const value = phone();
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${value},,`);
+    const hold = (age: string) =>
+      admin.pool.query(
+        `update imports set claimed_at=date_trunc('milliseconds', now() - interval '${age}'), last_progress_at=now() - interval '${age}' where id=$1`,
+        [importId],
+      );
+    await hold('1 minute');
+
+    await expect(service.runCustomerImport(storeId, importId)).rejects.toMatchObject({
+      code: 'IMPORT_BEING_RUN',
+    });
+    expect((await service.get(storeId, importId)).status).toBe('importing');
+    await hold('6 minutes');
+
+    await service.runCustomerImport(storeId, importId);
+
+    expect(await service.get(storeId, importId)).toMatchObject({ status: 'done', rowsAdded: 1 });
   });
 
   it('adds tags up to 50 and reports the ones left out', async () => {
@@ -327,19 +371,34 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     const { result } = await runImport(file, { consentEvidence: {} });
 
     expect((await contactByPhone(value)).tags).toEqual([...tags, 'ঈদ']);
-    expect(await report(result.reportUrl)).toContain('"2","tags","2 tags not added');
+    expect(await report(result.reportUrl)).toContain('"2","Tags","2 tags not added');
   });
 
-  it('fails an import whose run stopped an hour ago and leaves a running one alone', async () => {
+  it('queues a stalled import again, fails it after the limit and leaves a running one alone', async () => {
     const stopped = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${phone()},,`);
     const running = await prepareImport(`Name,Mobile,Email,Tags\nশিরিন,${phone()},,`);
-    // The app writes leases from its clock, in whole milliseconds.
-    await admin.pool.query(
-      "update imports set started_at=now() - interval '2 hours', claimed_at=date_trunc('milliseconds', now() - interval '61 minutes') where id=$1",
-      [stopped],
-    );
+    const stall = (requeues: number) =>
+      admin.pool.query(
+        "update imports set started_at=now() - interval '2 hours', last_progress_at=now() - interval '20 minutes', requeue_count=$2 where id=$1",
+        [stopped, requeues],
+      );
+    const queued = async (importId: string) =>
+      (
+        await admin.pool.query(
+          "select count(*)::int as count from outbox_events where type='import.started' and payload->>'importId'=$1",
+          [importId],
+        )
+      ).rows[0].count;
+    await stall(0);
 
-    await service.failStuckImports();
+    await service.sweepStuckImports();
+
+    expect(await queued(stopped)).toBe(2);
+    expect(await queued(running)).toBe(1);
+    expect((await service.get(storeId, stopped)).status).toBe('importing');
+    await stall(4);
+
+    await service.sweepStuckImports();
 
     const result = await service.get(storeId, stopped);
     expect(result.status).toBe('failed');

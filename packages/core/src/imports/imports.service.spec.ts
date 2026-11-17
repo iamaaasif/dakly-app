@@ -31,6 +31,7 @@ describe('ImportsService', () => {
   let removed: string[];
   let published: string[];
   let leftToRemove: number;
+  let failReport: boolean;
   let service: ImportsService;
 
   const repository = {
@@ -102,12 +103,14 @@ describe('ImportsService', () => {
   const storage: FileStorageDriver = {
     createUploadUrl: (key) => `https://files.test/put/${key}`,
     createDownloadUrl: (key) => `https://files.test/get/${key}`,
-    readText: async (key, maxBytes) => {
+    readBytes: async (key, maxBytes) => {
       const text = objects.get(key);
       if (text === undefined) return { kind: 'missing' };
-      return Buffer.byteLength(text) > maxBytes ? { kind: 'too_large' } : { kind: 'found', text };
+      const bytes = Buffer.from(text);
+      return bytes.byteLength > maxBytes ? { kind: 'too_large' } : { kind: 'found', bytes };
     },
     writeText: async (key, body) => {
+      if (failReport) throw new Error('Storage unavailable');
       objects.set(key, body);
     },
   };
@@ -174,7 +177,7 @@ describe('ImportsService', () => {
       'contact-01712345678:sms': 'granted',
       'contact-01812345678:sms': 'granted',
     });
-    expect(objects.get(finished!.reportKey!)).toMatch(/^Row,Field,Problem\r\n"4","phone",/);
+    expect(objects.get(finished!.reportKey!)).toMatch(/^Row,Field,Problem\r\n"4","Phone",/);
   });
 
   it('reports a withdrawn channel on its row and leaves skipped contacts out of consent', async () => {
@@ -191,7 +194,7 @@ describe('ImportsService', () => {
       'contact-01712345678:whatsapp': 'granted',
     });
     expect(objects.get(finished!.reportKey!)).toBe(
-      'Row,Field,Problem\r\n"2","sms","This customer said no to SMS messages, so the import did not change that"\r\n',
+      'Row,Field,Problem\r\n"2","SMS","This customer said no to SMS messages, so the import did not change that"\r\n',
     );
   });
 
@@ -228,12 +231,14 @@ describe('ImportsService', () => {
     expect(finished).toBeUndefined();
   });
 
-  it('leaves an import another run holds, and takes it over once that lease is stale', async () => {
+  it('fails while another run holds a fresh lease and takes the import over once it is stale', async () => {
     importing({});
     objects.set(UPLOAD, 'Name,Mobile\nরাবেয়া,01712345678');
     lease = new Date('2026-11-17T04:28:00Z');
 
-    await service.runCustomerImport(STORE_ID, IMPORT_ID);
+    await expect(service.runCustomerImport(STORE_ID, IMPORT_ID)).rejects.toMatchObject({
+      code: 'IMPORT_BEING_RUN',
+    });
     expect(finished).toBeUndefined();
 
     lease = new Date('2026-11-17T04:20:00Z');
@@ -252,6 +257,20 @@ describe('ImportsService', () => {
     failBatch = false;
     await service.runCustomerImport(STORE_ID, IMPORT_ID);
     expect(finished?.counts).toMatchObject({ rowsAdded: 1 });
+  });
+
+  it('lets go of its lease when the report cannot be saved, so the retry finishes the import', async () => {
+    importing({});
+    objects.set(UPLOAD, 'Name,Mobile\nরাবেয়া,01712345678\nসুমি,0171');
+    failReport = true;
+
+    await expect(service.runCustomerImport(STORE_ID, IMPORT_ID)).rejects.toThrow();
+    expect(finished).toBeUndefined();
+    expect(lease).toBeNull();
+
+    failReport = false;
+    await service.runCustomerImport(STORE_ID, IMPORT_ID);
+    expect(finished?.status).toBe('done');
   });
 
   it('answers a missing import with IMPORT_NOT_FOUND', async () => {

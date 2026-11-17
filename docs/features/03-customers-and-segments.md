@@ -145,16 +145,26 @@ undo the contacts it added.
   report. The reader drops blank lines as it goes, stops at 50,000 rows and keeps at most 200
   cells a row.
 - One run at a time: the job takes a lease on the import (`imports.claimed_at`) and renews it
-  after each batch. A second delivery of the job leaves an import whose lease is under 5
-  minutes old; a run that fails lets go at once, so the queue's retry carries on. The
-  `fail-stuck-imports` sweep fails an import still `importing` an hour after its last batch,
-  with a line in its report.
+  after each batch, saving `last_progress_at` with it. A second delivery of the job while the
+  lease is under 5 minutes old fails with `IMPORT_BEING_RUN` and is retried, so a crashed run
+  is never mistaken for a finished one. A run that fails lets go of its lease at once and keeps
+  its last progress time, so the retry carries on. A run counts as finished only after its
+  last write succeeds, so a report that failed to save is retried.
+- The `fail-stuck-imports` sweep looks at imports still `importing` that made no progress for
+  15 minutes (`last_progress_at`, else `started_at`). Their job may have died with its worker
+  or may still wait behind others, so each is queued again with a new `import.started` event,
+  up to 4 times, and failed only after that, with a line in its report. The report is a CSV
+  in R2 whose `files` row expires after 7 days, like the upload.
+- A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
+  the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
+  being read as records, so 10 MB of line breaks costs no memory.
 - Existing phone (D42): a row whose phone a contact already has changes it only this way.
   Phone, kind, source, verification and consent never change. Name, email, address, district
-  and notes take a non-blank cell. A WhatsApp number is filled only when the contact has none:
-  an import never moves consent to a number nobody verified, and changing an existing number
-  stays a profile edit. A different number is left as it is, and the report says "WhatsApp
-  number differs, not changed". Tags are added to the contact's own up to 50; the report
+  and notes take a non-blank cell. A WhatsApp number is filled only when the contact has none
+  and no WhatsApp consent answer, because an empty number means "same as the phone" and
+  filling it would move that answer to a number nobody verified. Changing an existing number
+  stays a profile edit. A number left out for either reason is reported as "WhatsApp number
+  differs, not changed". Tags are added to the contact's own up to 50; the report
   counts the ones left out. The duplicate mode `skip` leaves the contact as it is, consent
   included. A new phone becomes a customer with source `import` and the import's id in
   `contacts.import_id`.

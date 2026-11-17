@@ -15,6 +15,6 @@ export class FailStuckImportsJob implements JobHandler {
 
   async handle(data: unknown) {
     payload.parse(data);
-    await this.importsService.failStuckImports();
+    await this.importsService.sweepStuckImports();
   }
 }

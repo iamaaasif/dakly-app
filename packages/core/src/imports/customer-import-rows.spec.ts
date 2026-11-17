@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { contactImportMappingSchema, createImportSchema } from '@dakly/contracts/contacts';
 
-import { readCustomerImportRows } from './customer-import-rows';
+import { decodeCustomerImportFile, readCustomerImportRows } from './customer-import-rows';
 
 const header = 'Name,Mobile,WhatsApp,Email,Area,Tags';
 const mapping = { name: 0, phone: 1, whatsappPhone: 2, email: 3, district: 4, tags: 5 };
@@ -186,6 +186,23 @@ describe('readCustomerImportRows', () => {
 
     expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_TOO_MANY_ROWS' }),
+    );
+  });
+});
+
+describe('decodeCustomerImportFile', () => {
+  it('reads UTF-8 text, Bangla and a byte order mark included', () => {
+    const bytes = new TextEncoder().encode('\uFEFFনাম,Mobile\n');
+
+    expect(decodeCustomerImportFile(bytes)).toBe('নাম,Mobile\n');
+  });
+
+  it.each([
+    ['a UTF-16 file', Buffer.from('\uFEFFMobile\n01712345678\n', 'utf16le')],
+    ['a file with an invalid byte', Uint8Array.from([0x4d, 0x6f, 0xff, 0x0a])],
+  ])('refuses %s as unreadable', (_case, bytes) => {
+    expect(() => decodeCustomerImportFile(bytes)).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
     );
   });
 });

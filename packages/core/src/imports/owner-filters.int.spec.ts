@@ -70,6 +70,11 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.listStuck(f.a, late)).toEqual([
       { id: importA, claimedAt: renewed.renewed },
     ]);
+    const requeue = { before: late, now: late, limit: 1 };
+    expect(await repository.requeue(f.b, importA, requeue)).toBe(false);
+    expect(await repository.requeue(f.a, importA, requeue)).toBe(true);
+    expect(await repository.requeue(f.a, importA, requeue)).toBe(false);
+    expect(await f.row('imports', importA)).toMatchObject({ requeue_count: 1 });
 
     const report = { ...upload(f.a), status: 'ready' as const };
     const finishedAt = new Date('2026-11-17T04:31:00Z');

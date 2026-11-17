@@ -19,7 +19,11 @@ import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { type CustomerImportRows, readCustomerImportRows } from './customer-import-rows';
+import {
+  type CustomerImportRows,
+  decodeCustomerImportFile,
+  readCustomerImportRows,
+} from './customer-import-rows';
 import { FILE_STORAGE_DRIVER } from './file-storage-provider';
 import { importError } from './imports.errors';
 import {
@@ -49,12 +53,26 @@ const UNDO_BATCH_ROWS = 1_000;
 const CSV = 'text/csv';
 // Each batch renews the lease; a run that has not renewed it for 5 minutes is gone.
 const LEASE_MS = 5 * 60 * 1000;
-const STUCK_MS = 60 * 60 * 1000;
+// An import with no progress for this long lost its job, or still waits behind a long queue.
+const STUCK_MS = 15 * 60 * 1000;
+const MAX_REQUEUES = 4;
 const COUNT_FOR_OUTCOME = {
   added: 'rowsAdded',
   updated: 'rowsUpdated',
   skipped: 'rowsSkipped',
 } as const satisfies Record<ImportedContact['outcome'], keyof ImportCounts>;
+const FIELD_LABELS = {
+  phone: 'Phone',
+  name: 'Name',
+  whatsappPhone: 'WhatsApp number',
+  email: 'Email',
+  address: 'Address',
+  district: 'District',
+  tags: 'Tags',
+  notes: 'Notes',
+  sms: 'SMS',
+  whatsapp: 'WhatsApp',
+} as const satisfies Record<NonNullable<ReportLine['field']>, string>;
 const CONSENT_LABELS = { sms: 'SMS', whatsapp: 'WhatsApp' } as const;
 
 @Injectable()
@@ -176,8 +194,10 @@ export class ImportsService {
     if (found?.status !== 'importing') return;
     const now = this.clock.now();
     const staleBefore = new Date(now.getTime() - LEASE_MS);
-    // Another run holds a fresh lease: it finishes the import, or the sweep fails it.
-    if (!(await this.repository.claim(storeId, importId, now, staleBefore))) return;
+    // A fresh lease may belong to a run that died. Returning would let the queue count this job as
+    // done, so it fails and is retried, and the sweep queues the import again if nothing moves.
+    if (!(await this.repository.claim(storeId, importId, now, staleBefore)))
+      throw importError('IMPORT_BEING_RUN');
     const run: Run = { storeId, found, lease: now, finished: false };
     try {
       await this.importFile(run);
@@ -187,15 +207,30 @@ export class ImportsService {
     }
   }
 
-  // An import still running an hour after its last batch lost its job; it fails with a report.
-  async failStuckImports(): Promise<void> {
-    const before = new Date(this.clock.now().getTime() - STUCK_MS);
+  // A stalled import is queued again up to MAX_REQUEUES times, because its job may only be waiting
+  // behind others or may have died with its worker. After that it fails, with a report.
+  async sweepStuckImports(): Promise<void> {
+    const now = this.clock.now();
+    const before = new Date(now.getTime() - STUCK_MS);
     for (const storeId of await this.repository.storesWithStuckImports(before))
-      for (const stuck of await this.repository.listStuck(storeId, before))
-        await this.finish(storeId, stuck.id, stuck.claimedAt, {
-          status: 'failed',
-          lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+      for (const stuck of await this.repository.listStuck(storeId, before)) {
+        const requeued = await this.transaction.run(storeId, async () => {
+          const requeue = { before, now, limit: MAX_REQUEUES };
+          if (!(await this.repository.requeue(storeId, stuck.id, requeue))) return false;
+          await this.outbox.publish({
+            type: 'import.started',
+            storeId,
+            occurredAt: now.toISOString(),
+            payload: { importId: stuck.id },
+          });
+          return true;
         });
+        if (!requeued)
+          await this.finish(storeId, stuck.id, stuck.claimedAt, {
+            status: 'failed',
+            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+          });
+      }
   }
 
   private async importFile(run: Run): Promise<void> {
@@ -291,8 +326,9 @@ export class ImportsService {
   }
 
   private async finishRun(run: Run, outcome: Outcome): Promise<void> {
-    run.finished = true;
     await this.finish(run.storeId, run.found.id, run.lease, outcome);
+    // Set only after the write, so a run that failed to save its report lets go of its lease.
+    run.finished = true;
   }
 
   private async finish(
@@ -325,10 +361,10 @@ export class ImportsService {
   }
 
   private async download(objectKey: string): Promise<string> {
-    const file = await this.storage.readText(objectKey, MAX_IMPORT_FILE_BYTES);
+    const file = await this.storage.readBytes(objectKey, MAX_IMPORT_FILE_BYTES);
     if (file.kind === 'missing') throw importError('IMPORT_FILE_NOT_UPLOADED');
     if (file.kind === 'too_large') throw importError('IMPORT_FILE_TOO_LARGE');
-    return file.text;
+    return decodeCustomerImportFile(file.bytes);
   }
 
   private async uploadReport(storeId: string, lines: ReportLine[]): Promise<NewImportFile> {
@@ -344,7 +380,9 @@ function reportCsv(lines: ReportLine[]): string {
   const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const sorted = [...lines].sort((a, b) => (a.rowNumber ?? 0) - (b.rowNumber ?? 0));
   const records = sorted.map((line) =>
-    [String(line.rowNumber ?? ''), line.field ?? '', line.message].map(cell).join(','),
+    [String(line.rowNumber ?? ''), line.field ? FIELD_LABELS[line.field] : '', line.message]
+      .map(cell)
+      .join(','),
   );
   return `${['Row,Field,Problem', ...records].join('\r\n')}\r\n`;
 }
