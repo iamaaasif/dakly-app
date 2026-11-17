@@ -3,9 +3,9 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
-import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 
+import { AccountMenu } from './account-menu';
 import { MobileNavigation } from './mobile-navigation';
 import { ShellNavigation } from './shell-navigation';
 import { StoreRequired } from './store-required';
@@ -48,19 +48,19 @@ export function ShellFrame({
       >
         <ShellNavigation
           session={data}
+          onSignOut={onSignOut}
           collapsed={collapsed}
           onCollapse={() => setCollapsed(!collapsed)}
         />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="flex flex-wrap items-center gap-4 border-b border-border bg-surface px-4 py-4 md:px-8">
-          <MobileNavigation session={data} blocked={blocked} />
+        <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8">
+          <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
           <StoreSwitcher session={data} onSwitch={onSwitch} />
-          <p className="min-w-0 text-sm break-words text-text-muted md:ml-auto">{data.user.name}</p>
-          {bell}
-          <Button variant="secondary" onClick={() => void onSignOut()}>
-            Sign out
-          </Button>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {bell}
+            <AccountMenu user={data.user} onSignOut={onSignOut} />
+          </div>
         </header>
         <div
           id="page-content"
