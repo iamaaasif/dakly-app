@@ -1,10 +1,12 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { ChevronDown } from 'lucide-react';
 
 import type { UserStorePage, SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
 
 import { storeSwitcherKeys } from './store-switcher-keys';
 import { apiRequest } from '@/lib/api-client';
+import { initialsOf } from '@/lib/initials';
 
 type StoreSwitcherProps = { session: SessionContext; onSwitch: (storeId: string) => Promise<void> };
 export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
@@ -12,26 +14,39 @@ export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
   const current = session.currentStore;
   if (!session.hasMemberships) return <p className="text-text-muted">No shop yet</p>;
   return (
-    <div className="order-last w-full min-w-0 basis-full space-y-1 md:order-none md:w-auto md:max-w-sm md:flex-1 md:basis-auto">
-      <label htmlFor="active-shop" className="block text-sm text-text-muted">
-        Current shop
-      </label>
-      <select
-        id="active-shop"
-        value={session.currentStore?.storeId ?? ''}
-        onChange={(event) => void onSwitch(event.target.value)}
-        className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      >
-        <option value="" disabled>
-          Choose a shop
-        </option>
-        {options.map((store) => (
-          <option key={store.storeId} value={store.storeId}>
-            {store.name}
+    <div className="order-last w-full min-w-0 basis-full space-y-2 md:order-none md:w-auto md:max-w-xs md:basis-auto">
+      <div className="relative flex min-h-12 items-center gap-3 rounded-lg border border-input-border bg-surface px-2 py-1 has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
+        <span
+          aria-hidden="true"
+          className="grid size-8 shrink-0 place-items-center rounded-md bg-inverse text-xs font-semibold text-on-primary"
+        >
+          {current ? initialsOf(current.name) : ''}
+        </span>
+        <div className="min-w-0 flex-1">
+          <label htmlFor="active-shop" className="block text-xs text-text-muted">
+            Current shop
+          </label>
+          <p aria-hidden="true" className="font-semibold break-words">
+            {current?.name ?? 'Choose a shop'}
+          </p>
+        </div>
+        <ChevronDown aria-hidden="true" size={16} className="shrink-0 text-text-muted" />
+        <select
+          id="active-shop"
+          value={session.currentStore?.storeId ?? ''}
+          onChange={(event) => void onSwitch(event.target.value)}
+          className="absolute inset-0 size-full cursor-pointer opacity-0"
+        >
+          <option value="" disabled>
+            Choose a shop
           </option>
-        ))}
-      </select>
-      {current ? <p className="font-semibold break-words">{current.name}</p> : null}
+          {options.map((store) => (
+            <option key={store.storeId} value={store.storeId}>
+              {store.name}
+            </option>
+          ))}
+        </select>
+      </div>
       {shops.isPending ? <p role="status">Loading shops…</p> : null}
       {shops.error ? (
         <p role="alert">

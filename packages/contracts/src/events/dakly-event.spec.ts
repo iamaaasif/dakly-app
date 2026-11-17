@@ -17,6 +17,24 @@ const trackedLink = {
 } as const;
 
 const examples: DaklyEvent[] = [
+  {
+    type: 'stock.changed',
+    storeId,
+    occurredAt,
+    payload: { variantId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2', kind: 'adjust' },
+  },
+  {
+    type: 'variant.restocked',
+    storeId,
+    occurredAt,
+    payload: { variantId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
+  },
+  {
+    type: 'product.updated',
+    storeId,
+    occurredAt,
+    payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
+  },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
   {
     type: 'consent.changed',
