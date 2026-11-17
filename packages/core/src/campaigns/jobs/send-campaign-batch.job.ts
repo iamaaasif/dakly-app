@@ -20,12 +20,13 @@ const batchJobOptions = {
   removeOnFail: 100,
 } satisfies JobsOptions;
 
-// The sweep's job for a campaign is dropped while one is waiting or running.
-export function sweptBatchJob(storeId: string, campaignId: string) {
+// One chain of batches per campaign: a batch is dropped while another for the same campaign is
+// waiting, delayed or running.
+export function batchJob(storeId: string, campaignId: string, delay = 0) {
   return {
     name: SEND_CAMPAIGN_BATCH,
     data: { storeId, campaignId },
-    opts: { ...batchJobOptions, deduplication: { id: campaignId } },
+    opts: { ...batchJobOptions, delay, deduplication: { id: campaignId } },
   };
 }
 
@@ -37,20 +38,18 @@ export class SendCampaignBatchJob implements JobHandler {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // The next batch goes to the back of the queue, behind other campaigns. Its job id holds its
-  // start time, so batches deferred to the end of quiet hours are queued once.
+  // This running job holds the campaign's key, so it frees the key just before queueing the next
+  // batch, which goes to the back of the queue behind other campaigns.
   async handle(data: unknown) {
     const { storeId, campaignId } = payload.parse(data);
     const next = await this.sender.sendBatch(storeId, campaignId);
     if (!next) return;
-    await this.queue.add(
-      SEND_CAMPAIGN_BATCH,
-      { storeId, campaignId },
-      {
-        ...batchJobOptions,
-        delay: Math.max(0, next.getTime() - this.clock.now().getTime()),
-        jobId: `${campaignId}-${next.getTime()}`,
-      },
-    );
+    const {
+      name,
+      data: job,
+      opts,
+    } = batchJob(storeId, campaignId, Math.max(0, next.getTime() - this.clock.now().getTime()));
+    await this.queue.removeDeduplicationKey(campaignId);
+    await this.queue.add(name, job, opts);
   }
 }
