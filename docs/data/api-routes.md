@@ -146,6 +146,10 @@ atomically and retain business data when an extension is disabled.
 | `POST /variants/:variantId/stock-adjustments`                                            | `products` |
 | `GET /variants/:variantId/stock-movements`                                               | `products` |
 | `GET /restock-requests`                                                                  | `products` |
+| `POST /products/:productId/photos/upload-url`                                            | `products` |
+| `POST /products/:productId/photos/confirm`                                               | `products` |
+| `PATCH /products/:productId/photos`                                                      | `products` |
+| `DELETE /products/:productId/photos/:fileId`                                             | `products` |
 
 ## Orders and delivery (06)
 

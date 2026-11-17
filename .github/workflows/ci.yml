@@ -19,6 +19,10 @@ env:
   REDIS_URL: redis://localhost:6379/15
   DATABASE_ADMIN_URL: postgres://dakly:dakly@localhost:5432/dakly
   DATABASE_URL: postgres://dakly_app:dakly_app@localhost:5432/dakly
+  R2_ENDPOINT: http://127.0.0.1:8333
+  R2_BUCKET: dakly-local
+  R2_ACCESS_KEY_ID: dakly-local
+  R2_SECRET_ACCESS_KEY: dakly-local-secret
 
 jobs:
   static:
@@ -143,6 +147,7 @@ jobs:
           pnpm --filter @dakly/db db:migrate
       - name: Install Chromium
         run: pnpm --filter @dakly/web exec playwright install --with-deps chromium
+      - run: docker compose up -d --wait seaweedfs
       - run: pnpm test:e2e
       - name: Upload browser test evidence
         if: always()
