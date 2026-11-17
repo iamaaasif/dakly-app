@@ -232,7 +232,7 @@ describe('AutomationRunsService', () => {
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
       send: async (_storeId: string, message: OutgoingMessage) => {
-        if (message.destination && message.destination !== contactPhone)
+        if (message.destination !== undefined && message.destination !== contactPhone)
           throw new AppError('MESSAGING_DESTINATION_CHANGED', {
             status: 409,
             message: "The contact's phone changed after this message was decided",

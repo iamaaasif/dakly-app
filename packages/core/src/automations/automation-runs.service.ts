@@ -383,7 +383,7 @@ export class AutomationRunsService {
         contactId,
         body,
         operationKey: operationKey(claim),
-        ...(destination && { destination }),
+        destination,
       } as const;
       const { providerMessageId, credits } = await this.messaging.send(storeId, message);
       return {
