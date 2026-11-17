@@ -4,11 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
 import { createDatabase } from '@dakly/db/client';
 
+import { ContactsService } from '../contacts/contacts.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
@@ -50,12 +51,51 @@ async function prepareImport(file: string, start: Partial<StartImportInput> = {}
   return importId;
 }
 
+async function runImport(file: string, start: Partial<StartImportInput> = {}) {
+  const importId = await prepareImport(file, start);
+  await service.runCustomerImport(storeId, importId);
+  return { importId, result: await service.get(storeId, importId) };
+}
+
+async function committedCount(importId: string) {
+  const result = await admin.pool.query<{ added: number | null; contacts: number }>(
+    'select rows_added as added, (select count(*)::int from contacts where import_id=$1) as contacts from imports where id=$1',
+    [importId],
+  );
+  return result.rows[0];
+}
+
+async function contactByPhone(value: string) {
+  const result = await admin.pool.query(
+    'select id,name,email,whatsapp_phone,kind,source,tags,import_id from contacts where store_id=$1 and phone=$2',
+    [storeId, value],
+  );
+  return result.rows[0];
+}
+
+async function consentRows(contactId: string) {
+  const result = await admin.pool.query(
+    'select channel,status,source,evidence,captured_by_user_id from consents where contact_id=$1 order by captured_at,channel',
+    [contactId],
+  );
+  return result.rows;
+}
+
+async function existingLead(value: string) {
+  const id = randomUUID();
+  await admin.pool.query(
+    "insert into contacts(id,store_id,name,phone,email,source,kind,tags) values($1,$2,'পুরনো নাম',$3,'old@example.com','messenger','lead','{পুরনো}')",
+    [id, storeId, value],
+  );
+  return id;
+}
+
 async function report(url: string | null) {
   expect(url).not.toBeNull();
   return (await fetch(url!)).text();
 }
 
-describe('ImportsService imports (Postgres and SeaweedFS)', () => {
+describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
   beforeAll(async () => {
     await admin.pool.query("insert into stores(id,name) values($1,'শাহনাজের দোকান')", [storeId]);
     await admin.pool.query(
@@ -64,6 +104,10 @@ describe('ImportsService imports (Postgres and SeaweedFS)', () => {
     );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ImportsService);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
@@ -76,6 +120,214 @@ describe('ImportsService imports (Postgres and SeaweedFS)', () => {
     } finally {
       await admin.pool.end();
     }
+  });
+
+  it('adds new customers with consent, updates an existing phone by D42 and reports bad rows', async () => {
+    const fresh = phone();
+    const known = phone();
+    const leadId = await existingLead(known);
+    await admin.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'sms','withdrawn','opt_out_link')",
+      [storeId, leadId],
+    );
+    const file = [
+      'Name,Mobile,Email,Tags',
+      `রাবেয়া খাতুন,${fresh},,ঈদ`,
+      `,${known},rabeya@example.com,"ঈদ, পুরনো"`,
+      'করিম উদ্দিন,01212345678,,',
+    ].join('\n');
+
+    const { importId, result } = await runImport(file);
+
+    expect(result).toMatchObject({
+      status: 'done',
+      rowsTotal: 3,
+      rowsAdded: 1,
+      rowsUpdated: 1,
+      rowsSkipped: 0,
+      rowsFailed: 1,
+    });
+    const added = await contactByPhone(fresh);
+    expect(added).toMatchObject({ name: 'রাবেয়া খাতুন', kind: 'customer', source: 'import' });
+    expect(added.import_id).toBe(importId);
+    expect(await contactByPhone(known)).toMatchObject({
+      name: 'পুরনো নাম',
+      email: 'rabeya@example.com',
+      kind: 'lead',
+      source: 'messenger',
+      tags: ['পুরনো', 'ঈদ'],
+      import_id: null,
+    });
+    expect(await consentRows(added.id)).toEqual([
+      expect.objectContaining({ channel: 'sms', status: 'granted', evidence: evidence.sms }),
+      expect.objectContaining({
+        channel: 'whatsapp',
+        source: 'import',
+        captured_by_user_id: userId,
+      }),
+    ]);
+    expect((await consentRows(leadId)).map((row) => [row.channel, row.status])).toEqual([
+      ['sms', 'withdrawn'],
+      ['whatsapp', 'granted'],
+    ]);
+    const lines = (await report(result.reportUrl)).trim().split('\r\n');
+    expect(lines).toEqual([
+      'Row,Field,Problem',
+      expect.stringMatching(/^"3","sms","This customer said no to SMS messages/),
+      expect.stringMatching(/^"4","phone",/),
+    ]);
+    expect(lines.join()).not.toContain('01212345678');
+  });
+
+  it('leaves an existing customer and its consent as they are in skip mode', async () => {
+    const known = phone();
+    const leadId = await existingLead(known);
+
+    const { result } = await runImport(
+      `Name,Mobile,Email,Tags\nনতুন নাম,${known},new@example.com,ঈদ`,
+      {
+        duplicateMode: 'skip',
+      },
+    );
+
+    expect(result).toMatchObject({ status: 'done', rowsSkipped: 1, reportUrl: null });
+    expect(await contactByPhone(known)).toMatchObject({
+      name: 'পুরনো নাম',
+      email: 'old@example.com',
+      tags: ['পুরনো'],
+    });
+    expect(await consentRows(leadId)).toEqual([]);
+  });
+
+  it('records consent on a second import only for a channel whose answer changes', async () => {
+    const value = phone();
+    const file = `Name,Mobile,Email,Tags\nসুমাইয়া,${value},,`;
+    await runImport(file, { consentEvidence: { sms: evidence.sms } });
+
+    const { result } = await runImport(file);
+
+    expect(result).toMatchObject({ rowsUpdated: 1 });
+    const contact = await contactByPhone(value);
+    expect((await consentRows(contact.id)).map((row) => row.channel)).toEqual(['sms', 'whatsapp']);
+  });
+
+  it('adds nothing twice when the job runs again for the same import', async () => {
+    const value = phone();
+    const { importId } = await runImport(`Name,Mobile,Email,Tags\nনাসরিন,${value},,`);
+    await admin.pool.query("update imports set status='importing' where id=$1", [importId]);
+
+    await service.runCustomerImport(storeId, importId);
+
+    expect(await service.get(storeId, importId)).toMatchObject({ status: 'done', rowsAdded: 1 });
+    const contact = await contactByPhone(value);
+    expect(contact.import_id).toBe(importId);
+    expect(await consentRows(contact.id)).toHaveLength(2);
+  });
+
+  it('commits each batch of a 10,000-row file before the next one starts', async () => {
+    const rows = Array.from({ length: 10_000 }, (_, index) => `ক্রেতা ${index},${phone()},,`);
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\n${rows.join('\n')}`, {
+      consentEvidence: {},
+    });
+    const contacts = app.get(ContactsService);
+    const save = contacts.saveImportedRows.bind(contacts);
+    const seen: { added: number | null; contacts: number }[] = [];
+    vi.spyOn(contacts, 'saveImportedRows').mockImplementation(async (...args) => {
+      seen.push((await committedCount(importId))!);
+      return save(...args);
+    });
+
+    await service.runCustomerImport(storeId, importId);
+
+    expect(seen.map((count) => count.contacts)).toEqual(
+      Array.from({ length: 20 }, (_, batch) => batch * 500),
+    );
+    expect(seen.slice(1).map((count) => count.added)).toEqual(
+      Array.from({ length: 19 }, (_, batch) => (batch + 1) * 500),
+    );
+    expect(await service.get(storeId, importId)).toMatchObject({
+      status: 'done',
+      rowsTotal: 10_000,
+      rowsAdded: 10_000,
+    });
+  });
+
+  it('finishes a run that failed mid-file on its retry, adding nothing twice', async () => {
+    const rows = Array.from({ length: 1_000 }, (_, index) => `ক্রেতা ${index},${phone()},,`);
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\n${rows.join('\n')}`);
+    const contacts = app.get(ContactsService);
+    const save = contacts.saveImportedRows.bind(contacts);
+    let calls = 0;
+    vi.spyOn(contacts, 'saveImportedRows').mockImplementation(async (...args) => {
+      calls += 1;
+      if (calls === 2) throw new Error('Database connection lost');
+      return save(...args);
+    });
+
+    await expect(service.runCustomerImport(storeId, importId)).rejects.toThrow();
+    expect(await committedCount(importId)).toEqual({ added: 500, contacts: 500 });
+    await service.runCustomerImport(storeId, importId);
+
+    expect(await service.get(storeId, importId)).toMatchObject({
+      status: 'done',
+      rowsAdded: 1_000,
+    });
+    expect((await committedCount(importId))!.contacts).toBe(1_000);
+    const consents = await admin.pool.query(
+      'select count(*)::int from consents c join contacts k on k.id=c.contact_id where k.import_id=$1',
+      [importId],
+    );
+    expect(consents.rows[0].count).toBe(2_000);
+    const upload = await admin.pool.query(
+      'select f.status from files f join imports i on i.file_id=f.id where i.id=$1',
+      [importId],
+    );
+    expect(upload.rows[0].status).toBe('ready');
+  });
+
+  it('keeps a saved WhatsApp number and fills an empty one', async () => {
+    const [differs, same, empty] = [phone(), phone(), phone()];
+    const [saved, sameNumber, filled] = ['01912345678', '01912345679', '01912345670'];
+    for (const [value, whatsapp] of [
+      [differs, saved],
+      [same, sameNumber],
+      [empty, null],
+    ] as const) {
+      const id = await existingLead(value);
+      await admin.pool.query('update contacts set whatsapp_phone=$2 where id=$1', [id, whatsapp]);
+    }
+    const file = [
+      'Name,Mobile,WhatsApp',
+      `,${differs},01812345678`,
+      `,${same},${sameNumber}`,
+      `,${empty},${filled}`,
+    ].join('\n');
+
+    const { result } = await runImport(file, {
+      mapping: { name: 0, phone: 1, whatsappPhone: 2 },
+      consentEvidence: {},
+    });
+
+    expect((await contactByPhone(differs)).whatsapp_phone).toBe(saved);
+    expect((await contactByPhone(same)).whatsapp_phone).toBe(sameNumber);
+    expect((await contactByPhone(empty)).whatsapp_phone).toBe(filled);
+    expect((await report(result.reportUrl)).trim().split('\r\n')).toEqual([
+      'Row,Field,Problem',
+      '"2","whatsappPhone","WhatsApp number differs, not changed"',
+    ]);
+  });
+
+  it('adds tags up to 50 and reports the ones left out', async () => {
+    const value = phone();
+    const id = await existingLead(value);
+    const tags = Array.from({ length: 49 }, (_, index) => `ট্যাগ ${index}`);
+    await admin.pool.query('update contacts set tags=$2 where id=$1', [id, tags]);
+    const file = `Name,Mobile,Email,Tags\n,${value},,"ঈদ, পূজা, ট্যাগ 3, বৈশাখ"`;
+
+    const { result } = await runImport(file, { consentEvidence: {} });
+
+    expect((await contactByPhone(value)).tags).toEqual([...tags, 'ঈদ']);
+    expect(await report(result.reportUrl)).toContain('"2","tags","2 tags not added');
   });
 
   it('fails an import whose run stopped an hour ago and leaves a running one alone', async () => {
@@ -93,5 +345,21 @@ describe('ImportsService imports (Postgres and SeaweedFS)', () => {
     expect(result.status).toBe('failed');
     expect(await report(result.reportUrl)).toContain('The import stopped before it finished');
     expect((await service.get(storeId, running)).status).toBe('importing');
+  });
+
+  it('fails an import whose file never arrived, with the reason in the report', async () => {
+    const { importId } = await service.createCustomerImport(storeId, { sizeBytes: 40 }, owner);
+    await service.start(
+      storeId,
+      importId,
+      { mapping, duplicateMode: 'update', consentEvidence: {} },
+      owner,
+    );
+
+    await service.runCustomerImport(storeId, importId);
+
+    const result = await service.get(storeId, importId);
+    expect(result.status).toBe('failed');
+    expect(await report(result.reportUrl)).toContain('The file was not uploaded');
   });
 });

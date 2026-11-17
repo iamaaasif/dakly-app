@@ -46,6 +46,16 @@ export class ConsentsRepository {
     return rows[0]!;
   }
 
+  async insertAll(storeId: string, rows: NewConsent[]): Promise<Consent[]> {
+    if (rows.length === 0) return [];
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(consents)
+        .values(rows.map((consent) => ({ storeId, ...consent })))
+        .returning(consentColumns),
+    );
+  }
+
   listCurrent(
     storeId: string,
     contactIds: string[],

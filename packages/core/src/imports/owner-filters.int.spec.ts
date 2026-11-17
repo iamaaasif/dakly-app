@@ -26,7 +26,7 @@ describe('import filters without RLS assistance', () => {
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
-  it('creates, starts and finishes an import only in the selected store', async () => {
+  it('creates, starts, claims, counts and finishes an import only in the selected store', async () => {
     const importA = randomUUID();
     const importB = randomUUID();
     const fileA = upload(f.a);
@@ -48,24 +48,46 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.start(f.a, importA, started)).toBe(true);
     expect(await repository.start(f.a, importA, started)).toBe(false);
 
-    // The app writes leases from its clock, in whole milliseconds.
     const lease = new Date('2026-11-17T04:30:00Z');
-    await f.connection.pool.query('update imports set claimed_at=$2 where id=$1', [importA, lease]);
+    const stale = new Date('2026-11-17T04:25:00Z');
+    expect(await repository.claim(f.b, importA, lease, stale)).toBe(false);
+    expect(await repository.claim(f.a, importA, lease, stale)).toBe(true);
+    expect(await repository.claim(f.a, importA, lease, stale)).toBe(false);
+    const renewed = { held: lease, renewed: new Date('2026-11-17T04:30:30Z') };
+    expect(await repository.saveProgress(f.b, importA, counts, renewed)).toBe(false);
+    expect((await f.row('imports', importA)).rows_total).toBeNull();
+    expect(await repository.saveProgress(f.a, importA, counts, renewed)).toBe(true);
+    await repository.releaseClaim(f.b, importA, renewed.renewed);
+    expect((await f.row('imports', importA)).claimed_at).not.toBeNull();
+    await repository.markUploadReady(f.b, fileA.id);
+    expect((await f.row('files', fileA.id)).status).toBe('pending');
+    await repository.markUploadReady(f.a, fileA.id);
+    expect((await f.row('files', fileA.id)).status).toBe('ready');
+
     const late = new Date('2026-11-17T06:00:00Z');
     expect(await repository.storesWithStuckImports(late)).toContain(f.a);
     expect(await repository.listStuck(f.b, late)).toEqual([]);
-    expect(await repository.listStuck(f.a, late)).toEqual([{ id: importA, claimedAt: lease }]);
+    expect(await repository.listStuck(f.a, late)).toEqual([
+      { id: importA, claimedAt: renewed.renewed },
+    ]);
 
     const report = { ...upload(f.a), status: 'ready' as const };
-    const done = { status: 'failed', counts, finishedAt: late } as const;
-    expect(await repository.finish(f.b, importA, { lease, result: done, report })).toBe(false);
-    expect(await repository.finish(f.a, importA, { lease: null, result: done, report })).toBe(
+    const finishedAt = new Date('2026-11-17T04:31:00Z');
+    const done = { status: 'done', counts, finishedAt } as const;
+    expect(
+      await repository.finish(f.b, importA, { lease: renewed.renewed, result: done, report }),
+    ).toBe(false);
+    expect(await repository.finish(f.a, importA, { lease: lease, result: done, report })).toBe(
       false,
     );
     expect(await f.row('files', report.id)).toBeUndefined();
-    expect(await repository.finish(f.a, importA, { lease, result: done, report })).toBe(true);
+    expect((await f.row('imports', importA)).status).toBe('importing');
+    expect(
+      await repository.finish(f.a, importA, { lease: renewed.renewed, result: done, report }),
+    ).toBe(true);
     expect(await repository.findById(f.a, importA)).toMatchObject({
-      status: 'failed',
+      status: 'done',
+      rowsAdded: 2,
       reportKey: report.objectKey,
     });
     expect((await f.row('imports', importB)).status).toBe('uploaded');

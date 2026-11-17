@@ -6,6 +6,7 @@ import type {
   ConsentResponse,
   RecordConsentInput,
 } from '@dakly/contracts/contacts';
+import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
@@ -44,25 +45,14 @@ export class ConsentService {
     actor: AuditEntry['actor'],
   ): Promise<ConsentResponse> {
     return this.transaction.run(storeId, async () => {
-      await this.contacts.assertContactExists(storeId, change.contactId);
+      await this.contacts.lockForConsent(storeId, [change.contactId]);
       const capturedAt = this.clock.now();
       const consent = await this.repository.insert(storeId, {
         ...change,
         capturedAt,
         capturedByUserId: actor.kind === 'user' ? actor.userId : null,
       });
-      await this.outbox.publish({
-        type: 'consent.changed',
-        storeId,
-        occurredAt: capturedAt.toISOString(),
-        payload: {
-          consentId: consent.id,
-          contactId: consent.contactId,
-          channel: consent.channel,
-          status: consent.status,
-          source: consent.source,
-        },
-      });
+      await this.outbox.publish(consentChangedEvent(storeId, consent));
       return toConsentResponse(consent);
     });
   }
@@ -90,11 +80,64 @@ export class ConsentService {
     return this.repository.listCurrent(storeId, contactIds, channel);
   }
 
+  // D42 and CUS-R4: the shop's evidence grants a channel only to contacts with no answer on it. A
+  // contact already granted gets no new row, so a rerun records nothing; one who withdrew is never
+  // granted again and is returned for the import report.
+  async grantFromImport(
+    storeId: string,
+    grant: { contactIds: string[]; channel: ConsentChannel; evidence: string },
+    actor: AuditEntry['actor'],
+  ): Promise<{ withdrawnContactIds: string[] }> {
+    if (grant.contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
+      throw consentError('CONSENT_AUDIENCE_TOO_MANY');
+    return this.transaction.run(storeId, async () => {
+      await this.contacts.lockForConsent(storeId, grant.contactIds);
+      const current = await this.repository.listCurrent(storeId, grant.contactIds, grant.channel);
+      const answered = new Map(current.map((consent) => [consent.contactId, consent.status]));
+      const capturedAt = this.clock.now();
+      const granted = await this.repository.insertAll(
+        storeId,
+        grant.contactIds
+          .filter((contactId) => !answered.has(contactId))
+          .map((contactId) => ({
+            contactId,
+            channel: grant.channel,
+            status: 'granted' as const,
+            source: 'import' as const,
+            evidence: grant.evidence,
+            capturedAt,
+            capturedByUserId: actor.kind === 'user' ? actor.userId : null,
+          })),
+      );
+      await this.outbox.publishAll(granted.map((consent) => consentChangedEvent(storeId, consent)));
+      return {
+        withdrawnContactIds: current
+          .filter((consent) => consent.status === 'withdrawn')
+          .map((consent) => consent.contactId),
+      };
+    });
+  }
+
   currentForAudience(storeId: string, contactIds: string[], channel: ConsentChannel) {
     if (contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
       throw consentError('CONSENT_AUDIENCE_TOO_MANY');
     return this.repository.listCurrent(storeId, contactIds, channel);
   }
+}
+
+function consentChangedEvent(storeId: string, consent: Consent): DaklyEvent {
+  return {
+    type: 'consent.changed',
+    storeId,
+    occurredAt: consent.capturedAt.toISOString(),
+    payload: {
+      consentId: consent.id,
+      contactId: consent.contactId,
+      channel: consent.channel,
+      status: consent.status,
+      source: consent.source,
+    },
+  };
 }
 
 function toConsentResponse(consent: Consent): ConsentResponse {
