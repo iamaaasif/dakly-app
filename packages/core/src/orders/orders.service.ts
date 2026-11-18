@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -30,7 +31,6 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTransitions,
   productArchiveStages,
   recordOrderStage,
   stageWrite,
@@ -239,6 +239,7 @@ export class OrdersService {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
+      hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),
       shippedAt: isoTime(order.shippedAt),
       deliveredAt: isoTime(order.deliveredAt),

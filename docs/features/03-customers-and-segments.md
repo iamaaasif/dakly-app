@@ -92,6 +92,7 @@ The web app has two customer screens.
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
+  The browser test selects the fixture's owner shop before checking the full phone number.
 - Members with Edit Customers also change the customer from the profile. Edit changes the
   name, the tags (separated by commas) and the phone. The phone field starts empty, because
   the shown phone may be masked, and is sent only when typed. Delete asks "Delete <name>?" and

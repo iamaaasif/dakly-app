@@ -51,6 +51,7 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
       <OrderAmount order={order} />
       <Link
         href={href}
+        data-order-row-action={order.id}
         aria-label={`${canConfirm ? 'Confirm' : 'Details for'} order #${order.number}`}
         className="col-start-2 inline-flex min-h-10 w-fit items-center rounded-md bg-inverse px-3 font-medium text-on-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:col-start-auto"
       >
