@@ -76,7 +76,7 @@ function CampaignName({ campaign }: { campaign: CampaignResponse }) {
     <>
       <Link
         href={`/campaigns/${campaign.id}`}
-        className="inline-flex min-h-10 items-center font-semibold wrap-anywhere text-action hover:underline"
+        className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-action hover:underline"
       >
         {campaign.name}
       </Link>
