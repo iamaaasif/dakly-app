@@ -6,8 +6,8 @@ import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
 
-import { useProducts } from '@/features/products/api/products';
 import { formatMoney } from '@/lib/format-money';
+import { useProducts } from '@/lib/product-queries';
 
 export type VariantChoice = { label: string; price: number; stock: number | null };
 

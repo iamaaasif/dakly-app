@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
 
 import { ordersKey } from './orders';
-import { productsKeys } from '@/features/products/api/products';
+import { productsKeys } from '@/lib/product-queries';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useCreateOrder() {

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 
-import { productsKeys } from './products';
+import { productsKeys } from '@/lib/product-queries';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
 

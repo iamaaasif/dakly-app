@@ -6,7 +6,7 @@ import {
   type ProductResponse,
 } from '@dakly/contracts/products';
 
-import { productsKeys } from './products';
+import { productsKeys } from '@/lib/product-queries';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useUploadProductPhoto(productId: string) {

@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
 
 import {
-  createOrderSchema,
+  createOrderFormSchema,
   type CreateOrderInput,
   type CreateOrderValues,
 } from '@dakly/contracts/orders';
+import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
 import { useCreateOrder } from '../api/create-order';
@@ -17,29 +18,22 @@ import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
-const newOrderFormSchema = createOrderSchema.omit({ buyer: true });
 
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
 export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   const create = useCreateOrder();
-  const form = useForm<
-    Omit<CreateOrderValues, 'buyer'>,
-    undefined,
-    Omit<CreateOrderInput, 'buyer'>
-  >({
-    resolver: zodResolver(newOrderFormSchema),
+  const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
+    resolver: zodResolver(createOrderFormSchema),
     defaultValues: {
+      buyer: { name: '' },
       recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
       items: [newLine],
     },
   });
-  const submit = form.handleSubmit((input) => {
-    create.mutate(
-      { ...input, buyer: { name: input.recipient.name, phone: input.recipient.phone } },
-      { onSuccess: (order) => onSaved(order.id) },
-    );
-  });
+  const submit = form.handleSubmit((input) =>
+    create.mutate(input, { onSuccess: (order) => onSaved(order.id) }),
+  );
 
   return (
     <SessionDialog
@@ -51,13 +45,12 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
     >
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
-          <fieldset
-            disabled={create.isPending}
-            className="min-h-0 space-y-3 overflow-y-auto px-0.5"
-          >
-            <OrderRecipientFields />
-            <ItemsAndAmounts />
-          </fieldset>
+          <div className="min-h-0 overflow-y-auto px-0.5">
+            <fieldset disabled={create.isPending} className="space-y-3">
+              <OrderRecipientFields />
+              <ItemsAndAmounts />
+            </fieldset>
+          </div>
           {create.error && (
             <p role="alert" className="text-danger">
               {create.error.message}
@@ -113,7 +106,7 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
     ['recipient.areaId', 'items', 'deliveryChargePoisha']
   >({ name: ['recipient.areaId', 'items', 'deliveryChargePoisha'] });
   const quote = useOrderDelivery(areaId);
-  const delivery = override ?? quote.data?.chargePoisha;
+  const delivery = override ? takaInput.safeParse(override).data : quote.data?.chargePoisha;
   if (delivery === undefined) return null;
   const total = items.reduce(
     (sum, item) => sum + (variants[item.variantId]?.price ?? 0) * item.quantity,

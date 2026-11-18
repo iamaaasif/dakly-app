@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
-import { productsSearch, useProducts } from '../api/products';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
@@ -12,6 +11,7 @@ import { ProductSheet } from './product-sheet';
 import { StockAdjustmentForm } from './stock-adjustment-form';
 import { SessionDialog } from '@/components/session-dialog';
 import { StorePage } from '@/components/store-page';
+import { productsSearch, useProducts } from '@/lib/product-queries';
 import { useSessionContext } from '@/lib/session-context';
 
 type ProductsScreenProps = {

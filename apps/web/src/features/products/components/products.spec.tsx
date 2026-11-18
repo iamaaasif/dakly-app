@@ -7,8 +7,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
-import { productsKeys } from '../api/products';
 import { ProductsScreen } from './products-screen';
+import { productsKeys } from '@/lib/product-queries';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.hoisted(() => vi.fn());

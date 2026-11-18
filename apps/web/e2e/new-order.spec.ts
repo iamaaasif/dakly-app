@@ -20,6 +20,10 @@ async function capture(page: Page, name: string) {
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
     if (name === 'new') {
+      if (width === 360) {
+        await page.getByText('Cash on delivery').scrollIntoViewIfNeeded();
+        await expect(page.getByRole('button', { name: 'Save order' })).toBeInViewport();
+      }
       await expect
         .poll(() =>
           page
@@ -81,8 +85,14 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await capture(page, 'pipeline');
     await page.getByRole('button', { name: 'New order' }).click();
     const create = page.getByRole('dialog', { name: 'New order' });
+    await create.getByLabel('Buyer name').fill('Rahim Ahmed');
+    const gift = create.getByLabel('Deliver to someone else');
+    const recipientPhone = create.getByLabel('Recipient phone');
+    await recipientPhone.fill('01701000014');
+    await gift.check();
+    await expect(recipientPhone).toHaveValue('');
     await create.getByLabel('Recipient name').fill('Karim Ahmed');
-    await create.getByLabel('Recipient phone').fill('01701000015');
+    await recipientPhone.fill('01701000015');
     await create.getByLabel('Address').fill('House 14, Mirpur');
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
@@ -90,13 +100,15 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
     await expect(create.getByText('5 in stock')).toBeVisible();
     await expect(create.getByText('৳1,310')).toBeVisible();
+    await create.getByLabel('Delivery charge (৳)').fill('90.25');
+    await expect(create.getByText('৳1,340.25')).toBeVisible();
     await capture(page, 'new');
     await create.getByRole('button', { name: 'Save order' }).click();
     const detail = page.getByRole('dialog', { name: /^Order #/ });
     await expect(detail.getByText('Karim Ahmed', { exact: true })).toBeVisible();
-    await expect(detail.getByText('Buyer Karim Ahmed')).toBeVisible();
+    await expect(detail.getByText('Buyer Rahim Ahmed')).toBeVisible();
     await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
-    await expect(detail.getByText('৳1,310').first()).toBeVisible();
+    await expect(detail.getByText('৳1,340.25').first()).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string }>(
       'select id from orders where store_id=$1 and delivery_zone_id=$2',

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
+import { takaInput } from './products';
 
 export const orderSources = [
   'messenger',
@@ -293,7 +294,10 @@ export const createOrderSchema = z.strictObject({
   advancePaidPoisha: money.default(0),
 });
 
-export type CreateOrderValues = z.input<typeof createOrderSchema>;
+export const createOrderFormSchema = createOrderSchema.extend({
+  deliveryChargePoisha: takaInput.optional(),
+});
+export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
