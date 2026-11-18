@@ -64,6 +64,12 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
         await action.scrollIntoViewIfNeeded();
         await expect(action).toBeInViewport({ ratio: 1 });
       }
+      if (name === 'filters' && width === 360) {
+        await page.getByText('Filters', { exact: true }).evaluate((summary) => {
+          summary.scrollIntoView({ block: 'start' });
+        });
+        await expect(page.getByRole('button', { name: 'Apply filters' })).toBeInViewport();
+      }
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -220,12 +226,15 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
     await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
     await page.getByText('Filters', { exact: true }).click();
-    await page.getByRole('combobox', { name: 'Source' }).selectOption('whatsapp');
-    await page.getByRole('combobox', { name: 'Courier' }).selectOption('pathao');
+    await page.getByRole('combobox', { name: 'Source' }).selectOption({ label: 'WhatsApp' });
+    await page.getByRole('combobox', { name: 'Courier' }).selectOption({ label: 'Pathao' });
     await page.getByLabel('From date').fill('2026-11-17');
     await page.getByLabel('Through date').fill('2026-11-17');
-    await page.getByRole('button', { name: 'Apply filters' }).click();
+    const applyFilters = page.getByRole('button', { name: 'Apply filters' });
+    await applyFilters.focus();
+    await applyFilters.press('Enter');
     await expect(page).toHaveURL(/courier=pathao/);
+    await expect(applyFilters).toBeFocused();
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
     await capture('filters');
     await database.pool.query(
@@ -236,6 +245,9 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await page.getByRole('button', { name: 'Apply filters' }).click();
     await expect(page).toHaveURL(/stage=cancelled/);
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page).toHaveURL(/stage=to_confirm/);
+    await expect(page.getByText('Filters', { exact: true })).toBeFocused();
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",

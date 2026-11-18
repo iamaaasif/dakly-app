@@ -211,6 +211,10 @@ fixture('GET /orders', async () => {
     filtered.replace('source=whatsapp', 'source=manual'),
     filtered.replace('courier=pathao', 'courier=redx'),
     filtered.replaceAll('2026-11-17', '2026-11-18'),
+    filtered.replace(
+      '&createdFrom=2026-11-17&createdThrough=2026-11-17',
+      '&createdThrough=2026-11-16',
+    ),
   ]) {
     expect((await success(a, 'GET', unmatched, 200)).json().items).toEqual([]);
   }
