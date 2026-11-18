@@ -23,6 +23,7 @@ const context: SessionContext = {
     name: 'Shop',
     canViewProducts: true,
     canEditProducts: true,
+    canViewOrders: false,
     canViewCustomers: false,
     canCreateCustomer: false,
     canViewSegments: false,

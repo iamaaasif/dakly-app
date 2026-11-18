@@ -239,7 +239,9 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 ![Orders](../design/screenshots/orders.webp)
 
-Pipeline by stage with counts and return risk badges. The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
+Pipeline by stage with counts and return risk badges. To confirm includes On hold, and Delivered includes Partly delivered. Each combined tab counts both stages. Cards show the order age and use the total supplied by the API.
+The pipeline URL keeps the stage, search and page cursor. Search uses the buyer or recipient name, order number or exact recipient phone for staff who can see full phones. The alert strip links to orders waiting over 12 hours, high-risk unconfirmed orders with no advance, and unpaid COD on delivered parcels. Counts cover the store. The out-of-stock alert waits for the staff oversell rule, since orders currently cannot reserve stock they do not have. The list shows up to two item lines. The detail and timeline follow the pipeline.
+The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
 ### How it works
 

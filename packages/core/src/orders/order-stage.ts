@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
   orderStages,
+  orderTabs,
   type OrderDetail,
   type OrderStage,
   type OrderStageChange,
@@ -24,6 +25,32 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
 };
 
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
+
+const groupedStages: Partial<Record<OrderStage, OrderStage[]>> = {
+  to_confirm: ['to_confirm', 'on_hold'],
+  delivered: ['delivered', 'partially_delivered'],
+};
+
+export function stagesForOrderTab(stage: OrderStage): OrderStage[] {
+  return groupedStages[stage] ?? [stage];
+}
+
+export function orderStageCounts(rows: { stage: OrderStage; count: number }[]) {
+  const counts = Object.fromEntries(orderStages.map((stage) => [stage, 0])) as Record<
+    OrderStage,
+    number
+  >;
+  for (const { stage, count } of rows) counts[stage] = count;
+  return {
+    ...counts,
+    ...Object.fromEntries(
+      orderTabs.map((tab) => [
+        tab,
+        stagesForOrderTab(tab).reduce((sum, stage) => sum + counts[stage], 0),
+      ]),
+    ),
+  };
+}
 
 export function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
   return {

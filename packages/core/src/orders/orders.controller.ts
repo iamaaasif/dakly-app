@@ -80,8 +80,9 @@ export class OrdersController {
   list(
     @CurrentStore() storeId: string,
     @Query(new ZodValidationPipe(orderListQuerySchema)) query: OrderListQuery,
+    @CurrentAccess() access: StoreAccess,
   ): Promise<OrderListResponse> {
-    return this.service.list(storeId, query);
+    return this.service.list(storeId, query, access.seeFullPhone);
   }
 
   @Get(':orderId')
