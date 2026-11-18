@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { z } from 'zod';
 
 import type {
   CampaignResponse,
   ChangeCampaignInput,
-  CreateCampaignInput,
+  createCampaignSchema,
 } from '@dakly/contracts/campaigns';
 
 import { campaignKeys } from './campaigns-key';
@@ -14,7 +15,9 @@ export function useSaveCampaign() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (
-      change: { id: string; input: ChangeCampaignInput } | { input: CreateCampaignInput },
+      change:
+        | { id: string; input: ChangeCampaignInput }
+        | { input: z.input<typeof createCampaignSchema> },
     ) =>
       'id' in change
         ? request<CampaignResponse>(`/campaigns/${change.id}`, {
