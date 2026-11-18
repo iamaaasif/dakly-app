@@ -110,6 +110,7 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 - Open for Asif before beta:
   - the R2 bucket for each environment;
   - its access keys for `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`;
+  - a [bucket CORS rule](https://developers.cloudflare.com/r2/buckets/cors/) that allows the web origin for that environment to send `PUT` with `Content-Type`;
   - the R2 lifecycle rule that deletes `imports/` after 7 days.
 
 ## Key flows
