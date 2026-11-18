@@ -199,39 +199,42 @@ describe('tracked links over Fastify', () => {
     expect(await visits(stop.id)).toEqual([]);
   });
 
-  it('withdraws SMS consent once when the opt-out is tapped twice', async () => {
-    const contactId = await contact(storeA);
-    await consent.record(
-      storeA,
-      { contactId, channel: 'sms', status: 'granted', source: 'manual', evidence: 'দোকানে রাজি' },
-      { kind: 'system' },
-    );
-    const link = await optOutLink(storeA, contactId);
+  it.each(['granted', 'not_answered'] as const)(
+    'withdraws SMS consent once from %s when the opt-out is tapped twice',
+    async (status) => {
+      const contactId = await contact(storeA);
+      await consent.record(
+        storeA,
+        { contactId, channel: 'sms', status, source: 'manual', evidence: 'দোকানে রাজি' },
+        { kind: 'system' },
+      );
+      const link = await optOutLink(storeA, contactId);
 
-    const page = await tap(link.url);
-    expect(page.statusCode).toBe(200);
-    expect(page.headers['content-type']).toContain('text/html');
-    expect(page.body).toContain('Stop offers');
-    expect(await consent.current(storeA, [contactId], 'sms')).toEqual([
-      expect.objectContaining({ status: 'granted' }),
-    ]);
+      const page = await tap(link.url);
+      expect(page.statusCode).toBe(200);
+      expect(page.headers['content-type']).toContain('text/html');
+      expect(page.body).toContain('Stop offers');
+      expect(await consent.current(storeA, [contactId], 'sms')).toEqual([
+        expect.objectContaining({ status }),
+      ]);
 
-    const [first, second] = await Promise.all([optOut(link.url), optOut(link.url)]);
-    expect([first!.statusCode, second!.statusCode]).toEqual([200, 200]);
+      const [first, second] = await Promise.all([optOut(link.url), optOut(link.url)]);
+      expect([first!.statusCode, second!.statusCode]).toEqual([200, 200]);
 
-    // The marketing send gate reads this same current row.
-    expect(await consent.current(storeA, [contactId], 'sms')).toEqual([
-      expect.objectContaining({ status: 'withdrawn', source: 'opt_out_link' }),
-    ]);
-    const withdrawals = await admin.pool.query(
-      "select count(*)::int as count from consents where contact_id=$1 and status='withdrawn'",
-      [contactId],
-    );
-    expect(withdrawals.rows).toEqual([{ count: 1 }]);
-    expect((await events('message.opted_out', link.id)).map((event) => event.payload)).toEqual([
-      { trackedLinkId: link.id, contactId, sourceType: 'campaign', sourceId: campaignId },
-    ]);
-  });
+      // The marketing send gate reads this same current row.
+      expect(await consent.current(storeA, [contactId], 'sms')).toEqual([
+        expect.objectContaining({ status: 'withdrawn', source: 'opt_out_link' }),
+      ]);
+      const withdrawals = await admin.pool.query(
+        "select count(*)::int as count from consents where contact_id=$1 and status='withdrawn'",
+        [contactId],
+      );
+      expect(withdrawals.rows).toEqual([{ count: 1 }]);
+      expect((await events('message.opted_out', link.id)).map((event) => event.payload)).toEqual([
+        { trackedLinkId: link.id, contactId, sourceType: 'campaign', sourceId: campaignId },
+      ]);
+    },
+  );
 
   it('refuses an opt-out posted from another site', async () => {
     const contactId = await contact(storeA);

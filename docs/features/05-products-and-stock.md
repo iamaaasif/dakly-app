@@ -191,10 +191,14 @@ options shows an override only if it already has one.
 A background refresh keeps unsaved form input. A shop change clears it. Saving
 the form updates only the edited fields. Hide and Show update visibility separately.
 
-The product drawer shows confirmed photos through signed URLs. Photo upload,
-reorder and removal controls are the last PROD-4 slice. Opening stock is adjusted
-after saving through the list, and the low-stock threshold belongs to the shop;
-the editor does not add a per-product threshold or an initial-quantity field.
+The product drawer shows confirmed photos through signed URLs. Members with
+product edit access can add a JPEG, PNG or WebP up to 5 MB, move photos earlier
+in the list, or remove a photo after confirming. The first photo appears on the
+products list. Each product has room for ten photos. Browser uploads need the
+[R2 bucket CORS rule](../architecture.md#files).
+
+Adjust opening stock after saving through the list. The low-stock threshold
+belongs to the shop.
 
 The list omits unsupported totals, sales, chat and waiting-list counts, category
 filters, best-selling order, import and promotion controls. The stock dialog

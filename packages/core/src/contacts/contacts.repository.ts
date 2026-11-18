@@ -226,16 +226,25 @@ export class ContactsRepository {
   // Adding a tag the contact has, or one past the limit, and removing one it lacks change nothing.
   async changeTag(storeId: string, id: string, change: TagChange, maxTags: number) {
     const { tag } = change;
-    const tags =
-      change.change === 'add'
-        ? sql`case when ${tag} = any(${contacts.tags}) or cardinality(${contacts.tags}) >= ${maxTags}
-            then ${contacts.tags} else array_append(${contacts.tags}, ${tag}) end`
-        : sql`array_remove(${contacts.tags}, ${tag})`;
+    const adding = change.change === 'add';
+    const changesTags = adding
+      ? sql`not (${tag} = any(${contacts.tags})) and cardinality(${contacts.tags}) < ${maxTags}`
+      : sql`${tag} = any(${contacts.tags})`;
+    const tags = adding
+      ? sql`array_append(${contacts.tags}, ${tag})`
+      : sql`array_remove(${contacts.tags}, ${tag})`;
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(contacts)
         .set({ tags })
-        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt))),
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.id, id),
+            isNull(contacts.deletedAt),
+            changesTags,
+          ),
+        ),
     );
   }
 
@@ -262,6 +271,43 @@ export class ContactsRepository {
         .returning({ id: contacts.id }),
     );
     return rows.length > 0;
+  }
+
+  // Both timestamps start from the database clock; a later edit makes them differ.
+  // Locks hold later edits and consent changes until the caller has checked eligibility.
+  async lockUneditedByImport(
+    storeId: string,
+    importId: string,
+    page: { after?: string; limit: number },
+  ): Promise<string[]> {
+    const result = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.importId, importId),
+            isNull(contacts.deletedAt),
+            eq(contacts.updatedAt, contacts.createdAt),
+            page.after ? gt(contacts.id, page.after) : undefined,
+          ),
+        )
+        .orderBy(contacts.id)
+        .limit(page.limit)
+        .for('no key update'),
+    );
+    return result.map((row) => row.id);
+  }
+
+  // For ids that lockUneditedByImport returned in the same transaction, so all are still live.
+  async softDeleteAll(storeId: string, ids: string[], deletedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contacts)
+        .set({ deletedAt })
+        .where(and(eq(contacts.storeId, storeId), inArray(contacts.id, ids))),
+    );
   }
 
   async countMatching(storeId: string, rules: SegmentRules): Promise<number> {

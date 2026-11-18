@@ -8,12 +8,13 @@ export type DialogProps = {
   title: string;
   open: boolean;
   suspended?: boolean;
+  closeDisabled?: boolean;
   className?: string;
   onClose: () => void;
   children: ReactNode;
 };
 export function Dialog(props: DialogProps) {
-  const { title, open, suspended = false, className, onClose, children } = props;
+  const { title, open, suspended = false, closeDisabled, className, onClose, children } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -36,7 +37,8 @@ export function Dialog(props: DialogProps) {
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        event.stopPropagation();
+        if (!closeDisabled) onClose();
       }}
       onKeyDown={trapFocus}
       className={cn(
@@ -52,6 +54,7 @@ export function Dialog(props: DialogProps) {
           variant="secondary"
           className="shrink-0"
           aria-label="Close dialog"
+          disabled={closeDisabled}
           onClick={onClose}
         >
           Close

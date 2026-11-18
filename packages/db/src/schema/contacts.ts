@@ -307,11 +307,18 @@ export const consents = pgTable(
     channel: text('channel', { enum: consentChannels }).notNull(),
     status: text('status', { enum: consentStatuses }).notNull(),
     source: text('source', { enum: consentSources }).notNull(),
+    importId: uuid('import_id'),
     evidence: text('evidence'),
     capturedByUserId: uuid('captured_by_user_id').references(() => users.id),
     capturedAt: timestamptz('captured_at').notNull().defaultNow(),
   },
   (table) => [
+    foreignKey({
+      name: 'consents_import_id_store_fk',
+      columns: [table.storeId, table.importId],
+      foreignColumns: [imports.storeId, imports.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    index('consents_store_id_import_id_idx').on(table.storeId, table.importId, table.id),
     foreignKey({
       name: 'consents_contact_id_store_fk',
       columns: [table.storeId, table.contactId],

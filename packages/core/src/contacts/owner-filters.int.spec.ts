@@ -116,6 +116,17 @@ describe('contact filters without RLS assistance', () => {
     expect(await repository.isMatching(f.b, b!.id, rules)).toBe(true);
     expect(await repository.isMatching(f.b, a!.id, rules)).toBe(false);
     expect(await repository.isMatching(f.a, a!.id, rules)).toBe(true);
+    await f.connection.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) values(gen_random_uuid(),$1,$2,'sms','not_answered','import',now()+interval '1 minute')",
+      [f.b, b!.id],
+    );
+    expect(await repository.countMatching(f.b, rules)).toBe(0);
+    expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([]);
+    const unanswered = {
+      ...rules,
+      conditions: [{ field: 'consent', channel: 'sms', granted: false }],
+    } as const;
+    expect(await repository.listIdsMatching(f.b, unanswered, { limit: 100 })).toContain(b!.id);
   });
 
   it('finds, adds and updates imported contacts only in the selected store', async () => {
@@ -150,10 +161,87 @@ describe('contact filters without RLS assistance', () => {
       { id: b!.id, phone, importId: null, whatsappPhone: null, tags: [] },
     ]);
     expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([b!.id]);
+    await f.connection.pool.query('update contacts set deleted_at=now() where id=$1', [b!.id]);
+    expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([]);
+    expect(await imports.lockConsentHistory(f.b, [added!.id, b!.id])).toEqual([b!.id]);
+    await f.connection.pool.query('update contacts set deleted_at=null where id=$1', [b!.id]);
 
     await imports.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
     await imports.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
     expect(await f.row('contacts', added!.id)).toMatchObject({ name: 'শাহনাজ', tags: ['ঈদ'] });
     expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
+  });
+
+  it('keeps import undo eligibility for no-op tags and loses it for a real tag edit', async () => {
+    const importId = randomUUID();
+    const fileId = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileId, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importId, f.a, fileId],
+    );
+    const [contact] = await imports.insertImported(f.a, [
+      { importId, source: 'import', kind: 'customer', phone: '01711000024' },
+    ]);
+    const id = contact!.id;
+    await f.connection.pool.query(
+      "update contacts set tags = array['vip'], created_at = '2020-01-01T00:00:00Z', updated_at = '2020-01-01T00:00:00Z' where id = $1",
+      [id],
+    );
+    for (const change of [
+      { tag: 'absent', change: 'remove' },
+      { tag: 'vip', change: 'add' },
+      { tag: 'gold', change: 'add' },
+    ] as const) {
+      await repository.changeTag(f.a, id, change, 1);
+      expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([id]);
+      expect((await f.row('contacts', id)).tags).toEqual(['vip']);
+    }
+    await repository.changeTag(f.a, id, { tag: 'gold', change: 'add' }, 2);
+    expect((await f.row('contacts', id)).tags).toEqual(['vip', 'gold']);
+    expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([]);
+  });
+
+  it('locks and soft deletes unedited contacts of an import only in the selected store', async () => {
+    const importId = randomUUID();
+    const fileId = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileId, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importId, f.a, fileId],
+    );
+    const imported = { importId, source: 'import', kind: 'customer' } as const;
+    const [first, second, edited] = (
+      await imports.insertImported(f.a, [
+        { ...imported, phone: '01711000021' },
+        { ...imported, phone: '01711000022' },
+        { ...imported, phone: '01711000023' },
+      ])
+    )
+      .map((row) => row.id)
+      .sort();
+    await f.connection.pool.query(
+      "update contacts set updated_at = created_at + interval '1 minute' where id = $1",
+      [edited],
+    );
+
+    expect(await repository.lockUneditedByImport(f.b, importId, { limit: 10 })).toEqual([]);
+    const page = await repository.lockUneditedByImport(f.a, importId, { limit: 1 });
+    expect(page).toEqual([first]);
+    expect(
+      await repository.lockUneditedByImport(f.a, importId, { after: first, limit: 10 }),
+    ).toEqual([second]);
+    await repository.softDeleteAll(f.b, [first!], new Date());
+    expect(await f.row('contacts', first!)).toMatchObject({ deleted_at: null });
+    await repository.softDeleteAll(f.a, [first!, second!], new Date());
+    expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([]);
+    expect((await f.row('contacts', second!)).deleted_at).not.toBeNull();
+    expect((await f.row('contacts', edited!)).deleted_at).toBeNull();
   });
 });

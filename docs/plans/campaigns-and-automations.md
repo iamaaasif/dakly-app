@@ -37,12 +37,13 @@ Each task is one PR under about 500 lines, in this order, on the branch named un
 
 ### Group 1: who to send to
 
-### CUS-8 · Customer import
+### CUS-8 · Customer import, what is left
 
-Branch: `feat/cus-8-customer-import`
+Branch: to be named when the part starts.
 
-- Scope: CSV and XLSX upload to R2, preview of the first 20 rows, column mapping, consent evidence per channel (the shop must state where consent came from, or the rows import with no marketing consent), row errors in a downloadable report, undo within 7 days for contacts the import created. An `imports` row tracks each run; the work runs in a bulk job in batches of 500.
-- Tests (integration): bad phones are reported, not dropped silently; an existing phone updates allowed fields and never changes consent without evidence; undo removes only contacts the import created and nothing a later edit touched; a 10,000-row file finishes in batches without one long transaction.
+- Built and described in [feature 03](../features/03-customers-and-segments.md): CSV upload, column mapping, consent evidence per channel, the import job, row errors in a report and undo.
+- Still to build: the import screens in the web app, and a preview of the first 20 rows before the import starts. XLSX comes with CUS-16.
+- Tests: the preview reads the uploaded file without starting the import, never shows a full phone to a member without "See full phone numbers", and refuses a file that is not UTF-8.
 
 ### Group 2: campaigns
 
@@ -117,6 +118,7 @@ Branch: `feat/camp-7-messenger-campaigns`
 Branches: `feat/camp-4-campaign-list-and-results`, `feat/camp-4-campaign-builder`
 
 - Scope: two PRs. List with statuses (Draft, Scheduled, Sending with progress, Paused, Sent, Failed), search, channel and date filters in the URL; results page from feature 09 "Missing design" with sent, delivered, read, tapped and the failure groups (orders and revenue show "after Orders is set up" until ANA-2); builder steps Goal, Channel, Content, Audience, Schedule, Review with save draft on every step, live preview, SMS part counter, cost and balance after, and the approval checkbox. Send test to my phone.
+- Owner decision (18 Nov 2026): build the list and builder now from `campaigns.webp` and `campaigns-and-automations/`. Draft rows open the builder and sent rows open a read-only builder summary. Defer results until ORD-3, then build from the feature 09 screen table and "Missing design" section without a separate design. Keep CAMP-4 In progress after the list and builder merge.
 - Tests: component states for each step; Playwright creates an SMS campaign to a seeded segment, approves it and sees it sending with the fake SMS driver.
 
 ### Group 3: automations

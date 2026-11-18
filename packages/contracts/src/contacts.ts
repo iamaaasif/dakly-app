@@ -27,7 +27,7 @@ export const notCustomerReasons = [
 ] as const;
 export const genders = ['female', 'male', 'other'] as const;
 export const consentChannels = ['whatsapp', 'sms', 'messenger', 'instagram', 'email'] as const;
-export const consentStatuses = ['granted', 'withdrawn'] as const;
+export const consentStatuses = ['granted', 'withdrawn', 'not_answered'] as const;
 export const consentSources = [
   'checkout',
   'chat_opt_in',
@@ -219,6 +219,7 @@ export type ImportUploadResponse = { importId: string; uploadUrl: string };
 export type ImportResponse = {
   id: string;
   status: ImportStatus;
+  undoFinishedAt: string | null;
   rowsTotal: number | null;
   rowsAdded: number | null;
   rowsUpdated: number | null;
@@ -246,7 +247,7 @@ export type ConsentSource = (typeof consentSources)[number];
 // is not offered until email campaigns ship (D20).
 export const recordConsentSchema = z.object({
   channel: z.enum(consentChannels).exclude(['email']),
-  status: z.enum(consentStatuses),
+  status: z.enum(consentStatuses).exclude(['not_answered']),
   note: z.string().trim().min(1).max(500),
 });
 
