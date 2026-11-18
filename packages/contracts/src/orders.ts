@@ -265,3 +265,15 @@ export const createOrderSchema = z.strictObject({
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
+export const editOrderSchema = z.strictObject({
+  items: orderLines,
+  recipient: recipientSchema
+    .omit({ isBuyer: true })
+    .partial()
+    .extend({ isBuyer: z.boolean().optional() })
+    .optional(),
+  deliveryChargePoisha: money.optional(),
+  orderDiscountPoisha: money.optional(),
+  advancePaidPoisha: money.optional(),
+});
+export type EditOrderInput = z.infer<typeof editOrderSchema>;

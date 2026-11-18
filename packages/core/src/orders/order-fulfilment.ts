@@ -1,5 +1,5 @@
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type { OrderStageChange } from '@dakly/contracts/orders';
+import type { OrderReturnRisk, OrderStageChange } from '@dakly/contracts/orders';
 import type { StockMovementKind } from '@dakly/contracts/products';
 
 import type { ProductsService } from '../products/products.service';
@@ -130,4 +130,11 @@ async function moveOrderStock(
     if (isStockTracked && quantity > 0)
       await products.moveStock(storeId, variantId, { ...movement, quantity });
   }
+}
+
+export function returnRisk(outcome?: { parcels: number; returned: number }): OrderReturnRisk {
+  if (!outcome) return 'new_customer';
+  if (outcome.parcels < 2) return null;
+  if (2 * outcome.returned >= outcome.parcels) return 'high';
+  return 5 * outcome.returned <= outcome.parcels ? 'good' : 'some_returns';
 }
