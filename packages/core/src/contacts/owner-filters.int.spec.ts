@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { ContactsRepository } from './contacts.repository';
+import { ImportContactsRepository } from './import-contacts.repository';
 
 // A staff add, as ContactsService.create saves it.
 const manualCustomer = { source: 'manual', kind: 'customer' } as const;
@@ -11,6 +12,7 @@ const manualCustomer = { source: 'manual', kind: 'customer' } as const;
 describe('contact filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new ContactsRepository(f.tenant);
+  const imports = new ImportContactsRepository(f.tenant);
   beforeAll(() => f.setup());
   afterAll(() => f.close());
   it('inserts into the selected store and finds only its contacts', async () => {
@@ -112,7 +114,7 @@ describe('contact filters without RLS assistance', () => {
       [importA, f.a, fileA],
     );
     const phone = '01711000009';
-    const [added] = await repository.insertImported(f.a, [
+    const [added] = await imports.insertImported(f.a, [
       {
         phone,
         name: 'শাহনাজ',
@@ -128,13 +130,13 @@ describe('contact filters without RLS assistance', () => {
       import_id: importA,
       source: 'import',
     });
-    expect(await repository.findByPhones(f.b, [phone])).toEqual([
-      { id: b!.id, phone, importId: null, whatsappPhone: null, whatsappAnswered: false, tags: [] },
+    expect(await imports.findByPhones(f.b, [phone])).toEqual([
+      { id: b!.id, phone, importId: null, whatsappPhone: null, tags: [] },
     ]);
     expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([b!.id]);
 
-    await repository.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
-    await repository.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
+    await imports.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
+    await imports.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
     expect(await f.row('contacts', added!.id)).toMatchObject({ name: 'শাহনাজ', tags: ['ঈদ'] });
     expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
   });

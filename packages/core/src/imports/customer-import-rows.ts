@@ -25,6 +25,8 @@ export type CustomerImportRows = {
 // garbled text.
 export function decodeCustomerImportFile(bytes: Uint8Array): string {
   try {
+    if (bytes.some((byte) => byte < 32 && byte !== 9 && byte !== 10 && byte !== 13))
+      throw importError('IMPORT_FILE_UNREADABLE');
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     throw importError('IMPORT_FILE_UNREADABLE');
@@ -85,8 +87,8 @@ function readLines(file: string) {
   const records = csvRecords(file.replace(/^\uFEFF/, ''));
   const header = records.next().value?.cells ?? [];
   const lines: { rowNumber: number; cells: string[] }[] = [];
-  for (const { rowNumber, cells } of records) {
-    if (!cells.some((cell) => cell.trim())) continue;
+  for (const { rowNumber, cells, hasContent } of records) {
+    if (!hasContent) continue;
     if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
     lines.push({ rowNumber, cells });
   }
@@ -97,16 +99,18 @@ function readLines(file: string) {
 // else, such as a stray quote inside a plain cell, makes the file unreadable rather than wrong.
 // Lines with nothing on them are counted and skipped in a tight loop, so 10 MB of line breaks
 // does not allocate a record each.
-function* csvRecords(text: string): Generator<{ rowNumber: number; cells: string[] }, undefined> {
+function* csvRecords(
+  text: string,
+): Generator<{ rowNumber: number; cells: string[]; hasContent: boolean }, undefined> {
   let position = 0;
   let rowNumber = 0;
   for (;;) {
     const blank = skipBlankLines(text, position);
     if (blank.position >= text.length) return undefined;
-    const { cells, next } = readRecord(text, blank.position);
+    const { cells, next, hasContent } = readRecord(text, blank.position);
     position = next;
     rowNumber += blank.lines + 1;
-    yield { rowNumber, cells };
+    yield { rowNumber, cells, hasContent };
   }
 }
 
@@ -122,10 +126,12 @@ function skipBlankLines(text: string, start: number) {
 
 function readRecord(text: string, start: number) {
   const cells: string[] = [];
+  let hasContent = false;
   let position = start;
   for (;;) {
     const { cell, end } =
       text[position] === '"' ? quotedCell(text, position) : plainCell(text, position);
+    hasContent ||= cell.trim().length > 0;
     if (cells.length < MAX_IMPORT_COLUMNS) cells.push(cell);
     position = end + 1;
     if (text[end] !== ',') break;
@@ -135,7 +141,7 @@ function readRecord(text: string, start: number) {
     }
   }
   const crlf = text[position - 1] === '\r' && text[position] === '\n';
-  return { cells, next: crlf ? position + 1 : position };
+  return { cells, hasContent, next: crlf ? position + 1 : position };
 }
 
 // `end` is the index of the separator after the cell, or the text length.
@@ -149,19 +155,32 @@ function plainCell(text: string, start: number) {
 }
 
 function quotedCell(text: string, start: number) {
-  let cell = '';
   let from = start + 1;
+  let escaped = 0;
   for (;;) {
     const quote = text.indexOf('"', from);
     if (quote === -1) throw importError('IMPORT_FILE_UNREADABLE');
-    cell += text.slice(from, quote);
     if (text[quote + 1] !== '"') {
       const end = quote + 1;
       if (end < text.length && !',\r\n'.includes(text[end]!))
         throw importError('IMPORT_FILE_UNREADABLE');
-      return { cell, end };
+      return { cell: decodeQuotedCell(text, start + 1, quote, escaped), end };
     }
-    cell += '"';
+    escaped += 1;
     from = quote + 2;
   }
+}
+
+// String concatenation and replacement allocate per escape on Node 22; one buffer bounds memory.
+function decodeQuotedCell(text: string, start: number, end: number, escaped: number): string {
+  if (escaped === 0) return text.slice(start, end);
+  const bytes = Buffer.allocUnsafe((end - start - escaped) * 2);
+  let offset = 0;
+  for (let index = start; index < end; index += 1) {
+    const value = text.charCodeAt(index);
+    bytes.writeUInt16LE(value, offset);
+    offset += 2;
+    if (value === 34) index += 1;
+  }
+  return bytes.toString('utf16le');
 }

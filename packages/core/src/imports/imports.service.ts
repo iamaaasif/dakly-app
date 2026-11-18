@@ -18,13 +18,13 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import {
   type CustomerImportRows,
   decodeCustomerImportFile,
   readCustomerImportRows,
 } from './customer-import-rows';
-import { FILE_STORAGE_DRIVER } from './file-storage-provider';
 import { importError } from './imports.errors';
 import {
   type Import,
@@ -35,7 +35,12 @@ import {
 
 type Actor = AuditEntry['actor'];
 type Run = { storeId: string; found: Import; lease: Date; finished: boolean };
-type Outcome = { status: 'done' | 'failed'; counts?: ImportCounts; lines: ReportLine[] };
+type Outcome = {
+  status: 'done' | 'failed';
+  counts?: ImportCounts;
+  lines: ReportLine[];
+  stalled?: { before: Date; limit: number };
+};
 type ReportLine = {
   rowNumber?: number;
   field?: ContactImportField | 'sms' | 'whatsapp';
@@ -100,7 +105,7 @@ export class ImportsService {
     const upload = this.newFile(storeId, input.sizeBytes, 'pending');
     const userId = actor.kind === 'user' ? actor.userId : null;
     await this.repository.createCustomerImport(storeId, importId, upload, userId);
-    const content = { contentLength: input.sizeBytes, contentType: CSV };
+    const content = { sizeBytes: input.sizeBytes, contentType: CSV };
     return {
       importId,
       uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS, content),
@@ -111,7 +116,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     input: StartImportInput,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<ImportResponse> {
     await this.transaction.run(storeId, async () => {
       const now = this.clock.now();
@@ -121,6 +126,7 @@ export class ImportsService {
         consentEvidence: input.consentEvidence,
         hasConsentConfirmation: Object.keys(input.consentEvidence).length > 0,
         startedAt: now,
+        startedByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       if (!started) {
         await this.findImport(storeId, importId);
@@ -254,6 +260,7 @@ export class ImportsService {
           await this.finish(storeId, stuck.id, stuck.claimedAt, {
             status: 'failed',
             lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+            stalled: { before, limit: MAX_REQUEUES },
           });
       }
   }
@@ -298,11 +305,27 @@ export class ImportsService {
     batch: CustomerImportRows['rows'],
     counts: ImportCounts,
   ): Promise<ReportLine[]> {
+    const rows = batch.map((row) => row.contact);
+    const matches = await this.contacts.findImportMatches(
+      storeId,
+      rows.map((row) => row.phone),
+    );
+    const ids = matches.map((contact) => contact.id);
+    await this.contacts.lockForConsent(storeId, ids);
+    const answers = await this.consents.currentForAudience(storeId, ids, 'whatsapp');
+    const actor: Actor = found.startedByUserId
+      ? { kind: 'user', userId: found.startedByUserId }
+      : { kind: 'system' };
     const saved = await this.contacts.saveImportedRows(
       storeId,
       found.id,
-      batch.map((row) => row.contact),
-      found.duplicateMode,
+      {
+        rows,
+        duplicateMode: found.duplicateMode,
+        whatsappAnswered: new Set(answers.map((answer) => answer.contactId)),
+        matchedContactIds: new Set(ids),
+      },
+      actor,
     );
     const rowNumbers = new Map(batch.map((row) => [row.contact.phone, row.rowNumber]));
     const lines: ReportLine[] = [];
@@ -323,14 +346,27 @@ export class ImportsService {
     saved: ImportedContact[],
   ): Promise<ReportLine[]> {
     const written = saved.filter((contact) => contact.outcome !== 'skipped');
-    const actor: Actor = found.createdByUserId
-      ? { kind: 'user', userId: found.createdByUserId }
+    const actor: Actor = found.startedByUserId
+      ? { kind: 'user', userId: found.startedByUserId }
       : { kind: 'system' };
     const lines: ReportLine[] = [];
     for (const channel of ['sms', 'whatsapp'] as const) {
       const evidence = found.consentEvidence?.[channel];
       if (!evidence) continue;
-      const contactIds = written.map((contact) => contact.contactId);
+      const mismatched =
+        channel === 'whatsapp'
+          ? written.filter((contact) => contact.hasWhatsappNumberMismatch)
+          : [];
+      lines.push(
+        ...mismatched.map((contact) => ({
+          rowNumber: rowNumbers.get(contact.phone)!,
+          field: channel,
+          message: 'WhatsApp consent skipped: number differs',
+        })),
+      );
+      const contactIds = written
+        .filter((contact) => channel !== 'whatsapp' || !contact.hasWhatsappNumberMismatch)
+        .map((contact) => contact.contactId);
       const { withdrawnContactIds } = await this.consents.grantFromImport(
         storeId,
         { contactIds, channel, evidence },
@@ -360,11 +396,17 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines }: Outcome,
+    { status, counts, lines, stalled }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
-    await this.repository.finish(storeId, importId, { lease, result, report });
+    const finished = await this.repository.finish(storeId, importId, {
+      lease,
+      result,
+      report,
+      stalled,
+    });
+    if (!finished && report) await this.storage.deleteObject(report.objectKey);
   }
 
   private async findImport(storeId: string, importId: string): Promise<Import> {

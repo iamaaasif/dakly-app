@@ -1129,6 +1129,120 @@ fixture('GET /account-recovery-history', async () => {
   ).toEqual([bId]);
 });
 
+const photoInput = { contentType: 'image/png', sizeBytes: 4 };
+async function uploadedPhoto(shop: Shop, productId: string) {
+  const issued = (
+    await success(shop, 'POST', `/products/${productId}/photos/upload-url`, 200, photoInput)
+  ).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': photoInput.contentType },
+    body: new Uint8Array([137, 80, 78, 71]),
+  });
+  expect(response.status).toBe(200);
+  return { ...photoInput, fileId: issued.fileId as string };
+}
+fixture('POST /products/:productId/photos/upload-url', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const before = await f.row('products', foreignId);
+  const issued = (
+    await success(b, 'POST', `/products/${own}/photos/upload-url`, 200, photoInput)
+  ).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/products/${issued.fileId}`,
+  );
+  expect(await f.row('files', issued.fileId)).toBeUndefined();
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/photos/upload-url`,
+    foreignId,
+    () => photoInput,
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+  expect(
+    (await f.request(b.member, 'POST', `/products/${own}/photos/upload-url`, photoInput))
+      .statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await f.request(b.owner, 'POST', `/products/${own}/photos/upload-url`, {
+        ...photoInput,
+        sizeBytes: 5242881,
+      })
+    ).statusCode,
+  ).toBe(400);
+});
+fixture('POST /products/:productId/photos/confirm', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const photo = await uploadedPhoto(b, own);
+  const confirmed = (
+    await success(b, 'POST', `/products/${own}/photos/confirm`, 201, photo)
+  ).json();
+  expect(confirmed.imageFileIds).toEqual([photo.fileId]);
+  expect((await f.row('files', photo.fileId)).store_id).toBe(b.id);
+  const url = confirmed.photos[0].url as string;
+  expect(new URL(url).searchParams.get('X-Amz-Expires')).toBe('900');
+  const download = await fetch(url);
+  expect(download.status).toBe(200);
+  expect(new Uint8Array(await download.arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71]));
+  const before = await f.row('products', foreignId);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/photos/confirm`,
+    foreignId,
+    () => photo,
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
+fixture('PATCH /products/:productId/photos', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const first = await uploadedPhoto(b, own),
+    second = await uploadedPhoto(b, own);
+  await success(b, 'POST', `/products/${own}/photos/confirm`, 201, first);
+  await success(b, 'POST', `/products/${own}/photos/confirm`, 201, second);
+  const payload = { fileIds: [second.fileId, first.fileId] };
+  const changed = (await success(b, 'PATCH', `/products/${own}/photos`, 200, payload)).json();
+  expect(changed.photos.map((photo: { id: string }) => photo.id)).toEqual(payload.fileIds);
+  const before = await f.row('products', foreignId);
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${id}/photos`,
+    foreignId,
+    () => payload,
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
+fixture('DELETE /products/:productId/photos/:fileId', async () => {
+  const { a, b } = await pair(),
+    foreignProduct = await product(a),
+    own = await product(b);
+  const foreignPhoto = await uploadedPhoto(a, foreignProduct),
+    photo = await uploadedPhoto(b, own);
+  await success(a, 'POST', `/products/${foreignProduct}/photos/confirm`, 201, foreignPhoto);
+  await success(b, 'POST', `/products/${own}/photos/confirm`, 201, photo);
+  const before = await f.row('files', foreignPhoto.fileId);
+  await success(b, 'DELETE', `/products/${own}/photos/${photo.fileId}`, 204);
+  expect((await f.row('products', own)).image_file_ids).toEqual([]);
+  expect((await f.row('files', photo.fileId)).expires_at).not.toBeNull();
+  await hidden(
+    b,
+    'DELETE',
+    (id) => `/products/${id}/photos/${foreignPhoto.fileId}`,
+    foreignProduct,
+  );
+  await hidden(b, 'DELETE', (id) => `/products/${own}/photos/${id}`, foreignPhoto.fileId);
+  expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
+});
+
 describe('every production shop route isolates its data', () => {
   let logs: ReturnType<typeof captureRequestLogs>;
   beforeEach(() => logs.beginTest());

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
@@ -46,6 +46,7 @@ const importColumns = {
   createdByUserId: imports.createdByUserId,
   finishedAt: imports.finishedAt,
   undoFinishedAt: imports.undoFinishedAt,
+  startedByUserId: imports.startedByUserId,
   rowsTotal: imports.rowsTotal,
   rowsAdded: imports.rowsAdded,
   rowsUpdated: imports.rowsUpdated,
@@ -66,13 +67,19 @@ export type Import = {
   finishedAt: Date | null;
   undoFinishedAt: Date | null;
   uploadFileId: string;
+  startedByUserId: string | null;
   uploadKey: string;
   reportKey: string | null;
 } & { [Count in keyof ImportCounts]: number | null };
 
 export type StartedImport = Pick<
   typeof imports.$inferInsert,
-  'columnMapping' | 'duplicateMode' | 'consentEvidence' | 'hasConsentConfirmation' | 'startedAt'
+  | 'columnMapping'
+  | 'duplicateMode'
+  | 'consentEvidence'
+  | 'hasConsentConfirmation'
+  | 'startedAt'
+  | 'startedByUserId'
 >;
 
 @Injectable()
@@ -184,7 +191,17 @@ export class ImportsRepository {
   finish(
     storeId: string,
     importId: string,
-    { lease, result, report }: { lease: Date | null; result: ImportResult; report?: NewImportFile },
+    {
+      lease,
+      result,
+      report,
+      stalled: exhausted,
+    }: {
+      lease: Date | null;
+      result: ImportResult;
+      report?: NewImportFile;
+      stalled?: { before: Date; limit: number };
+    },
   ): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {
       const held = lease ? eq(imports.claimedAt, lease) : isNull(imports.claimedAt);
@@ -196,7 +213,14 @@ export class ImportsRepository {
           finishedAt: result.finishedAt,
           claimedAt: null,
         })
-        .where(and(guard(storeId, importId, 'importing'), held))
+        .where(
+          and(
+            guard(storeId, importId, 'importing'),
+            held,
+            exhausted ? stalled(storeId, exhausted.before) : undefined,
+            exhausted ? gte(imports.requeueCount, exhausted.limit) : undefined,
+          ),
+        )
         .returning({ id: imports.id });
       if (rows.length === 0) return false;
       if (report) {

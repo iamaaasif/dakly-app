@@ -26,9 +26,12 @@ import {
   type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
+} from './contacts.repository';
+import {
+  ImportContactsRepository,
   type ImportedChange,
   type ImportMatch,
-} from './contacts.repository';
+} from './import-contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 // Writes take the actor (services.md); nothing records it for contacts yet.
@@ -38,8 +41,16 @@ export type ImportedContact = {
   contactId: string;
   phone: string;
   outcome: 'added' | 'updated' | 'skipped';
+  hasWhatsappNumberMismatch: boolean;
   // Cells the D42 rule left out, for the import report.
   notChanged: { field: 'whatsappPhone' | 'tags'; message: string }[];
+};
+
+export type ImportContactBatch = {
+  rows: ContactImportRow[];
+  duplicateMode: ImportDuplicateMode;
+  whatsappAnswered: Set<string>;
+  matchedContactIds: Set<string>;
 };
 
 @Injectable()
@@ -49,6 +60,7 @@ export class ContactsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
   ) {}
 
   async create(
@@ -120,17 +132,25 @@ export class ContactsService {
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the
   // store already has. A filled cell replaces that field and tags are added; `skip` leaves it as it
   // is. A contact this import already added is not written again, so a rerun changes nothing.
+  findImportMatches(storeId: string, phones: string[]): Promise<ImportMatch[]> {
+    return this.importContacts.findByPhones(storeId, phones);
+  }
+
   saveImportedRows(
     storeId: string,
     importId: string,
-    rows: ContactImportRow[],
-    duplicateMode: ImportDuplicateMode,
+    { rows, duplicateMode, whatsappAnswered, matchedContactIds }: ImportContactBatch,
+    _actor: Actor,
   ): Promise<ImportedContact[]> {
     return this.transaction.run(storeId, async () => {
       const phones = rows.map((row) => row.phone);
-      const existing = await this.contactsRepository.findByPhones(storeId, phones);
+      // A contact created after matching must hit the unique constraint and retry, so its
+      // consent is read under the same lock before any imported field can change.
+      const existing = (await this.importContacts.findByPhones(storeId, phones)).filter((contact) =>
+        matchedContactIds.has(contact.id),
+      );
       const byPhone = new Map(existing.map((contact) => [contact.phone, contact]));
-      const added = await this.contactsRepository.insertImported(
+      const added = await this.importContacts.insertImported(
         storeId,
         rows
           .filter((row) => !byPhone.has(row.phone))
@@ -141,22 +161,21 @@ export class ContactsService {
         phone,
         outcome: 'added',
         notChanged: [],
+        hasWhatsappNumberMismatch: false,
       }));
       const changes: ImportedChange[] = [];
       for (const row of rows) {
         const contact = byPhone.get(row.phone);
         if (!contact) continue;
         const outcome = importOutcome(contact, importId, duplicateMode);
-        const update = outcome === 'updated' ? importChange(contact, row) : undefined;
+        const update =
+          outcome === 'updated'
+            ? importChange(contact, row, whatsappAnswered.has(contact.id))
+            : undefined;
         if (update) changes.push(update.change);
-        results.push({
-          contactId: contact.id,
-          phone: contact.phone,
-          outcome,
-          notChanged: update?.notChanged ?? [],
-        });
+        results.push(toImportedContact(contact, row, outcome, update));
       }
-      await this.contactsRepository.updateImported(storeId, changes);
+      await this.importContacts.updateImported(storeId, changes);
       return results;
     });
   }
@@ -237,10 +256,14 @@ function importOutcome(
 // A saved WhatsApp number is kept, and so is an empty one on a contact with a WhatsApp consent
 // answer: empty means "the phone", so filling it would move that answer to a number nobody
 // verified. Changing a number stays a profile edit.
-function importChange(contact: ImportMatch, { phone: _phone, ...row }: ContactImportRow) {
+function importChange(
+  contact: ImportMatch,
+  { phone: _phone, ...row }: ContactImportRow,
+  whatsappAnswered: boolean,
+) {
   const notChanged: ImportedContact['notChanged'] = [];
   const whatsappDiffers = row.whatsappPhone && row.whatsappPhone !== contact.whatsappPhone;
-  const whatsappKept = Boolean(contact.whatsappPhone) || contact.whatsappAnswered;
+  const whatsappKept = Boolean(contact.whatsappPhone) || whatsappAnswered;
   if (whatsappKept && whatsappDiffers)
     notChanged.push({ field: 'whatsappPhone', message: 'WhatsApp number differs, not changed' });
   const newTags = [...new Set(row.tags ?? [])].filter((tag) => !contact.tags.includes(tag));
@@ -257,6 +280,22 @@ function importChange(contact: ImportMatch, { phone: _phone, ...row }: ContactIm
     tags: newTags.slice(0, room),
   };
   return { change, notChanged };
+}
+
+function toImportedContact(
+  contact: ImportMatch,
+  row: ContactImportRow,
+  outcome: ImportedContact['outcome'],
+  update: ReturnType<typeof importChange> | undefined,
+): ImportedContact {
+  const destination = update?.change.whatsappPhone ?? contact.whatsappPhone ?? contact.phone;
+  return {
+    contactId: contact.id,
+    phone: contact.phone,
+    outcome,
+    notChanged: update?.notChanged ?? [],
+    hasWhatsappNumberMismatch: destination !== (row.whatsappPhone ?? row.phone),
+  };
 }
 
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {
