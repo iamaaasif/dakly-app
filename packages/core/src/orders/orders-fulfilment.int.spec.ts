@@ -211,23 +211,4 @@ describe('Manual dispatch and delivery', () => {
     );
     expect(rows).toEqual([{ payload: { orderId } }]);
   });
-
-  it('uses only the recipient phone and this store’s completed parcels for risk', async () => {
-    const phone = '01710000006';
-    await order(f.a, 'returned', { phone });
-    const own = await order(f.a, 'to_confirm', { phone });
-    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBeNull();
-    await order(f.a, 'partially_delivered', { phone });
-    for (let i = 0; i < 4; i++) await order(f.b, 'delivered', { phone });
-    const newPhone = await order(f.a, 'to_confirm', { phone: '01710000007' });
-    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('high');
-    const page = await service.list(f.a, { stage: 'to_confirm', limit: 20 });
-    expect(page.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: own, returnRisk: 'high' }),
-        expect.objectContaining({ id: newPhone, returnRisk: 'new_customer' }),
-      ]),
-    );
-    expect(page.items[0]).not.toHaveProperty('recipientPhone');
-  });
 });

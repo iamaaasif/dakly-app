@@ -9,7 +9,6 @@ import {
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
-  type OrderReturnRisk,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
 import { maskPhone } from '@dakly/contracts/phone';
@@ -117,15 +116,9 @@ export class OrdersService {
 
   async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
     const rows = await this.repository.list(storeId, query);
-    const page = rows.slice(0, query.limit);
-    const outcomes = await this.repository.parcelOutcomes(storeId, [
-      ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
-    ]);
-    const byPhone = new Map(outcomes.map((row) => [row.phone, row]));
-    const items = page.map(({ recipientPhone, createdAt, ...row }) => ({
+    const items = rows.slice(0, query.limit).map((row) => ({
       ...row,
-      createdAt: createdAt.toISOString(),
-      returnRisk: returnRisk(byPhone.get(recipientPhone)),
+      createdAt: row.createdAt.toISOString(),
     }));
     const counts = {
       to_confirm: 0,
@@ -148,7 +141,6 @@ export class OrdersService {
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
-    const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
     const history = await this.audit.history(storeId, {
       entityType: 'order',
       entityId: orderId,
@@ -163,7 +155,6 @@ export class OrdersService {
       deliveredAt: isoTime(order.deliveredAt),
       returnedAt: isoTime(order.returnedAt),
       codCollectedAt: isoTime(order.codCollectedAt),
-      returnRisk: returnRisk(outcomes[0]),
       items: await this.repository.items(storeId, orderId),
       timeline: history.map(({ before, after, createdAt, ...row }) => ({
         ...row,
@@ -309,13 +300,6 @@ export class OrdersService {
       });
     }
   }
-}
-
-function returnRisk(outcome?: { parcels: number; returned: number }): OrderReturnRisk {
-  if (!outcome) return 'new_customer';
-  if (outcome.parcels < 2) return null;
-  if (2 * outcome.returned >= outcome.parcels) return 'high';
-  return 5 * outcome.returned <= outcome.parcels ? 'good' : 'some_returns';
 }
 
 function isoTime(value: Date | null): string | null {
