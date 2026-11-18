@@ -176,6 +176,28 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
+
+    await database.pool.query(
+      "update campaigns set status='sent', finished_at=now() where store_id=$1 and id=$2",
+      [storeId, draft.id],
+    );
+    const conflict = page.waitForResponse(
+      (result) => result.request().method() === 'PATCH' && result.status() === 409,
+    );
+    await name.fill('A change after approval');
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    expect(await (await conflict).json()).toMatchObject({ code: 'CAMPAIGN_NOT_DRAFT' });
+    await expect(page.getByRole('region', { name: 'Saved campaign' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
+
+    await database.pool.query('delete from campaigns where store_id=$1 and id=$2', [
+      storeId,
+      draft.id,
+    ]);
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await expect(page.getByRole('alert')).toContainText('Campaign not found');
+    await expect(page.getByRole('region', { name: 'Saved campaign' })).toHaveCount(0);
+
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();

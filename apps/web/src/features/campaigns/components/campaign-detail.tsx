@@ -1,5 +1,6 @@
 'use client';
 
+import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 import { Skeleton } from '@dakly/ui/skeleton';
 
@@ -9,6 +10,8 @@ import { StorePage } from '@/components/store-page';
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const campaign = useCampaign(campaignId);
+  const missing =
+    campaign.error instanceof ApiError && campaign.error.code === 'CAMPAIGN_NOT_FOUND';
   return (
     <StorePage permission="canViewCampaigns">
       {campaign.isPending && (
@@ -24,7 +27,9 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           </Button>
         </div>
       )}
-      {campaign.data && <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />}
+      {campaign.data && !missing && (
+        <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />
+      )}
     </StorePage>
   );
 }
