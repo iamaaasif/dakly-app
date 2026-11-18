@@ -128,12 +128,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M5. Products
 
-| ID     | Task                                   | Status      | Depends               | PR         | Notes                                                          |
-| ------ | -------------------------------------- | ----------- | --------------------- | ---------- | -------------------------------------------------------------- |
-| PROD-1 | Products, options, variants            | Done        | ACC-3                 | #121       |                                                                |
-| PROD-2 | Stock ledger and `moveStock`           | Done        | PROD-1                | #124       |                                                                |
-| PROD-3 | Photo upload to R2 with presigned URLs | Done        | PROD-1, FILE-1        | #125       |                                                                |
-| PROD-4 | Web: products list and product editor  | In progress | PROD-2, PROD-3, WEB-2 | #126, #131 | List, stock adjustment and editor merged. Photo controls next. |
+| ID     | Task                                   | Status    | Depends               | PR               | Notes                                                               |
+| ------ | -------------------------------------- | --------- | --------------------- | ---------------- | ------------------------------------------------------------------- |
+| PROD-1 | Products, options, variants            | Done      | ACC-3                 | #121             |                                                                     |
+| PROD-2 | Stock ledger and `moveStock`           | Done      | PROD-1                | #124             |                                                                     |
+| PROD-3 | Photo upload to R2 with presigned URLs | Done      | PROD-1, FILE-1        | #125             |                                                                     |
+| PROD-4 | Web: products list and product editor  | In review | PROD-2, PROD-3, WEB-2 | #126, #131, #134 | List, stock adjustment and editor merged. Photo controls in review. |
 
 ## M6. Orders
 
