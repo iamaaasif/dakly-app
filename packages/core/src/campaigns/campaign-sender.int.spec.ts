@@ -13,6 +13,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { runWithJobContext } from '../platform/logging/job-context';
+import { DAY_MS } from '../platform/time';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
@@ -293,6 +294,32 @@ describe('Campaign sweep (Postgres)', () => {
         [...backlog, outsideBacklog],
       ]);
       await admin.pool.query('delete from stores where id=$1', [store]);
+    }
+  });
+
+  it('passes future-only stores without spending the due-store page limit', async () => {
+    const stores = Array.from({ length: 4 }, (_, i) => `00000000-0000-4000-8000-00000000020${i}`);
+    const nextDay = new Date(sendAt.getTime() + DAY_MS);
+    const [firstDue, nextDue] = [stores[1]!, stores[3]!];
+    try {
+      await admin.pool.query(
+        "insert into stores(id,name) select id,'নতুন দোকান' from unnest($1::uuid[]) as id",
+        [stores],
+      );
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
+         select gen_random_uuid(),store_id,'নতুন প্রচারণা','sms','{"text":"নতুন"}',
+                'scheduled',scheduled_for,$3
+         from unnest($1::uuid[],$2::timestamptz[]) as fixture(store_id,scheduled_for)`,
+        [stores, [nextDay, sendAt, nextDay, sendAt], sendAt],
+      );
+
+      const repository = app.get(CampaignSendingRepository);
+      expect(await repository.listDueStores(sendAt, null, 2)).toEqual([firstDue, nextDue]);
+      expect(await repository.listDueStores(sendAt, firstDue, 1)).toEqual([nextDue]);
+    } finally {
+      await admin.pool.query('delete from campaigns where store_id=any($1::uuid[])', [stores]);
+      await admin.pool.query('delete from stores where id=any($1::uuid[])', [stores]);
     }
   });
 
