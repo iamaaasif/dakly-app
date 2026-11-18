@@ -253,6 +253,30 @@ const deliveredLines = z
     'Enter the delivered quantity for each item once',
   );
 
+const partialDeliverySchema = z.strictObject({
+  to: z.literal('partially_delivered'),
+  items: deliveredLines,
+  note: z.string('Enter a delivery note.').trim().min(1, 'Enter a delivery note.').max(200),
+});
+
+export function partialDeliveryFormSchema(ordered: Pick<OrderItem, 'id' | 'quantity'>[]) {
+  const quantities = new Map(ordered.map(({ id, quantity }) => [id, quantity]));
+  return partialDeliverySchema.extend({
+    items: deliveredLines
+      .refine((items) => items.some(({ quantity }) => quantity > 0), {
+        path: [0, 'quantity'],
+        message: 'Enter at least one delivered unit.',
+      })
+      .refine(
+        (items) => items.some(({ itemId, quantity }) => quantity < (quantities.get(itemId) ?? 0)),
+        {
+          path: [0, 'quantity'],
+          message: 'Use Mark delivered if all units arrived.',
+        },
+      ),
+  });
+}
+
 export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('to_confirm') }),
   z.strictObject({ to: z.literal('to_pack') }),
@@ -263,11 +287,7 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   }),
   z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons, 'Choose a reason.') }),
   z.strictObject({ to: z.literal('delivered') }),
-  z.strictObject({
-    to: z.literal('partially_delivered'),
-    items: deliveredLines,
-    note: z.string().trim().min(1).max(200),
-  }),
+  partialDeliverySchema,
   z.strictObject({
     to: z.literal('returned'),
     reason: z.string().trim().min(1).max(200),

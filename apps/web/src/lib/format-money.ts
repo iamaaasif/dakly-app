@@ -13,3 +13,9 @@ export function formatMoney(amountPoisha: number | bigint): string {
   const sign = amount < 0n ? '-' : '';
   return `${sign}৳${wholeTaka}${fraction}`;
 }
+
+export function takaInputFromPoisha(value: number | null) {
+  if (value === null) return '';
+  const amount = BigInt(value);
+  return `${amount / 100n}.${(amount % 100n).toString().padStart(2, '0')}`;
+}
