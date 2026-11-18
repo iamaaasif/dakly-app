@@ -1,14 +1,19 @@
 import type { OrderSummary } from '@dakly/contracts/orders';
 
+export function canChangeOrderStage(
+  order: Pick<OrderSummary, 'source'>,
+  canEditOrders?: boolean,
+): boolean {
+  return canEditOrders === true && order.source !== 'shopify' && order.source !== 'woocommerce';
+}
+
 export function canConfirmOrder(
   order: Pick<OrderSummary, 'stage' | 'source'> | undefined,
   canEditOrders?: boolean,
 ): boolean {
   return (
-    canEditOrders === true &&
     order !== undefined &&
-    (order.stage === 'to_confirm' || order.stage === 'on_hold') &&
-    order.source !== 'shopify' &&
-    order.source !== 'woocommerce'
+    canChangeOrderStage(order, canEditOrders) &&
+    (order.stage === 'to_confirm' || order.stage === 'on_hold')
   );
 }
