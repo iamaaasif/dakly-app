@@ -74,32 +74,11 @@ export class MailpitSmsDriver implements SmsDriver {
   }
 
   private async resolveSmtpError(error: unknown, messageId?: string): Promise<SmsSendResult> {
-    // Mailpit can return 451 after storing DATA if tagging the capture fails.
-    const { responseCode, command, code, originalCode, timeoutType } = (error ?? {}) as {
-      responseCode?: unknown;
-      command?: unknown;
-      code?: unknown;
-      originalCode?: unknown;
-      timeoutType?: unknown;
-    };
-    if (
-      code === 'EDNS' ||
-      originalCode === 'ECONNREFUSED' ||
-      timeoutType === 'CONNECT_TIMEOUT' ||
-      timeoutType === 'GREETING_TIMEOUT'
-    )
-      throw new SmsSendRefused();
-    // A disconnect may leave part of the DATA acknowledgment in Nodemailer's error.
-    if (responseCode === 451 && (command === 'DATA' || code === 'ECONNECTION')) {
-      const captured = messageId && (await this.findCaptured(messageId).catch(() => undefined));
+    const failure = classifySmtpFailure(error);
+    if (failure === 'refused') throw new SmsSendRefused();
+    if (failure === 'lookup' && messageId) {
+      const captured = await this.findCaptured(messageId).catch(() => undefined);
       if (captured) return { providerMessageId: captured };
-    } else if (
-      code !== 'ECONNECTION' &&
-      typeof responseCode === 'number' &&
-      responseCode >= 400 &&
-      responseCode < 600
-    ) {
-      throw new SmsSendRefused();
     }
     throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
   }
@@ -124,4 +103,37 @@ export class MailpitSmsDriver implements SmsDriver {
       if (messages.length === 0 || start >= messages_count) return undefined;
     }
   }
+}
+
+type SmtpFailure = {
+  responseCode?: unknown;
+  command?: unknown;
+  code?: unknown;
+  originalCode?: unknown;
+  timeoutType?: unknown;
+};
+
+function classifySmtpFailure(error: unknown): 'refused' | 'lookup' | 'unknown' {
+  const failure = (error ?? {}) as SmtpFailure;
+  if (failedDuringSetup(failure)) return 'refused';
+  const { responseCode, command, code } = failure;
+  // ECONNECTION on CONN can include an incomplete reply left in the receive buffer.
+  const disconnected = code === 'ECONNECTION' && command === 'CONN';
+  const bodySubmitted = code === 'EMESSAGE' && command === 'DATA';
+  // Mailpit can return 451 after storing DATA if tagging the capture fails.
+  if (responseCode === 451 && (bodySubmitted || disconnected)) return 'lookup';
+  return !disconnected && isSmtpRejection(responseCode) ? 'refused' : 'unknown';
+}
+
+function failedDuringSetup({ code, originalCode, timeoutType }: SmtpFailure): boolean {
+  return (
+    code === 'EDNS' ||
+    originalCode === 'ECONNREFUSED' ||
+    timeoutType === 'CONNECT_TIMEOUT' ||
+    timeoutType === 'GREETING_TIMEOUT'
+  );
+}
+
+function isSmtpRejection(responseCode: unknown): boolean {
+  return typeof responseCode === 'number' && responseCode >= 400 && responseCode < 600;
 }

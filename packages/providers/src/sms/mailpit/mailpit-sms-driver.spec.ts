@@ -98,7 +98,11 @@ describe('MailpitSmsDriver', () => {
         apiUrl: 'http://127.0.0.1:1',
       });
       vi.spyOn(driver['transport'], 'sendMail').mockRejectedValue(
-        Object.assign(new Error('SMTP refused after DATA'), { responseCode: 451, command: 'DATA' }),
+        Object.assign(new Error('SMTP refused after DATA'), {
+          code: 'EMESSAGE',
+          responseCode: 451,
+          command: 'DATA',
+        }),
       );
       const lookup = vi
         .fn()
@@ -124,6 +128,23 @@ describe('MailpitSmsDriver', () => {
       }
     },
   );
+
+  it.each([
+    { code: 'ECONNECTION', command: 'EHLO', responseCode: 421 },
+    { code: 'EENVELOPE', command: 'DATA', responseCode: 451 },
+  ])('refuses a complete $command reply before sending the body', async (details) => {
+    const driver = new MailpitSmsDriver({
+      host: '127.0.0.1',
+      port: 1,
+      apiUrl: 'http://127.0.0.1:1',
+    });
+    vi.spyOn(driver['transport'], 'sendMail').mockRejectedValue(
+      Object.assign(new Error('SMTP refused'), details),
+    );
+    await expect(driver.send({ to: '+8801700000000', text: 'SMS' })).rejects.toBeInstanceOf(
+      SmsSendRefused,
+    );
+  });
 
   it('finds the full operation id past a substring match', async () => {
     const driver = new MailpitSmsDriver({
