@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0032_snapshot.json`: **95 tables, 1244 columns, 370 explicit indexes and 295 foreign keys**.
+Built from `packages/db/migrations/meta/0033_snapshot.json`: **95 tables, 1248 columns, 373 explicit indexes and 297 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -375,7 +375,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`.
 
 ```mermaid
 erDiagram
@@ -390,6 +390,7 @@ erDiagram
     files |o..o{ sms_sender_ids : "store_id, nid_file_id"
     stores ||..o{ contacts : "store_id"
     bd_areas |o..o{ contacts : "bd_area_id"
+    imports |o..o{ contacts : "store_id, import_id"
     stores ||..o{ contact_merges : "store_id"
     contacts |o..o{ contact_merges : "kept_contact_id"
     contacts |o..o{ contact_merges : "merged_contact_id"
@@ -421,6 +422,7 @@ erDiagram
     files ||..o{ imports : "file_id"
     files |o..o{ imports : "report_file_id"
     users |o..o{ imports : "created_by_user_id"
+    users |o..o{ imports : "started_by_user_id"
     files ||..o{ imports : "store_id, file_id"
     files |o..o{ imports : "store_id, report_file_id"
     contacts ||--o| contact_memories : "contact_id"
@@ -520,6 +522,7 @@ erDiagram
         text__ tags "NOT NULL; text[]"
         text notes "NULL; text"
         text external_ref "NULL; text"
+        uuid import_id FK "NULL; uuid"
         timestamp_with_time_zone deleted_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
@@ -609,6 +612,7 @@ erDiagram
         jsonb column_mapping "NULL; jsonb"
         text duplicate_mode "NOT NULL; text"
         boolean has_consent_confirmation "NOT NULL; boolean"
+        jsonb consent_evidence "NULL; jsonb"
         integer rows_total "NULL; integer"
         integer rows_added "NULL; integer"
         integer rows_updated "NULL; integer"
@@ -617,7 +621,9 @@ erDiagram
         uuid report_file_id FK "NULL; uuid"
         uuid created_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
+        uuid started_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }
@@ -1978,12 +1984,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_stats_contact_id_store_fk`                                  | `contact_stats(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
 | `contacts_store_id_stores_id_fk`                                     | `contacts(store_id)`                                      | `stores(id)`                                | no action |
 | `contacts_bd_area_id_bd_areas_id_fk`                                 | `contacts(bd_area_id)`                                    | `bd_areas(id)`                              | no action |
-| `imports_store_id_stores_id_fk`                                      | `imports(store_id)`                                       | `stores(id)`                                | no action |
-| `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
-| `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |
-| `imports_created_by_user_id_users_id_fk`                             | `imports(created_by_user_id)`                             | `users(id)`                                 | no action |
-| `imports_file_id_store_fk`                                           | `imports(store_id, file_id)`                              | `files(store_id, id)`                       | no action |
-| `imports_report_file_id_store_fk`                                    | `imports(store_id, report_file_id)`                       | `files(store_id, id)`                       | no action |
+| `contacts_import_id_store_fk`                                        | `contacts(store_id, import_id)`                           | `imports(store_id, id)`                     | no action |
 | `segments_store_id_stores_id_fk`                                     | `segments(store_id)`                                      | `stores(id)`                                | no action |
 | `segments_created_by_user_id_users_id_fk`                            | `segments(created_by_user_id)`                            | `users(id)`                                 | no action |
 | `customer_insights_store_id_stores_id_fk`                            | `customer_insights(store_id)`                             | `stores(id)`                                | no action |
@@ -1995,6 +1996,13 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `data_requests_file_id_files_id_fk`                                  | `data_requests(file_id)`                                  | `files(id)`                                 | no action |
 | `data_requests_contact_id_store_fk`                                  | `data_requests(store_id, contact_id)`                     | `contacts(store_id, id)`                    | no action |
 | `data_requests_file_id_store_fk`                                     | `data_requests(store_id, file_id)`                        | `files(store_id, id)`                       | no action |
+| `imports_store_id_stores_id_fk`                                      | `imports(store_id)`                                       | `stores(id)`                                | no action |
+| `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
+| `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |
+| `imports_created_by_user_id_users_id_fk`                             | `imports(created_by_user_id)`                             | `users(id)`                                 | no action |
+| `imports_started_by_user_id_users_id_fk`                             | `imports(started_by_user_id)`                             | `users(id)`                                 | no action |
+| `imports_file_id_store_fk`                                           | `imports(store_id, file_id)`                              | `files(store_id, id)`                       | no action |
+| `imports_report_file_id_store_fk`                                    | `imports(store_id, report_file_id)`                       | `files(store_id, id)`                       | no action |
 | `delivery_zones_store_id_stores_id_fk`                               | `delivery_zones(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_store_id_stores_id_fk`                               | `discount_codes(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |
