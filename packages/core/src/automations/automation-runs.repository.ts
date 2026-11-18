@@ -19,7 +19,7 @@ import {
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
-import { workflowSchedulerTime } from './workflow-scheduler-time';
+import { workflowSchedulerTime } from './workflow-scheduler-time.repository';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
