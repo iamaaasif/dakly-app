@@ -299,11 +299,11 @@ export class ImportsRepository {
   }
 
   // A finished or failed import moves to undone once, so a second undo changes nothing.
-  async markUndone(storeId: string, importId: string): Promise<boolean> {
+  async markUndone(storeId: string, importId: string, at: Date): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(imports)
-        .set({ status: 'undone' })
+        .set({ status: 'undone', lastProgressAt: at })
         .where(
           and(
             eq(imports.storeId, storeId),
@@ -314,6 +314,40 @@ export class ImportsRepository {
         .returning({ id: imports.id }),
     );
     return rows.length > 0;
+  }
+
+  async renewUndoProgress(storeId: string, importId: string, at: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ lastProgressAt: at })
+        .where(and(guard(storeId, importId, 'undone'), isNull(imports.undoFinishedAt))),
+    );
+  }
+
+  requeuePendingUndos(storeId: string, before: Date, now: Date): Promise<string[]> {
+    return this.database.forStore(storeId, async (tx) => {
+      const pending = tx
+        .select({ id: imports.id })
+        .from(imports)
+        .where(
+          and(
+            eq(imports.storeId, storeId),
+            eq(imports.status, 'undone'),
+            isNull(imports.undoFinishedAt),
+            lt(sql`coalesce(${imports.lastProgressAt}, ${imports.finishedAt})`, before),
+          ),
+        )
+        .orderBy(imports.id)
+        .limit(100)
+        .for('update', { skipLocked: true });
+      const rows = await tx
+        .update(imports)
+        .set({ lastProgressAt: now })
+        .where(and(eq(imports.storeId, storeId), inArray(imports.id, pending)))
+        .returning({ id: imports.id });
+      return rows.map((row) => row.id);
+    });
   }
 
   async markUndoFinished(storeId: string, importId: string, at: Date): Promise<void> {

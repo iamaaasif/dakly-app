@@ -100,6 +100,17 @@ describe('contact filters without RLS assistance', () => {
 
     expect(await repository.countMatching(f.b, rules)).toBe(1);
     expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
+    await f.connection.pool.query(
+      "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) values(gen_random_uuid(),$1,$2,'sms','not_answered','import',now()+interval '1 minute')",
+      [f.b, b!.id],
+    );
+    expect(await repository.countMatching(f.b, rules)).toBe(0);
+    expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([]);
+    const unanswered = {
+      ...rules,
+      conditions: [{ field: 'consent', channel: 'sms', granted: false }],
+    } as const;
+    expect(await repository.listIdsMatching(f.b, unanswered, { limit: 100 })).toContain(b!.id);
   });
 
   it('finds, adds and updates imported contacts only in the selected store', async () => {
@@ -134,6 +145,10 @@ describe('contact filters without RLS assistance', () => {
       { id: b!.id, phone, importId: null, whatsappPhone: null, tags: [] },
     ]);
     expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([b!.id]);
+    await f.connection.pool.query('update contacts set deleted_at=now() where id=$1', [b!.id]);
+    expect(await repository.lockForConsent(f.b, [added!.id, b!.id])).toEqual([]);
+    expect(await imports.lockConsentHistory(f.b, [added!.id, b!.id])).toEqual([b!.id]);
+    await f.connection.pool.query('update contacts set deleted_at=null where id=$1', [b!.id]);
 
     await imports.updateImported(f.b, [{ id: added!.id, name: 'অন্য দোকান', tags: ['বি'] }]);
     await imports.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
@@ -154,7 +169,7 @@ describe('contact filters without RLS assistance', () => {
     );
     const imported = { importId, source: 'import', kind: 'customer' } as const;
     const [first, second, edited] = (
-      await repository.insertImported(f.a, [
+      await imports.insertImported(f.a, [
         { ...imported, phone: '01711000021' },
         { ...imported, phone: '01711000022' },
         { ...imported, phone: '01711000023' },

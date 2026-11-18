@@ -34,6 +34,7 @@ import {
   ImportsRepository,
   type NewImportFile,
 } from './imports.repository';
+import { UndoCustomerImport } from './undo-customer-import';
 
 type Actor = AuditEntry['actor'];
 type Run = { storeId: string; found: Import; lease: Date; finished: boolean };
@@ -49,10 +50,7 @@ const LINK_SECONDS = 15 * 60;
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
-const UNDO_MILLISECONDS = FILE_DAYS * 24 * 60 * 60 * 1000;
 const BATCH_ROWS = 500;
-// The consent lookup takes at most 500 contacts.
-const UNDO_BATCH_ROWS = 500;
 const CSV = 'text/csv';
 // Each batch renews the lease; a run that has not renewed it for 5 minutes is gone.
 const LEASE_MS = 5 * 60 * 1000;
@@ -89,6 +87,7 @@ export class ImportsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
+    @Inject(UndoCustomerImport) private readonly undoImport: UndoCustomerImport,
   ) {}
 
   async createCustomerImport(
@@ -139,66 +138,13 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
-  // The status moves and the event is queued in one transaction, so a crash before the job
-  // finishes is covered by the job's rerun: it deletes whatever is still left. Asking again for
-  // an import whose removal has not finished queues the job again, which finishes it after a
-  // job that failed every attempt. A failed import can be undone too: it may have added contacts.
-  async undo(storeId: string, importId: string, _actor: Actor): Promise<ImportResponse> {
-    await this.transaction.run(storeId, async () => {
-      const found = await this.findImport(storeId, importId);
-      const now = this.clock.now();
-      const removing = found.status === 'undone' && !found.undoFinishedAt;
-      if (!removing && !['done', 'failed'].includes(found.status))
-        throw importError('IMPORT_NOT_UNDOABLE');
-      if (now.getTime() > found.finishedAt!.getTime() + UNDO_MILLISECONDS)
-        throw importError('IMPORT_UNDO_EXPIRED');
-      if (!removing && !(await this.repository.markUndone(storeId, importId)))
-        throw importError('IMPORT_NOT_UNDOABLE');
-      await this.outbox.publish({
-        type: 'import.undo_requested',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { importId },
-      });
-    });
+  async undo(storeId: string, importId: string, actor: Actor): Promise<ImportResponse> {
+    await this.undoImport.request(storeId, importId, actor);
     return this.get(storeId, importId);
   }
 
-  // Each batch locks its contacts, keeps the ones with a consent answer that is not the import's
-  // own grant, and removes the rest in one short transaction. A rerun finds only what is left.
-  async removeContactsOfUndoneImport(storeId: string, importId: string): Promise<void> {
-    const found = await this.repository.findById(storeId, importId);
-    if (found?.status !== 'undone' || found.undoFinishedAt) return;
-    let after: string | undefined;
-    for (;;) {
-      const batch = await this.transaction.run(storeId, async () => {
-        const ids = await this.contacts.lockUneditedByImport(storeId, importId, {
-          after,
-          limit: UNDO_BATCH_ROWS,
-        });
-        if (ids.length === 0) return ids;
-        const answered = await this.contactsWithOwnAnswer(storeId, ids);
-        await this.contacts.removeAll(
-          storeId,
-          ids.filter((id) => !answered.has(id)),
-          { kind: 'system' },
-        );
-        return ids;
-      });
-      after = batch.at(-1);
-      if (batch.length < UNDO_BATCH_ROWS) break;
-    }
-    await this.repository.markUndoFinished(storeId, importId, this.clock.now());
-  }
-
-  // Consent never changes the contact row, so an opt-out after the import shows only here.
-  private async contactsWithOwnAnswer(storeId: string, ids: string[]): Promise<Set<string>> {
-    const answered = new Set<string>();
-    for (const channel of ['sms', 'whatsapp'] as const)
-      for (const answer of await this.consents.currentForAudience(storeId, ids, channel))
-        if (answer.source !== 'import' || answer.status !== 'granted')
-          answered.add(answer.contactId);
-    return answered;
+  removeContactsOfUndoneImport(storeId: string, importId: string): Promise<void> {
+    return this.undoImport.run(storeId, importId, { kind: 'system' });
   }
 
   async get(storeId: string, importId: string): Promise<ImportResponse> {
@@ -211,6 +157,7 @@ export class ImportsService {
       rowsUpdated: found.rowsUpdated,
       rowsSkipped: found.rowsSkipped,
       rowsFailed: found.rowsFailed,
+      undoFinishedAt: found.undoFinishedAt?.toISOString() ?? null,
       reportUrl: found.reportKey && this.storage.createDownloadUrl(found.reportKey, LINK_SECONDS),
     };
   }
@@ -242,7 +189,8 @@ export class ImportsService {
   async sweepStuckImports(): Promise<void> {
     const now = this.clock.now();
     const before = new Date(now.getTime() - STUCK_MS);
-    for (const storeId of await this.repository.storesWithStuckImports(before))
+    for (const storeId of await this.repository.storesWithStuckImports(before)) {
+      await this.undoImport.recover(storeId, before, { kind: 'system' });
       for (const stuck of await this.repository.listStuck(storeId, before)) {
         const requeued = await this.transaction.run(storeId, async () => {
           const requeue = { before, now, limit: MAX_REQUEUES };
@@ -265,6 +213,7 @@ export class ImportsService {
             exhausted: { before, limit: MAX_REQUEUES },
           });
       }
+    }
   }
 
   private async readImportFile(storeId: string, found: Import) {
@@ -333,7 +282,11 @@ export class ImportsService {
       {
         rows,
         duplicateMode: found.duplicateMode,
-        whatsappAnswered: new Set(answers.map((answer) => answer.contactId)),
+        whatsappAnswered: new Set(
+          answers
+            .filter((answer) => answer.status !== 'not_answered')
+            .map((answer) => answer.contactId),
+        ),
         matchedContactIds: new Set(ids),
       },
       actor,
@@ -380,7 +333,7 @@ export class ImportsService {
         .map((contact) => contact.contactId);
       const { withdrawnContactIds } = await this.consents.grantFromImport(
         storeId,
-        { contactIds, channel, evidence },
+        { contactIds, channel, evidence, importId: found.id },
         actor,
       );
       const withdrawn = new Set(withdrawnContactIds);

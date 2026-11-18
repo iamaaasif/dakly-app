@@ -21,6 +21,7 @@ import type {
   ImportsRepository,
 } from './imports.repository';
 import { ImportsService } from './imports.service';
+import { UndoCustomerImport } from './undo-customer-import';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const IMPORT_ID = '019c01ea-cf15-7d31-a7f5-d73d66007ad7';
@@ -52,6 +53,7 @@ describe('ImportsService', () => {
       found = { ...found, status: 'undone' };
       return true;
     },
+    renewUndoProgress: async () => undefined,
     markUndoFinished: async (_s: string, _i: string, at: Date) => {
       found = { ...found!, undoFinishedAt: at };
     },
@@ -124,6 +126,12 @@ describe('ImportsService', () => {
     },
   };
   const consents = {
+    restoreImportGrants: async () => {
+      for (const answer of answers)
+        if (answer.source === 'import' && answer.status === 'granted')
+          answer.status = 'not_answered';
+      return { complete: true };
+    },
     currentForAudience: async (_storeId: string, ids: string[], channel: string) =>
       ids.flatMap((contactId) => {
         const answer = answers.find(
@@ -212,6 +220,16 @@ describe('ImportsService', () => {
       { now: () => new Date('2026-11-17T04:30:00Z') } as Clock,
       storage,
       { consume: async () => ({ allowed: true, retryAfter: 0 }) } as unknown as RateLimiter,
+      new UndoCustomerImport(
+        repository as unknown as ImportsRepository,
+        contacts as unknown as ContactsService,
+        consents as unknown as ConsentService,
+        { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
+        {
+          publish: async (event: { type: string }) => void published.push(event.type),
+        } as unknown as OutboxService,
+        { now: () => new Date('2026-11-17T04:30:00Z') } as Clock,
+      ),
     );
   });
 
@@ -407,18 +425,27 @@ describe('ImportsService', () => {
       expect(published).toEqual([]);
     });
 
-    it('queues the removal again while it has not finished and refuses once it has', async () => {
+    it('keeps one pending removal and refuses once it has finished', async () => {
       finishedImport();
       await service.undo(STORE_ID, IMPORT_ID, actor);
       await service.undo(STORE_ID, IMPORT_ID, actor);
-      expect(published).toHaveLength(2);
+      expect(published).toHaveLength(1);
 
       found = { ...found!, undoFinishedAt: finishedAt };
 
       await expect(service.undo(STORE_ID, IMPORT_ID, actor)).rejects.toMatchObject({
         code: 'IMPORT_NOT_UNDOABLE',
       });
-      expect(published).toHaveLength(2);
+      expect(published).toHaveLength(1);
+    });
+
+    it('keeps accepted undo work pending after the seven-day acceptance window', async () => {
+      finishedImport('undone', new Date('2026-11-01T04:30:00Z'));
+      await expect(service.undo(STORE_ID, IMPORT_ID, actor)).resolves.toMatchObject({
+        status: 'undone',
+        undoFinishedAt: null,
+      });
+      expect(published).toEqual([]);
     });
 
     it.each(['done', 'failed'] as const)(

@@ -187,6 +187,11 @@ export class ContactsService {
     if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
   }
 
+  async lockConsentHistory(storeId: string, ids: string[]): Promise<void> {
+    const locked = await this.importContacts.lockConsentHistory(storeId, ids);
+    if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
+  }
+
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');

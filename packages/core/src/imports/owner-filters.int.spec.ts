@@ -133,13 +133,19 @@ describe('import filters without RLS assistance', () => {
   it('marks an import undone and finished only in the selected store and only once', async () => {
     const importId = randomUUID();
     await repository.createCustomerImport(f.a, importId, upload(f.a), f.userA);
-    expect(await repository.markUndone(f.a, importId)).toBe(false);
+    expect(await repository.markUndone(f.a, importId, new Date('2026-11-18T00:00:00Z'))).toBe(
+      false,
+    );
     await f.connection.pool.query("update imports set status='failed' where id=$1", [importId]);
 
-    expect(await repository.markUndone(f.b, importId)).toBe(false);
+    expect(await repository.markUndone(f.b, importId, new Date('2026-11-18T00:00:00Z'))).toBe(
+      false,
+    );
     expect((await f.row('imports', importId)).status).toBe('failed');
-    expect(await repository.markUndone(f.a, importId)).toBe(true);
-    expect(await repository.markUndone(f.a, importId)).toBe(false);
+    expect(await repository.markUndone(f.a, importId, new Date('2026-11-18T00:00:00Z'))).toBe(true);
+    expect(await repository.markUndone(f.a, importId, new Date('2026-11-18T00:00:00Z'))).toBe(
+      false,
+    );
     expect((await f.row('imports', importId)).status).toBe('undone');
 
     const at = new Date('2026-11-17T04:30:00Z');
