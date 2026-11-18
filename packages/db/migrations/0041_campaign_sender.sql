@@ -20,14 +20,23 @@ CREATE FUNCTION campaign_due_stores(p_as_of timestamptz, p_after uuid, p_limit i
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
   WITH RECURSIVE due(store_id, visit) AS (
-    (
-      SELECT c.store_id, 1
-      FROM public.campaigns c
-      WHERE p_limit > 0 AND c.status = 'scheduled' AND c.scheduled_for <= p_as_of
-        AND c.store_id > coalesce(p_after, '00000000-0000-0000-0000-000000000000'::uuid)
-      ORDER BY c.store_id, c.scheduled_for, c.id
-      LIMIT 1
-    )
+    SELECT first_store.store_id, 1 FROM (
+      (
+        SELECT c.store_id FROM public.campaigns c
+        WHERE p_limit > 0 AND p_after IS NULL
+          AND c.status = 'scheduled' AND c.scheduled_for <= p_as_of
+        ORDER BY c.store_id, c.scheduled_for, c.id
+        LIMIT 1
+      )
+      UNION ALL
+      (
+        SELECT c.store_id FROM public.campaigns c
+        WHERE p_limit > 0 AND p_after IS NOT NULL
+          AND c.status = 'scheduled' AND c.scheduled_for <= p_as_of AND c.store_id > p_after
+        ORDER BY c.store_id, c.scheduled_for, c.id
+        LIMIT 1
+      )
+    ) first_store
     UNION ALL
     SELECT next.store_id, due.visit + 1
     FROM due JOIN LATERAL (

@@ -48,11 +48,11 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## campaign
 
-| Job                         | Started by                      | Payload                                     | Makes a rerun harmless                                     |
-| --------------------------- | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
-| `build-campaign-audience`   | Campaign scheduled or sent now  | `storeId`, `campaignId`                     | Unique `campaign_recipients (campaign_id, contact_id)`     |
-| `send-campaign-batch`       | Audience built, then each batch | `storeId`, `campaignId`, `afterRecipientId` | Only `queued` recipients are picked; status moves forward  |
-| sweep `start-due-campaigns` | Every minute                    | none                                        | `due_campaigns`; status moves `scheduled` → `sending` once |
+| Job                         | Started by                      | Payload                                     | Makes a rerun harmless                                                                                                                |
+| --------------------------- | ------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `build-campaign-audience`   | Campaign scheduled or sent now  | `storeId`, `campaignId`                     | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                |
+| `send-campaign-batch`       | Audience built, then each batch | `storeId`, `campaignId`, `afterRecipientId` | Only `queued` recipients are picked; status moves forward                                                                             |
+| sweep `start-due-campaigns` | Every minute from CAMP-3 sender | none                                        | `campaign_due_stores` discovers stores. The sweep starts due campaigns and backfills a bounded batch of old start times in one store. |
 
 Per-store cap: one running campaign batch per store.
 

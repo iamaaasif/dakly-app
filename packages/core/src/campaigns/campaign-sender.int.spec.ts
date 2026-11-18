@@ -143,6 +143,62 @@ describe('Campaign sweep (Postgres)', () => {
     }
   });
 
+  it('backfills another store while the first legacy start is locked', async () => {
+    const store = randomUUID();
+    const [firstStore, nextStore] = [storeId, store].sort() as [string, string];
+    const first = randomUUID();
+    const next = randomUUID();
+    const connection = app.get(ValkeyClient).connection;
+    const cursor = 'campaign-start:backfill-store';
+    const blocker = await admin.pool.connect();
+    try {
+      await connection.del(cursor);
+      await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,approved_at)
+         values($1,$2,'পুরানো প্রচারণা','sms','{"text":"নতুন"}','sending',$5),
+               ($3,$4,'পুরানো প্রচারণা','sms','{"text":"নতুন"}','sending',$5)`,
+        [first, firstStore, next, nextStore, sendAt],
+      );
+      await blocker.query('begin');
+      await blocker.query('select id from campaigns where id=$1 for update', [first]);
+
+      await sender.backfillStarts();
+      await sender.backfillStarts();
+      expect(await campaignRow(first)).toMatchObject({ started_at: null });
+      expect(await campaignRow(next)).toMatchObject({ started_at: sendAt });
+
+      await blocker.query('commit');
+      await sender.backfillStarts();
+      await sender.backfillStarts();
+      expect(await campaignRow(first)).toMatchObject({ started_at: sendAt });
+    } finally {
+      await blocker.query('rollback');
+      blocker.release();
+      await connection.del(cursor);
+      await admin.pool.query('delete from campaigns where id in ($1,$2)', [first, next]);
+      await admin.pool.query('delete from stores where id=$1', [store]);
+    }
+  });
+
+  it('includes the nil store only on the first page', async () => {
+    const nil = '00000000-0000-0000-0000-000000000000';
+    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [nil]);
+    try {
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
+         values($1,$2,'নতুন প্রচারণা','sms','{"text":"নতুন"}','scheduled',$3,$3)`,
+        [randomUUID(), nil, sendAt],
+      );
+      const repository = app.get(CampaignSendingRepository);
+      expect(await repository.listDueStores(sendAt, null, 1)).toEqual([nil]);
+      expect(await repository.listDueStores(sendAt, nil, 1)).not.toContain(nil);
+    } finally {
+      await admin.pool.query('delete from campaigns where store_id=$1', [nil]);
+      await admin.pool.query('delete from stores where id=$1', [nil]);
+    }
+  });
+
   it('keeps an older immediate campaign first when its start time is missing', async () => {
     const store = randomUUID();
     const [legacy, newer] = [randomUUID(), randomUUID()];

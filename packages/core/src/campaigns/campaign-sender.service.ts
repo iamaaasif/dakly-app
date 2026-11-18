@@ -47,13 +47,22 @@ export class CampaignSenderService {
   async backfillStarts(): Promise<void> {
     const cursor = await this.valkey.connection.get(BACKFILL_CURSOR);
     if (cursor === BACKFILL_COMPLETE) return;
-    const storeId = await this.repository.nextBackfillStore(cursor);
+    const [after, pending] = cursor?.split(':') ?? [];
+    const storeId = await this.repository.nextBackfillStore(after || null);
     if (!storeId) {
-      await this.saveCursor(BACKFILL_CURSOR, BACKFILL_COMPLETE);
+      if (pending) await this.valkey.connection.del(BACKFILL_CURSOR);
+      else await this.saveCursor(BACKFILL_CURSOR, BACKFILL_COMPLETE);
       return;
     }
-    const hasMore = await this.repository.backfillStarts(storeId, START_BACKFILL_BATCH);
-    if (!hasMore) await this.saveCursor(BACKFILL_CURSOR, storeId);
+    const hasMore = await this.repository
+      .backfillStarts(storeId, START_BACKFILL_BATCH)
+      .catch((error: unknown) => {
+        this.logger.error({ storeId }, 'Campaign start backfill failed');
+        this.reportJobError(error);
+        return true;
+      });
+    const next = pending || hasMore ? `${storeId}:pending` : storeId;
+    await this.saveCursor(BACKFILL_CURSOR, next);
   }
 
   private async startStorePage(storeId: string, asOf: Date): Promise<void> {
