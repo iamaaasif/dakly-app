@@ -204,7 +204,9 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       draft.id,
     ]);
     await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(page.getByRole('alert')).toContainText('Campaign not found');
+    await expect(page.getByRole('alert').filter({ hasText: 'Campaign not found' })).toContainText(
+      'Campaign not found',
+    );
     await expect(page.getByRole('region', { name: 'Saved campaign' })).toHaveCount(0);
 
     await page.goto(`/campaigns/${sent.id}`);
