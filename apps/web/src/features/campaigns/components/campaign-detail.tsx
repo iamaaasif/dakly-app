@@ -8,27 +8,21 @@ import { CampaignLoading } from './campaign-loading';
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const campaign = useCampaign(campaignId);
-  return (
-    <>
-      {campaign.isPending && <CampaignLoading />}
-      {campaign.isError && (
-        <div role="alert" className="space-y-3 p-6">
-          <p>{campaign.error.message}</p>
-          <Button variant="secondary" onClick={() => void campaign.refetch()}>
-            Try again
-          </Button>
-        </div>
-      )}
-      {campaign.data === null && (
-        <p role="alert" className="p-6">
-          Campaign not found
-        </p>
-      )}
-      {campaign.data && (
-        <div hidden={campaign.isError}>
-          <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />
-        </div>
-      )}
-    </>
-  );
+  if (campaign.isPending) return <CampaignLoading />;
+  if (campaign.isError)
+    return (
+      <div role="alert" className="space-y-3 p-6">
+        <p>{campaign.error.message}</p>
+        <Button variant="secondary" onClick={() => void campaign.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  if (!campaign.data)
+    return (
+      <p role="alert" className="p-6">
+        Campaign not found
+      </p>
+    );
+  return <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />;
 }

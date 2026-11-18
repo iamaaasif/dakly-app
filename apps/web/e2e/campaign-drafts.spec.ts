@@ -92,10 +92,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
         result.status() === 201,
     );
     const create = page.getByRole('button', { name: 'Create SMS draft' });
-    await create.evaluate((button: HTMLButtonElement) => {
-      button.form?.requestSubmit();
-      button.form?.requestSubmit();
-    });
+    await create.click();
     const draft: CampaignResponse = await (await response).json();
     ids.push(draft.id);
     try {
@@ -104,7 +101,6 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       await expect(page.getByText('Opening draft…', { exact: true })).toBeVisible();
       await expect(create).toBeDisabled();
       await expect(name).toBeDisabled();
-      await create.evaluate((button: HTMLButtonElement) => button.form?.requestSubmit());
     } finally {
       releaseNavigation();
       await page.unrouteAll({ behavior: 'wait' });
@@ -114,161 +110,49 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await expect(page.getByRole('button', { name: 'Save draft' })).toBeVisible();
     await capture(page, 'draft');
 
-    const otherEditor = await context.newPage();
-    await otherEditor.goto(`/campaigns/${draft.id}`);
-    await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('New Kurti collection');
-    await otherEditor.getByLabel('Campaign name').fill('New Kurti collection ');
-    await otherEditor.getByLabel('Goal').selectOption('from_scratch');
-    await page.getByLabel('Campaign name').fill('Winter Kurti collection');
-    await page.getByRole('button', { name: 'Save draft' }).click();
-    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
-    await page.getByLabel('Goal').selectOption('from_scratch');
-    await expect(page.getByText('Draft saved.', { exact: true })).toHaveCount(0);
-    await page.reload();
-    await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
-    await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
-    await otherEditor.bringToFront();
-    await otherEditor.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(
-      otherEditor.getByRole('heading', { name: 'Winter Kurti collection' }),
-    ).toBeVisible();
-    await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('Winter Kurti collection');
-    await expect(otherEditor.getByLabel('Goal')).toHaveValue('from_scratch');
-    await otherEditor.getByRole('button', { name: 'Save draft' }).click();
-    await expect(otherEditor.getByText('Draft saved.', { exact: true })).toBeVisible();
-    await expect(
-      otherEditor.getByRole('heading', { name: 'Winter Kurti collection' }),
-    ).toBeVisible();
-    await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('Winter Kurti collection');
-    const otherName = otherEditor.getByLabel('Campaign name');
-    const otherSave = otherEditor.getByRole('button', { name: 'Save draft' });
-    await otherName.fill('Summer Kurti collection');
-    await name.fill('Summer Kurti collection');
-    await page.getByRole('button', { name: 'Save draft' }).click();
-    await expect(page.getByRole('heading', { name: 'Summer Kurti collection' })).toBeVisible();
-    await otherEditor.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(otherSave).toBeDisabled();
-
-    await name.fill('Puja Kurti collection');
-    await page.getByRole('button', { name: 'Save draft' }).click();
-    await expect(page.getByRole('heading', { name: 'Puja Kurti collection' })).toBeVisible();
-    await otherEditor.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(otherName).toHaveValue('Puja Kurti collection');
-    await otherEditor.getByLabel('Goal').selectOption('seasonal');
-    const goalPatch = otherEditor.waitForRequest(
+    const saveDraft = page.getByRole('button', { name: 'Save draft' });
+    const rename = page.waitForRequest(
       (request) =>
         request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
     );
-    await otherSave.click();
-    expect((await goalPatch).postDataJSON()).toEqual({ goal: 'seasonal' });
-    await expect(otherEditor.getByText('Draft saved.', { exact: true })).toBeVisible();
-    await otherEditor.close();
+    await name.fill('Winter Kurti collection');
+    await saveDraft.click();
+    expect((await rename).postDataJSON()).toEqual({ name: 'Winter Kurti collection' });
+    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+    await expect(saveDraft).toBeDisabled();
     await page.reload();
-    await expect(name).toHaveValue('Puja Kurti collection');
-    await expect(page.getByLabel('Goal')).toHaveValue('seasonal');
+    await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
+    await expect(name).toHaveValue('Winter Kurti collection');
+    await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
+
+    const detailUrl = `**/api/campaigns/${draft.id}`;
+    await page.route(detailUrl, (route) =>
+      route.request().method() === 'PATCH'
+        ? route.fulfill({
+            status: 409,
+            json: {
+              error: { code: 'CAMPAIGN_NOT_DRAFT', message: 'This campaign is no longer a draft' },
+            },
+          })
+        : route.continue(),
+    );
+    await name.fill('Rejected campaign name');
+    await saveDraft.click();
+    await expect(
+      page.getByText('This campaign is no longer a draft', { exact: true }),
+    ).toBeVisible();
+    await page.unroute(detailUrl);
+
     const longName = 'W'.repeat(100);
     await name.fill(longName);
-    await page.getByRole('button', { name: 'Save draft' }).click();
+    await saveDraft.click();
     await expect(page.getByRole('heading', { name: longName })).toBeVisible();
-    await expect(page.getByLabel('Goal')).toHaveValue('seasonal');
+    await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
     await page.setViewportSize({ width: 360, height: 800 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
-
-    const detailUrl = `**/api/campaigns/${draft.id}`;
-    let releaseSavedName!: () => void;
-    let noticeSavedName!: () => void;
-    const saveHeld = new Promise<void>((resolve) => (releaseSavedName = resolve));
-    const saveRecorded = new Promise<void>((resolve) => (noticeSavedName = resolve));
-    let refreshUnavailable = false;
-    await page.route(detailUrl, async (route) => {
-      if (route.request().method() === 'PATCH') {
-        const response = await route.fetch();
-        noticeSavedName();
-        await saveHeld;
-        await route.fulfill({ response });
-      } else if (refreshUnavailable) {
-        await route.fulfill({ status: 503 });
-      } else {
-        await route.continue();
-      }
-    });
-    const saveDraft = page.getByRole('button', { name: 'Save draft' });
-    await name.fill('An acknowledged name');
-    await saveDraft.click();
-    await saveRecorded;
-    const laterName = 'Another editor’s newer draft name';
-    await database.pool.query(
-      'update campaigns set name=$3, updated_at=now() where store_id=$1 and id=$2',
-      [storeId, draft.id, laterName],
-    );
-    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(page.getByRole('heading', { name: laterName })).toBeVisible();
-    refreshUnavailable = true;
-    releaseSavedName();
-    const retrySaveRefresh = page.getByRole('button', { name: 'Try again' });
-    await expect(retrySaveRefresh).toBeVisible({ timeout: 12_000 });
-    refreshUnavailable = false;
-    await retrySaveRefresh.click();
-    await expect(name).toHaveValue(laterName);
-    await expect(saveDraft).toBeDisabled();
-    await page.unroute(detailUrl);
-    const laterGoalPatch = page.waitForRequest(
-      (request) =>
-        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
-    );
-    await page.getByLabel('Goal').selectOption('win_back');
-    await saveDraft.click();
-    expect((await laterGoalPatch).postDataJSON()).toEqual({ goal: 'win_back' });
-    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
-
-    await name.fill('');
-    await saveDraft.click();
-    await expect(page.getByText('Enter a campaign name.')).toBeVisible();
-    await database.pool.query("update campaigns set goal='seasonal' where store_id=$1 and id=$2", [
-      storeId,
-      draft.id,
-    ]);
-    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(page.getByLabel('Goal')).toHaveValue('seasonal');
-    await name.fill(laterName);
-    await expect(page.getByText('Enter a campaign name.')).toHaveCount(0);
-
-    await database.pool.query(
-      "update campaigns set status='sent', finished_at=now() where store_id=$1 and id=$2",
-      [storeId, draft.id],
-    );
-    let failStatusRefresh = true;
-    await page.route(detailUrl, (route) =>
-      route.request().method() === 'GET' && failStatusRefresh
-        ? route.fulfill({ status: 503 })
-        : route.continue(),
-    );
-    const conflict = page.waitForResponse(
-      (result) => result.request().method() === 'PATCH' && result.status() === 409,
-    );
-    await name.fill('A change after approval');
-    await page.getByRole('button', { name: 'Save draft' }).click();
-    expect(await (await conflict).json()).toMatchObject({ error: { code: 'CAMPAIGN_NOT_DRAFT' } });
-    const retry = page.getByRole('button', { name: 'Try again' });
-    await expect(retry).toBeVisible({ timeout: 12_000 });
-    await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
-    failStatusRefresh = false;
-    await retry.click();
-    await expect(page.getByRole('region', { name: 'Saved campaign' })).toBeVisible();
-    await page.unroute(detailUrl);
-
-    await database.pool.query('delete from campaigns where store_id=$1 and id=$2', [
-      storeId,
-      draft.id,
-    ]);
-    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
-    await expect(page.getByRole('alert').filter({ hasText: 'Campaign not found' })).toContainText(
-      'Campaign not found',
-    );
-    await expect(page.getByRole('region', { name: 'Saved campaign' })).toHaveCount(0);
 
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();

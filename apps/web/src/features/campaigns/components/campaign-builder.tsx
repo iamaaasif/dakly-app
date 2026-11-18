@@ -3,7 +3,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
 
@@ -71,21 +70,11 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
           : undefined,
     }),
     defaultValues: { name, goal },
-    values: { name, goal },
-    resetOptions: { keepDirtyValues: true, keepErrors: true, keepIsSubmitted: true },
   });
   const { dirtyFields, isDirty } = form.formState;
-  const { getFieldState, getValues, resetField } = form;
-  useEffect(() => {
-    // A refetch can confirm a pending edit without clearing its dirty flag.
-    if (getFieldState('name').isDirty && getValues('name') === name)
-      resetField('name', { defaultValue: name, keepError: true, keepTouched: true });
-    if (getFieldState('goal').isDirty && getValues('goal') === goal)
-      resetField('goal', { defaultValue: goal, keepError: true, keepTouched: true });
-  }, [getFieldState, getValues, resetField, name, goal]);
   const opening = !campaign && save.isSuccess;
   const submit = form.handleSubmit((input) => {
-    if (opening || save.isSaving()) return;
+    if (opening) return;
     const change = {
       ...(dirtyFields.name && { name: input.name }),
       ...(dirtyFields.goal && { goal: input.goal }),
@@ -100,11 +89,7 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
           router.replace(`/campaigns/${saved.id}`);
           return;
         }
-        const current = save.getCachedCampaign(saved.id);
-        // The PATCH succeeded even if its follow-up read failed. Those edits are acknowledged.
-        const confirmed = current === undefined ? saved : current;
-        if (confirmed?.status === 'draft')
-          form.reset({ name: confirmed.name, goal: confirmed.goal }, { keepDirtyValues: false });
+        form.reset({ name: saved.name, goal: saved.goal });
       },
     });
   });
