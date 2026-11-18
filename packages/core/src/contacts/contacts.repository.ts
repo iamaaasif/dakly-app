@@ -209,6 +209,20 @@ export class ContactsRepository {
     }
   }
 
+  async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(eq(contacts.storeId, storeId), inArray(contacts.id, ids), isNull(contacts.deletedAt)),
+        )
+        .orderBy(contacts.id)
+        .for('no key update'),
+    );
+    return rows.map((row) => row.id);
+  }
+
   async softDelete(storeId: string, id: string, deletedAt: Date): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx

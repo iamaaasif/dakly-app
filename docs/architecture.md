@@ -102,7 +102,7 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 ## Files
 
 - Cloudflare R2 bucket per environment; object keys `stores/<store_id>/<kind>/<uuid>`. Customer imports and their reports use `imports/<store_id>/<uuid>.csv` instead, so one lifecycle rule covers every store.
-- Uploads go from the browser straight to R2 with a short-lived presigned URL. An import records its `files` row when it hands out the URL; the URL signs the declared size and content type, so R2 refuses any other body.
+- Uploads go from the browser straight to R2 with a short-lived presigned URL. An import records its `files` row as `pending` when it hands out the URL, and the import job marks it `ready` once it has read the file; the URL signs the declared size and content type, so R2 refuses any other body.
 - `FileStorageDriver` in `packages/providers` makes the presigned PUT and GET URLs, and reads and writes the files the API processes itself (an import and its report) through URLs signed for one request. A read stops at a size limit, so an oversized file is never held in memory. `S3FileStorageDriver` signs them with AWS Signature Version 4 and path-style addresses, so it works with any S3 API. It reads `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. The shared `FileStorageModule` requires all four in every environment; local runs use the SeaweedFS values from `.env.example`.
 - Local development and CI use SeaweedFS from `docker compose` (S3 API on port 8333, bucket `dakly-local`) in place of R2, the way Mailpit stands in for SMS and email.
 - Downloads use signed URLs valid 15 minutes. Public order-link product images are served through Cloudflare with a public, cache-friendly path that contains no personal data.
