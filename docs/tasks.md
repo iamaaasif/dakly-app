@@ -152,7 +152,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ID   | Task                                                                    | Status    | Depends      | PR   | Notes |
 | ---- | ----------------------------------------------------------------------- | --------- | ------------ | ---- | ----- |
 | AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | In review |              | #137 | Q8    |
-| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Todo      | AI-1, PAY-1  |      | Q15   |
+| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | In review | AI-1, PAY-1  | #140 | Q15   |
 | AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Todo      | AI-2         |      |       |
 | AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo      | AI-2, CHAT-3 |      |       |
 | AI-5 | Sales agent tools and the fact check before sending                     | Todo      | AI-4, ORD-3  |      |       |
