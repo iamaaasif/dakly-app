@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 
+import { canConfirmOrder } from '../order-actions';
 import { orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
@@ -20,11 +21,7 @@ type OrderRowProps = { order: OrderListItem; href: string; canEdit: boolean };
 
 export function OrderRow({ order, href, canEdit }: OrderRowProps) {
   const Icon = sourceIcons[order.source] ?? ClipboardList;
-  const canConfirm =
-    canEdit &&
-    order.stage === 'to_confirm' &&
-    order.source !== 'shopify' &&
-    order.source !== 'woocommerce';
+  const canConfirm = canConfirmOrder(order, canEdit);
 
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto_auto] md:gap-4">

@@ -24,6 +24,8 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
   cancelled: [],
 };
 
+export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
+
 const groupedStages: Partial<Record<OrderStage, OrderStage[]>> = {
   to_confirm: ['to_confirm', 'on_hold'],
   delivered: ['delivered', 'partially_delivered'],

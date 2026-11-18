@@ -132,6 +132,28 @@ export class OrdersRepository {
     );
   }
 
+  async hasItemsInStages(
+    storeId: string,
+    variantIds: string[],
+    stages: OrderStage[],
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orderItems.id })
+        .from(orderItems)
+        .innerJoin(orders, and(eq(orders.storeId, storeId), eq(orders.id, orderItems.orderId)))
+        .where(
+          and(
+            eq(orderItems.storeId, storeId),
+            inArray(orderItems.variantId, variantIds),
+            inArray(orders.stage, stages),
+          ),
+        )
+        .limit(1),
+    );
+    return rows.length > 0;
+  }
+
   async alertTotals(storeId: string, overdueBefore: Date) {
     const [row] = await this.database.forStore(storeId, (tx) => {
       const waiting = orderAlertFilter(tx, storeId, 'waiting', overdueBefore);
