@@ -1,8 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import type { ContactListResponse, ContactResponse } from '@dakly/contracts/contacts';
+import type { ContactResponse } from '@dakly/contracts/contacts';
 import type { CreateOrderValues } from '@dakly/contracts/orders';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 import { Button } from '@dakly/ui/button';
@@ -10,8 +9,8 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { useOrderBuyers } from '../api/order-buyers';
 import { useSessionContext } from '@/lib/session-context';
-import { useStoreRequest } from '@/lib/store-request';
 
 export function OrderBuyerFields() {
   const [selected, setSelected] = useState<ContactResponse | null>(null);
@@ -24,8 +23,9 @@ export function OrderBuyerFields() {
     const phone = contact
       ? bdMobileSchema.safeParse(contact.phone).data
       : form.getValues('buyer.phone');
-    form.setValue('recipient.name', name);
-    form.setValue('recipient.phone', phone ?? '');
+    const options = { shouldValidate: form.formState.isSubmitted };
+    form.setValue('recipient.name', name, options);
+    form.setValue('recipient.phone', phone ?? '', options);
   }
 
   function choose(contact: ContactResponse | null) {
@@ -70,18 +70,7 @@ export function OrderBuyerFields() {
 
 function BuyerSearch({ onChoose }: { onChoose: (contact: ContactResponse) => void }) {
   const [search, setSearch] = useState('');
-  const { contextTag, request } = useStoreRequest();
-  const term = search.trim();
-  const customers = useQuery({
-    queryKey: ['order-buyers', contextTag, term],
-    queryFn: ({ signal }) =>
-      request<ContactListResponse>(
-        `/contacts?${new URLSearchParams({ limit: '20', search: term })}`,
-        { signal },
-      ),
-    enabled: Boolean(contextTag && term.length >= 3),
-    retry: false,
-  });
+  const customers = useOrderBuyers(search.trim());
 
   return (
     <>
