@@ -206,7 +206,10 @@ describe('AutomationRunsService', () => {
       hasContact: async (_storeId: string, segmentId: string, contactId: string) =>
         segmentId === SEGMENT_ID && segmentMembers.includes(contactId),
     };
-    const sendPolicy = { check: async () => decision };
+    const sendPolicy = {
+      check: async () => decision,
+      checkForSend: async () => ({ decision, destination: '01711000201', at: clockNow }),
+    };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
@@ -415,6 +418,7 @@ describe('AutomationRunsService', () => {
           contactId: CONTACT_ID,
           body: `নতুন কালেকশন এসেছে\n${optOutUrl}`,
           operationKey: `run:${RUN_ID}:first`,
+          destination: '01711000201',
         },
       ]);
       expect(next).toEqual({ runId: RUN_ID, stepKey: 'end', claimedAt: now });
@@ -488,7 +492,7 @@ describe('AutomationRunsService', () => {
       expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
       expect(repository.run.lastError).toContain('The SMS provider did not answer');
       expect(repository.run.lastError).toContain('credits stay reserved');
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
     it('does not send again a step that an earlier claim handed to the provider', async () => {
@@ -501,7 +505,7 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
       expect(repository.run).toMatchObject({ status: 'failed' });
       expect(repository.run.lastError).toContain('credits stay reserved');
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
     it('fails the run with the message of a refused send', async () => {
@@ -569,7 +573,7 @@ describe('AutomationRunsService', () => {
         );
         if (status === 'failed')
           expect(repository.run.lastError).toContain('This step failed too many times in a row');
-        expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+        expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
         expect(ledger).toEqual([{ key, kind: 'reserve', quantity: 1 }]);
         expect(balance).toBe(9);
       },

@@ -13,6 +13,7 @@ export type OutgoingMessage = {
   contactId: string;
   body: string;
   operationKey: string;
+  destination?: string | null;
 };
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
@@ -33,6 +34,8 @@ export class MessagingService {
     const contact = await this.contactsService.getById(storeId, message.contactId, {
       seeFullPhone: true,
     });
+    if (message.destination !== undefined && contact.phone !== message.destination)
+      throw messagingError('MESSAGING_DESTINATION_CHANGED');
     if (!contact.phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
     const parts = countSmsParts(message.body);
     const sender = await this.smsSenders.approvedSenderName(storeId);

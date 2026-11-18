@@ -6,6 +6,7 @@ import type { SendingSettings } from '@dakly/contracts/stores';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { StoresService } from '../stores/stores.service';
@@ -50,10 +51,25 @@ export class SendPolicyService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(SendingRepository) private readonly repository: SendingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
+  // Freeze the destination from the eligibility read and take the cap time after the lock.
+  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+    this.requireTransaction();
+    await this.repository.lockContact(storeId, request.contactId);
+    const at = this.clock.now();
+    const [checked] = await this.checkAudience(storeId, {
+      contactIds: [request.contactId],
+      channel: request.channel,
+      category: request.category,
+      at,
+    });
+    return { decision: checked!.decision, destination: checked!.phone, at };
+  }
+
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
-    this.requireTransactionForMarketing(request.category);
+    if (request.category === 'marketing') this.requireTransaction();
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =
       contact && request.category === 'marketing'
@@ -101,8 +117,8 @@ export class SendPolicyService {
   }
 
   // The cap lock must last until the caller marks the message sending and commits.
-  private requireTransactionForMarketing(category: SendCategory): void {
-    if (category === 'marketing' && !this.transaction.isOpen())
+  private requireTransaction(): void {
+    if (!this.transaction.isOpen())
       throw new AppError('STORE_TRANSACTION_REQUIRED', PLATFORM_ERRORS.STORE_TRANSACTION_REQUIRED);
   }
 

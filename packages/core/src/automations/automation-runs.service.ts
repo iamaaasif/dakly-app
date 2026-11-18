@@ -16,7 +16,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
-import { type SendDecision, SendPolicyService } from '../sending/send-policy.service';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import {
@@ -260,24 +260,33 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
-      const decision: SendDecision = step.channels.includes('sms')
-        ? await this.sendPolicy.check(storeId, {
-            contactId,
-            channel: 'sms',
-            category: step.category,
-            at: now,
-          })
-        : { action: 'skip', reason: 'window_closed' };
+      if (!step.channels.includes('sms'))
+        return { decision: { action: 'skip', reason: 'window_closed' } };
+      const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
+        contactId,
+        channel: 'sms',
+        category: step.category,
+      });
       if (decision.action !== 'send') return { decision };
-      const body = await this.writeSend({ storeId, claim, contactId, step }, now);
+      const body = await this.writeSend({ storeId, claim, contactId, step }, at);
       if (body === undefined) return { decision: noCredits };
-      return { decision, body };
+      return { decision, body, destination, at };
     });
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
     const { decision } = started;
     if ('body' in started)
-      return this.deliver({ storeId, claim: renewed, contactId, step, body: started.body }, now);
+      return this.deliver(
+        {
+          storeId,
+          claim: renewed,
+          contactId,
+          step,
+          body: started.body,
+          destination: started.destination,
+        },
+        started.at,
+      );
     if (decision.action === 'defer')
       return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
     if (decision.action === 'skip')
@@ -297,7 +306,7 @@ export class AutomationRunsService {
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
-    { storeId, claim, contactId, step }: Omit<Delivery, 'body'>,
+    { storeId, claim, contactId, step }: Omit<Delivery, 'body' | 'destination'>,
     now: Date,
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
@@ -365,7 +374,7 @@ export class AutomationRunsService {
 
   // Called with no transaction open, with the operation key the provider deduplicates on.
   private async deliver(
-    { storeId, claim, contactId, step, body }: Delivery,
+    { storeId, claim, contactId, step, body, destination }: Delivery,
     now: Date,
   ): Promise<StepResult> {
     try {
@@ -374,6 +383,7 @@ export class AutomationRunsService {
         contactId,
         body,
         operationKey: operationKey(claim),
+        destination,
       } as const;
       const { providerMessageId, credits } = await this.messaging.send(storeId, message);
       return {
