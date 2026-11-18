@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 
-import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
+import type { AutomationExitReason } from '@dakly/contracts/automations';
+import type { AutomationStep, AutomationGraph } from '@dakly/contracts/automations/graph';
 
-import type { ContactsService } from '../contacts/contacts.service';
+import type { TagChange } from '../contacts/contacts.service';
+import type { PreparedSmsSender } from '../messaging/messaging.service';
+import { DAY_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
@@ -15,11 +18,14 @@ import type {
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 
-export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 export type Condition = AutomationGraph['workflowFilters'][number];
-type ExitCondition = AutomationGraph['exitConditions'][number];
+export type PathChoice = { outcome: string; next: string };
+
+export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
 export type RunFacts = {
+  preparedSender?: PreparedSmsSender;
+  graph: AutomationGraph;
   storeId: string;
   runId: string;
   contactId: string;
@@ -27,8 +33,8 @@ export type RunFacts = {
   tappedStepKeys: string[];
   wakeAt: Date | null;
 };
-export type PathChoice = { outcome: string; next: string };
 export type Delivery = {
+  preparedSender?: PreparedSmsSender;
   storeId: string;
   claim: RunClaim;
   contactId: string;
@@ -41,8 +47,10 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
+  | { outcome: 'late' }
+  | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }
-  | { decision: { action: 'send' }; body: string; destination: string | null };
+  | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -53,38 +61,12 @@ export type StepResult = {
   claim?: RunClaim;
   step?: NewRunStep;
   stepChange?: RunStepChange;
-  tagChange?: Parameters<ContactsService['changeTag']>[2];
+  tagChange?: TagChange;
   next?: Omit<RunClaim, 'runId'>;
 };
 
-// Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
-// publish refuses them. The tag change is written with the step, under the claim.
-export function runAction(
-  stepKey: string,
-  { action, next }: Extract<AutomationStep, { kind: 'action' }>,
-  now: Date,
-): StepResult {
-  if (action.action !== 'add_tag' && action.action !== 'remove_tag')
-    return failed('This action is not available yet', now);
-  const change = action.action === 'add_tag' ? 'add' : 'remove';
-  return {
-    ...goOn(next, now),
-    step: { stepKey, kind: 'action', outcome: 'done' },
-    tagChange: { tag: action.tag, change },
-  };
-}
-
-// Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish
-// refuses the tap exit until taps on workflow messages are recorded. Tags carry no time, so a tag
-// the person already had counts as got.
-export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
-  if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
-  if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
-  return false;
-}
-
-// Short balance (feature 09): the step is skipped as no_credits and "if not reachable" applies.
-// Pausing the workflow or failing the run instead would change only this case.
+// This intermediate part skips a short balance; the balance-pause part replaces it.
+// Costs, retries and balance pause must merge together before any deploy.
 export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
 
 export function operationKey({ runId, stepKey }: RunClaim) {
@@ -100,7 +82,8 @@ export function ifNotReachable(step: SendStep, now: Date) {
 }
 
 // The step was handed to the provider and no answer came; it may have been sent. Its credits stay
-// reserved until a reconciliation settles it (ACC-14 brings provider status reports).
+// reserved until a reconciliation settles it (ACC-14 brings provider status reports), and it is
+// not sent again.
 export const UNKNOWN_OUTCOME =
   'The SMS provider did not confirm this message, so its credits stay reserved until it is checked';
 
@@ -129,23 +112,15 @@ export function holdOrEnd(run: ClaimedRun, now: Date): StepResult | undefined {
   return undefined;
 }
 
-export function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
-  return (
-    run.status === 'running' &&
-    run.currentStepKey === claim.stepKey &&
-    run.claimedAt?.getTime() === claim.claimedAt.getTime()
-  );
-}
-
 // The next step's job takes over the claim with a fresh time, which also renews the lease.
 export function goOn(next: string, now: Date) {
   return {
-    run: { status: 'running', currentStepKey: next, claimedAt: now },
+    run: { status: 'running', currentStepKey: next, claimedAt: now, wakeAt: now },
     next: { stepKey: next, claimedAt: now },
   } as const;
 }
 
-export function exited(exitReason: string, now: Date) {
+export function exited(exitReason: AutomationExitReason, now: Date) {
   return { run: { status: 'exited', exitReason, finishedAt: now } } as const;
 }
 
@@ -164,4 +139,53 @@ export function randomPath(
   let upTo = 0;
   const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
   return { outcome: `path_${index + 1}`, next: paths[index]!.next };
+}
+
+// Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
+// publish refuses them. The tag change is written with the step, under the claim.
+export function runAction(
+  stepKey: string,
+  { action, next }: Extract<AutomationStep, { kind: 'action' }>,
+  now: Date,
+): StepResult {
+  if (action.action !== 'add_tag' && action.action !== 'remove_tag')
+    return failed('This action is not available yet', now);
+  const change = action.action === 'add_tag' ? 'add' : 'remove';
+  return {
+    ...goOn(next, now),
+    step: { stepKey, kind: 'action', outcome: 'done' },
+    tagChange: { tag: action.tag, change },
+  };
+}
+
+export function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
+  return (
+    run.status === 'running' &&
+    run.currentStepKey === claim.stepKey &&
+    run.claimedAt?.getTime() === claim.claimedAt.getTime()
+  );
+}
+
+type ExitCondition = AutomationGraph['exitConditions'][number];
+
+// Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish
+// refuses the tap exit until taps on workflow messages are recorded. Tags carry no time, so a tag
+// the person already had counts as got.
+export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
+  if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
+  if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
+  return false;
+}
+
+export function isLateSend(wakeAt: Date | null, now: Date): boolean {
+  return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
+}
+
+export function shouldPrepareSender(step: AutomationStep, wakeAt: Date | null, now: Date): boolean {
+  return (
+    step.kind === 'send' &&
+    step.channels.includes('sms') &&
+    !step.reviewBeforeSending &&
+    !isLateSend(wakeAt, now)
+  );
 }

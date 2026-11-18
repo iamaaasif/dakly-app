@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
 import type { AutomationStep } from '@dakly/contracts/automations/graph';
 import { countSmsParts } from '@dakly/contracts/sms';
 
@@ -13,7 +14,7 @@ import { AppError } from '../platform/errors/app-error';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { serializeError } from '../platform/logging/safe-error';
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../platform/time';
-import { type SendDecision, SendPolicyService } from '../sending/send-policy.service';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationConditionsService } from './automation-conditions.service';
@@ -35,11 +36,13 @@ import {
   holdOrEnd,
   holdsClaim,
   ifNotReachable,
+  isLateSend,
   messageBody,
   noCredits,
   operationKey,
   randomPath,
   runAction,
+  shouldPrepareSender,
   type RunFacts,
   type SendStep,
   type StepResult,
@@ -82,7 +85,11 @@ export class AutomationRunsService {
   }
 
   // Returns the claim on the next step when the run goes straight on, for its job to queue.
-  async continueRun(storeId: string, queued: RunClaim): Promise<RunClaim | undefined> {
+  async continueRun(
+    storeId: string,
+    queued: RunClaim,
+    actor: AuditEntry['actor'],
+  ): Promise<RunClaim | undefined> {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
@@ -101,7 +108,7 @@ export class AutomationRunsService {
       if (result.stepChange)
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
-        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, system);
+        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
       if (result.credits) await this.settleCredits(storeId, claim, result.credits);
       return true;
     });
@@ -130,6 +137,7 @@ export class AutomationRunsService {
         now,
       );
     const facts: RunFacts = {
+      graph: run.graph,
       storeId,
       runId: claim.runId,
       contactId: run.contactId,
@@ -139,6 +147,8 @@ export class AutomationRunsService {
     };
     const exitReason = await this.conditions.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
+    if (shouldPrepareSender(step, facts.wakeAt, this.clock.now()))
+      facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
   }
 
@@ -179,6 +189,8 @@ export class AutomationRunsService {
         };
       }
       case 'send':
+        if (step.reviewBeforeSending)
+          return failed('Review before sending is not available yet', now);
         return this.startSend(claim, step, facts, now);
       case 'action':
         return runAction(stepKey, step, now);
@@ -200,42 +212,51 @@ export class AutomationRunsService {
     now: Date,
   ): Promise<StepResult | undefined> {
     const { storeId, contactId } = facts;
-    // Publish refuses it; a version published before that refusal still fails here.
-    if (step.reviewBeforeSending) return failed('Review before sending is not available yet', now);
     const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
-    // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
-    if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
-      return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
-    const renewed = { ...claim, claimedAt: now };
+    let renewed = claim;
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
-      // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
-      const decision: SendDecision = step.channels.includes('sms')
-        ? await this.sendPolicy.check(storeId, {
-            contactId,
-            channel: 'sms',
-            category: step.category,
-            at: now,
-          })
-        : { action: 'skip', reason: 'window_closed' };
-      if (decision.action !== 'send') return { decision };
-      const written = await this.writeSend({ storeId, claim, contactId, step }, now);
-      return written ? { decision, ...written } : { decision: noCredits };
+      renewed = { ...claim, claimedAt: now };
+      if (isLateSend(facts.wakeAt, this.clock.now())) return { outcome: 'late' };
+      const result = await this.gateSend(renewed, step, facts);
+      const claimedAt = this.clock.now();
+      // The live move holds this run row; renew after the gate's other locks and writes.
+      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
+      renewed = { ...claim, claimedAt };
+      return result;
     });
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
-    if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
-    const { decision } = started;
-    if ('body' in started) {
-      const { body, destination } = started;
-      const delivery = { storeId, claim: renewed, contactId, step, body, destination };
-      return this.deliver({ ...delivery, isFirstTry: true }, now, now);
+    if (started === 'not_live') {
+      const run = await this.repository.findRun(storeId, claim.runId);
+      const held = run && holdsClaim(run, renewed) ? holdOrEnd(run, this.clock.now()) : undefined;
+      return held && { ...held, claim: renewed };
     }
+    const gatedAt = this.clock.now();
+    if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
+    if ('outcome' in started)
+      return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
+    const { decision } = started;
+    if ('body' in started)
+      return this.deliver(
+        {
+          storeId,
+          claim: renewed,
+          contactId,
+          step,
+          body: started.body,
+          isFirstTry: true,
+          preparedSender: facts.preparedSender,
+          destination: started.destination,
+        },
+        started.at,
+        started.at,
+      );
     if (decision.action === 'defer')
       return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
     if (decision.action === 'skip')
       return {
-        ...ifNotReachable(step, now),
+        ...ifNotReachable(step, gatedAt),
         claim: renewed,
         step: { ...row, outcome: 'skipped', skipReason: decision.reason },
       };
@@ -243,6 +264,39 @@ export class AutomationRunsService {
   }
 
   // With a send row that may have reached the provider, ending the run keeps its credits.
+  private async gateSend(claim: RunClaim, step: SendStep, facts: RunFacts): Promise<GateResult> {
+    const { storeId, contactId } = facts;
+    // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
+    if (!step.channels.includes('sms'))
+      return { decision: { action: 'skip', reason: 'window_closed' } };
+    await this.wallets.lockForReservation(storeId, 'sms_credits');
+    const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
+      contactId,
+      channel: 'sms',
+      category: step.category,
+    });
+    if (
+      !(await this.repository.moveRunIfLive(storeId, claim, {
+        status: 'running',
+        claimedAt: claim.claimedAt,
+      }))
+    )
+      return 'not_live';
+    const exitReason = await this.refreshExitReason(facts, at);
+    if (exitReason) return { exitReason, at };
+    if (isLateSend(facts.wakeAt, at)) return { outcome: 'late' };
+    if (decision.action !== 'send') return { decision };
+    const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
+    if (body === undefined) return { decision: noCredits };
+    return { decision, body, destination, at };
+  }
+
+  private async refreshExitReason(facts: RunFacts, at: Date) {
+    const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
+    const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
+    return this.conditions.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
+  }
+
   private async heldOrStale(storeId: string, claim: RunClaim, now: Date, hasSendingRow = false) {
     const run = await this.repository.findRun(storeId, claim.runId);
     const held = run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
@@ -252,9 +306,9 @@ export class AutomationRunsService {
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
-    { storeId, claim, contactId, step }: Omit<Delivery, 'body' | 'destination' | 'isFirstTry'>,
+    { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body' | 'isFirstTry'>,
     now: Date,
-  ): Promise<Pick<Delivery, 'body' | 'destination'> | undefined> {
+  ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing
       ? this.links.optOutUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH))
@@ -270,9 +324,6 @@ export class AutomationRunsService {
           system,
         )
       : [];
-    // The phone is frozen with the decision; a retry refuses a contact whose phone changed since.
-    const [recipient] = await this.contacts.findRecipients(storeId, [contactId]);
-    const destination = recipient?.phone ?? null;
     await this.repository.insertStep(storeId, claim.runId, contactId, {
       stepKey: claim.stepKey,
       kind: 'send',
@@ -280,11 +331,11 @@ export class AutomationRunsService {
       id,
       outcome: 'sending',
       channel: 'sms',
-      optOutCode: optOut?.code ?? null,
-      destination,
       sentAt: now,
+      optOutCode: optOut?.code,
+      destination,
     });
-    return { body: messageBody(step, optOut?.url), destination };
+    return messageBody(step, optOut?.url);
   }
 
   // A balance that changes between the check and the write fails the transaction instead; the run
@@ -373,7 +424,7 @@ export class AutomationRunsService {
   // Called with no transaction open. The operation key makes a repeat return the first result, so
   // a retry after an unknown outcome sends once.
   private async deliver(
-    { storeId, claim, contactId, step, body, destination, isFirstTry }: Delivery,
+    { storeId, claim, contactId, step, body, destination, isFirstTry, preparedSender }: Delivery,
     firstTriedAt: Date,
     now: Date,
   ): Promise<StepResult> {
@@ -385,7 +436,11 @@ export class AutomationRunsService {
         operationKey: operationKey(claim),
         destination,
       } as const;
-      const { providerMessageId, credits } = await this.messaging.send(storeId, message);
+      const { providerMessageId, credits } = await this.messaging.send(
+        storeId,
+        message,
+        preparedSender,
+      );
       return {
         ...goOn(step.next, now),
         claim,

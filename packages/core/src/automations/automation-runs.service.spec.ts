@@ -152,7 +152,11 @@ describe('AutomationRunsService', () => {
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
-    return service.continueRun(STORE_ID, { runId, stepKey: 'first', claimedAt });
+    return service.continueRun(
+      STORE_ID,
+      { runId, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
   }
 
   beforeEach(() => {
@@ -171,6 +175,7 @@ describe('AutomationRunsService', () => {
     ledger = [];
     // Reservations by key, as the ledger keeps them; a repeated key changes nothing.
     const wallets = {
+      lockForReservation: async () => undefined,
       reserve: async (
         _storeId: string,
         { quantity, idempotencyKey }: { quantity: number; idempotencyKey: string },
@@ -222,6 +227,7 @@ describe('AutomationRunsService', () => {
     };
     const sendPolicy = {
       check: async () => decision,
+      checkForSend: async () => ({ decision, destination: contactPhone, at: clockNow }),
       recheck: async () => {
         if (recheckReason) return { action: 'skip', reason: recheckReason };
         return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
@@ -231,6 +237,7 @@ describe('AutomationRunsService', () => {
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
+      prepareSender: async () => ({ name: undefined }),
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (message.destination !== undefined && message.destination !== contactPhone)
           throw new AppError('MESSAGING_DESTINATION_CHANGED', {
@@ -362,11 +369,11 @@ describe('AutomationRunsService', () => {
     repository.run = { ...repository.run, status: 'running', claimedAt: now };
     repository.steps = [];
 
-    const next = await service.continueRun(STORE_ID, {
-      runId: RUN_ID,
-      stepKey: 'first',
-      claimedAt,
-    });
+    const next = await service.continueRun(
+      STORE_ID,
+      { runId: RUN_ID, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
 
     expect(next).toBeUndefined();
     expect(repository.run).toMatchObject({ status: 'running', claimedAt: now });
@@ -528,7 +535,11 @@ describe('AutomationRunsService', () => {
       providerError = undefined;
       clockNow = new Date(now.getTime() + 2 * 60 * 1000);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(sent.map((message) => message.body)).toEqual([`নতুন কালেকশন এসেছে\n${optOutUrl}`]);
       expect(repository.steps).toEqual([
@@ -544,7 +555,11 @@ describe('AutomationRunsService', () => {
       recheckReason = 'no_consent';
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
 
       expect(sent).toEqual([]);
       expect(repository.steps).toEqual([
@@ -565,7 +580,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date('2026-11-16T20:00:00Z');
       recheckDefer = new Date('2026-11-17T03:00:00Z');
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
       expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: recheckDefer });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
       expect(sent).toEqual([]);
@@ -573,7 +592,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date('2026-11-17T03:01:00Z');
       recheckDefer = undefined;
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(sent).toHaveLength(1);
     });
@@ -586,7 +609,11 @@ describe('AutomationRunsService', () => {
       contactPhone = '01812345678';
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
 
       expect(sent).toEqual([]);
       expect(repository.run.lastError).toContain("The contact's phone changed");
@@ -601,7 +628,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(now.getTime() + 26 * HOUR);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow, wakeAt: now };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(sent).toEqual([]);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
@@ -614,12 +645,18 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(now.getTime() + 36 * HOUR);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(repository.run).toMatchObject({
         status: 'failed',
+        currentStepKey: 'first',
         lastError: expect.stringContaining('The SMS provider did not answer for 36 hours.'),
       });
+      expect(repository.run.lastError).toContain('credits stay reserved');
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
@@ -669,7 +706,11 @@ describe('AutomationRunsService', () => {
       await start(send);
       providerError = undefined;
       repository.run = { ...repository.run, status: 'running', claimedAt: now, ...change };
-      return service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+      return service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
     }
 
     it.each([
@@ -710,7 +751,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(now.getTime() + 36 * HOUR);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(repository.run.status).toBe('failed');
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);

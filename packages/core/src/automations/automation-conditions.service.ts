@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 
 import { SegmentsService } from '../segments/segments.service';
@@ -21,7 +22,11 @@ export class AutomationConditionsService {
 
   // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
   // filters.
-  async exitReason(graph: AutomationGraph, facts: RunFacts, at: Date) {
+  async exitReason(
+    graph: AutomationGraph,
+    facts: RunFacts,
+    at: Date,
+  ): Promise<AutomationExitReason | undefined> {
     const { goal, exitConditions, workflowFilters } = graph;
     if (goal && hasHappened(goal, facts)) return 'goal';
     if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';

@@ -1,2 +1,0 @@
-ALTER TABLE "automation_run_steps" ADD COLUMN "category" text;--> statement-breakpoint
-ALTER TABLE "automation_run_steps" ADD CONSTRAINT "automation_run_steps_category" CHECK ("automation_run_steps"."category" in ('transactional', 'marketing'));

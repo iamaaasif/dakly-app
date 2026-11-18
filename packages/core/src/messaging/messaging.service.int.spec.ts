@@ -156,6 +156,41 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(sent).toMatchObject({ parts: 2, credits: 2 });
   });
 
+  it('reads the final phone after an unprepared sender lookup finishes', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Sumi Akter', phone: '01712345618' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const original = SmsSendersService.prototype.approvedSenderName;
+    vi.spyOn(SmsSendersService.prototype, 'approvedSenderName').mockImplementationOnce(
+      async function (store) {
+        const sender = await original.call(this, store);
+        await contacts.editDetails(
+          storeA,
+          contact.id,
+          { phone: '01712345619' },
+          { access: fullPhone, actor: { kind: 'system' } },
+        );
+        return sender;
+      },
+    );
+    expect(
+      await errorCode(
+        messaging.send(storeA, {
+          channel: 'sms',
+          contactId: contact.id,
+          body: 'Your order has shipped',
+          operationKey: `test-${contact.id}`,
+          destination: contact.phone,
+        }),
+      ),
+    ).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
   it('refuses before the provider a destination the contact no longer has', async () => {
     const contact = await contacts.create(
       storeA,

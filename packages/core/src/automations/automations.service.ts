@@ -233,10 +233,7 @@ const RUNNABLE_ACTIONS: readonly ActionKind[] = ['add_tag', 'remove_tag'];
 // What the runner cannot do yet: taps on workflow messages are not recorded, the review list does
 // not exist, and only tag actions have an owning service.
 function checkRunnable({ goal, exitConditions, workflowFilters, steps }: AutomationGraph) {
-  if ([goal, ...exitConditions].some((exit) => exit?.kind === 'tapped_link'))
-    throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
-      { path: 'exitConditions', message: 'A tap exit is not available yet' },
-    ]);
+  checkTapGoalsAndExits(goal, exitConditions);
   if (workflowFilters.some((filter) => filter.kind === 'tapped'))
     throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
       { path: 'workflowFilters', message: 'A tap filter is not available yet' },
@@ -259,6 +256,20 @@ function checkRunnable({ goal, exitConditions, workflowFilters, steps }: Automat
         { path, message: `${step.action.action} is not available yet` },
       ]);
   }
+}
+
+function checkTapGoalsAndExits(
+  goal: AutomationGraph['goal'],
+  exitConditions: AutomationGraph['exitConditions'],
+) {
+  if (goal?.kind === 'tapped_link')
+    throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
+      { path: 'goal', message: 'A tap goal is not available yet' },
+    ]);
+  if (exitConditions.some((exit) => exit.kind === 'tapped_link'))
+    throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
+      { path: 'exitConditions', message: 'A tap exit is not available yet' },
+    ]);
 }
 
 // Before channel connections (D40) a store has Dakly data and SMS only: a trigger ready before

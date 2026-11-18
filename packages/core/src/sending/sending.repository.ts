@@ -83,8 +83,7 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
     );
 }
 
-// A send step counts from its send time while sending, once sent, and when its outcome stayed
-// unknown (unconfirmed), as it may have reached the person; a send that provably failed does not.
+// Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
 function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
   return tx
     .select({

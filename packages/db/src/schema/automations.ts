@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import {
+  automationExitReasons,
   automationRunStatuses,
   automationStatuses,
   automationStepKinds,
@@ -123,7 +124,7 @@ export const automationRuns = pgTable(
     triggerKey: text('trigger_key').notNull(),
     currentStepKey: text('current_step_key').notNull(),
     status: text('status', { enum: automationRunStatuses }).notNull().default('waiting'),
-    exitReason: text('exit_reason'),
+    exitReason: text('exit_reason', { enum: automationExitReasons }),
     wakeAt: timestamptz('wake_at'),
     claimedAt: timestamptz('claimed_at'),
     attempts: smallint('attempts').notNull().default(0),
@@ -173,6 +174,7 @@ export const automationRuns = pgTable(
     index('automation_runs_version_id_idx').on(table.versionId),
     index('automation_runs_contact_id_idx').on(table.contactId),
     check('automation_runs_status', isOneOf(table.status, automationRunStatuses)),
+    check('automation_runs_exit_reason', isOneOf(table.exitReason, automationExitReasons)),
     check(
       'automation_runs_waiting_has_wake',
       sql`${table.status} <> 'waiting' or ${table.wakeAt} is not null`,

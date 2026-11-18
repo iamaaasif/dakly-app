@@ -27,7 +27,7 @@ export const notCustomerReasons = [
 ] as const;
 export const genders = ['female', 'male', 'other'] as const;
 export const consentChannels = ['whatsapp', 'sms', 'messenger', 'instagram', 'email'] as const;
-export const consentStatuses = ['granted', 'withdrawn'] as const;
+export const consentStatuses = ['granted', 'withdrawn', 'not_answered'] as const;
 export const consentSources = [
   'checkout',
   'chat_opt_in',
@@ -58,6 +58,7 @@ export const importStatuses = [
   'importing',
   'done',
   'failed',
+  'undone',
 ] as const;
 export const importDuplicateModes = ['update', 'skip'] as const;
 // Why staff are asked whether two contacts are one person. Only a staff merge acts on it (D27).
@@ -118,7 +119,12 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
-const importColumn = z.int().min(0).max(199);
+// A file column the mapping can name; the reader keeps no cells past this.
+export const MAX_IMPORT_COLUMNS = 200;
+const importColumn = z
+  .int()
+  .min(0)
+  .max(MAX_IMPORT_COLUMNS - 1);
 
 // The file column for each field, by position, so two columns with the same header stay apart.
 // The phone finds an existing contact, so an import never replaces it.
@@ -164,12 +170,38 @@ export const contactImportRowSchema = z.object({
   notes: optionalCell(z.string().max(2000)),
 });
 
+// Feature 03: a customer file is at most 10 MB.
+export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+
+export const createImportSchema = z.strictObject({
+  sizeBytes: z.int().min(1).max(MAX_IMPORT_FILE_BYTES),
+});
+
+// CUS-R4 and D42: the shop states where consent came from, per channel, for every row in the file.
+// A channel it does not name gets no consent.
+const consentEvidence = z.string().trim().min(1).max(500);
+export const importConsentEvidenceSchema = z.strictObject({
+  sms: consentEvidence.optional(),
+  whatsapp: consentEvidence.optional(),
+});
+
+export const startImportSchema = z.strictObject({
+  mapping: contactImportMappingSchema,
+  duplicateMode: z.enum(importDuplicateModes),
+  consentEvidence: importConsentEvidenceSchema,
+});
+
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
 export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
 export type ContactImportMapping = z.infer<typeof contactImportMappingSchema>;
 export type ContactImportRow = z.infer<typeof contactImportRowSchema>;
 export type ContactImportField = keyof ContactImportRow;
+export type CreateImportInput = z.infer<typeof createImportSchema>;
+export type StartImportInput = z.infer<typeof startImportSchema>;
+export type ImportConsentEvidence = z.infer<typeof importConsentEvidenceSchema>;
+export type ImportStatus = (typeof importStatuses)[number];
+export type ImportDuplicateMode = (typeof importDuplicateModes)[number];
 export type ContactKind = (typeof contactKinds)[number];
 export type ContactSource = (typeof contactSources)[number];
 
@@ -180,6 +212,21 @@ export type ContactResponse = {
   kind: ContactKind;
   tags: string[];
   createdAt: string;
+};
+
+export type ImportUploadResponse = { importId: string; uploadUrl: string };
+
+export type ImportResponse = {
+  id: string;
+  status: ImportStatus;
+  undoFinishedAt: string | null;
+  rowsTotal: number | null;
+  rowsAdded: number | null;
+  rowsUpdated: number | null;
+  rowsSkipped: number | null;
+  rowsFailed: number | null;
+  // A link to the CSV of row errors, valid for 15 minutes; null when nothing went wrong.
+  reportUrl: string | null;
 };
 
 export type ContactIdentityResponse = {
@@ -200,7 +247,7 @@ export type ConsentSource = (typeof consentSources)[number];
 // is not offered until email campaigns ship (D20).
 export const recordConsentSchema = z.object({
   channel: z.enum(consentChannels).exclude(['email']),
-  status: z.enum(consentStatuses),
+  status: z.enum(consentStatuses).exclude(['not_answered']),
   note: z.string().trim().min(1).max(500),
 });
 

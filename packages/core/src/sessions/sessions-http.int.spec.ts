@@ -270,6 +270,8 @@ describe('Session boundary over Fastify and Postgres', () => {
       name: 'Rina shop',
       canViewCustomers: true,
       canCreateCustomer: false,
+      canViewProducts: true,
+      canEditProducts: false,
       canViewSegments: true,
       canEditSegments: false,
       canApproveSupport: false,
@@ -453,6 +455,41 @@ describe('Session boundary over Fastify and Postgres', () => {
         .update(memberships)
         .set({ builtInRole: 'support_agent' })
         .where(eq(memberships.storeId, storeId));
+    }
+  });
+  it('derives live product view and edit capabilities from the current role', async () => {
+    const [role] = await admin.db
+      .insert(roles)
+      .values({
+        storeId,
+        name: 'Product context',
+        permissions: {},
+      })
+      .returning({ id: roles.id });
+    await admin.db
+      .update(memberships)
+      .set({ builtInRole: null, roleId: role!.id })
+      .where(eq(memberships.storeId, storeId));
+    try {
+      for (const level of ['none', 'view', 'edit'] as const) {
+        await admin.db
+          .update(roles)
+          .set({ permissions: { products: level } })
+          .where(eq(roles.id, role!.id));
+        const context = (
+          await app.inject({ url: '/me/context', headers: { cookie: cookie() } })
+        ).json();
+        expect(context.currentStore).toMatchObject({
+          canViewProducts: level !== 'none',
+          canEditProducts: level === 'edit',
+        });
+      }
+    } finally {
+      await admin.db
+        .update(memberships)
+        .set({ builtInRole: 'support_agent', roleId: null })
+        .where(eq(memberships.storeId, storeId));
+      await admin.db.delete(roles).where(eq(roles.id, role!.id));
     }
   });
   it('derives Team capabilities from fresh custom grants without granting ownership', async () => {
