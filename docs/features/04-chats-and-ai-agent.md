@@ -331,6 +331,22 @@ Local development can select `LLM_DRIVER=fake` and supply scripted responses.
 Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
 `OPENAI_API_KEY`. Tests use saved Responses API fixtures and make no network calls.
 
+### Shared AI service
+
+Features pass a tier, versioned prompt, output schema, and usage reference to
+`AiService`. Reply, vision and writer use GPT-6.1 Terra by default. Fast uses
+GPT-6 Luna. Config can change each tier and prices per million input, cached
+input and output tokens. The defaults follow [OpenAI's standard prices](https://developers.openai.com/api/docs/pricing).
+
+Each model attempt records its token counts, cost in micro-USD, latency and
+outcome in `ai_runs`. A schema mismatch gets one retry within the call's
+20-second budget. Both attempts share one allowance charge. The service
+returns the parsed output, tool calls or a typed failure.
+
+Valkey allows up to three calls at a time per store. Three provider errors
+within one minute pause new calls for two minutes across stores. Customer
+refusals and caller cancellations do not count as provider errors.
+
 ### Rules
 
 1. The AI may reply and draft orders without approval while auto-reply is on (D7). Every AI message is labelled AI.
