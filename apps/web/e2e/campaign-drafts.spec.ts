@@ -186,7 +186,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     );
     await name.fill('A change after approval');
     await page.getByRole('button', { name: 'Save draft' }).click();
-    expect(await (await conflict).json()).toMatchObject({ code: 'CAMPAIGN_NOT_DRAFT' });
+    expect(await (await conflict).json()).toMatchObject({ error: { code: 'CAMPAIGN_NOT_DRAFT' } });
     await expect(page.getByRole('region', { name: 'Saved campaign' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
 
