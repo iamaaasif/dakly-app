@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
-import { productsSearch, useProducts } from '../api/products';
+import { productsSearch, useProducts } from '@/lib/product-queries';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
