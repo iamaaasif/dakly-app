@@ -42,14 +42,12 @@ export function useSaveCampaign() {
       const detail = campaignKeys.detail(contextTag, saved.id);
       await client.cancelQueries({ queryKey: detail, exact: true });
       const current = getCachedCampaign(saved.id);
-      if (current?.status === 'draft' && current !== snapshot?.before) {
-        // The overlapping read could precede or follow the commit. Load the current draft
-        // before showing a saved state. A failed refresh leaves the detail available to retry.
-        await client.invalidateQueries({ queryKey: detail, exact: true });
-      } else if (
-        current === snapshot?.before &&
-        (current === undefined || current?.status === 'draft')
-      ) {
+      if (current !== snapshot?.before) {
+        // An overlapping read could precede or follow the commit. Let the active detail
+        // finish refreshing before the form reports success.
+        if (current?.status === 'draft')
+          await client.invalidateQueries({ queryKey: detail, exact: true });
+      } else if (current === undefined || current?.status === 'draft') {
         client.setQueryData(detail, saved);
         if ('id' in change) void client.invalidateQueries({ queryKey: detail, exact: true });
       }
