@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 
-import { campaignsKey } from './campaigns-key';
+import { campaignKeys } from './campaigns-key';
 import { useSaveCampaign } from './save-campaign';
 import { sessionContextKey } from '@/lib/session-context';
 
@@ -34,7 +34,7 @@ it('keeps a saved campaign when an earlier detail request returns afterward', as
   };
   const saved = { ...original, name: 'Updated name' };
   const client = new QueryClient();
-  const queryKey = [...campaignsKey, contextTag, 'detail', id];
+  const queryKey = campaignKeys.detail(contextTag, id);
   client.setQueryData(sessionContextKey, { contextTag, currentStore: { id: 'shop' } });
   client.setQueryData(queryKey, original);
   vi.stubGlobal('fetch', async () =>

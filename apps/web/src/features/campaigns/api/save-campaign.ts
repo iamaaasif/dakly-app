@@ -6,7 +6,7 @@ import type {
   CreateCampaignInput,
 } from '@dakly/contracts/campaigns';
 
-import { campaignsKey } from './campaigns-key';
+import { campaignKeys } from './campaigns-key';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useSaveCampaign() {
@@ -23,10 +23,10 @@ export function useSaveCampaign() {
           })
         : request<CampaignResponse>('/campaigns', { method: 'POST', body: change.input }),
     onSuccess: async (saved) => {
-      const detail = [...campaignsKey, contextTag, 'detail', saved.id];
+      const detail = campaignKeys.detail(contextTag, saved.id);
       await client.cancelQueries({ queryKey: detail, exact: true });
       client.setQueryData(detail, saved);
-      return client.invalidateQueries({ queryKey: [...campaignsKey, contextTag, 'list'] });
+      return client.invalidateQueries({ queryKey: campaignKeys.list(contextTag) });
     },
   });
 }
