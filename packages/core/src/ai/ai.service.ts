@@ -28,14 +28,6 @@ type GateFailure =
   'AI_PAUSED' | 'AI_STORE_BUSY' | 'USAGE_ALLOWANCE_EXCEEDED' | 'LLM_ABORTED' | 'LLM_TIMEOUT';
 type AiResult<T> = AiAttempt<T> | { kind: 'failure'; code: GateFailure };
 
-const providerFailures = new Set([
-  'LLM_TIMEOUT',
-  'LLM_RATE_LIMITED',
-  'LLM_UNAVAILABLE',
-  'LLM_REQUEST_FAILED',
-  'LLM_INVALID_RESPONSE',
-]);
-
 @Injectable()
 export class AiService {
   constructor(
@@ -73,9 +65,9 @@ export class AiService {
     request: AiRequest<T>,
     deadline: number,
   ): Promise<AiResult<T>> {
+    if (await this.gate.isPaused()) return { kind: 'failure', code: 'AI_PAUSED' };
     const firstTimeout = deadline - this.clock.now().getTime();
     if (firstTimeout <= 0) return { kind: 'failure', code: 'LLM_TIMEOUT' };
-    if (request.signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
     const first = await this.attempt(storeId, request, firstTimeout);
     if (first.kind !== 'failure' || first.code !== 'AI_OUTPUT_MISMATCH') return first;
     if (await this.gate.isPaused()) return first;
@@ -90,7 +82,7 @@ export class AiService {
     timeoutMs: number,
   ): Promise<AiAttempt<T>> {
     const model = this.config.models[request.tier];
-    const result = await this.runs.attempt(
+    return this.runs.attempt(
       storeId,
       {
         model,
@@ -108,8 +100,5 @@ export class AiService {
         price: Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
       },
     );
-    if (result.kind === 'failure' && providerFailures.has(result.code))
-      await this.gate.recordFailure(result.aiRunId);
-    return result;
   }
 }

@@ -10,6 +10,7 @@ import {
 } from '@dakly/providers/llm/llm-driver';
 
 import { Clock } from '../platform/clock';
+import { AiGate } from './ai-gate';
 import { AiRunsRepository, type AiRun } from './ai-runs.repository';
 import { LLM_DRIVER, type AiConfig } from './ai.config';
 
@@ -22,6 +23,14 @@ type AttemptResult<T> =
   | { kind: 'failure'; code: AttemptFailureCode };
 export type AiAttempt<T> = AttemptResult<T> & { aiRunId: string };
 
+const providerFailures = new Set<LlmErrorCode>([
+  'LLM_TIMEOUT',
+  'LLM_RATE_LIMITED',
+  'LLM_UNAVAILABLE',
+  'LLM_REQUEST_FAILED',
+  'LLM_INVALID_RESPONSE',
+]);
+
 const emptyUsage = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
 type Price = AiConfig['prices'][string];
 type RunContext = Pick<AiRun, 'tier' | 'purpose' | 'promptVersion'> & { price?: Price };
@@ -32,6 +41,7 @@ export class AiRunsService {
     @Inject(LLM_DRIVER) private readonly driver: LlmDriver,
     @Inject(AiRunsRepository) private readonly repository: AiRunsRepository,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(AiGate) private readonly gate: AiGate,
   ) {}
 
   async attempt<T>(
@@ -66,6 +76,7 @@ export class AiRunsService {
       model = await this.driver.respond(request);
     } catch (error) {
       const failure = error instanceof LlmError ? error : new LlmError('LLM_REQUEST_FAILED');
+      if (providerFailures.has(failure.code)) await this.gate.recordFailure();
       return {
         result: { kind: 'failure', code: failure.code },
         usage: failure.usage ?? emptyUsage,

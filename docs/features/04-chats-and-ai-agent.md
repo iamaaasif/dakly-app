@@ -340,7 +340,7 @@ input and output tokens. The defaults follow [OpenAI's standard prices](https://
 
 Each model attempt records its token counts, cost in micro-USD, latency and
 outcome in `ai_runs`. A schema mismatch gets one retry within the call's
-20-second budget. Both attempts share one allowance charge. The service
+20-second model budget. Both attempts share one allowance charge. The service
 returns the parsed output, tool calls or a typed failure.
 
 Valkey allows up to three calls at a time per store. Three provider errors
