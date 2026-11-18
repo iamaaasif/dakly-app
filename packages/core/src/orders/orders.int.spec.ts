@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { OrdersModule } from './orders.module';
 import { OrdersService } from './orders.service';
@@ -88,6 +89,11 @@ describe('OrdersService', () => {
     });
     expect(next.items.map(({ number }) => number)).toEqual([1001]);
     expect(next.nextCursor).toBeNull();
+    expect(await service.list(fixture.a, { stage: 'to_confirm', limit: 1, cursor: 1001 })).toEqual({
+      items: [],
+      counts: page.counts,
+      nextCursor: null,
+    });
   });
 
   it('reads the recipient snapshot separately from the buyer and hides a foreign order', async () => {
@@ -157,6 +163,74 @@ describe('OrdersService', () => {
       'order.confirmed',
       'order.stage_changed',
     ]);
+  });
+
+  it('keeps the stage timeline in transition order when the clock moves backwards', async () => {
+    const id = await order(fixture.a, 1009, 'to_confirm');
+    const editor = { access, actor: { kind: 'user', userId: fixture.userA } } as const;
+    const now = vi.spyOn(Clock.prototype, 'now').mockReturnValue(new Date('2026-11-18T06:00:00Z'));
+    try {
+      await service.changeStage(fixture.a, id, { to: 'on_hold', reason: 'pre_order' }, editor);
+      now.mockReturnValue(new Date('2026-11-18T05:59:59Z'));
+      const updated = await service.changeStage(fixture.a, id, { to: 'to_pack' }, editor);
+      expect(updated.timeline.map(({ to }) => to)).toEqual(['on_hold', 'to_pack']);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('releases a reservation once when two staff members cancel together', async () => {
+    const id = await order(fixture.a, 1010, 'to_confirm');
+    const variantId = await trackedItem(id, 1);
+    const cancel = () =>
+      service.changeStage(
+        fixture.a,
+        id,
+        { to: 'cancelled', reason: 'duplicate' },
+        { actor: { kind: 'user', userId: fixture.userA }, access },
+      );
+    const results = await Promise.allSettled([cancel(), cancel()]);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: 'fulfilled',
+          value: expect.objectContaining({ stage: 'cancelled' }),
+        }),
+        expect.objectContaining({
+          status: 'rejected',
+          reason: expect.objectContaining({ code: 'ORDER_STAGE_NOT_ALLOWED' }),
+        }),
+      ]),
+    );
+    expect(await fixture.row('product_variants', variantId)).toMatchObject({
+      reserved: 0,
+      on_hand: 1,
+    });
+  });
+
+  it('releases the order reservation if tracking was turned off after the order', async () => {
+    const id = await order(fixture.a, 1008, 'to_confirm');
+    const variantId = await trackedItem(id, 1);
+    await fixture.connection.pool.query(
+      `update products set is_stock_tracked=false
+       where id=(select product_id from product_variants where id=$1)`,
+      [variantId],
+    );
+
+    await service.changeStage(
+      fixture.a,
+      id,
+      { to: 'cancelled', reason: 'duplicate' },
+      {
+        actor: { kind: 'user', userId: fixture.userA },
+        access,
+      },
+    );
+
+    expect(await fixture.row('product_variants', variantId)).toMatchObject({
+      reserved: 0,
+      on_hand: 1,
+    });
   });
 
   it('rolls back earlier stock releases when a later line cannot release', async () => {

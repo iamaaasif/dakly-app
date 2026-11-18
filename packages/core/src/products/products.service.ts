@@ -119,8 +119,9 @@ export class ProductsService {
     return this.transaction.run(storeId, async () => {
       const variant = await this.repository.findStockVariant(storeId, variantId);
       if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
-      if (!variant.isStockTracked) return;
       const { kind, quantity } = input;
+      // An existing order must release its reservation even when tracking is now off.
+      if (!variant.isStockTracked && !(kind === 'release' && input.reference.orderId)) return;
       if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
         throw productError('STOCK_QUANTITY_INVALID');
       const change = {

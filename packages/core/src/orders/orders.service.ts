@@ -34,14 +34,15 @@ export class OrdersService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
-    return this.transaction.run(storeId, async () => {
-      const rows = await this.repository.list(storeId, query);
-      const items = rows.slice(0, query.limit).map((row) => ({
-        ...row,
-        createdAt: row.createdAt.toISOString(),
-      }));
-      const counts = {
+  async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
+    const { items: rows, counts } = await this.repository.list(storeId, query);
+    const items = rows.slice(0, query.limit).map((row) => ({
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+    }));
+    return {
+      items,
+      counts: {
         to_confirm: 0,
         on_hold: 0,
         to_pack: 0,
@@ -50,14 +51,10 @@ export class OrdersService {
         partially_delivered: 0,
         returned: 0,
         cancelled: 0,
-      };
-      for (const row of await this.repository.countByStage(storeId)) counts[row.stage] = row.count;
-      return {
-        items,
-        counts,
-        nextCursor: rows.length > query.limit ? (items.at(-1)?.number ?? null) : null,
-      };
-    });
+        ...counts,
+      },
+      nextCursor: rows.length > query.limit ? (items.at(-1)?.number ?? null) : null,
+    };
   }
 
   getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
@@ -92,7 +89,8 @@ export class OrdersService {
       )
         throw orderError('ORDER_STAGE_NOT_ALLOWED');
 
-      const now = this.clock.now();
+      // Keep the audit timeline in transition order when clocks tie or drift.
+      const now = new Date(Math.max(this.clock.now().getTime(), order.updatedAt.getTime() + 1));
       const confirmed = change.to === 'to_pack' && !order.confirmedAt;
       if (change.to === 'cancelled') {
         await this.releaseReservations(storeId, orderId, change.reason, actor);
