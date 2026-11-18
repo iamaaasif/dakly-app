@@ -26,7 +26,13 @@ export function OrderDetails({ order }: { order: OrderDetail }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Badge ref={stage} tabIndex={-1} role="status" aria-label="Order stage">
+        <Badge
+          ref={stage}
+          tabIndex={-1}
+          role="status"
+          aria-label="Order stage"
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
           {orderStageLabels[order.stage]}
         </Badge>
         {canConfirm ? (
@@ -110,7 +116,7 @@ function BuyerDetails({ order }: { order: OrderDetail }) {
       Buyer {order.buyerName ?? 'Unnamed customer'}{' '}
       {canOpenBuyer && (
         <Link
-          className="inline-flex min-h-10 min-w-10 items-center text-action underline"
+          className="inline-flex min-h-10 min-w-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           href={`/customers/${order.buyerContactId}`}
         >
           Open profile

@@ -28,7 +28,11 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
     <StorePage permission="canViewOrders">
       <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
         <header>
-          <h1 ref={heading} tabIndex={-1} className="text-xl font-bold">
+          <h1
+            ref={heading}
+            tabIndex={-1}
+            className="text-xl font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
             Orders
           </h1>
           <p className="mt-1 text-text-muted">Follow each order from confirmation to delivery.</p>

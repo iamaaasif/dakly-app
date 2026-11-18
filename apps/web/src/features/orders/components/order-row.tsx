@@ -33,7 +33,7 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link
             href={href}
-            className="inline-flex min-h-10 max-w-full min-w-10 items-center font-semibold wrap-anywhere hover:underline"
+            className="inline-flex min-h-10 max-w-full min-w-10 items-center font-semibold wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             {order.recipientName}
           </Link>
@@ -54,7 +54,7 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
       <Link
         href={href}
         aria-label={`${canConfirm ? 'Confirm' : 'Details for'} order #${order.number}`}
-        className="col-start-2 inline-flex min-h-10 w-fit items-center rounded-md bg-inverse px-3 font-medium text-on-primary hover:underline md:col-start-auto"
+        className="col-start-2 inline-flex min-h-10 w-fit items-center rounded-md bg-inverse px-3 font-medium text-on-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:col-start-auto"
       >
         {canConfirm ? 'Confirm' : 'Details'}
       </Link>
