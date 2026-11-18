@@ -15,19 +15,17 @@ export default async function CampaignsPage({
   const { pageShop, ...filters } = await searchParams;
   const query = campaignListQuerySchema.safeParse(filters);
   const cursorShop = typeof pageShop === 'string' ? pageShop : undefined;
-  return (
+  return query.success ? (
+    <CampaignsScreen query={query.data} cursorShop={cursorShop} />
+  ) : (
     <StorePage permission="canViewCampaigns">
-      {query.success ? (
-        <CampaignsScreen query={query.data} cursorShop={cursorShop} />
-      ) : (
-        <p role="alert" className="p-6">
-          The campaign filters are invalid.{' '}
-          <Link href="/campaigns" className="text-action underline">
-            Open all campaigns
-          </Link>
-          .
-        </p>
-      )}
+      <p role="alert" className="p-6">
+        The campaign filters are invalid.{' '}
+        <Link href="/campaigns" className="text-action underline">
+          Open all campaigns
+        </Link>
+        .
+      </p>
     </StorePage>
   );
 }

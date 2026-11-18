@@ -12,6 +12,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { campaignListHref, useCampaigns } from '../api/campaigns';
 import { CampaignFilters } from './campaign-filters';
 import { CampaignTable } from './campaign-table';
+import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
 
 export function CampaignsScreen({
@@ -32,24 +33,26 @@ export function CampaignsScreen({
     if (shopId && staleCursor) router.replace(filters);
   }, [filters, router, shopId, staleCursor]);
   return (
-    <main className="space-y-6 p-6 md:p-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold">Campaigns</h1>
-          <p className="mt-2 text-text-muted">Send a message to a group of customers.</p>
-        </div>
-        {session?.currentStore?.canEditCampaigns && (
-          <Link
-            href="/campaigns/new"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover"
-          >
-            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create campaign
-          </Link>
-        )}
-      </header>
-      <CampaignFilters key={`${session?.contextTag ?? ''}/${filters}`} query={query} />
-      <CampaignListState query={query} campaigns={campaigns} shopId={shopId} />
-    </main>
+    <StorePage permission="canViewCampaigns">
+      <main className="space-y-6 p-6 md:p-8">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold">Campaigns</h1>
+            <p className="mt-2 text-text-muted">Send a message to a group of customers.</p>
+          </div>
+          {session?.currentStore?.canEditCampaigns && (
+            <Link
+              href="/campaigns/new"
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover"
+            >
+              <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create campaign
+            </Link>
+          )}
+        </header>
+        <CampaignFilters key={`${session?.contextTag ?? ''}/${filters}`} query={query} />
+        <CampaignListState query={query} campaigns={campaigns} shopId={shopId} />
+      </main>
+    </StorePage>
   );
 }
 
