@@ -48,6 +48,10 @@ export class LlmError extends Error {
   }
 }
 
+export type LlmEmbeddingRequest = Pick<LlmRequest, 'model' | 'input' | 'timeoutMs' | 'signal'>;
+export type LlmEmbedding = { model: string; embedding: number[]; usage: LlmUsage };
+
 export type LlmDriver = {
+  embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding>;
   respond(request: LlmRequest): Promise<LlmResult>;
 };

@@ -405,6 +405,95 @@ fixture('GET /areas', async () => {
     nameBn: 'সাভার',
   });
 });
+async function knowledgeItem(shop: Shop, answer: string) {
+  return (await success(shop, 'POST', '/knowledge-items', 201, { kind: 'policy', answer })).json()
+    .id as string;
+}
+fixture('POST /knowledge-items', async () => {
+  const { a, b } = await pair();
+  const foreign = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+  const before = await f.row('knowledge_items', foreign);
+  const own = await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।');
+  expect((await f.row('knowledge_items', own)).store_id).toBe(b.id);
+  expect(await f.row('knowledge_items', foreign)).toEqual(before);
+  expect(
+    (
+      await f.request(b.member, 'POST', '/knowledge-items', {
+        kind: 'policy',
+        answer: 'বন্ধের সময় রাত আটটা।',
+      })
+    ).statusCode,
+  ).toBe(403);
+});
+fixture('POST /knowledge-items/uploads', async () => {
+  const { a, b } = await pair();
+  const url = '/knowledge-items/uploads';
+  const metadata = { contentType: 'text/plain', sizeBytes: 40 };
+  const foreign = (await success(a, 'POST', url, 201, metadata)).json();
+  const before = await f.row('files', foreign.fileId);
+
+  expect((await f.request(b.member, 'POST', url, metadata)).statusCode).toBe(403);
+  await f.admin.pool.query(
+    "update memberships set built_in_role = 'admin' where store_id = $1 and user_id = $2",
+    [b.id, b.member.id],
+  );
+  const res = await f.request(b.member, 'POST', url, metadata);
+  expect(res.statusCode, res.body).toBe(201);
+  const { fileId, uploadUrl } = res.json();
+  const objectKey = `stores/${b.id}/knowledge/${fileId}`;
+  expect(new URL(uploadUrl).pathname).toContain(objectKey);
+  expect(await f.row('files', fileId)).toMatchObject({
+    store_id: b.id,
+    object_key: objectKey,
+    purpose: 'knowledge_file',
+    status: 'pending',
+  });
+  await success(b, 'POST', '/knowledge-items', 201, { kind: 'file', fileId });
+  await hidden(
+    b,
+    'POST',
+    () => '/knowledge-items',
+    foreign.fileId,
+    (id) => ({
+      kind: 'file',
+      fileId: id,
+    }),
+  );
+  expect(await f.row('files', foreign.fileId)).toEqual(before);
+});
+fixture('GET /knowledge-items', async () => {
+  const { a, b } = await pair();
+  const first = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+  const second = await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।');
+  expect((await success(a, 'GET', '/knowledge-items', 200)).json().items).toMatchObject([
+    { id: first },
+  ]);
+  expect((await success(b, 'GET', '/knowledge-items', 200)).json().items).toMatchObject([
+    { id: second },
+  ]);
+});
+fixture('GET /knowledge-items/:knowledgeItemId', async () => {
+  const { a, b } = await pair();
+  const id = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+  expect((await success(a, 'GET', `/knowledge-items/${id}`, 200)).json().answer).toBe(
+    'ঢাকায় ৬০ টাকা।',
+  );
+  await hidden(b, 'GET', (value) => `/knowledge-items/${value}`, id);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /knowledge-items/:knowledgeItemId`, async () => {
+    const { a, b } = await pair();
+    const foreign = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+    const own = await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।');
+    const before = await f.row('knowledge_items', foreign);
+    const url = (id: string) => `/knowledge-items/${id}`;
+    const body = method === 'PATCH' ? { answer: 'ঢাকার বাইরে ১৫০ টাকা।' } : undefined;
+    const response = await success(b, method, url(own), method === 'PATCH' ? 200 : 204, body);
+    if (body) expect(response.json()).toMatchObject(body);
+    else expect(await f.row('knowledge_items', own)).toBeUndefined();
+    await hidden(b, method, url, foreign, body ? () => body : undefined);
+    expect(await f.row('knowledge_items', foreign)).toEqual(before);
+  });
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
     id = await contact(a);
@@ -1390,6 +1479,12 @@ describe('every production shop route isolates its data', () => {
     const rows: [string, string, string, string][] = [
       ['stores', 'id', a.id, b.id],
       ['memberships', 'id', a.membership, b.membership],
+      [
+        'knowledge_items',
+        'id',
+        await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।'),
+        await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।'),
+      ],
       ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
       ['segments', 'id', await segment(a), await segment(b)],

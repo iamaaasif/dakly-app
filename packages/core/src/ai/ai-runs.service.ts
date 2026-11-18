@@ -4,6 +4,8 @@ import type { ZodType } from 'zod';
 import {
   LlmError,
   type LlmDriver,
+  type LlmEmbedding,
+  type LlmEmbeddingRequest,
   type LlmErrorCode,
   type LlmRequest,
   type LlmResult,
@@ -51,19 +53,70 @@ export class AiRunsService {
   ): Promise<AiAttempt<T>> {
     const startedAt = this.clock.now();
     const { result, usage, model } = await this.callModel(request);
-    const aiRunId = await this.repository.insert(storeId, {
-      tier: context.tier,
-      purpose: context.purpose,
+    const aiRunId = await this.record(storeId, context, {
       model,
-      promptVersion: context.promptVersion,
+      startedAt,
+      usage,
+      code: result.kind === 'failure' ? result.code : undefined,
+    });
+    return { ...result, aiRunId };
+  }
+
+  async embed(
+    storeId: string,
+    request: LlmEmbeddingRequest,
+    price: Price | undefined,
+  ): Promise<LlmEmbedding> {
+    const startedAt = this.clock.now();
+    const context: RunContext = {
+      tier: 'embed',
+      purpose: 'embedding',
+      promptVersion: 'embedding.v1',
+      price,
+    };
+    let result: LlmEmbedding;
+    try {
+      result = await this.driver.embed(request);
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      if (providerFailures.has(error.code)) await this.gate.recordFailure();
+      await this.record(storeId, context, {
+        model: request.model,
+        startedAt,
+        usage: error.usage ?? emptyUsage,
+        code: error.code,
+      });
+      throw error;
+    }
+    await this.record(storeId, context, { ...result, startedAt });
+    return result;
+  }
+
+  private record(
+    storeId: string,
+    { price, ...context }: RunContext,
+    {
+      model,
+      startedAt,
+      usage,
+      code,
+    }: {
+      model: string;
+      startedAt: Date;
+      usage: LlmResult['usage'];
+      code?: AttemptFailureCode;
+    },
+  ): Promise<string> {
+    return this.repository.insert(storeId, {
+      ...context,
+      model,
       createdAt: startedAt,
       latencyMs: Math.max(0, this.clock.now().getTime() - startedAt.getTime()),
       ...usage,
-      costMicroUsd: cost(usage, context.price),
-      outcome: result.kind === 'failure' ? failureOutcome(result.code) : 'completed',
-      errorCode: result.kind === 'failure' ? result.code : null,
+      costMicroUsd: cost(usage, price),
+      outcome: code ? failureOutcome(code) : 'completed',
+      errorCode: code ?? null,
     });
-    return { ...result, aiRunId };
   }
 
   private async callModel<T>(request: Attempt<T>): Promise<{

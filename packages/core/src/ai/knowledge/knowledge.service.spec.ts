@@ -5,6 +5,7 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 
 import type { StoreTransaction } from '../../platform/database/store-transaction';
 import type { OutboxService } from '../../platform/outbox/outbox.service';
+import type { AiService } from '../ai.service';
 import type { KnowledgeItem, KnowledgeRepository } from './knowledge.repository';
 import { KnowledgeService } from './knowledge.service';
 
@@ -51,6 +52,13 @@ describe('KnowledgeService', () => {
     ]);
   });
 
+  it('searches the store with an embedding of the same query', async () => {
+    const { service } = fixture();
+    await expect(service.search(storeId, 'ঢাকা', 1)).resolves.toEqual([
+      { itemId, content: 'ঢাকায় ডেলিভারি ৬০ টাকা।' },
+    ]);
+  });
+
   it('rejects a missing knowledge file before creating an item', async () => {
     const { service, events } = fixture();
 
@@ -84,6 +92,17 @@ function fixture() {
     async createFile(_storeId: string, file: object) {
       files.push(file);
     },
+    async search(tenant: string, input: Parameters<KnowledgeRepository['search']>[1]) {
+      if (
+        tenant !== storeId ||
+        input.query !== 'ঢাকা' ||
+        input.model !== 'test-model' ||
+        input.embedding[0] !== 0.5 ||
+        input.limit !== 1
+      )
+        return [];
+      return [{ itemId, content: 'ঢাকায় ডেলিভারি ৬০ টাকা।' }];
+    },
     async findFile() {
       return undefined;
     },
@@ -96,8 +115,26 @@ function fixture() {
   const transaction = {
     run: <T>(_storeId: string, work: () => Promise<T>) => work(),
   } as StoreTransaction;
-  const service = new KnowledgeService(repository, outbox, transaction, { now: () => now }, {
+  const storage = {
     createUploadUrl: (key: string) => `https://files.test/${key}`,
-  } as FileStorageDriver);
+  } as FileStorageDriver;
+  const ai = {
+    async embed(tenant: string, query: string) {
+      if (tenant !== storeId || query !== 'ঢাকা') throw new Error('Unexpected embedding input');
+      return {
+        embedding: Array.from({ length: 512 }, () => 0.5),
+        model: 'test-model',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 0 },
+      };
+    },
+  } as AiService;
+  const service = new KnowledgeService(
+    repository,
+    outbox,
+    transaction,
+    { now: () => now },
+    storage,
+    ai,
+  );
   return { service, events, files };
 }

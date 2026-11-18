@@ -6,7 +6,7 @@ import type {
   CreateKnowledgeItemInput,
   ListKnowledgeItemsQuery,
 } from '@dakly/contracts/knowledge';
-import { knowledgeItems } from '@dakly/db/schema/ai';
+import { knowledgeChunks, knowledgeItems } from '@dakly/db/schema/ai';
 import { files } from '@dakly/db/schema/platform';
 
 import { TenantDatabase } from '../../platform/database/tenant-database';
@@ -23,6 +23,13 @@ const columns = {
 };
 
 export type KnowledgeItem = Pick<typeof knowledgeItems.$inferSelect, keyof typeof columns>;
+export type KnowledgeChunk = Pick<
+  typeof knowledgeChunks.$inferInsert,
+  'content' | 'embedding' | 'embeddingModel' | 'tokenCount'
+>;
+
+export type KnowledgeHit = { itemId: string; content: string };
+
 @Injectable()
 export class KnowledgeRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -113,6 +120,55 @@ export class KnowledgeRepository {
     return removed.length > 0;
   }
 
+  async finishIndex(
+    storeId: string,
+    itemId: string,
+    revision: Date,
+    index: { chunks: readonly KnowledgeChunk[] } | { rejection: string },
+  ): Promise<boolean> {
+    return this.database.forStore(storeId, async (tx) => {
+      const chunks = 'chunks' in index ? index.chunks : [];
+      const rejection = 'rejection' in index ? index.rejection : null;
+      const [item] = await tx
+        .update(knowledgeItems)
+        .set({
+          status: rejection ? 'failed' : 'active',
+          factsCount: chunks.length,
+        })
+        .where(
+          and(
+            eq(knowledgeItems.storeId, storeId),
+            eq(knowledgeItems.id, itemId),
+            eq(knowledgeItems.updatedAt, revision),
+            eq(knowledgeItems.status, 'processing'),
+          ),
+        )
+        .returning({ fileId: knowledgeItems.fileId });
+      if (!item) return false;
+      await tx
+        .delete(knowledgeChunks)
+        .where(
+          and(eq(knowledgeChunks.storeId, storeId), eq(knowledgeChunks.knowledgeItemId, itemId)),
+        );
+      if (chunks.length)
+        await tx
+          .insert(knowledgeChunks)
+          .values(chunks.map((chunk) => ({ ...chunk, storeId, knowledgeItemId: itemId })));
+      if (item.fileId)
+        await tx
+          .update(files)
+          .set({ status: rejection ? 'rejected' : 'ready', rejectReason: rejection })
+          .where(
+            and(
+              eq(files.id, item.fileId),
+              eq(files.storeId, storeId),
+              eq(files.purpose, 'knowledge_file'),
+            ),
+          );
+      return true;
+    });
+  }
+
   async createFile(
     storeId: string,
     file: Pick<
@@ -123,6 +179,45 @@ export class KnowledgeRepository {
     await this.database.forStore(storeId, (tx) =>
       tx.insert(files).values({ ...file, storeId, purpose: 'knowledge_file' }),
     );
+  }
+
+  async search(
+    storeId: string,
+    input: { query: string; embedding: readonly number[]; model: string; limit: number },
+  ): Promise<KnowledgeHit[]> {
+    const { query, embedding, model, limit } = input;
+    const vector = JSON.stringify(embedding);
+    const result = await this.database.forStore(storeId, (tx) =>
+      tx.execute<KnowledgeHit>(sql`
+        WITH eligible AS (
+          SELECT chunk.id, chunk.knowledge_item_id, chunk.content,
+            chunk.embedding <=> ${vector}::vector AS distance,
+            to_tsvector('simple', chunk.content) AS document
+          FROM knowledge_chunks chunk
+          JOIN knowledge_items item
+            ON item.store_id = chunk.store_id AND item.id = chunk.knowledge_item_id
+          WHERE chunk.store_id = ${storeId} AND item.status = 'active'
+            AND chunk.embedding_model = ${model}
+        ),
+        terms AS (
+          SELECT plainto_tsquery('simple', ${query}) AS text
+        ),
+        ranks AS (
+          SELECT id, row_number() OVER (ORDER BY distance, id) AS rank FROM eligible
+          UNION ALL
+          SELECT id, row_number() OVER (ORDER BY ts_rank_cd(document, terms.text) DESC, id)
+          FROM eligible CROSS JOIN terms WHERE document @@ terms.text
+        ),
+        scores AS (
+          SELECT id, sum(1.0 / (60 + rank)) AS score FROM ranks GROUP BY id
+        )
+        SELECT eligible.knowledge_item_id AS "itemId", eligible.content
+        FROM scores JOIN eligible USING (id)
+        ORDER BY scores.score DESC, eligible.id
+        LIMIT ${limit}
+      `),
+    );
+    return result.rows;
   }
 
   async findFile(storeId: string, fileId: string) {

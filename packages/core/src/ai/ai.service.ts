@@ -63,6 +63,23 @@ export class AiService {
     );
   }
 
+  async embed(storeId: string, input: string, signal?: AbortSignal) {
+    if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
+    const permit = await this.gate.acquire(storeId);
+    if (permit.kind === 'paused') throw aiError('AI_PAUSED');
+    if (permit.kind === 'busy') throw aiError('AI_STORE_BUSY');
+    const model = this.config.embeddingModel;
+    try {
+      return await this.runs.embed(
+        storeId,
+        { model, input, timeoutMs: aiTimeoutMs, signal },
+        Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
+      );
+    } finally {
+      await this.gate.release(storeId, permit.ticket);
+    }
+  }
+
   private async billOutput<T>(
     storeId: string,
     usage: Omit<ConsumeUsageInput, 'quantity'>,

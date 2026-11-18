@@ -380,10 +380,22 @@ Owners and admins can add or edit typed policies and upload PDF or plain text
 files. Knowledge reads require `storeSettings.view` and changes require
 `storeSettings.edit`. Images and URLs are for later work.
 
-The API routes are registered with the indexing worker. The upload route
-issues a signed PUT for a tenant-owned pending file. A shop uploads the
-file before creating or changing the item. The event that requests indexing
-carries only the store and item IDs.
+`POST /knowledge-items/uploads` creates a pending file and returns a signed
+PUT URL. Upload the file before creating or changing the knowledge item.
+The worker indexes one item per job. It reads no more than 10 MiB per file
+and rejects PDFs over 100 pages or files with more than 200,000 characters
+of extracted text. A rejected file records the reason and produces no
+chunks. Typed and extracted text is untrusted data.
+
+Indexing uses 512-dimension embeddings. `AI_EMBEDDING_MODEL` defaults to
+`text-embedding-3-small`. An OpenAI model override needs a matching entry in
+`AI_MODEL_PRICES`. The worker needs the same AI settings as other AI callers.
+A change marks the item processing and queues a new index. The job only
+replaces chunks if the item still has the revision the job read.
+
+Knowledge search embeds the query with the configured model, then combines the
+exact vector rank and Postgres full-text rank with reciprocal rank fusion.
+Search returns passages from active items in the same store and embedding model.
 
 ### Data
 
