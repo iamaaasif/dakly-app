@@ -137,15 +137,15 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M6. Orders
 
-| ID    | Task                                                                             | Status      | Depends        | PR   | Notes                                                                                                            |
-| ----- | -------------------------------------------------------------------------------- | ----------- | -------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
-| ORD-1 | Orders, items, stage table, stage events, order numbers                          | In progress | PROD-2, CUS-1  | #136 | Q7; archive guard follows ORD-3 so it can use its variant locks; order numbers and buyer timestamp move to ORD-3 |
-| ORD-2 | Delivery zones, areas and charges                                                | Done        | ACC-3          | #122 |                                                                                                                  |
-| ORD-3 | Create order from chat and from staff                                            | In review   | ORD-1, ORD-2   | #139 | D26/D27; oversell override deferred; edits in stacked PR                                                         |
-| ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo        | ORD-3, CAMP-11 |      | Was a separate confirmation sender; now runs on the workflow engine                                              |
-| ORD-5 | Web: orders pipeline and order detail                                            | Todo        | ORD-3, WEB-2   |      |                                                                                                                  |
-| ORD-6 | Public order link page and endpoint (Turnstile, limits)                          | Todo        | ORD-3          |      | Design needed                                                                                                    |
-| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | In review   | ORD-3          | #142 | D21; manual dispatch, delivery, returns and COD checks; return risk follows in a stacked PR                      |
+| ID    | Task                                                                             | Status      | Depends        | PR         | Notes                                                                                                            |
+| ----- | -------------------------------------------------------------------------------- | ----------- | -------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| ORD-1 | Orders, items, stage table, stage events, order numbers                          | In progress | PROD-2, CUS-1  | #136       | Q7; archive guard follows ORD-3 so it can use its variant locks; order numbers and buyer timestamp move to ORD-3 |
+| ORD-2 | Delivery zones, areas and charges                                                | Done        | ACC-3          | #122       |                                                                                                                  |
+| ORD-3 | Create order from chat and from staff                                            | In review   | ORD-1, ORD-2   | #139       | D26/D27; oversell override deferred; edits in stacked PR                                                         |
+| ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo        | ORD-3, CAMP-11 |            | Was a separate confirmation sender; now runs on the workflow engine                                              |
+| ORD-5 | Web: orders pipeline and order detail                                            | Todo        | ORD-3, WEB-2   |            |                                                                                                                  |
+| ORD-6 | Public order link page and endpoint (Turnstile, limits)                          | Todo        | ORD-3          |            | Design needed                                                                                                    |
+| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | In review   | ORD-3          | #142, #150 | D21; manual dispatch, delivery, returns, COD checks and store-only return risk                                   |
 
 ## M7. AI layer
 

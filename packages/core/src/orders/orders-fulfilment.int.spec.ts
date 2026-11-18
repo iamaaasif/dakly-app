@@ -235,4 +235,32 @@ describe('Manual dispatch and delivery', () => {
     });
     expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 1, reserved: 0 });
   });
+  it('uses only the recipient phone and this store’s completed parcels for risk', async () => {
+    const phone = '01710000006';
+    await order(f.a, 'returned', { phone });
+    const own = await order(f.a, 'to_confirm', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBeNull();
+    await order(f.a, 'partially_delivered', { phone });
+    for (let i = 0; i < 4; i++) await order(f.b, 'delivered', { phone });
+    const newPhone = await order(f.a, 'to_confirm', { phone: '01710000007' });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('high');
+    const page = await service.list(f.a, { stage: 'to_confirm', limit: 20 });
+    expect(page.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: own, returnRisk: 'high' }),
+        expect.objectContaining({ id: newPhone, returnRisk: 'new_customer' }),
+      ]),
+    );
+    expect(page.items[0]).not.toHaveProperty('recipientPhone');
+  });
+
+  it('shows some returns at 25 percent and a good buyer at 20 percent', async () => {
+    const phone = '01710000008';
+    const own = await order(f.a, 'to_confirm', { phone });
+    await order(f.a, 'returned', { phone });
+    for (let i = 0; i < 3; i++) await order(f.a, 'delivered', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('some_returns');
+    await order(f.a, 'delivered', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('good');
+  });
 });
