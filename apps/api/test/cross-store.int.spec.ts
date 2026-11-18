@@ -78,6 +78,66 @@ async function smsCredits(shop: Shop, quantity: number) {
   );
   return id;
 }
+async function order(shop: Shop): Promise<string> {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into orders (id,store_id,number,source,created_by_type,recipient_name,
+       recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
+     values($1,$2,1001,'manual','user','রিনা',$3,'ধানমন্ডি','Dhaka',9000,9000)`,
+    [id, shop.id, shop.owner.phone],
+  );
+  return id;
+}
+
+fixture('GET /orders', async () => {
+  const { a, b } = await pair();
+  const ownA = await order(a);
+  const ownB = await order(b);
+  for (const [shop, id] of [
+    [a, ownA],
+    [b, ownB],
+  ] as const) {
+    const result = await success(shop, 'GET', '/orders?stage=to_confirm', 200);
+    expect(result.json()).toMatchObject({ items: [{ id }], counts: { to_confirm: 1 } });
+    expect(result.json().items).toHaveLength(1);
+  }
+});
+
+fixture('GET /orders/:orderId', async () => {
+  const { a, b } = await pair();
+  const id = await order(a);
+  expect((await success(a, 'GET', `/orders/${id}`, 200)).json()).toMatchObject({
+    id,
+    items: [],
+    timeline: [],
+  });
+  const restricted = await f.request(a.member, 'GET', `/orders/${id}`);
+  expect(restricted.statusCode, restricted.body).toBe(200);
+  expect(restricted.json().recipientPhone).toBe(
+    `${a.owner.phone.slice(0, 5)}-XXX${a.owner.phone.slice(-3)}`,
+  );
+  await hidden(b, 'GET', (value) => `/orders/${value}`, id);
+});
+
+fixture('POST /orders/:orderId/stage', async () => {
+  const { a, b } = await pair();
+  const foreignId = await order(a);
+  const ownId = await order(b);
+  const url = (id: string) => `/orders/${id}/stage`;
+  const change = { to: 'to_pack' };
+  const before = await f.row('orders', foreignId);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'POST', url(ownId), change)).statusCode).toBe(403);
+  expect((await success(b, 'POST', url(ownId), 200, change)).json()).toMatchObject({
+    stage: 'to_pack',
+    timeline: [{ from: 'to_confirm', to: 'to_pack', actorUserId: b.owner.id }],
+  });
+  await hidden(b, 'POST', url, foreignId, () => change);
+  expect(await f.row('orders', foreignId)).toEqual(before);
+});
+
 fixture('GET /contacts/:contactId', async () => {
   const { a, b } = await pair(),
     id = await contact(a);
