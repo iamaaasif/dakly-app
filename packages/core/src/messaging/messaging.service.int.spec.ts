@@ -306,15 +306,16 @@ describe('MessagingService (Postgres and Mailpit)', () => {
         channel: 'sms',
         contactId: contact.id,
         body: 'নতুন কালেকশন এসেছে',
-        operationKey: `test-destination-${destination}`,
+        operationKey: `test-destination-${contact.id}`,
         destination,
       });
 
     expect(await errorCode(approved('01712345600'))).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(await errorCode(approved(null))).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
-    await approved('01712345609');
+    const sent = await approved('01712345609');
     expect(calls.map((call) => call.to)).toEqual(['01712345609']);
+    expect(await capturedText(sent.providerMessageId)).toBe('নতুন কালেকশন এসেছে');
   });
 
   it('never sends to another store’s contact', async () => {
