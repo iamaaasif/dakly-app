@@ -67,6 +67,7 @@ it('keeps a saved campaign when an earlier detail request returns afterward', as
 it.each([
   ['approval', { ...saved, status: 'scheduled' }],
   ['deletion', null],
+  ['draft edit', { ...saved, name: 'Later edit', updatedAt: '2026-11-18T06:00:01.000Z' }],
 ] as const)('keeps a newer %s when the save response arrives late', async (_, terminal) => {
   const { client, queryKey, result } = setup();
   let releaseSave!: (response: Response) => void;

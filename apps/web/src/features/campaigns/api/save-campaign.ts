@@ -39,11 +39,19 @@ export function useSaveCampaign() {
       const detail = campaignKeys.detail(contextTag, saved.id);
       await client.cancelQueries({ queryKey: detail, exact: true });
       client.setQueryData<CampaignResponse | null>(detail, (current) =>
-        current === null || (current && current.status !== 'draft') ? current : saved,
+        current === null ||
+        (current && (current.status !== 'draft' || current.updatedAt > saved.updatedAt))
+          ? current
+          : saved,
       );
       await client.invalidateQueries({ queryKey: campaignKeys.list(contextTag) });
       if ('id' in change) void client.invalidateQueries({ queryKey: detail, exact: true });
     },
   });
-  return { ...save, isSaving: () => client.isMutating({ mutationKey, exact: true }) > 0 };
+  return {
+    ...save,
+    isSaving: () => client.isMutating({ mutationKey, exact: true }) > 0,
+    getCachedCampaign: (id: string) =>
+      client.getQueryData<CampaignResponse | null>(campaignKeys.detail(contextTag, id)),
+  };
 }

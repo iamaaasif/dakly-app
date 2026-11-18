@@ -96,8 +96,12 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
       : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) };
     save.mutate(request, {
       onSuccess: (saved) => {
-        if (campaign) form.reset({ name: saved.name, goal: saved.goal });
-        else router.replace(`/campaigns/${saved.id}`);
+        if (!campaign) {
+          router.replace(`/campaigns/${saved.id}`);
+          return;
+        }
+        const current = save.getCachedCampaign(saved.id);
+        if (current?.status === 'draft') form.reset({ name: current.name, goal: current.goal });
       },
     });
   });
