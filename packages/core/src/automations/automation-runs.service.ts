@@ -159,7 +159,11 @@ export class AutomationRunsService {
 
   // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
   // filters.
-  private async exitReason(graph: AutomationGraph, facts: RunFacts, at: Date) {
+  private async exitReason(
+    graph: AutomationGraph,
+    facts: RunFacts,
+    at: Date,
+  ): Promise<AutomationExitReason | undefined> {
     const { goal, exitConditions, workflowFilters } = graph;
     if (goal && hasHappened(goal, facts)) return 'goal';
     if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';
