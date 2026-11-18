@@ -21,11 +21,12 @@ type LinkSource = { sourceType: TrackedLinkSourceType; sourceId: string };
 export type NewTrackedLink =
   | (LinkSource & { kind: 'redirect'; targetUrl: string; contactId: string | null })
   | (LinkSource & { kind: 'sms_opt_out'; contactId: string });
-export type TrackedLink = { id: string; url: string };
+export type TrackedLink = { id: string; code: string; url: string };
 export type Visitor = { ip: string; userAgent: string | undefined };
 
 const CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const CODE_ATTEMPTS = 3;
+export const TRACKED_LINK_CODE_LENGTH = 8;
 // Shared mobile carrier addresses put many customers behind one IP, so the limit is generous.
 const TAPS_PER_IP_PER_MINUTE = 120;
 // Longer than one Asia/Dhaka day, so the salt lives through the day it was made on and then goes.
@@ -69,7 +70,12 @@ export class LinksService {
       for (const row of pending) row.code = newCode();
     }
     if (pending.length) throw linkError('LINK_CODES_EXHAUSTED');
-    return rows.map((row) => ({ id: row.id, url: linkUrl(row.kind, row.code) }));
+    return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
+  }
+
+  // A sender that kept the code builds the same address again.
+  optOutUrl(code: string): string {
+    return linkUrl('sms_opt_out', code);
   }
 
   // D31: a visit keeps only an HMAC of the address and browser, never either value.
@@ -164,7 +170,10 @@ export class LinksService {
 }
 
 function newCode(): string {
-  return Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+  return Array.from(
+    { length: TRACKED_LINK_CODE_LENGTH },
+    () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)],
+  ).join('');
 }
 
 function linkUrl(kind: NewTrackedLink['kind'], code: string): string {

@@ -83,7 +83,7 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
     );
 }
 
-// A send step counts from its send time, while sending and once sent; a failed send does not.
+// Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
 function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
   return tx
     .select({
@@ -100,7 +100,7 @@ function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: S
         lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
         eq(automationRunSteps.category, 'marketing'),
-        inArray(automationRunSteps.outcome, ['sending', 'sent']),
+        inArray(automationRunSteps.outcome, ['sending', 'sent', 'unconfirmed']),
       ),
     );
 }

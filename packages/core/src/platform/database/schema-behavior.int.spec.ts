@@ -151,6 +151,7 @@ describe('release schema behavior (Postgres)', () => {
         'goal',
         'exit_condition',
         'workflow_filter',
+        'not_reachable',
         null,
       ]) {
         const saved = await client.query(

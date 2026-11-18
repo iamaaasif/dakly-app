@@ -52,8 +52,34 @@ export class SendPolicyService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
+  // Freeze the destination from the eligibility read and use one database clock after the locks.
+  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = await this.transaction.databaseTime(storeId);
+    if (!exists) return { decision: skip('no_address'), destination: null, at };
+    const [checked] = await this.checkAudience(storeId, {
+      contactIds: [request.contactId],
+      channel: request.channel,
+      category: request.category,
+      at,
+    });
+    return { decision: checked!.decision, destination: checked!.phone, at };
+  }
+
+  private async lockForDispatch(storeId: string, contactId: string) {
+    this.requireTransaction();
+    await this.repository.lockContact(storeId, contactId);
+    try {
+      await this.contacts.lockForConsent(storeId, [contactId]);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
+      throw error;
+    }
+  }
+
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
-    this.requireTransactionForMarketing(request.category);
+    if (request.category === 'marketing') this.requireTransaction();
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =
       contact && request.category === 'marketing'
@@ -101,8 +127,8 @@ export class SendPolicyService {
   }
 
   // The cap lock must last until the caller marks the message sending and commits.
-  private requireTransactionForMarketing(category: SendCategory): void {
-    if (category === 'marketing' && !this.transaction.isOpen())
+  private requireTransaction(): void {
+    if (!this.transaction.isOpen())
       throw new AppError('STORE_TRANSACTION_REQUIRED', PLATFORM_ERRORS.STORE_TRANSACTION_REQUIRED);
   }
 
