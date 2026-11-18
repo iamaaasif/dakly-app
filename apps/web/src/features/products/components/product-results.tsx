@@ -4,9 +4,9 @@ import Link from 'next/link';
 import type { ProductListQuery } from '@dakly/contracts/products';
 import { QueryError } from '@dakly/ui/query-error';
 
+import { productsSearch, type useProducts } from '../api/products';
 import { ProductList } from './product-list';
 import { ProductsLoading } from './products-loading';
-import { productsSearch, type useProducts } from '@/lib/product-queries';
 
 type ProductResultsProps = {
   query: ProductListQuery;
