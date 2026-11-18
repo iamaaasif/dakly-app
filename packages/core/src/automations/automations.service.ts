@@ -233,26 +233,24 @@ export class AutomationsService {
       if (!email) continue;
       const key = `automation-pause-email:${eventId}:${id}`;
       const claim = `sending:${randomUUID()}`;
-      const claimed = await this.valkey.connection.set(
-        key,
-        claim,
-        'EX',
-        SENDING_CLAIM_SECONDS,
-        'NX',
-      );
-      if (!claimed) {
-        stillSending ||= (await this.valkey.connection.get(key)) !== 'sent';
-        continue;
-      }
       try {
-        await this.email.send({ to: email, subject: title, text });
+        const connection = this.valkey.connection;
+        if (!(await connection.set(key, claim, 'EX', SENDING_CLAIM_SECONDS, 'NX'))) {
+          stillSending ||= (await connection.get(key)) !== 'sent';
+          continue;
+        }
+        const ttl = await this.email.send({ to: email, subject: title, text }).then(
+          () => SENT_CLAIM_SECONDS,
+          (error: unknown) => {
+            firstFailure ??= { error };
+            return 0;
+          },
+        );
+        await connection.eval(finishEmailClaim, 1, key, claim, ttl);
       } catch (error) {
-        // Retry the failed recipient without preventing delivery to the other owners.
-        await this.valkey.connection.eval(finishEmailClaim, 1, key, claim, 0);
+        // Retry this recipient without preventing delivery to the other owners.
         firstFailure ??= { error };
-        continue;
       }
-      await this.valkey.connection.eval(finishEmailClaim, 1, key, claim, SENT_CLAIM_SECONDS);
     }
     if (firstFailure) throw firstFailure.error;
     if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
