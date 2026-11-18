@@ -1514,7 +1514,7 @@ fixture('GET /events/stream', async () => {
       return { shop, abort, read };
     }),
   );
-  // Nest sends headers before Valkey finishes subscribing. Both streams share the readiness window.
+  // Nest can send headers while Valkey is still subscribing. Give both streams one deadline.
   await vi.waitFor(
     async () => {
       for (const shop of [a, b]) {
