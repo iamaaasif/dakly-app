@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
@@ -59,6 +59,11 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
+      if (name === 'pipeline' && width === 360) {
+        const action = page.getByRole('link', { name: 'Confirm order #1060' });
+        await action.scrollIntoViewIfNeeded();
+        await expect(action).toBeInViewport({ ratio: 1 });
+      }
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -92,7 +97,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       name: 'Kamal Hossain',
       phone: '01701000001',
       hours: 3,
-      cod: 502000,
+      cod: 501000,
     });
     await order({
       number: 1059,
@@ -147,8 +152,8 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       [partial],
     );
     await database.pool.query(
-      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
-        values ($1,$2,$3,$4,'Cotton Panjabi','L',2,248000,false)`,
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,line_discount_poisha,is_stock_tracked)
+        values ($1,$2,$3,$4,'Cotton Panjabi','L',2,248000,1000,false)`,
       [randomUUID(), storeId, kamal, variantId],
     );
 
@@ -159,6 +164,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     ).toHaveCount(5);
     await expect(page.getByRole('link', { name: 'To confirm 3' })).toBeVisible();
     await expect(page.getByText('On hold', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Confirm order #1054' })).toBeVisible();
     await expect(page.getByText('3 hours ago', { exact: true })).toHaveAttribute(
       'title',
       /Asia\/Dhaka/,
@@ -177,6 +183,31 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page).toHaveURL(/search=%231060/);
     await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Confirm order #1060' }).click();
+    const detail = page.getByRole('dialog', { name: 'Order #1060' });
+    await expect(detail.getByText('Staff ·')).toBeVisible();
+    await expect(detail.getByText('3 hours ago')).toHaveAttribute('title', /Asia\/Dhaka/);
+    await expect(detail.getByText('High return risk')).toBeVisible();
+    await expect(detail.getByText('Ask for a small advance first')).toBeVisible();
+    await expect(detail.getByText('Line discount')).toBeVisible();
+    await verifyDrawerWhileSessionIsBlocked(page, detail);
+    const confirm = detail.getByRole('button', { name: 'Mark confirmed' });
+    await capture('detail');
+    await expect(confirm).toBeInViewport({ ratio: 1 });
+    const content = detail.getByRole('region', { name: 'Order #1060 content' });
+    await detail.getByRole('button', { name: 'Close' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(content).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(confirm).toBeFocused();
+    await confirm.press('Enter');
+    await expect(detail.getByText('To confirm → To pack')).toBeVisible();
+    await expect(detail.getByRole('status', { name: 'Order stage' })).toBeFocused();
+    await detail.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('heading', { name: 'Orders', exact: true })).toBeFocused();
+    await page.getByRole('link', { name: /^To pack/ }).click();
+    await expect(page).toHaveURL(/stage=to_pack/);
+    await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
     await page.getByRole('link', { name: 'Clear search' }).click();
     await page.getByRole('link', { name: /^Delivered/ }).click();
     await expect(page).toHaveURL(/stage=delivered/);
@@ -185,6 +216,10 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
     await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
   } finally {
+    await database.pool.query(
+      "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",
+      [storeId, orderIds],
+    );
     await database.pool.query('delete from orders where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       orderIds,
@@ -200,3 +235,32 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await database.pool.end();
   }
 });
+
+async function verifyDrawerWhileSessionIsBlocked(page: Page, detail: Locator) {
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requested = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  await page.route('**/api/me/context', async (route) => {
+    entered();
+    await held;
+    await route.continue();
+  });
+  try {
+    const verified = page.waitForResponse((response) => response.url().endsWith('/api/me/context'));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await requested;
+    await expect(detail).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+    release();
+    expect((await verified).status()).toBe(200);
+    await expect(detail).toBeVisible();
+  } finally {
+    release();
+    await page.unroute('**/api/me/context');
+  }
+}

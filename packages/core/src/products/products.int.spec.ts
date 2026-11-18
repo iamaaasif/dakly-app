@@ -13,6 +13,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
@@ -27,6 +28,7 @@ describe('ProductsService with Postgres', () => {
   const repository = new ProductsRepository(tenant);
   const service = new ProductsService(
     repository,
+    new ProductOrderVariantsRepository(tenant),
     transaction,
     new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => instant } as Clock,
@@ -400,5 +402,18 @@ describe('ProductsService with Postgres', () => {
       (await service.list(f.b, { limit: 50, readiness: 'hidden' })).items.map((item) => item.id),
     ).toEqual([second.id]);
     expect((await service.list(f.a, { limit: 50, search: '_50%' })).items).toEqual([]);
+  });
+
+  it('finds archive variants only for the product in the current store on an owner connection', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Archive fixture' }),
+      actor,
+    );
+    const repository = new ProductOrderVariantsRepository(f.tenant);
+    await expect(repository.lockArchiveVariants(f.a, product.id)).resolves.toEqual([
+      product.variants[0]!.id,
+    ]);
+    await expect(repository.lockArchiveVariants(f.b, product.id)).resolves.toBeNull();
   });
 });

@@ -271,6 +271,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       canViewCustomers: true,
       canCreateCustomer: false,
       canViewOrders: true,
+      canEditOrders: true,
       canViewProducts: true,
       canEditProducts: false,
       canViewCampaigns: false,

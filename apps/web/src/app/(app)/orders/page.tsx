@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { orderListQuerySchema } from '@dakly/contracts/orders';
+import { orderScreenQuerySchema } from '@dakly/contracts/orders';
 
 import { OrdersScreen } from '@/features/orders/components/orders-screen';
 import { requireSession } from '@/lib/require-session';
@@ -17,7 +17,7 @@ export default async function OrdersPage({
         You do not have Orders access in this shop.
       </p>
     );
-  const parsed = orderListQuerySchema.safeParse(await searchParams);
+  const parsed = orderScreenQuerySchema.safeParse(await searchParams);
   if (!parsed.success)
     return (
       <p role="alert" className="p-6">
@@ -28,10 +28,11 @@ export default async function OrdersPage({
         .
       </p>
     );
-  const query = parsed.data;
+  const { selected, ...query } = parsed.data;
   return (
     <OrdersScreen
       query={{ ...query, stage: query.stage ?? (query.alert ? undefined : 'to_confirm') }}
+      selected={selected}
     />
   );
 }

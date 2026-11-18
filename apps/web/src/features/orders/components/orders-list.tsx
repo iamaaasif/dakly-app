@@ -4,12 +4,15 @@ import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders'
 
 import { ordersSearch } from '../api/orders';
 import { OrderRow } from './order-row';
+import { useSessionContext } from '@/lib/session-context';
 
 const linkStyle = 'inline-flex min-h-10 min-w-10 items-center text-action underline';
 
 type OrdersListProps = { page: OrderListResponse; query: OrderListQuery };
 
 export function OrdersList({ page, query }: OrdersListProps) {
+  const { data } = useSessionContext();
+  const canEdit = data?.currentStore?.canEditOrders;
   const pageHref = (cursor?: number) => `/orders?${ordersSearch({ ...query, cursor })}`;
 
   return (
@@ -22,7 +25,12 @@ export function OrdersList({ page, query }: OrdersListProps) {
         className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface"
       >
         {page.items.map((order) => (
-          <OrderRow key={order.id} order={order} />
+          <OrderRow
+            key={order.id}
+            order={order}
+            href={`/orders?${ordersSearch({ ...query, selected: order.id })}`}
+            canEdit={canEdit ?? false}
+          />
         ))}
       </ul>
       <nav aria-label="Order pages" className="flex gap-4">

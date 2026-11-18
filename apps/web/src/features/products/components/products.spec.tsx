@@ -78,6 +78,7 @@ function show(
       canViewProducts: view,
       canEditProducts: edit,
       canViewOrders: false,
+      canEditOrders: false,
       canViewCampaigns: false,
       canEditCampaigns: false,
       canViewCustomers: false,
