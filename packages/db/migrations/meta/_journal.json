@@ -267,6 +267,13 @@
       "when": 1794991756021,
       "tag": "0037_import_undo",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794994351581,
+      "tag": "0038_automation_steps",
+      "breakpoints": true
     }
   ]
 }
