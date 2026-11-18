@@ -35,11 +35,14 @@ export function useSaveCampaign() {
       }
       if (error.code === 'CAMPAIGN_NOT_DRAFT') await client.resetQueries({ queryKey, exact: true });
     },
-    onSuccess: async (saved) => {
+    onSuccess: async (saved, change) => {
       const detail = campaignKeys.detail(contextTag, saved.id);
       await client.cancelQueries({ queryKey: detail, exact: true });
-      client.setQueryData(detail, saved);
-      return client.invalidateQueries({ queryKey: campaignKeys.list(contextTag) });
+      client.setQueryData<CampaignResponse | null>(detail, (current) =>
+        current === null || (current && current.status !== 'draft') ? current : saved,
+      );
+      await client.invalidateQueries({ queryKey: campaignKeys.list(contextTag) });
+      if ('id' in change) void client.invalidateQueries({ queryKey: detail, exact: true });
     },
   });
   return { ...save, isSaving: () => client.isMutating({ mutationKey, exact: true }) > 0 };
