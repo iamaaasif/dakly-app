@@ -101,3 +101,29 @@ function toResponse(item: KnowledgeItem): KnowledgeItemResponse {
     updatedAt: item.updatedAt.toISOString(),
   };
 }
+
+const chunkBytes = 2000;
+const words = new Intl.Segmenter('bn', { granularity: 'word' });
+
+export function splitKnowledgeText(text: string): string[] {
+  const chunks: string[] = [];
+  let chunk = '';
+  let bytes = 0;
+  function append(segment: string): void {
+    const length = Buffer.byteLength(segment);
+    if (bytes + length > chunkBytes) {
+      chunks.push(chunk.trim());
+      chunk = '';
+      bytes = 0;
+    }
+    chunk += segment;
+    bytes += length;
+  }
+
+  for (const { segment } of words.segment(text.trim())) {
+    if (Buffer.byteLength(segment) <= chunkBytes) append(segment);
+    else for (const codePoint of segment) append(codePoint);
+  }
+  chunks.push(chunk.trim());
+  return chunks.filter(Boolean);
+}
