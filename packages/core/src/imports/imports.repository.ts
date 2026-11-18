@@ -3,6 +3,7 @@ import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
+  ContactImportField,
   ContactImportMapping,
   ImportConsentEvidence,
   ImportDuplicateMode,
@@ -23,6 +24,18 @@ export type ImportCounts = {
   rowsFailed: number;
 };
 
+export type ImportReportLine = {
+  rowNumber?: number;
+  field?: ContactImportField | 'sms' | 'whatsapp';
+  message: string;
+};
+
+export type ImportCheckpoint = {
+  processedRows: number;
+  fileHash: string;
+  report: ImportReportLine[];
+};
+
 export type NewImportFile = {
   id: string;
   objectKey: string;
@@ -39,6 +52,7 @@ const reports = alias(files, 'reports');
 
 const importColumns = {
   id: imports.id,
+  checkpoint: sql<ImportCheckpoint | null>`${imports.checkpoint}`,
   status: imports.status,
   columnMapping: sql<ContactImportMapping | null>`${imports.columnMapping}`,
   duplicateMode: imports.duplicateMode,
@@ -58,6 +72,7 @@ const importColumns = {
 };
 
 export type Import = {
+  checkpoint: ImportCheckpoint | null;
   id: string;
   status: ImportStatus;
   columnMapping: ContactImportMapping | null;
@@ -165,12 +180,17 @@ export class ImportsRepository {
     storeId: string,
     importId: string,
     counts: ImportCounts,
-    lease: { held: Date; renewed: Date },
+    lease: { held: Date; renewed: Date; checkpoint: ImportCheckpoint },
   ): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(imports)
-        .set({ ...counts, claimedAt: lease.renewed, lastProgressAt: lease.renewed })
+        .set({
+          ...counts,
+          checkpoint: lease.checkpoint,
+          claimedAt: lease.renewed,
+          lastProgressAt: lease.renewed,
+        })
         .where(and(guard(storeId, importId, 'importing'), eq(imports.claimedAt, lease.held)))
         .returning({ id: imports.id }),
     );
@@ -195,12 +215,12 @@ export class ImportsRepository {
       lease,
       result,
       report,
-      stalled: exhausted,
+      exhausted,
     }: {
       lease: Date | null;
       result: ImportResult;
       report?: NewImportFile;
-      stalled?: { before: Date; limit: number };
+      exhausted?: { before: Date; limit: number };
     },
   ): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {
@@ -244,10 +264,17 @@ export class ImportsRepository {
   }
 
   // The last time a run made progress, or the start for an import no run has claimed yet.
-  listStuck(storeId: string, before: Date): Promise<{ id: string; claimedAt: Date | null }[]> {
+  listStuck(
+    storeId: string,
+    before: Date,
+  ): Promise<{ id: string; claimedAt: Date | null; checkpoint: ImportCheckpoint | null }[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: imports.id, claimedAt: imports.claimedAt })
+        .select({
+          id: imports.id,
+          claimedAt: imports.claimedAt,
+          checkpoint: importColumns.checkpoint,
+        })
         .from(imports)
         .where(stalled(storeId, before)),
     );

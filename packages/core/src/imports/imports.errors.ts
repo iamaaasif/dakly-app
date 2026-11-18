@@ -8,6 +8,10 @@ const IMPORT_ERRORS = {
     status: 400,
     message: 'This file is not a readable CSV. Save it as CSV (UTF-8) and upload it again',
   },
+  IMPORT_FILE_CHANGED: {
+    status: 409,
+    message: 'The uploaded file changed after a batch was saved. Start a new import',
+  },
   IMPORT_FILE_EMPTY: { status: 400, message: 'This file has no customer rows under its header' },
   IMPORT_FILE_TOO_MANY_ROWS: {
     status: 400,
@@ -27,7 +31,10 @@ const IMPORT_ERRORS = {
     message: 'An import can be undone for 7 days after it finishes',
   },
   IMPORT_BEING_RUN: { status: 409, message: 'Another run is still importing this file' },
-  IMPORT_RATE_LIMITED: { status: 429, message: 'A shop can start at most 20 imports an hour' },
+  IMPORT_RATE_LIMITED: {
+    status: 429,
+    message: 'A shop can upload at most 20 customer files an hour',
+  },
 } as const satisfies ErrorCatalog;
 
 export function importError(code: keyof typeof IMPORT_ERRORS): AppError {

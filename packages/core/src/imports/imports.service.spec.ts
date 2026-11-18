@@ -13,7 +13,13 @@ import type { RateLimiter } from '../platform/cache/rate-limiter';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
-import type { Import, ImportResult, ImportsRepository } from './imports.repository';
+import type {
+  Import,
+  ImportCheckpoint,
+  ImportCounts,
+  ImportResult,
+  ImportsRepository,
+} from './imports.repository';
 import { ImportsService } from './imports.service';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
@@ -58,7 +64,13 @@ describe('ImportsService', () => {
       lease = null;
     },
     markUploadReady: async () => undefined,
-    saveProgress: async (_s: string, _i: string, _c: unknown, held: { renewed: Date }) => {
+    saveProgress: async (
+      _s: string,
+      _i: string,
+      counts: ImportCounts,
+      held: { renewed: Date; checkpoint: ImportCheckpoint },
+    ) => {
+      Object.assign(found!, counts, { checkpoint: structuredClone(held.checkpoint) });
       lease = held.renewed;
       return true;
     },
@@ -166,6 +178,7 @@ describe('ImportsService', () => {
       finishedAt: null,
       undoFinishedAt: null,
       startedByUserId: USER_ID,
+      checkpoint: null,
       uploadFileId: '019c01ea-cf15-7d31-a7f5-d73d66007ad8',
       uploadKey: UPLOAD,
       reportKey: null,

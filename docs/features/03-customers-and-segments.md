@@ -111,7 +111,7 @@ undo the contacts it added.
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
   browser sends the file straight to R2 under `imports/<storeId>/<uuid>.csv`, with
   `Content-Type: text/csv` and exactly the declared size: both are signed into the URL, so R2
-  refuses any other body. A store starts at most 20 imports an hour (`IMPORT_RATE_LIMITED`).
+  refuses any other body. A shop can upload at most 20 customer files an hour (`IMPORT_RATE_LIMITED`).
 - The upload's `files` row has `expires_at` 7 days ahead, and an R2 lifecycle rule deletes
   everything under `imports/` after 7 days.
 - Start: `POST /imports/:importId/start` takes the column mapping, the duplicate mode
@@ -168,7 +168,8 @@ undo the contacts it added.
   event, up to 4 times, and failed only after that, with a line in its report. The report is a
   CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
   progress time, retry limit and observed lease in one update. A report from a sweep
-  that loses this check is deleted.
+  that loses this check is deleted. The final failed report keeps checkpointed row errors and
+  warnings alongside the stopped-import message.
 - A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
   the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
   being read as records, so 10 MB of line breaks costs no memory.
@@ -192,8 +193,11 @@ undo the contacts it added.
   records nothing new. If the saved WhatsApp destination differs from the file, the import
   skips that grant and reports "WhatsApp consent skipped: number differs". Evidence for
   other channels still applies to that row.
-- A retried job finds the contacts this import already added and does not write them again,
-  so the counts and consent come out the same.
+- Each batch saves a checkpoint with its completed row position, file hash and report entries
+  in the same transaction as contact writes and counts. A retry resumes after committed
+  batches, preserving their original results and any later member edits. A changed upload
+  fails with `IMPORT_FILE_CHANGED` before any remaining rows are written; the committed
+  counts and report entries stay available.
 - The report is a CSV with the row, the field and the problem. Its `files` row has
   `expires_at` 7 days ahead, like the upload, and the R2 lifecycle rule on `imports/` deletes
   both objects after 7 days.

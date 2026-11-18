@@ -1,8 +1,9 @@
+import { createHash } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
-  type ContactImportField,
   type CreateImportInput,
   type ImportResponse,
   type ImportUploadResponse,
@@ -29,6 +30,7 @@ import { importError } from './imports.errors';
 import {
   type Import,
   type ImportCounts,
+  type ImportReportLine as ReportLine,
   ImportsRepository,
   type NewImportFile,
 } from './imports.repository';
@@ -39,16 +41,11 @@ type Outcome = {
   status: 'done' | 'failed';
   counts?: ImportCounts;
   lines: ReportLine[];
-  stalled?: { before: Date; limit: number };
-};
-type ReportLine = {
-  rowNumber?: number;
-  field?: ContactImportField | 'sms' | 'whatsapp';
-  message: string;
+  exhausted?: { before: Date; limit: number };
 };
 
 const LINK_SECONDS = 15 * 60;
-// Each import is a file in R2 and a bulk job, so a store starts at most 20 an hour.
+// Uploads consume R2 storage, so a shop can upload at most 20 customer files an hour.
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
@@ -219,7 +216,7 @@ export class ImportsService {
   }
 
   // The file is read before any transaction opens, and each batch commits on its own. A retry
-  // reads the file again: contacts this import added are found, not added twice.
+  // verifies the file again and resumes after the last committed batch.
   async runCustomerImport(storeId: string, importId: string): Promise<void> {
     const found = await this.repository.findById(storeId, importId);
     if (found?.status !== 'importing') return;
@@ -231,6 +228,8 @@ export class ImportsService {
       throw importError('IMPORT_BEING_RUN');
     const run: Run = { storeId, found, lease: now, finished: false };
     try {
+      // The prior run may have committed a batch between the eligibility read and this claim.
+      run.found = await this.findImport(storeId, importId);
       await this.importFile(run);
     } finally {
       // A failed run lets go at once, so the queue's retry need not wait for the lease to go stale.
@@ -259,39 +258,51 @@ export class ImportsService {
         if (!requeued)
           await this.finish(storeId, stuck.id, stuck.claimedAt, {
             status: 'failed',
-            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
-            stalled: { before, limit: MAX_REQUEUES },
+            lines: [
+              ...(stuck.checkpoint?.report ?? []),
+              { message: 'The import stopped before it finished. Upload the file again' },
+            ],
+            exhausted: { before, limit: MAX_REQUEUES },
           });
       }
   }
 
+  private async readImportFile(storeId: string, found: Import) {
+    const text = await this.download(found.uploadKey);
+    const fileHash = createHash('sha256').update(text).digest('hex');
+    if (found.checkpoint && found.checkpoint.fileHash !== fileHash)
+      throw importError('IMPORT_FILE_CHANGED');
+    await this.repository.markUploadReady(storeId, found.uploadFileId);
+    return { fileHash, file: readCustomerImportRows(text, found.columnMapping!) };
+  }
+
   private async importFile(run: Run): Promise<void> {
     const { storeId, found } = run;
-    let file: CustomerImportRows;
+    let read: { file: CustomerImportRows; fileHash: string };
     try {
-      const text = await this.download(found.uploadKey);
-      await this.repository.markUploadReady(storeId, found.uploadFileId);
-      file = readCustomerImportRows(text, found.columnMapping!);
+      read = await this.readImportFile(storeId, found);
     } catch (error) {
       // A file that cannot be read fails the import with the reason in its report; nothing to retry.
       if (!(error instanceof AppError)) throw error;
-      return this.finishRun(run, { status: 'failed', lines: [{ message: error.message }] });
+      return this.finishRun(run, {
+        status: 'failed',
+        lines: [...(found.checkpoint?.report ?? []), { message: error.message }],
+      });
     }
-    const failedRows = new Set(file.errors.map((error) => error.rowNumber)).size;
-    const counts = {
-      rowsTotal: file.rows.length + failedRows,
-      rowsAdded: 0,
-      rowsUpdated: 0,
-      rowsSkipped: 0,
-      rowsFailed: failedRows,
-    };
-    const report: ReportLine[] = [...file.errors];
-    for (let first = 0; first < file.rows.length; first += BATCH_ROWS) {
+    const { file, fileHash } = read;
+    const counts = resumedCounts(found, file);
+    const report: ReportLine[] = found.checkpoint?.report ?? [...file.errors];
+    for (
+      let first = found.checkpoint?.processedRows ?? 0;
+      first < file.rows.length;
+      first += BATCH_ROWS
+    ) {
       const batch = file.rows.slice(first, first + BATCH_ROWS);
       run.lease = await this.transaction.run(storeId, async () => {
         report.push(...(await this.applyBatch(run, batch, counts)));
         const renewed = this.clock.now();
-        const lease = { held: run.lease, renewed };
+        const checkpoint = { processedRows: first + batch.length, fileHash, report };
+        const lease = { held: run.lease, renewed, checkpoint };
         if (!(await this.repository.saveProgress(storeId, found.id, counts, lease)))
           throw new Error('Another run took over this import');
         return renewed;
@@ -396,7 +407,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines, stalled }: Outcome,
+    { status, counts, lines, exhausted }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
@@ -404,7 +415,7 @@ export class ImportsService {
       lease,
       result,
       report,
-      stalled,
+      exhausted,
     });
     if (!finished && report) await this.storage.deleteObject(report.objectKey);
   }
@@ -452,4 +463,15 @@ function reportCsv(lines: ReportLine[]): string {
       .join(','),
   );
   return `${['Row,Field,Problem', ...records].join('\r\n')}\r\n`;
+}
+
+function resumedCounts(found: Import, file: CustomerImportRows): ImportCounts {
+  const failedRows = new Set(file.errors.map((error) => error.rowNumber)).size;
+  return {
+    rowsTotal: found.rowsTotal ?? file.rows.length + failedRows,
+    rowsAdded: found.rowsAdded ?? 0,
+    rowsUpdated: found.rowsUpdated ?? 0,
+    rowsSkipped: found.rowsSkipped ?? 0,
+    rowsFailed: found.rowsFailed ?? failedRows,
+  };
 }

@@ -24,9 +24,9 @@ export type CustomerImportRows = {
 // A file that is not valid UTF-8, such as UTF-16 from Excel, is refused rather than read as
 // garbled text.
 export function decodeCustomerImportFile(bytes: Uint8Array): string {
+  if (bytes.some((byte) => byte < 32 && byte !== 9 && byte !== 10 && byte !== 13))
+    throw importError('IMPORT_FILE_UNREADABLE');
   try {
-    if (bytes.some((byte) => byte < 32 && byte !== 9 && byte !== 10 && byte !== 13))
-      throw importError('IMPORT_FILE_UNREADABLE');
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     throw importError('IMPORT_FILE_UNREADABLE');
@@ -136,7 +136,7 @@ function readRecord(text: string, start: number) {
     position = end + 1;
     if (text[end] !== ',') break;
     if (position >= text.length) {
-      cells.push('');
+      if (cells.length < MAX_IMPORT_COLUMNS) cells.push('');
       break;
     }
   }
@@ -171,7 +171,8 @@ function quotedCell(text: string, start: number) {
   }
 }
 
-// String concatenation and replacement allocate per escape on Node 22; one buffer bounds memory.
+// Node 22.23.4 slice/replaceAll peaks at 304,200 KiB RSS for the quote-heavy 10 MB case.
+// One buffer keeps decoding below the 192 MiB regression limit without per-escape strings.
 function decodeQuotedCell(text: string, start: number, end: number, escaped: number): string {
   if (escaped === 0) return text.slice(start, end);
   const bytes = Buffer.allocUnsafe((end - start - escaped) * 2);

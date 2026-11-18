@@ -1,6 +1,6 @@
 {
-  "id": "50a7f7e1-548a-4f9b-9063-74d2195ee5b2",
-  "prevId": "58c6b6db-b405-486c-90aa-d548b5263ff2",
+  "id": "c43e2444-2f99-4b73-9685-659e036f26a5",
+  "prevId": "f96ef8bf-72f3-479f-9c30-f49620b2a2ad",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -13485,6 +13485,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "checkpoint": {
+          "name": "checkpoint",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "report_file_id": {
           "name": "report_file_id",
           "type": "uuid",
@@ -13503,6 +13509,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "started_by_user_id": {
+          "name": "started_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "finished_at": {
           "name": "finished_at",
           "type": "timestamp with time zone",
@@ -13517,12 +13529,6 @@
         },
         "last_progress_at": {
           "name": "last_progress_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "undo_finished_at": {
-          "name": "undo_finished_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -13652,6 +13658,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "imports_started_by_user_id_idx": {
+          "name": "imports_started_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "started_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -13700,6 +13721,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_started_by_user_id_users_id_fk": {
+          "name": "imports_started_by_user_id_users_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "started_by_user_id"
           ],
           "columnsTo": [
             "id"

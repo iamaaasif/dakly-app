@@ -142,7 +142,7 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
     });
   });
 
-  it('lets a store start at most 20 imports an hour', async () => {
+  it('lets a store upload at most 20 customer files an hour', async () => {
     const otherStore = randomUUID();
     await admin.pool.query("insert into stores(id,name) values($1,'করিমের দোকান')", [otherStore]);
     stores.push(otherStore);
