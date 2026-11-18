@@ -288,6 +288,13 @@
       "when": 1795004972403,
       "tag": "0040_partial_delivery_totals",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795015726719,
+      "tag": "0041_automation_send_costs",
+      "breakpoints": true
     }
   ]
 }
