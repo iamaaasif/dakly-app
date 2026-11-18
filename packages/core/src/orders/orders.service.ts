@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -30,7 +31,6 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTransitions,
   productArchiveStages,
   recordOrderStage,
   stageWrite,
