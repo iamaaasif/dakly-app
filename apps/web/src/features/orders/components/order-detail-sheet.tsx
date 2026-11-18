@@ -7,9 +7,10 @@ import { Sheet, type SheetProps } from '@dakly/ui/sheet';
 
 import { useOrderStage } from '../api/change-order-stage';
 import { useOrder } from '../api/get-order';
-import { canConfirmOrder } from '../order-actions';
+import { canConfirmOrder, canEditOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
 import { OrderDetails } from './order-details';
+import { OrderEditorDialog } from './order-editor-dialog';
 import {
   OrderStageActions,
   orderStageActions,
@@ -21,6 +22,8 @@ import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
+type OrderDrawerAction = StageFormAction | 'edit';
+
 type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'fallbackFocus'>;
 
 export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailSheetProps) {
@@ -30,11 +33,12 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
   const { data } = useSessionContext();
   const transition = useOrderStage();
   const stage = useRef<HTMLSpanElement>(null);
-  const [action, setAction] = useState<StageFormAction>();
+  const [action, setAction] = useState<OrderDrawerAction>();
   const canEdit = data?.currentStore?.canEditOrders;
   const canConfirm = canConfirmOrder(order, canEdit);
   const actions = orderStageActions(order, canEdit);
-  const formAction = action && actions.includes(action) ? action : undefined;
+  const editable = canEditOrder(order, canEdit);
+  const formAction = orderDrawerAction(action, actions, editable);
 
   return (
     <>
@@ -44,21 +48,42 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
         onClose={onClose}
         fallbackFocus={fallbackFocus}
         footer={
-          (canConfirm || actions.length > 0) && (
+          canConfirm || actions.length || editable ? (
             <OrderStageFooter
               {...{ id, transition, stage, canConfirm, actions }}
               onForm={setAction}
+              onEdit={editable ? () => setAction('edit') : undefined}
             />
-          )
+          ) : undefined
         }
       >
         <OrderDetailContent query={query} stage={stage} />
       </Sheet>
-      {formAction && order && (
-        <OrderStageDialog order={order} action={formAction} onClose={() => setAction(undefined)} />
-      )}
+      <OrderDrawerForm order={order} action={formAction} onClose={() => setAction(undefined)} />
     </>
   );
+}
+
+function orderDrawerAction(
+  action: OrderDrawerAction | undefined,
+  allowed: readonly StageAction[],
+  editable: boolean,
+) {
+  if (action === 'edit') return editable ? action : undefined;
+  return action && allowed.includes(action) ? action : undefined;
+}
+
+type OrderDrawerFormProps = {
+  order?: OrderDetail;
+  action?: OrderDrawerAction;
+  onClose: () => void;
+};
+
+function OrderDrawerForm({ order, action, onClose }: OrderDrawerFormProps) {
+  if (!order || !action) return null;
+  if (action === 'edit')
+    return <OrderEditorDialog order={order} onClose={onClose} onSaved={onClose} />;
+  return <OrderStageDialog order={order} action={action} onClose={onClose} />;
 }
 
 function OrderDetailContent({
@@ -105,6 +130,7 @@ type OrderStageFooterProps = {
   canConfirm: boolean;
   actions: readonly StageAction[];
   onForm: (action: StageFormAction) => void;
+  onEdit?: () => void;
 };
 
 function OrderStageFooter({
@@ -114,6 +140,7 @@ function OrderStageFooter({
   canConfirm,
   actions,
   onForm,
+  onEdit,
 }: OrderStageFooterProps) {
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
     const drawer = button.closest('[role="dialog"]');
@@ -144,6 +171,11 @@ function OrderStageFooter({
             onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
           >
             Mark confirmed
+          </Button>
+        )}
+        {onEdit && (
+          <Button variant="secondary" onClick={onEdit} disabled={transition.isPending}>
+            Edit order
           </Button>
         )}
         <OrderStageActions

@@ -244,7 +244,7 @@ The pipeline URL keeps the stage, search, page cursor and selected order. Search
 
 The order drawer offers actions for its current stage. Staff can put an order on hold, confirm a cancellation, record a courier and tracking code, mark delivery per item, record a return, and record the COD they received.
 
-Staff can enter the buyer and delivery details, select variants with their stock shown, and save a new order in To confirm. The buyer is the recipient by default. Choose Deliver to someone else to enter a separate recipient. Staff can choose an existing buyer or enter a new one. The form shows the zone charge, allows an override and previews COD after any discount and advance received. Save as confirmed records the order in To pack after staff confirmation. Paste and fill waits for the AI layer, and the payment link waits for PAY-6.
+Staff can enter the buyer and delivery details, select variants with their stock shown, and save a new order in To confirm. The buyer is the recipient by default. Choose Deliver to someone else to enter a separate recipient. Staff can choose an existing buyer or enter a new one. The form shows the zone charge, allows an override and previews COD after any discount and advance received. Save as confirmed records the order in To pack after staff confirmation. Staff can edit eligible orders from the drawer. Changing quantities keeps saved prices for existing items, updates reservations and recalculates COD. Paste and fill waits for the AI layer, and the payment link waits for PAY-6.
 
 The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 

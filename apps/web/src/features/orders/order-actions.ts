@@ -17,3 +17,12 @@ export function canConfirmOrder(
     (order.stage === 'to_confirm' || order.stage === 'on_hold')
   );
 }
+
+export function canEditOrder(order: OrderSummary | undefined, canEditOrders?: boolean): boolean {
+  return (
+    order !== undefined &&
+    canChangeOrderStage(order, canEditOrders) &&
+    ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) &&
+    ['cod_pending', 'advance_paid'].includes(order.paymentStatus)
+  );
+}

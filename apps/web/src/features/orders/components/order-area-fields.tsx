@@ -4,7 +4,13 @@ import type { AreaResponse } from '@dakly/contracts/delivery';
 
 import { useOrderAreas } from '../api/get-areas';
 
-export function OrderAreaFields({ onChange }: { onChange: (id: number | undefined) => void }) {
+export function OrderAreaFields({
+  currentDistrict,
+  onChange,
+}: {
+  currentDistrict?: string;
+  onChange: (id: number | undefined) => void;
+}) {
   const [division, setDivision] = useState(0);
   const [district, setDistrict] = useState(0);
   const [upazila, setUpazila] = useState(0);
@@ -30,6 +36,7 @@ export function OrderAreaFields({ onChange }: { onChange: (id: number | undefine
         label="District"
         items={districts.data?.items}
         value={district}
+        current={division ? undefined : currentDistrict}
         onChange={(id) => {
           setDistrict(id);
           setUpazila(0);
@@ -60,11 +67,13 @@ function AreaSelect({
   label,
   items,
   value,
+  current,
   onChange,
 }: {
   label: string;
   items?: AreaResponse[];
   value: number;
+  current?: string;
   onChange: (id: number) => void;
 }) {
   return (
@@ -76,7 +85,7 @@ function AreaSelect({
         disabled={!items?.length}
         onChange={(event) => onChange(Number(event.target.value))}
       >
-        <option value={0}>{`Choose ${label.toLowerCase()}`}</option>
+        <option value={0}>{current ?? `Choose ${label.toLowerCase()}`}</option>
         {items?.map((area) => (
           <option key={area.id} value={area.id}>
             {area.name}

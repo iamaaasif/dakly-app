@@ -307,3 +307,15 @@ export const editOrderSchema = z.strictObject({
   advancePaidPoisha: money.optional(),
 });
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
+const editOrderFormSchema = editOrderSchema.extend({
+  deliveryChargePoisha: takaInput.optional(),
+  orderDiscountPoisha: takaInput.optional(),
+  advancePaidPoisha: takaInput.optional(),
+});
+
+export const orderEditorSchema = z.discriminatedUnion('mode', [
+  createOrderFormSchema.extend({ mode: z.literal('new') }),
+  editOrderFormSchema.extend({ mode: z.literal('edit') }),
+]);
+export type OrderEditorValues = z.input<typeof orderEditorSchema>;
+export type OrderEditorInput = z.output<typeof orderEditorSchema>;

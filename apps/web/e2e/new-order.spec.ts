@@ -19,7 +19,7 @@ async function capture(page: Page, name: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
-    if (name === 'new') {
+    if (name === 'new' || name === 'edit') {
       if (width === 360) {
         await page.getByText('Cash on delivery').scrollIntoViewIfNeeded();
         await expect(page.getByRole('button', { name: 'Save order' })).toBeInViewport();
@@ -148,6 +148,18 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     );
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
     await expect(detail.getByText('৳1,110')).toBeVisible();
+
+    await detail.getByRole('button', { name: 'Edit order' }).click();
+    const edit = page.getByRole('dialog', { name: 'Edit order' });
+    await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
+    await expect(edit.getByText('3 in stock')).toBeVisible();
+    await edit.getByLabel('Quantity 1').fill('2');
+    await expect(
+      edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),
+    ).toBeVisible();
+    await capture(page, 'edit');
+    await edit.getByRole('button', { name: 'Save order', exact: true }).click();
+    await expect(detail.getByText('৳2,360')).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string }>(
       'select id from orders where store_id=$1 and delivery_zone_id=$2',

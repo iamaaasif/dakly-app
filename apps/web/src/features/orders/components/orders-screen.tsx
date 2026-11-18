@@ -11,9 +11,9 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
-import { NewOrderDialog } from './new-order-dialog';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
+import { OrderEditorDialog } from './order-editor-dialog';
 import { OrderFilters } from './order-filters';
 import { OrderSearch } from './order-search';
 import { OrdersList } from './orders-list';
@@ -99,7 +99,7 @@ function OrdersHeader({
       </div>
       {canCreate && <Button onClick={() => setOpen(true)}>New order</Button>}
       {open && (
-        <NewOrderDialog
+        <OrderEditorDialog
           onClose={() => setOpen(false)}
           onSaved={(id) => {
             setOpen(false);
