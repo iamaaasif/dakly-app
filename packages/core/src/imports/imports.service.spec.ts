@@ -429,7 +429,7 @@ describe('ImportsService', () => {
       finishedImport('undone');
       pool = ids(1_200);
 
-      await service.finishUndo(STORE_ID, IMPORT_ID);
+      await service.finishUndo(STORE_ID, IMPORT_ID, { kind: 'system' });
 
       expect(removed).toEqual(ids(1_200));
       expect(found?.undoFinishedAt).toEqual(new Date('2026-11-17T04:30:00Z'));
@@ -446,7 +446,7 @@ describe('ImportsService', () => {
         { contactId: whatsappOptOut!, channel: 'whatsapp', status: 'withdrawn', source: 'stop' },
       ];
 
-      await service.finishUndo(STORE_ID, IMPORT_ID);
+      await service.finishUndo(STORE_ID, IMPORT_ID, { kind: 'system' });
 
       expect(removed).toEqual([granted]);
       expect(pool).toEqual([optedOut, manual, whatsappOptOut]);
@@ -456,10 +456,10 @@ describe('ImportsService', () => {
     it('removes nothing for an import that is not undone or whose removal finished', async () => {
       pool = ids(5);
       finishedImport('done');
-      await service.finishUndo(STORE_ID, IMPORT_ID);
+      await service.finishUndo(STORE_ID, IMPORT_ID, { kind: 'system' });
       finishedImport('undone');
       found = { ...found!, undoFinishedAt: finishedAt };
-      await service.finishUndo(STORE_ID, IMPORT_ID);
+      await service.finishUndo(STORE_ID, IMPORT_ID, { kind: 'system' });
 
       expect(removed).toEqual([]);
     });

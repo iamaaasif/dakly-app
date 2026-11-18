@@ -135,8 +135,8 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
-  finishUndo(storeId: string, importId: string): Promise<void> {
-    return this.undoImport.run(storeId, importId, { kind: 'system' });
+  finishUndo(storeId: string, importId: string, actor: Actor): Promise<void> {
+    return this.undoImport.run(storeId, importId, actor);
   }
 
   async get(storeId: string, importId: string): Promise<ImportResponse> {

@@ -583,7 +583,7 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
 
     async function undo(importId: string) {
       const result = await service.undo(storeId, importId, owner);
-      await service.finishUndo(storeId, importId);
+      await service.finishUndo(storeId, importId, { kind: 'system' });
       return result;
     }
 
@@ -664,8 +664,8 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
         [storeId, importId],
       );
       expect(events.rows).toEqual([{ payload: { importId } }]);
-      await service.finishUndo(storeId, importId);
-      await service.finishUndo(storeId, importId);
+      await service.finishUndo(storeId, importId, { kind: 'system' });
+      await service.finishUndo(storeId, importId, { kind: 'system' });
       expect(await deletedAt(contactId)).not.toBeNull();
       await expect(service.undo(storeId, importId, owner)).rejects.toMatchObject({
         code: 'IMPORT_NOT_UNDOABLE',
@@ -750,7 +750,7 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
         status: 'undone',
         undoFinishedAt: null,
       });
-      await service.finishUndo(storeId, importId);
+      await service.finishUndo(storeId, importId, { kind: 'system' });
       expect((await service.get(storeId, importId)).undoFinishedAt).not.toBeNull();
       expect(await deletedAt(contactId)).not.toBeNull();
       await admin.pool.query(
@@ -826,7 +826,9 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
           if (pages === 2) throw new Error('Worker stopped');
           return restore(...args);
         });
-      await expect(service.finishUndo(storeId, importId)).rejects.toThrow('Worker stopped');
+      await expect(service.finishUndo(storeId, importId, { kind: 'system' })).rejects.toThrow(
+        'Worker stopped',
+      );
       const counts = async () =>
         (
           await admin.pool.query(
@@ -851,8 +853,8 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
         },
         owner,
       );
-      await service.finishUndo(storeId, importId);
-      await service.finishUndo(storeId, importId);
+      await service.finishUndo(storeId, importId, { kind: 'system' });
+      await service.finishUndo(storeId, importId, { kind: 'system' });
       expect(await counts()).toEqual([
         { status: 'granted', count: 502 },
         { status: 'not_answered', count: 502 },
