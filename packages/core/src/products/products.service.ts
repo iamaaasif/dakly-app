@@ -2,6 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
+  OrderCataloguePage,
+  OrderCatalogueProduct,
+  OrderCatalogueQuery,
+} from '@dakly/contracts/orders';
+import type {
   CreateProductInput,
   ChangeProductInput,
   ProductListQuery,
@@ -108,6 +113,19 @@ export class ProductsService {
       toResponse(product, product.variants, stock.lowStockThreshold, this.storage),
     );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {
+    const { stock } = await this.stores.settings(storeId);
+    const rows = await this.repository.list(storeId, query, stock.lowStockThreshold);
+    const items = rows.slice(0, query.limit).map(orderCatalogueProduct);
+    return { items, nextCursor: rows.length > query.limit ? (items.at(-1)?.id ?? null) : null };
+  }
+
+  async getForOrder(storeId: string, id: string): Promise<OrderCatalogueProduct> {
+    const product = await this.repository.findById(storeId, id);
+    if (!product) throw productError('PRODUCT_NOT_FOUND');
+    return orderCatalogueProduct(product);
   }
 
   remove(storeId: string, id: string, _actor: Actor): Promise<void> {
@@ -350,6 +368,21 @@ export class ProductsService {
       payload: { productId },
     });
   }
+}
+
+function orderCatalogueProduct(product: CatalogueProduct): OrderCatalogueProduct {
+  return {
+    id: product.id,
+    name: product.name,
+    isStockTracked: product.isStockTracked,
+    variants: product.variants.map((variant) => ({
+      id: variant.id,
+      title: variant.title,
+      isDefault: variant.isDefault,
+      pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
+      available: variant.onHand - variant.reserved,
+    })),
+  };
 }
 
 function toResponse(

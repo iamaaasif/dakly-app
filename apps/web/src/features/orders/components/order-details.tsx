@@ -53,6 +53,11 @@ function DeliveryDetails({ order }: { order: OrderDetail }) {
         {order.recipientAddress}, {order.recipientDistrict}
       </p>
       <BuyerDetails order={order} />
+      {order.hasRecipientPhoneMatch && (
+        <p className="mt-2 text-sm text-warning">
+          The delivery phone may match another customer profile.
+        </p>
+      )}
     </section>
   );
 }

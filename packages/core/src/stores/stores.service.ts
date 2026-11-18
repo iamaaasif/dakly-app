@@ -50,6 +50,12 @@ export class StoresService {
     return toSettingsResponse(store);
   }
 
+  async timeZone(storeId: string): Promise<string> {
+    const timeZone = await this.repository.timeZone(storeId);
+    if (timeZone === undefined) throw storeError('STORE_NOT_FOUND');
+    return timeZone;
+  }
+
   async sendingSettings(storeId: string): Promise<SendingSettings & { timeZone: string }> {
     const store = await this.repository.sendingSettings(storeId);
     if (!store) throw storeError('STORE_NOT_FOUND');

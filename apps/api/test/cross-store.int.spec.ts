@@ -190,6 +190,114 @@ fixture('GET /orders', async () => {
     expect(result.json()).toMatchObject({ items: [{ id }], counts: { to_confirm: 1 } });
     expect(result.json().items).toHaveLength(1);
   }
+  await f.admin.pool.query("update stores set time_zone='America/New_York' where id=$1", [b.id]);
+  await f.admin.pool.query(
+    `update orders set stage='delivered', source='whatsapp', courier='pathao',
+      created_at=case when id=$1 then '2026-11-16T18:00:00Z'::timestamptz
+                      else '2026-11-18T04:59:59Z'::timestamptz end
+      where id in ($1,$2)`,
+    [ownA, ownB],
+  );
+  const filtered =
+    '/orders?stage=delivered&source=whatsapp&courier=pathao&createdFrom=2026-11-17&createdThrough=2026-11-17';
+  for (const [shop, id] of [
+    [a, ownA],
+    [b, ownB],
+  ] as const) {
+    expect((await success(shop, 'GET', filtered, 200)).json().items).toEqual([
+      expect.objectContaining({ id }),
+    ]);
+  }
+  await f.admin.pool.query("update orders set created_at='2026-11-18T05:00:00Z' where id=$1", [
+    ownB,
+  ]);
+  expect((await success(b, 'GET', filtered, 200)).json().items).toEqual([]);
+  for (const unmatched of [
+    filtered.replace('source=whatsapp', 'source=manual'),
+    filtered.replace('courier=pathao', 'courier=redx'),
+    filtered.replaceAll('2026-11-17', '2026-11-18'),
+    filtered.replace(
+      '&createdFrom=2026-11-17&createdThrough=2026-11-17',
+      '&createdThrough=2026-11-16',
+    ),
+  ]) {
+    expect((await success(a, 'GET', unmatched, 200)).json().items).toEqual([]);
+  }
+});
+
+fixture('GET /orders/catalogue', async () => {
+  const { a, b } = await pair();
+  const own = (
+    await success(b, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 125000,
+      isStockTracked: true,
+    })
+  ).json();
+  const foreign = await success(a, 'POST', '/products', 201, {
+    name: 'Panjabi',
+    pricePoisha: 80000,
+  });
+  expect(foreign.statusCode).toBe(201);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', '/orders/catalogue')).statusCode).toBe(403);
+  const role = (
+    await success(b, 'POST', '/roles', 201, {
+      name: 'Order desk',
+      permissions: { ...permissions, areas: { orders: 'edit' } },
+    })
+  ).json();
+  await success(b, 'PATCH', `/members/${b.membership}`, 200, { roleId: role.id });
+  expect((await f.request(b.member, 'GET', '/products')).statusCode).toBe(403);
+  const catalogue = await f.request(b.member, 'GET', '/orders/catalogue?search=Panjabi');
+  expect(catalogue.statusCode).toBe(200);
+  expect(catalogue.json()).toEqual({
+    items: [
+      {
+        id: own.id,
+        name: 'Panjabi',
+        isStockTracked: true,
+        variants: [
+          {
+            id: own.variants[0].id,
+            title: own.variants[0].title,
+            isDefault: true,
+            pricePoisha: 125000,
+            available: 0,
+          },
+        ],
+      },
+    ],
+    nextCursor: null,
+  });
+});
+
+fixture('GET /orders/catalogue/:productId', async () => {
+  const { a, b } = await pair();
+  const product = (
+    await success(a, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 125000,
+    })
+  ).json();
+  await f.admin.pool.query(
+    "insert into product_variants (id,store_id,product_id,title,status) values ($1,$2,$3,'Old size','archived')",
+    [randomUUID(), a.id, product.id],
+  );
+  const url = (id: string) => `/orders/catalogue/${id}`;
+  expect((await success(a, 'GET', url(product.id), 200)).json()).toMatchObject({
+    id: product.id,
+    variants: [{ id: product.variants[0].id, pricePoisha: 125000 }],
+  });
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    a.membership,
+  ]);
+  expect((await f.request(a.member, 'GET', url(product.id))).statusCode).toBe(403);
+  await hidden(b, 'GET', url, product.id);
+  await success(a, 'DELETE', `/products/${product.id}`, 204);
+  await hidden(a, 'GET', url, product.id);
 });
 
 fixture('GET /orders/:orderId', async () => {
@@ -478,6 +586,22 @@ fixture('POST /delivery-zones/initialize-defaults', async () => {
   for (const zone of result.json().items)
     expect((await f.row('delivery_zones', zone.id)).store_id).toBe(b.id);
   expect(await f.row('delivery_zones', id)).toEqual(before);
+});
+fixture('GET /delivery-zones/charge', async () => {
+  const { a, b } = await pair();
+  await deliveryZone(a);
+  await success(b, 'POST', '/delivery-zones', 201, {
+    name: 'Standard delivery',
+    chargePoisha: 6000,
+    isDefault: true,
+  });
+  const path = '/delivery-zones/charge?areaId=301';
+  expect((await success(a, 'GET', path, 200)).json().chargePoisha).toBe(12000);
+  expect((await success(b, 'GET', path, 200)).json().chargePoisha).toBe(6000);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', path)).statusCode).toBe(403);
 });
 fixture('GET /delivery-zones', async () => {
   const { a, b } = await pair(),

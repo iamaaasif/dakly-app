@@ -246,6 +246,8 @@ The campaign builder and the visual workflow editor are the strongest screens in
 
 Owner decision (18 Nov 2026): build the campaign list and builder from `campaigns.webp` and `campaigns-and-automations/` first. Draft rows open the builder; sent rows open a read-only summary in the builder until results exist. Build results after ORD-3 from the screen table above and this section, with no separate design. CAMP-4 stays In progress after the list and builder merge.
 
+The first builder slice opens an SMS draft, saves its name and goal, and shows a read-only summary for a sent campaign. It sends only changed fields, resets the form to the saved values on success, and shows a server error if a save is refused. After creating a draft, the form stays locked while the builder opens. The campaign list links these screens in the next slice. Content, audience, scheduling and approval controls follow separately.
+
 **Why it's needed.** Clicking a campaign in the Campaigns list does nothing. Shop owners send a campaign and then want to know if it worked and who bought. The Dashboard, Analytics and notifications ("Kurti campaign earned ৳1,86,900 · Send it again") all point to a page that doesn't exist.
 
 **What to design.**
@@ -382,6 +384,8 @@ Quiet hours, the cap and the approval setting are the `sending` section of `stor
 
 The gate does not reserve cost: the campaign reserves at approval (CAMP-2) and the sending job reserves or releases around the gate in the same transaction (CAMP-3, CAMP-5).
 
+The workflow dispatch gate can take the contact and frequency locks and read the database clock after the waits. It returns the checked destination and time. The wallet service exposes the reservation lock so callers can take it before the gate. The schema accepts `no_credits` as a skipped-send reason and `not_reachable` as a workflow exit reason.
+
 ### Channel rules
 
 Checked 13 Nov 2026; sources are in the market study. Confirm the SMS rules with the chosen aggregator.
@@ -401,6 +405,7 @@ Window first: a send step tries a free-form message on the channel where the cus
 Campaigns and workflows send through `MessagingService.send(storeId, { channel, contactId, body, operationKey })` in `messaging/` (D37). SMS is the only channel so far (D40); Messenger and Instagram join the same method later.
 
 - It reads the contact's phone through `ContactsService`. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone goes only to the SMS driver; it is never logged or returned.
+- Messaging can check a frozen destination before calling the provider. A changed phone returns `MESSAGING_DESTINATION_CHANGED`. A prepared sender name is bound to its store, and messaging looks up the current store's approved sender when the prepared value belongs to another store.
 - It counts parts with `countSmsParts` in `packages/contracts/src/sms.ts`, where the web app can use the same counter. One part holds 160 GSM-7 or 70 Unicode characters; a longer text splits into parts of 153 or 67, because each part carries a header. One Bangla character makes the whole text Unicode, and `^ { } \ [ ] ~ | €` take two GSM-7 characters each. One part costs one SMS credit.
 - It calls the driver with no store transaction open and refuses to run inside one (`MESSAGING_INSIDE_TRANSACTION`). It returns the provider message id, parts and credits. The caller, a campaign recipient or a workflow step, records status and cost and decides retries; `messaging/` writes no rows.
 - Every SMS goes from Dakly's shared sender until the store's own sender name is approved ([feature 02](02-channel-connections.md)); then it goes from that name. Delivery receipts come with the provider driver (ACC-14); Mailpit, used in development and tests, sends none, so an accepted message counts as delivered.
