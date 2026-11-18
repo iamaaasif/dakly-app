@@ -45,17 +45,20 @@ export async function applyOrderFulfilment(
       if (!change.isDamaged) {
         const lines = (await orders.items(storeId, orderId)).map((item) => ({
           ...item,
-          quantity:
-            order.stage === 'with_courier'
-              ? item.quantity
-              : (item.deliveredQuantity ?? (order.stage === 'delivered' ? item.quantity : 0)),
+          quantity: item.deliveredQuantity ?? item.quantity,
         }));
         await moveOrderStock(storeId, products, lines, {
           kind: 'return',
           reference: { ...reference, reason: change.reason },
         });
       }
-      return { returnedAt: now, returnReason: change.reason };
+      return {
+        returnedAt: now,
+        returnReason: change.reason,
+        ...(['paid', 'advance_paid', 'cod_collected'].includes(order.paymentStatus) && {
+          paymentStatus: 'refund_due',
+        }),
+      };
     default:
       return {};
   }
