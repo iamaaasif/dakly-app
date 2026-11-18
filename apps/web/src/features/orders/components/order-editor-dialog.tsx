@@ -1,6 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRef, type FormEvent } from 'react';
-import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
+import {
+  FormProvider,
+  useFieldArray,
+  useForm,
+  useFormContext,
+  useWatch,
+  type UseFormHandleSubmit,
+} from 'react-hook-form';
 
 import {
   createOrderFormSchema,
@@ -31,9 +38,6 @@ const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
 export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
-  const create = useCreateOrder();
-  const transition = useOrderStage();
-  const confirmAfterSave = useRef(false);
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
     resolver: zodResolver(createOrderFormSchema),
     defaultValues: {
@@ -43,6 +47,54 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
     },
   });
 
+  const { saved, pending, retry, error, close, submit, saveConfirmed } = useNewOrderSubmission(
+    { onClose, onSaved },
+    form.handleSubmit,
+  );
+
+  return (
+    <SessionDialog
+      title="New order"
+      open
+      onClose={close}
+      closeDisabled={pending}
+      className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
+    >
+      <FormProvider {...form}>
+        <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
+          <div className="min-h-0 overflow-y-auto px-0.5">
+            <fieldset disabled={pending || retry || saved} className="space-y-3">
+              <OrderRecipientFields />
+              <ItemsAndAmounts />
+            </fieldset>
+          </div>
+          {error && (
+            <p role="alert" className="text-danger">
+              {retry
+                ? 'Could not confirm the save. Retry with the same order details.'
+                : error.message}
+            </p>
+          )}
+          <OrderSaveActions
+            saved={saved}
+            retry={retry}
+            pending={pending}
+            onClose={close}
+            onConfirm={saveConfirmed}
+          />
+        </form>
+      </FormProvider>
+    </SessionDialog>
+  );
+}
+
+function useNewOrderSubmission(
+  { onClose, onSaved }: NewOrderDialogProps,
+  handleSubmit: UseFormHandleSubmit<CreateOrderValues, CreateOrderInput>,
+) {
+  const create = useCreateOrder();
+  const transition = useOrderStage();
+  const confirmAfterSave = useRef(false);
   const saved = create.data;
   const pending = create.isPending || transition.isPending;
   const error = create.error ?? transition.error;
@@ -67,52 +119,24 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       if (create.variables) save(create.variables);
     } else {
       confirmAfterSave.current = false;
-      void form.handleSubmit(save)(event);
+      void handleSubmit(save)(event);
     }
   }
   function saveConfirmed() {
     if (saved) return confirm(saved);
     confirmAfterSave.current = true;
-    void form.handleSubmit(save)();
+    void handleSubmit(save)();
   }
 
-  return (
-    <SessionDialog
-      title="New order"
-      open
-      onClose={close}
-      closeDisabled={pending}
-      className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
-    >
-      <FormProvider {...form}>
-        <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
-          <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset
-              disabled={pending || create.mustRetry || Boolean(saved)}
-              className="space-y-3"
-            >
-              <OrderRecipientFields />
-              <ItemsAndAmounts />
-            </fieldset>
-          </div>
-          {error && (
-            <p role="alert" className="text-danger">
-              {create.mustRetry
-                ? 'Could not confirm the save. Retry with the same order details.'
-                : error.message}
-            </p>
-          )}
-          <OrderSaveActions
-            saved={Boolean(saved)}
-            retry={create.mustRetry}
-            pending={pending}
-            onClose={close}
-            onConfirm={saveConfirmed}
-          />
-        </form>
-      </FormProvider>
-    </SessionDialog>
-  );
+  return {
+    saved: Boolean(saved),
+    pending,
+    retry: create.mustRetry,
+    error,
+    close,
+    submit,
+    saveConfirmed,
+  };
 }
 
 type OrderSaveActionsProps = {

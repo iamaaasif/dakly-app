@@ -119,17 +119,18 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await variant.selectOption({ label: 'Cotton Panjabi · M' });
     await expect(variant).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
-    await expect(create.getByText('৳1,310')).toBeVisible();
+    const cod = create.getByText(/^Cash on delivery/);
+    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await create.getByRole('button', { name: 'Add product' }).click();
     await expect(create.getByText('Cash on delivery')).toHaveCount(0);
     await create.getByRole('button', { name: 'Remove' }).last().click();
     const search = create.getByLabel('Search products');
     await search.fill('Missing product');
     await expect(create.getByText('5 in stock')).toBeVisible();
-    await expect(create.getByText('৳1,310')).toBeVisible();
+    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await search.clear();
     await create.getByLabel('Delivery charge (৳)').fill('90.25');
-    await expect(create.getByText('৳1,340.25')).toBeVisible();
+    await expect(cod.getByText('৳1,340.25', { exact: true })).toBeVisible();
     await capture(page, 'new');
     let firstKey: string | undefined;
     let firstBody: string | null;
@@ -188,11 +189,18 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(create.getByText(/^Total/).getByText('৳1,260', { exact: true })).toBeVisible();
     await create.getByLabel('Discount (৳)').clear();
     await create.getByLabel('Advance paid (৳)').fill('200');
-    await expect(
-      create.getByText(/^Cash on delivery/).getByText('৳1,110', { exact: true }),
-    ).toBeVisible();
+    await expect(cod.getByText('৳1,110', { exact: true })).toBeVisible();
     await capture(page, 'buyer-and-advance');
+    await page.route('**/api/orders', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const saved = await route.fetch();
+      expect(saved.status()).toBe(201);
+      await route.abort();
+      await page.unroute('**/api/orders');
+    });
     await create.getByRole('button', { name: 'Save as confirmed' }).click();
+    await expect(create.getByText('Could not confirm the save')).toBeVisible();
+    await create.getByRole('button', { name: 'Retry save' }).click();
     await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
     await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
       'href',
