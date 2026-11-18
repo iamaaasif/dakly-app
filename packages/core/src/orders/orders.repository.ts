@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, count, desc, eq, gte, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
 
-import type { OrderListQuery } from '@dakly/contracts/orders';
+import type { OrderListQuery, OrderStage } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -107,6 +107,28 @@ export class OrdersRepository {
         .where(eq(orders.storeId, storeId))
         .groupBy(orders.stage),
     );
+  }
+
+  async hasItemsInStages(
+    storeId: string,
+    variantIds: string[],
+    stages: OrderStage[],
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orderItems.id })
+        .from(orderItems)
+        .innerJoin(orders, and(eq(orders.storeId, storeId), eq(orders.id, orderItems.orderId)))
+        .where(
+          and(
+            eq(orderItems.storeId, storeId),
+            inArray(orderItems.variantId, variantIds),
+            inArray(orders.stage, stages),
+          ),
+        )
+        .limit(1),
+    );
+    return rows.length > 0;
   }
 
   parcelOutcomes(storeId: string, phones: string[]) {

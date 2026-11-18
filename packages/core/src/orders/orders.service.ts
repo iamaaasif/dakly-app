@@ -23,12 +23,13 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
-import { applyOrderFulfilment } from './order-fulfilment';
+import { applyOrderFulfilment, moveOrderReservations } from './order-fulfilment';
 import {
   canEditOrder,
   isSyncedOrder,
   orderStageHistory,
   orderStageTransitions,
+  productArchiveStages,
   recordOrderStage,
   stageWrite,
 } from './order-stage';
@@ -57,6 +58,15 @@ export class OrdersService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
+
+  archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
+    return this.transaction.run(storeId, async () => {
+      const variantIds = await this.products.lockArchiveVariants(storeId, productId);
+      if (await this.repository.hasItemsInStages(storeId, variantIds, productArchiveStages))
+        throw orderError('PRODUCT_HAS_OPEN_ORDERS');
+      await this.products.remove(storeId, productId, actor);
+    });
+  }
 
   createOrder(
     storeId: string,
@@ -150,7 +160,12 @@ export class OrdersService {
         variantIds: items.map(({ variantId }) => variantId),
         since: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       });
-      await this.moveReservations(storeId, orderId, { before: previous, after: items }, { actor });
+      await moveOrderReservations(
+        storeId,
+        this.products,
+        { orderId, actor },
+        { before: previous, after: items },
+      );
       await this.repository.saveItems(
         storeId,
         orderId,
@@ -239,11 +254,11 @@ export class OrdersService {
       const now = this.clock.now();
       const confirmed = change.to === 'to_pack' && !order.confirmedAt;
       if (change.to === 'cancelled') {
-        await this.moveReservations(
+        await moveOrderReservations(
           storeId,
-          orderId,
+          this.products,
+          { orderId, actor, reason: change.reason },
           { before: await this.repository.items(storeId, orderId), after: [] },
-          { actor, reason: change.reason },
         );
       }
       const fulfilment = await applyOrderFulfilment(
@@ -316,7 +331,12 @@ export class OrdersService {
   ): Promise<void> {
     const { id, createdAt, buyerContactId } = order;
     await this.repository.insert(storeId, order);
-    await this.moveReservations(storeId, id, { before: [], after: items }, { actor });
+    await moveOrderReservations(
+      storeId,
+      this.products,
+      { orderId: id, actor },
+      { before: [], after: items },
+    );
     await this.repository.insertItems(
       storeId,
       id,
@@ -379,29 +399,6 @@ export class OrdersService {
       byId.set(variant.variantId, { ...variant, quantity: 0 });
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
-  }
-
-  private async moveReservations(
-    storeId: string,
-    orderId: string,
-    { before, after }: { before: OrderItemWrite[]; after: OrderItemWrite[] },
-    { actor, reason }: { actor: AuditEntry['actor']; reason?: string },
-  ): Promise<void> {
-    const deltas = new Map<string, number>();
-    for (const item of before)
-      if (item.isStockTracked)
-        deltas.set(item.variantId, (deltas.get(item.variantId) ?? 0) - item.quantity);
-    for (const item of after)
-      if (item.isStockTracked)
-        deltas.set(item.variantId, (deltas.get(item.variantId) ?? 0) + item.quantity);
-    for (const [variantId, delta] of [...deltas].sort(([a], [b]) => a.localeCompare(b))) {
-      if (delta === 0) continue;
-      await this.products.moveStock(storeId, variantId, {
-        kind: delta > 0 ? 'reserve' : 'release',
-        quantity: Math.abs(delta),
-        reference: { orderId, actor, reason },
-      });
-    }
   }
 }
 

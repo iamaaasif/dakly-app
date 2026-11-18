@@ -23,6 +23,8 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
   cancelled: [],
 };
 
+export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
+
 export function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
   return {
     stage: change.to,

@@ -16,6 +16,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
@@ -52,6 +53,7 @@ describe('product photos with Postgres', () => {
   };
   const service = new ProductsService(
     new ProductsRepository(tenant),
+    new ProductOrderVariantsRepository(tenant),
     transaction,
     new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     clock,

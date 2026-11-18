@@ -382,6 +382,66 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('products', foreignId)).toEqual(before);
   });
+fixture('DELETE /products/:productId refuses variants on open orders', async () => {
+  const { a, b } = await pair();
+  const variantId = await orderVariant(b);
+  const { product_id: productId } = await f.row('product_variants', variantId);
+  const orderId = await order(b);
+  await f.admin.pool.query(
+    `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+     values($1,$2,$3,$4,'Panjabi','Default',1,125000,false)`,
+    [randomUUID(), b.id, orderId, variantId],
+  );
+  await f.admin.pool.query("update product_variants set status='archived' where id=$1", [
+    variantId,
+  ]);
+  const url = `/products/${productId}`;
+  expect((await f.request(b.member, 'DELETE', url)).statusCode).toBe(403);
+  for (const change of [undefined, { to: 'on_hold', reason: 'cannot_reach' }, { to: 'to_pack' }]) {
+    if (change) await success(b, 'POST', `/orders/${orderId}/stage`, 200, change);
+    const denied = await f.request(b.owner, 'DELETE', url);
+    expect(denied.statusCode, denied.body).toBe(409);
+    expect(denied.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+    expect(await f.row('products', productId)).not.toMatchObject({ status: 'archived' });
+  }
+  await hidden(a, 'DELETE', (id) => `/products/${id}`, productId);
+  await success(b, 'POST', `/orders/${orderId}/stage`, 200, {
+    to: 'cancelled',
+    reason: 'customer_cancelled',
+  });
+  await success(b, 'DELETE', url, 204);
+  expect(await f.row('products', productId)).toMatchObject({ status: 'archived' });
+});
+
+fixture('DELETE /products/:productId races new order creation', async () => {
+  const { b } = await pair();
+  const variantId = await orderVariant(b);
+  const { product_id: productId } = await f.row('product_variants', variantId);
+  await deliveryZone(b);
+  await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
+  const [created, archived] = await Promise.all([
+    f.request(
+      b.owner,
+      'POST',
+      '/orders',
+      {
+        buyer: { name: 'Rahim' },
+        recipient: { name: 'Rahim', phone: b.owner.phone, address: 'Mirpur', areaId: 301 },
+        items: [{ variantId, quantity: 1 }],
+      },
+      { 'idempotency-key': randomUUID() },
+    ),
+    f.request(b.owner, 'DELETE', `/products/${productId}`),
+  ]);
+  if (created.statusCode === 201) {
+    expect(archived.statusCode, archived.body).toBe(409);
+    expect(archived.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+  } else {
+    expect(archived.statusCode, archived.body).toBe(204);
+    expect(created.statusCode, created.body).toBe(404);
+    expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
+  }
+});
 fixture('POST /variants/:variantId/stock-adjustments', async () => {
   const { a, b } = await pair();
   const created = (
