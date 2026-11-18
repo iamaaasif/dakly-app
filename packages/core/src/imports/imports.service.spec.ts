@@ -33,6 +33,7 @@ type Answer = 'granted' | 'withdrawn';
 describe('ImportsService', () => {
   const objects = new Map<string, string>();
   const knownPhones = new Set<string>();
+  const phonesWithNotes = new Set<string>();
   const consent = new Map<string, Answer>();
   let found: Import | undefined;
   let lease: Date | null;
@@ -96,7 +97,12 @@ describe('ImportsService', () => {
           contactId: `contact-${phone}`,
           phone,
           outcome: knownPhones.has(phone) ? existing : 'added',
-          notChanged: [],
+          notChanged: phonesWithNotes.has(phone)
+            ? [
+                { field: 'tags', message: '1 tags not added: a customer has at most 50' },
+                { field: 'whatsappPhone', message: 'WhatsApp number differs, not changed' },
+              ]
+            : [],
           hasWhatsappNumberMismatch: false,
         };
       });
@@ -166,6 +172,7 @@ describe('ImportsService', () => {
   beforeEach(() => {
     objects.clear();
     knownPhones.clear();
+    phonesWithNotes.clear();
     consent.clear();
     lease = null;
     finished = undefined;
@@ -198,6 +205,46 @@ describe('ImportsService', () => {
       'contact-01812345678:sms': 'granted',
     });
     expect(objects.get(finished!.reportKey!)).toMatch(/^Row,Field,Problem\r\n"4","Phone",/);
+  });
+
+  it('caps saved batch notes and resumes with the same complete report as an uninterrupted run', async () => {
+    const phones = Array.from({ length: 6002 }, (_, index) => `017${10_000_000 + index}`);
+    for (const phone of phones) {
+      knownPhones.add(phone);
+      phonesWithNotes.add(phone);
+    }
+    objects.set(
+      UPLOAD,
+      ['Name,Mobile', ...phones.map((phone) => `রাবেয়া,${phone}`), 'ভুল,0171'].join('\n'),
+    );
+    importing({});
+    await service.runCustomerImport(STORE_ID, IMPORT_ID);
+    const uninterrupted = objects.get(finished!.reportKey!)!;
+    expect(found!.checkpoint!.report).toHaveLength(5000);
+    expect(found!.checkpoint).toMatchObject({ processedRows: 6002, omittedRows: 3502 });
+    expect(found!.checkpoint!.report.every((line) => line.field !== 'phone')).toBe(true);
+    expect(uninterrupted).toContain('"6004","Phone",');
+    expect(uninterrupted.endsWith('"","","3502 more rows had notes that are not listed"\r\n')).toBe(
+      true,
+    );
+
+    importing({});
+    finished = undefined;
+    const save = contacts.saveImportedRows;
+    let batches = 0;
+    const interrupted = vi
+      .spyOn(contacts, 'saveImportedRows')
+      .mockImplementation(async (...args) => {
+        if (++batches === 10) throw new Error('Worker stopped');
+        return save(...args);
+      });
+    await expect(service.runCustomerImport(STORE_ID, IMPORT_ID)).rejects.toThrow('Worker stopped');
+    expect(found!.checkpoint).toMatchObject({ processedRows: 4500, omittedRows: 2000 });
+    expect(found!.checkpoint!.report).toHaveLength(5000);
+    interrupted.mockRestore();
+    await service.runCustomerImport(STORE_ID, IMPORT_ID);
+    expect(objects.get(finished!.reportKey!)).toBe(uninterrupted);
+    expect(finished!.counts).toMatchObject({ rowsUpdated: 6002, rowsFailed: 1 });
   });
 
   it('reports a withdrawn channel on its row and leaves skipped contacts out of consent', async () => {

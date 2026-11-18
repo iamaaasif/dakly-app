@@ -82,7 +82,12 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.claim(f.b, importA, lease, stale)).toBe(false);
     expect(await repository.claim(f.a, importA, lease, stale)).toBe(true);
     expect(await repository.claim(f.a, importA, lease, stale)).toBe(false);
-    const checkpoint = { processedRows: 3, fileHash: 'saved-file-hash', report: [] };
+    const checkpoint = {
+      processedRows: 3,
+      fileHash: 'saved-file-hash',
+      report: [],
+      omittedRows: 0,
+    };
     const renewed = { held: lease, renewed: new Date('2026-11-17T04:30:30Z'), checkpoint };
     expect(await repository.saveProgress(f.b, importA, counts, renewed)).toBe(false);
     expect((await f.row('imports', importA)).rows_total).toBeNull();
@@ -100,7 +105,14 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.storesWithStuckImports(late)).toContain(f.a);
     expect(await repository.listStuck(f.b, late)).toEqual([]);
     expect(await repository.listStuck(f.a, late)).toEqual([
-      { id: importA, claimedAt: renewed.renewed, checkpoint },
+      {
+        id: importA,
+        claimedAt: renewed.renewed,
+        checkpoint,
+        columnMapping: mapping,
+        uploadKey: fileA.objectKey,
+        uploadFileId: fileA.id,
+      },
     ]);
     const requeue = { before: late, now: late, limit: 1 };
     expect(await repository.requeue(f.b, importA, requeue)).toBe(false);
