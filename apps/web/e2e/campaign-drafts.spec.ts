@@ -194,8 +194,11 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await name.fill('A change after approval');
     await page.getByRole('button', { name: 'Save draft' }).click();
     expect(await (await conflict).json()).toMatchObject({ error: { code: 'CAMPAIGN_NOT_DRAFT' } });
+    const retry = page.getByRole('button', { name: 'Try again' });
+    await expect(retry).toBeVisible({ timeout: 12_000 });
     await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
     failStatusRefresh = false;
+    await retry.click();
     await expect(page.getByRole('region', { name: 'Saved campaign' })).toBeVisible();
     await page.unroute(detailUrl);
 
