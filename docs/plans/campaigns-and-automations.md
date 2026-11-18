@@ -118,6 +118,7 @@ Branch: `feat/camp-7-messenger-campaigns`
 Branches: `feat/camp-4-campaign-list-and-results`, `feat/camp-4-campaign-builder`
 
 - Scope: two PRs. List with statuses (Draft, Scheduled, Sending with progress, Paused, Sent, Failed), search, channel and date filters in the URL; results page from feature 09 "Missing design" with sent, delivered, read, tapped and the failure groups (orders and revenue show "after Orders is set up" until ANA-2); builder steps Goal, Channel, Content, Audience, Schedule, Review with save draft on every step, live preview, SMS part counter, cost and balance after, and the approval checkbox. Send test to my phone.
+- Owner decision (18 Nov 2026): build the list and builder now from `campaigns.webp` and `campaigns-and-automations/`. Draft rows open the builder and sent rows open a read-only builder summary. Defer results until ORD-3, then build from the feature 09 screen table and "Missing design" section without a separate design. Keep CAMP-4 In progress after the list and builder merge.
 - Tests: component states for each step; Playwright creates an SMS campaign to a seeded segment, approves it and sees it sending with the fake SMS driver.
 
 ### Group 3: automations
