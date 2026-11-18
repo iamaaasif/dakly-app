@@ -11,7 +11,7 @@ export class FakeLlmDriver implements LlmDriver {
     if (request.signal?.aborted) throw new LlmError('LLM_ABORTED');
     const response = this.responses.shift();
     if (response instanceof Error) throw response;
-    if (!response) throw new LlmError('LLM_SCRIPT_EXHAUSTED');
+    if (!response) throw new Error('No scripted response left');
     return response;
   }
 }

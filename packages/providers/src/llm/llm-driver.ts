@@ -31,15 +31,13 @@ export type LlmResult = { usage: LlmUsage; model: string; responseId: string } &
 export type LlmErrorCode =
   | 'LLM_ABORTED'
   | 'LLM_TIMEOUT'
-  | 'LLM_INVALID_TIMEOUT'
   | 'LLM_REQUEST_FAILED'
   | 'LLM_RATE_LIMITED'
   | 'LLM_UNAVAILABLE'
   | 'LLM_INVALID_RESPONSE'
   | 'LLM_INVALID_SCHEMA'
   | 'LLM_INCOMPLETE'
-  | 'LLM_REFUSED'
-  | 'LLM_SCRIPT_EXHAUSTED';
+  | 'LLM_REFUSED';
 
 export class LlmError extends Error {
   constructor(

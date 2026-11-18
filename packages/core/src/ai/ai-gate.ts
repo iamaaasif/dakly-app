@@ -58,15 +58,19 @@ export class AiGate {
     return (await this.valkey.connection.exists(`${this.prefix}:paused`)) === 1;
   }
 
-  async recordFailure(runId: string): Promise<void> {
-    await this.valkey.connection.eval(
-      recordError,
-      2,
-      `${this.prefix}:paused`,
-      `${this.prefix}:errors`,
-      this.clock.now().getTime(),
-      runId,
-    );
+  async recordFailure(): Promise<void> {
+    try {
+      await this.valkey.connection.eval(
+        recordError,
+        2,
+        `${this.prefix}:paused`,
+        `${this.prefix}:errors`,
+        this.clock.now().getTime(),
+        randomUUID(),
+      );
+    } catch {
+      this.logger.warn('Could not record an AI provider failure');
+    }
   }
 
   async release(storeId: string, ticket: string): Promise<void> {

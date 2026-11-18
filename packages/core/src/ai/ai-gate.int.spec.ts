@@ -37,14 +37,14 @@ describe('AiGate', () => {
   });
 
   it('pauses across stores for two minutes only after three recent errors', async () => {
-    await gate.recordFailure(randomUUID());
+    await gate.recordFailure();
     now += 59_000;
-    await gate.recordFailure(randomUUID());
+    await gate.recordFailure();
     now += 2_000;
-    await gate.recordFailure(randomUUID());
+    await gate.recordFailure();
     expect((await gate.acquire(randomUUID())).kind).toBe('acquired');
 
-    await gate.recordFailure(randomUUID());
+    await gate.recordFailure();
     expect(await gate.acquire(randomUUID())).toEqual({ kind: 'paused' });
     const pauseKey = `${loadEnv().QUEUE_PREFIX}:{ai}:paused`;
     const pauseMs = await valkey.connection.pttl(pauseKey);

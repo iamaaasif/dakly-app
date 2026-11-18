@@ -33,7 +33,7 @@ describe('FakeLlmDriver', () => {
 
     await expect(driver.respond(request)).resolves.toEqual(first);
     await expect(driver.respond(request)).resolves.toEqual(second);
-    await expect(driver.respond(request)).rejects.toMatchObject({ code: 'LLM_SCRIPT_EXHAUSTED' });
+    await expect(driver.respond(request)).rejects.toThrow('No scripted response left');
   });
 
   it('returns a scripted provider error', async () => {

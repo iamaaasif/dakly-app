@@ -5,7 +5,7 @@ import type { LlmDriver } from '@dakly/providers/llm/llm-driver';
 import { OpenAiLlmDriver } from '@dakly/providers/llm/openai/openai-llm-driver';
 
 import { CacheModule } from '../platform/cache/cache.module';
-import { Clock } from '../platform/clock';
+import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
 import { UsageModule } from '../usage/usage.module';
 import { AiGate } from './ai-gate';
@@ -16,9 +16,8 @@ import { aiError } from './ai.errors';
 import { AiService } from './ai.service';
 
 @Module({
-  imports: [CacheModule, UsageModule],
+  imports: [CacheModule, ClockModule, UsageModule],
   providers: [
-    Clock,
     AiGate,
     AiRunsRepository,
     AiRunsService,

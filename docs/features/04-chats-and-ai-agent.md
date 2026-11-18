@@ -333,15 +333,20 @@ Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
 
 ### Shared AI service
 
-Features pass a tier, versioned prompt, output schema, and usage reference to
-`AiService`. Reply, vision and writer use GPT-6.1 Terra by default. Fast uses
+Features pass a tier, versioned prompt and output schema to `AiService`. Reply, vision and writer use GPT-6.1 Terra by default. Fast uses
 GPT-6 Luna. Config can change each tier and prices per million input, cached
 input and output tokens. The defaults follow [OpenAI's standard prices](https://developers.openai.com/api/docs/pricing).
 
 Each model attempt records its token counts, cost in micro-USD, latency and
-outcome in `ai_runs`. A schema mismatch gets one retry within the call's
-20-second budget. Both attempts share one allowance charge. The service
-returns the parsed output, tool calls or a typed failure.
+outcome in `ai_runs`. A schema mismatch gets one retry within the 20-second
+model budget. The service returns the parsed output, tool calls or a typed
+failure.
+
+Content Studio and Ask Dakly can supply a usage reference. The service consumes
+one unit after a schema-valid result, and the same reference makes a retry
+free. Chats checks its allowance before any model work and consumes the
+conversation unit when it saves the outgoing AI reply, using the contact and
+window as the reference.
 
 Valkey allows up to three calls at a time per store. Three provider errors
 within one minute pause new calls for two minutes across stores. Customer
