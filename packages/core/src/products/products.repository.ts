@@ -245,6 +245,47 @@ export class ProductsRepository {
     }
   }
 
+  async lockVariants(storeId: string, variantIds: string[]): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: productVariants.id })
+        .from(productVariants)
+        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds)))
+        .orderBy(productVariants.id)
+        .for('no key update'),
+    );
+  }
+
+  orderVariants(storeId: string, variantIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          variantId: productVariants.id,
+          productName: products.name,
+          variantTitle: productVariants.title,
+          unitPricePoisha:
+            sql<number>`coalesce(${productVariants.priceOverridePoisha}, ${products.pricePoisha})`.mapWith(
+              Number,
+            ),
+          unitCostPoisha: productVariants.costPoisha,
+          isStockTracked: products.isStockTracked,
+        })
+        .from(productVariants)
+        .innerJoin(
+          products,
+          and(eq(products.id, productVariants.productId), eq(products.storeId, storeId)),
+        )
+        .where(
+          and(
+            eq(productVariants.storeId, storeId),
+            inArray(productVariants.id, variantIds),
+            ne(products.status, 'archived'),
+            ne(productVariants.status, 'archived'),
+          ),
+        ),
+    );
+  }
+
   async findStockVariant(
     storeId: string,
     variantId: string,

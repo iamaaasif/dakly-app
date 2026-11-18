@@ -12,6 +12,7 @@ import type {
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
+import type { CreateOrderInput } from '@dakly/contracts/orders';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
@@ -111,6 +112,55 @@ export class ContactsService {
       ...toContactResponse(contact, access.seeFullPhone),
       identities: await this.contactsRepository.findIdentities(storeId, id),
     };
+  }
+
+  resolveOrderBuyer(
+    storeId: string,
+    input: { buyer: CreateOrderInput['buyer']; orderId: string; ownPhone?: string },
+    _actor: Actor,
+  ): Promise<Pick<Contact, 'id' | 'name'>> {
+    return this.transaction.run(storeId, async () => {
+      const { buyer, orderId } = input;
+      const now = this.clock.now();
+      const contact =
+        'contactId' in buyer
+          ? await this.contactsRepository.findById(storeId, buyer.contactId)
+          : await this.contactsRepository.insert(storeId, {
+              name: buyer.name,
+              phone: null,
+              kind: 'customer',
+              source: 'manual',
+            });
+      if (!contact) throw contactError('CONTACT_NOT_FOUND');
+      if ('name' in buyer)
+        await this.outbox.publish({
+          type: 'contact.created',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { contactId: contact.id },
+        });
+      const phone = input.ownPhone ?? ('phone' in buyer ? buyer.phone : undefined);
+      if (phone && phone !== contact.phone)
+        await this.saveOrderPhone(storeId, contact.id, { phone, orderId, now });
+      return { id: contact.id, name: contact.name };
+    });
+  }
+
+  private async saveOrderPhone(
+    storeId: string,
+    contactId: string,
+    { phone, orderId, now }: { phone: string; orderId: string; now: Date },
+  ): Promise<void> {
+    if (await this.contactsRepository.saveOrderPhone(storeId, contactId, phone, now)) return;
+    const [owner] = await this.contactsRepository.list(storeId, { phone, limit: 1 });
+    if (owner && owner.id !== contactId)
+      await this.contactsRepository.suggestOrderPhoneMatch(storeId, {
+        contactId,
+        matchedContactId: owner.id,
+        phone,
+        orderId,
+        createdAt: now,
+      });
   }
 
   // Import undo keeps a contact once a new order makes the imported record useful.

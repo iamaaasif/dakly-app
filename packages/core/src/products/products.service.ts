@@ -115,13 +115,21 @@ export class ProductsService {
     });
   }
 
+  async orderVariants(storeId: string, variantIds: string[], existingIds: string[]) {
+    await this.repository.lockVariants(storeId, [...variantIds, ...existingIds]);
+    if (!variantIds.length) return [];
+    const variants = await this.repository.orderVariants(storeId, variantIds);
+    if (variants.length !== variantIds.length) throw productError('PRODUCT_VARIANT_NOT_FOUND');
+    return variants;
+  }
+
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
     return this.transaction.run(storeId, async () => {
       const variant = await this.repository.findStockVariant(storeId, variantId);
       if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
       const { kind, quantity } = input;
-      // An existing order must release its reservation even when tracking is now off.
-      if (!variant.isStockTracked && !(kind === 'release' && input.reference.orderId)) return;
+      // Order movements follow the tracking flag saved on the order item.
+      if (!variant.isStockTracked && !input.reference.orderId) return;
       if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
         throw productError('STOCK_QUANTITY_INVALID');
       const change = {

@@ -107,7 +107,8 @@ export class DeliveryService {
 
   async calculateDeliveryCharge(storeId: string, areaId: number): Promise<DeliveryChargeResponse> {
     const path = await this.repository.findAreaPath(storeId, areaId);
-    if (!path[0] || path[0].kind === 'division') throw deliveryError('DELIVERY_AREA_INVALID');
+    const district = path.find((area) => area.kind === 'district');
+    if (!district) throw deliveryError('DELIVERY_AREA_INVALID');
     const zones = await this.repository.findApplicableZones(
       storeId,
       path.map((area) => area.id),
@@ -117,7 +118,7 @@ export class DeliveryService {
         .map((area) => zones.find((candidate) => candidate.bdAreaIds.includes(area.id)))
         .find(Boolean) ?? zones.find((candidate) => candidate.isDefault);
     if (!zone) throw deliveryError('DELIVERY_DEFAULT_REQUIRED');
-    return { deliveryZoneId: zone.id, chargePoisha: zone.chargePoisha };
+    return { deliveryZoneId: zone.id, chargePoisha: zone.chargePoisha, district: district.name };
   }
 
   private async assertAreasAvailable(storeId: string, ids: number[], exceptId?: string) {

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
 
 import type { OrderListQuery, OrderStage } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
@@ -34,7 +34,11 @@ const detailColumns = {
   onHoldReason: orders.onHoldReason,
   followUpOn: orders.followUpOn,
   cancelReason: orders.cancelReason,
+  possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
 };
+
+export type OrderWrite = Omit<typeof orders.$inferInsert, 'storeId'>;
+export type OrderItemWrite = Omit<typeof orderItems.$inferInsert, 'storeId' | 'orderId'>;
 
 export type StageWrite = Pick<
   typeof orders.$inferInsert,
@@ -100,6 +104,94 @@ export class OrdersRepository {
     });
   }
 
+  async findByIdempotencyKey(storeId: string, key: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), eq(orders.idempotencyKey, key)))
+        .limit(1),
+    );
+    return row;
+  }
+
+  async findDuplicate(
+    storeId: string,
+    {
+      orderId,
+      phone,
+      variantIds,
+      since,
+    }: { orderId: string; phone: string; variantIds: string[]; since: Date },
+  ) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orders.id })
+        .from(orders)
+        .innerJoin(
+          orderItems,
+          and(eq(orderItems.storeId, storeId), eq(orderItems.orderId, orders.id)),
+        )
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.recipientPhone, phone),
+            inArray(orderItems.variantId, variantIds),
+            gte(orders.createdAt, since),
+            ne(orders.id, orderId),
+          ),
+        )
+        .orderBy(desc(orders.createdAt), desc(orders.id))
+        .limit(1),
+    );
+    return row?.id ?? null;
+  }
+
+  async insert(storeId: string, order: OrderWrite): Promise<void> {
+    await this.database.forStore(storeId, (tx) => tx.insert(orders).values({ ...order, storeId }));
+  }
+
+  async insertItems(storeId: string, orderId: string, items: OrderItemWrite[]): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx.insert(orderItems).values(items.map((item) => ({ ...item, orderId, storeId }))),
+    );
+  }
+
+  async saveItems(storeId: string, orderId: string, items: OrderItemWrite[]): Promise<void> {
+    await this.database.forStore(storeId, async (tx) => {
+      await tx.delete(orderItems).where(
+        and(
+          eq(orderItems.storeId, storeId),
+          eq(orderItems.orderId, orderId),
+          notInArray(
+            orderItems.variantId,
+            items.map(({ variantId }) => variantId),
+          ),
+        ),
+      );
+      await tx
+        .insert(orderItems)
+        .values(items.map((item) => ({ ...item, storeId, orderId })))
+        .onConflictDoUpdate({
+          target: orderItems.id,
+          set: {
+            quantity: sql`excluded.quantity`,
+            lineDiscountPoisha: sql`excluded.line_discount_poisha`,
+          },
+          setWhere: and(eq(orderItems.storeId, storeId), eq(orderItems.orderId, orderId)),
+        });
+    });
+  }
+
+  async editOrder(storeId: string, orderId: string, values: Partial<OrderWrite>): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(orders)
+        .set(values)
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
+    );
+  }
+
   async find(storeId: string, orderId: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -124,6 +216,7 @@ export class OrdersRepository {
           deliveredQuantity: orderItems.deliveredQuantity,
           isStockTracked: orderItems.isStockTracked,
           unitPricePoisha: orderItems.unitPricePoisha,
+          unitCostPoisha: orderItems.unitCostPoisha,
           lineDiscountPoisha: orderItems.lineDiscountPoisha,
         })
         .from(orderItems)
@@ -136,10 +229,9 @@ export class OrdersRepository {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
-          stage: orders.stage,
+          ...detailColumns,
           confirmedAt: orders.confirmedAt,
           updatedAt: orders.updatedAt,
-          source: orders.source,
         })
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))

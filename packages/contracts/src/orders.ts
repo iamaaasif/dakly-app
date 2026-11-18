@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { bdMobileSchema } from './phone';
+
 export const orderSources = [
   'messenger',
   'instagram',
@@ -130,6 +132,7 @@ export type OrderDetail = OrderSummary & {
   onHoldReason: (typeof onHoldReasons)[number] | null;
   followUpOn: string | null;
   cancelReason: (typeof cancelReasons)[number] | null;
+  possibleDuplicateOfOrderId: string | null;
   items: OrderItem[];
   timeline: OrderStageHistoryEntry[];
 };
@@ -145,3 +148,51 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
 ]);
 export type OrderStageChange = z.infer<typeof orderStageChangeSchema>;
+
+const money = z.int().nonnegative();
+const buyerSchema = z.union([
+  z.strictObject({ contactId: z.uuid() }),
+  z.strictObject({ name: z.string().trim().min(1).max(120), phone: bdMobileSchema.optional() }),
+]);
+const recipientSchema = z.strictObject({
+  name: z.string().trim().min(1).max(120),
+  phone: bdMobileSchema,
+  address: z.string().trim().min(1).max(500),
+  areaId: z.int().positive().max(2147483647),
+  isBuyer: z.boolean().default(true),
+});
+const orderLines = z
+  .array(
+    z.strictObject({
+      variantId: z.uuid(),
+      quantity: z.int().positive().max(2147483647),
+      lineDiscountPoisha: money.default(0),
+    }),
+  )
+  .min(1)
+  .max(100)
+  .refine(
+    (items) => new Set(items.map(({ variantId }) => variantId)).size === items.length,
+    'Choose each variant once',
+  );
+
+export const createOrderSchema = z.strictObject({
+  buyer: buyerSchema,
+  recipient: recipientSchema,
+  items: orderLines,
+  deliveryChargePoisha: money.optional(),
+  orderDiscountPoisha: money.default(0),
+  advancePaidPoisha: money.default(0),
+});
+
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
+
+export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
+export const editOrderSchema = z.strictObject({
+  items: orderLines,
+  recipient: recipientSchema.optional(),
+  deliveryChargePoisha: money.optional(),
+  orderDiscountPoisha: money.optional(),
+  advancePaidPoisha: money.optional(),
+});
+export type EditOrderInput = z.infer<typeof editOrderSchema>;

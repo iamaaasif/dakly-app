@@ -89,6 +89,79 @@ async function order(shop: Shop): Promise<string> {
   return id;
 }
 
+async function orderVariant(shop: Shop): Promise<string> {
+  const result = await success(shop, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+    isStockTracked: false,
+  });
+  return result.json().variants[0].id as string;
+}
+
+fixture('POST /orders', async () => {
+  const { a, b } = await pair();
+  const ownVariant = await orderVariant(b);
+  const foreignVariant = await orderVariant(a);
+  const ownBuyer = await contact(b);
+  const foreignBuyer = await contact(a);
+  await deliveryZone(b);
+  await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
+  const input = (contactId: string, variantId: string) => ({
+    buyer: { contactId },
+    recipient: { name: 'রিনা', phone: b.owner.phone, address: 'ধানমন্ডি', areaId: 301 },
+    items: [{ variantId, quantity: 1 }],
+  });
+  const create = (payload: object, key = randomUUID()) =>
+    f.request(b.owner, 'POST', '/orders', payload, { 'idempotency-key': key });
+  const before = await f.row('product_variants', foreignVariant);
+  const buyerBefore = await f.row('contacts', foreignBuyer);
+  for (const [foreign, missing] of [
+    [input(foreignBuyer, ownVariant), input(randomUUID(), ownVariant)],
+    [input(ownBuyer, foreignVariant), input(ownBuyer, randomUUID())],
+  ] as const) {
+    const denied = await create(foreign);
+    const absent = await create(missing);
+    expect(denied.statusCode, denied.body).toBe(404);
+    expect(absent.statusCode, absent.body).toBe(404);
+    expect(denied.json()).toEqual(absent.json());
+  }
+  expect(await f.row('product_variants', foreignVariant)).toEqual(before);
+  expect(await f.row('contacts', foreignBuyer)).toEqual(buyerBefore);
+  const key = randomUUID();
+  const goodInput = input(ownBuyer, ownVariant);
+  const created = await create(goodInput, key);
+  expect(created.statusCode, created.body).toBe(201);
+  expect(created.json()).toMatchObject({
+    number: 1001,
+    buyerContactId: ownBuyer,
+    stage: 'to_confirm',
+  });
+  expect((await create(goodInput, key)).json()).toEqual(created.json());
+  expect((await f.request(b.owner, 'POST', '/orders', goodInput)).statusCode).toBe(400);
+});
+
+fixture('PATCH /orders/:orderId', async () => {
+  const { a, b } = await pair();
+  const foreignId = await order(a);
+  const ownId = await order(b);
+  const variantId = await orderVariant(b);
+  const edit = { items: [{ variantId, quantity: 2 }] };
+  const before = await f.row('orders', foreignId);
+  expect((await success(b, 'PATCH', `/orders/${ownId}`, 200, edit)).json()).toMatchObject({
+    id: ownId,
+    items: [{ variantId, quantity: 2 }],
+    itemsSubtotalPoisha: 250000,
+  });
+  await hidden(
+    b,
+    'PATCH',
+    (value) => `/orders/${value}`,
+    foreignId,
+    () => edit,
+  );
+  expect(await f.row('orders', foreignId)).toEqual(before);
+});
+
 fixture('GET /orders', async () => {
   const { a, b } = await pair();
   const ownA = await order(a);

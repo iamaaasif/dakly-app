@@ -2,17 +2,24 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Inject,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
 
 import {
+  createOrderSchema,
+  editOrderSchema,
+  orderIdempotencyKeySchema,
   orderListQuerySchema,
   orderStageChangeSchema,
+  type CreateOrderInput,
+  type EditOrderInput,
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
@@ -27,9 +34,42 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { OrdersService } from './orders.service';
 
+const idempotencyKeyPipe = new ZodValidationPipe(orderIdempotencyKeySchema);
+
 @Controller('orders')
 export class OrdersController {
   constructor(@Inject(OrdersService) private readonly service: OrdersService) {}
+
+  @Post()
+  @RequirePermission('orders.edit')
+  createOrder(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(createOrderSchema)) input: CreateOrderInput,
+    @Headers('idempotency-key') key: string | undefined,
+  ): Promise<OrderDetail> {
+    return this.service.createOrder(storeId, input, {
+      actor: { kind: 'user', userId },
+      access,
+      idempotencyKey: idempotencyKeyPipe.transform(key),
+    });
+  }
+
+  @Patch(':orderId')
+  @RequirePermission('orders.edit')
+  editOrder(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body(new ZodValidationPipe(editOrderSchema)) input: EditOrderInput,
+  ): Promise<OrderDetail> {
+    return this.service.editOrder(storeId, orderId, input, {
+      actor: { kind: 'user', userId },
+      access,
+    });
+  }
 
   @Get()
   @RequirePermission('orders.view')
