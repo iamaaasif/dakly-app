@@ -162,7 +162,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(create.getByText('Could not confirm the save')).toBeVisible();
     await expect(recipientPhone).toBeDisabled();
     await expect(create.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
-    await expect(create.getByRole('button', { name: 'Close', exact: true })).toBeDisabled();
+    await expect(create.getByRole('button', { name: 'Close dialog', exact: true })).toBeDisabled();
     await page.keyboard.press('Escape');
     await expect(create).toBeVisible();
     await create.getByRole('button', { name: 'Retry save' }).click();
