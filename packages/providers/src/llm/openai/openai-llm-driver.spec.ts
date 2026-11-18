@@ -47,11 +47,15 @@ describe('OpenAiLlmDriver', () => {
     });
   });
 
-  it('rejects a malformed batch and preserves its measured input tokens', async () => {
+  it.each([
+    [{ index: 0, embedding: [0.1, 0.2] }],
+    [{ index: 'invalid', embedding: [0.1, 0.2] }],
+    [{ index: 0, embedding: ['invalid'] }],
+  ])('rejects malformed vectors while preserving measured input tokens', async (data) => {
     const driver = new OpenAiLlmDriver('test-key', async () =>
       Response.json({
         model: 'text-embedding-3-small',
-        data: [{ index: 0, embedding: [0.1, 0.2] }],
+        data,
         usage: { prompt_tokens: 4 },
       }),
     );

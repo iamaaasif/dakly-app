@@ -132,6 +132,7 @@ export class KnowledgeRepository {
         .set({
           status: rejection ? 'failed' : 'active',
           factsCount: chunks.length,
+          updatedAt: knowledgeItems.updatedAt,
         })
         .where(
           and(
