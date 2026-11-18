@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRef, type FormEvent } from 'react';
 import {
   FormProvider,
@@ -23,7 +24,9 @@ import { Input } from '@dakly/ui/input';
 import { useOrderStage } from '../api/change-order-stage';
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
+import { useOrder } from '../api/get-order';
 import { useOrderCatalogueProducts } from '../api/order-catalogue';
+import { ordersKey } from '../api/orders';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -94,10 +97,12 @@ function useNewOrderSubmission(
 ) {
   const create = useCreateOrder();
   const transition = useOrderStage();
+  const client = useQueryClient();
   const confirmAfterSave = useRef(false);
   const saved = create.data;
-  const pending = create.isPending || transition.isPending;
-  const error = create.error ?? transition.error;
+  const latest = useOrder(saved?.id ?? '', false);
+  const pending = create.isPending || transition.isPending || latest.isFetching;
+  const error = create.error ?? latest.error ?? transition.error;
   const close = () => (saved ? onSaved(saved.id) : onClose());
   function confirm(order: OrderDetail) {
     transition.mutate(
@@ -122,8 +127,15 @@ function useNewOrderSubmission(
       void handleSubmit(save)(event);
     }
   }
-  function saveConfirmed() {
-    if (saved) return confirm(saved);
+  async function saveConfirmed() {
+    if (saved) {
+      const { data: current, isSuccess } = await latest.refetch();
+      if (!isSuccess) return;
+      if (current.stage === 'to_confirm') return confirm(current);
+      void client.invalidateQueries({ queryKey: ordersKey });
+      onSaved(current.id);
+      return;
+    }
     confirmAfterSave.current = true;
     void handleSubmit(save)();
   }
@@ -244,17 +256,27 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
     ],
   });
   const quote = useOrderDelivery(areaId);
-  const charge = override ? takaInput.safeParse(override).data : quote.data?.chargePoisha;
-  const orderDiscount = discount ? takaInput.safeParse(discount).data : 0;
-  const paid = advance ? takaInput.safeParse(advance).data : 0;
-  if (charge === undefined || orderDiscount === undefined || paid === undefined) return null;
-  const total = items.reduce((sum, item) => {
+  const charge = moneyInputOr(override, quote.data?.chargePoisha);
+  const orderDiscount = moneyInputOr(discount, 0);
+  const paid = moneyInputOr(advance, 0);
+  if (orderDiscount === undefined) return null;
+  const subtotal = items.reduce((sum, item) => {
     const variant = variants[item.variantId];
     return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
       ? sum + variant.price * item.quantity
       : NaN;
-  }, charge - orderDiscount);
-  if (!Number.isSafeInteger(total) || total < 0) return null;
+  }, 0);
+  if (!Number.isSafeInteger(subtotal)) return null;
+  if (orderDiscount > subtotal) {
+    return (
+      <p role="alert" className="text-danger">
+        Discount cannot exceed the item total.
+      </p>
+    );
+  }
+  if (charge === undefined || paid === undefined) return null;
+  const total = subtotal - orderDiscount + charge;
+  if (!Number.isSafeInteger(total)) return null;
   return (
     <p className="flex flex-wrap gap-x-4 rounded-md bg-surface-muted p-3">
       <span>
@@ -265,4 +287,8 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
       </span>
     </p>
   );
+}
+
+function moneyInputOr(value: string | undefined, fallback?: number) {
+  return value ? takaInput.safeParse(value).data : fallback;
 }
