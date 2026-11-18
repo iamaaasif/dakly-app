@@ -8,7 +8,7 @@ import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-test('filters the active shop’s pipeline by alert, search and stage', async ({
+test('filters orders, opens a detail and confirms an order in the active shop', async ({
   page,
   context,
   baseURL,
@@ -141,7 +141,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     );
 
     await page.goto('/orders?stage=to_confirm');
-    await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
     await expect(page.getByText('1 order waiting over 12 hours')).toBeVisible();
     await expect(page.getByText('1 high-risk order')).toBeVisible();
     await expect(page.getByText('৳5,780 COD still with couriers')).toBeVisible();
@@ -150,17 +150,26 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
 
     await page.getByRole('link', { name: '1 high-risk order' }).click();
     await expect(page).toHaveURL(/alert=risk/);
-    await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(0);
     await page.getByRole('searchbox').fill('#1060');
     await page.getByRole('button', { name: 'Search orders' }).click();
     await expect(page).toHaveURL(/search=%231060/);
-    await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
-    await page.getByRole('link', { name: 'Clear search' }).click();
-    await page.getByRole('link', { name: /^Delivered/ }).click();
-    await expect(page).toHaveURL(/stage=delivered/);
-    await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(2);
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Confirm order #1060' }).click();
+    const detail = page.getByRole('dialog', { name: 'Order #1060' });
+    await expect(detail.getByText('High return risk')).toBeVisible();
+    await detail.getByRole('button', { name: 'Mark confirmed' }).click();
+    await expect(detail.getByText('To confirm → To pack')).toBeVisible();
+    await capture('detail');
+    await detail.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('link', { name: /^To pack/ }).click();
+    await expect(page).toHaveURL(/stage=to_pack/);
+    await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
   } finally {
+    await database.pool.query(
+      "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",
+      [storeId, orderIds],
+    );
     await database.pool.query('delete from orders where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       orderIds,

@@ -55,6 +55,7 @@ function show(initial?: ProductResponse) {
       canViewProducts: true,
       canEditProducts: true,
       canViewOrders: false,
+      canEditOrders: false,
       canViewCustomers: false,
       canCreateCustomer: false,
       canViewSegments: false,

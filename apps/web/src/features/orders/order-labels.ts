@@ -1,4 +1,4 @@
-import type { OrderStage } from '@dakly/contracts/orders';
+import type { OrderDetail, OrderStage } from '@dakly/contracts/orders';
 
 export const orderStageLabels: Record<OrderStage, string> = {
   to_confirm: 'To confirm',
@@ -9,4 +9,12 @@ export const orderStageLabels: Record<OrderStage, string> = {
   partially_delivered: 'Partly delivered',
   returned: 'Returned',
   cancelled: 'Cancelled',
+};
+
+export const courierLabels: Record<NonNullable<OrderDetail['courier']>, string> = {
+  steadfast: 'Steadfast',
+  pathao: 'Pathao',
+  redx: 'RedX',
+  own_delivery: 'Own delivery',
+  other: 'Other',
 };
