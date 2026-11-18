@@ -114,7 +114,9 @@ describe('automation filters without RLS assistance', () => {
       attempts: 1,
       graph,
     });
+    const stepId = randomUUID();
     const sending = {
+      id: stepId,
       stepKey: 'offer',
       kind: 'send',
       outcome: 'sending',
@@ -124,6 +126,9 @@ describe('automation filters without RLS assistance', () => {
     expect(await runs.findSendingStep(f.b, runId, 'offer')).toBeUndefined();
     await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
     expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
+      id: stepId,
+      firstTriedAt: claimedAt,
+      latestDispatchAt: claimedAt,
       sentAt: claimedAt,
       optOutCode: null,
       destination: null,
