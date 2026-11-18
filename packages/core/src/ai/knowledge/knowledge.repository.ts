@@ -124,7 +124,7 @@ export class KnowledgeRepository {
     storeId: string,
     itemId: string,
     revision: Date,
-    index: { chunks: readonly KnowledgeChunk[] } | { rejection: string },
+    index: ({ chunks: readonly KnowledgeChunk[] } | { rejection: string }) & { sha256?: Buffer },
   ): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {
       const chunks = 'chunks' in index ? index.chunks : [];
@@ -157,7 +157,11 @@ export class KnowledgeRepository {
       if (item.fileId)
         await tx
           .update(files)
-          .set({ status: rejection ? 'rejected' : 'ready', rejectReason: rejection })
+          .set({
+            status: rejection ? 'rejected' : 'ready',
+            rejectReason: rejection,
+            sha256: index.sha256,
+          })
           .where(
             and(
               eq(files.id, item.fileId),
@@ -196,7 +200,8 @@ export class KnowledgeRepository {
           FROM knowledge_chunks chunk
           JOIN knowledge_items item
             ON item.store_id = chunk.store_id AND item.id = chunk.knowledge_item_id
-          WHERE chunk.store_id = ${storeId} AND item.status = 'active'
+          LEFT JOIN files file ON file.store_id = item.store_id AND file.id = item.file_id
+          WHERE file.status IS DISTINCT FROM 'rejected' AND chunk.store_id = ${storeId} AND item.status = 'active'
             AND chunk.embedding_model = ${model}
         ),
         terms AS (

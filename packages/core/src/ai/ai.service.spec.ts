@@ -76,6 +76,15 @@ describe('AiService', () => {
     expect(used.size).toBe(0);
   });
 
+  it('can index in local development without a vendor key or a script', async () => {
+    const { service, runs } = fixture([]);
+    await expect(service.embed(storeId, 'ঢাকায় ৬০ টাকা।')).resolves.toMatchObject({
+      model: 'test-embedding',
+      embedding: expect.arrayContaining([0.5]),
+    });
+    expect(runs).toMatchObject([{ outcome: 'completed', costMicroUsd: 0 }]);
+  });
+
   it('records a healthy run and returns the parsed reply', async () => {
     const { service, runs } = fixture([reply]);
 

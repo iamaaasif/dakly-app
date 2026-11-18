@@ -387,17 +387,21 @@ PUT URL. Upload the file before creating or changing the knowledge item.
 The worker indexes one item per job. It reads no more than 10 MiB per file
 and rejects PDFs over 100 pages or files with more than 200,000 characters
 of extracted text. A rejected file records the reason and produces no
-chunks. Typed and extracted text is untrusted data.
+chunks. The worker saves the SHA-256 of the bytes it read. Typed and extracted
+text is untrusted data.
 
 Indexing uses 512-dimension embeddings. `AI_EMBEDDING_MODEL` defaults to
 `text-embedding-3-small`. An OpenAI model override needs a matching entry in
-`AI_MODEL_PRICES`. The worker needs the same AI settings as other AI callers.
+`AI_MODEL_PRICES`. The worker needs the same AI settings as other AI callers. The local fake
+driver uses a fixed vector by default, which exercises indexing and text
+search without a vendor key.
 A change marks the item processing and queues a new index. The job only
 replaces chunks if the item still has the revision the job read.
 
 Knowledge search embeds the query with the configured model, then combines the
 exact vector rank and Postgres full-text rank with reciprocal rank fusion.
 Search returns passages from active items in the same store and embedding model.
+It skips items whose file was rejected.
 
 ### Data
 

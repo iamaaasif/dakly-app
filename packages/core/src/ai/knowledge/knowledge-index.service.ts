@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 import { getResolvedPDFJS } from 'unpdf';
 
@@ -10,7 +12,7 @@ import { KnowledgeRepository, type KnowledgeChunk } from './knowledge.repository
 
 const textLimit = 200_000;
 
-type FileText = { text: string } | { rejection: string };
+type FileText = ({ text: string } | { rejection: string }) & { sha256?: Buffer };
 
 @Injectable()
 export class KnowledgeIndexService {
@@ -23,7 +25,7 @@ export class KnowledgeIndexService {
   async index(storeId: string, itemId: string): Promise<void> {
     const item = await this.repository.find(storeId, itemId);
     if (!item || item.status !== 'processing') return;
-    const source = item.fileId
+    const source: FileText = item.fileId
       ? await this.fileText(storeId, item.fileId)
       : { text: item.answer ?? '' };
     const rejection = 'rejection' in source ? source.rejection : 'knowledge_file_empty';
@@ -40,7 +42,7 @@ export class KnowledgeIndexService {
       storeId,
       item.id,
       item.updatedAt,
-      chunks.length ? { chunks } : { rejection },
+      chunks.length ? { chunks, sha256: source.sha256 } : { rejection, sha256: source.sha256 },
     );
   }
 
@@ -51,13 +53,18 @@ export class KnowledgeIndexService {
     const stored = await this.storage.readBytes(file.objectKey, file.sizeBytes);
     if (stored.kind === 'too_large') return { rejection: 'knowledge_file_size_limit' };
     if (stored.kind === 'missing') return { rejection: 'knowledge_file_missing' };
-    if (stored.bytes.length !== file.sizeBytes) return { rejection: 'knowledge_file_invalid' };
+    const sha256 = createHash('sha256').update(stored.bytes).digest();
+    if (stored.bytes.length !== file.sizeBytes)
+      return { rejection: 'knowledge_file_invalid', sha256 };
     try {
-      if (file.contentType === 'application/pdf') return await readPdf(stored.bytes);
+      if (file.contentType === 'application/pdf')
+        return { ...(await readPdf(stored.bytes)), sha256 };
       const text = new TextDecoder('utf-8', { fatal: true }).decode(stored.bytes);
-      return text.length > textLimit ? { rejection: 'knowledge_file_text_limit' } : { text };
+      return text.length > textLimit
+        ? { rejection: 'knowledge_file_text_limit', sha256 }
+        : { text, sha256 };
     } catch {
-      return { rejection: 'knowledge_file_invalid' };
+      return { rejection: 'knowledge_file_invalid', sha256 };
     }
   }
 }
@@ -68,6 +75,7 @@ async function readPdf(bytes: Uint8Array): Promise<FileText> {
     data: new Uint8Array(bytes),
     useWorkerFetch: false,
     useSystemFonts: false,
+    stopAtErrors: true,
     verbosity: 0,
   });
   try {
@@ -90,22 +98,26 @@ async function readPdf(bytes: Uint8Array): Promise<FileText> {
 
 async function readPdfPage(
   reader: ReadableStreamDefaultReader<{
-    items: Array<{ str?: string; hasEOL?: boolean } | object>;
+    items: object[];
   }>,
   limit: number,
 ): Promise<string | null> {
   let text = '';
   for (;;) {
     const { value, done } = await reader.read();
-    if (done) return text;
-    for (const item of value.items) {
-      if (!('str' in item) || typeof item.str !== 'string') continue;
-      text += item.str + ('hasEOL' in item && item.hasEOL ? '\n' : ' ');
-      if (text.length <= limit) continue;
-      await reader.cancel();
-      return null;
-    }
+    if (done) return text.length <= limit ? text : null;
+    // Drain the current page after reaching the cap. PDF.js can close the stream on cancel.
+    if (text.length <= limit) text += pdfTextItems(value.items);
   }
+}
+
+function pdfTextItems(items: object[]): string {
+  let text = '';
+  for (const item of items) {
+    if ('str' in item && typeof item.str === 'string')
+      text += item.str + ('hasEOL' in item && item.hasEOL ? '\n' : ' ');
+  }
+  return text;
 }
 
 const chunkBytes = 2000;

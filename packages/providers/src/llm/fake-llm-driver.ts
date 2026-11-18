@@ -10,18 +10,24 @@ import {
 export class FakeLlmDriver implements LlmDriver {
   private readonly responses: (LlmResult | Error)[];
 
-  private readonly embeddings: (LlmEmbedding | Error)[];
+  private readonly embeddings?: (LlmEmbedding | Error)[];
 
   constructor(
     responses: readonly (LlmResult | Error)[],
-    embeddings: readonly (LlmEmbedding | Error)[] = [],
+    embeddings?: readonly (LlmEmbedding | Error)[],
   ) {
-    this.embeddings = [...embeddings];
+    this.embeddings = embeddings && [...embeddings];
     this.responses = [...responses];
   }
 
   async embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding> {
     if (request.signal?.aborted) throw new LlmError('LLM_ABORTED');
+    if (!this.embeddings)
+      return {
+        model: request.model,
+        embedding: Array.from({ length: 512 }, () => 0.5),
+        usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 },
+      };
     const embedding = this.embeddings.shift();
     if (embedding instanceof Error) throw embedding;
     if (!embedding) throw new Error('No scripted embedding left');

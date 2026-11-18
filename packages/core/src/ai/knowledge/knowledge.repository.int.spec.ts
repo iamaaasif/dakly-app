@@ -1,7 +1,9 @@
-import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { knowledgeFileBytes } from '@dakly/contracts/knowledge';
 import { createDatabase } from '@dakly/db/client';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
@@ -53,14 +55,15 @@ describe('KnowledgeRepository', () => {
     ['text/plain', 'ঢাকায় ডেলিভারি ৬০ টাকা।'],
     ['application/pdf', 'Delivery in Dhaka costs 60 taka.'],
   ] as const)('indexes a %s once and keeps its chunks in the store', async (type, text) => {
-    const bytes =
-      type === 'text/plain'
-        ? Buffer.from(text)
-        : await readFile(new URL('./test/delivery.pdf', import.meta.url));
+    const bytes = type === 'text/plain' ? Buffer.from(text) : pdfWithText(1, text);
     const item = await createFile(type, bytes);
     const indexer = withFile(bytes);
 
     await indexer.index(fixture.a, item.id);
+    const { rows } = await fixture.connection.pool.query('select sha256 from files where id=$1', [
+      item.fileId,
+    ]);
+    expect(rows).toEqual([{ sha256: createHash('sha256').update(bytes).digest() }]);
     const chunks = await chunksFor(item.id);
     expect(chunks).toEqual([{ content: text, token_count: 8 }]);
     await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
@@ -76,11 +79,28 @@ describe('KnowledgeRepository', () => {
     expect(await chunksFor(item.id)).toEqual(chunks);
   });
 
-  it('rejects text over the extraction limit with no partial chunks', async () => {
-    const bytes = Buffer.from('a'.repeat(200_001));
-    const item = await createFile('text/plain', bytes);
-    await withFile(bytes).index(fixture.a, item.id);
+  it.each([
+    ['text/plain', Buffer.from('a'.repeat(200_001)), 'knowledge_file_text_limit'],
+    ['application/pdf', pdfWithText(101, 'Dhaka'), 'knowledge_file_page_limit'],
+    ['application/pdf', pdfWithText(90, 'a'.repeat(2_500)), 'knowledge_file_text_limit'],
+    ['application/pdf', Buffer.from('Invalid PDF'), 'knowledge_file_invalid'],
+  ] as const)(
+    'rejects a %s that fails validation with no partial chunks',
+    async (type, bytes, reason) => {
+      const item = await createFile(type, bytes);
+      await withFile(bytes).index(fixture.a, item.id);
+      await expectRejected(item, reason);
+    },
+  );
 
+  it('rejects oversized file metadata before reading the object', async () => {
+    const item = await createFile('text/plain', Buffer.alloc(0), knowledgeFileBytes + 1);
+    const indexer = new KnowledgeIndexService(repository, {} as FileStorageDriver, {} as AiService);
+    await indexer.index(fixture.a, item.id);
+    await expectRejected(item, 'knowledge_file_size_limit');
+  });
+
+  async function expectRejected(item: { id: string; fileId: string | null }, reason: string) {
     expect(await chunksFor(item.id)).toEqual([]);
     await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
       status: 'failed',
@@ -90,15 +110,15 @@ describe('KnowledgeRepository', () => {
       'select status, reject_reason from files where id=$1',
       [item.fileId],
     );
-    expect(rows).toEqual([{ status: 'rejected', reject_reason: 'knowledge_file_text_limit' }]);
-  });
+    expect(rows).toEqual([{ status: 'rejected', reject_reason: reason }]);
+  }
 
-  async function createFile(contentType: string, bytes: Uint8Array) {
+  async function createFile(contentType: string, bytes: Uint8Array, sizeBytes = bytes.length) {
     const id = newId();
     await repository.createFile(fixture.a, {
       id,
       contentType,
-      sizeBytes: bytes.length,
+      sizeBytes,
       objectKey: `stores/${fixture.a}/knowledge/${id}`,
       uploadedByUserId: fixture.userA,
       createdAt: now,
@@ -190,6 +210,14 @@ describe('KnowledgeRepository', () => {
     await create(fixture.a, 'ঢাকা delivery', closer, 'old');
     await create(fixture.b, 'ঢাকা delivery', closer, 'current');
 
+    const rejected = await createFile('text/plain', Buffer.from('ঢাকা'));
+    await repository.finishIndex(fixture.a, rejected.id, rejected.updatedAt, {
+      chunks: [{ content: 'ঢাকা', embedding: closer, embeddingModel: 'current', tokenCount: 5 }],
+    });
+    await fixture.connection.pool.query("update files set status='rejected' where id=$1", [
+      rejected.fileId,
+    ]);
+
     const hits = await repository.search(fixture.a, {
       query: 'ঢাকা',
       embedding,
@@ -200,3 +228,43 @@ describe('KnowledgeRepository', () => {
     expect(hits[0]?.content).toBe('ঢাকা delivery');
   });
 });
+
+function pdfWithText(pages: number, text: string): Buffer {
+  const refs = Array.from({ length: pages }, (_, index) => `${index + 5} 0 R`);
+  const lines = text.match(/.{1,80}/g) ?? [];
+  const commands = lines.map((line) => `(${line}) Tj 0 -10 Td`).join(' ');
+  const stream = deflateSync(`BT /F1 8 Tf 72 720 Td ${commands} ET`);
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${refs.join(' ')}] /Count ${pages} >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    Buffer.concat([
+      Buffer.from(`<< /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`),
+      stream,
+      Buffer.from('\nendstream'),
+    ]),
+    ...refs.map(
+      () =>
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>',
+    ),
+  ];
+  const parts = [Buffer.from('%PDF-1.4\n')];
+  let offset = parts[0]!.length;
+  const xref = ['0000000000 65535 f '];
+  for (const [index, object] of objects.entries()) {
+    xref.push(`${String(offset).padStart(10, '0')} 00000 n `);
+    const part = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`),
+      typeof object === 'string' ? Buffer.from(object) : object,
+      Buffer.from('\nendobj\n'),
+    ]);
+    parts.push(part);
+    offset += part.length;
+  }
+  parts.push(
+    Buffer.from(
+      `xref\n0 ${xref.length}\n${xref.join('\n')}\ntrailer\n<< /Root 1 0 R /Size ${xref.length} >>\nstartxref\n${offset}\n%%EOF\n`,
+    ),
+  );
+  return Buffer.concat(parts);
+}
