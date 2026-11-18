@@ -130,15 +130,28 @@ export const changeCampaignSchema = z
     (input) => Object.values(input).some((value) => value !== undefined),
     'Nothing to change',
   );
+const campaignListTime = z.iso
+  .datetime()
+  .refine(
+    (value) => !/\.\d{4,}/u.test(value),
+    'Use no more than three digits for fractional seconds',
+  );
+
 export const campaignListQuerySchema = z
   .strictObject({
     cursor: z.uuid().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
-    search: z.string().trim().min(1).max(100).optional(),
+    search: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .refine((text) => !text.includes('\u0000'), 'Remove the null character')
+      .optional(),
     status: z.enum(campaignStatuses).optional(),
     channel: z.enum(campaignChannels).optional(),
-    createdFrom: z.iso.datetime().optional(),
-    createdBefore: z.iso.datetime().optional(),
+    createdFrom: campaignListTime.optional(),
+    createdBefore: campaignListTime.optional(),
   })
   .refine(
     ({ createdFrom, createdBefore }) =>

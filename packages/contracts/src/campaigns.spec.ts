@@ -47,11 +47,22 @@ describe('campaign list query', () => {
   it.each([
     { search: ' '.repeat(3) },
     { search: 'x'.repeat(101) },
+    { search: 'before\u0000after' },
     { status: 'unknown' },
     { channel: 'email' },
     { createdBefore: '2026-02-30T00:00:00.000Z' },
+    { createdBefore: '2026-11-20T00:00:00.0001Z' },
     { createdFrom: '2026-11-20T00:00:00.000Z', createdBefore: '2026-11-19T00:00:00.000Z' },
   ])('rejects an invalid filter %o', (query) => {
     expect(campaignListQuerySchema.safeParse(query).success).toBe(false);
+  });
+
+  it('accepts second- and millisecond-precision date boundaries', () => {
+    expect(
+      campaignListQuerySchema.safeParse({
+        createdFrom: '2026-11-20T00:00:00Z',
+        createdBefore: '2026-11-20T00:00:00.001Z',
+      }).success,
+    ).toBe(true);
   });
 });
