@@ -123,7 +123,19 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
     await expect(name).toHaveValue('Winter Kurti collection');
-    await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
+    const goal = page.getByLabel('Goal');
+    await expect(goal).toHaveValue('new_collection');
+    const changeGoal = page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await goal.selectOption('seasonal');
+    await saveDraft.click();
+    expect((await changeGoal).postDataJSON()).toEqual({ goal: 'seasonal' });
+    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(goal).toHaveValue('seasonal');
+    await expect(name).toHaveValue('Winter Kurti collection');
 
     const detailUrl = `**/api/campaigns/${draft.id}`;
     await page.route(detailUrl, (route) =>
@@ -147,7 +159,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await name.fill(longName);
     await saveDraft.click();
     await expect(page.getByRole('heading', { name: longName })).toBeVisible();
-    await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
+    await expect(goal).toHaveValue('seasonal');
     await page.setViewportSize({ width: 360, height: 800 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
