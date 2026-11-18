@@ -7,6 +7,7 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -15,12 +16,14 @@ import {
   codCollectedSchema,
   createOrderSchema,
   dispatchOrderSchema,
+  editOrderSchema,
   orderIdempotencyKeySchema,
   orderListQuerySchema,
   orderStageChangeSchema,
   type CodCollectedInput,
   type CreateOrderInput,
   type DispatchOrderInput,
+  type EditOrderInput,
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
@@ -57,13 +60,29 @@ export class OrdersController {
     });
   }
 
+  @Patch(':orderId')
+  @RequirePermission('orders.edit')
+  editOrder(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body(new ZodValidationPipe(editOrderSchema)) input: EditOrderInput,
+  ): Promise<OrderDetail> {
+    return this.service.editOrder(storeId, orderId, input, {
+      actor: { kind: 'user', userId },
+      access,
+    });
+  }
+
   @Get()
   @RequirePermission('orders.view')
   list(
     @CurrentStore() storeId: string,
     @Query(new ZodValidationPipe(orderListQuerySchema)) query: OrderListQuery,
+    @CurrentAccess() access: StoreAccess,
   ): Promise<OrderListResponse> {
-    return this.service.list(storeId, query);
+    return this.service.list(storeId, query, access.seeFullPhone);
   }
 
   @Get(':orderId')

@@ -38,6 +38,7 @@ export type SessionContext = {
     | (UserStore & {
         canViewProducts: boolean;
         canEditProducts: boolean;
+        canViewOrders: boolean;
         canViewCampaigns: boolean;
         canEditCampaigns: boolean;
         canViewCustomers: boolean;

@@ -26,6 +26,7 @@ function show(child: ReactNode, edit = false) {
       canEditTeam: edit,
       canViewProducts: false,
       canEditProducts: false,
+      canViewOrders: false,
       canViewCampaigns: false,
       canEditCampaigns: false,
       canViewCustomers: false,

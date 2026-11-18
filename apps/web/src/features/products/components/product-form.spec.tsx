@@ -54,6 +54,7 @@ function show(initial?: ProductResponse) {
       name: 'Shop',
       canViewProducts: true,
       canEditProducts: true,
+      canViewOrders: false,
       canViewCampaigns: false,
       canEditCampaigns: false,
       canViewCustomers: false,

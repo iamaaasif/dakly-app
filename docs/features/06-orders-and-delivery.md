@@ -239,7 +239,9 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 ![Orders](../design/screenshots/orders.webp)
 
-Pipeline by stage with counts and return risk badges. The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
+Pipeline by stage with counts and return risk badges. To confirm includes On hold, and Delivered includes Partly delivered. Each combined tab counts both stages. Cards show the order age and use the total supplied by the API.
+The pipeline URL keeps the stage, search and page cursor. Search uses the buyer or recipient name, order number or exact recipient phone for staff who can see full phones. The alert strip links to orders waiting over 12 hours, high-risk unconfirmed orders with no advance, and unpaid COD on delivered parcels. Counts cover the store. The out-of-stock alert waits for the staff oversell rule, since orders currently cannot reserve stock they do not have. The list shows up to two item lines. The detail and timeline follow the pipeline.
+The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
 ### How it works
 
@@ -273,6 +275,8 @@ Staff without full-phone access do not see the linked duplicate order. The staff
 
 Staff orders use `POST /orders` with an `Idempotency-Key`. During order capture, Orders edit access allows staff to record a new buyer and fill an empty own-phone field under D27. Editing a profile separately requires Customers edit access. A retry returns the existing order. The order discount cannot exceed the item subtotal after line discounts. An advance above the total leaves zero COD. The order starts in To confirm. Order numbers come from the locked store counter. Creating an order updates the buyer's timestamp so import undo keeps that contact. Staff can record money already received by hand. Cancelling an advance-paid order sets `refund_due` in the same transaction as the cancellation audit and stock release. Payment links and `advance_requested` wait for PAY-6. Order creation from a chat waits for CHAT-1.
 
+Staff can edit items, discounts and the delivery snapshot in To confirm, On hold, and To pack before COD is collected. The buyer stays linked and their profile stays as it was. Changes to a recipient name or address keep the phone and charge unless staff supply new values. Choosing another area quotes its charge. New lines use the current variant price. Existing lines keep the price recorded on the order. The item and stock changes, totals, duplicate hint, and edit audit are saved together. The customer summary after confirmed edits waits for ORD-4. Adding items requires enough stock to reserve.
+
 Confirmation: a WhatsApp utility template, or an SMS with a confirm link (SMS cannot receive replies). A yes reply on WhatsApp ("হ্যাঁ", yes, ji, ok, confirm, "ঠিক আছে") moves the order to `to_pack` when it is the contact's only order in `to_confirm`; with two, the AI asks which.
 
 Sending with a courier (release 1): staff move the order to `with_courier` and may type the courier name (from a fixed list: Steadfast, Pathao, RedX, own delivery, other) and the tracking code. Staff mark the order delivered, partly delivered or returned by hand, and mark COD collected when the money arrives. The shipping update message to the customer includes the tracking code when there is one.
@@ -283,7 +287,7 @@ Partial delivery scales each line discount by the delivered quantity divided by 
 
 For example, an order has three items at ৳1,250 each, a ৳10 line discount, a ৳30.01 order discount, ৳60 delivery and a ৳200 advance. Two delivered items receive a ৳6.66 line discount, leaving ৳2,493.34 in items. Their share of the order discount is ৳20. COD becomes ৳2,333.34.
 
-Staff can record the COD amount once after delivery. Returning an order with an advance, paid balance or collected COD sets `refund_due` in the return transaction. Return risk follows in a separate PR.
+Staff can record the COD amount once after delivery. Returning an order with an advance, paid balance or collected COD sets `refund_due` in the return transaction. The order list and details compute return risk from completed parcels for the recipient’s phone in the same store. A partly delivered parcel counts as delivered for risk. A single past parcel is too little for a badge.
 
 Later release (D21), kept here so the data model does not block it: courier connections with the shop's own keys, booking as an idempotent job per order, parcel status by webhook or polling, and COD reconciliation from courier payouts matched by consignment id. Do not build any of it in release 1.
 

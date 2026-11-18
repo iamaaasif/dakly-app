@@ -1,7 +1,7 @@
 const TAKA_FORMAT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 
-export function formatMoney(amountPoisha: number): string {
-  if (!Number.isSafeInteger(amountPoisha)) {
+export function formatMoney(amountPoisha: number | bigint): string {
+  if (typeof amountPoisha === 'number' && !Number.isSafeInteger(amountPoisha)) {
     throw new RangeError('Money must be a safe integer in poisha');
   }
 

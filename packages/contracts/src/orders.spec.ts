@@ -4,6 +4,7 @@ import {
   codCollectedSchema,
   createOrderSchema,
   dispatchOrderSchema,
+  editOrderSchema,
   orderListQuerySchema,
   orderStageChangeSchema,
 } from './orders';
@@ -17,12 +18,15 @@ describe('order list query', () => {
     });
   });
 
-  it.each([{ stage: 'inquiry' }, { cursor: '-1' }, { limit: '101' }, { storeId: 'other' }])(
-    'rejects an unsupported filter %j',
-    (query) => {
-      expect(orderListQuerySchema.safeParse(query).success).toBe(false);
-    },
-  );
+  it.each([
+    { stage: 'inquiry' },
+    { cursor: '-1' },
+    { limit: '101' },
+    { storeId: 'other' },
+    { search: 'invalid\0text' },
+  ])('rejects an unsupported filter %j', (query) => {
+    expect(orderListQuerySchema.safeParse(query).success).toBe(false);
+  });
 });
 
 describe('staff order input', () => {
@@ -56,6 +60,12 @@ describe('staff order input', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('allows changing the address without sending the number or recipient type', () => {
+    expect(
+      editOrderSchema.parse({ items: order.items, recipient: { address: 'Mirpur' } }).recipient,
+    ).toEqual({ address: 'Mirpur' });
   });
 
   it('requires separate buyer fields and accepts a different delivery recipient', () => {

@@ -44,6 +44,7 @@ export type KnowledgeItemResponse = {
   fileId: string | null;
   status: (typeof knowledgeStatuses)[number];
   factsCount: number;
+  failureReason: string | null;
   createdAt: string;
   updatedAt: string;
 };

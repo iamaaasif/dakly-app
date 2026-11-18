@@ -6,6 +6,7 @@ import { useSessionContext } from '@/lib/session-context';
 type StorePageProps = {
   permission:
     | 'canViewProducts'
+    | 'canViewOrders'
     | 'canViewCampaigns'
     | 'canEditCampaigns'
     | 'canViewCustomers'

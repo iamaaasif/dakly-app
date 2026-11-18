@@ -13,7 +13,7 @@ Release 1 uses the OpenAI API (decision D17) behind the `LlmDriver` interface. T
 7. Untrusted text (customer messages, comments, file contents, web pages) goes into the prompt inside a labelled data block, never as instructions.
 8. No database transaction or lock is held during a model call ([database.md](database.md)).
 9. Every call has a timeout (20 s for a chat reply in total) and a circuit breaker (3 errors in a minute pause AI for 2 minutes).
-10. Send only what the call needs: no other customers, no tokens or credentials. Every OpenAI call sets `store: false`.
+10. Send only what the call needs: no other customers, no tokens or credentials. Every OpenAI Responses call sets `store: false`. The Embeddings endpoint stores no application state and takes no such flag.
 11. Usage is consumed through `UsageService.consume` with a reference that makes retries free.
 12. Model-written content shown to shops' customers or posted publicly passes moderation first.
 13. A gate that can be checked in code (AI off, window closed, saved reply matches, allowance used) runs before any model call.
