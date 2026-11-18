@@ -1,7 +1,7 @@
 'use client';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import Image from 'next/image';
-import { useId, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { MAX_PRODUCT_PHOTOS, type ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
@@ -41,7 +41,7 @@ function EditablePhotos({ product }: ProductPhotosProps) {
     upload.reset();
     const fileIds = product.photos.map((photo) => photo.id);
     fileIds.splice(index - 1, 0, fileIds.splice(index, 1)[0]!);
-    reorder.mutate({ fileIds }, { onSuccess: () => requestAnimationFrame(onMoved) });
+    reorder.mutate({ fileIds }, { onSuccess: onMoved });
   }
   function handleUpload(file: File) {
     reorder.reset();
@@ -123,9 +123,15 @@ type PhotoEntryProps = {
 function PhotoEntry({ name, photo, index, actions }: PhotoEntryProps) {
   const move = useRef<HTMLButtonElement>(null);
   const remove = useRef<HTMLButtonElement>(null);
+  const [restoreFocus, setRestoreFocus] = useState(false);
+  const disabled = actions?.disabled;
+  useEffect(() => {
+    if (!restoreFocus || disabled) return;
+    (index === 0 ? remove : move).current?.focus();
+    setRestoreFocus(false);
+  }, [disabled, index, restoreFocus]);
   function handleMove() {
-    const focusTarget = index === 1 ? remove : move;
-    actions?.onMove(index, () => focusTarget.current?.focus());
+    actions?.onMove(index, () => setRestoreFocus(true));
   }
   return (
     <li className="space-y-2">

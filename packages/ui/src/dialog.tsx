@@ -38,6 +38,7 @@ export function Dialog(props: DialogProps) {
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         if (!closeDisabled) onClose();
       }}
       onKeyDown={trapFocus}

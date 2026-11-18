@@ -148,11 +148,33 @@ test('saves unfinished products, edits variants without losing stock and manages
     const removal = page.getByRole('dialog', { name: removalTitle });
     await expect(removal).toBeVisible();
     await capture('remove', photoEvidence, removalTitle);
+    await page.keyboard.press('Escape');
+    await expect(removal).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Remove photo 1' }).click();
+
+    let releaseRemoval: () => void = () => undefined;
+    const removalGate = new Promise<void>((resolve) => {
+      releaseRemoval = resolve;
+    });
+    const removalPath = `**/api/products/${productId}/photos/${fileIds[1]}`;
+    await page.route(removalPath, async (route) => {
+      await removalGate;
+      await route.continue();
+    });
     const removed = page.waitForResponse(
       (response) => response.url().endsWith(`/photos/${fileIds[1]}`) && response.status() === 204,
     );
-    await removal.getByRole('button', { name: 'Remove photo', exact: true }).click();
+    try {
+      await removal.getByRole('button', { name: 'Remove photo', exact: true }).click();
+      await expect(removal.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+      await page.keyboard.press('Escape');
+      await expect(removal).toBeVisible();
+    } finally {
+      releaseRemoval();
+    }
     await removed;
+    await page.unroute(removalPath);
     await expect(page.getByRole('heading', { name: 'Photos (1)' })).toBeVisible();
     const afterRemoval = (await (
       await request(`/products/${productId}`, undefined, 'GET')
