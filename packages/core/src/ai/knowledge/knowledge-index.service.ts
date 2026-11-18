@@ -124,13 +124,17 @@ function isIndexAiFailure(error: unknown): boolean {
 
 async function readPdf(bytes: Uint8Array): Promise<FileText> {
   const { getDocument } = await getResolvedPDFJS();
-  const loading = getDocument({
+  const options = {
     data: new Uint8Array(bytes),
+    // Keep font evaluation off on PDF.js builds that expose this option.
+    isEvalSupported: false,
+    disableFontFace: true,
     useWorkerFetch: false,
     useSystemFonts: false,
     stopAtErrors: true,
     verbosity: 0,
-  });
+  };
+  const loading = getDocument(options);
   try {
     const pdf = await loading.promise;
     if (pdf.numPages > 100) return { rejection: 'knowledge_file_page_limit' };

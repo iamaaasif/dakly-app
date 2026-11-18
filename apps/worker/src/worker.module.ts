@@ -8,10 +8,7 @@ import { StaffAuditExportJob } from '@dakly/core/admin/jobs/staff-audit-export.j
 import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
-import { AiModule } from '@dakly/core/ai/ai.module';
-import { IndexKnowledgeJob } from '@dakly/core/ai/knowledge/jobs/index-knowledge.job';
-import { KnowledgeIndexService } from '@dakly/core/ai/knowledge/knowledge-index.service';
-import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
+import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
@@ -27,7 +24,6 @@ import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
-import { FileStorageModule } from '@dakly/core/platform/file-storage/file-storage.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { RelayOutboxJob } from '@dakly/core/platform/outbox/jobs/relay-outbox.job';
@@ -56,8 +52,6 @@ import { JobSchedulers } from './job-schedulers';
     RelayOutboxJob,
     FailStuckImportsJob,
     RunContactImport,
-    IndexKnowledgeJob,
-    KnowledgeIndexService,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
@@ -80,9 +74,7 @@ import { JobSchedulers } from './job-schedulers';
     NotificationsModule,
     AutomationRunsModule,
     ImportsModule,
-    AiModule,
-    KnowledgeModule,
-    FileStorageModule,
+    KnowledgeIndexModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
