@@ -208,27 +208,30 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Advance paid (৳)').fill('200');
     await expect(cod.getByText('৳1,110', { exact: true })).toBeVisible();
     await capture(page, 'buyer-and-advance');
+    let confirmKey: string | undefined;
+    let confirmBody: string | null;
     await page.route('**/api/orders', async (route) => {
-      if (route.request().method() !== 'POST') return route.continue();
-      const saved = await route.fetch();
-      expect(saved.status()).toBe(201);
-      await route.abort();
-      await page.unroute('**/api/orders');
-    });
-    let confirmationRequests = 0;
-    await page.route('**/api/orders/*/stage', async (route) => {
-      confirmationRequests++;
+      const request = route.request();
+      if (request.method() !== 'POST') return route.continue();
+      expect(request.postDataJSON()).toMatchObject({ confirm: true });
+      if (confirmKey) {
+        expect(request.headers()['idempotency-key']).toBe(confirmKey);
+        expect(request.postData()).toBe(confirmBody);
+        return route.continue();
+      }
+      confirmKey = request.headers()['idempotency-key'];
+      confirmBody = request.postData();
+      expect(confirmKey).toBeTruthy();
       const confirmed = await route.fetch();
-      expect(confirmed.status()).toBe(200);
+      expect(confirmed.status()).toBe(201);
+      expect(await confirmed.json()).toMatchObject({ stage: 'to_pack' });
       await route.abort();
     });
     await create.getByRole('button', { name: 'Save as confirmed' }).click();
     await expect(create.getByText('Could not confirm the save')).toBeVisible();
     await create.getByRole('button', { name: 'Retry save' }).click();
-    await expect(create.getByRole('alert')).toBeVisible();
-    await create.getByRole('button', { name: 'Confirm saved order' }).click();
     await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
-    expect(confirmationRequests).toBe(1);
+    await page.unroute('**/api/orders');
     await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
       'href',
       `/customers/${buyerId}`,
