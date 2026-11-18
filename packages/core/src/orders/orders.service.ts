@@ -26,12 +26,14 @@ import { applyOrderFulfilment, returnRisk } from './order-fulfilment';
 import {
   canEditOrder,
   isSyncedOrder,
+  orderStageCounts,
   orderStageHistory,
   orderStageTransitions,
   recordOrderStage,
   stageWrite,
+  stagesForOrderTab,
 } from './order-stage';
-import { orderTotals } from './order-totals';
+import { orderTotalPoisha, orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
@@ -181,7 +183,9 @@ export class OrdersService {
     const overdueBefore = new Date(this.clock.now().getTime() - 12 * 60 * 60 * 1000);
     const parsedPhone = bdMobileSchema.safeParse(query.search);
     const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
-    const rows = await this.repository.list(storeId, query, overdueBefore, phone);
+    const { stage, ...filters } = query;
+    const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
+    const rows = await this.repository.list(storeId, { ...filters, stages }, overdueBefore, phone);
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
@@ -190,23 +194,13 @@ export class OrdersService {
     const items = page.map(({ recipientPhone, createdAt, ...row }) => ({
       ...row,
       createdAt: createdAt.toISOString(),
+      totalPoisha: orderTotalPoisha(row),
       returnRisk: returnRisk(byPhone.get(recipientPhone)),
       isWaitingForConfirmation: row.stage === 'to_confirm' && createdAt < overdueBefore,
     }));
-    const counts = {
-      to_confirm: 0,
-      on_hold: 0,
-      to_pack: 0,
-      with_courier: 0,
-      delivered: 0,
-      partially_delivered: 0,
-      returned: 0,
-      cancelled: 0,
-    };
-    for (const row of await this.repository.countByStage(storeId)) counts[row.stage] = row.count;
     return {
       items,
-      counts,
+      counts: orderStageCounts(await this.repository.countByStage(storeId)),
       alerts: await this.repository.alertTotals(storeId, overdueBefore),
       nextCursor: rows.length > query.limit ? (items.at(-1)?.number ?? null) : null,
     };
@@ -226,6 +220,7 @@ export class OrdersService {
       deliveredAt: isoTime(order.deliveredAt),
       returnedAt: isoTime(order.returnedAt),
       codCollectedAt: isoTime(order.codCollectedAt),
+      totalPoisha: orderTotalPoisha(order),
       returnRisk: returnRisk(outcomes[0]),
       items: await this.repository.items(storeId, orderId),
       timeline,

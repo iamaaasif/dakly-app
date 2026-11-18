@@ -68,6 +68,13 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderTabs = [
+  'to_confirm',
+  'to_pack',
+  'with_courier',
+  'delivered',
+  'returned',
+] as const;
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
@@ -93,6 +100,7 @@ export type OrderSummary = {
   itemsSubtotalPoisha: number;
   orderDiscountPoisha: number;
   deliveryChargePoisha: number;
+  totalPoisha: number;
   advancePaidPoisha: number;
   codAmountPoisha: number;
   codCollectedPoisha: number | null;

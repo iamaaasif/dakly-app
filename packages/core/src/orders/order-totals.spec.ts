@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import { partialOrderTotals } from './order-totals';
+import { orderTotals, partialOrderTotals } from './order-totals';
 
 it('allocates the order discount by delivered value across different prices', () => {
   expect(
@@ -27,4 +27,22 @@ it('allocates the order discount by delivered value across different prices', ()
     deliveredOrderDiscountPoisha: 100,
     codAmountPoisha: 1300,
   });
+});
+
+it('rejects a total above the largest exact poisha amount even after recording an advance', () => {
+  expect(() =>
+    orderTotals(
+      [
+        {
+          variantId: 'shirt',
+          productName: 'Shirt',
+          variantTitle: 'M',
+          quantity: 1,
+          unitPricePoisha: Number.MAX_SAFE_INTEGER,
+          isStockTracked: false,
+        },
+      ],
+      { orderDiscountPoisha: 0, deliveryChargePoisha: 2, advancePaidPoisha: 4 },
+    ),
+  ).toThrow(expect.objectContaining({ code: 'ORDER_TOTAL_INVALID' }));
 });

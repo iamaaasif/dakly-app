@@ -15,7 +15,7 @@ import {
   sql,
 } from 'drizzle-orm';
 
-import type { OrderListQuery } from '@dakly/contracts/orders';
+import type { OrderListQuery, OrderStage } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
@@ -97,7 +97,12 @@ export type StageWrite = Partial<
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string, query: OrderListQuery, overdueBefore: Date, phone?: string) {
+  list(
+    storeId: string,
+    query: Omit<OrderListQuery, 'stage'> & { stages?: OrderStage[] },
+    overdueBefore: Date,
+    phone?: string,
+  ) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
@@ -105,7 +110,7 @@ export class OrdersRepository {
         .where(
           and(
             eq(orders.storeId, storeId),
-            query.stage ? eq(orders.stage, query.stage) : undefined,
+            query.stages ? inArray(orders.stage, query.stages) : undefined,
             query.cursor ? lt(orders.number, query.cursor) : undefined,
             orderSearch(query.search, phone),
             query.alert ? orderAlertFilter(tx, storeId, query.alert, overdueBefore) : undefined,

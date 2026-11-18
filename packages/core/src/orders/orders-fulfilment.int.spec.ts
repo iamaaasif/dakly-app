@@ -143,6 +143,7 @@ describe('Manual dispatch and delivery', () => {
       orderDiscountPoisha: 3001,
       deliveredItemsSubtotalPoisha: 249334,
       deliveredOrderDiscountPoisha: 2000,
+      totalPoisha: 253334,
       codAmountPoisha: 233334,
       items: [
         {

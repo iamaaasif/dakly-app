@@ -44,9 +44,9 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     orderIds.push(id);
     await database.pool.query(
       `insert into orders (id,store_id,number,source,created_by_type,stage,buyer_name,recipient_name,
-        recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+        recipient_phone,recipient_address,recipient_district,on_hold_reason,items_subtotal_poisha,
         delivery_charge_poisha,cod_amount_poisha,created_at)
-        values ($1,$2,$3,'manual','user',$4,$5,$5,$6,'House 14, Mirpur','Dhaka',$7,6000,$8,
+        values ($1,$2,$3,'manual','user',$4,$5,$5,$6,'House 14, Mirpur','Dhaka',case when $4='on_hold' then 'pre_order' end,$7,6000,$8,
           now() - ($9::int * interval '1 hour'))`,
       [id, storeId, number, stage, name, phone, cod - 6000, cod, hours],
     );
@@ -126,14 +126,26 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       hours: 49,
       cod: 322000,
     });
-    await order({
+    const partial = await order({
       number: 1055,
-      stage: 'delivered',
+      stage: 'partially_delivered',
       name: 'Nusrat Jahan',
       phone: '01701000002',
       hours: 71,
       cod: 256000,
     });
+    await order({
+      number: 1054,
+      stage: 'on_hold',
+      name: 'Imran Khan',
+      phone: '01701000003',
+      hours: 4,
+      cod: 98000,
+    });
+    await database.pool.query(
+      'update orders set items_subtotal_poisha=450000, delivered_items_subtotal_poisha=252000, delivered_order_discount_poisha=2000 where id=$1',
+      [partial],
+    );
     await database.pool.query(
       `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
         values ($1,$2,$3,$4,'Cotton Panjabi','L',2,248000,false)`,
@@ -142,6 +154,15 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
 
     await page.goto('/orders?stage=to_confirm');
     await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Order stages' }).getByRole('link'),
+    ).toHaveCount(5);
+    await expect(page.getByRole('link', { name: 'To confirm 3' })).toBeVisible();
+    await expect(page.getByText('On hold', { exact: true })).toBeVisible();
+    await expect(page.getByText('3 hours ago', { exact: true })).toHaveAttribute(
+      'title',
+      /Asia\/Dhaka/,
+    );
     await expect(page.getByText('1 order waiting over 12 hours')).toBeVisible();
     await expect(page.getByText('1 high-risk order')).toBeVisible();
     await expect(page.getByText('৳5,780 COD still with couriers')).toBeVisible();
@@ -152,7 +173,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page).toHaveURL(/alert=risk/);
     await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
     await page.getByRole('searchbox').fill('#1060');
-    await page.getByRole('button', { name: 'Search orders' }).click();
+    await page.getByRole('searchbox').press('Enter');
     await expect(page).toHaveURL(/search=%231060/);
     await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
@@ -160,6 +181,9 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await page.getByRole('link', { name: /^Delivered/ }).click();
     await expect(page).toHaveURL(/stage=delivered/);
     await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(2);
+    await expect(page.getByRole('link', { name: 'Delivered 2' })).toBeVisible();
+    await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
+    await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
   } finally {
     await database.pool.query('delete from orders where store_id=$1 and id=any($2::uuid[])', [
       storeId,
