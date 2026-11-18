@@ -281,6 +281,13 @@
       "when": 1795000947648,
       "tag": "0039_bd_upazila_areas",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795004972403,
+      "tag": "0040_partial_delivery_totals",
+      "breakpoints": true
     }
   ]
 }

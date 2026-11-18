@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
 
 import type { OrderListQuery } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
@@ -34,23 +34,48 @@ const detailColumns = {
   onHoldReason: orders.onHoldReason,
   followUpOn: orders.followUpOn,
   cancelReason: orders.cancelReason,
+  courier: orders.courier,
+  courierOtherName: orders.courierOtherName,
+  trackingCode: orders.trackingCode,
+  shippedAt: orders.shippedAt,
+  shippedByUserId: orders.shippedByUserId,
+  deliveredAt: orders.deliveredAt,
+  returnedAt: orders.returnedAt,
+  returnReason: orders.returnReason,
+  codCollectedAt: orders.codCollectedAt,
+  codCollectedPoisha: orders.codCollectedPoisha,
+  deliveredItemsSubtotalPoisha: orders.deliveredItemsSubtotalPoisha,
+  deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
   possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
 };
 
 export type OrderWrite = Omit<typeof orders.$inferInsert, 'storeId'>;
 export type OrderItemWrite = Omit<typeof orderItems.$inferInsert, 'storeId' | 'orderId'>;
 
-export type StageWrite = Pick<
-  typeof orders.$inferInsert,
-  | 'stage'
-  | 'onHoldReason'
-  | 'followUpOn'
-  | 'cancelReason'
-  | 'confirmationMethod'
-  | 'confirmedAt'
-  | 'cancelledAt'
-  | 'paymentStatus'
-  | 'updatedAt'
+export type StageWrite = Partial<
+  Pick<
+    typeof orders.$inferInsert,
+    | 'stage'
+    | 'onHoldReason'
+    | 'followUpOn'
+    | 'cancelReason'
+    | 'confirmationMethod'
+    | 'confirmedAt'
+    | 'cancelledAt'
+    | 'courier'
+    | 'courierOtherName'
+    | 'trackingCode'
+    | 'shippedAt'
+    | 'shippedByUserId'
+    | 'deliveredAt'
+    | 'returnedAt'
+    | 'returnReason'
+    | 'paymentStatus'
+    | 'deliveredItemsSubtotalPoisha'
+    | 'deliveredOrderDiscountPoisha'
+    | 'codAmountPoisha'
+    | 'updatedAt'
+  >
 >;
 
 @Injectable()
@@ -158,6 +183,7 @@ export class OrdersRepository {
           variantTitle: orderItems.variantTitle,
           quantity: orderItems.quantity,
           deliveredQuantity: orderItems.deliveredQuantity,
+          deliveredLineDiscountPoisha: orderItems.deliveredLineDiscountPoisha,
           isStockTracked: orderItems.isStockTracked,
           unitPricePoisha: orderItems.unitPricePoisha,
           lineDiscountPoisha: orderItems.lineDiscountPoisha,
@@ -172,10 +198,8 @@ export class OrdersRepository {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
-          stage: orders.stage,
+          ...detailColumns,
           confirmedAt: orders.confirmedAt,
-          source: orders.source,
-          paymentStatus: orders.paymentStatus,
         })
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))
@@ -184,7 +208,22 @@ export class OrdersRepository {
     return row;
   }
 
-  async setStage(storeId: string, orderId: string, values: StageWrite): Promise<void> {
+  async recordDelivery(
+    storeId: string,
+    orderId: string,
+    lines: { itemId: string; quantity: number; discountPoisha?: number }[],
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        update ${orderItems} as item
+        set delivered_quantity = delivery.quantity, delivered_line_discount_poisha = delivery."discountPoisha"
+        from jsonb_to_recordset(${JSON.stringify(lines)}::jsonb) as delivery("itemId" uuid, quantity integer, "discountPoisha" bigint)
+        where item.store_id = ${storeId} and item.order_id = ${orderId} and item.id = delivery."itemId"
+      `),
+    );
+  }
+
+  async updateOrder(storeId: string, orderId: string, values: Partial<OrderWrite>): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(orders)
