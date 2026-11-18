@@ -234,24 +234,24 @@ export class OrdersService {
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
+    const { buyerContactId, recipientPhone, isRecipientBuyer } = order;
+    const hasRecipientPhoneMatch =
+      isRecipientBuyer && access.seeFullPhone && buyerContactId
+        ? await this.contacts.hasOrderPhoneMatch(storeId, buyerContactId, recipientPhone)
+        : false;
     const items = await this.repository.items(storeId, orderId);
-    const productArea = access.areas?.products;
     const productIds =
-      productArea && productArea !== 'none' && canEditOrder(order)
-        ? await this.products.orderVariantProductIds(
-            storeId,
-            items.map(({ variantId }) => variantId),
-          )
+      access.areas?.orders === 'edit' && canEditOrder(order)
+        ? await this.products.orderVariantProductIds(storeId, items)
         : undefined;
     return {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       ...orderStageTimes(order),
+      hasRecipientPhoneMatch,
       totalPoisha: orderTotalPoisha(order),
-      returnRisk: returnRisk(
-        (await this.repository.parcelOutcomes(storeId, [order.recipientPhone]))[0],
-      ),
+      returnRisk: returnRisk((await this.repository.parcelOutcomes(storeId, [recipientPhone]))[0]),
       items: items.map((item) => ({ ...item, productId: productIds?.get(item.variantId) ?? null })),
       timeline: await orderStageHistory(storeId, orderId, this.audit),
     };

@@ -20,5 +20,6 @@ export function useOrderDelivery(
   return {
     chargePoisha: quoteArea ? query.data?.chargePoisha : order?.deliveryChargePoisha,
     error: query.error,
+    refetch: query.refetch,
   };
 }

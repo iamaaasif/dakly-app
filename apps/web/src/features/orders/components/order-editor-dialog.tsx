@@ -14,9 +14,10 @@ import {
   type CreateOrderInput,
   type CreateOrderValues,
   type OrderDetail,
+  type OrderCatalogueProduct,
   type OrderEditorValues,
 } from '@dakly/contracts/orders';
-import { takaInput, type ProductResponse } from '@dakly/contracts/products';
+import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -24,6 +25,7 @@ import { Input } from '@dakly/ui/input';
 import { useOrderStage } from '../api/change-order-stage';
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
+import { useOrderCatalogueProducts } from '../api/order-catalogue';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -32,8 +34,6 @@ import {
 import { OrderRecipientFields } from './order-recipient-fields';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
-import { useProductDetails } from '@/lib/product-detail-query';
-import { useSessionContext } from '@/lib/session-context';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 
@@ -59,7 +59,7 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       title="New order"
       open
       onClose={close}
-      closeDisabled={pending}
+      closeDisabled={pending || retry}
       className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
     >
       <FormProvider {...form}>
@@ -151,7 +151,7 @@ type OrderSaveActionsProps = {
 function OrderSaveActions({ saved, retry, pending, onClose, onConfirm }: OrderSaveActionsProps) {
   return (
     <div className="flex shrink-0 flex-wrap justify-end gap-2">
-      <Button variant="secondary" disabled={pending} onClick={onClose}>
+      <Button variant="secondary" disabled={pending || retry} onClick={onClose}>
         {saved ? 'Open saved order' : 'Cancel'}
       </Button>
       {!saved && (
@@ -177,13 +177,11 @@ export function OrderEditorFields({ order }: { order?: OrderDetail }) {
 
 function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   const productIds = useRef<Record<string, string>>({});
-  const { data } = useSessionContext();
-  const canBrowse = data?.currentStore?.canViewProducts === true;
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' });
   const savedProductIds = order?.items.flatMap(({ productId }) => productId ?? []) ?? [];
-  const selectedProducts = useProductDetails([
+  const selectedProducts = useOrderCatalogueProducts([
     ...new Set([
       ...savedProductIds,
       ...items.flatMap(({ variantId }) => productIds.current[variantId] ?? []),
@@ -195,7 +193,6 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
     <>
       <OrderProductFields
         fields={fields}
-        canBrowse={canBrowse}
         ids={items.map(({ variantId }) => variantId)}
         variants={variants}
         register={register}
@@ -217,7 +214,7 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   );
 }
 
-function draftVariantChoices(products: ProductResponse[], order?: OrderDetail) {
+function draftVariantChoices(products: OrderCatalogueProduct[], order?: OrderDetail) {
   const variants = orderVariantChoices(products);
   for (const item of order?.items ?? []) {
     const live = products.find(({ id }) => id === item.productId);

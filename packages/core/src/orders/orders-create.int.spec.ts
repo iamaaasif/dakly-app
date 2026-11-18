@@ -362,7 +362,14 @@ describe('Staff order creation', () => {
       }),
       editor(),
     );
-    expect(conflicting).toMatchObject({ buyerContactId: karimId, recipientPhone: editedPhone });
+    expect(conflicting).toMatchObject({
+      buyerContactId: karimId,
+      recipientPhone: editedPhone,
+      hasRecipientPhoneMatch: true,
+    });
+    expect(await orders.getById(f.a, conflicting.id, { seeFullPhone: false })).toMatchObject({
+      hasRecipientPhoneMatch: false,
+    });
     expect(await f.row('contacts', rahimId)).toMatchObject({ phone: editedPhone });
     expect(await f.row('contacts', karimId)).toMatchObject({ phone: null });
     const suggestions = await f.connection.pool.query(

@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import type { FieldArrayWithId, UseFormRegister } from 'react-hook-form';
 
-import type { OrderEditorValues } from '@dakly/contracts/orders';
-import type { ProductResponse } from '@dakly/contracts/products';
+import type { OrderEditorValues, OrderCatalogueProduct } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { useOrderCatalogue } from '../api/order-catalogue';
 import { formatMoney } from '@/lib/format-money';
-import { useProductPages } from '@/lib/product-queries';
 
 export type VariantChoice = {
   productId: string;
@@ -19,7 +18,6 @@ export type VariantChoice = {
 
 type ProductFieldsProps = {
   fields: FieldArrayWithId<OrderEditorValues, 'items'>[];
-  canBrowse: boolean;
   variants: Record<string, VariantChoice>;
   ids: string[];
   register: UseFormRegister<OrderEditorValues>;
@@ -30,7 +28,6 @@ type ProductFieldsProps = {
 
 export function OrderProductFields({
   fields,
-  canBrowse,
   variants,
   ids,
   register,
@@ -40,21 +37,15 @@ export function OrderProductFields({
 }: ProductFieldsProps) {
   const [search, setSearch] = useState('');
   const term = search.trim();
-  const products = useProductPages(term.length >= 3 ? term : undefined);
+  const products = useOrderCatalogue(term.length >= 3 ? term : undefined);
   const choices = orderVariantChoices(products.data?.pages.flatMap((page) => page.items) ?? []);
   return (
     <fieldset className="space-y-2">
       <legend className="font-semibold">Products</legend>
-      {canBrowse && (
-        <label className="block">
-          Search products
-          <Input
-            maxLength={200}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-      )}
+      <label className="block">
+        Search products
+        <Input maxLength={200} value={search} onChange={(event) => setSearch(event.target.value)} />
+      </label>
       {products.error ? (
         <p role="alert" className="text-danger">
           {products.error.message}
@@ -63,7 +54,7 @@ export function OrderProductFields({
       {fields.map((field, index) => (
         <OrderProductLine
           key={field.id}
-          {...{ choices, ids, index, variants, register, onChoose, canBrowse }}
+          {...{ choices, ids, index, variants, register, onChoose }}
           onRemove={fields.length > 1 ? onRemove : undefined}
         />
       ))}
@@ -76,16 +67,14 @@ export function OrderProductFields({
           Load more products
         </Button>
       )}
-      {canBrowse && (
-        <Button variant="secondary" disabled={fields.length >= 100} onClick={onAdd}>
-          Add product
-        </Button>
-      )}
+      <Button variant="secondary" disabled={fields.length >= 100} onClick={onAdd}>
+        Add product
+      </Button>
     </fieldset>
   );
 }
 
-export function orderVariantChoices(products: ProductResponse[]) {
+export function orderVariantChoices(products: OrderCatalogueProduct[]) {
   return Object.fromEntries(
     products.flatMap((product) =>
       product.variants
@@ -106,17 +95,19 @@ export function orderVariantChoices(products: ProductResponse[]) {
   );
 }
 
-type OrderProductLineProps = Pick<
-  ProductFieldsProps,
-  'ids' | 'variants' | 'register' | 'onChoose' | 'canBrowse'
-> & {
+function OrderProductLine({
+  choices,
+  ids,
+  index,
+  variants,
+  register,
+  onChoose,
+  onRemove,
+}: Pick<ProductFieldsProps, 'ids' | 'variants' | 'register' | 'onChoose'> & {
   choices: Record<string, VariantChoice>;
   index: number;
   onRemove?: ProductFieldsProps['onRemove'];
-};
-
-function OrderProductLine(props: OrderProductLineProps) {
-  const { choices, canBrowse, ids, index, variants, register, onChoose, onRemove } = props;
+}) {
   const id = ids[index] ?? '';
   const variant = variants[id];
   const options = variant ? { ...choices, [id]: variant } : choices;
@@ -129,7 +120,6 @@ function OrderProductLine(props: OrderProductLineProps) {
               {...props}
               className="min-h-10 w-full rounded-md border border-input-border bg-surface px-2 aria-invalid:border-danger"
               value={id}
-              disabled={!canBrowse}
               onChange={(event) => onChoose(index, event.target.value, choices[event.target.value])}
             >
               <option value="">Choose a product</option>

@@ -87,7 +87,7 @@ function OrdersHeader({
 }) {
   const { data } = useSessionContext();
   const [open, setOpen] = useState(false);
-  const canCreate = data?.currentStore?.canEditOrders && data.currentStore.canViewProducts;
+  const canCreate = data?.currentStore?.canEditOrders;
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div>

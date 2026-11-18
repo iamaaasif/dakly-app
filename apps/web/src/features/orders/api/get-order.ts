@@ -25,15 +25,17 @@ export function prepareOrderRefresh(
   contextTag: string | undefined,
   id: string,
 ) {
-  const key = orderDetailKey(contextTag, id);
-  const cached = client.getQueryCache().find({ queryKey: key });
+  const original = client.getQueryCache().find<OrderDetail>({
+    queryKey: orderDetailKey(contextTag, id),
+    exact: true,
+  });
   return async (order: OrderDetail) => {
-    if (cached && client.getQueryCache().find({ queryKey: key }) === cached) {
-      await client.cancelQueries({ queryKey: key });
-      if (client.getQueryCache().find({ queryKey: key }) === cached)
-        client.setQueryData(key, order);
-    }
-    void client.invalidateQueries({ queryKey: ordersKey });
+    await original?.cancel({ revert: true });
+    // A shop switch can remove the detail query while the order update is in flight.
+    const cache = client.getQueryCache();
+    const saved = original && cache.get(original.queryHash) === original ? original : undefined;
+    saved?.setData(order, { manual: true });
+    void client.invalidateQueries({ queryKey: ordersKey, predicate: (query) => query !== saved });
     void client.invalidateQueries({ queryKey: productsKeys.all });
   };
 }
