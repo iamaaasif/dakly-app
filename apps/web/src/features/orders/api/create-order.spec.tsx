@@ -26,7 +26,9 @@ it('lets staff change a draft after a replay proves the order was refused', asyn
   const unanswered = [
     new TypeError('Connection lost'),
     new ApiError('REQUEST_TIMEOUT', 'The request timed out', undefined, 408),
+    new ApiError('RATE_LIMITED', 'Try again later', undefined, 429),
     new ApiError('SERVICE_UNAVAILABLE', 'Try again later', undefined, 503),
+    new ApiError('REQUEST_FAILED', 'Could not complete the request', undefined, 403),
   ];
   const refused = new ApiError('ORDER_REFUSED', 'Check the order details', undefined, 422);
   for (const error of [...unanswered, refused]) request.mockRejectedValueOnce(error);
@@ -49,14 +51,15 @@ it('lets staff change a draft after a replay proves the order was refused', asyn
   });
   expect(result.current.mustRetry).toBe(false);
   expect(result.current.error?.message).toBe('Check the order details');
-  expect(request.mock.calls.slice(0, 4)).toEqual(
-    Array.from({ length: 4 }, () => request.mock.calls[0]),
+  const attempts = unanswered.length + 1;
+  expect(request.mock.calls.slice(0, attempts)).toEqual(
+    Array.from({ length: attempts }, () => request.mock.calls[0]),
   );
 
   await act(async () => {
     await result.current.mutateAsync({ ...input, items: [{ ...input.items[0]!, quantity: 2 }] });
   });
-  expect(request.mock.calls[4]?.[1].idempotencyKey).not.toBe(
+  expect(request.mock.calls[attempts]?.[1].idempotencyKey).not.toBe(
     request.mock.calls[0]?.[1].idempotencyKey,
   );
   unmount();

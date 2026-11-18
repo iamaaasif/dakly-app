@@ -19,8 +19,14 @@ export function useCreateOrder() {
       return request<OrderDetail>('/orders', { body, idempotencyKey: key.current });
     },
     onError: (error) => {
-      const status = error instanceof ApiError ? error.status : undefined;
-      const unanswered = status === undefined || status === 408 || status >= 500;
+      const reply = error instanceof ApiError ? error : undefined;
+      const status = reply?.status;
+      const unanswered =
+        status === undefined ||
+        status === 408 ||
+        status === 429 ||
+        status >= 500 ||
+        reply?.code === 'REQUEST_FAILED';
       if (!unanswered) key.current = undefined;
       setMustRetry(unanswered);
     },
