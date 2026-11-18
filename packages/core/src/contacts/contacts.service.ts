@@ -166,6 +166,11 @@ export class ContactsService {
       });
   }
 
+  async hasOrderPhoneMatch(storeId: string, contactId: string, phone: string): Promise<boolean> {
+    const [match] = await this.orderContacts.findOpenPhoneMatch(storeId, contactId, phone);
+    return match !== undefined;
+  }
+
   // Import undo keeps a contact once a new order makes the imported record useful.
   async markOrderLinked(storeId: string, contactId: string, _actor: Actor): Promise<void> {
     if (!(await this.orderContacts.markOrderLinked(storeId, contactId, this.clock.now())))

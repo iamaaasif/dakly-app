@@ -59,6 +59,24 @@ export class OrderContactsRepository {
     );
   }
 
+  findOpenPhoneMatch(storeId: string, contactId: string, phone: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contactMatchSuggestions.id })
+        .from(contactMatchSuggestions)
+        .where(
+          and(
+            eq(contactMatchSuggestions.storeId, storeId),
+            eq(contactMatchSuggestions.contactId, contactId),
+            eq(contactMatchSuggestions.phone, phone),
+            eq(contactMatchSuggestions.reason, 'same_phone'),
+            eq(contactMatchSuggestions.status, 'open'),
+          ),
+        )
+        .limit(1),
+    );
+  }
+
   async markOrderLinked(storeId: string, contactId: string, now: Date): Promise<boolean> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
