@@ -167,7 +167,7 @@ const recipientSchema = z.strictObject({
 const orderLines = z
   .array(
     z.strictObject({
-      variantId: z.uuid(),
+      variantId: z.uuid().toLowerCase(),
       quantity: z.int().positive().max(2147483647),
       lineDiscountPoisha: money.default(0),
     }),
@@ -193,7 +193,11 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
 export const editOrderSchema = z.strictObject({
   items: orderLines,
-  recipient: recipientSchema.optional(),
+  recipient: recipientSchema
+    .omit({ isBuyer: true })
+    .partial()
+    .extend({ isBuyer: z.boolean().optional() })
+    .optional(),
   deliveryChargePoisha: money.optional(),
   orderDiscountPoisha: money.optional(),
   advancePaidPoisha: money.optional(),

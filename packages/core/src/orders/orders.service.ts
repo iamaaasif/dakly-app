@@ -61,10 +61,9 @@ export class OrdersService {
   createOrder(
     storeId: string,
     input: CreateOrderInput,
-    editor: CreateEditor,
+    { idempotencyKey, access, actor }: CreateEditor,
   ): Promise<OrderDetail> {
     return this.transaction.runLocked(storeId, async () => {
-      const { idempotencyKey, access, actor } = editor;
       const existing = await this.repository.findByIdempotencyKey(storeId, idempotencyKey);
       if (existing) return this.getById(storeId, existing.id, access);
 
@@ -79,7 +78,11 @@ export class OrdersService {
         },
         actor,
       );
-      const delivery = await this.deliverySnapshot(storeId, recipient, input.deliveryChargePoisha);
+      const delivery = await this.quoteDelivery(
+        storeId,
+        recipient.areaId,
+        input.deliveryChargePoisha,
+      );
       const items = await this.orderItems(storeId, input.items);
       const totals = orderTotals(items, {
         ...input,
@@ -97,6 +100,10 @@ export class OrdersService {
         number: await this.stores.nextOrderNumber(storeId),
         buyerContactId: contact.id,
         buyerName: contact.name,
+        recipientName: recipient.name,
+        recipientPhone: recipient.phone,
+        recipientAddress: recipient.address,
+        isRecipientBuyer: recipient.isBuyer,
         source: 'manual',
         createdByType: 'user',
         createdByUserId: actor.userId,
@@ -128,7 +135,7 @@ export class OrdersService {
       if (order.advancePaidPoisha > 0 && order.advancePaidPoisha !== advancePaidPoisha)
         throw orderError('ORDER_ADVANCE_ALREADY_PAID');
 
-      const delivery = await this.editedDelivery(storeId, input);
+      const delivery = await this.editedDelivery(storeId, input, order.recipientBdAreaId);
       const previous = await this.repository.items(storeId, orderId);
       const items = await this.orderItems(storeId, input.items, previous);
       const totals = orderTotals(items, {
@@ -143,7 +150,7 @@ export class OrdersService {
         orderId,
         items.map((item) => ({ ...item, createdAt: now })),
       );
-      await this.repository.editOrder(storeId, orderId, {
+      await this.repository.updateOrder(storeId, orderId, {
         ...delivery,
         ...totals,
         paymentStatus: advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
@@ -195,6 +202,7 @@ export class OrdersService {
     return {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
+      possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       createdAt: order.createdAt.toISOString(),
       items: (await this.repository.items(storeId, orderId)).map(
         ({ unitCostPoisha: _unitCost, ...item }) => item,
@@ -230,7 +238,7 @@ export class OrdersService {
           { actor, reason: change.reason },
         );
       }
-      await this.repository.setStage(storeId, orderId, stageWrite(change, now, confirmed));
+      await this.repository.updateOrder(storeId, orderId, stageWrite(change, now, confirmed));
       await this.recordStage(storeId, orderId, {
         from: order.stage,
         change,
@@ -271,27 +279,33 @@ export class OrdersService {
     });
   }
 
-  private async editedDelivery(storeId: string, input: EditOrderInput) {
-    if (input.recipient)
-      return this.deliverySnapshot(storeId, input.recipient, input.deliveryChargePoisha);
-    if (input.deliveryChargePoisha !== undefined)
-      return { deliveryChargePoisha: input.deliveryChargePoisha, isDeliveryChargeOverridden: true };
-    return {};
+  private async editedDelivery(
+    storeId: string,
+    input: EditOrderInput,
+    previousArea: number | null,
+  ) {
+    const recipient = input.recipient;
+    const override = input.deliveryChargePoisha;
+    const snapshot = {
+      recipientName: recipient?.name,
+      recipientPhone: recipient?.phone,
+      recipientAddress: recipient?.address,
+      isRecipientBuyer: recipient?.isBuyer,
+    };
+    if (recipient?.areaId !== undefined && recipient.areaId !== previousArea)
+      return { ...snapshot, ...(await this.quoteDelivery(storeId, recipient.areaId, override)) };
+    return {
+      ...snapshot,
+      deliveryChargePoisha: override,
+      isDeliveryChargeOverridden: override === undefined ? undefined : true,
+    };
   }
 
-  private async deliverySnapshot(
-    storeId: string,
-    recipient: CreateOrderInput['recipient'],
-    override?: number,
-  ) {
-    const zone = await this.delivery.calculateDeliveryCharge(storeId, recipient.areaId);
+  private async quoteDelivery(storeId: string, areaId: number, override?: number) {
+    const zone = await this.delivery.calculateDeliveryCharge(storeId, areaId);
     return {
-      recipientName: recipient.name,
-      recipientPhone: recipient.phone,
-      recipientAddress: recipient.address,
       recipientDistrict: zone.district,
-      recipientBdAreaId: recipient.areaId,
-      isRecipientBuyer: recipient.isBuyer,
+      recipientBdAreaId: areaId,
       deliveryZoneId: zone.deliveryZoneId,
       deliveryChargePoisha: override ?? zone.chargePoisha,
       isDeliveryChargeOverridden: override !== undefined,
