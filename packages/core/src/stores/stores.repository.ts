@@ -81,6 +81,13 @@ export class StoresRepository {
     return row;
   }
 
+  async timeZone(storeId: string): Promise<string | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select({ timeZone: stores.timeZone }).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row?.timeZone;
+  }
+
   async sendingSettings(
     storeId: string,
   ): Promise<{ timeZone: string; sending: unknown } | undefined> {

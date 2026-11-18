@@ -202,7 +202,14 @@ export class OrdersService {
     const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
     const { stage, ...filters } = query;
     const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
-    const rows = await this.repository.list(storeId, { ...filters, stages }, overdueBefore, phone);
+    const timeZone =
+      query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
+    const rows = await this.repository.list(
+      storeId,
+      { ...filters, stages, timeZone },
+      overdueBefore,
+      phone,
+    );
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),

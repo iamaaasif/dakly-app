@@ -1,6 +1,6 @@
-import { useContext, useRef, type RefObject } from 'react';
+import { useContext, useRef, useState, type RefObject } from 'react';
 
-import type { OrderDetail } from '@dakly/contracts/orders';
+import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Sheet, type SheetProps } from '@dakly/ui/sheet';
@@ -10,6 +10,13 @@ import { useOrder } from '../api/get-order';
 import { canConfirmOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
 import { OrderDetails } from './order-details';
+import {
+  OrderStageActions,
+  orderStageActions,
+  type StageAction,
+  type StageFormAction,
+} from './order-stage-actions';
+import { OrderStageDialog } from './order-stage-dialog';
 import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
@@ -23,20 +30,43 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
   const { data } = useSessionContext();
   const transition = useOrderStage(id);
   const stage = useRef<HTMLSpanElement>(null);
+  const [action, setAction] = useState<StageFormAction>();
+  const canEdit = data?.currentStore?.canEditOrders;
+  const canConfirm = canConfirmOrder(order, canEdit);
+  const actions = orderStageActions(order, canEdit);
+  const formAction = action && actions.includes(action) ? action : undefined;
 
   return (
-    <Sheet
-      title={order ? `Order #${order.number}` : 'Order details'}
-      description={order && <OrderDescription order={order} />}
-      open={!blocked}
-      onClose={onClose}
-      fallbackFocus={fallbackFocus}
-      footer={
-        canConfirmOrder(order, data?.currentStore?.canEditOrders) && (
-          <ConfirmOrderFooter transition={transition} stage={stage} />
-        )
-      }
-    >
+    <>
+      <Sheet
+        {...orderHeading(order)}
+        open={!blocked && !formAction}
+        onClose={onClose}
+        fallbackFocus={fallbackFocus}
+        footer={
+          (canConfirm || actions.length > 0) && (
+            <OrderStageFooter {...{ transition, stage, canConfirm, actions }} onForm={setAction} />
+          )
+        }
+      >
+        <OrderDetailContent query={query} stage={stage} />
+      </Sheet>
+      {formAction && order && (
+        <OrderStageDialog order={order} action={formAction} onClose={() => setAction(undefined)} />
+      )}
+    </>
+  );
+}
+
+function OrderDetailContent({
+  query,
+  stage,
+}: {
+  query: ReturnType<typeof useOrder>;
+  stage: RefObject<HTMLSpanElement | null>;
+}) {
+  return (
+    <>
       {query.isPending ? <p role="status">Loading order…</p> : null}
       {query.error ? (
         <QueryError
@@ -45,29 +75,52 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
           retryLabel="Retry order"
         />
       ) : null}
-      {order ? <OrderDetails order={order} stageRef={stage} /> : null}
-    </Sheet>
-  );
-}
-
-function OrderDescription({ order }: { order: OrderDetail }) {
-  return (
-    <>
-      {orderSourceLabels[order.source]} ·{' '}
-      <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
-        {formatRelativeTime(order.createdAt)}
-      </time>
+      {query.data ? <OrderDetails order={query.data} stageRef={stage} /> : null}
     </>
   );
 }
 
-function ConfirmOrderFooter({
-  transition,
-  stage,
-}: {
+function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'description'> {
+  if (!order) return { title: 'Order details' };
+  return {
+    title: `Order #${order.number}`,
+    description: (
+      <>
+        {orderSourceLabels[order.source]} ·{' '}
+        <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
+          {formatRelativeTime(order.createdAt)}
+        </time>
+      </>
+    ),
+  };
+}
+
+type OrderStageFooterProps = {
   transition: ReturnType<typeof useOrderStage>;
   stage: RefObject<HTMLSpanElement | null>;
-}) {
+  canConfirm: boolean;
+  actions: readonly StageAction[];
+  onForm: (action: StageFormAction) => void;
+};
+
+function OrderStageFooter({
+  transition,
+  stage,
+  canConfirm,
+  actions,
+  onForm,
+}: OrderStageFooterProps) {
+  function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
+    const drawer = button.closest('[role="dialog"]');
+    transition.mutate(change, {
+      onSuccess: () => {
+        const focused = document.activeElement;
+        if (focused === button || focused === drawer || focused === document.body)
+          stage.current?.focus();
+      },
+    });
+  }
+
   return (
     <>
       {transition.error && (
@@ -75,26 +128,24 @@ function ConfirmOrderFooter({
           {transition.error.message}
         </p>
       )}
-      <Button
-        className="w-full"
-        disabled={transition.isPending}
-        onClick={(event) => {
-          const button = event.currentTarget;
-          const drawer = button.closest('[role="dialog"]');
-          transition.mutate(
-            { to: 'to_pack' },
-            {
-              onSuccess: () => {
-                const focused = document.activeElement;
-                if (focused === button || focused === drawer || focused === document.body)
-                  stage.current?.focus();
-              },
-            },
-          );
-        }}
-      >
-        Mark confirmed
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        {canConfirm && (
+          <Button
+            className="w-full"
+            disabled={transition.isPending}
+            onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+          >
+            Mark confirmed
+          </Button>
+        )}
+        <OrderStageActions
+          actions={actions}
+          pending={transition.isPending}
+          hasPrimary={canConfirm}
+          onChange={changeStage}
+          onForm={onForm}
+        />
+      </div>
     </>
   );
 }

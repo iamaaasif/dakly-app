@@ -80,20 +80,15 @@ export const orderTabs = [
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
 const searchText = z.string().trim().min(1).max(120);
+const calendarDate = z.iso.date().refine((date) => !date.startsWith('0000-'), 'Enter a valid date');
 
 export const orderListQuerySchema = z
   .strictObject({
     stage: z.enum(orderStages).optional(),
     source: z.enum(orderSources).optional(),
     courier: z.enum(couriers).optional(),
-    createdFrom: z.iso
-      .date()
-      .refine((date) => !date.startsWith('0000-'))
-      .optional(),
-    createdThrough: z.iso
-      .date()
-      .refine((date) => !date.startsWith('0000-'))
-      .optional(),
+    createdFrom: calendarDate.optional(),
+    createdThrough: calendarDate.optional(),
     alert: z.enum(['waiting', 'risk', 'cod']).optional(),
     search: searchText.refine((text) => !text.includes('\0')).optional(),
     cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
@@ -234,10 +229,7 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({
     to: z.literal('on_hold'),
     reason: z.enum(onHoldReasons),
-    followUpOn: z.iso
-      .date()
-      .refine((date) => !date.startsWith('0000-'), 'Enter a valid follow-up date')
-      .optional(),
+    followUpOn: calendarDate.optional(),
   }),
   z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
   z.strictObject({ to: z.literal('delivered') }),

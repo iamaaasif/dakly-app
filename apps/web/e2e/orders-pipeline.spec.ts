@@ -247,7 +247,17 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Clear filters' }).click();
     await expect(page).toHaveURL(/stage=to_confirm/);
-    await expect(page.getByText('Filters', { exact: true })).toBeFocused();
+    const summary = page.getByText('Filters', { exact: true });
+    await expect(summary).toBeFocused();
+    await summary.press('Enter');
+    await page.getByLabel('Cancelled orders').check();
+    await applyFilters.click();
+    await expect(page).toHaveURL(/stage=cancelled/);
+    await page.getByLabel('Cancelled orders').uncheck();
+    await applyFilters.focus();
+    await applyFilters.press('Enter');
+    await expect(page).toHaveURL(/stage=to_confirm/);
+    await expect(summary).toBeFocused();
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",

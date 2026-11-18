@@ -23,11 +23,8 @@ type FilterFormValues = z.input<typeof filterFormSchema>;
 type FilterFormInput = z.output<typeof filterFormSchema>;
 
 export function OrderFilters({ query }: { query: OrderListQuery }) {
-  const { source, courier, createdFrom, createdThrough, stage } = query;
   const summary = useRef<HTMLElement>(null);
-  const applied = Boolean(
-    source || courier || createdFrom || createdThrough || stage === 'cancelled',
-  );
+  const applied = hasOrderFilters(query);
 
   return (
     <details
@@ -40,6 +37,10 @@ export function OrderFilters({ query }: { query: OrderListQuery }) {
       <FilterForm query={query} applied={applied} focusSummary={() => summary.current?.focus()} />
     </details>
   );
+}
+
+function hasOrderFilters({ source, courier, createdFrom, createdThrough, stage }: OrderListQuery) {
+  return Boolean(source || courier || createdFrom || createdThrough || stage === 'cancelled');
 }
 
 type FilterFormProps = {
@@ -62,8 +63,10 @@ function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
     resolver: zodResolver(filterFormSchema),
     values: { source, courier, createdFrom, createdThrough, onlyCancelled },
   });
-  const navigate = (next: OrderListQuery) =>
+  const navigate = (next: OrderListQuery) => {
+    if (applied && !hasOrderFilters(next)) focusSummary();
     startTransition(() => router.push(`/orders?${ordersSearch(next)}`));
+  };
   const submit = form.handleSubmit(
     ({ source, courier, createdFrom, createdThrough, onlyCancelled }) => {
       if (pending) return;
@@ -87,14 +90,7 @@ function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
             {pending ? 'Applying filters…' : 'Apply filters'}
           </Button>
           {applied && (
-            <Button
-              variant="secondary"
-              disabled={pending}
-              onClick={() => {
-                focusSummary();
-                navigate(base);
-              }}
-            >
+            <Button variant="secondary" disabled={pending} onClick={() => navigate(base)}>
               Clear filters
             </Button>
           )}
