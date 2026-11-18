@@ -395,7 +395,7 @@ Indexing uses 512-dimension embeddings in groups of up to 64 chunks. `AI_EMBEDDI
 `AI_MODEL_PRICES`. The worker needs the same AI settings as other AI callers. The local fake
 driver uses a fixed vector by default so local indexing needs no vendor key.
 A change marks the item processing and queues a new index. The job only
-replaces chunks if the item still has the revision the job read. Indexing
+replaces chunks for the revision that requested the job. Indexing
 retries with an initial 60-second delay. If AI still fails on the last attempt,
 the item shows a failure reason and can be saved again to retry.
 

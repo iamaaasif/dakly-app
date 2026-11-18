@@ -64,5 +64,6 @@ describe('KnowledgeService', () => {
     const { service } = fixture();
     await expect(service.view(storeId, itemId)).resolves.toMatchObject({
       status: 'failed',
-      failureReason: 'Dakly could not index this item. Edit it to retry.',
+      failureReason:
+        'Dakly could not prepare this item for AI answers. Check the text or choose another file and save again.',
     });

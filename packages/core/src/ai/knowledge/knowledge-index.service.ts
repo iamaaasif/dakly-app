@@ -10,7 +10,11 @@ import { LlmError } from '@dakly/providers/llm/llm-driver';
 import { AppError } from '../../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
 import { AiService } from '../ai.service';
-import { KnowledgeRepository, type KnowledgeChunk } from './knowledge.repository';
+import {
+  KnowledgeRepository,
+  type KnowledgeChunk,
+  type KnowledgeItem,
+} from './knowledge.repository';
 
 const textLimit = 200_000;
 
@@ -24,9 +28,13 @@ export class KnowledgeIndexService {
     @Inject(AiService) private readonly ai: AiService,
   ) {}
 
-  async index(storeId: string, itemId: string, finalAttempt = false): Promise<void> {
+  async index(
+    storeId: string,
+    itemId: string,
+    attempt: { revision: string; finalAttempt: boolean },
+  ): Promise<void> {
     const item = await this.repository.find(storeId, itemId);
-    if (!item || item.status !== 'processing') return;
+    if (!isCurrentRevision(item, attempt.revision)) return;
     const source: FileText = item.fileId
       ? await this.fileText(storeId, item.fileId)
       : { text: item.answer ?? '' };
@@ -34,14 +42,14 @@ export class KnowledgeIndexService {
     const passages =
       'text' in source ? splitKnowledgeText(source.text.replaceAll('\u0000', '')) : [];
 
-    const chunks = await this.embedPassages(storeId, passages, finalAttempt);
+    const chunks = await this.embedPassages(storeId, passages, attempt.finalAttempt);
     await this.repository.finishIndex(
       storeId,
       item.id,
       item.updatedAt,
       chunks
         ? { chunks, file: { rejection: chunks.length ? null : rejection, sha256: source.sha256 } }
-        : { chunks: [] },
+        : { chunks: [], file: source.sha256 && { sha256: source.sha256 } },
     );
   }
 
@@ -98,6 +106,13 @@ export class KnowledgeIndexService {
       return { rejection: 'knowledge_file_invalid', sha256 };
     }
   }
+}
+
+function isCurrentRevision(
+  item: KnowledgeItem | undefined,
+  revision: string,
+): item is KnowledgeItem {
+  return item?.status === 'processing' && item.updatedAt.toISOString() === revision;
 }
 
 function isIndexAiFailure(error: unknown): boolean {
