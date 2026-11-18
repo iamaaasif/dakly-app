@@ -638,11 +638,19 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
       expect(link.rows).toEqual([{ kind: 'sms_opt_out', code: expect.any(String) }]);
       const sent = sentFor(runId!);
+      const optOutUrl = `${loadEnv().SHORT_LINK_BASE_URL}/s/${link.rows[0].code}`;
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({
         idempotencyKey: `run:${runId}:first`,
-        text: `নতুন কালেকশন এসেছে\n${loadEnv().SHORT_LINK_BASE_URL}/s/${link.rows[0].code}`,
+        text: `নতুন কালেকশন এসেছে\n${optOutUrl}`,
       });
+      const { rows: retryInputs } = await admin.pool.query(
+        "select destination,opt_out_url,first_tried_at from automation_run_steps where run_id=$1 and kind='send'",
+        [runId],
+      );
+      expect(retryInputs).toEqual([
+        { destination: sent[0]?.to, opt_out_url: optOutUrl, first_tried_at: daytime },
+      ]);
       expect(await sendStep(runId!)).toEqual([
         expect.objectContaining({ outcome: 'sent', category: 'marketing', channel: 'sms' }),
       ]);

@@ -119,7 +119,7 @@ export class AutomationRunsService {
     const step = run.graph.steps[claim.stepKey]!;
     const isSending =
       step.kind === 'send' &&
-      (await this.repository.hasSendingStep(storeId, claim.runId, claim.stepKey));
+      (await this.repository.findSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
     // A send handed to the provider by an earlier claim is not sent again; its run ends.
     if (isSending) return endWithUnknownOutcome(held ?? failed(NO_ANSWER, now));
@@ -323,10 +323,16 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (isLateSend(facts.wakeAt, await this.repository.schedulerTime(storeId)))
-      return { outcome: 'late' };
+    const firstTriedAt = await this.repository.schedulerTime(storeId);
+    if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
-    const body = await this.writeSend({ storeId, claim, contactId, step }, at);
+    const body = await this.writeSend(
+      { storeId, claim, contactId, step, destination },
+      {
+        sentAt: at,
+        firstTriedAt,
+      },
+    );
     if (body === undefined) return { decision: noCredits };
     return { decision, body, destination, at };
   }
@@ -340,8 +346,8 @@ export class AutomationRunsService {
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
-    { storeId, claim, contactId, step }: Omit<Delivery, 'body' | 'destination'>,
-    now: Date,
+    { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body'>,
+    times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing
@@ -365,7 +371,9 @@ export class AutomationRunsService {
       id,
       outcome: 'sending',
       channel: 'sms',
-      sentAt: now,
+      ...times,
+      destination,
+      optOutUrl: optOut?.url,
     });
     return messageBody(step, optOut?.url);
   }

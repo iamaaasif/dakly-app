@@ -54,10 +54,27 @@ export type NewRunStep = {
   outcome: string;
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
+  optOutUrl?: string | null;
+  destination?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
+  firstTriedAt?: Date;
 };
-export type RunStepChange = { outcome: string; providerMessageId?: string; sentAt?: Date };
+export type RunStepChange = {
+  outcome: string;
+  providerMessageId?: string;
+  skipReason?: SkipReason;
+  sentAt?: Date;
+  firstTriedAt?: Date;
+};
+// A send handed to the provider whose outcome is not known yet.
+export type SendingStep = {
+  id: string;
+  firstTriedAt: Date;
+  latestDispatchAt: Date;
+  optOutUrl: string | null;
+  destination: string | null;
+};
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -139,11 +156,21 @@ export class AutomationRunsRepository {
     return rows.map((row) => row.stepKey);
   }
 
-  // A send handed to the provider whose outcome is not known yet.
-  async hasSendingStep(storeId: string, runId: string, stepKey: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: automationRunSteps.id })
+  async findSendingStep(
+    storeId: string,
+    runId: string,
+    stepKey: string,
+    lock = false,
+  ): Promise<SendingStep | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) => {
+      const query = tx
+        .select({
+          id: automationRunSteps.id,
+          firstTriedAt: automationRunSteps.firstTriedAt,
+          sentAt: automationRunSteps.sentAt,
+          optOutUrl: automationRunSteps.optOutUrl,
+          destination: automationRunSteps.destination,
+        })
         .from(automationRunSteps)
         .where(
           and(
@@ -153,9 +180,14 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.outcome, 'sending'),
           ),
         )
-        .limit(1),
-    );
-    return rows.length > 0;
+        .limit(1);
+      return lock ? query.for('update') : query;
+    });
+    if (!row) return undefined;
+    const firstTriedAt = row.firstTriedAt ?? row.sentAt;
+    return firstTriedAt
+      ? { ...row, firstTriedAt, latestDispatchAt: row.sentAt ?? firstTriedAt }
+      : undefined;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
