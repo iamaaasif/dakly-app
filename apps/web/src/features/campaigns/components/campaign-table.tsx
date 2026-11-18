@@ -14,53 +14,80 @@ import { formatDateTime } from '@/lib/format-date';
 
 export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) {
   return (
-    <Table aria-label="Campaigns">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Campaign</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="hidden md:table-cell">Scheduled for</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      <ul aria-label="Campaigns" className="space-y-3 md:hidden">
         {campaigns.map((campaign) => (
-          <TableRow key={campaign.id}>
-            <TableCell className="whitespace-normal">
-              <Link
-                href={`/campaigns/${campaign.id}`}
-                className="inline-flex min-h-10 items-center font-semibold wrap-anywhere text-action hover:underline"
-              >
-                {campaign.name}
-              </Link>
-              <p className="text-sm text-text-muted">
-                {campaignChannelLabels[campaign.channel]}
-                {campaign.goal && ` · ${campaignGoalLabels[campaign.goal]}`}
-              </p>
-              {campaign.scheduledFor && (
-                <p className="mt-1 text-sm text-text-muted md:hidden">
-                  <time dateTime={campaign.scheduledFor}>
-                    {formatDateTime(campaign.scheduledFor)}
-                  </time>
-                </p>
-              )}
-            </TableCell>
-            <TableCell>
-              <Badge variant={campaignStatusColors[campaign.status]}>
-                {campaignStatusLabels[campaign.status]}
-              </Badge>
-            </TableCell>
-            <TableCell className="hidden tabular-nums md:table-cell">
-              {campaign.scheduledFor ? (
+          <li key={campaign.id} className="rounded-lg border border-border bg-surface px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <CampaignName campaign={campaign} />
+              </div>
+              <CampaignStatus status={campaign.status} />
+            </div>
+            {campaign.scheduledFor && (
+              <p className="mt-2 text-sm text-text-muted">
+                Scheduled for{' '}
                 <time dateTime={campaign.scheduledFor}>
                   {formatDateTime(campaign.scheduledFor)}
                 </time>
-              ) : (
-                '—'
-              )}
-            </TableCell>
-          </TableRow>
+              </p>
+            )}
+          </li>
         ))}
-      </TableBody>
-    </Table>
+      </ul>
+      <div className="hidden md:block">
+        <Table aria-label="Campaigns">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Campaign</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Scheduled for</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {campaigns.map((campaign) => (
+              <TableRow key={campaign.id}>
+                <TableCell className="whitespace-normal">
+                  <CampaignName campaign={campaign} />
+                </TableCell>
+                <TableCell>
+                  <CampaignStatus status={campaign.status} />
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  {campaign.scheduledFor ? (
+                    <time dateTime={campaign.scheduledFor}>
+                      {formatDateTime(campaign.scheduledFor)}
+                    </time>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
+}
+
+function CampaignName({ campaign }: { campaign: CampaignResponse }) {
+  return (
+    <>
+      <Link
+        href={`/campaigns/${campaign.id}`}
+        className="inline-flex min-h-10 items-center font-semibold wrap-anywhere text-action hover:underline"
+      >
+        {campaign.name}
+      </Link>
+      <p className="text-sm text-text-muted">
+        {campaignChannelLabels[campaign.channel]}
+        {campaign.goal && ` · ${campaignGoalLabels[campaign.goal]}`}
+      </p>
+    </>
+  );
+}
+
+function CampaignStatus({ status }: { status: CampaignResponse['status'] }) {
+  return <Badge variant={campaignStatusColors[status]}>{campaignStatusLabels[status]}</Badge>;
 }
