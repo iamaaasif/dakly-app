@@ -136,7 +136,7 @@ export class AutomationRunsService {
     };
     const exitReason = await this.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
-    if (shouldPrepareSender(step, facts.wakeAt, now))
+    if (shouldPrepareSender(step, facts.wakeAt, this.clock.now()))
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
   }

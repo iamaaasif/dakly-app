@@ -848,6 +848,46 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     });
 
     it.each(['transactional', 'marketing'] as const)(
+      'uses the current time for %s sender preparation after slow fact reads',
+      async (category) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          runIds: [runId],
+        } = await dueRuns(send(category), 1, 'active', contact);
+        await admin.pool.query('update automation_runs set wake_at=$2, attempts=9 where id=$1', [
+          runId,
+          new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+        ]);
+        const original = ContactsService.prototype.findTags;
+        const factsHook = vi
+          .spyOn(ContactsService.prototype, 'findTags')
+          .mockImplementationOnce(async function (store, id) {
+            const tags = await original.call(this, store, id);
+            clockNow = new Date(daytime.getTime() + 2 * MINUTE);
+            return tags;
+          });
+        const senderHook = vi
+          .spyOn(SmsSendersService.prototype, 'approvedSenderName')
+          .mockRejectedValueOnce(new Error('database unavailable'));
+        try {
+          await runDueStep(runner, runId!);
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'late' })]);
+          expect(await run(runId!)).toMatchObject({
+            status: 'running',
+            current_step_key: 'end',
+            attempts: 0,
+          });
+        } finally {
+          factsHook.mockRestore();
+          senderHook.mockRestore();
+        }
+      },
+    );
+
+    it.each(['transactional', 'marketing'] as const)(
       'advances an expired %s SMS even when sender preparation is unavailable',
       async (category) => {
         const runner = await worker();
