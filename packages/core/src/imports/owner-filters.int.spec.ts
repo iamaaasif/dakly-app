@@ -100,7 +100,7 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.storesWithStuckImports(late)).toContain(f.a);
     expect(await repository.listStuck(f.b, late)).toEqual([]);
     expect(await repository.listStuck(f.a, late)).toEqual([
-      { id: importA, claimedAt: renewed.renewed },
+      { id: importA, claimedAt: renewed.renewed, checkpoint },
     ]);
     const requeue = { before: late, now: late, limit: 1 };
     expect(await repository.requeue(f.b, importA, requeue)).toBe(false);

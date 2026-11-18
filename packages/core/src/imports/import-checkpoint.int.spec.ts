@@ -182,4 +182,45 @@ describe('Import checkpoints (Postgres and SeaweedFS)', () => {
     expect(await committedCount(importId)).toEqual({ added: 500, contacts: 500 });
     expect(await report(result.reportUrl)).toContain('The uploaded file changed');
   });
+  it('keeps checkpointed row errors and warnings when the sweep exhausts retries', async () => {
+    const value = phone();
+    const id = await existingLead(value);
+    await admin.pool.query('update contacts set tags=$2 where id=$1', [
+      id,
+      Array.from({ length: 50 }, (_, index) => `ট্যাগ ${index}`),
+    ]);
+    const rows = Array.from({ length: 500 }, () => `ক্রেতা,${phone()},,`);
+    const importId = await prepareImport(
+      `Name,Mobile,Email,Tags\nফাইলের নাম,${value},,নতুন\n${rows.join('\n')}\nভুল,0171,,`,
+      { consentEvidence: {} },
+    );
+    const contacts = app.get(ContactsService);
+    const save = contacts.saveImportedRows.bind(contacts);
+    let calls = 0;
+    vi.spyOn(contacts, 'saveImportedRows').mockImplementation(async (...args) => {
+      if (++calls === 2) throw new Error('Database connection lost');
+      return save(...args);
+    });
+    await expect(service.runCustomerImport(storeId, importId)).rejects.toThrow();
+    expect(await committedCount(importId)).toEqual({ added: 499, contacts: 499 });
+    await admin.pool.query(
+      "update imports set last_progress_at=now() - interval '20 minutes', requeue_count=4 where id=$1",
+      [importId],
+    );
+
+    await service.sweepStuckImports();
+
+    const result = await service.get(storeId, importId);
+    expect(result).toMatchObject({
+      status: 'failed',
+      rowsTotal: 502,
+      rowsAdded: 499,
+      rowsUpdated: 1,
+      rowsFailed: 1,
+    });
+    const lines = await report(result.reportUrl);
+    expect(lines).toContain('1 tags not added: a customer has at most 50');
+    expect(lines).toContain('"503","Phone",');
+    expect(lines).toContain('The import stopped before it finished');
+  });
 });

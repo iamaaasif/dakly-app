@@ -168,7 +168,8 @@ comes in the next part.
   event, up to 4 times, and failed only after that, with a line in its report. The report is a
   CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
   progress time, retry limit and observed lease in one update. A report from a sweep
-  that loses this check is deleted.
+  that loses this check is deleted. The final failed report keeps checkpointed row errors and
+  warnings alongside the stopped-import message.
 - A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
   the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
   being read as records, so 10 MB of line breaks costs no memory.

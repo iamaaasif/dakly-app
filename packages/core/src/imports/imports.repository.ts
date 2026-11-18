@@ -260,10 +260,17 @@ export class ImportsRepository {
   }
 
   // The last time a run made progress, or the start for an import no run has claimed yet.
-  listStuck(storeId: string, before: Date): Promise<{ id: string; claimedAt: Date | null }[]> {
+  listStuck(
+    storeId: string,
+    before: Date,
+  ): Promise<{ id: string; claimedAt: Date | null; checkpoint: ImportCheckpoint | null }[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: imports.id, claimedAt: imports.claimedAt })
+        .select({
+          id: imports.id,
+          claimedAt: imports.claimedAt,
+          checkpoint: importColumns.checkpoint,
+        })
         .from(imports)
         .where(stalled(storeId, before)),
     );

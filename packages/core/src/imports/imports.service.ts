@@ -193,7 +193,10 @@ export class ImportsService {
         if (!requeued)
           await this.finish(storeId, stuck.id, stuck.claimedAt, {
             status: 'failed',
-            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+            lines: [
+              ...(stuck.checkpoint?.report ?? []),
+              { message: 'The import stopped before it finished. Upload the file again' },
+            ],
             stalled: { before, limit: MAX_REQUEUES },
           });
       }
