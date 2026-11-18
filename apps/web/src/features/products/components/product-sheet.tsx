@@ -6,12 +6,12 @@ import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useChangeProduct } from '../api/change-product';
+import { useGetProduct } from '../api/get-product';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
 import { ProductsLoading } from './products-loading';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
-import { useGetProduct } from '@/lib/product-detail-query';
 import { useSessionContext } from '@/lib/session-context';
 
 type ProductSheetProps = { productId: string; onClose: () => void };

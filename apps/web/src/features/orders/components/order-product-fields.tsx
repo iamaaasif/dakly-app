@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import type { FieldArrayWithId, UseFormRegister } from 'react-hook-form';
 
-import type { CreateOrderValues } from '@dakly/contracts/orders';
-import type { ProductResponse } from '@dakly/contracts/products';
+import type { CreateOrderValues, OrderCatalogueProduct } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { useOrderCatalogue } from '../api/order-catalogue';
 import { formatMoney } from '@/lib/format-money';
-import { useProductPages } from '@/lib/product-queries';
 
 export type VariantChoice = {
   productId: string;
@@ -38,7 +37,7 @@ export function OrderProductFields({
 }: ProductFieldsProps) {
   const [search, setSearch] = useState('');
   const term = search.trim();
-  const products = useProductPages(term.length >= 3 ? term : undefined);
+  const products = useOrderCatalogue(term.length >= 3 ? term : undefined);
   const choices = orderVariantChoices(products.data?.pages.flatMap((page) => page.items) ?? []);
   return (
     <fieldset className="space-y-2">
@@ -75,7 +74,7 @@ export function OrderProductFields({
   );
 }
 
-export function orderVariantChoices(products: ProductResponse[]) {
+export function orderVariantChoices(products: OrderCatalogueProduct[]) {
   return Object.fromEntries(
     products.flatMap((product) =>
       product.variants

@@ -92,7 +92,7 @@ export function OrderStageDialog({
     >
       <FormProvider {...form}>
         <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
-          <fieldset disabled={pending} className="space-y-3">
+          <fieldset disabled={pending} className="min-w-0 space-y-3 wrap-anywhere">
             <StageFields action={action} order={order} />
           </fieldset>
           {error && (
@@ -279,13 +279,15 @@ type StageSelectProps = {
 };
 
 function StageSelect({ name, label, placeholder, options, onChange }: StageSelectProps) {
-  const { register } = useFormContext<ActionValues>();
+  const { register, control } = useFormContext<ActionValues>();
+  const value = useWatch({ control, name });
   return (
     <FormField name={name} label={label}>
       {(props) => (
         <select
           {...props}
           className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-invalid:border-danger"
+          value={value ?? ''}
           {...register(name, {
             setValueAs: (value: string) => value || undefined,
             onChange: (event) => onChange?.(event.target.value),

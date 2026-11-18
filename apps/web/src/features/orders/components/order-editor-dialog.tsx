@@ -23,6 +23,7 @@ import { Input } from '@dakly/ui/input';
 import { useOrderStage } from '../api/change-order-stage';
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
+import { useOrderCatalogueProducts } from '../api/order-catalogue';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -31,7 +32,6 @@ import {
 import { OrderRecipientFields } from './order-recipient-fields';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
-import { useProductDetails } from '@/lib/product-detail-query';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 
@@ -57,7 +57,7 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       title="New order"
       open
       onClose={close}
-      closeDisabled={pending}
+      closeDisabled={pending || retry}
       className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
     >
       <FormProvider {...form}>
@@ -150,7 +150,7 @@ type OrderSaveActionsProps = {
 function OrderSaveActions({ saved, retry, pending, onClose, onConfirm }: OrderSaveActionsProps) {
   return (
     <div className="flex shrink-0 flex-wrap justify-end gap-2">
-      <Button variant="secondary" disabled={pending} onClick={onClose}>
+      <Button variant="secondary" disabled={pending || retry} onClick={onClose}>
         {saved ? 'Open saved order' : 'Cancel'}
       </Button>
       {!saved && (
@@ -170,7 +170,7 @@ function ItemsAndAmounts() {
   const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' });
-  const selectedProducts = useProductDetails([
+  const selectedProducts = useOrderCatalogueProducts([
     ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
   ]);
   const variants = orderVariantChoices(selectedProducts.flatMap(({ data }) => data ?? []));

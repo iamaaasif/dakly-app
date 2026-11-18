@@ -244,7 +244,7 @@ The pipeline URL keeps the stage, search, page cursor and selected order. Search
 
 Staff can put eligible orders on hold, return them to To confirm and confirm a cancellation from the drawer. They can also record courier dispatch, mark full or partial delivery, record a return and enter the COD they received. Each form opens over the drawer.
 
-Staff can enter the buyer and delivery details, select variants with their stock shown, and save a new order in To confirm. The buyer is the recipient by default. Choose Deliver to someone else to enter a separate recipient. Staff can choose an existing buyer or enter a new one. The form shows the zone charge, allows an override and previews COD after any discount and advance received. Save as confirmed records the order in To pack after staff confirmation. Paste and fill waits for the AI layer, and the payment link waits for PAY-6.
+Staff with Orders edit can enter the buyer and delivery details, select variants with their stock shown, and save a new order in To confirm. If the shop has no zones, staff with store settings edit can set up the default zones while entering the order. The buyer is the recipient by default. Choose Deliver to someone else to enter a separate recipient. Staff can choose an existing buyer or enter a new one. The form shows the zone charge, allows an override and previews COD after any discount and advance received. Save as confirmed records the order in To pack after staff confirmation. Paste and fill waits for the AI layer, and the payment link waits for PAY-6.
 
 The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
@@ -265,6 +265,8 @@ An order has two state fields: `stage` for fulfilment and `paymentStatus` for mo
 `paymentStatus`: `cod_pending`, `advance_requested`, `advance_paid`, `paid`, `cod_collected`, `refund_due`, `refunded`.
 
 The transition table lives in `packages/contracts/src/orders.ts` for the API and web app. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
+
+Staff with Orders edit can read the order catalogue. It gives product and variant names, variant prices, and available stock for the current shop. The order detail signals an open self-delivery match to staff who can see the full phone.
 
 Product archive uses the same variant locks as order creation and edits. It returns `PRODUCT_HAS_OPEN_ORDERS` if any variant is on an order in To confirm, On hold or To pack.
 

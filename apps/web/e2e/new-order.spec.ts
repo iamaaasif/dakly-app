@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
+import type { DeliveryZoneListResponse } from '@dakly/contracts/delivery';
 import { createDatabase } from '@dakly/db/client';
 
 const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-new-order');
@@ -56,7 +57,8 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   const productId = `0${randomUUID().slice(1)}`;
   const otherProducts = Array.from({ length: 50 }, () => `f${randomUUID().slice(1)}`);
   const variantId = randomUUID();
-  const zoneId = randomUUID();
+  let zoneId: string | undefined;
+  let zoneIds: string[] = [];
   let insertedCounter = false;
   let existingBuyerId: string | undefined;
   await context.addCookies([
@@ -89,10 +91,6 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       "insert into product_variants (id,store_id,product_id,title,on_hand) values ($1,$2,$3,'M',5)",
       [variantId, storeId, productId],
     );
-    await database.pool.query(
-      "insert into delivery_zones (id,store_id,name,charge_poisha,bd_area_ids) values ($1,$2,'Inside Dhaka',6000,ARRAY[301])",
-      [zoneId, storeId],
-    );
     await page.goto('/orders');
     await expect(page.getByRole('button', { name: 'New order' })).toBeVisible();
     await capture(page, 'pipeline');
@@ -112,6 +110,18 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(create.getByLabel('District')).toHaveAttribute('aria-invalid', 'true');
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
+    const zonesCreated = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/delivery-zones/initialize-defaults') &&
+        response.request().method() === 'POST',
+    );
+    await create.getByRole('button', { name: 'Set up delivery zones' }).click();
+    const zonesResponse = await zonesCreated;
+    expect(zonesResponse.status()).toBe(201);
+    const zones = (await zonesResponse.json()) as DeliveryZoneListResponse;
+    zoneIds = zones.items.map(({ id }) => id);
+    zoneId = zones.items.find(({ name }) => name === 'Inside Dhaka')?.id;
+    expect(zoneId).toBeDefined();
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
     const variant = create.getByLabel('Product and variant 1');
     await expect(variant.getByRole('option', { name: 'Cotton Panjabi · M' })).toHaveCount(0);
@@ -153,6 +163,10 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByRole('button', { name: 'Save order' }).click();
     await expect(create.getByText('Could not confirm the save')).toBeVisible();
     await expect(recipientPhone).toBeDisabled();
+    await expect(create.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+    await expect(create.getByRole('button', { name: 'Close dialog', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(create).toBeVisible();
     await create.getByRole('button', { name: 'Retry save' }).click();
     const detail = page.getByRole('dialog', { name: /^Order #/ });
     await expect(detail.getByText('Karim Ahmed', { exact: true })).toBeVisible();
@@ -241,10 +255,10 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       storeId,
       [productId, ...otherProducts],
     ]);
-    await database.pool.query('delete from delivery_zones where store_id=$1 and id=$2', [
-      storeId,
-      zoneId,
-    ]);
+    await database.pool.query(
+      'delete from delivery_zones where store_id=$1 and id=any($2::uuid[])',
+      [storeId, zoneIds],
+    );
     if (insertedCounter)
       await database.pool.query('delete from store_counters where store_id=$1', [storeId]);
     await database.pool.end();

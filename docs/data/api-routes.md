@@ -158,6 +158,7 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                                            | Permission      |
 | -------------------------------------------------------------------------------------------------------------------------------- | --------------- |
 | `GET /orders`, `GET /orders/:orderId`, `GET /orders/:orderId/timeline`                                                           | `orders`        |
+| `GET /orders/catalogue`, `GET /orders/catalogue/:productId`                                                                      | `orders.edit`   |
 | `POST /orders` (idem), `PATCH /orders/:orderId`                                                                                  | `orders`        |
 | `POST /orders/:orderId/stage` (to, reason, follow-up date)                                                                       | `orders`        |
 | `POST /orders/:orderId/courier` (courier name, tracking code)                                                                    | `orders`        |
