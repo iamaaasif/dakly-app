@@ -1,7 +1,7 @@
 'use client';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { useRef, type ReactNode, type RefObject } from 'react';
+import { useRef, type ReactNode } from 'react';
 
 import { Button } from './button';
 import { cn } from './cn';
@@ -18,7 +18,8 @@ export type SheetProps = {
   open: boolean;
   side?: keyof typeof sideClasses;
   onClose: () => void;
-  fallbackFocus?: RefObject<HTMLElement | null>;
+  onOpenAutoFocus?: (event: Event) => void;
+  fallbackFocus?: () => HTMLElement | null;
   children: ReactNode;
 };
 
@@ -29,6 +30,7 @@ export function Sheet({
   open,
   side = 'right',
   onClose,
+  onOpenAutoFocus,
   fallbackFocus,
   children,
 }: SheetProps) {
@@ -40,7 +42,10 @@ export function Sheet({
         <DialogPrimitive.Content
           {...(!description && { 'aria-describedby': undefined })}
           // Radix returns focus only to its own Trigger; callers open the sheet from their own state.
-          onOpenAutoFocus={() => (opener.current = document.activeElement)}
+          onOpenAutoFocus={(event) => {
+            onOpenAutoFocus?.(event);
+            if (!event.defaultPrevented) opener.current = document.activeElement;
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             if (
@@ -50,7 +55,7 @@ export function Sheet({
             ) {
               opener.current.focus();
             } else {
-              fallbackFocus?.current?.focus();
+              fallbackFocus?.()?.focus();
             }
           }}
           className={cn(

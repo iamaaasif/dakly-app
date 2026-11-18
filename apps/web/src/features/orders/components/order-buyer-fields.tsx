@@ -13,10 +13,16 @@ import { useOrderBuyers } from '../api/order-buyers';
 import { useSessionContext } from '@/lib/session-context';
 
 export function OrderBuyerFields() {
-  const [selected, setSelected] = useState<ContactResponse | null>(null);
+  const [search, setSearch] = useState('');
   const form = useFormContext<CreateOrderValues>();
   const { data } = useSessionContext();
-  const isBuyer = useWatch({ control: form.control, name: 'recipient.isBuyer' });
+  const [isBuyer, buyer] = useWatch({
+    control: form.control,
+    name: ['recipient.isBuyer', 'buyer'],
+  });
+  const selectedId = buyer && 'contactId' in buyer ? buyer.contactId : undefined;
+  const customers = useOrderBuyers(search.trim());
+  const selected = customers.data?.items.find(({ id }) => id === selectedId);
 
   function populateRecipient(contact: ContactResponse | null) {
     const name = contact ? (contact.name ?? '') : form.getValues('buyer.name');
@@ -29,7 +35,6 @@ export function OrderBuyerFields() {
   }
 
   function choose(contact: ContactResponse | null) {
-    setSelected(contact);
     form.unregister('buyer');
     form.setValue('buyer', contact ? { contactId: contact.id } : { name: '' });
     if (form.getValues('recipient.isBuyer')) populateRecipient(contact);
@@ -37,16 +42,18 @@ export function OrderBuyerFields() {
 
   return (
     <>
-      {selected ? (
+      {selectedId ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-muted p-2">
-          <span>Buyer {selected.name ?? 'Unnamed customer'}</span>
+          <span>Buyer {selected?.name ?? 'Unnamed customer'}</span>
           <Button variant="secondary" onClick={() => choose(null)}>
             Change buyer
           </Button>
         </div>
       ) : (
         <>
-          {data?.currentStore?.canViewCustomers && <BuyerSearch onChoose={choose} />}
+          {data?.currentStore?.canViewCustomers && (
+            <BuyerSearch {...{ search, setSearch, customers }} onChoose={choose} />
+          )}
           <BuyerEntry />
         </>
       )}
@@ -59,7 +66,7 @@ export function OrderBuyerFields() {
             if (different) {
               form.setValue('recipient.name', '');
               form.setValue('recipient.phone', '');
-            } else populateRecipient(selected);
+            } else populateRecipient(selected ?? null);
           }}
         />
         <label htmlFor="different-recipient">Deliver to someone else</label>
@@ -68,10 +75,14 @@ export function OrderBuyerFields() {
   );
 }
 
-function BuyerSearch({ onChoose }: { onChoose: (contact: ContactResponse) => void }) {
-  const [search, setSearch] = useState('');
-  const customers = useOrderBuyers(search.trim());
+type BuyerSearchProps = {
+  search: string;
+  setSearch: (search: string) => void;
+  customers: ReturnType<typeof useOrderBuyers>;
+  onChoose: (contact: ContactResponse) => void;
+};
 
+function BuyerSearch({ search, setSearch, customers, onChoose }: BuyerSearchProps) {
   return (
     <>
       <label className="block">

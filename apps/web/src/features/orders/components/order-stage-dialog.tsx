@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -16,12 +15,13 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { ordersKey } from '../api/orders';
+import { useOrderStage } from '../api/change-order-stage';
+import { useCollectOrderCod } from '../api/collect-order-cod';
+import { useDispatchOrder } from '../api/dispatch-order';
 import { cancelReasonLabels, courierLabels, onHoldReasonLabels } from '../order-labels';
 import { stageActionLabels, type StageFormAction } from './order-stage-actions';
 import { SessionDialog } from '@/components/session-dialog';
-import { productsKeys } from '@/lib/product-queries';
-import { useStoreRequest } from '@/lib/store-request';
+import { takaInputFromPoisha } from '@/lib/format-money';
 
 const actionSchema = z.discriminatedUnion('to', [
   ...orderStageChangeSchema.options,
@@ -34,7 +34,7 @@ type ActionInput = z.output<typeof actionSchema>;
 function defaultFields(action: StageFormAction, order: OrderDetail): Partial<ActionValues> {
   switch (action) {
     case 'cod':
-      return { to: action, amountPoisha: (order.codAmountPoisha / 100).toFixed(2) };
+      return { to: action, amountPoisha: takaInputFromPoisha(order.codAmountPoisha) };
     case 'partially_delivered':
       return {
         to: action,
@@ -48,55 +48,32 @@ function defaultFields(action: StageFormAction, order: OrderDetail): Partial<Act
 type OrderStageDialogProps = { order: OrderDetail; action: StageFormAction; onClose: () => void };
 
 export function OrderStageDialog({ order, action, onClose }: OrderStageDialogProps) {
-  const { request } = useStoreRequest();
-  const client = useQueryClient();
   const form = useForm<ActionValues, undefined, ActionInput>({
     resolver: zodResolver(actionSchema),
     defaultValues: defaultFields(action, order),
   });
-  const mutation = useMutation({
-    mutationFn: (input: ActionInput) => {
-      if (input.to === 'with_courier') {
-        const { courier, courierOtherName, trackingCode } = input;
-        return request<OrderDetail>(`/orders/${order.id}/courier`, {
-          body: { courier, courierOtherName, trackingCode },
-        });
-      }
-      if (input.to === 'cod')
-        return request<OrderDetail>(`/orders/${order.id}/cod-collected`, {
-          body: { amountPoisha: input.amountPoisha },
-        });
-      return request<OrderDetail>(`/orders/${order.id}/stage`, { body: input });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ordersKey }),
-        client.invalidateQueries({ queryKey: productsKeys.all }),
-      ]);
-      onClose();
-    },
-  });
+  const { submit, pending, error } = useStageSubmission(order.id, onClose);
   const title =
     action === 'cancelled' ? `Cancel order #${order.number}?` : stageActionLabels[action];
   return (
-    <SessionDialog title={title} open onClose={onClose} closeDisabled={mutation.isPending}>
+    <SessionDialog title={title} open onClose={onClose} closeDisabled={pending}>
       <FormProvider {...form}>
-        <form className="space-y-3" onSubmit={form.handleSubmit((input) => mutation.mutate(input))}>
-          <fieldset disabled={mutation.isPending} className="space-y-3">
+        <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
+          <fieldset disabled={pending} className="space-y-3">
             <StageFields action={action} order={order} />
           </fieldset>
-          {mutation.error && (
+          {error && (
             <p role="alert" className="text-danger">
-              {mutation.error.message}
+              {error.message}
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" disabled={mutation.isPending} onClick={onClose}>
+            <Button variant="secondary" disabled={pending} onClick={onClose}>
               Back
             </Button>
             <Button
               type="submit"
-              loading={mutation.isPending}
+              loading={pending}
               variant={action === 'cancelled' ? 'danger' : 'primary'}
             >
               {stageActionLabels[action]}
@@ -106,6 +83,28 @@ export function OrderStageDialog({ order, action, onClose }: OrderStageDialogPro
       </FormProvider>
     </SessionDialog>
   );
+}
+
+function useStageSubmission(id: string, onSaved: () => void) {
+  const stage = useOrderStage(onSaved);
+  const dispatch = useDispatchOrder(id, onSaved);
+  const cod = useCollectOrderCod(id, onSaved);
+
+  function submit(input: ActionInput) {
+    if (input.to === 'with_courier') {
+      const { courier, courierOtherName, trackingCode } = input;
+      dispatch.mutate({ courier, courierOtherName, trackingCode });
+    } else if (input.to === 'cod') {
+      cod.mutate({ amountPoisha: input.amountPoisha });
+    } else {
+      stage.mutate({ id, body: input });
+    }
+  }
+  return {
+    submit,
+    pending: stage.isPending || dispatch.isPending || cod.isPending,
+    error: stage.error ?? dispatch.error ?? cod.error,
+  };
 }
 
 function StageFields({ action, order }: Omit<OrderStageDialogProps, 'onClose'>) {
@@ -153,7 +152,7 @@ function ReturnFields() {
           checked={damaged ?? false}
           onCheckedChange={(value) => setValue('isDamaged', value === true)}
         />
-        <label htmlFor="damaged-items">Damaged items</label>
+        <label htmlFor="damaged-items">Damaged items. Skip restocking.</label>
       </div>
     </>
   );
@@ -185,6 +184,9 @@ function PartialFields({ items }: { items: OrderDetail['items'] }) {
   const { register } = useFormContext<ActionValues>();
   return (
     <>
+      <p className="text-sm text-text-muted">
+        Enter at least one delivered and one undelivered unit.
+      </p>
       {items.map((item, index) => {
         const name = `items.${index}.quantity` as const;
         return (

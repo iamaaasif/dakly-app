@@ -128,7 +128,7 @@ function ItemsAndAmounts() {
         onRemove={remove}
         onChoose={(index, id, variant) => {
           if (variant) setVariants((current) => ({ ...current, [id]: variant }));
-          setValue(`items.${index}.variantId`, id);
+          setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
         }}
       />
       {formState.errors.items && (
