@@ -135,7 +135,7 @@ export class OrdersService {
       if (order.advancePaidPoisha > 0 && order.advancePaidPoisha !== advancePaidPoisha)
         throw orderError('ORDER_ADVANCE_ALREADY_PAID');
 
-      const delivery = await this.editedDelivery(storeId, input, order.recipientBdAreaId);
+      const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
       const items = await this.orderItems(storeId, input.items, previous);
       const totals = orderTotals(items, {
@@ -144,6 +144,12 @@ export class OrdersService {
         advancePaidPoisha,
       });
       const now = this.clock.now();
+      const possibleDuplicateOfOrderId = await this.repository.findDuplicate(storeId, {
+        orderId,
+        phone: delivery.recipientPhone,
+        variantIds: items.map(({ variantId }) => variantId),
+        since: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      });
       await this.moveReservations(storeId, orderId, { before: previous, after: items }, { actor });
       await this.repository.saveItems(
         storeId,
@@ -153,6 +159,7 @@ export class OrdersService {
       await this.repository.updateOrder(storeId, orderId, {
         ...delivery,
         ...totals,
+        possibleDuplicateOfOrderId,
         paymentStatus: advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         updatedAt: now,
       });
@@ -287,17 +294,17 @@ export class OrdersService {
   private async editedDelivery(
     storeId: string,
     input: EditOrderInput,
-    previousArea: number | null,
+    order: Pick<OrderDetail, 'recipientBdAreaId' | 'recipientPhone'>,
   ) {
     const recipient = input.recipient;
     const override = input.deliveryChargePoisha;
     const snapshot = {
       recipientName: recipient?.name,
-      recipientPhone: recipient?.phone,
+      recipientPhone: recipient?.phone ?? order.recipientPhone,
       recipientAddress: recipient?.address,
       isRecipientBuyer: recipient?.isBuyer,
     };
-    if (recipient?.areaId !== undefined && recipient.areaId !== previousArea)
+    if (recipient?.areaId !== undefined && recipient.areaId !== order.recipientBdAreaId)
       return { ...snapshot, ...(await this.quoteDelivery(storeId, recipient.areaId, override)) };
     return {
       ...snapshot,

@@ -143,8 +143,8 @@ export class OrdersRepository {
           eq(orderItems.storeId, storeId),
           eq(orderItems.orderId, orderId),
           notInArray(
-            orderItems.variantId,
-            items.map(({ variantId }) => variantId),
+            orderItems.id,
+            items.flatMap(({ id }) => (id ? [id] : [])),
           ),
         ),
       );

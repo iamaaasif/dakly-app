@@ -172,6 +172,10 @@ fixture('PATCH /orders/:orderId', async () => {
     () => edit,
   );
   expect(await f.row('orders', foreignId)).toEqual(before);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'PATCH', `/orders/${ownId}`, edit)).statusCode).toBe(403);
 });
 
 fixture('GET /orders', async () => {

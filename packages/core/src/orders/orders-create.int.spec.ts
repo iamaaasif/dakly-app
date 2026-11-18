@@ -182,6 +182,31 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('replaces duplicate legacy lines without keeping a released reservation on the order', async () => {
+    const variantId = await variant(2);
+    const request = editor();
+    const order = await orders.createOrder(f.a, draft(variantId), request);
+    await f.connection.pool.query(
+      `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+       select $3::uuid,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked
+       from order_items where store_id=$1 and order_id=$2`,
+      [f.a, order.id, randomUUID()],
+    );
+    await f.connection.pool.query(
+      'update product_variants set reserved=2 where store_id=$1 and id=$2',
+      [f.a, variantId],
+    );
+    const changed = await orders.editOrder(
+      f.a,
+      order.id,
+      editOrderSchema.parse({ items: [{ variantId, quantity: 1 }] }),
+      request,
+    );
+    expect(changed.items).toHaveLength(1);
+    expect(changed.itemsSubtotalPoisha).toBe(125000);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
   it('counts each purchase under its buyer when two people order for each other', async () => {
     const variantId = await variant(3);
     const rahimId = await buyer('Rahim');
@@ -338,6 +363,14 @@ describe('Staff order creation', () => {
       deliveryChargePoisha: 7000,
       isDeliveryChargeOverridden: true,
     });
+    await expect(
+      orders.editOrder(
+        f.a,
+        second.id,
+        editOrderSchema.parse({ items: input.items, recipient: { phone: '01712458904' } }),
+        editor(),
+      ),
+    ).resolves.toMatchObject({ possibleDuplicateOfOrderId: null });
     await f.connection.pool.query(
       "update orders set created_at=created_at - interval '25 hours' where store_id=$1 and id=any($2)",
       [f.a, [first.id, second.id]],
