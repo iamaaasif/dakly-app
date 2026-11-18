@@ -40,14 +40,13 @@ export function OrderDetails({ order }: { order: OrderDetail }) {
             disabled={transition.isPending}
             onClick={(event) => {
               const button = event.currentTarget;
+              const drawer = button.closest('[role="dialog"]');
               transition.mutate(
                 { to: 'to_pack' },
                 {
                   onSuccess: () => {
-                    if (
-                      document.activeElement === button ||
-                      document.activeElement === document.body
-                    )
+                    const focused = document.activeElement;
+                    if (focused === button || focused === drawer || focused === document.body)
                       stage.current?.focus();
                   },
                 },

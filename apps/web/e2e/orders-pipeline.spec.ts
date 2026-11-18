@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
@@ -59,6 +59,11 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
+      if (name === 'pipeline' && width === 360) {
+        const action = page.getByRole('link', { name: 'Confirm order #1060' });
+        await action.scrollIntoViewIfNeeded();
+        await expect(action).toBeInViewport({ ratio: 1 });
+      }
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -182,6 +187,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(detail.getByText('High return risk')).toBeVisible();
     await expect(detail.getByText('Ask for a small advance first')).toBeVisible();
     await expect(detail.getByText('Line discount')).toBeVisible();
+    await verifyDrawerWhileSessionIsBlocked(page, detail);
     const confirm = detail.getByRole('button', { name: 'Mark confirmed' });
     await confirm.focus();
     await confirm.press('Enter');
@@ -220,3 +226,32 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await database.pool.end();
   }
 });
+
+async function verifyDrawerWhileSessionIsBlocked(page: Page, detail: Locator) {
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requested = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  await page.route('**/api/me/context', async (route) => {
+    entered();
+    await held;
+    await route.continue();
+  });
+  try {
+    const verified = page.waitForResponse((response) => response.url().endsWith('/api/me/context'));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await requested;
+    await expect(detail).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+    release();
+    expect((await verified).status()).toBe(200);
+    await expect(detail).toBeVisible();
+  } finally {
+    release();
+    await page.unroute('**/api/me/context');
+  }
+}
