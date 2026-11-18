@@ -9,8 +9,12 @@ import { DatabaseModule } from '../../platform/database/database.module';
 import { KnowledgeIndexModule } from './knowledge-index.module';
 import { KnowledgeSearchService } from './knowledge-search.service';
 
+const workerSearch = Symbol('workerSearch');
 class KnowledgeWorkerTestModule {}
-Module({ imports: [DatabaseModule, KnowledgeIndexModule] })(KnowledgeWorkerTestModule);
+Module({
+  imports: [DatabaseModule, KnowledgeIndexModule],
+  providers: [{ provide: workerSearch, useExisting: KnowledgeSearchService }],
+})(KnowledgeWorkerTestModule);
 
 describe('worker knowledge search', () => {
   const fixture = new OwnerIsolationFixture();
@@ -33,7 +37,7 @@ describe('worker knowledge search', () => {
   });
 
   it('searches an empty store through the worker module with the fake model', async () => {
-    const service = worker.get(KnowledgeSearchService);
+    const service = worker.get<KnowledgeSearchService>(workerSearch);
     await expect(service.search(fixture.a, 'ঢাকা', 3)).resolves.toEqual([]);
   });
 });
