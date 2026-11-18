@@ -87,7 +87,7 @@ export class AutomationRunsService {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
-    const now = await this.transaction.databaseTime(storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const started = await this.repository.startWork(storeId, queued, now);
     if (!started) return undefined;
     const claim = { ...queued, claimedAt: started.claimedAt };
@@ -115,7 +115,7 @@ export class AutomationRunsService {
     claim: RunClaim,
     run: ClaimedRun,
   ): Promise<StepResult | undefined> {
-    const now = await this.transaction.databaseTime(storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const step = run.graph.steps[claim.stepKey]!;
     const isSending =
       step.kind === 'send' &&
@@ -137,7 +137,7 @@ export class AutomationRunsService {
     if (exitReason) return exited(exitReason, now);
     if (
       shouldPrepareSender(step) &&
-      !isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId))
+      !isLateSend(facts.wakeAt, await this.repository.schedulerTime(storeId))
     )
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
@@ -257,11 +257,11 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      const checkedAt = await this.transaction.databaseTime(storeId);
+      const checkedAt = await this.repository.schedulerTime(storeId);
       const result = isLateSend(facts.wakeAt, checkedAt)
         ? ({ outcome: 'late' } as const)
         : await this.gateSend(renewed, step, facts);
-      const claimedAt = await this.transaction.databaseTime(storeId);
+      const claimedAt = await this.repository.schedulerTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
@@ -271,7 +271,7 @@ export class AutomationRunsService {
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
       if (!run || !holdsClaim(run, renewed)) return undefined;
-      const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
+      const held = holdOrEnd(run, await this.repository.schedulerTime(storeId));
       return held && { ...held, claim: renewed };
     }
     const gatedAt = renewed.claimedAt;
@@ -323,7 +323,8 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (isLateSend(facts.wakeAt, at)) return { outcome: 'late' };
+    if (isLateSend(facts.wakeAt, await this.repository.schedulerTime(storeId)))
+      return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
     const body = await this.writeSend({ storeId, claim, contactId, step }, at);
     if (body === undefined) return { decision: noCredits };
@@ -419,7 +420,7 @@ export class AutomationRunsService {
       (receipt) => ({ receipt }),
       (error: unknown) => ({ error }),
     );
-    const now = await this.transaction.databaseTime(storeId);
+    const now = await this.repository.schedulerTime(storeId);
     if ('receipt' in attempt) {
       const { providerMessageId, credits } = attempt.receipt;
       return {

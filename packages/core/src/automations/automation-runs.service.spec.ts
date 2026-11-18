@@ -53,6 +53,8 @@ class FakeRunsRepository {
   run!: ClaimedRun & { id: string; lastError?: string | null };
   steps: NewRunStep[] = [];
 
+  constructor(readonly schedulerTime: () => Promise<Date>) {}
+
   async findRun(_storeId: string, runId: string) {
     return runId === this.run.id ? this.run : undefined;
   }
@@ -150,7 +152,11 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
-    repository = new FakeRunsRepository();
+    repository = new FakeRunsRepository(async () => {
+      if (clockFailsAfterGate && gateCommitted && !sent.length)
+        throw new Error('Scheduler clock unavailable before provider dispatch');
+      return databaseNow ?? clockNow;
+    });
     tags = [];
     segmentMembers = [];
     clockNow = now;
@@ -219,15 +225,15 @@ describe('AutomationRunsService', () => {
       checkForSend: async () => ({
         decision,
         destination: '01711000201',
-        at: databaseNow ?? clockNow,
+        at: clockNow,
       }),
     };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
-      prepareSender: async () => {
+      prepareSender: async (storeId: string) => {
         if (senderLookupError) throw senderLookupError;
-        return { name: undefined };
+        return { storeId, name: undefined };
       },
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (providerError) throw providerError;
@@ -246,11 +252,6 @@ describe('AutomationRunsService', () => {
         const result = await work();
         if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
         return result;
-      },
-      databaseTime: async () => {
-        if (clockFailsAfterGate && gateCommitted && !sent.length)
-          throw new Error('Database clock unavailable before provider dispatch');
-        return databaseNow ?? clockNow;
       },
     };
     service = new AutomationRunsService(
