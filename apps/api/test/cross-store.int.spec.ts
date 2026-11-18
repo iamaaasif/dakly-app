@@ -225,6 +225,81 @@ fixture('GET /orders', async () => {
   }
 });
 
+fixture('GET /orders/catalogue', async () => {
+  const { a, b } = await pair();
+  const own = (
+    await success(b, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 125000,
+      isStockTracked: true,
+    })
+  ).json();
+  const foreign = await success(a, 'POST', '/products', 201, {
+    name: 'Panjabi',
+    pricePoisha: 80000,
+  });
+  expect(foreign.statusCode).toBe(201);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', '/orders/catalogue')).statusCode).toBe(403);
+  const role = (
+    await success(b, 'POST', '/roles', 201, {
+      name: 'Order desk',
+      permissions: { ...permissions, areas: { orders: 'edit' } },
+    })
+  ).json();
+  await success(b, 'PATCH', `/members/${b.membership}`, 200, { roleId: role.id });
+  expect((await f.request(b.member, 'GET', '/products')).statusCode).toBe(403);
+  const catalogue = await f.request(b.member, 'GET', '/orders/catalogue?search=Panjabi');
+  expect(catalogue.statusCode).toBe(200);
+  expect(catalogue.json()).toEqual({
+    items: [
+      {
+        id: own.id,
+        name: 'Panjabi',
+        isStockTracked: true,
+        variants: [
+          {
+            id: own.variants[0].id,
+            title: own.variants[0].title,
+            isDefault: true,
+            pricePoisha: 125000,
+            available: 0,
+          },
+        ],
+      },
+    ],
+    nextCursor: null,
+  });
+});
+
+fixture('GET /orders/catalogue/:productId', async () => {
+  const { a, b } = await pair();
+  const product = (
+    await success(a, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 125000,
+    })
+  ).json();
+  await f.admin.pool.query(
+    "insert into product_variants (id,store_id,product_id,title,status) values ($1,$2,$3,'Old size','archived')",
+    [randomUUID(), a.id, product.id],
+  );
+  const url = (id: string) => `/orders/catalogue/${id}`;
+  expect((await success(a, 'GET', url(product.id), 200)).json()).toMatchObject({
+    id: product.id,
+    variants: [{ id: product.variants[0].id, pricePoisha: 125000 }],
+  });
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    a.membership,
+  ]);
+  expect((await f.request(a.member, 'GET', url(product.id))).statusCode).toBe(403);
+  await hidden(b, 'GET', url, product.id);
+  await success(a, 'DELETE', `/products/${product.id}`, 204);
+  await hidden(a, 'GET', url, product.id);
+});
+
 fixture('GET /orders/:orderId', async () => {
   const { a, b } = await pair();
   const id = await order(a);
