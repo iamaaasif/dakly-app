@@ -1,9 +1,7 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
-  HttpCode,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -70,16 +68,5 @@ export class ProductsController {
     @Body(new ZodValidationPipe(changeProductSchema)) input: ChangeProductInput,
   ): Promise<ProductResponse> {
     return this.service.edit(storeId, productId, input, { kind: 'user', userId });
-  }
-
-  @Delete(':productId')
-  @RequirePermission('products.edit')
-  @HttpCode(204)
-  remove(
-    @CurrentStore() storeId: string,
-    @CurrentUser() userId: string,
-    @Param('productId', ParseUUIDPipe) productId: string,
-  ): Promise<void> {
-    return this.service.remove(storeId, productId, { kind: 'user', userId });
   }
 }
