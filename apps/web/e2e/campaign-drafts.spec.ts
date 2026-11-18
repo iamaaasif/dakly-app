@@ -177,11 +177,69 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
 
+    const detailUrl = `**/api/campaigns/${draft.id}`;
+    let releaseSavedName!: () => void;
+    let noticeSavedName!: () => void;
+    const saveHeld = new Promise<void>((resolve) => (releaseSavedName = resolve));
+    const saveRecorded = new Promise<void>((resolve) => (noticeSavedName = resolve));
+    let refreshUnavailable = false;
+    await page.route(detailUrl, async (route) => {
+      if (route.request().method() === 'PATCH') {
+        const response = await route.fetch();
+        noticeSavedName();
+        await saveHeld;
+        await route.fulfill({ response });
+      } else if (refreshUnavailable) {
+        await route.fulfill({ status: 503 });
+      } else {
+        await route.continue();
+      }
+    });
+    const saveDraft = page.getByRole('button', { name: 'Save draft' });
+    await name.fill('An acknowledged name');
+    await saveDraft.click();
+    await saveRecorded;
+    const laterName = 'Another editor’s newer draft name';
+    await database.pool.query(
+      'update campaigns set name=$3, updated_at=now() where store_id=$1 and id=$2',
+      [storeId, draft.id, laterName],
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await expect(page.getByRole('heading', { name: laterName })).toBeVisible();
+    refreshUnavailable = true;
+    releaseSavedName();
+    const retrySaveRefresh = page.getByRole('button', { name: 'Try again' });
+    await expect(retrySaveRefresh).toBeVisible({ timeout: 12_000 });
+    refreshUnavailable = false;
+    await retrySaveRefresh.click();
+    await expect(name).toHaveValue(laterName);
+    await expect(saveDraft).toBeDisabled();
+    await page.unroute(detailUrl);
+    const laterGoalPatch = page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await page.getByLabel('Goal').selectOption('win_back');
+    await saveDraft.click();
+    expect((await laterGoalPatch).postDataJSON()).toEqual({ goal: 'win_back' });
+    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+
+    await name.fill('');
+    await saveDraft.click();
+    await expect(page.getByText('Enter a campaign name.')).toBeVisible();
+    await database.pool.query("update campaigns set goal='seasonal' where store_id=$1 and id=$2", [
+      storeId,
+      draft.id,
+    ]);
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await expect(page.getByLabel('Goal')).toHaveValue('seasonal');
+    await name.fill(laterName);
+    await expect(page.getByText('Enter a campaign name.')).toHaveCount(0);
+
     await database.pool.query(
       "update campaigns set status='sent', finished_at=now() where store_id=$1 and id=$2",
       [storeId, draft.id],
     );
-    const detailUrl = `**/api/campaigns/${draft.id}`;
     let failStatusRefresh = true;
     await page.route(detailUrl, (route) =>
       route.request().method() === 'GET' && failStatusRefresh

@@ -72,7 +72,7 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
     }),
     defaultValues: { name, goal },
     values: { name, goal },
-    resetOptions: { keepDirtyValues: true, keepErrors: true },
+    resetOptions: { keepDirtyValues: true, keepErrors: true, keepIsSubmitted: true },
   });
   const { dirtyFields, isDirty } = form.formState;
   const { getFieldState, getValues, resetField } = form;
@@ -101,7 +101,10 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
           return;
         }
         const current = save.getCachedCampaign(saved.id);
-        if (current?.status === 'draft') form.reset({ name: current.name, goal: current.goal });
+        // The PATCH succeeded even if its follow-up read failed. Those edits are acknowledged.
+        const confirmed = current === undefined ? saved : current;
+        if (confirmed?.status === 'draft')
+          form.reset({ name: confirmed.name, goal: confirmed.goal }, { keepDirtyValues: false });
       },
     });
   });

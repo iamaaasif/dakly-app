@@ -63,9 +63,6 @@ export function useSaveCampaign() {
   return {
     ...save,
     isSaving: () => client.isMutating({ mutationKey, exact: true }) > 0,
-    getCachedCampaign: (id: string) =>
-      client.getQueryState(campaignKeys.detail(contextTag, id))?.status === 'success'
-        ? getCachedCampaign(id)
-        : undefined,
+    getCachedCampaign,
   };
 }

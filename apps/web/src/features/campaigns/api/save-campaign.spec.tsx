@@ -131,7 +131,7 @@ it.each([true, false])(
         await pending;
       });
       expect(result.current.getCachedCampaign(id)).toEqual(
-        readSucceeds ? authoritative : undefined,
+        readSucceeds ? authoritative : { ...original, goal: 'win_back' },
       );
       expect(observer.getCurrentResult().status).toBe(readSucceeds ? 'success' : 'error');
     } finally {
