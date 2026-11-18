@@ -254,7 +254,8 @@ export class AutomationsService {
   // A top-up ends every pause for a short balance that began before it (feature 09); a repeated
   // event finds none.
   async resumeAfterTopUp(storeId: string, creditedAt: Date, _actor: Actor): Promise<void> {
-    await this.repository.resumeBalancePaused(storeId, creditedAt, this.clock.now());
+    const resumedAt = await this.transaction.databaseTime(storeId);
+    await this.repository.resumeBalancePaused(storeId, creditedAt, resumedAt);
   }
 
   private async move(

@@ -1968,13 +1968,21 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       clockNow = new Date(daytime.getTime() + HOUR);
       await runDueStep(runner, runId!);
       const status = () =>
-        admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
-      expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
+        admin.pool.query(
+          'select status,pause_reason,balance_resumed_at from automations where id=$1',
+          [automationId],
+        );
+      expect((await status()).rows).toEqual([
+        { status: 'paused', pause_reason: 'balance', balance_resumed_at: null },
+      ]);
 
       clockNow = new Date(daytime.getTime() - HOUR);
+      databaseNow = new Date(daytime.getTime() + 2 * HOUR);
       await creditThrough(runner, 'sms_credits', `behind-${automationId}`);
 
-      expect((await status()).rows).toEqual([{ status: 'active', pause_reason: null }]);
+      expect((await status()).rows).toEqual([
+        { status: 'active', pause_reason: null, balance_resumed_at: databaseNow },
+      ]);
     });
 
     it('keeps a pause whose gate already saw a credit that committed while it waited for the lock', async () => {
