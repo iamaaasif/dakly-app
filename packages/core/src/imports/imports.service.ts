@@ -21,7 +21,7 @@ import { type Import, ImportsRepository, type NewImportFile } from './imports.re
 type Actor = AuditEntry['actor'];
 
 const LINK_SECONDS = 15 * 60;
-// Each import is a file in R2 and a bulk job, so a store starts at most 20 an hour.
+// Uploads consume R2 storage, so a shop can upload at most 20 customer files an hour.
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
