@@ -67,3 +67,102 @@ describe('KnowledgeService', () => {
       failureReason:
         'Dakly could not prepare this item for AI answers. Check the text or choose another file and save again.',
     });
+  });
+
+  it('rejects a missing knowledge file before creating an item', async () => {
+    const { service, events } = fixture();
+
+    await expect(
+      service.create(storeId, actor, { kind: 'file', fileId: itemId }),
+    ).rejects.toMatchObject({ code: 'KNOWLEDGE_FILE_NOT_FOUND' });
+    expect(events).toEqual([]);
+  });
+});
+
+function fixture() {
+  const events: DaklyEvent[] = [];
+  const files: object[] = [];
+  const repository = {
+    async create(
+      _storeId: string,
+      _userId: string,
+      input: { answer: string },
+    ): Promise<KnowledgeItem> {
+      return {
+        id: itemId,
+        kind: 'policy',
+        answer: input.answer,
+        fileId: null,
+        status: 'processing',
+        factsCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+    },
+    async createFile(_storeId: string, file: object) {
+      files.push(file);
+    },
+    async search(tenant: string, input: Parameters<KnowledgeRepository['search']>[1]) {
+      if (
+        tenant !== storeId ||
+        input.query !== 'ঢাকা' ||
+        input.model !== 'test-model' ||
+        input.embedding[0] !== 0.5 ||
+        input.limit !== 1
+      )
+        return [];
+      return [{ itemId, content: 'ঢাকায় ডেলিভারি ৬০ টাকা।' }];
+    },
+    async find(): Promise<KnowledgeItem> {
+      return {
+        id: itemId,
+        kind: 'policy',
+        answer: 'ঢাকায় ৬০ টাকা।',
+        fileId: null,
+        status: 'failed',
+        factsCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+    },
+    async findFile() {
+      return undefined;
+    },
+  } as KnowledgeRepository;
+  const outbox = {
+    async publish(event: DaklyEvent) {
+      events.push(event);
+    },
+  } as OutboxService;
+  const transaction = {
+    run: <T>(_storeId: string, work: () => Promise<T>) => work(),
+  } as StoreTransaction;
+  const storage = {
+    createUploadUrl: (key: string) => `https://files.test/${key}`,
+  } as FileStorageDriver;
+  const ai = {
+    async embed(tenant: string, queries: readonly string[]) {
+      if (tenant !== storeId || queries.length !== 1 || queries[0] !== 'ঢাকা')
+        throw new Error('Unexpected embedding input');
+      return {
+        embeddings: [Array.from({ length: 512 }, () => 0.5)],
+        model: 'test-model',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 0 },
+      };
+    },
+  } as AiService;
+  const modules = {
+    async load() {
+      return { get: () => ai };
+    },
+  } as unknown as LazyModuleLoader;
+  const service = new KnowledgeService(
+    repository,
+    outbox,
+    transaction,
+    { now: () => now },
+    storage,
+    modules,
+  );
+  return { service, events, files };
+}
