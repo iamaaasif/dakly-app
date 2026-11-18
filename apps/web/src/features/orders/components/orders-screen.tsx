@@ -21,6 +21,7 @@ type OrdersScreenProps = { query: OrderListQuery; selected?: string };
 
 export function OrdersScreen({ query, selected }: OrdersScreenProps) {
   const orders = useOrders(query);
+  const pendingListRefresh = orders.fetchStatus !== 'idle';
   const router = useRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const listHref = `/orders?${ordersSearch(query)}`;
@@ -69,11 +70,22 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           <OrderDetailSheet
             key={selected}
             id={selected}
-            fallbackFocus={heading}
+            restoreFocusTo={() =>
+              orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
+            }
             onClose={() => router.replace(listHref)}
           />
         ) : null}
       </main>
     </StorePage>
+  );
+}
+
+function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | undefined) {
+  if (!orderId) return heading;
+  return (
+    heading
+      ?.closest('main')
+      ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${orderId}"]`) ?? heading
   );
 }
