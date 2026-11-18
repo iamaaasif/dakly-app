@@ -110,6 +110,39 @@ describe('Campaign sweep (Postgres)', () => {
     report.mockRestore();
   });
 
+  it('continues to the next store when the first store page fails', async () => {
+    const store = randomUUID();
+    const [firstStore, nextStore] = [storeId, store].sort() as [string, string];
+    const firstCampaign = randomUUID();
+    const nextCampaign = randomUUID();
+    const connection = app.get(ValkeyClient).connection;
+    const cursor = `campaign-start:campaign:${firstStore}`;
+    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
+    try {
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
+         values($1,$2,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$5,$5),
+               ($3,$4,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$5,$5)`,
+        [firstCampaign, firstStore, nextCampaign, nextStore, sendAt],
+      );
+      await connection.set(cursor, 'invalid-campaign-id');
+      clockNow = sendAt;
+
+      await sender.startDue();
+
+      expect(await campaignRow(firstCampaign)).toMatchObject({ status: 'scheduled' });
+      expect(await campaignRow(nextCampaign)).toMatchObject({ status: 'sending' });
+      expect(await connection.get('campaign-start:store')).toBe(nextStore);
+    } finally {
+      await connection.del(cursor, `campaign-start:campaign:${nextStore}`);
+      await admin.pool.query('delete from campaigns where id in ($1,$2)', [
+        firstCampaign,
+        nextCampaign,
+      ]);
+      await admin.pool.query('delete from stores where id=$1', [store]);
+    }
+  });
+
   it('keeps an older immediate campaign first when its start time is missing', async () => {
     const store = randomUUID();
     const [legacy, newer] = [randomUUID(), randomUUID()];

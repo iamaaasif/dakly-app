@@ -31,7 +31,12 @@ export class CampaignSenderService {
     let stores = await this.repository.listDueStores(now, after, STORES_PER_TICK);
     if (!stores.length && after)
       stores = await this.repository.listDueStores(now, null, STORES_PER_TICK);
-    for (const storeId of stores) await this.startStorePage(storeId, now);
+    for (const storeId of stores) {
+      await this.startStorePage(storeId, now).catch((error: unknown) => {
+        this.logger.error({ storeId }, 'Campaign store page failed');
+        this.reportJobError(error);
+      });
+    }
     const last = stores.at(-1);
     if (last) await this.saveCursor(STORE_CURSOR, last);
   }
@@ -54,8 +59,7 @@ export class CampaignSenderService {
       // Move past a locked or failed row this tick. A later pass can try it again.
       await this.repository.start(storeId, campaignId, asOf).catch((error: unknown) => {
         this.logger.error({ storeId, campaignId }, 'Campaign start failed');
-        const { jobId } = jobLogBindings();
-        if (jobId) this.reporter.reportJob(serializeError(error), jobId);
+        this.reportJobError(error);
       });
     }
     const last = page.at(-1);
@@ -64,5 +68,10 @@ export class CampaignSenderService {
 
   private async saveCursor(key: string, value: string): Promise<void> {
     await this.valkey.connection.set(key, value, 'EX', CURSOR_LIFETIME_SECONDS);
+  }
+
+  private reportJobError(error: unknown): void {
+    const { jobId } = jobLogBindings();
+    if (jobId) this.reporter.reportJob(serializeError(error), jobId);
   }
 }
