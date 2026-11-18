@@ -75,6 +75,9 @@ export const orderListQuerySchema = z.strictObject({
 });
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
+export const orderScreenQuerySchema = orderListQuerySchema.extend({
+  selected: z.uuid().optional(),
+});
 
 export type OrderSummary = {
   id: string;

@@ -59,6 +59,8 @@ function show(child: ReactNode, canEdit = true) {
       name: 'Shop',
       canViewProducts: false,
       canEditProducts: false,
+      canViewOrders: false,
+      canEditOrders: false,
       canViewCustomers: true,
       canCreateCustomer: canEdit,
       canViewSegments: true,
