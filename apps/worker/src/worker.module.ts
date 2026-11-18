@@ -15,6 +15,8 @@ import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module'
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
@@ -22,6 +24,7 @@ import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
+import { ClockModule } from '@dakly/core/platform/clock.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
@@ -30,6 +33,7 @@ import { RelayOutboxJob } from '@dakly/core/platform/outbox/jobs/relay-outbox.jo
 import { OutboxRelayModule } from '@dakly/core/platform/outbox/outbox-relay.module';
 import {
   BulkJobDispatcher,
+  CampaignJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
 } from '@dakly/core/platform/queue/job-dispatcher';
@@ -41,6 +45,7 @@ import { JobSchedulers } from './job-schedulers';
 @Module({
   providers: [
     BulkJobDispatcher,
+    CampaignJobDispatcher,
     TransactionalJobDispatcher,
     WorkflowJobDispatcher,
     StaffAuditExportJob,
@@ -56,6 +61,7 @@ import { JobSchedulers } from './job-schedulers';
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
+    StartDueCampaignsJob,
     ContinueAutomationRunJob,
     JobSchedulers,
   ],
@@ -68,11 +74,14 @@ import { JobSchedulers } from './job-schedulers';
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
     BullModule.registerQueue({ name: QUEUES.workflow }),
+    BullModule.registerQueue({ name: QUEUES.campaign }),
     DatabaseModule,
     SecurityNoticesModule,
     OutboxRelayModule,
     NotificationsModule,
     AutomationRunsModule,
+    CampaignsModule,
+    ClockModule,
     ImportsModule,
     KnowledgeIndexModule,
     BullModule.forRootAsync({

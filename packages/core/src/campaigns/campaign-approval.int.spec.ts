@@ -216,6 +216,11 @@ describe('Campaign estimate and approval (Postgres)', () => {
     const approved = await service.approve(storeId, campaignId, owner);
 
     expect(approved.status).toBe('scheduled');
+    const { rows: times } = await admin.pool.query(
+      'select approved_at, started_at from campaigns where id=$1',
+      [campaignId],
+    );
+    expect(times).toEqual([{ approved_at: expect.any(Date), started_at: null }]);
     const [counts] = (
       await admin.pool.query('select recipients_count, skipped_count from campaigns where id=$1', [
         campaignId,

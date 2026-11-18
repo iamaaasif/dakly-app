@@ -1,5 +1,6 @@
 export const QUEUES = {
   bulk: 'bulk',
+  campaign: 'campaign',
   transactional: 'transactional',
   workflow: 'workflow',
 } as const;

@@ -13,6 +13,7 @@ import { ErrorReporter } from '../logging/error-reporter';
 import { jobLogBindings } from '../logging/job-context';
 import {
   BulkJobDispatcher,
+  CampaignJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
 } from './job-dispatcher';
@@ -34,16 +35,20 @@ class TransactionalScheduledHandler implements JobHandler {
 
 class BulkScheduledHandler extends TransactionalScheduledHandler {}
 
+class CampaignScheduledHandler extends TransactionalScheduledHandler {}
+
 class WorkflowScheduledHandler extends TransactionalScheduledHandler {}
 
 HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalScheduledHandler);
 HandlesJob({ queue: QUEUES.bulk, name: SCHEDULED })(BulkScheduledHandler);
+HandlesJob({ queue: QUEUES.campaign, name: SCHEDULED })(CampaignScheduledHandler);
 HandlesJob({ queue: QUEUES.workflow, name: SCHEDULED })(WorkflowScheduledHandler);
 
 const setups = {
   transactional: [TransactionalScheduledHandler, TransactionalJobDispatcher],
   bulk: [BulkScheduledHandler, BulkJobDispatcher],
   workflow: [WorkflowScheduledHandler, WorkflowJobDispatcher],
+  campaign: [CampaignScheduledHandler, CampaignJobDispatcher],
 } satisfies Record<QueueName, unknown[]>;
 
 const reporter = new ErrorReporter(undefined);
@@ -114,7 +119,7 @@ describe.each(Object.values(QUEUES))('Scheduled job on %s', (queueName) => {
   });
 
   // Transactional and workflow run five jobs at once, so the next tick starts beside the active run.
-  const overlapping = queueName === QUEUES.bulk ? 1 : 2;
+  const overlapping = queueName === QUEUES.bulk || queueName === QUEUES.campaign ? 1 : 2;
   it(`runs ${overlapping} tick(s) at once on one worker and waits for them at shutdown`, async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => {
