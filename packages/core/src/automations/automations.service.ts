@@ -318,9 +318,13 @@ const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
 
 // A worker whose lease expired must leave a newer worker's claim or delivery intact.
 const finishEmailClaim = `
-  if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
-  if tonumber(ARGV[2]) == 0 then return redis.call('DEL', KEYS[1]) end
-  return redis.call('SET', KEYS[1], 'sent', 'EX', ARGV[2])
+  local current = redis.call('GET', KEYS[1])
+  if tonumber(ARGV[2]) == 0 then
+    if current == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+  elseif not current or current == ARGV[1] then
+    return redis.call('SET', KEYS[1], 'sent', 'EX', ARGV[2])
+  end
+  return 0
 `;
 
 function balancePauseNotice(name: string) {

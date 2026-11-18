@@ -1930,6 +1930,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         occurredAt: event.occurred_at.toISOString(),
         payload: event.payload,
       };
+      const deliverEmail = EmailService.prototype.send;
       // A failed send frees its claim for the retry; once it went out, a retry sends nothing more.
       vi.spyOn(EmailService.prototype, 'send').mockRejectedValueOnce(new Error('smtp down'));
       await expect(runner.emailOwner(pausedEvent)).rejects.toThrow('smtp down');
@@ -1962,6 +1963,30 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await runner.valkey.get(claimKey)).toBe('sent');
       await runner.emailOwner(crashed);
       expect(await mailTo(ownerEmail)).toHaveLength(2);
+
+      // A confirmed delivery can arrive after its lease expires with no replacement.
+      const delayed = { ...pausedEvent, id: randomUUID() };
+      const delayedKey = `automation-pause-email:${delayed.id}:${ownerId}`;
+      let finishDelayedEmail!: () => void;
+      const delayedEmail = new Promise<void>((resolve) => (finishDelayedEmail = resolve));
+      vi.spyOn(EmailService.prototype, 'send').mockImplementationOnce(async function (
+        this: EmailService,
+        input,
+      ) {
+        await delayedEmail;
+        await deliverEmail.call(this, input);
+      });
+      const delayedDelivery = runner.emailOwner(delayed);
+      await vi.waitFor(async () =>
+        expect(await runner.valkey.get(delayedKey)).toMatch(/^sending:/),
+      );
+      await runner.valkey.del(delayedKey);
+      finishDelayedEmail();
+      await delayedDelivery;
+      expect(await runner.valkey.get(delayedKey)).toBe('sent');
+      await runner.emailOwner(delayed);
+      expect(await mailTo(ownerEmail)).toHaveLength(3);
+
       // An owner whose email is still in flight does not hold back another owner's email.
       const coOwnerEmail = `owner-${coOwnerId}@example.test`;
       await admin.pool.query("insert into users(id,name,email) values($1,'ফাহিম',$2)", [
@@ -1984,7 +2009,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
       });
       expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
-      expect(await mailTo(ownerEmail)).toHaveLength(2);
+      expect(await mailTo(ownerEmail)).toHaveLength(3);
 
       const profiles = vi.spyOn(UsersService.prototype, 'profiles');
       const owners = [
@@ -1996,10 +2021,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const mail = vi.spyOn(EmailService.prototype, 'send');
       mail.mockRejectedValueOnce(new Error('mailbox refused'));
       await expect(runner.emailOwner(rejectedOwner)).rejects.toThrow('mailbox refused');
-      expect(await mailTo(ownerEmail)).toHaveLength(2);
+      expect(await mailTo(ownerEmail)).toHaveLength(3);
       expect(await mailTo(coOwnerEmail)).toHaveLength(2);
       await runner.emailOwner(rejectedOwner);
-      expect(await mailTo(ownerEmail)).toHaveLength(3);
+      expect(await mailTo(ownerEmail)).toHaveLength(4);
       expect(await mailTo(coOwnerEmail)).toHaveLength(2);
       // A paused workflow's runs are not swept.
       await runner.sweep();
