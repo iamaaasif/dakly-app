@@ -51,6 +51,14 @@ describe('KnowledgeService', () => {
     ]);
   });
 
+  it('explains a failed item in the shop response', async () => {
+    const { service } = fixture();
+    await expect(service.view(storeId, itemId)).resolves.toMatchObject({
+      status: 'failed',
+      failureReason: 'Dakly could not index this item. Edit it to retry.',
+    });
+  });
+
   it('rejects a missing knowledge file before creating an item', async () => {
     const { service, events } = fixture();
 
@@ -83,6 +91,18 @@ function fixture() {
     },
     async createFile(_storeId: string, file: object) {
       files.push(file);
+    },
+    async find(): Promise<KnowledgeItem> {
+      return {
+        id: itemId,
+        kind: 'policy',
+        answer: 'ঢাকায় ৬০ টাকা।',
+        fileId: null,
+        status: 'failed',
+        factsCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
     },
     async findFile() {
       return undefined;

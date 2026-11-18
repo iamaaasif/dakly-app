@@ -51,7 +51,9 @@ class StartContactWorkflow implements JobHandler {
     handled.push({ subscriber: 'StartContactWorkflow', contactId: contactIdOf(data) });
   }
 }
-HandlesEvent('contact.created', { queue: QUEUES.transactional })(StartContactWorkflow);
+HandlesEvent('contact.created', { queue: QUEUES.transactional, retryBackoffMs: 60_000 })(
+  StartContactWorkflow,
+);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeIds: string[] = [];
@@ -267,6 +269,9 @@ describe('OutboxRelayService', () => {
       (await jobsFor(contactId)).find((job) => job.name === 'StartContactWorkflow')!;
     await until(async () => (await (await workflowJob()).getState()) === 'delayed');
     expect(handledBy(contactId)).toEqual(['RefreshContactStats']);
+    expect((await workflowJob()).opts.backoff).toEqual({ type: 'exponential', delay: 60_000 });
+    const unchanged = (await jobsFor(contactId)).find((job) => job.name === 'RefreshContactStats');
+    expect(unchanged?.opts.backoff).toEqual({ type: 'exponential', delay: 30_000 });
     await (await workflowJob()).promote();
     await until(() => handledBy(contactId).length === 2);
     expect(handledBy(contactId)).toEqual(['RefreshContactStats', 'StartContactWorkflow']);

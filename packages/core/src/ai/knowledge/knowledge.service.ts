@@ -118,6 +118,8 @@ export class KnowledgeService {
 function toResponse(item: KnowledgeItem): KnowledgeItemResponse {
   return {
     ...item,
+    failureReason:
+      item.status === 'failed' ? 'Dakly could not index this item. Edit it to retry.' : null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
