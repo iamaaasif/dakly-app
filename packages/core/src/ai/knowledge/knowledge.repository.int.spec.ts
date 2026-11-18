@@ -82,7 +82,7 @@ describe('KnowledgeRepository', () => {
   it.each([
     ['text/plain', Buffer.from('a'.repeat(200_001)), 'knowledge_file_text_limit'],
     ['application/pdf', pdfWithText(101, 'Dhaka'), 'knowledge_file_page_limit'],
-    ['application/pdf', pdfWithText(90, 'a'.repeat(2_500)), 'knowledge_file_text_limit'],
+    ['application/pdf', pdfWithText(1, 'a'.repeat(200_001)), 'knowledge_file_text_limit'],
     ['application/pdf', Buffer.from('Invalid PDF'), 'knowledge_file_invalid'],
   ] as const)(
     'rejects a %s that fails validation with no partial chunks',
@@ -186,6 +186,27 @@ describe('KnowledgeRepository', () => {
     return rows;
   }
 
+  it('keeps the selected revision when indexing finishes before its clock', async () => {
+    const revisedAt = new Date('2099-01-01T00:00:00Z');
+    const item = await repository.create(
+      fixture.a,
+      fixture.userA,
+      { kind: 'policy', answer: 'নতুন তথ্য' },
+      revisedAt,
+    );
+    await expect(
+      repository.finishIndex(fixture.a, item.id, revisedAt, {
+        rejection: 'knowledge_file_empty',
+      }),
+    ).resolves.toBe(true);
+    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
+      updatedAt: revisedAt,
+      status: 'failed',
+    });
+    const changed = await repository.change(fixture.a, item.id, { answer: 'পরের তথ্য' }, now);
+    expect(changed?.updatedAt.getTime()).toBeGreaterThan(revisedAt.getTime());
+  });
+
   it('discards a completed index for an item changed after the indexing read', async () => {
     const item = await repository.create(
       fixture.a,
@@ -264,8 +285,9 @@ describe('KnowledgeRepository', () => {
 function pdfWithText(pages: number, text: string): Buffer {
   const refs = Array.from({ length: pages }, (_, index) => `${index + 5} 0 R`);
   const lines = text.match(/.{1,80}/g) ?? [];
-  const commands = lines.map((line) => `(${line}) Tj 0 -10 Td`).join(' ');
-  const stream = deflateSync(`BT /F1 8 Tf 72 720 Td ${commands} ET`);
+  const pageHeight = Math.max(792, lines.length * 3 + 144);
+  const commands = lines.map((line) => `(${line}) Tj 0 -3 Td`).join(' ');
+  const stream = deflateSync(`BT /F1 2 Tf 72 ${pageHeight - 72} Td ${commands} ET`);
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Kids [${refs.join(' ')}] /Count ${pages} >>`,
@@ -277,7 +299,7 @@ function pdfWithText(pages: number, text: string): Buffer {
     ]),
     ...refs.map(
       () =>
-        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>',
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 ${pageHeight}] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>`,
     ),
   ];
   const parts = [Buffer.from('%PDF-1.4\n')];

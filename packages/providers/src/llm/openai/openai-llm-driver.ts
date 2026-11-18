@@ -62,8 +62,8 @@ const embeddingEnvelope = z.object({
       index: z.int().nonnegative(),
     }),
   ),
-  usage: z.object({ prompt_tokens: z.int().nonnegative() }),
 });
+const embeddingUsage = z.object({ usage: z.object({ prompt_tokens: z.int().nonnegative() }) });
 
 export class OpenAiLlmDriver implements LlmDriver {
   constructor(
@@ -76,24 +76,25 @@ export class OpenAiLlmDriver implements LlmDriver {
   }
 
   async embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding> {
-    const result = embeddingEnvelope.safeParse(
-      await this.post(
-        'embeddings',
-        JSON.stringify({
-          model: request.model,
-          input: request.input,
-          dimensions: 512,
-          encoding_format: 'float',
-        }),
-        request,
-      ),
+    const body = await this.post(
+      'embeddings',
+      JSON.stringify({
+        model: request.model,
+        input: request.input,
+        dimensions: 512,
+        encoding_format: 'float',
+      }),
+      request,
     );
-    if (!result.success) throw new LlmError('LLM_INVALID_RESPONSE');
+    const reported = embeddingUsage.safeParse(body);
+    if (!reported.success) throw new LlmError('LLM_INVALID_RESPONSE');
     const usage = {
-      inputTokens: result.data.usage.prompt_tokens,
+      inputTokens: reported.data.usage.prompt_tokens,
       cachedInputTokens: 0,
       outputTokens: 0,
     };
+    const result = embeddingEnvelope.safeParse(body);
+    if (!result.success) throw new LlmError('LLM_INVALID_RESPONSE', usage);
     const rows = result.data.data.sort((a, b) => a.index - b.index);
     if (
       rows.length !== request.input.length ||

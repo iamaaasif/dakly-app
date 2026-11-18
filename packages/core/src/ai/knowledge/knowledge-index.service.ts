@@ -119,9 +119,13 @@ async function readPdfPage(
   let text = '';
   for (;;) {
     const { value, done } = await reader.read();
-    if (done) return text.length <= limit ? text : null;
-    // Drain the current page after reaching the cap. PDF.js can close the stream on cancel.
-    if (text.length <= limit) text += pdfTextItems(value.items);
+    if (done) return text;
+    text += pdfTextItems(value.items);
+    if (text.length > limit) {
+      // Destroying the document stops PDF.js after the reader releases its lock.
+      reader.releaseLock();
+      return null;
+    }
   }
 }
 
