@@ -89,7 +89,8 @@ export class AutomationRunsService {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
-    const started = await this.repository.startWork(storeId, queued, this.clock.now());
+    const now = await this.transaction.databaseTime(storeId);
+    const started = await this.repository.startWork(storeId, queued, now);
     if (!started) return undefined;
     const claim = { ...queued, claimedAt: started.claimedAt };
     const run = { ...found, ...started };
@@ -116,7 +117,7 @@ export class AutomationRunsService {
     claim: RunClaim,
     run: ClaimedRun,
   ): Promise<StepResult | undefined> {
-    const now = this.clock.now();
+    const now = await this.transaction.databaseTime(storeId);
     const step = run.graph.steps[claim.stepKey]!;
     const started =
       step.kind === 'send'
@@ -211,9 +212,10 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      if (isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId)))
-        return { outcome: 'late' };
-      const result = await this.gateSend(renewed, step, facts);
+      const checkedAt = await this.transaction.databaseTime(storeId);
+      const result = isLateSend(facts.wakeAt, checkedAt)
+        ? ({ outcome: 'late' } as const)
+        : await this.gateSend(renewed, step, facts);
       const claimedAt = await this.transaction.databaseTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
@@ -223,10 +225,11 @@ export class AutomationRunsService {
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      const held = holdOwnedClaim(run, renewed, this.clock.now());
+      if (!run || !holdsClaim(run, renewed)) return undefined;
+      const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
       return held && { ...held, claim: renewed };
     }
-    const gatedAt = this.clock.now();
+    const gatedAt = renewed.claimedAt;
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     if ('outcome' in started)
       return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };

@@ -1049,6 +1049,34 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it('keeps the next send due and claimed at database time with a slow worker', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const automationId = await workflow('active');
+      const graph = graphWith({ ...send('transactional'), next: 'second' });
+      graph.steps['second'] = send('transactional');
+      const versionId = await publish(automationId, 1, graph);
+      const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
+      databaseNow = daytime;
+      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
+
+      await runDueStep(runner, runId!);
+      const { rows } = await admin.pool.query(
+        'select wake_at, claimed_at from automation_runs where id=$1',
+        [runId],
+      );
+      expect(rows).toEqual([{ wake_at: daytime, claimed_at: daytime }]);
+
+      databaseNow = new Date(daytime.getTime() + 24 * HOUR - 5 * MINUTE);
+      clockNow = new Date(databaseNow.getTime() - 6 * MINUTE);
+      await runDueStep(runner, runId!);
+      expect(sentFor(runId!)).toHaveLength(2);
+      expect(await sendStep(runId!)).toEqual([
+        expect.objectContaining({ outcome: 'sent' }),
+        expect.objectContaining({ outcome: 'sent' }),
+      ]);
+    });
+
     it.each(['paused', 'archived', 'version stopped'] as const)(
       'does not consume an overdue send when the workflow becomes %s after its initial read',
       async (change) => {

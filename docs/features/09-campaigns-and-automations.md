@@ -366,7 +366,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 
    A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed` (an unknown provider outcome, which may have reached the person); a `failed` send, which provably did not, does not count. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
 
-The final dispatch gate freezes the destination and checks quiet hours and the cap using the Postgres clock after taking the contact locks. The workflow records that time on the send step. The early lateness check uses the same database clock. After the gate writes, the runner reads the database time again to renew the claim the sweeper will check.
+The final dispatch gate freezes the destination and checks quiet hours and the cap using the Postgres clock after taking the contact locks. The workflow records that time on the send step. The early lateness check uses the same database clock. After the gate writes, the runner reads the database time again to renew the claim the sweeper will check. The runner also uses that clock when advancing a run after a step, so the next wake and claim agree with the sweeper.
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 

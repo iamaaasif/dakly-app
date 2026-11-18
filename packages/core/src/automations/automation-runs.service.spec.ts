@@ -136,7 +136,10 @@ describe('AutomationRunsService', () => {
   let contactPhone: string;
   let reported: string[];
   let sent: OutgoingMessage[];
+  let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
+  let clockFailsAfterGate: boolean;
+  let gateCommitted: boolean;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
   let service: AutomationRunsService;
@@ -177,6 +180,9 @@ describe('AutomationRunsService', () => {
     reported = [];
     sent = [];
     providerError = undefined;
+    clockFailsAfterGate = false;
+    gateCommitted = false;
+    senderLookupError = undefined;
     balance = 10;
     ledger = [];
     // Reservations by key, as the ledger keeps them; a repeated key changes nothing.
@@ -249,7 +255,10 @@ describe('AutomationRunsService', () => {
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
-      prepareSender: async () => ({ name: undefined }),
+      prepareSender: async () => {
+        if (senderLookupError) throw senderLookupError;
+        return { name: undefined };
+      },
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (message.destination !== undefined && message.destination !== contactPhone)
           throw new AppError('MESSAGING_DESTINATION_CHANGED', {
@@ -268,8 +277,16 @@ describe('AutomationRunsService', () => {
       optOutUrl: (code: string) => `https://links.dakly.test/s/${code}`,
     };
     const transaction = {
-      run: (_storeId: string, work: () => Promise<unknown>) => work(),
-      databaseTime: async () => databaseNow ?? clockNow,
+      run: async (_storeId: string, work: () => Promise<unknown>) => {
+        const result = await work();
+        if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
+        return result;
+      },
+      databaseTime: async () => {
+        if (clockFailsAfterGate && gateCommitted && !sent.length)
+          throw new Error('Database clock unavailable before provider dispatch');
+        return databaseNow ?? clockNow;
+      },
     };
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
@@ -485,6 +502,16 @@ describe('AutomationRunsService', () => {
       ]);
     });
 
+    it('dispatches without another clock read after reserving the send', async () => {
+      clockFailsAfterGate = true;
+
+      await start(send);
+
+      expect(sent).toHaveLength(1);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
+    });
+
     it('sends a transactional SMS without an opt-out link', async () => {
       await start({ ...send, category: 'transactional' });
 
@@ -534,6 +561,18 @@ describe('AutomationRunsService', () => {
 
       expect(sent).toHaveLength(1);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+    });
+
+    it('skips an expired send without a sender lookup when the worker clock is slow', async () => {
+      databaseNow = new Date(claimedAt.getTime() + 24 * HOUR + 60_000);
+      clockNow = new Date(claimedAt.getTime() + 24 * HOUR - 60_000);
+      senderLookupError = new Error('Sender lookup unavailable');
+
+      expect(await start(send)).toMatchObject({ stepKey: 'end' });
+
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
+      expect(sent).toEqual([]);
+      expect(ledger).toEqual([]);
     });
 
     it('skips a send that was due more than a day before it runs', async () => {
