@@ -238,7 +238,12 @@ export class OrdersService {
           { actor, reason: change.reason },
         );
       }
-      await this.repository.updateOrder(storeId, orderId, stageWrite(change, now, confirmed));
+      await this.repository.updateOrder(storeId, orderId, {
+        ...stageWrite(change, now, confirmed),
+        ...(change.to === 'cancelled' && order.paymentStatus === 'advance_paid'
+          ? { paymentStatus: 'refund_due' }
+          : {}),
+      });
       await this.recordStage(storeId, orderId, {
         from: order.stage,
         change,
