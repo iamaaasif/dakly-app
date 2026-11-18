@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
+import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
 
 import { SmsService } from './sms.service';
 
@@ -46,12 +47,21 @@ describe('shared SMS delivery', () => {
     vi.useFakeTimers();
     const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     try {
-      const driver = new FakeSmsDriver();
-      vi.spyOn(driver, 'send').mockReturnValue(new Promise(() => {}));
+      const cancelled = vi.fn();
+      const driver: SmsDriver = {
+        send: (_message, signal) => {
+          signal?.addEventListener('abort', cancelled, { once: true });
+          return new Promise(() => {});
+        },
+      };
       const sending = new SmsService(driver).send({ to: '01712345678', text: 'অর্ডার নিশ্চিত' });
-      const outcome = expect(sending).rejects.toThrow('The SMS provider did not answer in time');
+      const outcome = expect(sending).rejects.toMatchObject({
+        code: 'SMS_SEND_TIMEOUT',
+        message: 'The SMS provider did not answer in time',
+      });
       await vi.advanceTimersByTimeAsync(30_000);
       await outcome;
+      expect(cancelled).toHaveBeenCalledTimes(1);
     } finally {
       log.mockRestore();
       vi.useRealTimers();
