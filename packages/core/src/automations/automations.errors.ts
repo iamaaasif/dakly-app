@@ -15,6 +15,10 @@ const AUTOMATION_ERRORS = {
     message: `A store can have at most ${MAX_AUTOMATIONS_PER_STORE} workflows`,
   },
   AUTOMATION_STATUS_NOT_ALLOWED: { status: 409, message: 'The workflow cannot do this now' },
+  AUTOMATION_PAUSED_BY_SYSTEM: {
+    status: 409,
+    message: 'This workflow resumes on its own once SMS credits are topped up',
+  },
   AUTOMATION_VERSION_IS_CURRENT: {
     status: 409,
     message: 'This is the published version. Pause the workflow to stop it.',
@@ -30,6 +34,10 @@ const AUTOMATION_ERRORS = {
   AUTOMATION_TAPS_UNAVAILABLE: {
     status: 409,
     message: 'Taps on workflow messages are not recorded yet',
+  },
+  AUTOMATION_PAUSE_EMAIL_SENDING: {
+    status: 409,
+    message: 'Another try is still sending this pause email',
   },
   AUTOMATION_REVIEW_UNAVAILABLE: {
     status: 409,

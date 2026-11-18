@@ -90,8 +90,8 @@ function graphWith(first: AutomationStep): AutomationGraph {
 async function workflow(status = 'active') {
   const automationId = randomUUID();
   await admin.pool.query(
-    "insert into automations(id,store_id,name,trigger_type,draft_graph,status) values($1,$2,'স্বাগতম','consent_given','{}',$3)",
-    [automationId, storeId, status],
+    "insert into automations(id,store_id,name,trigger_type,draft_graph,status,pause_reason) values($1,$2,'স্বাগতম','consent_given','{}',$3,$4)",
+    [automationId, storeId, status, status === 'paused' ? 'manual' : null],
   );
   return automationId;
 }
@@ -332,7 +332,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       runId,
     );
 
-    await admin.pool.query("update automations set status='active' where id=$1", [automationId]);
+    await admin.pool.query(
+      "update automations set status='active', pause_reason=null where id=$1",
+      [automationId],
+    );
     await runner.sweep();
     expect(await queuedStep(runner.queue, runId!)).toMatchObject({ stepKey: 'first' });
   });
@@ -783,7 +786,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
 
       clockNow = new Date(daytime.getTime() + 25 * HOUR);
-      await admin.pool.query("update automations set status='active' where id=$1", [automationId]);
+      await admin.pool.query(
+        "update automations set status='active', pause_reason=null where id=$1",
+        [automationId],
+      );
       await runDueStep(runner, runId!);
 
       expect(sentFor(runId!)).toEqual([]);
@@ -1126,10 +1132,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
                 [automationId],
               );
             else
-              await admin.pool.query('update automations set status=$1 where id=$2', [
-                change,
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status=$1, pause_reason=case when $1='paused' then 'manual' end where id=$2",
+                [change, automationId],
+              );
             return tags;
           });
         try {
@@ -1304,10 +1310,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               [ids],
             );
           else
-            await admin.pool.query('update automations set status=$1 where id=any($2::uuid[])', [
-              change,
-              ids,
-            ]);
+            await admin.pool.query(
+              "update automations set status=$1, pause_reason=case when $1='paused' then 'manual' end where id=any($2::uuid[])",
+              [change, ids],
+            );
           await blocker.query('commit');
           isHoldingLock = false;
           await pending;

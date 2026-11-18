@@ -106,7 +106,7 @@ describe('AutomationsService (Postgres)', () => {
         'update automations set published_version_id=null where store_id=any($1::uuid[])',
         stores,
       );
-      for (const table of ['automation_versions', 'automations', 'contacts'])
+      for (const table of ['automation_versions', 'automations', 'contacts', 'wallet_ledger'])
         await admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, stores);
       await admin.pool.query('delete from stores where id=any($1::uuid[])', stores);
       await admin.pool.query('delete from users where id=$1', [userId]);
@@ -339,6 +339,55 @@ describe('AutomationsService (Postgres)', () => {
     });
     await expect(service.enable(storeA, automation.id, owner)).rejects.toMatchObject({
       code: 'AUTOMATION_NOT_FOUND',
+    });
+  });
+
+  it('records a manual pause and leaves a balance pause only to a top-up', async () => {
+    const automation = await draft();
+    await service.publish(storeA, automation.id, owner);
+    expect(await service.pause(storeA, automation.id, staff)).toMatchObject({
+      status: 'paused',
+      pauseReason: 'manual',
+    });
+    expect(await service.enable(storeA, automation.id, owner)).toMatchObject({
+      status: 'active',
+      pauseReason: null,
+    });
+
+    await admin.pool.query(
+      "update automations set status='paused', pause_reason='balance', balance_pause_revision=1 where id=$1",
+      [automation.id],
+    );
+    for (const move of [
+      () => service.enable(storeA, automation.id, owner),
+      () => service.publish(storeA, automation.id, owner),
+    ])
+      await expect(move()).rejects.toMatchObject({
+        code: 'AUTOMATION_PAUSED_BY_SYSTEM',
+        fields: [{ path: 'pauseReason', message: 'balance' }],
+      });
+    expect(await service.get(storeA, automation.id)).toMatchObject({
+      status: 'paused',
+      pauseReason: 'balance',
+    });
+
+    const [earlierCredit, laterCredit] = [randomUUID(), randomUUID()];
+    await admin.pool.query(
+      `insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type)
+       values($1::uuid,$3,'sms_credits',1,'adjustment',1,1,$1::text,'system'),
+             ($2::uuid,$3,'sms_credits',2,'adjustment',1,2,$2::text,'system')`,
+      [earlierCredit, laterCredit, storeA],
+    );
+    const system = { kind: 'system' } as const;
+    // A credit the gate already saw cannot end this pause, even when its event arrives late.
+    await service.resumeAfterTopUp(storeA, earlierCredit, system);
+    expect((await service.get(storeA, automation.id)).status).toBe('paused');
+    await service.resumeAfterTopUp(storeB, laterCredit, system);
+    expect((await service.get(storeA, automation.id)).status).toBe('paused');
+    await service.resumeAfterTopUp(storeA, laterCredit, system);
+    expect(await service.get(storeA, automation.id)).toMatchObject({
+      status: 'active',
+      pauseReason: null,
     });
   });
 

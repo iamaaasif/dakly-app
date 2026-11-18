@@ -13,7 +13,10 @@ import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-securi
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
+import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { EmailOwnerOnAutomationPaused } from '@dakly/core/automations/jobs/email-owner-on-automation-paused.job';
+import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
@@ -63,6 +66,8 @@ import { JobSchedulers } from './job-schedulers';
     WakeDueRunsJob,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
+    EmailOwnerOnAutomationPaused,
+    ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
   ],
   imports: [
@@ -80,6 +85,7 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     AutomationRunsModule,
+    AutomationsModule,
     CampaignsModule,
     ClockModule,
     ImportsModule,

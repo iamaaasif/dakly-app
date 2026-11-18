@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
@@ -5,6 +7,7 @@ import {
   type AutomationDetailResponse,
   type AutomationListQuery,
   type AutomationListResponse,
+  type AutomationPauseReason,
   type AutomationResponse,
   type AutomationStatus,
   type ChangeAutomationInput,
@@ -20,10 +23,17 @@ import {
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import { UsersService } from '../auth/users.service';
+import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { WalletService } from '../wallets/wallet.service';
 import { automationError } from './automations.errors';
 import { type Automation, AutomationsRepository } from './automations.repository';
 
@@ -39,6 +49,13 @@ const STATUS_MOVES = {
   archive: { from: ['draft', 'active', 'paused'], to: 'archived' },
 } as const satisfies Record<string, { from: readonly AutomationStatus[]; to: AutomationStatus }>;
 type StatusMove = keyof typeof STATUS_MOVES;
+// The Pause button records a manual pause; moving to active or archiving clears either reason.
+const PAUSE_REASONS = {
+  publish: { pauseReason: null },
+  enable: { pauseReason: null },
+  pause: { pauseReason: 'manual' },
+  archive: { pauseReason: null },
+} as const satisfies Record<StatusMove, { pauseReason?: AutomationPauseReason | null }>;
 
 // An archived workflow is deleted for the shop; its versions stay for the runs on them.
 const VISIBLE_STATUSES = ['draft', 'active', 'paused'] as const;
@@ -55,6 +72,12 @@ export class AutomationsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(TeamService) private readonly team: TeamService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(UsersService) private readonly users: UsersService,
+    @Inject(EmailService) private readonly email: EmailService,
+    @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
+    @Inject(WalletService) private readonly wallets: WalletService,
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
@@ -171,18 +194,101 @@ export class AutomationsService {
       throw automationError('AUTOMATION_VERSION_NOT_FOUND');
   }
 
+  // Inside the send step's transaction. Only the first run short of SMS credits pauses the
+  // workflow; the owner gets a card now and an email from the automation.paused event.
+  async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
+    const revision = await this.wallets.currentRevision(storeId, 'sms_credits');
+    const now = await this.repository.schedulerTime(storeId);
+    const paused = await this.repository.pauseForBalance(storeId, automationId, revision, now);
+    if (!paused) return;
+    await this.notifications.notify(storeId, {
+      type: 'automation.paused_for_balance',
+      category: 'fix_now',
+      dedupeKey: `automation-balance:${automationId}:${revision}`,
+      recipientPermission: 'billing.edit',
+      ...balancePauseNotice(paused.name),
+      actionUrl: TOP_UP_PATH,
+    });
+    await this.outbox.publish({
+      type: 'automation.paused',
+      storeId,
+      occurredAt: now.toISOString(),
+      payload: { automationId, automationName: paused.name, reason: 'balance' },
+    });
+  }
+
+  // The email driver takes no idempotency key, so each owner's email for this event is claimed in
+  // Valkey first: a retry after some emails went out sends the rest only. Until the email is sent
+  // the claim is short; a retry that meets it emails the other owners and then fails, so a later
+  // retry sends the email of a worker that died mid-send.
+  async emailBalancePause(storeId: string, automationName: string, eventId: string): Promise<void> {
+    const { title, body } = balancePauseNotice(automationName);
+    const text = `${body}\n${loadEnv().WEB_ORIGINS[0]}${TOP_UP_PATH}`;
+    const owners = await this.users.profiles(
+      await this.team.userIdsWithPermission(storeId, 'billing.edit'),
+    );
+    let stillSending = false;
+    let firstFailure: { error: unknown } | undefined;
+    for (const { id, email } of owners) {
+      if (!email) continue;
+      const key = `automation-pause-email:${eventId}:${id}`;
+      const claim = `sending:${randomUUID()}`;
+      const claimed = await this.valkey.connection.set(
+        key,
+        claim,
+        'EX',
+        SENDING_CLAIM_SECONDS,
+        'NX',
+      );
+      if (!claimed) {
+        stillSending ||= (await this.valkey.connection.get(key)) !== 'sent';
+        continue;
+      }
+      try {
+        await this.email.send({ to: email, subject: title, text });
+      } catch (error) {
+        // Retry the failed recipient without preventing delivery to the other owners.
+        await this.valkey.connection.eval(finishEmailClaim, 1, key, claim, 0);
+        firstFailure ??= { error };
+        continue;
+      }
+      await this.valkey.connection.eval(finishEmailClaim, 1, key, claim, SENT_CLAIM_SECONDS);
+    }
+    if (firstFailure) throw firstFailure.error;
+    if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
+  }
+
+  // A delayed credit event cannot resume a pause whose gate already saw that ledger revision.
+  async resumeAfterTopUp(storeId: string, entryId: string, _actor: Actor): Promise<void> {
+    await this.transaction.run(storeId, async () => {
+      const revision = await this.wallets.topUpRevision(storeId, 'sms_credits', entryId);
+      if (revision === undefined) return;
+      const ids = await this.repository.lockBalancePaused(storeId, revision);
+      if (ids.length === 0) return;
+      const resumedAt = await this.repository.schedulerTime(storeId);
+      await this.repository.resumeBalancePaused(storeId, ids, resumedAt);
+    });
+  }
+
   private async move(
     storeId: string,
     automationId: string,
     move: StatusMove,
   ): Promise<AutomationResponse> {
     const { from, to } = STATUS_MOVES[move];
+    // Only a top-up ends a pause for a short balance (resumeAfterTopUp).
     const automation = await this.repository.change(storeId, automationId, from, {
       status: to,
+      ...PAUSE_REASONS[move],
       updatedAt: this.clock.now(),
+      ...(to === 'active' && { unlessPausedFor: 'balance' }),
     });
     if (automation) return toAutomationResponse(automation);
-    await this.findVisible(storeId, automationId);
+    const current = await this.findVisible(storeId, automationId);
+    if (current.status === 'paused' && current.pauseReason === 'balance')
+      throw automationError('AUTOMATION_PAUSED_BY_SYSTEM', [
+        { path: 'pauseReason', message: 'balance' },
+      ]);
     throw automationError('AUTOMATION_STATUS_NOT_ALLOWED');
   }
 
@@ -200,6 +306,32 @@ export class AutomationsService {
       throw automationError('AUTOMATION_NOT_FOUND');
     return automation;
   }
+}
+
+// The shop app has no top-up screen until PAY-8; Settings is where billing will live.
+const TOP_UP_PATH = '/settings';
+// Longer than an email driver waits for its provider (5 seconds), and short enough to lapse
+// before a crashed job's stall retry, which BullMQ starts 30 to 60 seconds later.
+const SENDING_CLAIM_SECONDS = 20;
+// Longer than the outbox relay keeps retrying an event.
+const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
+
+// A late refusal cannot clear another claim. Any confirmed delivery finishes the event.
+const finishEmailClaim = `
+  local current = redis.call('GET', KEYS[1])
+  if tonumber(ARGV[2]) == 0 then
+    if current == ARGV[1] then return redis.call('DEL', KEYS[1]) end
+  elseif current ~= 'sent' then
+    return redis.call('SET', KEYS[1], 'sent', 'EX', ARGV[2])
+  end
+  return 0
+`;
+
+function balancePauseNotice(name: string) {
+  return {
+    title: `"${name}" paused: SMS balance too low`,
+    body: `"${name}" paused because its next SMS needed more credits than were available. A top-up resumes the workflow and lets eligible messages go out.`,
+  };
 }
 
 // The graph schema already refused a path with no end or a loop. These checks need to know what

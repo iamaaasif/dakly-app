@@ -5,10 +5,16 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { UsersService } from '../auth/users.service';
+import type { EmailService } from '../email/email.service';
+import type { NotificationsService } from '../notifications/notifications.service';
+import type { ValkeyClient } from '../platform/cache/valkey-client';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
 import type { TeamService } from '../team/team.service';
+import type { WalletService } from '../wallets/wallet.service';
 import type { Automation, AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
 
@@ -61,6 +67,7 @@ function serviceFor(graph: AutomationGraph) {
     id: AUTOMATION_ID,
     name: 'স্বাগতম',
     status: 'draft',
+    pauseReason: null,
     graph,
     publishedVersionId: null,
     createdAt: now,
@@ -75,6 +82,12 @@ function serviceFor(graph: AutomationGraph) {
       sendingSettings: async () => ({ onlyOwnersAndAdminsApprove: true }),
     } as unknown as StoresService,
     { canApproveSends: () => true } as unknown as TeamService,
+    { notify: async () => undefined } as unknown as NotificationsService,
+    { publish: async () => undefined } as unknown as OutboxService,
+    { profiles: async () => [] } as unknown as UsersService,
+    { send: async () => undefined } as unknown as EmailService,
+    { connection: { set: async () => 'OK' } } as unknown as ValkeyClient,
+    {} as WalletService,
   );
 }
 

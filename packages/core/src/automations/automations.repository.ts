@@ -1,17 +1,23 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
-import type { AutomationListQuery, AutomationStatus } from '@dakly/contracts/automations';
+import type {
+  AutomationListQuery,
+  AutomationPauseReason,
+  AutomationStatus,
+} from '@dakly/contracts/automations';
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { automations, automationVersions } from '@dakly/db/schema/automations';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { workflowSchedulerTime } from './workflow-scheduler-time';
 
 export type Automation = {
   id: string;
   name: string;
   status: AutomationStatus;
+  pauseReason: AutomationPauseReason | null;
   graph: AutomationGraph;
   publishedVersionId: string | null;
   createdAt: Date;
@@ -29,6 +35,7 @@ const automationColumns = {
   id: automations.id,
   name: automations.name,
   status: automations.status,
+  pauseReason: automations.pauseReason,
   graph: automations.draftGraph,
   publishedVersionId: automations.publishedVersionId,
   createdAt: automations.createdAt,
@@ -44,11 +51,14 @@ const versionColumns = {
 
 type AutomationChange = {
   status?: AutomationStatus;
+  pauseReason?: AutomationPauseReason | null;
   name?: string;
   graph?: AutomationGraph;
   triggerType?: TriggerKey;
   publishedVersionId?: string;
   updatedAt: Date;
+  // Not a column: leaves a workflow paused for this reason as it is.
+  unlessPausedFor?: AutomationPauseReason;
 };
 
 @Injectable()
@@ -120,22 +130,108 @@ export class AutomationsRepository {
     storeId: string,
     id: string,
     from: readonly AutomationStatus[],
-    { graph, ...change }: AutomationChange,
+    { graph, unlessPausedFor, ...change }: AutomationChange,
   ): Promise<Automation | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automations)
-        .set({ ...change, ...(graph && { draftGraph: graph }) })
+        .set({
+          ...change,
+          ...(graph && { draftGraph: graph }),
+          ...(change.pauseReason === 'manual' && { hasBalanceResumeSendAllowance: false }),
+        })
         .where(
           and(
             eq(automations.storeId, storeId),
             eq(automations.id, id),
             inArray(automations.status, from),
+            unlessPausedFor &&
+              or(
+                ne(automations.status, 'paused'),
+                isNull(automations.pauseReason),
+                ne(automations.pauseReason, unlessPausedFor),
+              ),
           ),
         )
         .returning(automationColumns),
     );
     return row;
+  }
+
+  async schedulerTime(storeId: string): Promise<Date> {
+    return this.database.forStore(storeId, workflowSchedulerTime);
+  }
+
+  // The sender still holds the SMS wallet lock from its failed reservation.
+  async pauseForBalance(
+    storeId: string,
+    id: string,
+    observedRevision: number,
+    updatedAt: Date,
+  ): Promise<Automation | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automations)
+        .set({
+          status: 'paused',
+          pauseReason: 'balance',
+          balancePauseRevision: observedRevision,
+          hasBalanceResumeSendAllowance: false,
+          updatedAt,
+        })
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            eq(automations.id, id),
+            eq(automations.status, 'active'),
+          ),
+        )
+        .returning(automationColumns),
+    );
+    return row;
+  }
+
+  async lockBalancePaused(storeId: string, creditedRevision: number): Promise<string[]> {
+    const rows = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .select({ id: automations.id })
+        .from(automations)
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            eq(automations.status, 'paused'),
+            eq(automations.pauseReason, 'balance'),
+            lt(automations.balancePauseRevision, creditedRevision),
+          ),
+        )
+        .orderBy(asc(automations.id))
+        .for('update'),
+    );
+    return rows.map(({ id }) => id);
+  }
+
+  // The caller took these locks before reading the time that ends their pauses.
+  async resumeBalancePaused(storeId: string, ids: string[], resumedAt: Date): Promise<void> {
+    await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .update(automations)
+        .set({
+          status: 'active',
+          pauseReason: null,
+          balancePauseRevision: null,
+          balanceResumedAt: resumedAt,
+          hasBalanceResumeSendAllowance: true,
+          updatedAt: resumedAt,
+        })
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            inArray(automations.id, ids),
+            eq(automations.status, 'paused'),
+            eq(automations.pauseReason, 'balance'),
+          ),
+        ),
+    );
   }
 
   // The caller holds the workflow's row lock from its status update, so two publishes cannot

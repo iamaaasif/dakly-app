@@ -19,6 +19,7 @@ import {
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
+import { workflowSchedulerTime } from './workflow-scheduler-time';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
@@ -95,14 +96,7 @@ export class AutomationRunsRepository {
 
   // Lease and wake timestamps use the same clock as due_automation_runs.
   async schedulerTime(storeId: string): Promise<Date> {
-    return this.database.forStore(storeId, async (tx) => {
-      const { rows } = await tx.execute<{ milliseconds: string }>(
-        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
-      );
-      const [time] = rows;
-      if (!time) throw new Error('Postgres did not return the workflow scheduler time');
-      return new Date(Number(time.milliseconds));
-    });
+    return this.database.forStore(storeId, workflowSchedulerTime);
   }
 
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
