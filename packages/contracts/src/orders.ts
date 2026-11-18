@@ -288,6 +288,8 @@ export const createOrderSchema = z.strictObject({
 
 export const createOrderFormSchema = createOrderSchema.extend({
   deliveryChargePoisha: takaInput.optional(),
+  orderDiscountPoisha: takaInput.default(0),
+  advancePaidPoisha: takaInput.default(0),
 });
 export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;

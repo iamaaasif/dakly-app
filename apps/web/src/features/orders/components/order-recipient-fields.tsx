@@ -1,22 +1,22 @@
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import type { CreateOrderValues } from '@dakly/contracts/orders';
-import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
 import { useOrderDelivery } from '../api/get-delivery-charge';
 import { OrderAreaFields } from './order-area-fields';
+import { OrderBuyerFields } from './order-buyer-fields';
 
 export function OrderRecipientFields() {
   const { control, register, setValue } = useFormContext<CreateOrderValues>();
-  const { areaId, isBuyer } = useWatch({ control, name: 'recipient' });
+  const areaId = useWatch({ control, name: 'recipient.areaId' });
   const { data: charge, error } = useOrderDelivery(areaId);
 
   return (
     <fieldset className="space-y-2">
       <legend className="font-semibold">Buyer and delivery details</legend>
-      <BuyerFields />
+      <OrderBuyerFields />
       <div className="grid gap-2 sm:grid-cols-2">
         <FormField name="recipient.phone" label="Recipient phone">
           {(props) => (
@@ -33,11 +33,9 @@ export function OrderRecipientFields() {
             </div>
           )}
         </FormField>
-        {!isBuyer && (
-          <FormField name="recipient.name" label="Recipient name">
-            {(props) => <Input {...props} {...register('recipient.name')} />}
-          </FormField>
-        )}
+        <FormField name="recipient.name" label="Recipient name">
+          {(props) => <Input {...props} {...register('recipient.name')} />}
+        </FormField>
         <div className="sm:col-span-2">
           <FormField name="recipient.address" label="Address">
             {(props) => <Input {...props} {...register('recipient.address')} />}
@@ -67,38 +65,5 @@ export function OrderRecipientFields() {
         </p>
       )}
     </fieldset>
-  );
-}
-
-function BuyerFields() {
-  const { control, getValues, register, setValue } = useFormContext<CreateOrderValues>();
-  const isBuyer = useWatch({ control, name: 'recipient.isBuyer' });
-  return (
-    <>
-      <FormField name="buyer.name" label="Buyer name">
-        {(props) => (
-          <Input
-            {...props}
-            {...register('buyer.name', {
-              onChange: (event) => {
-                if (getValues('recipient.isBuyer')) setValue('recipient.name', event.target.value);
-              },
-            })}
-          />
-        )}
-      </FormField>
-      <div className="flex min-h-10 items-center gap-3 pl-2">
-        <Checkbox
-          id="different-recipient"
-          checked={!isBuyer}
-          onCheckedChange={(different) => {
-            setValue('recipient.isBuyer', different !== true);
-            setValue('recipient.name', different ? '' : getValues('buyer.name'));
-            setValue('recipient.phone', '');
-          }}
-        />
-        <label htmlFor="different-recipient">Deliver to someone else</label>
-      </div>
-    </>
   );
 }

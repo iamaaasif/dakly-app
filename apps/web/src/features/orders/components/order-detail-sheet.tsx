@@ -28,7 +28,7 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
   const order = query.data;
   const blocked = useContext(SessionInteraction);
   const { data } = useSessionContext();
-  const transition = useOrderStage(id);
+  const transition = useOrderStage();
   const stage = useRef<HTMLSpanElement>(null);
   const [action, setAction] = useState<StageFormAction>();
   const canEdit = data?.currentStore?.canEditOrders;
@@ -45,7 +45,10 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
         fallbackFocus={fallbackFocus}
         footer={
           (canConfirm || actions.length > 0) && (
-            <OrderStageFooter {...{ transition, stage, canConfirm, actions }} onForm={setAction} />
+            <OrderStageFooter
+              {...{ id, transition, stage, canConfirm, actions }}
+              onForm={setAction}
+            />
           )
         }
       >
@@ -96,6 +99,7 @@ function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'descript
 }
 
 type OrderStageFooterProps = {
+  id: string;
   transition: ReturnType<typeof useOrderStage>;
   stage: RefObject<HTMLSpanElement | null>;
   canConfirm: boolean;
@@ -104,6 +108,7 @@ type OrderStageFooterProps = {
 };
 
 function OrderStageFooter({
+  id,
   transition,
   stage,
   canConfirm,
@@ -112,13 +117,16 @@ function OrderStageFooter({
 }: OrderStageFooterProps) {
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
     const drawer = button.closest('[role="dialog"]');
-    transition.mutate(change, {
-      onSuccess: () => {
-        const focused = document.activeElement;
-        if (focused === button || focused === drawer || focused === document.body)
-          stage.current?.focus();
+    transition.mutate(
+      { id, body: change },
+      {
+        onSuccess: () => {
+          const focused = document.activeElement;
+          if (focused === button || focused === drawer || focused === document.body)
+            stage.current?.focus();
+        },
       },
-    });
+    );
   }
 
   return (
