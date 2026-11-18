@@ -72,11 +72,7 @@ export class MessagingService {
       if (message.destination !== undefined && phone !== message.destination)
         throw messagingError('MESSAGING_DESTINATION_CHANGED');
       if (!phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
-      return {
-        to: phone,
-        parts: countSmsParts(message.body),
-        sender,
-      };
+      return { to: phone, parts: countSmsParts(message.body), sender };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');

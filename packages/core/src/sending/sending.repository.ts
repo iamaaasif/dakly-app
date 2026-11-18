@@ -56,10 +56,8 @@ export class SendingRepository {
   }
 }
 
-function campaignSends(
-  tx: Transaction,
-  { storeId, contactIds, after, until, includeCommittedFuture }: SendWindow,
-) {
+function campaignSends(tx: Transaction, window: SendWindow) {
+  const { storeId, contactIds, after, until, includeCommittedFuture } = window;
   return tx
     .select({
       contactId: campaignRecipients.contactId,
@@ -92,10 +90,8 @@ function campaignSends(
 }
 
 // Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
-function workflowSends(
-  tx: Transaction,
-  { storeId, contactIds, after, until, includeCommittedFuture }: SendWindow,
-) {
+function workflowSends(tx: Transaction, window: SendWindow) {
+  const { storeId, contactIds, after, until, includeCommittedFuture } = window;
   return tx
     .select({
       contactId: automationRunSteps.contactId,
