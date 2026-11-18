@@ -250,6 +250,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(edit.getByText('Sonia Akter')).toBeVisible();
     await expect(edit.getByText('৳1,250 · 3 in stock', { exact: true })).toBeVisible();
     await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
+    await expect(edit.getByRole('button', { name: 'Save order' })).toBeDisabled();
     await edit.getByLabel('Quantity 1').fill('2');
     await expect(
       edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),

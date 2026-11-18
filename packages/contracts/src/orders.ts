@@ -375,7 +375,8 @@ export const editOrderSchema = z
     'Change at least one order field',
   );
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
-export const editOrderFormSchema = editOrderSchema.safeExtend({
+export const editOrderFormSchema = z.strictObject({
+  ...editOrderSchema.shape,
   deliveryChargePoisha: takaInput.optional(),
   orderDiscountPoisha: takaInput.optional(),
   advancePaidPoisha: takaInput.optional(),
