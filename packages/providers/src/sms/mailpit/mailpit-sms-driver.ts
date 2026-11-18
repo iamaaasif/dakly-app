@@ -88,7 +88,7 @@ export class MailpitSmsDriver implements SmsDriver {
     throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
   }
 
-  // Mailpit deduplicates by Message-ID. A real SMS driver's client reference comes with ACC-14.
+  // A retained capture lets a later send recover its id by Message-ID.
   private async findCaptured(messageId: string): Promise<string | undefined> {
     const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '100' });
     const signal = AbortSignal.timeout(5000);
