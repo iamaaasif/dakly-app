@@ -14,8 +14,7 @@ export type DialogProps = {
   children: ReactNode;
 };
 export function Dialog(props: DialogProps) {
-  const { title, open, suspended = false, className, onClose, children } = props;
-  const { closeDisabled } = props;
+  const { title, open, suspended = false, closeDisabled, className, onClose, children } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
