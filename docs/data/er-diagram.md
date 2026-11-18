@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0039_snapshot.json`: **95 tables, 1254 columns, 376 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0040_snapshot.json`: **95 tables, 1257 columns, 376 explicit indexes and 298 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -963,6 +963,8 @@ erDiagram
         text payment_status "NOT NULL; text"
         bigint items_subtotal_poisha "NOT NULL; bigint"
         bigint order_discount_poisha "NOT NULL; bigint"
+        bigint delivered_items_subtotal_poisha "NULL; bigint"
+        bigint delivered_order_discount_poisha "NULL; bigint"
         uuid discount_code_id FK "NULL; uuid"
         bigint delivery_charge_poisha "NOT NULL; bigint"
         boolean is_delivery_charge_overridden "NOT NULL; boolean"
@@ -1005,6 +1007,7 @@ erDiagram
         bigint unit_price_poisha "NOT NULL; bigint"
         bigint unit_cost_poisha "NULL; bigint"
         bigint line_discount_poisha "NOT NULL; bigint"
+        bigint delivered_line_discount_poisha "NULL; bigint"
         boolean is_stock_tracked "NOT NULL; boolean"
         boolean is_oversell_allowed "NOT NULL; boolean"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"

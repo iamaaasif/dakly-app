@@ -11,6 +11,6 @@ import { KnowledgeService } from './knowledge.service';
   imports: [ClockModule, FileStorageModule, OutboxModule],
   controllers: [KnowledgeController],
   providers: [KnowledgeRepository, KnowledgeService],
-  exports: [KnowledgeRepository, KnowledgeService],
+  exports: [KnowledgeService],
 })
 export class KnowledgeModule {}

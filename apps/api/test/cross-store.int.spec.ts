@@ -183,6 +183,46 @@ fixture('GET /orders/:orderId', async () => {
   await hidden(b, 'GET', (value) => `/orders/${value}`, id);
 });
 
+fixture('POST /orders/:orderId/courier', async () => {
+  const { a, b } = await pair();
+  const foreign = await order(a);
+  const own = await order(b);
+  await f.admin.pool.query("update orders set stage='to_pack' where id=any($1::uuid[])", [
+    [foreign, own],
+  ]);
+  const url = (id: string) => `/orders/${id}/courier`;
+  const input = { courier: 'other', courierOtherName: 'Local rider', trackingCode: 'DP123' };
+  const before = await f.row('orders', foreign);
+  expect((await success(b, 'POST', url(own), 200, input)).json()).toMatchObject({
+    stage: 'with_courier',
+    courier: 'other',
+    courierOtherName: 'Local rider',
+    trackingCode: 'DP123',
+    shippedByUserId: b.owner.id,
+  });
+  await hidden(b, 'POST', url, foreign, () => input);
+  expect(await f.row('orders', foreign)).toEqual(before);
+});
+
+fixture('POST /orders/:orderId/cod-collected', async () => {
+  const { a, b } = await pair();
+  const foreign = await order(a);
+  const own = await order(b);
+  await f.admin.pool.query("update orders set stage='delivered' where id=any($1::uuid[])", [
+    [foreign, own],
+  ]);
+  const url = (id: string) => `/orders/${id}/cod-collected`;
+  const input = { amountPoisha: 9000 };
+  const before = await f.row('orders', foreign);
+  expect((await success(b, 'POST', url(own), 200, input)).json()).toMatchObject({
+    stage: 'delivered',
+    paymentStatus: 'cod_collected',
+    codCollectedPoisha: 9000,
+  });
+  await hidden(b, 'POST', url, foreign, () => input);
+  expect(await f.row('orders', foreign)).toEqual(before);
+});
+
 fixture('POST /orders/:orderId/stage', async () => {
   const { a, b } = await pair();
   const foreignId = await order(a);
