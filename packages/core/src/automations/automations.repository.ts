@@ -11,7 +11,7 @@ import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { automations, automationVersions } from '@dakly/db/schema/automations';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { workflowSchedulerTime } from './workflow-scheduler-time';
+import { workflowSchedulerTime } from './workflow-scheduler-time.repository';
 
 export type Automation = {
   id: string;
