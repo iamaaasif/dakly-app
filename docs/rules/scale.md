@@ -9,7 +9,7 @@ Release 1 runs on a small stack, but the code must not need a rewrite when Dakly
 3. Bulk actions run as jobs with progress, never inside a request ([jobs.md](jobs.md)).
 4. A campaign sends to a snapshot of its audience taken at send time.
 5. Large segment counts are kept up to date from events, with a nightly full rebuild.
-6. Imports stream the file in chunks. A 1-million-row CSV imports without loading the file into memory.
+6. Customer imports are capped at 10 MB and 50,000 rows and read whole; the size is enforced in the signed upload URL and again when the job reads the file. Raise the cap only together with a streaming reader.
 7. Each store has fair-use limits on API calls, exports and AI usage, so one store cannot slow the others.
 8. Counters shown in the app (unread chats, usage meters) come from stored totals, not `COUNT(*)` on large tables.
 9. Time is stored in UTC (`timestamptz`) and shown in the store's time zone.

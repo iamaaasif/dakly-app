@@ -24,6 +24,8 @@ function show(child: ReactNode, edit = false) {
       name: 'Shop',
       canViewTeam: true,
       canEditTeam: edit,
+      canViewProducts: false,
+      canEditProducts: false,
       canViewCustomers: false,
       canCreateCustomer: false,
       canViewSegments: false,

@@ -104,12 +104,28 @@ The web app has two customer screens.
   export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
   tabs, and the current consent answer per channel.
 
-Customer import (CUS-8, first part) reads a CSV file into contact rows; nothing is saved yet.
-Upload, the import job, consent evidence and undo come in the next parts.
+Customer import (CUS-8) takes a CSV file the shop uploads. The job that saves its rows as
+contacts, with the consent evidence, comes in the next part, then undo.
 
+- Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
+  and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
+  browser sends the file straight to R2 under `imports/<storeId>/<uuid>.csv`, with
+  `Content-Type: text/csv` and exactly the declared size: both are signed into the URL, so R2
+  refuses any other body. A shop can upload at most 20 customer files an hour (`IMPORT_RATE_LIMITED`).
+- The upload's `files` row has `expires_at` 7 days ahead, and an R2 lifecycle rule deletes
+  everything under `imports/` after 7 days.
+- Start: `POST /imports/:importId/start` takes the column mapping, the duplicate mode
+  (`update` or `skip`) and the consent evidence. It moves the import to `importing` and queues
+  the job through the `import.started` event. Only an uploaded import starts; a second start
+  fails with `IMPORT_ALREADY_STARTED`. `GET /imports/:importId` returns the status, the counts
+  and a 15-minute link to the error report. Upload and start need Edit Customers, the read
+  View Customers. The member who starts it and confirms the consent evidence is stored
+  separately from the uploader.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
-  fills one field at most, so two columns with the same header stay apart.
+  fills one field at most, so two columns with the same header stay apart. Mapping uses
+  the first 200 columns; content in a later column still makes the row nonblank, so a
+  missing mapped phone is reported.
 - `readCustomerImportRows` reads RFC 4180 CSV: quoted cells may hold commas, line breaks and
   doubled quotes, and a byte order mark is dropped. A stray quote fails the whole file with
   `IMPORT_FILE_UNREADABLE` rather than shifting cells. A file with no rows under the header
@@ -124,7 +140,28 @@ Upload, the import job, consent evidence and undo come in the next parts.
   cell with two numbers (split by a comma, semicolon or slash) keeps the second as the
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
-- Only CSV is read. XLSX needs a parser the repository does not have yet.
+- Only CSV is read. XLSX comes with CUS-16.
+- Files must be UTF-8. NUL and other C0 control bytes are refused with
+  `IMPORT_FILE_UNREADABLE`; tab, CR and LF are allowed. UTF-16 files are refused
+  even without a byte order mark, before any rows reach the database.
+- The reader is one pass over the text. It drops blank lines as it goes, stops at 50,000
+  rows and keeps at most 200 cells a row, so neither a file of empty lines nor a quote that
+  never closes builds a large list. Quoted cells are scanned before they are decoded,
+  so escaped quotes do not allocate a new string for each pair.
+- The `fail-stuck-imports` sweep looks at imports still `importing` that made no progress for
+  15 minutes (`imports.last_progress_at`, else `started_at`). Their job may have died with its
+  worker or may still wait behind others, so each is queued again with a new `import.started`
+  event, up to 4 times, and failed only after that, with a line in its report. The report is a
+  CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
+  progress time, retry limit and observed lease in one update. A report from a sweep
+  that loses this check is deleted.
+- A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
+  the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
+  being read as records, so 10 MB of line breaks costs no memory.
+- The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
+  agreed. It applies to every row, for the channels it names.
+- Not built yet: the job that applies the rows, undo, the import screens, a preview before
+  start, and upload scanning (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

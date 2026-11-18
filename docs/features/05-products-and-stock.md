@@ -115,7 +115,7 @@ Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialo
 
 ![Products](../design/screenshots/products.webp)
 
-List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), stock per size, and "asked for in chats" counts. Fix the prototype's copy bug "1 people asked".
+List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
 ### How it works
 
@@ -150,6 +150,38 @@ ids, visibility and available stock. `settings.stock.lowStockThreshold` defaults
 3 and can be changed through Store settings. Lists accept the `running_low` filter.
 A `variant.restocked` event means availability crossed from zero or less to positive;
 notification sending still waits for PROD-6.
+
+PROD-3 adds photo upload, confirmation, reorder and removal. Upload URLs last five
+minutes and sign the declared content type and exact byte length. Only JPEG, PNG
+and WebP are accepted, up to 5,242,880 bytes. Keys are
+`stores/<store_id>/products/<uuid>`.
+
+Confirmation checks the object size and type before opening a store transaction.
+It then records a ready `files` row and appends the photo to the product together
+with `product.updated`. Photo changes are serialized per store, including the
+limit of ten photos. Reordering includes every current photo id once. Removing a
+photo detaches it and sets its file expiry for later object cleanup; this task
+does not run the object purge. Unconfirmed uploads have no file row; their object
+cleanup is also unimplemented. Scanning and image re-encoding wait for OPS-4.
+
+Product detail and list responses include ordered `photos` with signed download
+URLs lasting fifteen minutes. File metadata, product details and variants are
+read in one SQL snapshot; rows from another store or file purpose are excluded.
+The API requires the four `R2_*` values listed in `.env.example`.
+
+PROD-4's first web slice adds `/products`: search and readiness filters in the
+address, cursor pages, available stock per variant and signed photo thumbnails.
+The selected stock adjustment is in the address too; counts stay in the query
+cache while form input stays in React Hook Form.
+Members with product edit access can adjust a variant with a signed quantity and
+reason. Product view access is checked by the page and after shop changes.
+The editor and photo controls remain for the second PROD-4 PR.
+A hidden product is how a shop keeps an unfinished product on the server.
+
+The list omits unsupported totals, sales, chat and waiting-list counts, category
+filters, best-selling order, import and promotion controls. The stock dialog
+changes one variant and requires a reason; it does not offer waiting-list
+messages. The shared sidebar and header are unchanged.
 
 ### Rules
 
