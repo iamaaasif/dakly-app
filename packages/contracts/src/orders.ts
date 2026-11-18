@@ -71,6 +71,8 @@ export type OrderStage = (typeof orderStages)[number];
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
+const searchText = z.string().trim().min(1).max(120);
+
 export const orderListQuerySchema = z
   .strictObject({
     stage: z.enum(orderStages).optional(),
@@ -85,7 +87,7 @@ export const orderListQuerySchema = z
       .refine((date) => !date.startsWith('0000-'))
       .optional(),
     alert: z.enum(['waiting', 'risk', 'cod']).optional(),
-    search: z.string().trim().min(1).max(120).optional(),
+    search: searchText.refine((text) => !text.includes('\0')).optional(),
     cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
     limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })

@@ -21,7 +21,11 @@ export default async function OrdersPage({
   if (!parsed.success)
     return (
       <p role="alert" className="p-6">
-        This address is invalid. <Link href="/orders">Open orders</Link>.
+        This address is invalid.{' '}
+        <Link href="/orders" className="inline-flex min-h-10 items-center text-action underline">
+          Open orders
+        </Link>
+        .
       </p>
     );
   const { selected, ...query } = parsed.data;
