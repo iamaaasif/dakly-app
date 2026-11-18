@@ -15,7 +15,9 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { useRecordOrderAction } from '../api/record-order-action';
+import { useOrderStage } from '../api/change-order-stage';
+import { useCollectOrderCod } from '../api/collect-order-cod';
+import { useDispatchOrder } from '../api/dispatch-order';
 import { cancelReasonLabels, courierLabels, onHoldReasonLabels } from '../order-labels';
 import { stageActionLabels, type StageFormAction } from './order-stage-actions';
 import { SessionDialog } from '@/components/session-dialog';
@@ -50,28 +52,28 @@ export function OrderStageDialog({ order, action, onClose }: OrderStageDialogPro
     resolver: zodResolver(actionSchema),
     defaultValues: defaultFields(action, order),
   });
-  const mutation = useRecordOrderAction(order.id, onClose);
+  const { submit, pending, error } = useStageSubmission(order.id, onClose);
   const title =
     action === 'cancelled' ? `Cancel order #${order.number}?` : stageActionLabels[action];
   return (
-    <SessionDialog title={title} open onClose={onClose} closeDisabled={mutation.isPending}>
+    <SessionDialog title={title} open onClose={onClose} closeDisabled={pending}>
       <FormProvider {...form}>
-        <form className="space-y-3" onSubmit={form.handleSubmit((input) => mutation.mutate(input))}>
-          <fieldset disabled={mutation.isPending} className="space-y-3">
+        <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
+          <fieldset disabled={pending} className="space-y-3">
             <StageFields action={action} order={order} />
           </fieldset>
-          {mutation.error && (
+          {error && (
             <p role="alert" className="text-danger">
-              {mutation.error.message}
+              {error.message}
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" disabled={mutation.isPending} onClick={onClose}>
+            <Button variant="secondary" disabled={pending} onClick={onClose}>
               Back
             </Button>
             <Button
               type="submit"
-              loading={mutation.isPending}
+              loading={pending}
               variant={action === 'cancelled' ? 'danger' : 'primary'}
             >
               {stageActionLabels[action]}
@@ -81,6 +83,28 @@ export function OrderStageDialog({ order, action, onClose }: OrderStageDialogPro
       </FormProvider>
     </SessionDialog>
   );
+}
+
+function useStageSubmission(id: string, onSaved: () => void) {
+  const stage = useOrderStage(onSaved);
+  const dispatch = useDispatchOrder(id, onSaved);
+  const cod = useCollectOrderCod(id, onSaved);
+
+  function submit(input: ActionInput) {
+    if (input.to === 'with_courier') {
+      const { courier, courierOtherName, trackingCode } = input;
+      dispatch.mutate({ courier, courierOtherName, trackingCode });
+    } else if (input.to === 'cod') {
+      cod.mutate({ amountPoisha: input.amountPoisha });
+    } else {
+      stage.mutate({ id, body: input });
+    }
+  }
+  return {
+    submit,
+    pending: stage.isPending || dispatch.isPending || cod.isPending,
+    error: stage.error ?? dispatch.error ?? cod.error,
+  };
 }
 
 function StageFields({ action, order }: Omit<OrderStageDialogProps, 'onClose'>) {
