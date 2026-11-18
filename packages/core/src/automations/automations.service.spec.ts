@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AutomationStatus } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
@@ -10,6 +10,7 @@ import type { EmailService } from '../email/email.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { ValkeyClient } from '../platform/cache/valkey-client';
 import type { Clock } from '../platform/clock';
+import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
@@ -61,7 +62,10 @@ class FakeAutomationsRepository {
   }
 }
 
-function serviceFor(graph: AutomationGraph) {
+function serviceFor(
+  graph: AutomationGraph,
+  mail: { users?: UsersService; email?: EmailService; valkey?: ValkeyClient } = {},
+) {
   const repository = new FakeAutomationsRepository();
   repository.automation = {
     id: AUTOMATION_ID,
@@ -81,15 +85,50 @@ function serviceFor(graph: AutomationGraph) {
     {
       sendingSettings: async () => ({ onlyOwnersAndAdminsApprove: true }),
     } as unknown as StoresService,
-    { canApproveSends: () => true } as unknown as TeamService,
+    {
+      canApproveSends: () => true,
+      userIdsWithPermission: async () => ['first', 'second'],
+    } as unknown as TeamService,
     { notify: async () => undefined } as unknown as NotificationsService,
     { publish: async () => undefined } as unknown as OutboxService,
-    { profiles: async () => [] } as unknown as UsersService,
-    { send: async () => undefined } as unknown as EmailService,
-    { connection: { set: async () => 'OK' } } as unknown as ValkeyClient,
+    mail.users ?? ({ profiles: async () => [] } as unknown as UsersService),
+    mail.email ?? ({ send: async () => undefined } as unknown as EmailService),
+    mail.valkey ?? ({ connection: { set: async () => 'OK' } } as unknown as ValkeyClient),
     {} as WalletService,
   );
 }
+
+it('attempts the next balance notice if releasing a failed email claim also fails', async () => {
+  const environment = vi
+    .spyOn(env, 'loadEnv')
+    .mockReturnValue({ WEB_ORIGINS: ['https://dakly.test'] } as env.Env);
+  const deliveryError = new Error('provider refused the first email');
+  const send = vi.fn().mockRejectedValueOnce(deliveryError).mockResolvedValueOnce(undefined);
+  const finish = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Valkey unavailable during claim release'))
+    .mockResolvedValueOnce(1);
+  const profiles = async () => [
+    { id: 'first', email: 'first@example.test' },
+    { id: 'second', email: 'second@example.test' },
+  ];
+  const service = serviceFor(welcome, {
+    users: { profiles } as unknown as UsersService,
+    email: { send } as unknown as EmailService,
+    valkey: { connection: { set: async () => 'OK', eval: finish } } as unknown as ValkeyClient,
+  });
+
+  try {
+    const sent = service.emailBalancePause(STORE_ID, 'Welcome', 'pause-event');
+    await expect(sent).rejects.toBe(deliveryError);
+    expect(send.mock.calls.map(([message]) => message.to)).toEqual([
+      'first@example.test',
+      'second@example.test',
+    ]);
+  } finally {
+    environment.mockRestore();
+  }
+});
 
 const sms = (next: string): AutomationStep => ({
   kind: 'send',
