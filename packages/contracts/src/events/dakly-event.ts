@@ -8,6 +8,7 @@ import {
   importUndoRequestedEventSchema,
   segmentSavedEventSchema,
 } from './contacts';
+import { knowledgeIndexRequestedEventSchema } from './knowledge';
 import {
   conversationStartedEventSchema,
   messageDeliveredEventSchema,
@@ -18,7 +19,12 @@ import {
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
-import { orderConfirmedEventSchema, orderStageChangedEventSchema } from './orders';
+import {
+  orderCodCollectedEventSchema,
+  orderConfirmedEventSchema,
+  orderCreatedEventSchema,
+  orderStageChangedEventSchema,
+} from './orders';
 import {
   productUpdatedEventSchema,
   stockChangedEventSchema,
@@ -34,6 +40,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   segmentSavedEventSchema,
   importStartedEventSchema,
   importUndoRequestedEventSchema,
+  knowledgeIndexRequestedEventSchema,
   campaignApprovedEventSchema,
   conversationStartedEventSchema,
   messageReceivedEventSchema,
@@ -44,7 +51,9 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   messageOptedOutEventSchema,
   notificationCreatedEventSchema,
   orderStageChangedEventSchema,
+  orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
+  orderCreatedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

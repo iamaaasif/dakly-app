@@ -84,6 +84,7 @@ describe('DeliveryService with Postgres', () => {
     expect(await service.calculateDeliveryCharge(f.a, neighbourhood)).toEqual({
       deliveryZoneId: specific.id,
       chargePoisha: 7000,
+      district: 'Dhaka',
     });
     expect(await service.calculateDeliveryCharge(f.a, 304)).toMatchObject({ chargePoisha: 12000 });
     await expect(service.calculateDeliveryCharge(f.a, 999999)).rejects.toMatchObject({

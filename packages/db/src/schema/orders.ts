@@ -164,6 +164,8 @@ export const orders = pgTable(
     // COD = max(0, items_subtotal - order_discount + delivery charge - advance).
     itemsSubtotalPoisha: poisha('items_subtotal_poisha').notNull(),
     orderDiscountPoisha: poisha('order_discount_poisha').notNull().default(0),
+    deliveredItemsSubtotalPoisha: poisha('delivered_items_subtotal_poisha'),
+    deliveredOrderDiscountPoisha: poisha('delivered_order_discount_poisha'),
     discountCodeId: uuid('discount_code_id').references(() => discountCodes.id),
     deliveryChargePoisha: poisha('delivery_charge_poisha').notNull().default(0),
     isDeliveryChargeOverridden: boolean('is_delivery_charge_overridden').notNull().default(false),
@@ -285,6 +287,7 @@ export const orderItems = pgTable(
     unitCostPoisha: poisha('unit_cost_poisha'),
     // The whole discount on this line, not per unit.
     lineDiscountPoisha: poisha('line_discount_poisha').notNull().default(0),
+    deliveredLineDiscountPoisha: poisha('delivered_line_discount_poisha'),
     isStockTracked: boolean('is_stock_tracked').notNull(),
     // ORD-R3: a person ticked "Allow even though out of stock". The AI can never set it.
     isOversellAllowed: boolean('is_oversell_allowed').notNull().default(false),

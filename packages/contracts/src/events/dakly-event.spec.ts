@@ -19,12 +19,20 @@ const trackedLink = {
 
 const examples: DaklyEvent[] = [
   {
+    type: 'knowledge.index_requested',
+    storeId,
+    occurredAt,
+    payload: { knowledgeItemId: 'be82bf85-585b-4c33-960c-5acda9043aa1' },
+  },
+  {
     type: 'order.stage_changed',
     storeId,
     occurredAt,
     payload: { orderId, from: 'to_confirm', to: 'to_pack' },
   },
   { type: 'order.confirmed', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.created', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
     type: 'stock.changed',
     storeId,
