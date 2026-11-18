@@ -185,6 +185,11 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
 
   it('pauses a sending campaign, resumes it and refuses the moves its state does not allow', async () => {
     const id = await approvedCampaign(null);
+    const { rows: times } = await admin.pool.query(
+      'select approved_at, started_at from campaigns where id=$1',
+      [id],
+    );
+    expect(times).toEqual([{ approved_at: clockNow, started_at: clockNow }]);
 
     await expect(service.resume(storeId, id, actor)).rejects.toMatchObject({
       code: 'CAMPAIGN_NOT_PAUSED',
