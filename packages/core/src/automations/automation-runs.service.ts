@@ -353,8 +353,17 @@ export class AutomationRunsService {
     const standIn = isMarketing
       ? this.links.optOutUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH))
       : undefined;
-    if (!(await this.reserveCredits(storeId, claim, countSmsParts(messageBody(step, standIn)))))
-      return undefined;
+    try {
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity: countSmsParts(messageBody(step, standIn)),
+        idempotencyKey: operationKey(claim),
+        actor: system,
+      });
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return undefined;
+      throw error;
+    }
     const id = newId();
     // CAMP-R4: every marketing SMS ends with its one-tap opt-out link.
     const [optOut] = isMarketing
@@ -376,21 +385,6 @@ export class AutomationRunsService {
       optOutUrl: optOut?.url,
     });
     return messageBody(step, optOut?.url);
-  }
-
-  private async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
-    try {
-      await this.wallets.reserve(storeId, {
-        wallet: 'sms_credits',
-        quantity,
-        idempotencyKey: operationKey(claim),
-        actor: system,
-      });
-      return true;
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return false;
-      throw error;
-    }
   }
 
   private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
