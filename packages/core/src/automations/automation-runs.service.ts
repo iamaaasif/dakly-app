@@ -37,6 +37,7 @@ import {
   noCredits,
   operationKey,
   randomPath,
+  runAction,
   type RunFacts,
   type SendStep,
   type StepResult,
@@ -255,29 +256,21 @@ export class AutomationRunsService {
     // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
     if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
       return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
-    const renewed = { ...claim, claimedAt: now };
+    let renewed = { ...claim, claimedAt: now };
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
-      // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
-      if (!step.channels.includes('sms'))
-        return { decision: { action: 'skip', reason: 'window_closed' } };
-      const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
-        contactId,
-        channel: 'sms',
-        category: step.category,
-      });
-      const exitReason = await this.refreshExitReason(facts, at);
-      if (exitReason) return { exitReason, at };
-      if (decision.action !== 'send') return { decision };
-      const body = await this.writeSend({ storeId, claim, contactId, step }, at);
-      if (body === undefined) return { decision: noCredits };
-      return { decision, body, destination, at };
+      const result = await this.gateSend(claim, step, facts);
+      const claimedAt = this.clock.now();
+      // The live move holds this run row; renew after the gate's other locks and writes.
+      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
+      renewed = { ...claim, claimedAt };
+      return result;
     });
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
-    if ('exitReason' in started)
-      return { ...exited(started.exitReason, started.at), claim: renewed };
+    const gatedAt = this.clock.now();
+    if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     const { decision } = started;
     if ('body' in started)
       return this.deliver(
@@ -295,11 +288,29 @@ export class AutomationRunsService {
       return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
     if (decision.action === 'skip')
       return {
-        ...ifNotReachable(step, now),
+        ...ifNotReachable(step, gatedAt),
         claim: renewed,
         step: { ...row, outcome: 'skipped', skipReason: decision.reason },
       };
     return undefined;
+  }
+
+  private async gateSend(claim: RunClaim, step: SendStep, facts: RunFacts): Promise<GateResult> {
+    const { storeId, contactId } = facts;
+    // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
+    if (!step.channels.includes('sms'))
+      return { decision: { action: 'skip', reason: 'window_closed' } };
+    const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
+      contactId,
+      channel: 'sms',
+      category: step.category,
+    });
+    const exitReason = await this.refreshExitReason(facts, at);
+    if (exitReason) return { exitReason, at };
+    if (decision.action !== 'send') return { decision };
+    const body = await this.writeSend({ storeId, claim, contactId, step }, at);
+    if (body === undefined) return { decision: noCredits };
+    return { decision, body, destination, at };
   }
 
   private async refreshExitReason(facts: RunFacts, at: Date) {
@@ -391,7 +402,7 @@ export class AutomationRunsService {
   // Called with no transaction open, with the operation key the provider deduplicates on.
   private async deliver(
     { storeId, claim, contactId, step, body, destination }: Delivery,
-    now: Date,
+    sentAt: Date,
   ): Promise<StepResult> {
     try {
       const message = {
@@ -402,13 +413,15 @@ export class AutomationRunsService {
         destination,
       } as const;
       const { providerMessageId, credits } = await this.messaging.send(storeId, message);
+      const now = this.clock.now();
       return {
         ...goOn(step.next, now),
         claim,
-        stepChange: { outcome: 'sent', providerMessageId, sentAt: now },
+        stepChange: { outcome: 'sent', providerMessageId, sentAt },
         credits: { settle: 'charge', quantity: credits },
       };
     } catch (error) {
+      const now = this.clock.now();
       // MessagingService refuses before it calls the provider, so a refusal never reached it.
       if (error instanceof AppError)
         return {
@@ -421,23 +434,6 @@ export class AutomationRunsService {
       return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim });
     }
   }
-}
-
-// Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
-// publish refuses them. The tag change is written with the step, under the claim.
-function runAction(
-  stepKey: string,
-  { action, next }: Extract<AutomationStep, { kind: 'action' }>,
-  now: Date,
-): StepResult {
-  if (action.action !== 'add_tag' && action.action !== 'remove_tag')
-    return failed('This action is not available yet', now);
-  const change = action.action === 'add_tag' ? 'add' : 'remove';
-  return {
-    ...goOn(next, now),
-    step: { stepKey, kind: 'action', outcome: 'done' },
-    tagChange: { tag: action.tag, change },
-  };
 }
 
 // Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish

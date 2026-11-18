@@ -131,3 +131,20 @@ export function randomPath(
   const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
   return { outcome: `path_${index + 1}`, next: paths[index]!.next };
 }
+
+// Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
+// publish refuses them. The tag change is written with the step, under the claim.
+export function runAction(
+  stepKey: string,
+  { action, next }: Extract<AutomationStep, { kind: 'action' }>,
+  now: Date,
+): StepResult {
+  if (action.action !== 'add_tag' && action.action !== 'remove_tag')
+    return failed('This action is not available yet', now);
+  const change = action.action === 'add_tag' ? 'add' : 'remove';
+  return {
+    ...goOn(next, now),
+    step: { stepKey, kind: 'action', outcome: 'done' },
+    tagChange: { tag: action.tag, change },
+  };
+}

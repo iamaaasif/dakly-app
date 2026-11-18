@@ -20,9 +20,9 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
-import { SendingRepository } from '../sending/sending.repository';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { AutomationRunsModule } from './automation-runs.module';
+import { AutomationRunsRepository } from './automation-runs.repository';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
 import { WakeDueRunsJob } from './jobs/wake-due-runs.job';
 
@@ -793,37 +793,76 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runner.sweep();
       const jobs = await runner.queue.getJobs(['waiting']);
       const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
-      let reached!: () => void;
-      let release!: () => void;
-      const blocked = new Promise<void>((resolve) => {
-        reached = resolve;
-      });
-      const continueSend = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const originalLock = SendingRepository.prototype.lockContact;
-      const hook = vi
-        .spyOn(SendingRepository.prototype, 'lockContact')
-        .mockImplementationOnce(async function (store, id) {
-          reached();
-          await continueSend;
-          return originalLock.call(this, store, id);
-        });
+      const blocker = await admin.pool.connect();
+      await blocker.query('begin');
+      await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `send:${storeId}:${contact}`,
+      ]);
+      let isHoldingLock = true;
       const pending = runner.runStep(job.data as StepJobData);
       try {
-        await blocked;
+        let isWaiting = false;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const waiting = await admin.pool.query(
+            "select 1 from pg_locks where locktype='advisory' and not granted and database=(select oid from pg_database where datname=current_database())",
+          );
+          if (waiting.rowCount) {
+            isWaiting = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(isWaiting).toBe(true);
         await admin.pool.query("update contacts set tags=array['ordered'] where id=$1", [contact]);
-        release();
+        await blocker.query('commit');
+        isHoldingLock = false;
         await pending;
         expect(sentFor(runId!)).toEqual([]);
         expect(await ledgerFor(runId!)).toEqual([]);
         expect(await sendStep(runId!)).toEqual([]);
         expect(await run(runId!)).toMatchObject({ status: 'exited', exit_reason: 'goal' });
       } finally {
-        release();
+        if (isHoldingLock) await blocker.query('rollback');
+        blocker.release();
         await pending;
-        hook.mockRestore();
         await job.remove();
+      }
+    });
+
+    it('renews the lease after gate writes so a slow gate cannot lose credit settlement', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const later = new Date(daytime.getTime() + 6 * MINUTE);
+      const originalInsert = AutomationRunsRepository.prototype.insertStep;
+      const hook = vi
+        .spyOn(AutomationRunsRepository.prototype, 'insertStep')
+        .mockImplementationOnce(async function (...args) {
+          await originalInsert.apply(this, args);
+          clockNow = later;
+        });
+      let stolen = 0;
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        const result = await admin.pool.query(
+          "update automation_runs set claimed_at=$2 where id=$1 and status='running' and claimed_at < $2::timestamptz - interval '5 minutes' returning id",
+          [runId, later],
+        );
+        stolen = result.rowCount ?? 0;
+        return sms.send(message);
+      });
+      try {
+        await runDueStep(runner, runId!);
+        expect(stolen).toBe(0);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      } finally {
+        hook.mockRestore();
       }
     });
 
