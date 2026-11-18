@@ -1647,5 +1647,112 @@ describe('every production shop route isolates its data', () => {
       client.release();
     }
   });
+  it('DELETE /products/:productId refuses variants on open orders', async () => {
+    const { a, b } = await pair();
+    const variantId = await orderVariant(b);
+    const { product_id: productId } = await f.row('product_variants', variantId);
+    const orderId = await order(b);
+    await f.admin.pool.query(
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+       values($1,$2,$3,$4,'Panjabi','Default',1,125000,false)`,
+      [randomUUID(), b.id, orderId, variantId],
+    );
+    await f.admin.pool.query("update product_variants set status='archived' where id=$1", [
+      variantId,
+    ]);
+    const url = `/products/${productId}`;
+    expect((await f.request(b.member, 'DELETE', url)).statusCode).toBe(403);
+    for (const change of [
+      undefined,
+      { to: 'on_hold', reason: 'cannot_reach' },
+      { to: 'to_pack' },
+    ]) {
+      if (change) await success(b, 'POST', `/orders/${orderId}/stage`, 200, change);
+      const denied = await f.request(b.owner, 'DELETE', url);
+      expect(denied.statusCode, denied.body).toBe(409);
+      expect(denied.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+      expect(await f.row('products', productId)).not.toMatchObject({ status: 'archived' });
+    }
+    await hidden(a, 'DELETE', (id) => `/products/${id}`, productId);
+    await success(b, 'POST', `/orders/${orderId}/stage`, 200, {
+      to: 'cancelled',
+      reason: 'customer_cancelled',
+    });
+    await success(b, 'DELETE', url, 204);
+    expect(await f.row('products', productId)).toMatchObject({ status: 'archived' });
+  });
+
+  it('DELETE /products/:productId races new order creation', async () => {
+    const { b } = await pair();
+    const variantId = await orderVariant(b);
+    const { product_id: productId } = await f.row('product_variants', variantId);
+    await deliveryZone(b);
+    await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
+    const startRequests = () =>
+      Promise.allSettled([
+        f.request(
+          b.owner,
+          'POST',
+          '/orders',
+          {
+            buyer: { name: 'Rahim' },
+            recipient: { name: 'Rahim', phone: b.owner.phone, address: 'Mirpur', areaId: 301 },
+            items: [{ variantId, quantity: 1 }],
+          },
+          { 'idempotency-key': randomUUID() },
+        ),
+        f.request(b.owner, 'DELETE', `/products/${productId}`),
+      ]);
+    const lock = await f.admin.pool.connect();
+    let requests: ReturnType<typeof startRequests> | undefined;
+    try {
+      await lock.query('begin');
+      const {
+        rows: [session],
+      } = await lock.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await lock.query('select id from product_variants where id=$1 for no key update', [
+        variantId,
+      ]);
+      requests = startRequests();
+      await expect
+        .poll(async () => {
+          const {
+            rows: [blocked],
+          } = await f.admin.pool.query<{ total: string }>(
+            `with recursive waiting(pid) as (
+             select $1::int
+             union
+             select activity.pid from pg_stat_activity activity
+             join waiting on waiting.pid=any(pg_blocking_pids(activity.pid))
+           ) select count(*)-1 as total from waiting`,
+            [session!.pid],
+          );
+          return Number(blocked!.total);
+        })
+        .toBe(2);
+    } finally {
+      let rolledBack = false;
+      try {
+        await lock.query('rollback');
+        rolledBack = true;
+      } finally {
+        lock.release(!rolledBack);
+        await requests;
+      }
+    }
+    const [creation, archive] = (await requests)!;
+    if (creation.status === 'rejected') throw creation.reason;
+    if (archive.status === 'rejected') throw archive.reason;
+    const created = creation.value;
+    const archived = archive.value;
+    if (created.statusCode === 201) {
+      expect(archived.statusCode, archived.body).toBe(409);
+      expect(archived.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+    } else {
+      expect(archived.statusCode, archived.body).toBe(204);
+      expect(created.statusCode, created.body).toBe(404);
+      expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
+    }
+  });
   for (const [route, run] of fixtures) it(route, run);
 });

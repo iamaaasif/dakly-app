@@ -39,8 +39,9 @@ export class OutboxRelayService implements OnModuleInit {
     @InjectQueue(QUEUES.transactional) transactional: Queue,
     @InjectQueue(QUEUES.bulk) bulk: Queue,
     @InjectQueue(QUEUES.workflow) workflow: Queue,
+    @InjectQueue(QUEUES.campaign) campaign: Queue,
   ) {
-    this.queues = { transactional, bulk, workflow };
+    this.queues = { transactional, bulk, workflow, campaign };
   }
 
   onModuleInit() {
@@ -64,6 +65,7 @@ export class OutboxRelayService implements OnModuleInit {
       transactional: [],
       bulk: [],
       workflow: [],
+      campaign: [],
     };
     for (const { id, storeId, type, payload, occurredAt } of events)
       for (const { queue, name, retryBackoffMs } of this.subscribers.get(type) ?? [])
