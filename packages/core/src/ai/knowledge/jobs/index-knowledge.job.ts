@@ -13,9 +13,12 @@ export class IndexKnowledgeJob implements JobHandler {
   constructor(@Inject(KnowledgeIndexService) private readonly indexer: KnowledgeIndexService) {}
 
   async handle(data: unknown, finalAttempt: boolean): Promise<void> {
-    const { storeId, payload } = knowledgeIndexRequestedEventSchema
+    const { storeId, occurredAt, payload } = knowledgeIndexRequestedEventSchema
       .extend({ id: z.uuid() })
       .parse(data);
-    await this.indexer.index(storeId, payload.knowledgeItemId, finalAttempt);
+    await this.indexer.index(storeId, payload.knowledgeItemId, {
+      revision: occurredAt,
+      finalAttempt,
+    });
   }
 }

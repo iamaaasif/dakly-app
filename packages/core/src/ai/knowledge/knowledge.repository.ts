@@ -127,7 +127,7 @@ export class KnowledgeRepository {
       file,
     }: {
       chunks: readonly KnowledgeChunk[];
-      file?: { rejection: string | null; sha256?: Buffer };
+      file?: { rejection: string | null; sha256?: Buffer } | { sha256: Buffer };
     },
   ): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {
@@ -161,8 +161,9 @@ export class KnowledgeRepository {
         await tx
           .update(files)
           .set({
-            status: file.rejection ? 'rejected' : 'ready',
-            rejectReason: file.rejection,
+            ...('rejection' in file
+              ? { status: file.rejection ? 'rejected' : 'ready', rejectReason: file.rejection }
+              : {}),
             sha256: file.sha256,
           })
           .where(

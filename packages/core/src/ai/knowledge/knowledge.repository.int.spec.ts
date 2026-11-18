@@ -14,7 +14,7 @@ import { TenantDatabase } from '../../platform/database/tenant-database';
 import type { AiService } from '../ai.service';
 import { IndexKnowledgeJob } from './jobs/index-knowledge.job';
 import { KnowledgeIndexService } from './knowledge-index.service';
-import { KnowledgeRepository } from './knowledge.repository';
+import { KnowledgeRepository, type KnowledgeItem } from './knowledge.repository';
 
 describe('KnowledgeRepository', () => {
   const fixture = new OwnerIsolationFixture();
@@ -61,7 +61,7 @@ describe('KnowledgeRepository', () => {
     const item = await createFile(type, bytes);
     const indexer = withFile(bytes);
 
-    await indexer.index(fixture.a, item.id);
+    await runIndex(indexer, item);
     const { rows } = await fixture.connection.pool.query('select sha256 from files where id=$1', [
       item.fileId,
     ]);
@@ -77,7 +77,7 @@ describe('KnowledgeRepository', () => {
     });
     await expect(repository.findFile(fixture.b, item.fileId!)).resolves.toBeUndefined();
 
-    await indexer.index(fixture.a, item.id);
+    await runIndex(indexer, item);
     expect(await chunksFor(item.id)).toEqual(chunks);
   });
 
@@ -90,7 +90,7 @@ describe('KnowledgeRepository', () => {
     'rejects a %s that fails validation with no partial chunks',
     async (type, bytes, reason) => {
       const item = await createFile(type, bytes);
-      await withFile(bytes).index(fixture.a, item.id);
+      await runIndex(withFile(bytes), item);
       await expectRejected(item, reason);
     },
   );
@@ -98,7 +98,7 @@ describe('KnowledgeRepository', () => {
   it('embeds at most 64 chunks per request and keeps all measured tokens', async () => {
     const bytes = Buffer.from('a'.repeat(63 * 2000) + 'b'.repeat(2000) + 'ঢাকা');
     const item = await createFile('text/plain', bytes);
-    await withFile(bytes, [71, 8]).index(fixture.a, item.id);
+    await runIndex(withFile(bytes, [71, 8]), item);
     const chunks = await chunksFor(item.id);
     expect(chunks).toHaveLength(65);
     expect(
@@ -115,7 +115,7 @@ describe('KnowledgeRepository', () => {
   it('apportions the measured total by UTF-8 bytes', async () => {
     const bytes = Buffer.from('a'.repeat(2000) + 'ঢাকা'.repeat(25));
     const item = await createFile('text/plain', bytes);
-    await withFile(bytes).index(fixture.a, item.id);
+    await runIndex(withFile(bytes), item);
     expect(await chunksFor(item.id)).toEqual(
       expect.arrayContaining([
         { content: 'a'.repeat(2000), token_count: 6 },
@@ -159,12 +159,32 @@ describe('KnowledgeRepository', () => {
     await expect(repository.findFile(fixture.a, item.fileId!)).resolves.toMatchObject({
       status: 'pending',
     });
+    const { rows } = await fixture.connection.pool.query('select sha256 from files where id=$1', [
+      item.fileId,
+    ]);
+    expect(rows).toEqual([{ sha256: createHash('sha256').update(bytes).digest() }]);
+  });
+
+  it('leaves a new revision processing when an older final attempt is delivered', async () => {
+    const item = await repository.create(
+      fixture.a,
+      fixture.userA,
+      {
+        kind: 'policy',
+        answer: 'আগের তথ্য',
+      },
+      now,
+    );
+    const changed = await repository.change(fixture.a, item.id, { answer: 'নতুন তথ্য' }, now);
+    const indexer = withFile(Buffer.alloc(0), []);
+    await expect(runIndex(indexer, item, true)).resolves.toBeUndefined();
+    await expect(repository.find(fixture.a, item.id)).resolves.toEqual(changed);
   });
 
   it('rejects oversized file metadata before reading the object', async () => {
     const item = await createFile('text/plain', Buffer.alloc(0), knowledgeFileBytes + 1);
     const indexer = new KnowledgeIndexService(repository, {} as FileStorageDriver, {} as AiService);
-    await indexer.index(fixture.a, item.id);
+    await runIndex(indexer, item);
     await expectRejected(item, 'knowledge_file_size_limit');
   });
 
@@ -192,6 +212,13 @@ describe('KnowledgeRepository', () => {
       createdAt: now,
     });
     return repository.create(fixture.a, fixture.userA, { kind: 'file', fileId: id }, now);
+  }
+
+  function runIndex(indexer: KnowledgeIndexService, item: KnowledgeItem, finalAttempt = false) {
+    return indexer.index(fixture.a, item.id, {
+      revision: item.updatedAt.toISOString(),
+      finalAttempt,
+    });
   }
 
   function withFile(bytes: Uint8Array, measuredTokens = [8]) {
