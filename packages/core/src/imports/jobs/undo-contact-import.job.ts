@@ -17,6 +17,6 @@ export class UndoContactImport implements JobHandler {
     const { storeId, payload } = importUndoRequestedEventSchema
       .extend({ id: z.uuid() })
       .parse(data);
-    await this.importsService.removeContactsOfUndoneImport(storeId, payload.importId);
+    await this.importsService.finishUndo(storeId, payload.importId);
   }
 }

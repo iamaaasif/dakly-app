@@ -135,7 +135,7 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
-  removeContactsOfUndoneImport(storeId: string, importId: string): Promise<void> {
+  finishUndo(storeId: string, importId: string): Promise<void> {
     return this.undoImport.run(storeId, importId, { kind: 'system' });
   }
 
