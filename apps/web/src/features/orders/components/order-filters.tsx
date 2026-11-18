@@ -17,13 +17,18 @@ export function OrderFilters({ query }: { query: OrderListQuery }) {
   const router = useRouter();
   const [error, setError] = useState('');
   const { source, courier, createdFrom, createdThrough, ...other } = query;
-  const filter = Boolean(source || courier || createdFrom || createdThrough);
+  const cancelled = query.stage === 'cancelled';
+  const filter = Boolean(source || courier || createdFrom || createdThrough || cancelled);
+  const base = { ...other, stage: cancelled ? ('to_confirm' as const) : other.stage };
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const entries = Object.fromEntries(new FormData(event.currentTarget));
+    const { cancelled: showCancelled, ...entries } = Object.fromEntries(
+      new FormData(event.currentTarget),
+    );
     const parsed = orderListQuerySchema.safeParse({
-      ...other,
+      ...base,
+      ...(showCancelled && { stage: 'cancelled', alert: undefined }),
       ...Object.fromEntries(Object.entries(entries).filter(([, value]) => value)),
       cursor: undefined,
     });
@@ -36,7 +41,7 @@ export function OrderFilters({ query }: { query: OrderListQuery }) {
     <details className="rounded-md border border-border bg-surface px-3" open={filter || undefined}>
       <summary className="min-h-10 w-fit cursor-pointer py-2 font-medium">Filters</summary>
       <form
-        key={ordersSearch({ source, courier, createdFrom, createdThrough })}
+        key={ordersSearch({ source, courier, createdFrom, createdThrough, stage: query.stage })}
         className="space-y-3 pb-3"
         onSubmit={submit}
       >
@@ -53,7 +58,7 @@ export function OrderFilters({ query }: { query: OrderListQuery }) {
               variant="secondary"
               onClick={() => {
                 setError('');
-                router.push(`/orders?${ordersSearch({ ...other, cursor: undefined })}`);
+                router.push(`/orders?${ordersSearch({ ...base, cursor: undefined })}`);
               }}
             >
               Clear filters
@@ -88,6 +93,15 @@ function FilterFields({ query }: { query: OrderListQuery }) {
       </label>
       <label>
         Through date <Input name="createdThrough" type="date" defaultValue={createdThrough} />
+      </label>
+      <label className="flex min-h-10 items-center gap-2 sm:col-span-2 xl:col-span-4">
+        <input
+          type="checkbox"
+          name="cancelled"
+          className="accent-action"
+          defaultChecked={query.stage === 'cancelled'}
+        />
+        Only cancelled orders
       </label>
     </div>
   );

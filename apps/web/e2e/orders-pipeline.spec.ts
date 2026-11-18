@@ -187,6 +187,14 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     await expect(page).toHaveURL(/courier=pathao/);
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
     await capture('filters');
+    await database.pool.query(
+      "update orders set stage='cancelled',cancel_reason='test' where id=$1",
+      [delivered],
+    );
+    await page.getByLabel('Cancelled orders').check();
+    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await expect(page).toHaveURL(/stage=cancelled/);
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",
