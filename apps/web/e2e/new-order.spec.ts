@@ -163,6 +163,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await capture(page, 'edit');
     await edit.getByRole('button', { name: 'Save order', exact: true }).click();
     await expect(detail.getByText('৳2,360')).toBeVisible();
+    await expect(detail.getByRole('button', { name: 'Edit order' })).toBeFocused();
   } finally {
     const orders = await database.pool.query<{ id: string }>(
       'select id from orders where store_id=$1 and delivery_zone_id=$2',

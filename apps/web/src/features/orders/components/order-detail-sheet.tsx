@@ -33,38 +33,73 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
   const { data } = useSessionContext();
   const transition = useOrderStage();
   const stage = useRef<HTMLSpanElement>(null);
-  const [action, setAction] = useState<OrderDrawerAction>();
   const canEdit = data?.currentStore?.canEditOrders;
   const canConfirm = canConfirmOrder(order, canEdit);
   const actions = orderStageActions(order, canEdit);
   const editable = canEditOrder(order, canEdit);
-  const formAction = orderDrawerAction(action, actions, editable);
+  const form = useStageForm(actions, stage, editable);
 
   return (
     <>
       <Sheet
         {...orderHeading(order)}
-        open={!blocked && !formAction}
+        open={!blocked && !form.action}
         onClose={onClose}
+        onOpenAutoFocus={form.restoreFocus}
         fallbackFocus={fallbackFocus}
         footer={
           canConfirm || actions.length || editable ? (
             <OrderStageFooter
               {...{ id, transition, stage, canConfirm, actions }}
-              onForm={setAction}
-              onEdit={editable ? () => setAction('edit') : undefined}
+              onForm={form.open}
+              onEdit={editable ? () => form.open('edit') : undefined}
             />
           ) : undefined
         }
       >
         <OrderDetailContent query={query} stage={stage} />
       </Sheet>
-      <OrderDrawerForm order={order} action={formAction} onClose={() => setAction(undefined)} />
+      <OrderDrawerForm order={order} action={form.action} onClose={form.close} />
     </>
   );
 }
 
-function orderDrawerAction(
+function useStageForm(
+  actions: readonly StageAction[],
+  stage: RefObject<HTMLSpanElement | null>,
+  editable: boolean,
+) {
+  const [action, setAction] = useState<OrderDrawerAction>();
+  const previous = useRef<OrderDrawerAction | undefined>(undefined);
+
+  function open(next: OrderDrawerAction) {
+    previous.current = next;
+    setAction(next);
+  }
+
+  function restoreFocus(event: Event) {
+    const previousAction = previous.current;
+    if (!previousAction) return;
+    previous.current = undefined;
+    const drawer = stage.current?.closest('[role="dialog"]');
+    const target =
+      drawer?.querySelector<HTMLButtonElement>(`[data-order-action="${previousAction}"]`) ??
+      stage.current;
+    if (target) {
+      event.preventDefault();
+      target.focus();
+    }
+  }
+
+  return {
+    action: availableOrderAction(action, actions, editable),
+    open,
+    close: () => setAction(undefined),
+    restoreFocus,
+  };
+}
+
+function availableOrderAction(
   action: OrderDrawerAction | undefined,
   allowed: readonly StageAction[],
   editable: boolean,
@@ -174,7 +209,12 @@ function OrderStageFooter({
           </Button>
         )}
         {onEdit && (
-          <Button variant="secondary" onClick={onEdit} disabled={transition.isPending}>
+          <Button
+            data-order-action="edit"
+            variant="secondary"
+            onClick={onEdit}
+            disabled={transition.isPending}
+          >
             Edit order
           </Button>
         )}
