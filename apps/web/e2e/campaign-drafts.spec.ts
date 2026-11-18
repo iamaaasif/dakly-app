@@ -71,22 +71,50 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.getByLabel('Campaign name').fill('New Kurti collection');
     await expect(name).toHaveAttribute('aria-invalid', 'false');
     await page.getByLabel('Goal').selectOption('new_collection');
+    let draftPosts = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().endsWith('/api/campaigns')) draftPosts++;
+    });
+    let releaseNavigation!: () => void;
+    let navigationRequested!: () => void;
+    const holdNavigation = new Promise<void>((resolve) => (releaseNavigation = resolve));
+    const startedNavigation = new Promise<void>((resolve) => (navigationRequested = resolve));
+    const isDraftNavigation = (url: URL) => /^\/campaigns\/[\da-f-]{36}$/.test(url.pathname);
+    await page.route(isDraftNavigation, async (route) => {
+      navigationRequested();
+      await holdNavigation;
+      await route.continue();
+    });
     const response = page.waitForResponse(
       (result) =>
         result.url().endsWith('/api/campaigns') &&
         result.request().method() === 'POST' &&
         result.status() === 201,
     );
-    await page.getByRole('button', { name: 'Create SMS draft' }).click();
+    const create = page.getByRole('button', { name: 'Create SMS draft' });
+    await create.click();
     const draft: CampaignResponse = await (await response).json();
     ids.push(draft.id);
+    try {
+      await startedNavigation;
+      await expect(page).toHaveURL(/\/campaigns\/new$/);
+      await expect(page.getByText('Opening draft…', { exact: true })).toBeVisible();
+      await expect(create).toBeDisabled();
+      await expect(name).toBeDisabled();
+      await create.evaluate((button: HTMLButtonElement) => button.form?.requestSubmit());
+    } finally {
+      releaseNavigation();
+      await page.unrouteAll({ behavior: 'wait' });
+    }
     await expect(page).toHaveURL(new RegExp(`/campaigns/${draft.id}$`));
+    expect(draftPosts).toBe(1);
     await expect(page.getByRole('button', { name: 'Save draft' })).toBeVisible();
     await capture(page, 'draft');
 
     const otherEditor = await context.newPage();
     await otherEditor.goto(`/campaigns/${draft.id}`);
     await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('New Kurti collection');
+    await otherEditor.getByLabel('Goal').selectOption('from_scratch');
     await page.getByLabel('Campaign name').fill('Winter Kurti collection');
     await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
@@ -95,7 +123,13 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
     await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
-    await otherEditor.getByLabel('Goal').selectOption('from_scratch');
+    await otherEditor.bringToFront();
+    await otherEditor.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await expect(
+      otherEditor.getByRole('heading', { name: 'Winter Kurti collection' }),
+    ).toBeVisible();
+    await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('Winter Kurti collection');
+    await expect(otherEditor.getByLabel('Goal')).toHaveValue('from_scratch');
     await otherEditor.getByRole('button', { name: 'Save draft' }).click();
     await expect(otherEditor.getByText('Draft saved.', { exact: true })).toBeVisible();
     await expect(

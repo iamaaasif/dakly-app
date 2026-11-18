@@ -3,7 +3,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { FormProvider, useForm, useFormContext } from 'react-hook-form';
+import { useRef } from 'react';
+import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
 
 import {
@@ -72,9 +73,22 @@ function BuilderHeader({ title, editable }: { title: string; editable: boolean }
   );
 }
 
-function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
+function detailChanges(
+  input: Details,
+  defaults: Details,
+  dirty: Partial<Record<keyof DetailsInput, boolean>>,
+): Partial<Details> {
+  return {
+    ...(dirty.name && input.name !== defaults.name && { name: input.name }),
+    ...(dirty.goal && input.goal !== defaults.goal && { goal: input.goal }),
+  };
+}
+
+function useCampaignDetailsForm(campaign?: CampaignResponse) {
   const save = useSaveCampaign();
   const router = useRouter();
+  const requestInFlight = useRef(false);
+  const values = { name: campaign?.name ?? '', goal: campaign?.goal ?? null };
   const form = useForm<DetailsInput, unknown, Details>({
     resolver: zodResolver(detailsSchema, {
       error: (issue) =>
@@ -82,14 +96,16 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
           ? 'Enter a campaign name.'
           : undefined,
     }),
-    defaultValues: { name: campaign?.name ?? '', goal: campaign?.goal ?? null },
+    defaultValues: values,
+    values,
+    resetOptions: { keepDirtyValues: true, keepErrors: true },
   });
-  const { isDirty, defaultValues } = form.formState;
+  const { dirtyFields } = form.formState;
+  const [name, goal] = useWatch({ control: form.control, name: ['name', 'goal'] });
+  const hasEdits = name !== values.name || (goal ?? null) !== values.goal;
   const submit = form.handleSubmit((input) => {
-    const change = {
-      ...(input.name !== defaultValues?.name && { name: input.name }),
-      ...(input.goal !== defaultValues?.goal && { goal: input.goal }),
-    };
+    if (requestInFlight.current) return;
+    const change = detailChanges(input, values, dirtyFields);
     if (campaign && !Object.keys(change).length) {
       form.reset(input);
       return;
@@ -97,21 +113,33 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
     const request = campaign
       ? { id: campaign.id, input: change }
       : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) };
+    requestInFlight.current = true;
     save.mutate(request, {
       onSuccess: (saved) => {
-        if (campaign) form.reset({ name: saved.name, goal: saved.goal });
-        else router.replace(`/campaigns/${saved.id}`);
+        if (campaign) {
+          form.reset({ name: saved.name, goal: saved.goal });
+          requestInFlight.current = false;
+        } else router.replace(`/campaigns/${saved.id}`);
+      },
+      onError: () => {
+        requestInFlight.current = false;
       },
     });
   });
-  const saved = save.isSuccess && !isDirty;
+  return { form, submit, save, hasEdits };
+}
+
+function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
+  const { form, submit, save, hasEdits } = useCampaignDetailsForm(campaign);
+  const opening = !campaign && save.isSuccess;
+  const saved = save.isSuccess && !hasEdits;
   return (
     <FormProvider {...form}>
       <form
         onSubmit={submit}
         className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
       >
-        <fieldset className="min-w-0 space-y-4" disabled={save.isPending}>
+        <fieldset className="min-w-0 space-y-4" disabled={save.isPending || opening}>
           <CampaignFields />
         </fieldset>
         {save.error && (
@@ -119,8 +147,12 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
             {save.error.message}
           </p>
         )}
-        {saved && <p role="status">Draft saved.</p>}
-        <Button type="submit" loading={save.isPending} disabled={Boolean(campaign && !isDirty)}>
+        {opening ? <p role="status">Opening draft…</p> : saved && <p role="status">Draft saved.</p>}
+        <Button
+          type="submit"
+          loading={save.isPending}
+          disabled={opening || Boolean(campaign && !hasEdits)}
+        >
           {campaign ? 'Save draft' : 'Create SMS draft'}
         </Button>
       </form>
