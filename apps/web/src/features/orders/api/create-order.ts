@@ -27,11 +27,10 @@ export function useCreateOrder() {
       )
         setMustRetry(true);
     },
-    onSuccess: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ordersKey }),
-        client.invalidateQueries({ queryKey: productsKeys.all }),
-      ]);
+    onSuccess: () => {
+      setMustRetry(false);
+      void client.invalidateQueries({ queryKey: ordersKey });
+      void client.invalidateQueries({ queryKey: productsKeys.all });
     },
   });
   return { ...create, mustRetry };
