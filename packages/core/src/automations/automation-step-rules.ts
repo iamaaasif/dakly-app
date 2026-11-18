@@ -49,8 +49,8 @@ export type StepResult = {
   next?: Omit<RunClaim, 'runId'>;
 };
 
-// Short balance (feature 09): the step is skipped as no_credits and "if not reachable" applies.
-// Pausing the workflow or failing the run instead would change only this case.
+// This intermediate part skips a short balance; the balance-pause part replaces it.
+// Costs, retries and balance pause must merge together before any deploy.
 export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
 
 export function operationKey({ runId, stepKey }: RunClaim) {
