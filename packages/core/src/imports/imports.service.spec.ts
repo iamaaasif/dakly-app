@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ContactImportRow, ImportConsentEvidence } from '@dakly/contracts/contacts';
+import type { ImportConsentEvidence } from '@dakly/contracts/contacts';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import type { ConsentService } from '../consents/consent.service';
-import type { ContactsService, ImportedContact } from '../contacts/contacts.service';
+import type {
+  ContactsService,
+  ImportedContact,
+  ImportContactBatch,
+} from '../contacts/contacts.service';
 import type { RateLimiter } from '../platform/cache/rate-limiter';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
@@ -57,11 +61,21 @@ describe('ImportsService', () => {
     },
   };
   const contacts = {
+    findImportMatches: async (_storeId: string, phones: string[]) =>
+      phones
+        .filter((phone) => knownPhones.has(phone))
+        .map((phone) => ({
+          id: `contact-${phone}`,
+          phone,
+          importId: null,
+          whatsappPhone: null,
+          tags: [],
+        })),
+    lockForConsent: async () => undefined,
     saveImportedRows: async (
       _storeId: string,
       _importId: string,
-      rows: ContactImportRow[],
-      duplicateMode: string,
+      { rows, duplicateMode }: ImportContactBatch,
     ): Promise<ImportedContact[]> => {
       if (failBatch) throw new Error('Database connection lost');
       return rows.map(({ phone }) => {
@@ -71,11 +85,19 @@ describe('ImportsService', () => {
           phone,
           outcome: knownPhones.has(phone) ? existing : 'added',
           notChanged: [],
+          hasWhatsappNumberMismatch: false,
         };
       });
     },
   };
   const consents = {
+    currentForAudience: async (_storeId: string, ids: string[], channel: string) =>
+      ids.flatMap((contactId) => {
+        const status = consent.get(`${contactId}:${channel}`);
+        return status
+          ? [{ contactId, status, source: 'manual', capturedAt: new Date('2026-11-17T04:30:00Z') }]
+          : [];
+      }),
     grantFromImport: async (_storeId: string, grant: { contactIds: string[]; channel: string }) => {
       const withdrawnContactIds: string[] = [];
       for (const contactId of grant.contactIds) {
@@ -89,6 +111,10 @@ describe('ImportsService', () => {
   const storage: FileStorageDriver = {
     createUploadUrl: (key) => `https://files.test/put/${key}`,
     createDownloadUrl: (key) => `https://files.test/get/${key}`,
+    getObjectMetadata: async () => null,
+    deleteObject: async (key) => {
+      objects.delete(key);
+    },
     readBytes: async (key, maxBytes) => {
       const text = objects.get(key);
       if (text === undefined) return { kind: 'missing' };
@@ -112,6 +138,7 @@ describe('ImportsService', () => {
       duplicateMode,
       consentEvidence,
       createdByUserId: USER_ID,
+      startedByUserId: USER_ID,
       uploadFileId: '019c01ea-cf15-7d31-a7f5-d73d66007ad8',
       uploadKey: UPLOAD,
       reportKey: null,

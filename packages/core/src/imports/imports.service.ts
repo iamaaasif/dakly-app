@@ -240,11 +240,27 @@ export class ImportsService {
     batch: CustomerImportRows['rows'],
     counts: ImportCounts,
   ): Promise<ReportLine[]> {
+    const rows = batch.map((row) => row.contact);
+    const matches = await this.contacts.findImportMatches(
+      storeId,
+      rows.map((row) => row.phone),
+    );
+    const ids = matches.map((contact) => contact.id);
+    await this.contacts.lockForConsent(storeId, ids);
+    const answers = await this.consents.currentForAudience(storeId, ids, 'whatsapp');
+    const actor: Actor = found.startedByUserId
+      ? { kind: 'user', userId: found.startedByUserId }
+      : { kind: 'system' };
     const saved = await this.contacts.saveImportedRows(
       storeId,
       found.id,
-      batch.map((row) => row.contact),
-      found.duplicateMode,
+      {
+        rows,
+        duplicateMode: found.duplicateMode,
+        whatsappAnswered: new Set(answers.map((answer) => answer.contactId)),
+        matchedContactIds: new Set(ids),
+      },
+      actor,
     );
     const rowNumbers = new Map(batch.map((row) => [row.contact.phone, row.rowNumber]));
     const lines: ReportLine[] = [];
@@ -265,14 +281,27 @@ export class ImportsService {
     saved: ImportedContact[],
   ): Promise<ReportLine[]> {
     const written = saved.filter((contact) => contact.outcome !== 'skipped');
-    const actor: Actor = found.createdByUserId
-      ? { kind: 'user', userId: found.createdByUserId }
+    const actor: Actor = found.startedByUserId
+      ? { kind: 'user', userId: found.startedByUserId }
       : { kind: 'system' };
     const lines: ReportLine[] = [];
     for (const channel of ['sms', 'whatsapp'] as const) {
       const evidence = found.consentEvidence?.[channel];
       if (!evidence) continue;
-      const contactIds = written.map((contact) => contact.contactId);
+      const mismatched =
+        channel === 'whatsapp'
+          ? written.filter((contact) => contact.hasWhatsappNumberMismatch)
+          : [];
+      lines.push(
+        ...mismatched.map((contact) => ({
+          rowNumber: rowNumbers.get(contact.phone)!,
+          field: channel,
+          message: 'WhatsApp consent skipped: number differs',
+        })),
+      );
+      const contactIds = written
+        .filter((contact) => channel !== 'whatsapp' || !contact.hasWhatsappNumberMismatch)
+        .map((contact) => contact.contactId);
       const { withdrawnContactIds } = await this.consents.grantFromImport(
         storeId,
         { contactIds, channel, evidence },

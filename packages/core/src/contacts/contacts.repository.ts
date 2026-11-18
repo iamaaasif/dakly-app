@@ -25,7 +25,6 @@ import type {
   ConsentChannel,
   ContactIdentityResponse,
   ContactKind,
-  ContactImportRow,
   ContactListQuery,
   ContactSource,
   CreateContactInput,
@@ -64,26 +63,6 @@ export type AudienceRecipient = Omit<ContactRecipient, 'hasPhone'> & {
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
-
-export type ImportMatch = {
-  id: string;
-  phone: string;
-  importId: string | null;
-  whatsappPhone: string | null;
-  // The contact has an answer on WhatsApp, which an empty WhatsApp number would reassign.
-  whatsappAnswered: boolean;
-  tags: string[];
-};
-
-export type ImportedContactRow = ContactImportRow & {
-  importId: string;
-  source: ContactSource;
-  kind: ContactKind;
-};
-
-// Undefined fields keep what the contact has, a saved WhatsApp number is kept, and tags are
-// added to its own.
-export type ImportedChange = Omit<ContactImportRow, 'phone'> & { id: string };
 
 // The service decides what a search means; each search field has its own index.
 export type ContactFilter = Omit<ContactListQuery, 'search'> & {
@@ -228,79 +207,6 @@ export class ContactsRepository {
         return 'phone_taken';
       throw error;
     }
-  }
-
-  async findByPhones(storeId: string, phones: string[]): Promise<ImportMatch[]> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          id: contacts.id,
-          phone: contacts.phone,
-          importId: contacts.importId,
-          whatsappPhone: contacts.whatsappPhone,
-          whatsappAnswered: sql<boolean>`exists (select 1 from ${contactConsentCurrent} where ${contactConsentCurrent.storeId} = ${storeId} and ${contactConsentCurrent.contactId} = ${contacts.id} and ${contactConsentCurrent.channel} = 'whatsapp')`,
-          tags: contacts.tags,
-        })
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.storeId, storeId),
-            inArray(contacts.phone, phones),
-            isNull(contacts.deletedAt),
-          ),
-        ),
-    );
-    return rows.map((row) => ({ ...row, phone: row.phone! }));
-  }
-
-  // No conflict clause: a phone saved by someone else meanwhile fails the caller's transaction,
-  // and its retry finds that contact instead.
-  async insertImported(
-    storeId: string,
-    rows: ImportedContactRow[],
-  ): Promise<{ id: string; phone: string }[]> {
-    if (rows.length === 0) return [];
-    const inserted = await this.database.forStore(storeId, (tx) =>
-      tx
-        .insert(contacts)
-        .values(rows.map((row) => ({ ...row, storeId, tags: row.tags ?? [] })))
-        .returning({ id: contacts.id, phone: contacts.phone }),
-    );
-    return inserted.map((row) => ({ ...row, phone: row.phone! }));
-  }
-
-  async updateImported(storeId: string, changes: ImportedChange[]): Promise<void> {
-    if (changes.length === 0) return;
-    const values = changes.map((change) => ({
-      id: change.id,
-      name: change.name,
-      whatsapp_phone: change.whatsappPhone,
-      email: change.email,
-      address: change.address,
-      district: change.district,
-      notes: change.notes,
-      tags: change.tags,
-    }));
-    await this.database.forStore(storeId, (tx) =>
-      tx.execute(sql`
-        update contacts set
-          name = coalesce(v.name, contacts.name),
-          whatsapp_phone = coalesce(contacts.whatsapp_phone, v.whatsapp_phone),
-          email = coalesce(v.email::citext, contacts.email),
-          address = coalesce(v.address, contacts.address),
-          district = coalesce(v.district, contacts.district),
-          notes = coalesce(v.notes, contacts.notes),
-          tags = contacts.tags || array(
-            select distinct tag from unnest(v.tags) as tag where tag <> all(contacts.tags)
-          ),
-          updated_at = now()
-        from jsonb_to_recordset(${JSON.stringify(values)}::jsonb) as v(
-          id uuid, name text, whatsapp_phone text, email text, address text, district text,
-          notes text, tags text[]
-        )
-        where contacts.store_id = ${storeId} and contacts.id = v.id and contacts.deleted_at is null
-      `),
-    );
   }
 
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {

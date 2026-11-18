@@ -288,6 +288,99 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
     expect(upload.rows[0].status).toBe('ready');
   });
 
+  it('skips a WhatsApp grant for a different saved number while granting SMS', async () => {
+    const value = phone();
+    const id = await existingLead(value);
+    await admin.pool.query('update contacts set whatsapp_phone=$2 where id=$1', [
+      id,
+      '01912345678',
+    ]);
+    const { result } = await runImport(`Name,Mobile,WhatsApp\nনাসরিন,${value},01812345678`, {
+      mapping: { name: 0, phone: 1, whatsappPhone: 2 },
+    });
+    expect(result).toMatchObject({ status: 'done', rowsUpdated: 1 });
+    expect((await contactByPhone(value)).whatsapp_phone).toBe('01912345678');
+    expect((await consentRows(id)).map((row) => [row.channel, row.status])).toEqual([
+      ['sms', 'granted'],
+    ]);
+    expect(await report(result.reportUrl)).toContain('WhatsApp consent skipped: number differs');
+  });
+
+  it('attributes imported consent to the member who started the import', async () => {
+    const value = phone();
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${value},,`);
+    await admin.pool.query('update imports set created_by_user_id=null where id=$1', [importId]);
+    await service.runCustomerImport(storeId, importId);
+    const contact = await contactByPhone(value);
+    expect((await consentRows(contact.id)).map((row) => row.captured_by_user_id)).toEqual([
+      userId,
+      userId,
+    ]);
+  });
+
+  it('keeps the WhatsApp destination when another answer commits while the import waits', async () => {
+    const value = phone();
+    const id = await existingLead(value);
+    const importId = await prepareImport(`Name,Mobile,WhatsApp\nনাসরিন,${value},01912345678`, {
+      mapping: { name: 0, phone: 1, whatsappPhone: 2 },
+      consentEvidence: {},
+    });
+    const held = await admin.pool.connect();
+    await held.query('begin');
+    await held.query('select id from contacts where id=$1 for no key update', [id]);
+    const pending = service.runCustomerImport(storeId, importId);
+    void pending.catch(() => undefined);
+    try {
+      await expect
+        .poll(async () => {
+          const rows = await admin.pool.query(
+            "select count(*)::int as count from pg_stat_activity where datname=current_database() and usename='dakly_app' and wait_event_type='Lock'",
+          );
+          return rows.rows[0].count;
+        })
+        .toBeGreaterThan(0);
+      await held.query(
+        "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'whatsapp','granted','chat_opt_in')",
+        [storeId, id],
+      );
+      await held.query('commit');
+      await pending;
+      expect((await contactByPhone(value)).whatsapp_phone).toBeNull();
+      expect(await report((await service.get(storeId, importId)).reportUrl)).toContain(
+        'WhatsApp number differs, not changed',
+      );
+    } finally {
+      await held.query('rollback');
+      await pending.catch(() => undefined);
+      held.release();
+    }
+  });
+
+  it('retries a contact created after matching before reading its consent', async () => {
+    const value = phone();
+    const importId = await prepareImport(`Name,Mobile,WhatsApp\nনাসরিন,${value},01912345678`, {
+      mapping: { name: 0, phone: 1, whatsappPhone: 2 },
+      consentEvidence: {},
+    });
+    const contacts = app.get(ContactsService);
+    const find = contacts.findImportMatches.bind(contacts);
+    vi.spyOn(contacts, 'findImportMatches').mockImplementationOnce(async (...args) => {
+      const matches = await find(...args);
+      const id = await existingLead(value);
+      await admin.pool.query(
+        "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'whatsapp','granted','chat_opt_in')",
+        [storeId, id],
+      );
+      return matches;
+    });
+
+    await expect(service.runCustomerImport(storeId, importId)).rejects.toThrow();
+    await service.runCustomerImport(storeId, importId);
+
+    expect((await service.get(storeId, importId)).status).toBe('done');
+    expect((await contactByPhone(value)).whatsapp_phone).toBeNull();
+  });
+
   it('keeps a saved WhatsApp number and fills an empty one', async () => {
     const [differs, same, empty] = [phone(), phone(), phone()];
     const [saved, sameNumber, filled] = ['01912345678', '01912345679', '01912345670'];

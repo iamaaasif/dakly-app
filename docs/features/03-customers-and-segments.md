@@ -120,7 +120,7 @@ comes in the next part.
   fails with `IMPORT_ALREADY_STARTED`. `GET /imports/:importId` returns the status, the counts
   and a 15-minute link to the error report. Upload and start need Edit Customers, the read
   View Customers. The member who starts it and confirms the consent evidence is stored
-  separately from the uploader.
+  separately from the uploader. Consent grants record the member who started the import.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
   fills one field at most, so two columns with the same header stay apart. Mapping uses
@@ -151,7 +151,9 @@ comes in the next part.
   after each batch, saving `last_progress_at` with it. A second delivery of the job while the
   lease is under 5 minutes old fails with `IMPORT_BEING_RUN` and is retried, so a crashed run
   is never mistaken for a finished one. A run that fails lets go of its lease at once and keeps
-  its last progress time, so the retry carries on. A run counts as finished only after its
+  its last progress time, so the retry carries on. After a worker crash, the 5-minute lease
+  outlasts the queue retries (about 90 seconds); recovery then waits for the sweep after
+  15 minutes without progress. A run counts as finished only after its
   last write succeeds, so a report that failed to save is retried.
 - Files must be UTF-8. NUL and other C0 control bytes are refused with
   `IMPORT_FILE_UNREADABLE`; tab, CR and LF are allowed. UTF-16 files are refused
@@ -183,10 +185,13 @@ comes in the next part.
 - Consent evidence (CUS-R4, D42): for SMS and WhatsApp the shop writes where its customers
   agreed. The evidence applies to every row, for the channels it names; a channel without
   evidence gets no consent. Consent is written only for a contact with no answer on that
-  channel, after locking the contact rows, so a withdrawal saved at the same moment is never
-  overridden. The import never grants a channel the customer withdrew: that channel is
+  channel. The batch locks matched contacts in id order, then reads WhatsApp answers through
+  `ConsentService` before changing their numbers. A withdrawal saved at the same moment is
+  never overridden. A contact created after matching causes a retry under its own lock. The import never grants a channel the customer withdrew: that channel is
   skipped for that contact and its row in the report says so. Importing the same file again
-  records nothing new.
+  records nothing new. If the saved WhatsApp destination differs from the file, the import
+  skips that grant and reports "WhatsApp consent skipped: number differs". Evidence for
+  other channels still applies to that row.
 - A retried job finds the contacts this import already added and does not write them again,
   so the counts and consent come out the same.
 - The report is a CSV with the row, the field and the problem. Its `files` row has
