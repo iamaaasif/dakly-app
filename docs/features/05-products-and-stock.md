@@ -115,7 +115,7 @@ Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialo
 
 ![Products](../design/screenshots/products.webp)
 
-List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), stock per size, and "asked for in chats" counts. Fix the prototype's copy bug "1 people asked".
+List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
 ### How it works
 
@@ -168,6 +168,19 @@ Product detail and list responses include ordered `photos` with signed download
 URLs lasting fifteen minutes. File metadata, product details and variants are
 read in one SQL snapshot; rows from another store or file purpose are excluded.
 The API requires the four `R2_*` values listed in `.env.example`.
+
+PROD-4's first web slice adds `/products`: search and readiness filters in the
+address, cursor pages, available stock per variant and signed photo thumbnails.
+The selected stock adjustment is in the address too; counts stay in the query
+cache while form input stays in React Hook Form.
+Members with product edit access can adjust a variant with a signed quantity and
+reason. Product view access is checked by the page and after shop changes.
+The editor and photo controls remain for the second PROD-4 PR.
+
+The list omits unsupported totals, sales, chat and waiting-list counts, category
+filters, best-selling order, import and promotion controls. The stock dialog
+changes one variant and requires a reason; it does not offer waiting-list
+messages. The shared sidebar and header are unchanged.
 
 ### Rules
 
