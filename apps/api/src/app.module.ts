@@ -7,6 +7,7 @@ import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
+import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -31,6 +32,7 @@ import { HealthController } from './health.controller';
     DeliveryModule,
     ProductsModule,
     ConsentsModule,
+    ImportsModule,
     LinksModule,
     SegmentsModule,
     AutomationsModule,
