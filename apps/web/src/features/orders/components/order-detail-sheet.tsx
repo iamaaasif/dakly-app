@@ -114,44 +114,42 @@ function OrderStageFooter({
   }
 
   return (
-    <>
+    <div className="flex flex-wrap gap-2">
       {transition.error && (
-        <p role="alert" className="mb-2 text-danger">
+        <p role="alert" className="w-full text-danger">
           {transition.error.message}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
-        {canConfirm && (
+      {canConfirm && (
+        <Button
+          className="w-full"
+          disabled={transition.isPending}
+          onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+        >
+          Mark confirmed
+        </Button>
+      )}
+      {actions.map((action, index) =>
+        action === 'to_confirm' || action === 'delivered' ? (
           <Button
-            className="w-full"
+            key={action}
+            variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
             disabled={transition.isPending}
-            onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+            onClick={(event) => changeStage({ to: action }, event.currentTarget)}
           >
-            Mark confirmed
+            {stageActionLabels[action]}
           </Button>
-        )}
-        {actions.map((action, index) =>
-          action === 'to_confirm' || action === 'delivered' ? (
-            <Button
-              key={action}
-              variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
-              disabled={transition.isPending}
-              onClick={(event) => changeStage({ to: action }, event.currentTarget)}
-            >
-              {stageActionLabels[action]}
-            </Button>
-          ) : (
-            <OrderStageDialog
-              key={action}
-              order={order}
-              action={action}
-              stage={stage}
-              primary={!canConfirm && index === 0}
-              disabled={transition.isPending}
-            />
-          ),
-        )}
-      </div>
-    </>
+        ) : (
+          <OrderStageDialog
+            key={action}
+            order={order}
+            action={action}
+            stage={stage}
+            primary={!canConfirm && index === 0}
+            disabled={transition.isPending}
+          />
+        ),
+      )}
+    </div>
   );
 }
