@@ -1833,8 +1833,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await run(unpaid!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
     });
 
-    // After the drain above: the store has no SMS credits.
     it('pauses the workflow once on a short balance, tells the owner and resumes after a top-up', async () => {
+      await setCredits(0);
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
