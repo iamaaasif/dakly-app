@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useRef, type FormEvent } from 'react';
 import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
 
 import {
@@ -16,10 +16,15 @@ import { Input } from '@dakly/ui/input';
 import { useOrderStage } from '../api/change-order-stage';
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
-import { OrderProductFields, type VariantChoice } from './order-product-fields';
+import {
+  OrderProductFields,
+  orderVariantChoices,
+  type VariantChoice,
+} from './order-product-fields';
 import { OrderRecipientFields } from './order-recipient-fields';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
+import { useProductDetails } from '@/lib/product-detail-query';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 
@@ -28,6 +33,7 @@ type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void 
 export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   const create = useCreateOrder();
   const transition = useOrderStage();
+  const confirmAfterSave = useRef(false);
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
     resolver: zodResolver(createOrderFormSchema),
     defaultValues: {
@@ -36,22 +42,39 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       items: [newLine],
     },
   });
-  const confirm = (order: OrderDetail) =>
-    transition.mutate(
-      { id: order.id, body: { to: 'to_pack' } },
-      { onSuccess: () => onSaved(order.id) },
-    );
-  const submit = (confirmed: boolean) =>
-    form.handleSubmit((input) => {
-      create.mutate(input, {
-        onSuccess: (order) =>
-          confirmed && order.stage === 'to_confirm' ? confirm(order) : onSaved(order.id),
-      });
-    });
+
   const saved = create.data;
   const pending = create.isPending || transition.isPending;
   const error = create.error ?? transition.error;
   const close = () => (saved ? onSaved(saved.id) : onClose());
+  function confirm(order: OrderDetail) {
+    transition.mutate(
+      { id: order.id, body: { to: 'to_pack' } },
+      { onSuccess: () => onSaved(order.id) },
+    );
+  }
+  function save(input: CreateOrderInput) {
+    create.mutate(input, {
+      onSuccess: (order) =>
+        confirmAfterSave.current && order.stage === 'to_confirm'
+          ? confirm(order)
+          : onSaved(order.id),
+    });
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    if (create.mustRetry) {
+      event.preventDefault();
+      if (create.variables) save(create.variables);
+    } else {
+      confirmAfterSave.current = false;
+      void form.handleSubmit(save)(event);
+    }
+  }
+  function saveConfirmed() {
+    if (saved) return confirm(saved);
+    confirmAfterSave.current = true;
+    void form.handleSubmit(save)();
+  }
 
   return (
     <SessionDialog
@@ -62,23 +85,29 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
     >
       <FormProvider {...form}>
-        <form className="flex min-h-0 flex-col gap-3" onSubmit={submit(false)}>
+        <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={pending || Boolean(saved)} className="space-y-3">
+            <fieldset
+              disabled={pending || create.mustRetry || Boolean(saved)}
+              className="space-y-3"
+            >
               <OrderRecipientFields />
               <ItemsAndAmounts />
             </fieldset>
           </div>
           {error && (
             <p role="alert" className="text-danger">
-              {error.message}
+              {create.mustRetry
+                ? 'Could not confirm the save. Retry with the same order details.'
+                : error.message}
             </p>
           )}
           <OrderSaveActions
             saved={Boolean(saved)}
+            retry={create.mustRetry}
             pending={pending}
             onClose={close}
-            onConfirm={() => (saved ? confirm(saved) : void submit(true)())}
+            onConfirm={saveConfirmed}
           />
         </form>
       </FormProvider>
@@ -88,12 +117,13 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
 
 type OrderSaveActionsProps = {
   saved: boolean;
+  retry: boolean;
   pending: boolean;
   onClose: () => void;
   onConfirm: () => void;
 };
 
-function OrderSaveActions({ saved, pending, onClose, onConfirm }: OrderSaveActionsProps) {
+function OrderSaveActions({ saved, retry, pending, onClose, onConfirm }: OrderSaveActionsProps) {
   return (
     <div className="flex shrink-0 flex-wrap justify-end gap-2">
       <Button variant="secondary" disabled={pending} onClick={onClose}>
@@ -101,10 +131,10 @@ function OrderSaveActions({ saved, pending, onClose, onConfirm }: OrderSaveActio
       </Button>
       {!saved && (
         <Button type="submit" loading={pending}>
-          Save order
+          {retry ? 'Retry save' : 'Save order'}
         </Button>
       )}
-      <Button variant="secondary" disabled={pending} onClick={onConfirm}>
+      <Button variant="secondary" disabled={pending || retry} onClick={onConfirm}>
         {saved ? 'Confirm saved order' : 'Save as confirmed'}
       </Button>
     </div>
@@ -112,10 +142,14 @@ function OrderSaveActions({ saved, pending, onClose, onConfirm }: OrderSaveActio
 }
 
 function ItemsAndAmounts() {
-  const [variants, setVariants] = useState<Record<string, VariantChoice>>({});
+  const productIds = useRef<Record<string, string>>({});
   const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' });
+  const selectedProducts = useProductDetails([
+    ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
+  ]);
+  const variants = orderVariantChoices(selectedProducts.flatMap(({ data }) => data ?? []));
 
   return (
     <>
@@ -127,7 +161,7 @@ function ItemsAndAmounts() {
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant) setVariants((current) => ({ ...current, [id]: variant }));
+          if (variant) productIds.current[id] = variant.productId;
           setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
         }}
       />
@@ -190,10 +224,12 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
   const orderDiscount = discount ? takaInput.safeParse(discount).data : 0;
   const paid = advance ? takaInput.safeParse(advance).data : 0;
   if (charge === undefined || orderDiscount === undefined || paid === undefined) return null;
-  const total = items.reduce(
-    (sum, item) => sum + (variants[item.variantId]?.price ?? 0) * item.quantity,
-    charge - orderDiscount,
-  );
+  const total = items.reduce((sum, item) => {
+    const variant = variants[item.variantId];
+    return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
+      ? sum + variant.price * item.quantity
+      : NaN;
+  }, charge - orderDiscount);
   if (!Number.isSafeInteger(total) || total < 0) return null;
   return (
     <p className="flex flex-wrap gap-x-4 rounded-md bg-surface-muted p-3">

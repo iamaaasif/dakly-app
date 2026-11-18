@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createProductSchema, type ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
-import { useGetProduct } from '../api/get-product';
+import { useGetProduct } from '@/lib/product-detail-query';
 import { ProductPhotos } from './product-photos';
 import { sessionContextKey } from '@/lib/session-context';
 
