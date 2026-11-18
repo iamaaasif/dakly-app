@@ -104,8 +104,8 @@ The web app has two customer screens.
   export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
   tabs, and the current consent answer per channel.
 
-Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts. Undo
-comes in the next part.
+Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts, and can
+undo the contacts it added and the consent grants it recorded.
 
 - Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
@@ -211,8 +211,34 @@ comes in the next part.
   complete. The `consent_given` workflow trigger (CAMP-11) ignores source `import`, with no
   setting to change that, for the same reason: one CSV import must not start a welcome
   workflow for thousands of contacts. This is the owner's decision (17 Nov).
-- Not built yet: undo, the import screens, a preview before start, and upload scanning
-  (OPS-4).
+- Undo: `POST /imports/:importId/undo` (Edit Customers) accepts a `done` or `failed` import
+  for 7 days after `finished_at` and answers 202. A failed import may already have committed
+  contacts. A first request after the window fails with `IMPORT_UNDO_EXPIRED`; an importing
+  or fully undone import fails with `IMPORT_NOT_UNDOABLE`. Acceptance moves the import to
+  `undone` and publishes `import.undo_requested` in one transaction. A repeated request while
+  undo is pending returns that state without publishing another job.
+- Every import grant records its import id. Undo restores unanswered consent by appending
+  `not_answered`, source `import`, evidence `Import <importId> undone`. It never changes old
+  evidence or records a withdrawal on the customer's behalf. The contact is locked before
+  checking history again: if any later consent row exists for that channel, its answer stays.
+  This also restores grants on existing contacts and contacts edited or deleted after import.
+  The current-consent view stays unchanged; its latest `not_answered` row means no answer for
+  sends, segments, opt-out links and later imports. The future profile display labels it
+  "Not answered"; staff cannot record this reset through the consent form.
+- The bulk undo job restores consent and removes contacts in batches of 500, each in a short
+  transaction. It soft deletes, through `ContactsService`, only contacts this import created
+  whose `updated_at` still equals `created_at` and who have no consent answer on any
+  channel after restoration. A later grant or withdrawal keeps the contact. Contacts that the
+  import only updated stay. Chats and orders do not yet change `updated_at`, so a removed
+  contact may have had them; ORD, CHAT, identity and merge work must update undo eligibility as those relations change.
+- `ImportResponse.undoFinishedAt` is null while undo is pending. The job sets it when all work
+  finishes. Reruns leave restored grants alone and remove only remaining eligible contacts.
+  The sweep requeues unfinished undo after 15 minutes without progress, at most 100 imports
+  per store per sweep. Queueing and progress renew `last_progress_at`; concurrent sweeps skip
+  claimed work. Recovery has no seven-day cutoff once undo was accepted. Fully undone imports
+  are never requeued.
+- Not built yet: the import screens and the preview of the first 20 rows before start (a later
+  CUS-8 part), and upload scanning (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

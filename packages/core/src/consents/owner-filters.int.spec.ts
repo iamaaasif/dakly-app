@@ -45,4 +45,73 @@ describe('consent filters without RLS assistance', () => {
     expect((await f.row('consents', a!.id)).store_id).toBe(f.a);
     await expect(repository.insertAll(f.b, [{ ...answer, contactId: contactA }])).rejects.toThrow();
   });
+
+  it('finds an import grant only in its store and excludes a later answer in the view ordering', async () => {
+    const importId = randomUUID();
+    const fileId = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileId, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importId, f.a, fileId],
+    );
+    const grant = await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      importId,
+      source: 'import',
+      capturedAt: new Date('2026-11-18T00:00:00Z'),
+    });
+    expect(await repository.listImportGrants(f.b, importId, undefined, 10)).toEqual([]);
+    expect(await repository.listUnchangedGrants(f.b, [grant.id])).toEqual([]);
+    expect(await repository.listImportGrants(f.a, importId, undefined, 10)).toEqual([grant]);
+    expect(await repository.listImportGrants(f.a, importId, grant.id, 10)).toEqual([]);
+    expect(await repository.listUnchangedGrants(f.a, [grant.id])).toEqual([grant]);
+    await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      status: 'withdrawn',
+      capturedAt: grant.capturedAt,
+    });
+    expect(await repository.listUnchangedGrants(f.a, [grant.id])).toEqual([]);
+    const restored = await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      status: 'not_answered',
+      source: 'import',
+      capturedAt: new Date('2026-11-18T00:01:00Z'),
+    });
+    expect(await repository.listCurrent(f.a, [contactA], 'sms')).toEqual([
+      expect.objectContaining({ status: 'not_answered', capturedAt: restored.capturedAt }),
+    ]);
+    expect(await repository.listUnchangedGrants(f.a, [grant.id])).toEqual([]);
+    await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      channel: 'messenger',
+      status: 'withdrawn',
+      capturedAt: restored.capturedAt,
+    });
+    expect((await repository.listCurrent(f.a, [contactA])).map((row) => row.status).sort()).toEqual(
+      ['not_answered', 'withdrawn'],
+    );
+    expect(await repository.listCurrent(f.b, [contactA])).toEqual([]);
+    await expect(
+      repository.insert(f.b, { ...answer, contactId: contactB, importId }),
+    ).rejects.toThrow();
+    const second = await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      importId,
+      channel: 'whatsapp',
+      source: 'import',
+    });
+    const grants = [grant, second].sort((a, b) => a.id.localeCompare(b.id));
+    expect(await repository.listImportGrants(f.a, importId, undefined, 1)).toEqual([grants[0]]);
+    expect(await repository.listImportGrants(f.a, importId, grants[0]!.id, 1)).toEqual([grants[1]]);
+    expect(await repository.listImportGrants(f.a, importId, grants[1]!.id, 1)).toEqual([]);
+    expect(await repository.listImportGrants(f.b, importId, undefined, 1)).toEqual([]);
+  });
 });

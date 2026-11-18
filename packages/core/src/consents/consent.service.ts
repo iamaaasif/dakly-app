@@ -85,7 +85,7 @@ export class ConsentService {
   // granted again and is returned for the import report.
   async grantFromImport(
     storeId: string,
-    grant: { contactIds: string[]; channel: ConsentChannel; evidence: string },
+    grant: { contactIds: string[]; channel: ConsentChannel; evidence: string; importId: string },
     actor: AuditEntry['actor'],
   ): Promise<{ withdrawnContactIds: string[] }> {
     if (grant.contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
@@ -93,7 +93,11 @@ export class ConsentService {
     return this.transaction.run(storeId, async () => {
       await this.contacts.lockForConsent(storeId, grant.contactIds);
       const current = await this.repository.listCurrent(storeId, grant.contactIds, grant.channel);
-      const answered = new Map(current.map((consent) => [consent.contactId, consent.status]));
+      const answered = new Map(
+        current
+          .filter((consent) => consent.status !== 'not_answered')
+          .map((consent) => [consent.contactId, consent.status]),
+      );
       const capturedAt = this.clock.now();
       const granted = await this.repository.insertAll(
         storeId,
@@ -105,6 +109,7 @@ export class ConsentService {
             status: 'granted' as const,
             source: 'import' as const,
             evidence: grant.evidence,
+            importId: grant.importId,
             capturedAt,
             capturedByUserId: actor.kind === 'user' ? actor.userId : null,
           })),
@@ -118,7 +123,43 @@ export class ConsentService {
     });
   }
 
-  currentForAudience(storeId: string, contactIds: string[], channel: ConsentChannel) {
+  async restoreImportGrants(
+    storeId: string,
+    importId: string,
+    after: string | undefined,
+    actor: AuditEntry['actor'],
+  ): Promise<{ after?: string; complete: boolean }> {
+    const limit = ConsentService.AUDIENCE_LIMIT;
+    return this.transaction.run(storeId, async () => {
+      const grants = await this.repository.listImportGrants(storeId, importId, after, limit);
+      if (grants.length === 0) return { after, complete: true };
+      await this.contacts.lockConsentHistory(storeId, [
+        ...new Set(grants.map((row) => row.contactId)),
+      ]);
+      const unchanged = await this.repository.listUnchangedGrants(
+        storeId,
+        grants.map((row) => row.id),
+      );
+      const capturedAt = this.clock.now();
+      const restored = await this.repository.insertAll(
+        storeId,
+        unchanged.map((row) => ({
+          contactId: row.contactId,
+          channel: row.channel,
+          status: 'not_answered',
+          source: 'import',
+          evidence: `Import ${importId} undone`,
+          capturedAt,
+          capturedByUserId: actor.kind === 'user' ? actor.userId : null,
+        })),
+      );
+      await this.outbox.publishAll(restored.map((row) => consentChangedEvent(storeId, row)));
+      return { after: grants.at(-1)!.id, complete: grants.length < limit };
+    });
+  }
+
+  // Undo checks every channel together before deciding whether a contact can be removed.
+  currentForAudience(storeId: string, contactIds: string[], channel?: ConsentChannel) {
     if (contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
       throw consentError('CONSENT_AUDIENCE_TOO_MANY');
     return this.repository.listCurrent(storeId, contactIds, channel);

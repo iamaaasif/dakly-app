@@ -187,9 +187,28 @@ export class ContactsService {
     if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
   }
 
+  async lockConsentHistory(storeId: string, ids: string[]): Promise<void> {
+    const locked = await this.importContacts.lockConsentHistory(storeId, ids);
+    if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
+  }
+
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');
+  }
+
+  // The contacts an import added that nobody has edited since, locked until the caller's
+  // transaction ends. Call it inside one.
+  lockUneditedByImport(
+    storeId: string,
+    importId: string,
+    page: { after?: string; limit: number },
+  ): Promise<string[]> {
+    return this.contactsRepository.lockUneditedByImport(storeId, importId, page);
+  }
+
+  removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
+    return this.contactsRepository.softDeleteAll(storeId, ids, this.clock.now());
   }
 
   // A deleted contact reads as undefined.

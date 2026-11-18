@@ -37,12 +37,13 @@ Each task is one PR under about 500 lines, in this order, on the branch named un
 
 ### Group 1: who to send to
 
-### CUS-8 · Customer import
+### CUS-8 · Customer import, what is left
 
-Branch: `feat/cus-8-customer-import`
+Branch: to be named when the part starts.
 
-- Scope: CSV and XLSX upload to R2, preview of the first 20 rows, column mapping, consent evidence per channel (the shop must state where consent came from, or the rows import with no marketing consent), row errors in a downloadable report, undo within 7 days for contacts the import created. An `imports` row tracks each run; the work runs in a bulk job in batches of 500.
-- Tests (integration): bad phones are reported, not dropped silently; an existing phone updates allowed fields and never changes consent without evidence; undo removes only contacts the import created and nothing a later edit touched; a 10,000-row file finishes in batches without one long transaction.
+- Built and described in [feature 03](../features/03-customers-and-segments.md): CSV upload, column mapping, consent evidence per channel, the import job, row errors in a report and undo.
+- Still to build: the import screens in the web app, and a preview of the first 20 rows before the import starts. XLSX comes with CUS-16.
+- Tests: the preview reads the uploaded file without starting the import, never shows a full phone to a member without "See full phone numbers", and refuses a file that is not UTF-8.
 
 ### Group 2: campaigns
 
