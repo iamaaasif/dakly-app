@@ -98,14 +98,14 @@ export class MailpitSmsDriver implements SmsDriver {
       query.set('start', String(start));
       const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, { signal });
       if (!response.ok) throw new Error('Mailpit search failed');
-      const { messages, total } = (await response.json()) as {
+      const { messages, messages_count } = (await response.json()) as {
         messages: { ID: string; MessageID: string }[];
-        total: number;
+        messages_count: number;
       };
       const match = messages.find(({ MessageID }) => MessageID === messageId);
       if (match) return match.ID;
       start += messages.length;
-      if (messages.length === 0 || start >= total) return undefined;
+      if (messages.length === 0 || start >= messages_count) return undefined;
     }
   }
 }

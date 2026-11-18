@@ -113,13 +113,15 @@ describe('MailpitSmsDriver', () => {
       .mockResolvedValueOnce(
         Response.json({
           messages: [{ ID: 'unrelated', MessageID: 'other-campaign-1@sms.dakly.test' }],
-          total: 2,
+          messages_count: 2,
+          total: 500,
         }),
       )
       .mockResolvedValueOnce(
         Response.json({
           messages: [{ ID: 'matching', MessageID: 'campaign-1@sms.dakly.test' }],
-          total: 2,
+          messages_count: 2,
+          total: 500,
         }),
       );
     vi.stubGlobal('fetch', lookup);
@@ -127,6 +129,32 @@ describe('MailpitSmsDriver', () => {
       await expect(
         driver.send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
       ).resolves.toEqual({ providerMessageId: 'matching' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('submits after exhausting the matching pages without an exact capture', async () => {
+    const driver = new MailpitSmsDriver({
+      host: '127.0.0.1',
+      port: 1,
+      apiUrl: 'http://127.0.0.1:1',
+    });
+    vi.spyOn(driver['transport'], 'sendMail').mockResolvedValue({
+      response: '250 queued as new-capture',
+    });
+    const lookup = vi.fn().mockResolvedValueOnce(
+      Response.json({
+        messages: [{ ID: 'unrelated', MessageID: 'other-campaign-1@sms.dakly.test' }],
+        messages_count: 1,
+        total: 500,
+      }),
+    );
+    vi.stubGlobal('fetch', lookup);
+    try {
+      await expect(
+        driver.send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
+      ).resolves.toEqual({ providerMessageId: 'new-capture' });
     } finally {
       vi.unstubAllGlobals();
     }
