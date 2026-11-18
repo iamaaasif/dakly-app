@@ -145,7 +145,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo        | ORD-3, CAMP-11 |      | Was a separate confirmation sender; now runs on the workflow engine                                                                                                                           |
 | ORD-5 | Web: orders pipeline and order detail                                            | Todo        | ORD-3, WEB-2   |      |                                                                                                                                                                                               |
 | ORD-6 | Public order link page and endpoint (Turnstile, limits)                          | Todo        | ORD-3          |      | Design needed                                                                                                                                                                                 |
-| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | Todo        | ORD-3          |      | D21; item quantities and money checks required                                                                                                                                                |
+| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | In progress | ORD-3          |      | D21; item quantities and money checks required                                                                                                                                                |
 
 ## M7. AI layer
 
