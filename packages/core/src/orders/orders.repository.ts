@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 
 import type { OrderListQuery } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
