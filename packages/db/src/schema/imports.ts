@@ -54,11 +54,11 @@ export const imports = pgTable(
     finishedAt: timestamptz('finished_at'),
     // The running job's lease, renewed after each batch, so a redelivered job never runs beside it.
     claimedAt: timestamptz('claimed_at'),
-    // The last time a run made progress; the sweep judges a stalled import from it.
+    // Run progress and undo queue time let the sweep recover work without duplicating a live job.
     lastProgressAt: timestamptz('last_progress_at'),
-    // How often the sweep re-queued the import after it stalled.
-    // Set when the undo job has removed every contact it may; until then undo can be asked again.
+    // Set when the undo job has finished; recovery keeps unfinished undo work queued.
     undoFinishedAt: timestamptz('undo_finished_at'),
+    // How often the sweep re-queued the import after it stalled.
     requeueCount: integer('requeue_count').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -84,6 +84,9 @@ export const imports = pgTable(
       .on(table.storeId)
       .where(sql`${table.status} = 'importing'`),
     index('imports_started_by_user_id_idx').on(table.startedByUserId),
+    index('imports_pending_undo_idx')
+      .on(table.storeId, table.lastProgressAt, table.id)
+      .where(sql`${table.status} = 'undone' and ${table.undoFinishedAt} is null`),
     check('imports_kind', isOneOf(table.kind, importKinds)),
     check('imports_status', isOneOf(table.status, importStatuses)),
     check('imports_duplicate_mode', isOneOf(table.duplicateMode, importDuplicateModes)),
