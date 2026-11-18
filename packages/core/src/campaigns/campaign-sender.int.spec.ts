@@ -171,7 +171,9 @@ describe('Campaign sweep (Postgres)', () => {
       blocker.release();
       await sweep;
       vi.mocked(app.get(CampaignSendingRepository).listDueStores).mockRestore();
-      await admin.pool.query('delete from campaigns where store_id=$1', [store]);
+      await admin.pool.query('delete from campaigns where id=any($1::uuid[])', [
+        [locked, sameStore, other],
+      ]);
       await admin.pool.query('delete from stores where id=$1', [store]);
     }
   });
