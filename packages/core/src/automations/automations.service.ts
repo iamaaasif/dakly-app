@@ -208,7 +208,7 @@ export class AutomationsService {
       type: 'automation.paused',
       storeId,
       occurredAt: now.toISOString(),
-      payload: { automationId, reason: 'balance' },
+      payload: { automationId, automationName: paused.name, reason: 'balance' },
     });
   }
 
@@ -216,10 +216,8 @@ export class AutomationsService {
   // Valkey first: a retry after some emails went out sends the rest only. Until the email is sent
   // the claim is short; a retry that meets it emails the other owners and then fails, so a later
   // retry sends the email of a worker that died mid-send.
-  async emailBalancePause(storeId: string, automationId: string, eventId: string): Promise<void> {
-    const automation = await this.repository.find(storeId, automationId);
-    if (automation?.status !== 'paused' || automation.pauseReason !== 'balance') return;
-    const { title, body } = balancePauseNotice(automation.name);
+  async emailBalancePause(storeId: string, automationName: string, eventId: string): Promise<void> {
+    const { title, body } = balancePauseNotice(automationName);
     const text = `${body}\n${loadEnv().WEB_ORIGINS[0]}${TOP_UP_PATH}`;
     const owners = await this.users.profiles(
       await this.team.userIdsWithPermission(storeId, 'billing.edit'),

@@ -1983,6 +1983,24 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect((await status()).rows).toEqual([
         { status: 'active', pause_reason: null, balance_resumed_at: databaseNow },
       ]);
+
+      const { rows } = await admin.pool.query(
+        "select id,type,payload,occurred_at from outbox_events where store_id=$1 and type='automation.paused' and payload->>'automationId'=$2",
+        [storeId, automationId],
+      );
+      expect(rows).toHaveLength(1);
+      const [pause] = rows;
+      const earlier = await mailTo(ownerEmail);
+      const event = {
+        id: pause.id,
+        type: pause.type,
+        storeId,
+        occurredAt: pause.occurred_at.toISOString(),
+        payload: pause.payload,
+      };
+      await runner.emailOwner(event);
+      await runner.emailOwner(event);
+      expect(await mailTo(ownerEmail)).toHaveLength(earlier.length + 1);
     });
 
     it('keeps the workflow active when the old version stops at a short balance gate', async () => {
