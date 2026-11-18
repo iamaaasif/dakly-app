@@ -276,20 +276,19 @@ export class AutomationRunsService {
     if (!step.channels.includes('sms'))
       return { decision: { action: 'skip', reason: 'window_closed' } };
     await this.wallets.lockForReservation(storeId, 'sms_credits');
-    const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
-      contactId,
-      channel: 'sms',
-      category: step.category,
-    });
-    if (
-      !(await this.repository.moveRunIfLive(
-        storeId,
-        claim,
-        { status: 'running', claimedAt: claim.claimedAt },
-        'first_send',
-      ))
-    )
-      return 'not_live';
+    const checked = await this.sendPolicy.checkForSend(
+      storeId,
+      { contactId, channel: 'sms', category: step.category },
+      () =>
+        this.repository.moveRunIfLive(
+          storeId,
+          claim,
+          { status: 'running', claimedAt: claim.claimedAt },
+          'first_send',
+        ),
+    );
+    if (!checked) return 'not_live';
+    const { decision, destination, at } = checked;
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);

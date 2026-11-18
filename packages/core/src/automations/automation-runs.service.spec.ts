@@ -255,11 +255,14 @@ describe('AutomationRunsService', () => {
     };
     const sendPolicy = {
       check: async () => decision,
-      checkForSend: async () => ({
-        decision,
-        destination: contactPhone,
-        at: clockNow,
-      }),
+      checkForSend: async (
+        _storeId: string,
+        _request: unknown,
+        lockSource: () => Promise<boolean>,
+      ) => {
+        if (!(await lockSource())) return undefined;
+        return { decision, destination: contactPhone, at: clockNow };
+      },
       recheckForSend: async (
         _storeId: string,
         _request: unknown,

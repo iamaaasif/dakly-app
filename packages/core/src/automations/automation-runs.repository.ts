@@ -230,10 +230,10 @@ export class AutomationRunsRepository {
     change: RunChange,
     gate?: 'first_send' | 'retry',
   ): Promise<boolean> {
-    // A first send may have to write the pause itself. A retry holds the workflow until
-    // its dispatch commits so a pause and a new dispatch cannot pass each other.
+    // A first send may write the pause itself. Both gates hold the workflow until their
+    // dispatch commits so a pause and a new dispatch cannot pass each other.
     const lock = {
-      first_send: sql`for share of ${automationVersions}`,
+      first_send: sql`for no key update of ${automations} for share of ${automationVersions}`,
       retry: sql`for share of ${automations}, ${automationVersions}`,
     };
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}

@@ -26,6 +26,7 @@ export type SendRequest = {
 
 export type SendDecision =
   { action: 'send' } | { action: 'defer'; until: Date } | { action: 'skip'; reason: SkipReason };
+type DispatchDecision = { decision: SendDecision; destination: string | null; at: Date };
 
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
@@ -54,9 +55,20 @@ export class SendPolicyService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // Check eligibility and freeze the destination after the contact locks.
-  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+  // Decide and freeze the destination after the contact and any caller-specific locks.
+  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>): Promise<DispatchDecision>;
+  async checkForSend(
+    storeId: string,
+    request: Omit<SendRequest, 'at'>,
+    lockSource: () => Promise<boolean>,
+  ): Promise<DispatchDecision | undefined>;
+  async checkForSend(
+    storeId: string,
+    request: Omit<SendRequest, 'at'>,
+    lockSource?: () => Promise<boolean>,
+  ): Promise<DispatchDecision | undefined> {
     const exists = await this.lockForDispatch(storeId, request.contactId);
+    if (lockSource && !(await lockSource())) return undefined;
     const at = this.clock.now();
     if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.evaluateAudience(

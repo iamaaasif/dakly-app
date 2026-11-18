@@ -2226,6 +2226,43 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
     });
 
+    it('checks quiet hours after the workflow version lock on the first send', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      clockNow = new Date(opensAt.getTime() + 11 * HOUR);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const id = runId!;
+      const blocker = await admin.pool.connect();
+      let pending: Promise<void> | undefined;
+      try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query(
+          'select id from automation_versions where id=(select version_id from automation_runs where id=$1) for update',
+          [id],
+        );
+        pending = runDueStep(runner, id);
+        void pending.catch(() => undefined);
+        await waitForBlocker(pid);
+        clockNow = new Date(clockNow.getTime() + HOUR);
+        await blocker.query('rollback');
+        await pending;
+
+        expect(sentFor(id)).toEqual([]);
+        expect(await sendStep(id)).toEqual([]);
+        expect(await ledgerFor(id)).toEqual([]);
+        expect(await run(id)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await pending;
+      }
+    });
+
     it('keeps the workflow active when the old version stops at a short balance gate', async () => {
       await setCredits(0);
       const runner = await worker();
