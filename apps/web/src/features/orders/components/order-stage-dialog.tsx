@@ -92,7 +92,7 @@ export function OrderStageDialog({
     >
       <FormProvider {...form}>
         <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
-          <fieldset disabled={pending} className="space-y-3">
+          <fieldset disabled={pending} className="min-w-0 space-y-3 wrap-anywhere">
             <StageFields action={action} order={order} />
           </fieldset>
           {error && (

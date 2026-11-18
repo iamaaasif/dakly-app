@@ -19,6 +19,11 @@ async function capture(page: Page, name: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
+    await expect
+      .poll(() =>
+        page.getByRole('dialog').evaluate((dialog) => dialog.scrollWidth - dialog.clientWidth),
+      )
+      .toBe(0);
     await page.screenshot({
       path: resolve(evidence, `${name}-${width}.png`),
       animations: 'disabled',
@@ -37,6 +42,7 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
   const orderId = randomUUID();
   const productId = randomUUID();
   const variantId = randomUUID();
+  const panjabi = 'CottonPanjabi'.repeat(9);
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -49,8 +55,8 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     });
     expect(selected.status()).toBe(204);
     await database.pool.query(
-      "insert into products (id,store_id,name,price_poisha,is_stock_tracked) values ($1,$2,'Cotton Panjabi',125000,true)",
-      [productId, storeId],
+      'insert into products (id,store_id,name,price_poisha,is_stock_tracked) values ($1,$2,$3,125000,true)',
+      [productId, storeId, panjabi],
     );
     await database.pool.query(
       "insert into product_variants (id,store_id,product_id,title,on_hand,reserved) values ($1,$2,$3,'M',5,2)",
@@ -67,8 +73,8 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await database.pool.query(
       `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,
         unit_price_poisha,is_stock_tracked)
-        values ($1,$2,$3,$4,'Cotton Panjabi','M',2,125000,true)`,
-      [randomUUID(), storeId, orderId, variantId],
+        values ($1,$2,$3,$4,$5,'M',2,125000,true)`,
+      [randomUUID(), storeId, orderId, variantId, panjabi],
     );
 
     await page.goto('/orders?stage=to_pack');
@@ -91,7 +97,7 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
 
     await detail.getByRole('button', { name: 'Partly delivered' }).click();
     const partial = page.getByRole('dialog', { name: 'Partly delivered' });
-    await partial.getByLabel('Cotton Panjabi · M · delivered out of 2').fill('1');
+    await partial.getByLabel(`${panjabi} · M · delivered out of 2`).fill('1');
     await partial.getByLabel('Delivery note').fill('One item was sent back');
     await capture(page, 'partial');
     await partial.getByRole('button', { name: 'Partly delivered' }).click();
