@@ -8,10 +8,9 @@ import {
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
-  type OrderReturnRisk,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
-import { maskPhone } from '@dakly/contracts/phone';
+import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
@@ -24,15 +23,20 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { applyOrderFulfilment } from './order-fulfilment';
+import { moveOrderReservations } from './order-reservations';
+import { returnRisk } from './order-risk';
 import {
   canEditOrder,
   isSyncedOrder,
+  orderStageCounts,
   orderStageHistory,
   orderStageTransitions,
+  productArchiveStages,
   recordOrderStage,
   stageWrite,
+  stagesForOrderTab,
 } from './order-stage';
-import { orderTotals } from './order-totals';
+import { orderTotalPoisha, orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
@@ -57,6 +61,15 @@ export class OrdersService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
+
+  archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
+    return this.transaction.run(storeId, async () => {
+      const variantIds = await this.products.lockArchiveVariants(storeId, productId);
+      if (await this.repository.hasItemsInStages(storeId, variantIds, productArchiveStages))
+        throw orderError('PRODUCT_HAS_OPEN_ORDERS');
+      await this.products.remove(storeId, productId, actor);
+    });
+  }
 
   createOrder(
     storeId: string,
@@ -150,7 +163,12 @@ export class OrdersService {
         variantIds: items.map(({ variantId }) => variantId),
         since: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       });
-      await this.moveReservations(storeId, orderId, { before: previous, after: items }, { actor });
+      await moveOrderReservations(
+        storeId,
+        this.products,
+        { orderId, actor },
+        { before: previous, after: items },
+      );
       await this.repository.saveItems(
         storeId,
         orderId,
@@ -174,8 +192,17 @@ export class OrdersService {
     });
   }
 
-  async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
-    const rows = await this.repository.list(storeId, query);
+  async list(
+    storeId: string,
+    query: OrderListQuery,
+    seeFullPhone = false,
+  ): Promise<OrderListResponse> {
+    const overdueBefore = new Date(this.clock.now().getTime() - 12 * 60 * 60 * 1000);
+    const parsedPhone = bdMobileSchema.safeParse(query.search);
+    const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
+    const { stage, ...filters } = query;
+    const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
+    const rows = await this.repository.list(storeId, { ...filters, stages }, overdueBefore, phone);
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
@@ -184,22 +211,14 @@ export class OrdersService {
     const items = page.map(({ recipientPhone, createdAt, ...row }) => ({
       ...row,
       createdAt: createdAt.toISOString(),
+      totalPoisha: orderTotalPoisha(row),
       returnRisk: returnRisk(byPhone.get(recipientPhone)),
+      isWaitingForConfirmation: row.stage === 'to_confirm' && createdAt < overdueBefore,
     }));
-    const counts = {
-      to_confirm: 0,
-      on_hold: 0,
-      to_pack: 0,
-      with_courier: 0,
-      delivered: 0,
-      partially_delivered: 0,
-      returned: 0,
-      cancelled: 0,
-    };
-    for (const row of await this.repository.countByStage(storeId)) counts[row.stage] = row.count;
     return {
       items,
-      counts,
+      counts: orderStageCounts(await this.repository.countByStage(storeId)),
+      alerts: await this.repository.alertTotals(storeId, overdueBefore),
       nextCursor: rows.length > query.limit ? (items.at(-1)?.number ?? null) : null,
     };
   }
@@ -218,6 +237,7 @@ export class OrdersService {
       deliveredAt: isoTime(order.deliveredAt),
       returnedAt: isoTime(order.returnedAt),
       codCollectedAt: isoTime(order.codCollectedAt),
+      totalPoisha: orderTotalPoisha(order),
       returnRisk: returnRisk(outcomes[0]),
       items: await this.repository.items(storeId, orderId),
       timeline,
@@ -239,11 +259,11 @@ export class OrdersService {
       const now = this.clock.now();
       const confirmed = change.to === 'to_pack' && !order.confirmedAt;
       if (change.to === 'cancelled') {
-        await this.moveReservations(
+        await moveOrderReservations(
           storeId,
-          orderId,
+          this.products,
+          { orderId, actor, reason: change.reason },
           { before: await this.repository.items(storeId, orderId), after: [] },
-          { actor, reason: change.reason },
         );
       }
       const fulfilment = await applyOrderFulfilment(
@@ -316,7 +336,12 @@ export class OrdersService {
   ): Promise<void> {
     const { id, createdAt, buyerContactId } = order;
     await this.repository.insert(storeId, order);
-    await this.moveReservations(storeId, id, { before: [], after: items }, { actor });
+    await moveOrderReservations(
+      storeId,
+      this.products,
+      { orderId: id, actor },
+      { before: [], after: items },
+    );
     await this.repository.insertItems(
       storeId,
       id,
@@ -380,36 +405,6 @@ export class OrdersService {
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
-
-  private async moveReservations(
-    storeId: string,
-    orderId: string,
-    { before, after }: { before: OrderItemWrite[]; after: OrderItemWrite[] },
-    { actor, reason }: { actor: AuditEntry['actor']; reason?: string },
-  ): Promise<void> {
-    const deltas = new Map<string, number>();
-    for (const item of before)
-      if (item.isStockTracked)
-        deltas.set(item.variantId, (deltas.get(item.variantId) ?? 0) - item.quantity);
-    for (const item of after)
-      if (item.isStockTracked)
-        deltas.set(item.variantId, (deltas.get(item.variantId) ?? 0) + item.quantity);
-    for (const [variantId, delta] of [...deltas].sort(([a], [b]) => a.localeCompare(b))) {
-      if (delta === 0) continue;
-      await this.products.moveStock(storeId, variantId, {
-        kind: delta > 0 ? 'reserve' : 'release',
-        quantity: Math.abs(delta),
-        reference: { orderId, actor, reason },
-      });
-    }
-  }
-}
-
-function returnRisk(outcome?: { parcels: number; returned: number }): OrderReturnRisk {
-  if (!outcome) return 'new_customer';
-  if (outcome.parcels < 2) return null;
-  if (2 * outcome.returned >= outcome.parcels) return 'high';
-  return 5 * outcome.returned <= outcome.parcels ? 'good' : 'some_returns';
 }
 
 function isoTime(value: Date | null): string | null {

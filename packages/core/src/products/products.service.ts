@@ -24,6 +24,7 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { productError } from './products.errors';
 import {
   type CatalogueProduct,
@@ -50,6 +51,8 @@ export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
   constructor(
     @Inject(ProductsRepository) private readonly repository: ProductsRepository,
+    @Inject(ProductOrderVariantsRepository)
+    private readonly orderVariantRepository: ProductOrderVariantsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
@@ -115,11 +118,17 @@ export class ProductsService {
     });
   }
 
+  async lockArchiveVariants(storeId: string, productId: string): Promise<string[]> {
+    const ids = await this.orderVariantRepository.lockArchiveVariants(storeId, productId);
+    if (!ids) throw productError('PRODUCT_NOT_FOUND');
+    return ids;
+  }
+
   orderVariants(storeId: string, variantIds: string[], existingIds: string[]) {
     return this.transaction.run(storeId, async () => {
-      await this.repository.lockVariants(storeId, [...variantIds, ...existingIds]);
+      await this.orderVariantRepository.lockVariants(storeId, [...variantIds, ...existingIds]);
       if (!variantIds.length) return [];
-      const variants = await this.repository.orderVariants(storeId, variantIds);
+      const variants = await this.orderVariantRepository.orderVariants(storeId, variantIds);
       if (variants.length !== variantIds.length) throw productError('PRODUCT_VARIANT_NOT_FOUND');
       return variants;
     });
