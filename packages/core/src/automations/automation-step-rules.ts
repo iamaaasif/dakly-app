@@ -21,6 +21,9 @@ import { wakeTime } from './automation-waits';
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 
+export type Condition = AutomationGraph['workflowFilters'][number];
+export type PathChoice = { outcome: string; next: string };
+
 export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
 export type RunFacts = {
