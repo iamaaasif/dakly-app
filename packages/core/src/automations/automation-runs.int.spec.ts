@@ -1502,6 +1502,63 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await balance()).toBe(before - 1);
     });
 
+    it('applies the current marketing cap when an uncertain attempt ages out', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      clockNow = new Date(opensAt.getTime() - 24 * HOUR);
+      const {
+        runIds: [earlier],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, earlier!);
+
+      clockNow = new Date(clockNow.getTime() + 25 * HOUR);
+      const {
+        runIds: [newer],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      await runDueStep(runner, newer!);
+      expect(sentFor(newer!)).toHaveLength(1);
+
+      await wakeNow(earlier!);
+      await runDueStep(runner, earlier!);
+      expect(sentFor(earlier!)).toEqual([]);
+      expect(await sendStep(earlier!)).toEqual([
+        expect.objectContaining({ outcome: 'unconfirmed', skip_reason: 'frequency_cap' }),
+      ]);
+      expect(await ledgerFor(earlier!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+    });
+
+    it('counts a later uncertain retry without extending the original deadline', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const firstTriedAt = new Date(opensAt.getTime() - 24 * HOUR);
+      clockNow = firstTriedAt;
+      const {
+        runIds: [earlier],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, earlier!);
+
+      clockNow = new Date(firstTriedAt.getTime() + 25 * HOUR);
+      await wakeNow(earlier!);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, earlier!);
+      const timings = await admin.pool.query(
+        'select first_tried_at, sent_at from automation_run_steps where run_id=$1 and kind=$2',
+        [earlier, 'send'],
+      );
+      expect(timings.rows).toEqual([{ first_tried_at: firstTriedAt, sent_at: clockNow }]);
+
+      const {
+        runIds: [newer],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      await runDueStep(runner, newer!);
+      expect(sentFor(newer!)).toEqual([]);
+      expect(await sendStep(newer!)).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' }),
+      ]);
+    });
+
     // Last: it drains the store's credits.
     it('charges the credits a sent SMS reserved, and skips a send the balance cannot cover', async () => {
       const runner = await worker();

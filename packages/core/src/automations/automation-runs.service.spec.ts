@@ -98,7 +98,8 @@ class FakeRunsRepository {
     const step = this.steps.find((row) => row.stepKey === stepKey && row.outcome === 'sending');
     return (
       step && {
-        sentAt: step.sentAt!,
+        id: step.id!,
+        firstTriedAt: step.firstTriedAt ?? step.sentAt!,
         optOutCode: step.optOutCode ?? null,
         destination: step.destination ?? null,
       }

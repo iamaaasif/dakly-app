@@ -334,6 +334,7 @@ export class AutomationRunsService {
       outcome: 'sending',
       channel: 'sms',
       sentAt: now,
+      firstTriedAt: now,
       optOutCode: optOut?.code,
       destination,
     });
@@ -378,23 +379,31 @@ export class AutomationRunsService {
 
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
     const { storeId, contactId, wakeAt } = facts;
-    const { sentAt, optOutCode, destination } = started;
-    const preparedSender = endExpiredRetry(step, sentAt, wakeAt, this.clock.now())
+    const { firstTriedAt, optOutCode, destination } = started;
+    const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, this.clock.now())
       ? undefined
       : await this.messaging.prepareSender(storeId);
     const gated = await this.transaction.run(storeId, async () => {
       const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
-      const early = endExpiredRetry(step, sentAt, wakeAt, this.clock.now());
-      const result = early ?? (await this.recheckResend(step, facts, sentAt));
+      const early = endExpiredRetry(step, firstTriedAt, wakeAt, this.clock.now());
+      const result = early ?? (await this.recheckResend(step, facts, started));
       const claimedAt = this.clock.now();
       const renewal = { status: 'running', claimedAt } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return undefined;
-      return { result, claim: { ...claim, claimedAt } };
+      if (result) return { result, claim: { ...claim, claimedAt }, at: claimedAt };
+      const renewed = { ...claim, claimedAt };
+      await this.repository.changeStep(storeId, claim.runId, claim.stepKey, {
+        outcome: 'sending',
+        sentAt: claimedAt,
+        firstTriedAt,
+      });
+      const afterWrite = this.clock.now();
+      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
+      return { result, claim: { ...claim, claimedAt: afterWrite }, at: claimedAt };
     });
     if (!gated) return this.heldOrStale(storeId, claim, this.clock.now());
     if (gated.result) return { ...gated.result, claim: gated.claim };
-    const optOutUrl = optOutCode ? this.links.optOutUrl(optOutCode) : undefined;
     return deliverAutomationSms(
       { messaging: this.messaging, reporter: this.reporter, clock: this.clock },
       {
@@ -402,22 +411,22 @@ export class AutomationRunsService {
         claim: gated.claim,
         contactId,
         step,
-        body: messageBody(step, optOutUrl),
+        body: messageBody(step, optOutCode ? this.links.optOutUrl(optOutCode) : undefined),
         destination,
         preparedSender,
         isFirstTry: false,
       },
-      sentAt,
-      gated.claim.claimedAt,
+      firstTriedAt,
+      gated.at,
     );
   }
 
-  private async recheckResend(step: SendStep, facts: RunFacts, firstTriedAt: Date) {
-    const { decision, at } = await this.sendPolicy.recheckForSend(facts.storeId, {
-      contactId: facts.contactId,
-      channel: 'sms',
-      category: step.category,
-    });
+  private async recheckResend(step: SendStep, facts: RunFacts, { id, firstTriedAt }: SendingStep) {
+    const { decision, at } = await this.sendPolicy.recheckForSend(
+      facts.storeId,
+      { contactId: facts.contactId, channel: 'sms', category: step.category },
+      id,
+    );
     const exit = await this.refreshExitReason(facts, at);
     const now = this.clock.now();
     if (exit) return endWithUnknownOutcome(exited(exit, now));

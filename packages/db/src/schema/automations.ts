@@ -207,6 +207,8 @@ export const automationRunSteps = pgTable(
     optOutCode: text('opt_out_code'),
     // The phone the send was decided for; a retry refuses a contact whose phone changed since.
     destination: text('destination'),
+    // The retry deadline uses the first submission; the cap uses the latest dispatch.
+    firstTriedAt: timestamptz('first_tried_at'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),

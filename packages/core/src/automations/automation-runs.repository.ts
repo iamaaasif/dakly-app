@@ -58,15 +58,22 @@ export type NewRunStep = {
   destination?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
+  firstTriedAt?: Date;
 };
 export type RunStepChange = {
   outcome: string;
   providerMessageId?: string;
   skipReason?: SkipReason;
   sentAt?: Date;
+  firstTriedAt?: Date;
 };
 // A send handed to the provider whose outcome is not known yet.
-export type SendingStep = { sentAt: Date; optOutCode: string | null; destination: string | null };
+export type SendingStep = {
+  id: string;
+  firstTriedAt: Date;
+  optOutCode: string | null;
+  destination: string | null;
+};
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -144,6 +151,8 @@ export class AutomationRunsRepository {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
+          id: automationRunSteps.id,
+          firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
           optOutCode: automationRunSteps.optOutCode,
           destination: automationRunSteps.destination,
@@ -159,7 +168,9 @@ export class AutomationRunsRepository {
         )
         .limit(1),
     );
-    return row?.sentAt ? { ...row, sentAt: row.sentAt } : undefined;
+    if (!row) return undefined;
+    const firstTriedAt = row.firstTriedAt ?? row.sentAt;
+    return firstTriedAt ? { ...row, firstTriedAt } : undefined;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {

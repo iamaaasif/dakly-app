@@ -1,5 +1,5 @@
 {
-  "id": "85cfa731-5121-4992-902e-2647be8de496",
+  "id": "0fdc91d1-72a7-4b1d-9963-f65b5687515a",
   "prevId": "48ca5aa9-51cd-474c-b097-654299076546",
   "version": "7",
   "dialect": "postgresql",
@@ -4352,6 +4352,12 @@
         "destination": {
           "name": "destination",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_tried_at": {
+          "name": "first_tried_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

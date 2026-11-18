@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import { automationRunSteps } from '@dakly/db/schema/automations';
@@ -14,7 +14,13 @@ export type MarketingSend = {
   sentAt: Date;
 };
 
-type SendWindow = { storeId: string; contactIds: string[]; after: Date; until: Date };
+type SendWindow = {
+  storeId: string;
+  contactIds: string[];
+  after: Date;
+  until: Date;
+  excludeWorkflowStepId?: string;
+};
 
 // Read-only: the frequency cap counts campaign and workflow sends together from Postgres (A2).
 @Injectable()
@@ -34,10 +40,9 @@ export class SendingRepository {
   listMarketingSends(
     storeId: string,
     contactIds: string[],
-    after: Date,
-    until: Date,
+    range: Omit<SendWindow, 'storeId' | 'contactIds'>,
   ): Promise<MarketingSend[]> {
-    const window = { storeId, contactIds, after, until };
+    const window = { storeId, contactIds, ...range };
     return this.database.forStore(storeId, async (tx) => {
       const sends = [...(await campaignSends(tx, window)), ...(await workflowSends(tx, window))];
       // A recipient still in sending is a send happening now. Workflow steps always have a
@@ -45,7 +50,7 @@ export class SendingRepository {
       return sends.map((send) => ({
         contactId: send.contactId,
         channel: send.channel as MarketingSend['channel'],
-        sentAt: send.sentAt ?? until,
+        sentAt: send.sentAt ?? range.until,
       }));
     });
   }
@@ -84,7 +89,10 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
 }
 
 // Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
-function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
+function workflowSends(
+  tx: Transaction,
+  { storeId, contactIds, after, until, excludeWorkflowStepId }: SendWindow,
+) {
   return tx
     .select({
       contactId: automationRunSteps.contactId,
@@ -99,6 +107,7 @@ function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: S
         gt(automationRunSteps.sentAt, after),
         lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
+        excludeWorkflowStepId ? ne(automationRunSteps.id, excludeWorkflowStepId) : undefined,
         eq(automationRunSteps.category, 'marketing'),
         inArray(automationRunSteps.outcome, ['sending', 'sent', 'unconfirmed']),
       ),

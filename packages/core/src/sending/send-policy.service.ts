@@ -82,11 +82,13 @@ export class SendPolicyService {
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
-  // A retry keeps its first reservation and already counts toward the cap.
-  async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+  // A retry keeps its reservation and replaces its prior count with the new dispatch.
+  async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>, workflowStepId: string) {
     const exists = await this.lockForDispatch(storeId, request.contactId);
     const at = this.clock.now();
-    const decision = exists ? await this.recheck(storeId, { ...request, at }) : skip('no_address');
+    const decision = exists
+      ? await this.recheck(storeId, { ...request, at }, workflowStepId)
+      : skip('no_address');
     return { decision, at };
   }
 
@@ -102,13 +104,21 @@ export class SendPolicyService {
     }
   }
 
-  private async recheck(storeId: string, request: SendRequest): Promise<SendDecision> {
+  private async recheck(
+    storeId: string,
+    request: SendRequest,
+    workflowStepId: string,
+  ): Promise<SendDecision> {
     const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
-    const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
-    return quietUntil ? { action: 'defer', until: quietUntil } : SEND;
+    const { contactId, channel, at } = request;
+    const limit = await this.audienceLimits(
+      storeId,
+      { contactIds: [contactId], channel, at },
+      workflowStepId,
+    );
+    return limit(contactId);
   }
 
   private async recipientReason(
@@ -141,7 +151,7 @@ export class SendPolicyService {
       : [];
     const consentOf = new Map(consents.map((row) => [row.contactId, row.status]));
     const limits = isMarketing
-      ? await this.audienceLimits(storeId, contactIds, channel, at)
+      ? await this.audienceLimits(storeId, { contactIds, channel, at })
       : undefined;
     return contactIds.map((contactId) => {
       const contact = contacts.get(contactId);
@@ -159,15 +169,14 @@ export class SendPolicyService {
 
   private async audienceLimits(
     storeId: string,
-    contactIds: string[],
-    channel: SendChannel,
-    at: Date,
+    { contactIds, channel, at }: Pick<AudienceRequest, 'contactIds' | 'channel' | 'at'>,
+    excludeWorkflowStepId?: string,
   ): Promise<(contactId: string) => SendDecision> {
     const settings = await this.stores.sendingSettings(storeId);
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
     if (quietUntil) return () => ({ action: 'defer', until: quietUntil });
     const sendsOf = new Map<string, MarketingSend[]>();
-    for (const send of await this.listWeekOfSends(storeId, contactIds, at)) {
+    for (const send of await this.listWeekOfSends(storeId, contactIds, at, excludeWorkflowStepId)) {
       const own = sendsOf.get(send.contactId);
       if (own) own.push(send);
       else sendsOf.set(send.contactId, [send]);
@@ -178,13 +187,17 @@ export class SendPolicyService {
         : SEND;
   }
 
-  private listWeekOfSends(storeId: string, contactIds: string[], at: Date) {
-    return this.repository.listMarketingSends(
-      storeId,
-      contactIds,
-      new Date(at.getTime() - 7 * 24 * HOUR_MS),
-      at,
-    );
+  private listWeekOfSends(
+    storeId: string,
+    contactIds: string[],
+    at: Date,
+    excludeWorkflowStepId?: string,
+  ) {
+    return this.repository.listMarketingSends(storeId, contactIds, {
+      after: new Date(at.getTime() - 7 * 24 * HOUR_MS),
+      until: at,
+      excludeWorkflowStepId,
+    });
   }
 }
 

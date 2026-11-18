@@ -25,7 +25,7 @@ type Contact = {
 describe('SendPolicyService', () => {
   let contact: Contact | undefined;
   let consent: 'granted' | 'withdrawn' | 'not_answered' | undefined;
-  let sends: MarketingSend[];
+  let sends: (MarketingSend & { workflowStepId?: string })[];
   let isTransactionOpen: boolean;
   let service: SendPolicyService;
   let clockAt: Date;
@@ -62,10 +62,27 @@ describe('SendPolicyService', () => {
     // Mirrors the repository's window: after the first date, up to and including the second.
     const repository = {
       lockContact: async () => afterLock(),
-      listMarketingSends: async (_storeId: string, ids: string[], after: Date, until: Date) =>
+      listMarketingSends: async (
+        _storeId: string,
+        ids: string[],
+        {
+          after,
+          until,
+          excludeWorkflowStepId,
+        }: {
+          after: Date;
+          until: Date;
+          excludeWorkflowStepId?: string;
+        },
+      ) =>
         ids.flatMap((contactId) =>
           sends
-            .filter((send) => send.sentAt > after && send.sentAt <= until)
+            .filter(
+              (send) =>
+                send.sentAt > after &&
+                send.sentAt <= until &&
+                (!excludeWorkflowStepId || send.workflowStepId !== excludeWorkflowStepId),
+            )
             .map((send) => ({ ...send, contactId })),
         ),
     };
@@ -235,9 +252,10 @@ describe('SendPolicyService', () => {
   });
 
   it('rechecks consent and quiet hours after the lock without counting the resend twice', async () => {
-    sends.push(sentBefore(1));
+    const stepId = 'earlier-step';
+    sends.push({ ...sentBefore(1), workflowStepId: stepId });
     const retry = { contactId: CONTACT_ID, channel: 'sms', category: 'marketing' } as const;
-    expect(await service.recheckForSend(STORE_ID, retry)).toEqual({
+    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'send' },
       at: NOON_DHAKA,
     });
@@ -245,7 +263,7 @@ describe('SendPolicyService', () => {
     afterLock = () => {
       clockAt = late;
     };
-    expect(await service.recheckForSend(STORE_ID, retry)).toEqual({
+    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'defer', until: new Date('2026-11-17T03:00:00Z') },
       at: late,
     });
@@ -253,7 +271,7 @@ describe('SendPolicyService', () => {
       consent = 'withdrawn';
       clockAt = NOON_DHAKA;
     };
-    expect(await service.recheckForSend(STORE_ID, retry)).toEqual({
+    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'skip', reason: 'no_consent' },
       at: NOON_DHAKA,
     });
