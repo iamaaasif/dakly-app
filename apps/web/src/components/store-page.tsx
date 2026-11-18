@@ -7,6 +7,8 @@ type StorePageProps = {
   permission:
     | 'canViewProducts'
     | 'canViewOrders'
+    | 'canViewCampaigns'
+    | 'canEditCampaigns'
     | 'canViewCustomers'
     | 'canCreateCustomer'
     | 'canApproveSupport'
