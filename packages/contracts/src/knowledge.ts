@@ -10,7 +10,12 @@ export const knowledgeUploadSchema = z.strictObject({
 export type KnowledgeUploadInput = z.infer<typeof knowledgeUploadSchema>;
 export type KnowledgeUploadResponse = { fileId: string; uploadUrl: string };
 
-const answer = z.string().trim().min(1).max(20_000);
+const answer = z
+  .string()
+  .trim()
+  .min(1)
+  .max(20_000)
+  .refine((text) => !text.includes('\u0000'), 'Remove the null character');
 const fileId = z.uuid();
 
 export const createKnowledgeItemSchema = z.discriminatedUnion('kind', [

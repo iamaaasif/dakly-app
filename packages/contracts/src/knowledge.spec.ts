@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { createKnowledgeItemSchema, listKnowledgeItemsQuerySchema } from './knowledge';
+import {
+  changeKnowledgeItemSchema,
+  createKnowledgeItemSchema,
+  knowledgeFileBytes,
+  knowledgeUploadSchema,
+  listKnowledgeItemsQuerySchema,
+} from './knowledge';
 
 describe('knowledge item input', () => {
   const fileId = '9e75f9f4-ccbb-45d9-8fb7-7f19e39af6db';
@@ -25,6 +31,33 @@ describe('knowledge item input', () => {
     { kind: 'policy', answer: '  ' },
   ])('rejects a mixed or invalid item', (input) => {
     expect(createKnowledgeItemSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('rejects a null character in new or changed text', () => {
+    const answer = 'ঢাকা\u0000 ৬০ টাকা।';
+    expect(createKnowledgeItemSchema.safeParse({ kind: 'policy', answer }).success).toBe(false);
+    expect(changeKnowledgeItemSchema.safeParse({ answer }).success).toBe(false);
+  });
+
+  it('accepts only PDF or plain text uploads within the file size limit', () => {
+    expect(
+      knowledgeUploadSchema.safeParse({
+        contentType: 'application/pdf',
+        sizeBytes: knowledgeFileBytes,
+      }).success,
+    ).toBe(true);
+    expect(
+      knowledgeUploadSchema.safeParse({
+        contentType: 'text/plain',
+        sizeBytes: knowledgeFileBytes + 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      knowledgeUploadSchema.safeParse({
+        contentType: 'image/png',
+        sizeBytes: 100,
+      }).success,
+    ).toBe(false);
   });
 
   it('defaults to 50 items and rejects a requested page above 100', () => {

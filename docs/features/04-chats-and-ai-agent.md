@@ -118,7 +118,7 @@ Take over (or any reply typed by a person) switches the chat to human mode: the 
 
 ### Permissions
 
-View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Changing AI agent settings and knowledge: Owner and Admin only.
+View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Owners and admins change AI agent settings. Knowledge uses the store settings permission area.
 
 ### Events
 
@@ -376,9 +376,9 @@ Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_
 
 ### Knowledge items
 
-Owners and admins can add or edit typed policies and upload PDF or plain text
-files. Knowledge reads require `storeSettings.view` and changes require
-`storeSettings.edit`. Images and URLs are for later work.
+Knowledge supports typed policies and PDF or plain text files. Reads require
+`storeSettings.view` and changes require `storeSettings.edit`. Owner and Admin
+have edit access by default. Images and URLs are for later work.
 
 `POST /knowledge-items/uploads` creates a pending file and returns a signed
 PUT URL. Upload the file before creating or changing the knowledge item.
