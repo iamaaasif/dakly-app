@@ -25,7 +25,7 @@ export type AiRequest<T> = {
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
 } & (
-  | { purpose: BillablePurpose; usageReference?: string }
+  | { purpose: BillablePurpose; usageReference: string }
   | { purpose: Exclude<AiPurpose, BillablePurpose>; usageReference?: never }
 );
 
