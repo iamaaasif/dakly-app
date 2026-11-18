@@ -5,12 +5,11 @@ import { Button } from '@dakly/ui/button';
 import { useCampaign } from '../api/get-campaign';
 import { CampaignBuilder } from './campaign-builder';
 import { CampaignLoading } from './campaign-loading';
-import { StorePage } from '@/components/store-page';
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const campaign = useCampaign(campaignId);
   return (
-    <StorePage permission="canViewCampaigns">
+    <>
       {campaign.isPending && <CampaignLoading />}
       {campaign.isError && (
         <div role="alert" className="space-y-3 p-6">
@@ -30,6 +29,6 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />
         </div>
       )}
-    </StorePage>
+    </>
   );
 }

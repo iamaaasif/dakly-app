@@ -283,3 +283,64 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await database.pool.end();
   }
 });
+
+test('campaign routes update permissions after switching shops', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { token, storeIds } = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: [string, string];
+  };
+  const [ownerStore, supportStore] = storeIds;
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  let campaignId: string | undefined;
+
+  await context.addCookies([
+    { name: 'dakly_session', value: token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
+  ]);
+  async function post(path: string, data: unknown) {
+    const session = await (await context.request.get('/api/me/context')).json();
+    return context.request.post(`/api${path}`, {
+      data,
+      headers: { Origin: baseURL!, 'X-Session-Context': session.contextTag },
+    });
+  }
+
+  try {
+    expect((await post('/me/active-store', { storeId: ownerStore })).status()).toBe(204);
+    const created = await post('/campaigns', { name: 'Owner shop draft', channel: 'sms' });
+    expect(created.status()).toBe(201);
+    campaignId = ((await created.json()) as CampaignResponse).id;
+    const changed = await database.pool.query(
+      "update memberships set built_in_role='support_agent' where store_id=$1 and built_in_role='marketer'",
+      [supportStore],
+    );
+    expect(changed.rowCount).toBe(1);
+
+    for (const [path, heading] of [
+      ['/campaigns/new', 'New campaign'],
+      [`/campaigns/${campaignId}`, 'Owner shop draft'],
+    ]) {
+      expect((await post('/me/active-store', { storeId: supportStore })).status()).toBe(204);
+      await page.goto(path!);
+      await expect(
+        page.getByText('You do not have access to this action in the current shop.'),
+      ).toBeVisible();
+      await page.getByRole('combobox', { name: 'Current shop' }).selectOption(ownerStore);
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    }
+  } finally {
+    await database.pool.query(
+      "update memberships set built_in_role='marketer' where store_id=$1 and built_in_role='support_agent'",
+      [supportStore],
+    );
+    if (campaignId)
+      await database.pool.query('delete from campaigns where store_id=$1 and id=$2', [
+        ownerStore,
+        campaignId,
+      ]);
+    await database.pool.end();
+  }
+});
