@@ -41,18 +41,19 @@ export function useSaveCampaign() {
     onSuccess: async (saved, change, snapshot) => {
       const detail = campaignKeys.detail(contextTag, saved.id);
       await client.cancelQueries({ queryKey: detail, exact: true });
-      client.setQueryData<CampaignResponse | null>(detail, (current) => {
-        // Keep a detail read that changed the cache while the PATCH was outstanding.
-        if (
-          current !== snapshot?.before ||
-          current === null ||
-          (current && current.status !== 'draft')
-        )
-          return current;
-        return saved;
-      });
+      const current = getCachedCampaign(saved.id);
+      if (current?.status === 'draft' && current !== snapshot?.before) {
+        // The overlapping read could precede or follow the commit. Load the current draft
+        // before showing a saved state. A failed refresh leaves the detail available to retry.
+        await client.resetQueries({ queryKey: detail, exact: true, type: 'active' });
+      } else if (
+        current === snapshot?.before &&
+        (current === undefined || current?.status === 'draft')
+      ) {
+        client.setQueryData(detail, saved);
+        if ('id' in change) void client.invalidateQueries({ queryKey: detail, exact: true });
+      }
       await client.invalidateQueries({ queryKey: campaignKeys.list(contextTag) });
-      if ('id' in change) void client.invalidateQueries({ queryKey: detail, exact: true });
     },
   });
   return {

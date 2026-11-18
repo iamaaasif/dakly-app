@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -90,3 +90,46 @@ it.each([
 
   expect(client.getQueryData(queryKey)).toEqual(terminal);
 });
+
+it.each([true, false])(
+  'waits for the active detail to reconcile before completing the save (%s)',
+  async (readSucceeds) => {
+    const { client, queryKey, result } = setup();
+    let releaseSave!: (response: Response) => void;
+    let finishRead!: () => void;
+    const saveResponse = new Promise<Response>((resolve) => (releaseSave = resolve));
+    const authoritative = { ...saved, goal: 'win_back' } as const;
+    const read = vi.fn(
+      () =>
+        new Promise<CampaignResponse>((resolve, reject) => {
+          finishRead = () =>
+            readSucceeds ? resolve(authoritative) : reject(new Error('Detail unavailable'));
+        }),
+    );
+    const observer = new QueryObserver(client, {
+      queryKey,
+      queryFn: read,
+      staleTime: Infinity,
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    const fetch = vi.fn(() => saveResponse);
+    vi.stubGlobal('fetch', fetch);
+    try {
+      await act(async () => {
+        const pending = result.current.mutateAsync({ id, input: { name: saved.name } });
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+        client.setQueryData(queryKey, { ...original, goal: 'win_back' });
+        releaseSave(Response.json(saved, { headers: { 'x-session-context': contextTag } }));
+        await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+        expect(client.getQueryData(queryKey)).toBeUndefined();
+        finishRead();
+        await pending;
+      });
+      expect(client.getQueryData(queryKey)).toEqual(readSucceeds ? authoritative : undefined);
+      expect(observer.getCurrentResult().status).toBe(readSucceeds ? 'success' : 'error');
+    } finally {
+      unsubscribe();
+    }
+  },
+);
