@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
+import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { countSmsParts } from '@dakly/contracts/sms';
 
@@ -78,7 +80,11 @@ export class AutomationRunsService {
   }
 
   // Returns the claim on the next step when the run goes straight on, for its job to queue.
-  async continueRun(storeId: string, queued: RunClaim): Promise<RunClaim | undefined> {
+  async continueRun(
+    storeId: string,
+    queued: RunClaim,
+    actor: AuditEntry['actor'],
+  ): Promise<RunClaim | undefined> {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
@@ -97,7 +103,7 @@ export class AutomationRunsService {
       if (result.stepChange)
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
-        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, system);
+        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
       if (result.credits) await this.settleCredits(storeId, claim, result.credits);
       return true;
     });
@@ -181,7 +187,11 @@ export class AutomationRunsService {
 
   // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
   // filters.
-  private async exitReason(graph: AutomationGraph, facts: RunFacts, at: Date) {
+  private async exitReason(
+    graph: AutomationGraph,
+    facts: RunFacts,
+    at: Date,
+  ): Promise<AutomationExitReason | undefined> {
     const { goal, exitConditions, workflowFilters } = graph;
     if (goal && hasHappened(goal, facts)) return 'goal';
     if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';

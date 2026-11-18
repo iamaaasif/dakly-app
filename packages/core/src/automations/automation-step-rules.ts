@@ -1,3 +1,4 @@
+import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
@@ -103,7 +104,7 @@ export function goOn(next: string, now: Date) {
   } as const;
 }
 
-export function exited(exitReason: string, now: Date) {
+export function exited(exitReason: AutomationExitReason, now: Date) {
   return { run: { status: 'exited', exitReason, finishedAt: now } } as const;
 }
 

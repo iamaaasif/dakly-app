@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -28,6 +29,7 @@ describe('ProductsService stock ledger', () => {
     new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => now },
     {} as StoresService,
+    {} as FileStorageDriver,
   );
   beforeAll(() => f.setup());
   afterAll(async () => {

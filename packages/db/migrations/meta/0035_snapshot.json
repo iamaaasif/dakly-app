@@ -1,6 +1,6 @@
 {
-  "id": "2213aa88-b4a0-4054-a20d-9c21ecc3c7d8",
-  "prevId": "38a3ef76-31a1-419a-b5d0-76c829870279",
+  "id": "c43e2444-2f99-4b73-9685-659e036f26a5",
+  "prevId": "f96ef8bf-72f3-479f-9c30-f49620b2a2ad",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4337,12 +4337,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "category": {
-          "name": "category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "skip_reason": {
           "name": "skip_reason",
           "type": "text",
@@ -4566,15 +4560,11 @@
       "checkConstraints": {
         "automation_run_steps_kind": {
           "name": "automation_run_steps_kind",
-          "value": "\"automation_run_steps\".\"kind\" in ('trigger', 'wait', 'condition', 'random_split', 'send', 'action', 'goal', 'exit')"
-        },
-        "automation_run_steps_category": {
-          "name": "automation_run_steps_category",
-          "value": "\"automation_run_steps\".\"category\" in ('transactional', 'marketing')"
+          "value": "\"automation_run_steps\".\"kind\" in ('trigger', 'wait', 'condition', 'random', 'send', 'action', 'goal', 'exit')"
         },
         "automation_run_steps_skip_reason": {
           "name": "automation_run_steps_skip_reason",
-          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
+          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
         }
       },
       "isRLSEnabled": false
@@ -7277,7 +7267,7 @@
         },
         "campaign_recipients_skip_reason_value": {
           "name": "campaign_recipients_skip_reason_value",
-          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
+          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
         }
       },
       "isRLSEnabled": false
@@ -12424,6 +12414,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "import_id": {
+          "name": "import_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "deleted_at": {
           "name": "deleted_at",
           "type": "timestamp with time zone",
@@ -12640,6 +12636,27 @@
           "method": "btree",
           "with": {}
         },
+        "contacts_store_id_import_id_idx": {
+          "name": "contacts_store_id_import_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "import_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "contacts_deleted_at_idx": {
           "name": "contacts_deleted_at_idx",
           "columns": [
@@ -12683,6 +12700,21 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "contacts_import_id_store_fk": {
+          "name": "contacts_import_id_store_fk",
+          "tableFrom": "contacts",
+          "tableTo": "imports",
+          "columnsFrom": [
+            "store_id",
+            "import_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -12720,301 +12752,6 @@
         "contacts_birthday": {
           "name": "contacts_birthday",
           "value": "\"contacts\".\"birthday_day\" between 1 and 31 and \"contacts\".\"birthday_month\" between 1 and 12"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.imports": {
-      "name": "imports",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "store_id": {
-          "name": "store_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'uploaded'"
-        },
-        "file_id": {
-          "name": "file_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "column_mapping": {
-          "name": "column_mapping",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duplicate_mode": {
-          "name": "duplicate_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'update'"
-        },
-        "has_consent_confirmation": {
-          "name": "has_consent_confirmation",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "rows_total": {
-          "name": "rows_total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rows_added": {
-          "name": "rows_added",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rows_updated": {
-          "name": "rows_updated",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rows_skipped": {
-          "name": "rows_skipped",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rows_failed": {
-          "name": "rows_failed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "report_file_id": {
-          "name": "report_file_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "imports_store_id_created_at_idx": {
-          "name": "imports_store_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "imports_file_id_idx": {
-          "name": "imports_file_id_idx",
-          "columns": [
-            {
-              "expression": "file_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "imports_report_file_id_idx": {
-          "name": "imports_report_file_id_idx",
-          "columns": [
-            {
-              "expression": "report_file_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "imports_created_by_user_id_idx": {
-          "name": "imports_created_by_user_id_idx",
-          "columns": [
-            {
-              "expression": "created_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "imports_store_id_stores_id_fk": {
-          "name": "imports_store_id_stores_id_fk",
-          "tableFrom": "imports",
-          "tableTo": "stores",
-          "columnsFrom": [
-            "store_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "imports_file_id_files_id_fk": {
-          "name": "imports_file_id_files_id_fk",
-          "tableFrom": "imports",
-          "tableTo": "files",
-          "columnsFrom": [
-            "file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "imports_report_file_id_files_id_fk": {
-          "name": "imports_report_file_id_files_id_fk",
-          "tableFrom": "imports",
-          "tableTo": "files",
-          "columnsFrom": [
-            "report_file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "imports_created_by_user_id_users_id_fk": {
-          "name": "imports_created_by_user_id_users_id_fk",
-          "tableFrom": "imports",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "imports_file_id_store_fk": {
-          "name": "imports_file_id_store_fk",
-          "tableFrom": "imports",
-          "tableTo": "files",
-          "columnsFrom": [
-            "store_id",
-            "file_id"
-          ],
-          "columnsTo": [
-            "store_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "imports_report_file_id_store_fk": {
-          "name": "imports_report_file_id_store_fk",
-          "tableFrom": "imports",
-          "tableTo": "files",
-          "columnsFrom": [
-            "store_id",
-            "report_file_id"
-          ],
-          "columnsTo": [
-            "store_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "imports_kind": {
-          "name": "imports_kind",
-          "value": "\"imports\".\"kind\" in ('customers_csv', 'pos_csv', 'products_csv')"
-        },
-        "imports_status": {
-          "name": "imports_status",
-          "value": "\"imports\".\"status\" in ('uploaded', 'mapped', 'validated', 'importing', 'done', 'failed')"
-        },
-        "imports_duplicate_mode": {
-          "name": "imports_duplicate_mode",
-          "value": "\"imports\".\"duplicate_mode\" in ('update', 'skip')"
         }
       },
       "isRLSEnabled": false
@@ -13653,6 +13390,403 @@
         "data_requests_status": {
           "name": "data_requests_status",
           "value": "\"data_requests\".\"status\" in ('open', 'in_progress', 'done', 'rejected')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.imports": {
+      "name": "imports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'uploaded'"
+        },
+        "file_id": {
+          "name": "file_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "column_mapping": {
+          "name": "column_mapping",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duplicate_mode": {
+          "name": "duplicate_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'update'"
+        },
+        "has_consent_confirmation": {
+          "name": "has_consent_confirmation",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "consent_evidence": {
+          "name": "consent_evidence",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rows_total": {
+          "name": "rows_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rows_added": {
+          "name": "rows_added",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rows_updated": {
+          "name": "rows_updated",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rows_skipped": {
+          "name": "rows_skipped",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rows_failed": {
+          "name": "rows_failed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkpoint": {
+          "name": "checkpoint",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "report_file_id": {
+          "name": "report_file_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_by_user_id": {
+          "name": "started_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_progress_at": {
+          "name": "last_progress_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requeue_count": {
+          "name": "requeue_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "imports_store_id_id_key": {
+          "name": "imports_store_id_id_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_store_id_created_at_idx": {
+          "name": "imports_store_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_file_id_idx": {
+          "name": "imports_file_id_idx",
+          "columns": [
+            {
+              "expression": "file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_report_file_id_idx": {
+          "name": "imports_report_file_id_idx",
+          "columns": [
+            {
+              "expression": "report_file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_created_by_user_id_idx": {
+          "name": "imports_created_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "created_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_importing_idx": {
+          "name": "imports_importing_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"imports\".\"status\" = 'importing'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_started_by_user_id_idx": {
+          "name": "imports_started_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "started_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "imports_store_id_stores_id_fk": {
+          "name": "imports_store_id_stores_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_file_id_files_id_fk": {
+          "name": "imports_file_id_files_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "files",
+          "columnsFrom": [
+            "file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_report_file_id_files_id_fk": {
+          "name": "imports_report_file_id_files_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "files",
+          "columnsFrom": [
+            "report_file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_created_by_user_id_users_id_fk": {
+          "name": "imports_created_by_user_id_users_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_started_by_user_id_users_id_fk": {
+          "name": "imports_started_by_user_id_users_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "started_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_file_id_store_fk": {
+          "name": "imports_file_id_store_fk",
+          "tableFrom": "imports",
+          "tableTo": "files",
+          "columnsFrom": [
+            "store_id",
+            "file_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_report_file_id_store_fk": {
+          "name": "imports_report_file_id_store_fk",
+          "tableFrom": "imports",
+          "tableTo": "files",
+          "columnsFrom": [
+            "store_id",
+            "report_file_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "imports_kind": {
+          "name": "imports_kind",
+          "value": "\"imports\".\"kind\" in ('customers_csv', 'pos_csv', 'products_csv')"
+        },
+        "imports_status": {
+          "name": "imports_status",
+          "value": "\"imports\".\"status\" in ('uploaded', 'mapped', 'validated', 'importing', 'done', 'failed', 'undone')"
+        },
+        "imports_duplicate_mode": {
+          "name": "imports_duplicate_mode",
+          "value": "\"imports\".\"duplicate_mode\" in ('update', 'skip')"
         }
       },
       "isRLSEnabled": false

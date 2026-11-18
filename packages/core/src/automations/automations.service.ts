@@ -233,7 +233,11 @@ const RUNNABLE_ACTIONS: readonly ActionKind[] = ['add_tag', 'remove_tag'];
 // What the runner cannot do yet: taps on workflow messages are not recorded, the review list does
 // not exist, and only tag actions have an owning service.
 function checkRunnable({ goal, exitConditions, workflowFilters, steps }: AutomationGraph) {
-  if ([goal, ...exitConditions].some((exit) => exit?.kind === 'tapped_link'))
+  if (goal?.kind === 'tapped_link')
+    throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
+      { path: 'goal', message: 'A tap goal is not available yet' },
+    ]);
+  if (exitConditions.some((exit) => exit.kind === 'tapped_link'))
     throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
       { path: 'exitConditions', message: 'A tap exit is not available yet' },
     ]);

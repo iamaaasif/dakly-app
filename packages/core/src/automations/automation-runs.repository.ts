@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 
 import type {
+  AutomationExitReason,
   AutomationRunStatus,
   AutomationStatus,
   AutomationStepKind,
@@ -41,7 +42,7 @@ export type RunChange = {
   wakeAt?: Date;
   claimedAt?: Date;
   attempts?: number;
-  exitReason?: string;
+  exitReason?: AutomationExitReason;
   lastError?: string | null;
   finishedAt?: Date;
 };

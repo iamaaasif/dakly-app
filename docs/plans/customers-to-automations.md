@@ -39,7 +39,7 @@ Each group is one worker run: one session with subagents, one PR per task, nothi
 | 7     | CAMP-5  | `feat/camp-5-automation-runner`         | main          | Runner, part 1 of 5: due runs, claims, step job, waits, splits, exits |
 | 7     | CAMP-5  | `feat/camp-5-automation-steps`          | CAMP-5 part 1 | Runner, part 2 of 5: conditions, exit checks, tag actions             |
 | 7     | CAMP-5  | `feat/camp-5-automation-send-costs`     | CAMP-5 part 2 | Runner, part 3 of 5: sends, opt-out links, SMS credits                |
-| 7     | CAMP-5  | `feat/camp-5-automation-send-retries`   | CAMP-5 part 3 | Runner, part 4 of 5: resends after an unknown outcome                 |
+| 7     | CAMP-5  | `feat/camp-5-automation-send-retries`   | CAMP-5 part 3 | Runner, part 4 of 5: provider retries and unknown sends               |
 | 7     | CAMP-5  | `feat/camp-5-automation-balance-pause`  | CAMP-5 part 4 | Runner, part 5 of 5: pause on a short balance, resume on top-up       |
 | 7     | CAMP-11 | `feat/camp-11-automation-triggers`      | CAMP-5 runner | Triggers and entry rules                                              |
 | 7     | CAMP-12 | `feat/camp-12-automation-templates`     | CAMP-11       | Automations list, template library and settings forms                 |

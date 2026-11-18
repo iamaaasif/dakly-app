@@ -28,3 +28,10 @@ export const segmentSavedEventSchema = z.strictObject({
   occurredAt: z.iso.datetime(),
   payload: z.strictObject({ segmentId: z.uuid() }),
 });
+
+export const importStartedEventSchema = z.strictObject({
+  type: z.literal('import.started'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ importId: z.uuid() }),
+});

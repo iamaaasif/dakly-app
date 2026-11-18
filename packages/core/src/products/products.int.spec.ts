@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createProductSchema } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
@@ -51,6 +52,7 @@ describe('ProductsService with Postgres', () => {
         stock: { lowStockThreshold: 3 },
       }),
     } as StoresService,
+    {} as FileStorageDriver,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   beforeAll(() => f.setup());

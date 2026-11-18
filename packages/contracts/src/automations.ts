@@ -4,6 +4,13 @@ import { type AutomationGraph, automationGraphSchema } from './automations/graph
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
+export const automationExitReasons = [
+  'version_stopped',
+  'archived',
+  'goal',
+  'exit_condition',
+  'workflow_filter',
+] as const;
 export const automationStepKinds = [
   'trigger',
   'wait',
@@ -16,6 +23,7 @@ export const automationStepKinds = [
 ] as const;
 export type AutomationStatus = (typeof automationStatuses)[number];
 export type AutomationRunStatus = (typeof automationRunStatuses)[number];
+export type AutomationExitReason = (typeof automationExitReasons)[number];
 export type AutomationStepKind = (typeof automationStepKinds)[number];
 
 export const MAX_AUTOMATIONS_PER_STORE = 100;

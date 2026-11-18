@@ -140,6 +140,31 @@ describe('release schema behavior (Postgres)', () => {
     });
   });
 
+  it('accepts supported workflow exit reasons and rejects an unknown one', async () => {
+    await withFixture(async ({ client, storeId, contactId }) => {
+      const versionId = await insertVersion(client, storeId);
+      const runId = await insertRun(client, storeId, contactId, versionId, new Date(0));
+      await asApp(client, storeId);
+      for (const reason of [
+        'version_stopped',
+        'archived',
+        'goal',
+        'exit_condition',
+        'workflow_filter',
+        null,
+      ]) {
+        const saved = await client.query(
+          'update automation_runs set exit_reason=$1 where id=$2 returning exit_reason',
+          [reason, runId],
+        );
+        expect(saved.rows).toEqual([{ exit_reason: reason }]);
+      }
+      await expect(
+        client.query('update automation_runs set exit_reason=$1 where id=$2', ['invalid', runId]),
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+
   it('reclaims an expired workflow lease without claiming a current one', async () => {
     await withFixture(async ({ client, storeId, contactId }) => {
       const versionId = await insertVersion(client, storeId);
