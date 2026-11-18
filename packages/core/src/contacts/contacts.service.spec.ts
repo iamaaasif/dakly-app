@@ -5,6 +5,7 @@ import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
+import type { ImportContactsRepository } from './import-contacts.repository';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const actor = { kind: 'user', userId: '0b8f3c1e-5d2a-4f6b-9c7e-1a2b3c4d5e6f' } as const;
@@ -26,6 +27,7 @@ describe('ContactsService', () => {
     findIdentities: vi.fn(),
     update: vi.fn(),
     softDelete: vi.fn(),
+    lockForConsent: vi.fn(),
   };
   const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
   let service: ContactsService;
@@ -38,6 +40,11 @@ describe('ContactsService', () => {
       transaction as unknown as StoreTransaction,
       { publish: vi.fn() } as unknown as OutboxService,
       { now: () => new Date('2026-11-16T04:30:00Z') } as Clock,
+      {
+        findByPhones: vi.fn(),
+        insertImported: vi.fn(),
+        updateImported: vi.fn(),
+      } as unknown as ImportContactsRepository,
     );
   });
 
@@ -250,14 +257,14 @@ describe('ContactsService', () => {
     });
   });
 
-  it('confirms a contact exists only when this store has it', async () => {
-    repository.findById.mockImplementation(async (storeId: string) =>
-      storeId === STORE_ID ? contact : undefined,
+  it('locks a contact for consent only when this store has it', async () => {
+    repository.lockForConsent.mockImplementation(async (storeId: string, ids: string[]) =>
+      storeId === STORE_ID ? ids : [],
     );
 
-    await expect(service.assertContactExists(STORE_ID, contact.id)).resolves.toBeUndefined();
+    await expect(service.lockForConsent(STORE_ID, [contact.id])).resolves.toBeUndefined();
     await expect(
-      service.assertContactExists('0b7e5f6a-2d4c-4f1e-9a3b-8c6d5e4f3a21', contact.id),
+      service.lockForConsent('0b7e5f6a-2d4c-4f1e-9a3b-8c6d5e4f3a21', [contact.id]),
     ).rejects.toMatchObject({ code: 'CONTACT_NOT_FOUND', status: 404 });
   });
 });

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import { ContactsService } from '../contacts/contacts.service';
@@ -262,7 +263,7 @@ function goOn(next: string, now: Date) {
   } as const;
 }
 
-function exited(exitReason: string, now: Date) {
+function exited(exitReason: AutomationExitReason, now: Date) {
   return { run: { status: 'exited', exitReason, finishedAt: now } } as const;
 }
 
