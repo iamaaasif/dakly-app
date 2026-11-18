@@ -93,6 +93,7 @@ describe('OrdersService', () => {
     expect(await service.list(fixture.a, { stage: 'to_confirm', limit: 1, cursor: 1001 })).toEqual({
       items: [],
       counts: page.counts,
+      alerts: page.alerts,
       nextCursor: null,
     });
   });

@@ -230,4 +230,68 @@ describe('Manual dispatch and delivery', () => {
     );
     expect(page.items[0]).not.toHaveProperty('recipientPhone');
   });
+
+  it('keeps an exact COD balance past the largest single safe integer', async () => {
+    const query = { alert: 'cod', limit: 1 } as const;
+    const before = (await service.list(f.a, query)).alerts;
+    const one = await order(f.a, 'delivered');
+    const two = await order(f.a, 'partially_delivered');
+    const collected = await order(f.a, 'delivered');
+    await f.connection.pool.query(
+      'update orders set cod_amount_poisha=$3 where store_id=$1 and id=any($2::uuid[])',
+      [f.a, [one, two], Number.MAX_SAFE_INTEGER],
+    );
+    await f.connection.pool.query(
+      "update orders set payment_status='cod_collected' where store_id=$1 and id=$2",
+      [f.a, collected],
+    );
+    const page = await service.list(f.a, query);
+    expect(page.items).toHaveLength(1);
+    expect(page.alerts).toMatchObject({
+      codAwaitingOrders: before.codAwaitingOrders + 2,
+      codAwaitingPoisha: String(
+        BigInt(before.codAwaitingPoisha) + 2n * BigInt(Number.MAX_SAFE_INTEGER),
+      ),
+    });
+  });
+
+  it('counts alerts across the store and searches one page by order number', async () => {
+    const query = { stage: 'to_confirm', limit: 1 } as const;
+    const initial = (await service.list(f.a, query)).alerts;
+    const phone = '01710000008';
+    const overdue = await order(f.a, 'to_confirm', { phone });
+    await trackedLine(overdue, 2);
+    await f.connection.pool.query(
+      "update orders set created_at=now() - interval '13 hours' where store_id=$1 and id=$2",
+      [f.a, overdue],
+    );
+    await order(f.a, 'to_confirm', { phone, advance: 20000 });
+    await order(f.a, 'returned', { phone });
+    await order(f.a, 'returned', { phone });
+    await order(f.a, 'delivered');
+    await order(f.b, 'delivered', { phone });
+
+    const row = await f.row('orders', overdue);
+    const page = await service.list(f.a, { ...query, search: `#${row.number}` });
+    expect(page.items).toEqual([
+      expect.objectContaining({
+        id: overdue,
+        itemPreview: 'Panjabi (M) × 2',
+        returnRisk: 'high',
+      }),
+    ]);
+    expect((await service.list(f.a, { ...query, alert: 'risk' })).items).toEqual([
+      expect.objectContaining({ id: overdue }),
+    ]);
+    expect((await service.list(f.a, { ...query, search: phone })).items).toEqual([]);
+    expect((await service.list(f.a, { ...query, search: phone, limit: 20 }, true)).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: overdue })]),
+    );
+    expect(page.alerts).toEqual({
+      waiting: initial.waiting + 1,
+      highRisk: initial.highRisk + 1,
+      codAwaitingOrders: initial.codAwaitingOrders + 1,
+      codAwaitingPoisha: String(BigInt(initial.codAwaitingPoisha) + 381000n),
+    });
+  });
 });

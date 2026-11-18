@@ -72,6 +72,8 @@ export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
 export const orderListQuerySchema = z.strictObject({
   stage: z.enum(orderStages).optional(),
+  alert: z.enum(['waiting', 'risk', 'cod']).optional(),
+  search: z.string().trim().min(1).max(120).optional(),
   cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
   limit: z.coerce.number<string>().int().min(1).max(100).default(50),
 });
@@ -94,12 +96,27 @@ export type OrderSummary = {
   deliveryChargePoisha: number;
   advancePaidPoisha: number;
   codAmountPoisha: number;
+  codCollectedPoisha: number | null;
+  deliveredItemsSubtotalPoisha: number | null;
+  deliveredOrderDiscountPoisha: number | null;
   createdAt: string;
   returnRisk: OrderReturnRisk;
 };
 
+export type OrderListItem = OrderSummary & {
+  itemPreview: string | null;
+  isWaitingForConfirmation: boolean;
+};
+export type OrderAlerts = {
+  waiting: number;
+  highRisk: number;
+  codAwaitingOrders: number;
+  codAwaitingPoisha: string;
+};
+
 export type OrderListResponse = {
-  items: OrderSummary[];
+  items: OrderListItem[];
+  alerts: OrderAlerts;
   counts: Record<OrderStage, number>;
   nextCursor: number | null;
 };
@@ -148,9 +165,6 @@ export type OrderDetail = OrderSummary & {
   returnedAt: string | null;
   returnReason: string | null;
   codCollectedAt: string | null;
-  codCollectedPoisha: number | null;
-  deliveredItemsSubtotalPoisha: number | null;
-  deliveredOrderDiscountPoisha: number | null;
   possibleDuplicateOfOrderId: string | null;
   items: OrderItem[];
   timeline: OrderStageHistoryEntry[];

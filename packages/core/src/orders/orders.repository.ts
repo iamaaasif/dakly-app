@@ -1,9 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, inArray, lt, ne, notInArray, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  type SQL,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import type { OrderListQuery } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
 
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const summaryColumns = {
@@ -20,6 +35,9 @@ const summaryColumns = {
   deliveryChargePoisha: orders.deliveryChargePoisha,
   advancePaidPoisha: orders.advancePaidPoisha,
   codAmountPoisha: orders.codAmountPoisha,
+  codCollectedPoisha: orders.codCollectedPoisha,
+  deliveredItemsSubtotalPoisha: orders.deliveredItemsSubtotalPoisha,
+  deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
   createdAt: orders.createdAt,
 };
 
@@ -43,9 +61,6 @@ const detailColumns = {
   returnedAt: orders.returnedAt,
   returnReason: orders.returnReason,
   codCollectedAt: orders.codCollectedAt,
-  codCollectedPoisha: orders.codCollectedPoisha,
-  deliveredItemsSubtotalPoisha: orders.deliveredItemsSubtotalPoisha,
-  deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
   possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
 };
 
@@ -82,16 +97,18 @@ export type StageWrite = Partial<
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string, query: OrderListQuery) {
+  list(storeId: string, query: OrderListQuery, overdueBefore: Date, phone?: string) {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select(summaryColumns)
+        .select({ ...summaryColumns, itemPreview })
         .from(orders)
         .where(
           and(
             eq(orders.storeId, storeId),
-            query.stage === undefined ? undefined : eq(orders.stage, query.stage),
-            query.cursor === undefined ? undefined : lt(orders.number, query.cursor),
+            query.stage ? eq(orders.stage, query.stage) : undefined,
+            query.cursor ? lt(orders.number, query.cursor) : undefined,
+            orderSearch(query.search, phone),
+            query.alert ? orderAlertFilter(tx, storeId, query.alert, overdueBefore) : undefined,
           ),
         )
         .orderBy(desc(orders.number))
@@ -109,6 +126,29 @@ export class OrdersRepository {
     );
   }
 
+  async alertTotals(storeId: string, overdueBefore: Date) {
+    const [row] = await this.database.forStore(storeId, (tx) => {
+      const waiting = orderAlertFilter(tx, storeId, 'waiting', overdueBefore);
+      const risk = orderAlertFilter(tx, storeId, 'risk', overdueBefore);
+      const cod = orderAlertFilter(tx, storeId, 'cod', overdueBefore);
+      return tx
+        .select({
+          waiting: sql<number>`count(*) filter (where ${waiting})`.mapWith(Number),
+          highRisk: sql<number>`count(*) filter (where ${risk})`.mapWith(Number),
+          codAwaitingOrders: sql<number>`count(*) filter (where ${cod})`.mapWith(Number),
+          codAwaitingPoisha: sql<string>`coalesce(sum(${orders.codAmountPoisha}) filter (where ${cod}), 0)::text`,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            inArray(orders.stage, ['to_confirm', 'delivered', 'partially_delivered']),
+          ),
+        );
+    });
+    return row ?? { waiting: 0, highRisk: 0, codAwaitingOrders: 0, codAwaitingPoisha: '0' };
+  }
+
   parcelOutcomes(storeId: string, phones: string[]) {
     return this.database.forStore(storeId, (tx) =>
       tx
@@ -121,11 +161,7 @@ export class OrdersRepository {
         })
         .from(orders)
         .where(
-          and(
-            eq(orders.storeId, storeId),
-            inArray(orders.recipientPhone, phones),
-            inArray(orders.stage, ['delivered', 'partially_delivered', 'returned']),
-          ),
+          and(eq(orders.storeId, storeId), inArray(orders.recipientPhone, phones), parcelOutcome),
         )
         .groupBy(orders.recipientPhone),
     );
@@ -280,4 +316,51 @@ export class OrdersRepository {
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
   }
+}
+
+const itemPreview = sql<string | null>`(
+  select string_agg(label, ', ' order by id)
+  from (
+    select item.id, item.product_name || case when item.variant_title = 'Default' then ''
+      else ' (' || item.variant_title || ')' end || ' × ' || item.quantity::text as label
+    from ${orderItems} item
+    where item.store_id = "orders"."store_id" and item.order_id = "orders"."id"
+    order by item.id limit 2
+  ) lines
+)`;
+
+const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
+
+function orderSearch(search?: string, phone?: string) {
+  if (!search) return;
+  if (phone) return eq(orders.recipientPhone, phone);
+  if (/^#?\d{1,10}$/.test(search)) {
+    const number = Number(search.replace('#', ''));
+    if (number <= 2147483647) return eq(orders.number, number);
+  }
+  const name = `%${search.replace(/[%_\\]/g, '\\$&')}%`;
+  return or(ilike(orders.buyerName, name), ilike(orders.recipientName, name));
+}
+
+function orderAlertFilter(
+  tx: Transaction,
+  storeId: string,
+  alert: NonNullable<OrderListQuery['alert']>,
+  overdueBefore: Date,
+): SQL {
+  if (alert === 'waiting')
+    return sql`${orders.stage} = 'to_confirm' and ${lt(orders.createdAt, overdueBefore)}`;
+  if (alert === 'cod')
+    return sql`${orders.stage} in ('delivered', 'partially_delivered')
+      and ${orders.paymentStatus} in ('cod_pending', 'advance_paid') and ${orders.codAmountPoisha} > 0`;
+  const riskPhones = tx
+    .select({ phone: orders.recipientPhone })
+    .from(orders)
+    .where(and(eq(orders.storeId, storeId), parcelOutcome))
+    .groupBy(orders.recipientPhone)
+    .having(
+      sql`count(*) >= 2 and 2 * count(*) filter (where ${orders.stage} = 'returned') >= count(*)`,
+    );
+  return sql`${orders.stage} = 'to_confirm' and ${orders.advancePaidPoisha} = 0
+    and ${inArray(orders.recipientPhone, riskPhones)}`;
 }

@@ -13,7 +13,7 @@ import {
   type OrderReturnRisk,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
-import { maskPhone } from '@dakly/contracts/phone';
+import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
@@ -163,10 +163,18 @@ export class OrdersService {
     });
   }
 
-  async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
-    const rows = await this.repository.list(storeId, query);
+  async list(
+    storeId: string,
+    query: OrderListQuery,
+    seeFullPhone = false,
+  ): Promise<OrderListResponse> {
+    const repository = this.repository;
+    const overdueBefore = new Date(this.clock.now().getTime() - 12 * 60 * 60 * 1000);
+    const parsedPhone = bdMobileSchema.safeParse(query.search);
+    const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
+    const rows = await repository.list(storeId, query, overdueBefore, phone);
     const page = rows.slice(0, query.limit);
-    const outcomes = await this.repository.parcelOutcomes(storeId, [
+    const outcomes = await repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
     ]);
     const byPhone = new Map(outcomes.map((row) => [row.phone, row]));
@@ -174,6 +182,7 @@ export class OrdersService {
       ...row,
       createdAt: createdAt.toISOString(),
       returnRisk: returnRisk(byPhone.get(recipientPhone)),
+      isWaitingForConfirmation: row.stage === 'to_confirm' && createdAt < overdueBefore,
     }));
     const counts = {
       to_confirm: 0,
@@ -185,10 +194,11 @@ export class OrdersService {
       returned: 0,
       cancelled: 0,
     };
-    for (const row of await this.repository.countByStage(storeId)) counts[row.stage] = row.count;
+    for (const row of await repository.countByStage(storeId)) counts[row.stage] = row.count;
     return {
       items,
       counts,
+      alerts: await repository.alertTotals(storeId, overdueBefore),
       nextCursor: rows.length > query.limit ? (items.at(-1)?.number ?? null) : null,
     };
   }

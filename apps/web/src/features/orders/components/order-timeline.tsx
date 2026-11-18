@@ -14,7 +14,13 @@ export function OrderTimeline({ timeline }: { timeline: OrderStageHistoryEntry[]
               <p>
                 {orderStageLabels[event.from]} → {orderStageLabels[event.to]}
               </p>
-              {event.reason ? <p>{displayReason(event)}</p> : null}
+              {event.reason && (
+                <p className="wrap-anywhere">
+                  {['on_hold', 'cancelled'].includes(event.to)
+                    ? event.reason.replaceAll('_', ' ')
+                    : event.reason}
+                </p>
+              )}
               <time dateTime={event.occurredAt} className="text-xs text-text-muted">
                 {formatDateTime(event.occurredAt)}
               </time>
@@ -26,10 +32,4 @@ export function OrderTimeline({ timeline }: { timeline: OrderStageHistoryEntry[]
       )}
     </section>
   );
-}
-
-function displayReason(event: OrderStageHistoryEntry): string | null {
-  if (event.to === 'on_hold' || event.to === 'cancelled')
-    return event.reason?.replaceAll('_', ' ') ?? null;
-  return event.reason;
 }

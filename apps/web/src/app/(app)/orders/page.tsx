@@ -26,6 +26,9 @@ export default async function OrdersPage({
     );
   const { selected, ...query } = parsed.data;
   return (
-    <OrdersScreen query={{ ...query, stage: query.stage ?? 'to_confirm' }} selected={selected} />
+    <OrdersScreen
+      query={{ ...query, stage: query.stage ?? (query.alert ? undefined : 'to_confirm') }}
+      selected={selected}
+    />
   );
 }

@@ -1,5 +1,3 @@
-'use client';
-
 import { QueryError } from '@dakly/ui/query-error';
 import { Sheet } from '@dakly/ui/sheet';
 

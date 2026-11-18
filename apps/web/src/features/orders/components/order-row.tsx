@@ -1,8 +1,9 @@
 import { ClipboardList, Instagram, MessageSquare, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
-import type { OrderSummary } from '@dakly/contracts/orders';
+import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 
+import { OrderRiskBadge } from './order-risk-badge';
 import { formatDateTime } from '@/lib/format-date';
 import { formatMoney } from '@/lib/format-money';
 
@@ -13,7 +14,7 @@ const sourceIcons: Partial<Record<OrderSummary['source'], LucideIcon>> = {
   comment: MessageSquare,
 };
 
-type OrderRowProps = { order: OrderSummary; href: string; canEdit: boolean };
+type OrderRowProps = { order: OrderListItem; href: string; canEdit: boolean };
 
 export function OrderRow({ order, href, canEdit }: OrderRowProps) {
   const Icon = sourceIcons[order.source] ?? ClipboardList;
@@ -29,17 +30,24 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
         <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
       </span>
       <div className="min-w-0">
-        <Link href={href} className="font-semibold break-words hover:underline">
-          {order.buyerName ?? order.recipientName}
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link href={href} className="font-semibold wrap-anywhere hover:underline">
+            {order.recipientName}
+          </Link>
+          <OrderRiskBadge risk={order.returnRisk} />
+          {order.isWaitingForConfirmation ? (
+            <span className="text-xs font-medium text-warning">Waiting 12h+</span>
+          ) : null}
+        </div>
         <p className="text-xs text-text-muted">
           #{order.number} ·{' '}
           <time dateTime={order.createdAt}>{formatDateTime(order.createdAt)}</time>
         </p>
+        {order.itemPreview ? (
+          <p className="mt-1 text-sm wrap-anywhere">{order.itemPreview}</p>
+        ) : null}
       </div>
-      <p className="col-start-2 text-sm font-semibold tabular-nums md:col-start-auto md:text-right">
-        COD {formatMoney(order.codAmountPoisha)}
-      </p>
+      <OrderAmount order={order} />
       <Link
         href={href}
         aria-label={`${canConfirm ? 'Confirm' : 'Details for'} order #${order.number}`}
@@ -48,5 +56,23 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
         {canConfirm ? 'Confirm' : 'Details'}
       </Link>
     </li>
+  );
+}
+
+function OrderAmount({ order }: { order: OrderListItem }) {
+  const total =
+    BigInt(order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha) +
+    BigInt(order.deliveryChargePoisha) -
+    BigInt(order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha);
+
+  return (
+    <p className="col-start-2 tabular-nums md:col-start-auto md:text-right">
+      <span className="block font-semibold">{formatMoney(total)}</span>
+      <span className="text-xs text-text-muted">
+        {order.advancePaidPoisha > 0 ? `Advance ${formatMoney(order.advancePaidPoisha)} · ` : ''}
+        {order.codCollectedPoisha === null ? 'COD' : 'COD received'}{' '}
+        {formatMoney(order.codCollectedPoisha ?? order.codAmountPoisha)}
+      </span>
+    </p>
   );
 }
