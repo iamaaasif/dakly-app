@@ -94,6 +94,9 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Recipient name').fill('Karim Ahmed');
     await recipientPhone.fill('01701000015');
     await create.getByLabel('Address').fill('House 14, Mirpur');
+    await create.getByRole('button', { name: 'Save order' }).click();
+    await expect(create.getByText('Choose a district or upazila')).toBeVisible();
+    await expect(create.getByLabel('District')).toHaveAttribute('aria-invalid', 'true');
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
