@@ -15,6 +15,11 @@ const sourceIcons: Partial<Record<OrderSummary['source'], LucideIcon>> = {
 
 export function OrderRow({ order }: { order: OrderListItem }) {
   const Icon = sourceIcons[order.source] ?? ClipboardList;
+  const total =
+    BigInt(order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha) +
+    BigInt(order.deliveryChargePoisha) -
+    BigInt(order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha);
+
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto] md:gap-4">
       <span className="grid size-9 place-items-center rounded-md bg-surface-muted">
@@ -36,25 +41,14 @@ export function OrderRow({ order }: { order: OrderListItem }) {
           <p className="mt-1 text-sm wrap-anywhere">{order.itemPreview}</p>
         ) : null}
       </div>
-      <OrderAmount order={order} />
+      <p className="col-start-2 tabular-nums md:col-start-auto md:text-right">
+        <span className="block font-semibold">{formatMoney(total)}</span>
+        <span className="text-xs text-text-muted">
+          {order.advancePaidPoisha > 0 ? `Advance ${formatMoney(order.advancePaidPoisha)} · ` : ''}
+          {order.codCollectedPoisha === null ? 'COD' : 'COD received'}{' '}
+          {formatMoney(order.codCollectedPoisha ?? order.codAmountPoisha)}
+        </span>
+      </p>
     </li>
-  );
-}
-
-function OrderAmount({ order }: { order: OrderListItem }) {
-  const total =
-    BigInt(order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha) +
-    BigInt(order.deliveryChargePoisha) -
-    BigInt(order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha);
-
-  return (
-    <p className="col-start-2 tabular-nums md:col-start-auto md:text-right">
-      <span className="block font-semibold">{formatMoney(total)}</span>
-      <span className="text-xs text-text-muted">
-        {order.advancePaidPoisha > 0 ? `Advance ${formatMoney(order.advancePaidPoisha)} · ` : ''}
-        {order.codCollectedPoisha === null ? 'COD' : 'COD received'}{' '}
-        {formatMoney(order.codCollectedPoisha ?? order.codAmountPoisha)}
-      </span>
-    </p>
   );
 }
