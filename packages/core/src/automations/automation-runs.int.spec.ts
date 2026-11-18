@@ -120,10 +120,15 @@ async function startRuns(
   return result.rows.map((row) => row.id);
 }
 
-async function dueRuns(first: AutomationStep, count = 1, status = 'active') {
+async function dueRuns(
+  first: AutomationStep,
+  count = 1,
+  status = 'active',
+  forContact = contactId,
+) {
   const automationId = await workflow(status);
   const versionId = await publish(automationId, 1, graphWith(first));
-  return { automationId, runIds: await startRuns(automationId, versionId, { count }) };
+  return { automationId, runIds: await startRuns(automationId, versionId, { count, forContact }) };
 }
 
 async function run(runId: string) {
