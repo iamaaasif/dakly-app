@@ -6,7 +6,6 @@ import type { SendingSettings } from '@dakly/contracts/stores';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
-import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { HOUR_MS } from '../platform/time';
@@ -51,14 +50,13 @@ export class SendPolicyService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(SendingRepository) private readonly repository: SendingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // Freeze the destination from the eligibility read and take the cap time after the lock.
+  // Freeze the destination from the eligibility read and use one database clock after the locks.
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
-    if (!(await this.lockForDispatch(storeId, request.contactId)))
-      return { decision: skip('no_address'), destination: null, at: this.clock.now() };
-    const at = this.clock.now();
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = await this.transaction.databaseTime(storeId);
+    if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.evaluateAudience(
       storeId,
       { contactIds: [request.contactId], channel: request.channel, category: request.category, at },
@@ -78,16 +76,14 @@ export class SendPolicyService {
     const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
     await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at, {
-      includeCommittedFuture: true,
-    });
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
   // A retry keeps its reservation and replaces its prior count with the new dispatch.
   async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>, workflowStepId: string) {
     const exists = await this.lockForDispatch(storeId, request.contactId);
-    const at = this.clock.now();
+    const at = await this.transaction.databaseTime(storeId);
     const decision = exists
       ? await this.recheck(storeId, { ...request, at }, workflowStepId)
       : skip('no_address');

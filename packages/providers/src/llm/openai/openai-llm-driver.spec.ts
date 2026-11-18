@@ -14,6 +14,57 @@ const request: LlmRequest = {
 };
 
 describe('OpenAiLlmDriver', () => {
+  it('returns all 512-dimension embeddings in input order and the measured tokens', async () => {
+    const input = ['দাম কত?', 'Returns within seven days'];
+    const embeddings = [
+      Array.from({ length: 512 }, (_, index) => index / 512),
+      Array.from({ length: 512 }, (_, index) => (index + 1) / 512),
+    ];
+    const driver = new OpenAiLlmDriver('test-key', async (url, options) => {
+      expect(url).toBe('https://api.openai.com/v1/embeddings');
+      expect(JSON.parse(String(options?.body))).toEqual({
+        model: 'text-embedding-3-small',
+        input,
+        dimensions: 512,
+        encoding_format: 'float',
+      });
+      return Response.json({
+        object: 'list',
+        model: 'text-embedding-3-small',
+        data: [
+          { index: 1, object: 'embedding', embedding: embeddings[1] },
+          { index: 0, object: 'embedding', embedding: embeddings[0] },
+        ],
+        usage: { prompt_tokens: 10, total_tokens: 10 },
+      });
+    });
+    await expect(
+      driver.embed({ ...request, input, model: 'text-embedding-3-small' }),
+    ).resolves.toEqual({
+      model: 'text-embedding-3-small',
+      embeddings,
+      usage: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 0 },
+    });
+  });
+
+  it.each([
+    [{ index: 0, embedding: [0.1, 0.2] }],
+    [{ index: 'invalid', embedding: [0.1, 0.2] }],
+    [{ index: 0, embedding: ['invalid'] }],
+  ])('rejects malformed vectors while preserving measured input tokens', async (data) => {
+    const driver = new OpenAiLlmDriver('test-key', async () =>
+      Response.json({
+        model: 'text-embedding-3-small',
+        data,
+        usage: { prompt_tokens: 4 },
+      }),
+    );
+    await expect(driver.embed({ ...request, input: [request.input] })).rejects.toMatchObject({
+      code: 'LLM_INVALID_RESPONSE',
+      usage: { inputTokens: 4 },
+    });
+  });
+
   it('requests strict structured output without storing the response', async () => {
     const fetchResponse: typeof fetch = async (url, options) => {
       expect(url).toBe('https://api.openai.com/v1/responses');

@@ -218,11 +218,6 @@ export function isLateSend(wakeAt: Date | null, now: Date): boolean {
   return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
 }
 
-export function shouldPrepareSender(step: AutomationStep, wakeAt: Date | null, now: Date): boolean {
-  return (
-    step.kind === 'send' &&
-    step.channels.includes('sms') &&
-    !step.reviewBeforeSending &&
-    !isLateSend(wakeAt, now)
-  );
+export function shouldPrepareSender(step: AutomationStep): boolean {
+  return step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending;
 }

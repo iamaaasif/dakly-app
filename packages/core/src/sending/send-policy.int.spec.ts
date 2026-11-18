@@ -252,6 +252,36 @@ describe('SendPolicyService (Postgres)', () => {
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
   });
 
+  it('reads the Postgres dispatch time after waiting for the contact lock', async () => {
+    const contactId = await consentedContact(storeA);
+    const connection = await admin.pool.connect();
+    const startCheck = () =>
+      app
+        .get(StoreTransaction)
+        .run(storeA, () =>
+          policy.checkForSend(storeA, { contactId, channel: 'sms', category: 'transactional' }),
+        );
+    let pending: ReturnType<typeof startCheck> | undefined;
+    try {
+      await connection.query('begin');
+      await connection.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `send:${storeA}:${contactId}`,
+      ]);
+      pending = startCheck();
+      await waitForBlockedAdvisoryLock();
+      const { rows } = await connection.query<{ at: Date }>('select clock_timestamp() as at');
+      await connection.query('commit');
+
+      const result = await pending;
+      expect(result.decision).toEqual({ action: 'send' });
+      expect(result.at.getTime()).toBeGreaterThanOrEqual(rows[0]!.at.getTime());
+    } finally {
+      await connection.query('rollback');
+      connection.release();
+      await pending?.catch(() => undefined);
+    }
+  });
+
   it('lets only one of two concurrent checks for one contact send', async () => {
     const contactId = await consentedContact(storeA);
     const campaignId = await campaign(storeA);

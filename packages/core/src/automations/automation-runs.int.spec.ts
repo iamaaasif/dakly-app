@@ -20,6 +20,7 @@ import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SendPolicyService } from '../sending/send-policy.service';
@@ -578,6 +579,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         ? real
         : new Date(opensAt.getTime() + (real > opensAt ? 24 * HOUR : 0));
     let clockNow = daytime;
+    let databaseNow: Date | undefined;
     const send = (
       category: 'marketing' | 'transactional',
       ifNotReachable: 'skip' | 'exit' = 'skip',
@@ -713,10 +715,14 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         sms.send(message),
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
+      vi.spyOn(StoreTransaction.prototype, 'databaseTime').mockImplementation(
+        async () => databaseNow ?? clockNow,
+      );
     });
 
     afterEach(() => {
       clockNow = daytime;
+      databaseNow = undefined;
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation((message) => sms.send(message));
     });
 
@@ -1146,6 +1152,34 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it('keeps the next send due and claimed at database time with a slow worker', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const automationId = await workflow('active');
+      const graph = graphWith({ ...send('transactional'), next: 'second' });
+      graph.steps['second'] = send('transactional');
+      const versionId = await publish(automationId, 1, graph);
+      const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
+      databaseNow = daytime;
+      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
+
+      await runDueStep(runner, runId!);
+      const { rows } = await admin.pool.query(
+        'select wake_at, claimed_at from automation_runs where id=$1',
+        [runId],
+      );
+      expect(rows).toEqual([{ wake_at: daytime, claimed_at: daytime }]);
+
+      databaseNow = new Date(daytime.getTime() + 24 * HOUR - 5 * MINUTE);
+      clockNow = new Date(databaseNow.getTime() - 6 * MINUTE);
+      await runDueStep(runner, runId!);
+      expect(sentFor(runId!)).toHaveLength(2);
+      expect(await sendStep(runId!)).toEqual([
+        expect.objectContaining({ outcome: 'sent' }),
+        expect.objectContaining({ outcome: 'sent' }),
+      ]);
+    });
+
     it.each(['paused', 'archived', 'version stopped'] as const)(
       'does not consume an overdue send when the workflow becomes %s after its initial read',
       async (change) => {
@@ -1416,6 +1450,35 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       }
     });
 
+    it('keeps a dispatch lease current when the worker clock is slow', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      databaseNow = daytime;
+      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
+      let stolen = 0;
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        const result = await admin.pool.query(
+          "update automation_runs set claimed_at=$2 where id=$1 and status='running' and claimed_at < $2::timestamptz - interval '5 minutes' returning id",
+          [runId, daytime],
+        );
+        stolen = result.rowCount ?? 0;
+        return sms.send(message);
+      });
+
+      await runDueStep(runner, runId!);
+
+      expect(stolen).toBe(0);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(await ledgerFor(runId!)).toEqual([
+        { kind: 'reserve', delta: -1 },
+        { kind: 'release', delta: 1 },
+        { kind: 'charge', delta: -1 },
+      ]);
+    });
+
     it('counts an accepted send with a lost answer toward the marketing cap', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
@@ -1662,6 +1725,47 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await sendStep(newer!)).toEqual([
         expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' }),
       ]);
+    });
+
+    it('does not submit a retry after waiting on its step row across the deadline', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const firstTriedAt = new Date(opensAt.getTime() - 48 * HOUR);
+      const expiresAt = firstTriedAt.getTime() + 36 * HOUR;
+      clockNow = firstTriedAt;
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, runId!);
+      await wakeNow(runId!);
+      clockNow = new Date(expiresAt - MINUTE);
+
+      const blocker = await admin.pool.connect();
+      let resending: Promise<void> | undefined;
+      try {
+        const { rows } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select id from automation_run_steps where run_id=$1 for update', [
+          runId,
+        ]);
+        resending = runDueStep(runner, runId!);
+        void resending.catch(() => undefined);
+        await waitForBlocker(rows[0]!.pid);
+        clockNow = new Date(expiresAt);
+        await blocker.query('commit');
+        await resending;
+
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([
+          expect.objectContaining({ outcome: 'unconfirmed' }),
+        ]);
+        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await resending?.catch(() => undefined);
+      }
     });
 
     it('keeps the marketing cap when a slower worker settles a retry', async () => {

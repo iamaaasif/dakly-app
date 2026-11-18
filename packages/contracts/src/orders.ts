@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 
 export const orderSources = [
@@ -68,6 +69,8 @@ export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as c
 
 export type OrderStage = (typeof orderStages)[number];
 
+export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
+
 export const orderListQuerySchema = z.strictObject({
   stage: z.enum(orderStages).optional(),
   cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
@@ -90,6 +93,7 @@ export type OrderSummary = {
   advancePaidPoisha: number;
   codAmountPoisha: number;
   createdAt: string;
+  returnRisk: OrderReturnRisk;
 };
 
 export type OrderListResponse = {
@@ -246,3 +250,15 @@ export const createOrderSchema = z.strictObject({
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
+export const editOrderSchema = z.strictObject({
+  items: orderLines,
+  recipient: recipientSchema
+    .omit({ isBuyer: true })
+    .partial()
+    .extend({ isBuyer: z.boolean().optional() })
+    .optional(),
+  deliveryChargePoisha: money.optional(),
+  orderDiscountPoisha: money.optional(),
+  advancePaidPoisha: money.optional(),
+});
+export type EditOrderInput = z.infer<typeof editOrderSchema>;

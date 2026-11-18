@@ -152,9 +152,10 @@ export class AutomationRunsRepository {
     storeId: string,
     runId: string,
     stepKey: string,
+    lock = false,
   ): Promise<SendingStep | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
+    const [row] = await this.database.forStore(storeId, (tx) => {
+      const query = tx
         .select({
           id: automationRunSteps.id,
           firstTriedAt: automationRunSteps.firstTriedAt,
@@ -171,8 +172,9 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.outcome, 'sending'),
           ),
         )
-        .limit(1),
-    );
+        .limit(1);
+      return lock ? query.for('update') : query;
+    });
     if (!row) return undefined;
     const firstTriedAt = row.firstTriedAt ?? row.sentAt;
     return firstTriedAt

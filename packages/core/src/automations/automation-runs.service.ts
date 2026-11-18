@@ -7,7 +7,6 @@ import { countSmsParts } from '@dakly/contracts/sms';
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService, TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
 import { MessagingService } from '../messaging/messaging.service';
-import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -61,7 +60,6 @@ export class AutomationRunsService {
   constructor(
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(Clock) private readonly clock: Clock,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(StoresService) private readonly stores: StoresService,
@@ -91,7 +89,8 @@ export class AutomationRunsService {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
-    const started = await this.repository.startWork(storeId, queued, this.clock.now());
+    const now = await this.transaction.databaseTime(storeId);
+    const started = await this.repository.startWork(storeId, queued, now);
     if (!started) return undefined;
     const claim = { ...queued, claimedAt: started.claimedAt };
     const run = { ...found, ...started };
@@ -118,7 +117,7 @@ export class AutomationRunsService {
     claim: RunClaim,
     run: ClaimedRun,
   ): Promise<StepResult | undefined> {
-    const now = this.clock.now();
+    const now = await this.transaction.databaseTime(storeId);
     const step = run.graph.steps[claim.stepKey]!;
     const started =
       step.kind === 'send'
@@ -142,7 +141,10 @@ export class AutomationRunsService {
       return started ? endWithUnknownOutcome(result) : result;
     }
     if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
-    if (shouldPrepareSender(step, facts.wakeAt, this.clock.now()))
+    if (
+      shouldPrepareSender(step) &&
+      !isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId))
+    )
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
   }
@@ -211,9 +213,11 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      if (isLateSend(facts.wakeAt, this.clock.now())) return this.readLateGateResult(facts);
-      const result = await this.gateSend(renewed, step, facts);
-      const claimedAt = this.clock.now();
+      const checkedAt = await this.transaction.databaseTime(storeId);
+      const result = isLateSend(facts.wakeAt, checkedAt)
+        ? await this.readLateGateResult(facts)
+        : await this.gateSend(renewed, step, facts);
+      const claimedAt = await this.transaction.databaseTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
@@ -222,10 +226,11 @@ export class AutomationRunsService {
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      const held = holdOwnedClaim(run, renewed, this.clock.now());
+      if (!run || !holdsClaim(run, renewed)) return undefined;
+      const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
       return held && { ...held, claim: renewed };
     }
-    const gatedAt = this.clock.now();
+    const gatedAt = renewed.claimedAt;
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     if ('outcome' in started) {
       const late = lateSend(step, claim.stepKey, { wakeAt: facts.wakeAt, ...started }, gatedAt);
@@ -234,7 +239,7 @@ export class AutomationRunsService {
     const { decision } = started;
     if ('body' in started)
       return deliverAutomationSms(
-        { messaging: this.messaging, reporter: this.reporter, clock: this.clock },
+        { messaging: this.messaging, reporter: this.reporter, transaction: this.transaction },
         {
           storeId,
           claim: renewed,
@@ -313,8 +318,17 @@ export class AutomationRunsService {
     const standIn = isMarketing
       ? this.links.optOutUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH))
       : undefined;
-    if (!(await this.reserveCredits(storeId, claim, countSmsParts(messageBody(step, standIn)))))
-      return undefined;
+    try {
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity: countSmsParts(messageBody(step, standIn)),
+        idempotencyKey: operationKey(claim),
+        actor: system,
+      });
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return undefined;
+      throw error;
+    }
     const id = newId();
     // CAMP-R4: every marketing SMS ends with its one-tap opt-out link.
     const [optOut] = isMarketing
@@ -339,23 +353,6 @@ export class AutomationRunsService {
     return messageBody(step, optOut?.url);
   }
 
-  // A balance that changes between the check and the write fails the transaction instead; the run
-  // is claimed again later.
-  private async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
-    try {
-      await this.wallets.reserve(storeId, {
-        wallet: 'sms_credits',
-        quantity,
-        idempotencyKey: operationKey(claim),
-        actor: system,
-      });
-      return true;
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return false;
-      throw error;
-    }
-  }
-
   private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
     const key = operationKey(claim);
     // Every send row was written with its reservation, in the same transaction.
@@ -378,35 +375,46 @@ export class AutomationRunsService {
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
     const { storeId, contactId, wakeAt } = facts;
     const { firstTriedAt, optOutCode, destination } = started;
-    const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, this.clock.now())
+    const preflight = await this.transaction.databaseTime(storeId);
+    const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
       ? undefined
       : await this.messaging.prepareSender(storeId);
     const gated = await this.transaction.run(storeId, async () => {
       const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
-      const early = endExpiredRetry(step, firstTriedAt, wakeAt, this.clock.now());
-      const result = early ?? (await this.recheckResend(step, facts, started));
-      const claimedAt = this.clock.now();
+      const locked = await this.repository.findSendingStep(
+        storeId,
+        claim.runId,
+        claim.stepKey,
+        true,
+      );
+      if (!locked) return undefined;
+      const checkedAt = await this.transaction.databaseTime(storeId);
+      const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
+      const { result, at } = early
+        ? { result: early, at: checkedAt }
+        : await this.recheckResend(step, facts, locked);
+      const claimedAt = await this.transaction.databaseTime(storeId);
       if (!(await this.repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt })))
         return undefined;
       if (result) return { result, claim: { ...claim, claimedAt }, at: claimedAt };
       const renewed = { ...claim, claimedAt };
       // A slower worker must not age out a previously submitted message early.
-      const sentAt = claimedAt > started.latestDispatchAt ? claimedAt : started.latestDispatchAt;
+      const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
       const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
       await this.repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-      const afterWrite = this.clock.now();
+      const afterWrite = await this.transaction.databaseTime(storeId);
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
       return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
     });
     if (!gated) {
       const run = await this.repository.findRun(storeId, claim.runId);
-      const held = holdOwnedClaim(run, claim, this.clock.now());
+      const held = holdOwnedClaim(run, claim, await this.transaction.databaseTime(storeId));
       return held && endWithUnknownOutcome(held);
     }
     if (gated.result) return { ...gated.result, claim: gated.claim };
     return deliverAutomationSms(
-      { messaging: this.messaging, reporter: this.reporter, clock: this.clock },
+      { messaging: this.messaging, reporter: this.reporter, transaction: this.transaction },
       {
         storeId,
         claim: gated.claim,
@@ -429,11 +437,11 @@ export class AutomationRunsService {
       id,
     );
     const exit = await this.refreshExitReason(facts, at);
-    const now = this.clock.now();
-    if (exit) return endWithUnknownOutcome(exited(exit, now));
-    return (
-      endExpiredRetry(step, firstTriedAt, facts.wakeAt, now) ??
-      retryDecision(step, firstTriedAt, decision, now)
-    );
+    const now = await this.transaction.databaseTime(facts.storeId);
+    const result = exit
+      ? endWithUnknownOutcome(exited(exit, now))
+      : (endExpiredRetry(step, firstTriedAt, facts.wakeAt, now) ??
+        retryDecision(step, firstTriedAt, decision, now));
+    return { result, at };
   }
 }
