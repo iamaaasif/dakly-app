@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { LinksModule } from '../links/links.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
@@ -19,6 +20,7 @@ import { CampaignsService } from './campaigns.service';
   imports: [
     CacheModule,
     ClockModule,
+    LinksModule,
     ErrorReportingModule,
     OutboxModule,
     SegmentsModule,
