@@ -109,6 +109,40 @@ export const changeProductSchema = z
 
 export type ChangeProductInput = z.infer<typeof changeProductSchema>;
 
+const takaInput = z
+  .string()
+  .regex(/^\d+(?:\.\d{1,2})?$/, 'Enter Taka with at most two decimal places')
+  .transform((value) => {
+    const [whole, fraction = ''] = value.split('.');
+    return Number(BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')));
+  })
+  .pipe(money);
+const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput]);
+
+export const productFormSchema = z
+  .strictObject({
+    ...createProductSchema.shape,
+    aliases: z
+      .array(z.string())
+      .transform((values) => values.filter((value) => value.trim()))
+      .pipe(createProductSchema.shape.aliases.unwrap())
+      .default([]),
+    pricePoisha: takaInput.default(0),
+    compareAtPricePoisha: optionalTakaInput.default(null),
+    variants: z
+      .array(
+        editVariantSchema.extend({
+          priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
+          costPoisha: optionalTakaInput.default(null),
+        }),
+      )
+      .max(100)
+      .default([]),
+  })
+  .superRefine(validateVariants);
+export type ProductFormValues = z.input<typeof productFormSchema>;
+export type ProductFormInput = z.output<typeof productFormSchema>;
+
 const productReadinessValues = ['needs_price', 'needs_photo', 'hidden', 'running_low'] as const;
 export type ProductReadiness = (typeof productReadinessValues)[number];
 
