@@ -164,6 +164,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     ).toHaveCount(5);
     await expect(page.getByRole('link', { name: 'To confirm 3' })).toBeVisible();
     await expect(page.getByText('On hold', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Confirm order #1054' })).toBeVisible();
     await expect(page.getByText('3 hours ago', { exact: true })).toHaveAttribute(
       'title',
       /Asia\/Dhaka/,
@@ -184,16 +185,24 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Confirm order #1060' }).click();
     const detail = page.getByRole('dialog', { name: 'Order #1060' });
+    await expect(detail.getByText('Staff ·')).toBeVisible();
+    await expect(detail.getByText('3 hours ago')).toHaveAttribute('title', /Asia\/Dhaka/);
     await expect(detail.getByText('High return risk')).toBeVisible();
     await expect(detail.getByText('Ask for a small advance first')).toBeVisible();
     await expect(detail.getByText('Line discount')).toBeVisible();
     await verifyDrawerWhileSessionIsBlocked(page, detail);
     const confirm = detail.getByRole('button', { name: 'Mark confirmed' });
-    await confirm.focus();
+    await capture('detail');
+    await expect(confirm).toBeInViewport({ ratio: 1 });
+    const content = detail.getByRole('region', { name: 'Order #1060 content' });
+    await detail.getByRole('button', { name: 'Close' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(content).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(confirm).toBeFocused();
     await confirm.press('Enter');
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
     await expect(detail.getByRole('status', { name: 'Order stage' })).toBeFocused();
-    await capture('detail');
     await detail.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByRole('heading', { name: 'Orders', exact: true })).toBeFocused();
     await page.getByRole('link', { name: /^To pack/ }).click();
