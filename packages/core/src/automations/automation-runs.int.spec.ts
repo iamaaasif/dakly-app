@@ -23,7 +23,6 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
-import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -1204,10 +1203,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
                 [automationId],
               );
             else
-              await admin.pool.query('update automations set status=$1 where id=$2', [
-                change,
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status=$1, pause_reason=case when $1='paused' then 'manual' end where id=$2",
+                [change, automationId],
+              );
             return tags;
           });
         try {
@@ -1382,10 +1381,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               [ids],
             );
           else
-            await admin.pool.query('update automations set status=$1 where id=any($2::uuid[])', [
-              change,
-              ids,
-            ]);
+            await admin.pool.query(
+              "update automations set status=$1, pause_reason=case when $1='paused' then 'manual' end where id=any($2::uuid[])",
+              [change, ids],
+            );
           await blocker.query('commit');
           isHoldingLock = false;
           await pending;
@@ -1992,15 +1991,13 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } = await dueRuns(twoParts, 1, 'active', contact);
       // One credit, too few for two parts, commits after the gate's transaction began.
       let credit: { id: string; created_at: Date } | undefined;
-      // The gate checks the send policy inside its transaction, before reserve takes the lock.
-      const check = SendPolicyService.prototype.check;
-      vi.spyOn(SendPolicyService.prototype, 'check').mockImplementationOnce(async function (
-        this: SendPolicyService,
-        ...args
-      ) {
-        credit = await setCredits(1);
-        return check.apply(this, args);
-      });
+      const lockWallet = WalletService.prototype.lockForReservation;
+      vi.spyOn(WalletService.prototype, 'lockForReservation').mockImplementationOnce(
+        async function (this: WalletService, ...args) {
+          credit = await setCredits(1);
+          return lockWallet.apply(this, args);
+        },
+      );
       await runDueStep(runner, runId!);
       const status = () =>
         admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
