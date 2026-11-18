@@ -1,5 +1,5 @@
 {
-  "id": "a6485deb-fb7b-46b2-ac7d-d1c4ebaf6806",
+  "id": "804f7613-9451-4eeb-8c01-0e350f1aa3a1",
   "prevId": "f6c92e75-cd8f-4287-aa8e-7cecb58209fb",
   "version": "7",
   "dialect": "postgresql",
@@ -13503,6 +13503,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "started_by_user_id": {
+          "name": "started_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "finished_at": {
           "name": "finished_at",
           "type": "timestamp with time zone",
@@ -13617,6 +13623,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "imports_started_by_user_id_idx": {
+          "name": "imports_started_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "started_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -13665,6 +13686,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imports_started_by_user_id_users_id_fk": {
+          "name": "imports_started_by_user_id_users_id_fk",
+          "tableFrom": "imports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "started_by_user_id"
           ],
           "columnsTo": [
             "id"

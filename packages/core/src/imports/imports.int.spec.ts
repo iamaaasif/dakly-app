@@ -4,21 +4,25 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { DatabaseModule } from '../platform/database/database.module';
+import { FileStorageModule } from '../platform/file-storage/file-storage.module';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { ImportsModule } from './imports.module';
 import { ImportsService } from './imports.service';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, ImportsModule] })(TestModule);
+Module({ imports: [DatabaseModule, ImportsModule, FileStorageModule] })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
 const stores = [storeId];
 const userId = randomUUID();
+const starterId = randomUUID();
 const owner = { kind: 'user', userId } as const;
 const start = {
   mapping: { name: 0, phone: 1 },
@@ -35,6 +39,10 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
       "insert into users(id,name,email) values($1::uuid,'শাহনাজ',$1::text || '@example.test')",
       [userId],
     );
+    await admin.pool.query(
+      "insert into users(id,name,email) values($1::uuid,'নাসরিন',$1::text || '@example.test')",
+      [starterId],
+    );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ImportsService);
   });
@@ -45,7 +53,7 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
       for (const table of ['outbox_events', 'imports', 'files'])
         await admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [stores]);
       await admin.pool.query('delete from stores where id=any($1::uuid[])', [stores]);
-      await admin.pool.query('delete from users where id=$1', [userId]);
+      await admin.pool.query('delete from users where id=any($1::uuid[])', [[userId, starterId]]);
     } finally {
       await admin.pool.end();
     }
@@ -93,6 +101,33 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
       [storeId],
     );
     expect(events.rows).toEqual([{ payload: { importId } }]);
+  });
+
+  it('keeps the uploader and the person confirming consent as separate actors', async () => {
+    const { importId } = await service.createCustomerImport(storeId, { sizeBytes: 40 }, owner);
+    await service.start(storeId, importId, start, { kind: 'user', userId: starterId });
+    const saved = await admin.pool.query(
+      `select i.created_by_user_id, to_jsonb(i)->>'started_by_user_id' as started_by_user_id,
+        f.uploaded_by_user_id from imports i join files f on f.id=i.file_id where i.id=$1`,
+      [importId],
+    );
+    expect(saved.rows[0]).toEqual({
+      created_by_user_id: userId,
+      uploaded_by_user_id: userId,
+      started_by_user_id: starterId,
+    });
+  });
+
+  it('uses the shared storage driver for its upload URL', async () => {
+    const storage = app.get<FileStorageDriver>(FILE_STORAGE_DRIVER);
+    const uploadUrl = 'https://files.example.test/import.csv';
+    const signed = vi.spyOn(storage, 'createUploadUrl').mockReturnValue(uploadUrl);
+    try {
+      const result = await service.createCustomerImport(storeId, { sizeBytes: 40 }, owner);
+      expect(result.uploadUrl).toBe(uploadUrl);
+    } finally {
+      signed.mockRestore();
+    }
   });
 
   it('refuses to start an import twice and answers a missing one with not found', async () => {

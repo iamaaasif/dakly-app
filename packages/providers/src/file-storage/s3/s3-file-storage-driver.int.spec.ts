@@ -20,19 +20,54 @@ function request(url: string, init: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...init, signal: AbortSignal.timeout(5000) });
 }
 
-const text = { contentLength: 1, contentType: 'text/plain' };
+const text = { sizeBytes: 1, contentType: 'text/plain' };
 
 function put(url: string, body: string | Uint8Array, contentType = 'text/plain') {
   return request(url, { method: 'PUT', body, headers: { 'content-type': contentType } });
 }
 
 describe('S3FileStorageDriver (SeaweedFS)', () => {
+  it('binds upload size and type and reads the stored object metadata', async () => {
+    const driver = driverAt(new Date());
+    const key = `stores/${randomUUID()}/products/${randomUUID()}`;
+    const url = driver.createUploadUrl(key, 300, { contentType: 'image/png', sizeBytes: 4 });
+    expect(
+      (
+        await request(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: '1234',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: '12345',
+        })
+      ).status,
+    ).toBe(403);
+    expect(await driver.getObjectMetadata(key)).toBeNull();
+    expect(
+      (
+        await request(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: '1234',
+        })
+      ).status,
+    ).toBe(200);
+    expect(await driver.getObjectMetadata(key)).toEqual({ contentType: 'image/png', sizeBytes: 4 });
+  });
+
   it('stores bytes through the upload URL and returns them through the download URL', async () => {
     const driver = driverAt(new Date());
     const key = `stores/${randomUUID()}/photos/${randomUUID()}.txt`;
     const body = new TextEncoder().encode('লাল জামদানি শাড়ি, ৳4,500');
 
-    const content = { contentLength: body.length, contentType: 'text/plain' };
+    const content = { sizeBytes: body.length, contentType: 'text/plain' };
     const upload = await put(driver.createUploadUrl(key, 300, content), body);
     expect(upload.status).toBe(200);
 
@@ -66,6 +101,15 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
     expect(download.status).toBe(404);
   });
 
+  it('deletes a rejected report object and accepts repeating its cleanup', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    await driver.writeText(key, 'Row,Field,Problem\r\n', 'text/csv');
+    await driver.deleteObject(key);
+    expect(await driver.getObjectMetadata(key)).toBeNull();
+    await expect(driver.deleteObject(key)).resolves.toBeUndefined();
+  });
+
   it('writes text the server makes and reads it back with its content type', async () => {
     const driver = driverAt(new Date());
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
@@ -97,7 +141,7 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
   it('refuses an upload whose length or type differs from the signed one', async () => {
     const driver = driverAt(new Date());
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
-    const url = driver.createUploadUrl(key, 60, { contentLength: 19, contentType: 'text/csv' });
+    const url = driver.createUploadUrl(key, 60, { sizeBytes: 19, contentType: 'text/csv' });
     const csv = 'Mobile\n01712345678\n';
 
     expect((await put(url, `${csv}x`, 'text/csv')).status).toBe(403);

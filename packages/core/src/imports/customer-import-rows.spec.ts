@@ -31,6 +31,14 @@ describe('createImportSchema', () => {
 });
 
 describe('readCustomerImportRows', () => {
+  it('reports a missing mapped phone when only a later unmapped column has content', () => {
+    const file = `Phone\n${','.repeat(200)}Rahima\n`;
+    expect(readCustomerImportRows(file, { phone: 0 })).toMatchObject({
+      rows: [],
+      errors: [{ rowNumber: 2, field: 'phone' }],
+    });
+  });
+
   it('maps each field from its column and leaves blank cells unset', () => {
     const file = `${header}\r\nRahima Begum,01712345678,,rahima@example.com,Dhaka,"vip, eid"\r\n`;
 
@@ -191,6 +199,20 @@ describe('readCustomerImportRows', () => {
 });
 
 describe('decodeCustomerImportFile', () => {
+  it.each([0, 1, 8, 11, 12, 14, 31])('refuses control byte %i before database writes', (byte) => {
+    const bytes = new TextEncoder().encode(
+      `Name,Mobile\nনাসরিন${String.fromCharCode(byte)},01712345678\n`,
+    );
+    expect(() => decodeCustomerImportFile(bytes)).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
+    );
+  });
+
+  it('keeps tabs and CSV line breaks', () => {
+    const file = 'Name,Mobile\r\nনাসরিন\tবেগম,01712345678\n';
+    expect(decodeCustomerImportFile(new TextEncoder().encode(file))).toBe(file);
+  });
+
   it('reads UTF-8 text, Bangla and a byte order mark included', () => {
     const bytes = new TextEncoder().encode('\uFEFFনাম,Mobile\n');
 
@@ -198,6 +220,7 @@ describe('decodeCustomerImportFile', () => {
   });
 
   it.each([
+    ['a UTF-16 file without a byte order mark', Buffer.from('Mobile\n01712345678\n', 'utf16le')],
     ['a UTF-16 file', Buffer.from('\uFEFFMobile\n01712345678\n', 'utf16le')],
     ['a file with an invalid byte', Uint8Array.from([0x4d, 0x6f, 0xff, 0x0a])],
   ])('refuses %s as unreadable', (_case, bytes) => {

@@ -8,10 +8,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
 import { createDatabase } from '@dakly/db/client';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { DatabaseModule } from '../platform/database/database.module';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { ImportsModule } from './imports.module';
+import { ImportsRepository } from './imports.repository';
 import { ImportsService } from './imports.service';
 
 class TestModule {}
@@ -372,6 +375,36 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
 
     expect((await contactByPhone(value)).tags).toEqual([...tags, 'ঈদ']);
     expect(await report(result.reportUrl)).toContain('"2","Tags","2 tags not added');
+  });
+
+  it('keeps a resumed import alive and removes the report from a lost sweep race', async () => {
+    const importId = await prepareImport(`Name,Mobile,Email,Tags\nনাসরিন,${phone()},,`);
+    await admin.pool.query(
+      "update imports set started_at=now() - interval '2 hours', last_progress_at=now() - interval '20 minutes' where id=$1",
+      [importId],
+    );
+    const repository = app.get(ImportsRepository);
+    const storage = app.get<FileStorageDriver>(FILE_STORAGE_DRIVER);
+    const requeue = repository.requeue.bind(repository);
+    const write = storage.writeText.bind(storage);
+    const objects: string[] = [];
+    const writeSpy = vi.spyOn(storage, 'writeText').mockImplementation(async (key, body, type) => {
+      objects.push(key);
+      await write(key, body, type);
+    });
+    const requeueSpy = vi.spyOn(repository, 'requeue').mockImplementationOnce(async (...args) => {
+      await admin.pool.query('update imports set last_progress_at=now() where id=$1', [importId]);
+      return requeue(...args);
+    });
+    try {
+      await service.sweepStuckImports();
+      expect((await service.get(storeId, importId)).status).toBe('importing');
+      for (const key of objects) expect(await storage.getObjectMetadata(key)).toBeNull();
+      expect((await service.get(storeId, importId)).reportUrl).toBeNull();
+    } finally {
+      requeueSpy.mockRestore();
+      writeSpy.mockRestore();
+    }
   });
 
   it('queues a stalled import again, fails it after the limit and leaves a running one alone', async () => {

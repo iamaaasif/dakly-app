@@ -135,6 +135,7 @@ export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   id: string;
   imageFileIds: string[];
   readiness: ProductReadiness[];
+  photos: ProductPhotoResponse[];
   variants: ProductVariantResponse[];
   createdAt: string;
   updatedAt: string;
@@ -153,3 +154,24 @@ export const stockAdjustmentSchema = z.strictObject({
   reason: z.string().trim().min(1).max(500),
 });
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
+export const MAX_PRODUCT_PHOTOS = 10;
+export const productPhotoUploadSchema = z.strictObject({
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(5 * 1024 * 1024),
+});
+export const confirmProductPhotoSchema = productPhotoUploadSchema.extend({ fileId: z.uuid() });
+export const reorderProductPhotosSchema = z.strictObject({
+  fileIds: z
+    .array(z.uuid())
+    .max(MAX_PRODUCT_PHOTOS)
+    .refine((ids) => new Set(ids).size === ids.length, 'Repeated photo'),
+});
+export type ProductPhotoUploadInput = z.infer<typeof productPhotoUploadSchema>;
+export type ConfirmProductPhotoInput = z.infer<typeof confirmProductPhotoSchema>;
+export type ReorderProductPhotosInput = z.infer<typeof reorderProductPhotosSchema>;
+export type ProductPhotoUploadResponse = { fileId: string; uploadUrl: string };
+export type ProductPhotoResponse = { id: string; url: string };

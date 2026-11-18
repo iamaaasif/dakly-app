@@ -18,13 +18,13 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import {
   type CustomerImportRows,
   decodeCustomerImportFile,
   readCustomerImportRows,
 } from './customer-import-rows';
-import { FILE_STORAGE_DRIVER } from './file-storage-provider';
 import { importError } from './imports.errors';
 import {
   type Import,
@@ -35,7 +35,12 @@ import {
 
 type Actor = AuditEntry['actor'];
 type Run = { storeId: string; found: Import; lease: Date; finished: boolean };
-type Outcome = { status: 'done' | 'failed'; counts?: ImportCounts; lines: ReportLine[] };
+type Outcome = {
+  status: 'done' | 'failed';
+  counts?: ImportCounts;
+  lines: ReportLine[];
+  stalled?: { before: Date; limit: number };
+};
 type ReportLine = {
   rowNumber?: number;
   field?: ContactImportField | 'sms' | 'whatsapp';
@@ -97,7 +102,7 @@ export class ImportsService {
     const upload = this.newFile(storeId, input.sizeBytes, 'pending');
     const userId = actor.kind === 'user' ? actor.userId : null;
     await this.repository.createCustomerImport(storeId, importId, upload, userId);
-    const content = { contentLength: input.sizeBytes, contentType: CSV };
+    const content = { sizeBytes: input.sizeBytes, contentType: CSV };
     return {
       importId,
       uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS, content),
@@ -108,7 +113,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     input: StartImportInput,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<ImportResponse> {
     await this.transaction.run(storeId, async () => {
       const now = this.clock.now();
@@ -118,6 +123,7 @@ export class ImportsService {
         consentEvidence: input.consentEvidence,
         hasConsentConfirmation: Object.keys(input.consentEvidence).length > 0,
         startedAt: now,
+        startedByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       if (!started) {
         await this.findImport(storeId, importId);
@@ -189,6 +195,7 @@ export class ImportsService {
           await this.finish(storeId, stuck.id, stuck.claimedAt, {
             status: 'failed',
             lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+            stalled: { before, limit: MAX_REQUEUES },
           });
       }
   }
@@ -295,11 +302,17 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines }: Outcome,
+    { status, counts, lines, stalled }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
-    await this.repository.finish(storeId, importId, { lease, result, report });
+    const finished = await this.repository.finish(storeId, importId, {
+      lease,
+      result,
+      report,
+      stalled,
+    });
+    if (!finished && report) await this.storage.deleteObject(report.objectKey);
   }
 
   private async findImport(storeId: string, importId: string): Promise<Import> {

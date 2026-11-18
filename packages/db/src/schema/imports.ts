@@ -48,6 +48,7 @@ export const imports = pgTable(
     reportFileId: uuid('report_file_id').references(() => files.id),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     startedAt: timestamptz('started_at'),
+    startedByUserId: uuid('started_by_user_id').references(() => users.id),
     finishedAt: timestamptz('finished_at'),
     // The running job's lease, renewed after each batch, so a redelivered job never runs beside it.
     claimedAt: timestamptz('claimed_at'),
@@ -78,6 +79,7 @@ export const imports = pgTable(
     index('imports_importing_idx')
       .on(table.storeId)
       .where(sql`${table.status} = 'importing'`),
+    index('imports_started_by_user_id_idx').on(table.startedByUserId),
     check('imports_kind', isOneOf(table.kind, importKinds)),
     check('imports_status', isOneOf(table.status, importStatuses)),
     check('imports_duplicate_mode', isOneOf(table.duplicateMode, importDuplicateModes)),
