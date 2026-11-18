@@ -259,7 +259,7 @@ const recipientSchema = z.strictObject({
   name: z.string().trim().min(1).max(120),
   phone: bdMobileSchema,
   address: z.string().trim().min(1).max(500),
-  areaId: z.int().positive().max(2147483647),
+  areaId: z.int().positive('Choose a district or upazila').max(2147483647),
   isBuyer: z.boolean().default(true),
 });
 const orderLines = z
