@@ -9,6 +9,7 @@ import {
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
+  type OrderStage,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
 import { maskPhone } from '@dakly/contracts/phone';
@@ -23,10 +24,16 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
-import { changeOrderStage, isSyncedOrder } from './order-fulfilment';
+import { applyOrderFulfilment } from './order-fulfilment';
+import { orderStageTransitions } from './order-stage';
 import { orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
-import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
+import {
+  OrdersRepository,
+  type OrderItemWrite,
+  type OrderWrite,
+  type StageWrite,
+} from './orders.repository';
 
 const stageSnapshot = z.object({ state: z.enum(orderStages) });
 
@@ -172,17 +179,46 @@ export class OrdersService {
     { actor, access }: StageEditor,
   ): Promise<OrderDetail> {
     return this.transaction.run(storeId, async () => {
-      await changeOrderStage(
+      const order = await this.repository.lock(storeId, orderId);
+      if (!order) throw orderError('ORDER_NOT_FOUND');
+      if (!orderStageTransitions[order.stage].includes(change.to) || isSyncedOrder(order.source))
+        throw orderError('ORDER_STAGE_NOT_ALLOWED');
+
+      const now = this.clock.now();
+      const confirmed = change.to === 'to_pack' && !order.confirmedAt;
+      if (change.to === 'cancelled') {
+        await this.moveReservations(
+          storeId,
+          orderId,
+          { before: await this.repository.items(storeId, orderId), after: [] },
+          { actor, reason: change.reason },
+        );
+      }
+      const fulfilment = await applyOrderFulfilment(
         storeId,
-        { orderId, change, actor },
-        {
-          orders: this.repository,
-          products: this.products,
-          audit: this.audit,
-          outbox: this.outbox,
-          clock: this.clock,
-        },
+        { order, change, actor, now },
+        { orders: this.repository, products: this.products },
       );
+      await this.repository.updateOrder(storeId, orderId, {
+        ...fulfilment,
+        ...stageWrite(change, now, confirmed),
+        ...(change.to === 'cancelled' && order.paymentStatus === 'advance_paid'
+          ? { paymentStatus: 'refund_due' }
+          : {}),
+      });
+      await this.recordStage(storeId, orderId, {
+        from: order.stage,
+        change,
+        actor,
+        occurredAt: now.toISOString(),
+      });
+      if (confirmed)
+        await this.outbox.publish({
+          type: 'order.confirmed',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { orderId },
+        });
       return this.getById(storeId, orderId, access);
     });
   }
@@ -235,7 +271,7 @@ export class OrdersService {
   ): Promise<void> {
     const { id, createdAt, buyerContactId } = order;
     await this.repository.insert(storeId, order);
-    await this.moveReservations(storeId, id, { before: [], after: items }, actor);
+    await this.moveReservations(storeId, id, { before: [], after: items }, { actor });
     await this.repository.insertItems(
       storeId,
       id,
@@ -282,7 +318,7 @@ export class OrdersService {
     storeId: string,
     orderId: string,
     { before, after }: { before: OrderItemWrite[]; after: OrderItemWrite[] },
-    actor: AuditEntry['actor'],
+    { actor, reason }: { actor: AuditEntry['actor']; reason?: string },
   ): Promise<void> {
     const deltas = new Map<string, number>();
     for (const item of before)
@@ -296,10 +332,59 @@ export class OrdersService {
       await this.products.moveStock(storeId, variantId, {
         kind: delta > 0 ? 'reserve' : 'release',
         quantity: Math.abs(delta),
-        reference: { orderId, actor },
+        reference: { orderId, actor, reason },
       });
     }
   }
+
+  private async recordStage(
+    storeId: string,
+    orderId: string,
+    {
+      from,
+      change,
+      actor,
+      occurredAt,
+    }: {
+      from: OrderStage;
+      change: OrderStageChange;
+      actor: AuditEntry['actor'];
+      occurredAt: string;
+    },
+  ): Promise<void> {
+    const reason = 'reason' in change ? change.reason : undefined;
+    await this.audit.record(storeId, {
+      actor,
+      action: 'order.stage_changed',
+      entityType: 'order',
+      entityId: orderId,
+      before: { state: from },
+      after: { state: change.to },
+      reason: 'note' in change ? change.note : reason,
+    });
+    await this.outbox.publish({
+      type: 'order.stage_changed',
+      storeId,
+      occurredAt,
+      payload: { orderId, from, to: change.to },
+    });
+  }
+}
+
+function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
+  return {
+    stage: change.to,
+    onHoldReason: change.to === 'on_hold' ? change.reason : null,
+    followUpOn: change.to === 'on_hold' ? (change.followUpOn ?? null) : null,
+    cancelReason: change.to === 'cancelled' ? change.reason : null,
+    ...(confirmed && { confirmedAt: now, confirmationMethod: 'staff' }),
+    ...(change.to === 'cancelled' && { cancelledAt: now }),
+    updatedAt: now,
+  };
+}
+
+function isSyncedOrder(source: OrderDetail['source']): boolean {
+  return source === 'shopify' || source === 'woocommerce';
 }
 
 function isoTime(value: Date | null): string | null {

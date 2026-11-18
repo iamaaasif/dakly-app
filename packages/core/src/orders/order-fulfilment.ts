@@ -2,11 +2,7 @@ import type { AuditEntry } from '@dakly/contracts/audit';
 import type { OrderStageChange } from '@dakly/contracts/orders';
 import type { StockMovementKind } from '@dakly/contracts/products';
 
-import type { AuditService } from '../audit/audit.service';
-import type { Clock } from '../platform/clock';
-import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { ProductsService } from '../products/products.service';
-import { orderStageTransitions } from './order-stage';
 import { partialOrderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import type { OrdersRepository, StageWrite } from './orders.repository';
@@ -14,80 +10,19 @@ import type { OrdersRepository, StageWrite } from './orders.repository';
 type Actor = AuditEntry['actor'];
 type LockedOrder = NonNullable<Awaited<ReturnType<OrdersRepository['lock']>>>;
 type Items = Awaited<ReturnType<OrdersRepository['items']>>;
-type StageInput = { orderId: string; change: OrderStageChange; actor: Actor; now: Date };
-type StageDependencies = {
-  orders: OrdersRepository;
-  products: ProductsService;
-  audit: AuditService;
-  outbox: OutboxService;
-  clock: Clock;
-};
+type FulfilmentDependencies = { orders: OrdersRepository; products: ProductsService };
 
-export async function changeOrderStage(
+export async function applyOrderFulfilment(
   storeId: string,
-  input: Omit<StageInput, 'now'>,
-  deps: StageDependencies,
-): Promise<void> {
-  const { orderId, change, actor } = input;
-  const order = await deps.orders.lock(storeId, orderId);
-  if (!order) throw orderError('ORDER_NOT_FOUND');
-  if (!orderStageTransitions[order.stage].includes(change.to) || isSyncedOrder(order.source))
-    throw orderError('ORDER_STAGE_NOT_ALLOWED');
-
-  const now = deps.clock.now();
-  const confirmed = change.to === 'to_pack' && !order.confirmedAt;
-  const result = await fulfilmentWrite(storeId, { ...input, now }, order, deps);
-  const reason = change.to === 'partially_delivered' ? change.note : stageReason(change);
-  await deps.orders.updateOrder(storeId, orderId, {
-    ...stageFields(change, now, confirmed),
-    ...result,
-  });
-  await deps.audit.record(storeId, {
+  {
+    order,
+    change,
     actor,
-    action: 'order.stage_changed',
-    entityType: 'order',
-    entityId: orderId,
-    before: { state: order.stage },
-    after: { state: change.to },
-    reason,
-  });
-  const occurredAt = now.toISOString();
-  await deps.outbox.publish({
-    type: 'order.stage_changed',
-    storeId,
-    occurredAt,
-    payload: { orderId, from: order.stage, to: change.to },
-  });
-  if (confirmed)
-    await deps.outbox.publish({
-      type: 'order.confirmed',
-      storeId,
-      occurredAt,
-      payload: { orderId },
-    });
-}
-
-function stageReason(change: OrderStageChange): string | undefined {
-  return 'reason' in change ? change.reason : undefined;
-}
-
-function stageFields(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
-  return {
-    stage: change.to,
-    onHoldReason: change.to === 'on_hold' ? change.reason : null,
-    followUpOn: change.to === 'on_hold' ? (change.followUpOn ?? null) : null,
-    cancelReason: change.to === 'cancelled' ? change.reason : null,
-    ...(confirmed && { confirmedAt: now, confirmationMethod: 'staff' }),
-    updatedAt: now,
-  };
-}
-
-async function fulfilmentWrite(
-  storeId: string,
-  { orderId, change, actor, now }: StageInput,
-  order: LockedOrder,
-  { orders, products }: StageDependencies,
+    now,
+  }: { order: LockedOrder; change: OrderStageChange; actor: Actor; now: Date },
+  { orders, products }: FulfilmentDependencies,
 ): Promise<StageWrite> {
+  const orderId = order.id;
   const reference = { orderId, actor };
   switch (change.to) {
     case 'with_courier':
@@ -121,15 +56,6 @@ async function fulfilmentWrite(
         });
       }
       return { returnedAt: now, returnReason: change.reason };
-    case 'cancelled':
-      await moveOrderStock(storeId, products, await orders.items(storeId, orderId), {
-        kind: 'release',
-        reference: { ...reference, reason: change.reason },
-      });
-      return {
-        cancelledAt: now,
-        ...(order.paymentStatus === 'advance_paid' && { paymentStatus: 'refund_due' }),
-      };
     default:
       return {};
   }
@@ -145,7 +71,7 @@ async function recordDelivery(
     actor,
     now,
   }: { order: LockedOrder; change: DeliveryChange; actor: Actor; now: Date },
-  { orders, products }: Pick<StageDependencies, 'orders' | 'products'>,
+  { orders, products }: FulfilmentDependencies,
 ): Promise<StageWrite> {
   const orderId = order.id;
   const items = await orders.items(storeId, orderId);
@@ -201,8 +127,4 @@ async function moveOrderStock(
     if (isStockTracked && quantity > 0)
       await products.moveStock(storeId, variantId, { ...movement, quantity });
   }
-}
-
-export function isSyncedOrder(source: LockedOrder['source']): boolean {
-  return source === 'shopify' || source === 'woocommerce';
 }
