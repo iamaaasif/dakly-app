@@ -274,6 +274,13 @@
       "when": 1794994351581,
       "tag": "0038_automation_steps",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794995830264,
+      "tag": "0039_automation_send_costs",
+      "breakpoints": true
     }
   ]
 }
