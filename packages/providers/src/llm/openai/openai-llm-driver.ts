@@ -2,6 +2,18 @@ import { z } from 'zod';
 
 import { LlmError, type LlmDriver, type LlmRequest, type LlmResult } from '../llm-driver';
 
+const timeoutMilliseconds = z.int().min(1).max(2_147_483_647);
+const unsupportedSchemaKeywords = [
+  'allOf',
+  'oneOf',
+  'not',
+  'if',
+  'then',
+  'else',
+  'dependentRequired',
+  'dependentSchemas',
+];
+
 const responseUsage = z
   .object({
     input_tokens: z.int().nonnegative(),
@@ -44,8 +56,10 @@ export class OpenAiLlmDriver implements LlmDriver {
 
   async respond(request: LlmRequest): Promise<LlmResult> {
     if (request.signal?.aborted) throw new LlmError('LLM_ABORTED');
+    const timeout = timeoutMilliseconds.safeParse(request.timeoutMs);
+    if (!timeout.success) throw new LlmError('LLM_INVALID_TIMEOUT');
     const body = responseRequestBody(request);
-    const deadline = AbortSignal.timeout(request.timeoutMs);
+    const deadline = AbortSignal.timeout(timeout.data);
     const signal = request.signal ? AbortSignal.any([request.signal, deadline]) : deadline;
     try {
       const response = await this.request('https://api.openai.com/v1/responses', {
@@ -55,7 +69,10 @@ export class OpenAiLlmDriver implements LlmDriver {
         redirect: 'error',
         signal,
       });
-      if (!response.ok) throw httpError(response.status);
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw httpError(response.status);
+      }
       const payload: unknown = await response.json();
       return decodeResponse(payload);
     } catch (error) {
@@ -111,8 +128,12 @@ function httpError(status: number): LlmError {
 function strictSchema(schema: z.ZodType): Record<string, unknown> {
   const generated = z.toJSONSchema(schema, {
     target: 'draft-7',
+    io: 'input',
     override: ({ jsonSchema }) => {
+      if (unsupportedSchemaKeywords.some((keyword) => Object.hasOwn(jsonSchema, keyword)))
+        throw new LlmError('LLM_INVALID_SCHEMA');
       if (jsonSchema.type !== 'object') return;
+      jsonSchema.additionalProperties ??= false;
       const required = jsonSchema.required ?? [];
       const fields = Object.keys(jsonSchema.properties ?? {});
       if (
