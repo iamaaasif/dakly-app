@@ -69,23 +69,19 @@ export async function claimRetryDispatch({
     const checkedAt = await repository.schedulerTime(storeId);
     const { firstTriedAt } = locked;
     const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-    const claimedAt = await repository.schedulerTime(storeId);
-    const lockWorkflow = () =>
-      repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt }, 'retry');
+    const lockWorkflow = () => repository.moveRunIfLive(storeId, claim, unchanged, 'retry');
     const checked = early
       ? (await lockWorkflow()) && { result: early, at: checkedAt }
       : await recheck(locked, lockWorkflow);
     if (!checked) return undefined;
     const { result, at } = checked;
-    if (result) return { result, claim: { ...claim, claimedAt }, at };
-    const renewed = { ...claim, claimedAt };
     // A slower worker must not age out a previously submitted message early.
     const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
     const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
-    await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-    const afterWrite = await repository.schedulerTime(storeId);
-    await repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
-    return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
+    if (!result) await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
+    const claimedAt = await repository.schedulerTime(storeId);
+    await repository.moveRun(storeId, claim, { status: 'running', claimedAt });
+    return { result, claim: { ...claim, claimedAt }, at: sentAt };
   });
 }
 

@@ -693,6 +693,31 @@ describe('AutomationRunsService', () => {
       expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
     });
 
+    it('renews a deferred retry after a long dispatch lock wait', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      const afterWait = new Date(now.getTime() + 6 * 60_000);
+      recheckDefer = new Date(afterWait.getTime() + HOUR);
+      duringRecheck = () => {
+        databaseNow = afterWait;
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        claimedAt: afterWait,
+        wakeAt: recheckDefer,
+      });
+      expect(sent).toEqual([]);
+    });
+
     it('ends an uncertain send when the goal is reached during the resend check', async () => {
       providerError = new Error('connection reset');
       await start(send, { graph: { ...graphWith(send), goal: { kind: 'got_tag', tag: 'paid' } } });
