@@ -108,6 +108,12 @@ export class ContactsService {
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
+  async getPhoneForSend(storeId: string, id: string): Promise<string | null> {
+    const [contact] = await this.contactsRepository.findRecipients(storeId, [id]);
+    if (!contact) throw contactError('CONTACT_NOT_FOUND');
+    return contact.phone;
+  }
+
   async getById(storeId: string, id: string, access: Access): Promise<ContactDetailResponse> {
     const contact = await this.contactsRepository.findById(storeId, id);
     if (!contact) throw contactError('CONTACT_NOT_FOUND');
