@@ -56,17 +56,6 @@ export class StoresRepository {
     });
   }
 
-  async nextOrderNumber(storeId: string): Promise<number | undefined> {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx
-        .update(storeCounters)
-        .set({ nextOrderNumber: sql`${storeCounters.nextOrderNumber} + 1` })
-        .where(eq(storeCounters.storeId, storeId))
-        .returning({ number: sql<number>`${storeCounters.nextOrderNumber} - 1` }),
-    );
-    return row?.number;
-  }
-
   async find(storeId: string): Promise<StoreResponse | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select(storeColumns).from(stores).where(eq(stores.id, storeId)).limit(1),

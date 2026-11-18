@@ -38,12 +38,6 @@ export class StoresService {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  async nextOrderNumber(storeId: string): Promise<number> {
-    const number = await this.repository.nextOrderNumber(storeId);
-    if (number === undefined) throw storeError('STORE_NOT_FOUND');
-    return number;
-  }
-
   async settings(storeId: string): Promise<StoreSettingsResponse> {
     const store = await this.repository.settings(storeId);
     if (!store) throw storeError('STORE_NOT_FOUND');

@@ -25,7 +25,6 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { SessionsService } from '../sessions/sessions.service';
 import { StoresModule } from './stores.module';
 import { StoresRepository } from './stores.repository';
-import { StoresService } from './stores.service';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, SessionsModule, StoresModule] })(TestModule);
@@ -110,22 +109,6 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     await app?.close();
     await admin.pool.end();
   });
-  it('allocates consecutive order numbers to concurrent requests in one store', async () => {
-    const owner = await account();
-    const response = await post(owner.cookies[0]!);
-    expect(response.statusCode).toBe(201);
-    const storeId: string = response.json().id;
-    storeIds.push(storeId);
-    const storesService = app.get(StoresService);
-
-    const numbers = await Promise.all([
-      storesService.nextOrderNumber(storeId),
-      storesService.nextOrderNumber(storeId),
-    ]);
-
-    expect(numbers.sort((a, b) => a - b)).toEqual([1001, 1002]);
-  });
-
   it('creates exactly one yearly Growth trial for parallel sessions and resumes on retry', async () => {
     const owner = await account();
     const responses = await Promise.all(owner.cookies.map((cookie) => post(cookie)));

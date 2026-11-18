@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 
-import type { AuditEntry } from '@dakly/contracts/audit';
+import type { AuditEntry, AuditHistoryQuery } from '@dakly/contracts/audit';
 import { auditLog } from '@dakly/db/schema/platform';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -10,7 +10,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 export class AuditRepository {
   constructor(private readonly database: TenantDatabase) {}
 
-  orderStages(storeId: string, orderId: string) {
+  history(storeId: string, { entityType, entityId, action }: AuditHistoryQuery) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -27,9 +27,9 @@ export class AuditRepository {
         .where(
           and(
             eq(auditLog.storeId, storeId),
-            eq(auditLog.entityType, 'order'),
-            eq(auditLog.entityId, orderId),
-            eq(auditLog.action, 'order.stage_changed'),
+            eq(auditLog.entityType, entityType),
+            eq(auditLog.entityId, entityId),
+            eq(auditLog.action, action),
           ),
         )
         .orderBy(auditLog.createdAt, auditLog.id),
@@ -50,7 +50,6 @@ export class AuditRepository {
         after: entry.after,
         ip: entry.ip,
         reason: entry.reason,
-        createdAt: entry.occurredAt ? new Date(entry.occurredAt) : undefined,
       }),
     );
   }
