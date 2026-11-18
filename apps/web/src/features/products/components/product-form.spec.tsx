@@ -214,6 +214,32 @@ describe('Product form', () => {
     });
   });
 
+  it('asks for a new variant selection after its only option value is replaced', async () => {
+    const withOption: ProductResponse = {
+      ...product,
+      options: [{ name: 'Size', values: ['M'] }],
+      variants: [{ ...product.variants[0]!, isDefault: false, optionValues: { Size: 'M' } }],
+    };
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(withOption, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(withOption);
+    const values = screen.getByLabelText('Option 1 values');
+    const choice = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Size for variant 1' });
+    fireEvent.change(values, { target: { value: ' M ' } });
+    expect(choice.value).toBe('M');
+    fireEvent.change(values, { target: { value: 'L' } });
+    expect(choice.value).toBe('');
+    await userEvent.selectOptions(choice, 'L');
+    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toMatchObject({
+      variants: [{ id: product.variants[0]!.id, optionValues: { Size: 'L' } }],
+    });
+  });
+
   it('saves a description without overwriting later visibility or variant changes', async () => {
     let submitted: unknown;
     vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {

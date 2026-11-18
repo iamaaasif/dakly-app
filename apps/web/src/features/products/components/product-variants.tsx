@@ -17,7 +17,11 @@ export function ProductVariants({ options }: ProductVariantsProps) {
   const errors = form.formState.errors.variants;
   const error = errors?.message ?? errors?.root?.message;
   const namedOptions = options
-    .map((option) => ({ ...option, name: option.name.trim() }))
+    .map((option) => ({
+      ...option,
+      name: option.name.trim(),
+      values: option.values.map((value) => value.trim()),
+    }))
     .filter((option) => option.name);
   return (
     <fieldset className="space-y-4">
@@ -74,7 +78,7 @@ function VariantFields({ index, options: namedOptions, onRemove }: VariantFields
                   {...control}
                   ref={field.ref}
                   className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 aria-invalid:border-danger"
-                  value={field.value?.[option.index] ?? ''}
+                  value={option.values.find((item) => item === field.value?.[option.index]) ?? ''}
                   onBlur={field.onBlur}
                   onChange={(event) =>
                     field.onChange({ ...field.value, [option.index]: event.target.value })
