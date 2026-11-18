@@ -49,6 +49,7 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
+  | 'balance_paused'
   | { outcome: 'late'; balanceResumedAt: Date | null }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }

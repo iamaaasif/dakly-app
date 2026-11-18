@@ -223,12 +223,14 @@ export class AutomationRunsService {
       const checkedAt = await this.repository.schedulerTime(storeId);
       const late = await this.readLateGateResult(facts, checkedAt);
       const result = late ?? (await this.gateSend(renewed, step, facts));
+      if (result === 'balance_paused') return result;
       const claimedAt = await this.repository.schedulerTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
       return result;
     });
+    if (started === 'balance_paused') return undefined;
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
@@ -241,7 +243,6 @@ export class AutomationRunsService {
       const late = lateSend(step, claim.stepKey, { wakeAt: facts.wakeAt, ...started }, gatedAt);
       return { ...late, claim: renewed };
     }
-    const { decision } = started;
     if ('body' in started)
       return deliverAutomationSms(
         { messaging: this.messaging, reporter: this.reporter, repository: this.repository },
@@ -258,13 +259,13 @@ export class AutomationRunsService {
         started.firstTriedAt,
         started.at,
       );
-    if (decision.action === 'defer')
-      return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
-    if (decision.action === 'skip')
+    if (started.decision.action === 'defer')
+      return { claim: renewed, run: { status: 'waiting', wakeAt: started.decision.until } };
+    if (started.decision.action === 'skip')
       return {
         ...ifNotReachable(step, gatedAt),
         claim: renewed,
-        step: { ...row, outcome: 'skipped', skipReason: decision.reason },
+        step: { ...row, outcome: 'skipped', skipReason: started.decision.reason },
       };
     return undefined;
   }
@@ -302,7 +303,13 @@ export class AutomationRunsService {
     if (body === undefined) {
       await this.automations.pauseForBalance(storeId, facts.automationId, system);
       // The sweep ignores the waiting run while its workflow is paused.
-      return { decision: { action: 'defer', until: facts.wakeAt ?? at } };
+      await this.repository.moveRun(storeId, claim, {
+        status: 'waiting',
+        wakeAt: facts.wakeAt ?? firstTriedAt,
+        attempts: 0,
+        lastError: null,
+      });
+      return 'balance_paused';
     }
     return { decision, body, destination, at, firstTriedAt };
   }

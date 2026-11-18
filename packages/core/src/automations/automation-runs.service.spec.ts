@@ -142,6 +142,7 @@ describe('AutomationRunsService', () => {
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
   let clockFailsAfterGate: boolean;
+  let failAfterPause: boolean;
   let gateCommitted: boolean;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
@@ -192,6 +193,7 @@ describe('AutomationRunsService', () => {
     sent = [];
     providerError = undefined;
     clockFailsAfterGate = false;
+    failAfterPause = false;
     gateCommitted = false;
     senderLookupError = undefined;
     balance = 10;
@@ -310,6 +312,8 @@ describe('AutomationRunsService', () => {
       run: async (_storeId: string, work: () => Promise<unknown>) => {
         const result = await work();
         if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
+        if (failAfterPause && pausedForBalance.length)
+          throw new Error('worker stopped after the balance pause committed');
         return result;
       },
     };
@@ -1019,6 +1023,23 @@ describe('AutomationRunsService', () => {
       });
       expect(repository.steps).toEqual([]);
       expect(sent).toEqual([]);
+      expect(ledger).toEqual([]);
+    });
+
+    it('commits the waiting run before the worker can stop after a balance pause', async () => {
+      balance = 0;
+      failAfterPause = true;
+
+      await expect(start(send)).rejects.toThrow('worker stopped after the balance pause committed');
+
+      expect(pausedForBalance).toEqual([AUTOMATION_ID]);
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        currentStepKey: 'first',
+        wakeAt: claimedAt,
+        attempts: 0,
+        lastError: null,
+      });
       expect(ledger).toEqual([]);
     });
 
