@@ -230,13 +230,19 @@ export class AutomationRunsRepository {
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read
   // in the same statement so a pause or stop that committed first is seen.
-  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+  async moveRunIfLive(
+    storeId: string,
+    claim: RunClaim,
+    change: RunChange,
+    gate?: 'retry',
+  ): Promise<boolean> {
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
-        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped}
+      ${gate ? sql`for share of ${automations}, ${automationVersions}` : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

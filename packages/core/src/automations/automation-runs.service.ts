@@ -22,9 +22,17 @@ import {
   type RunClaim,
   type SendingStep,
 } from './automation-runs.repository';
-import { deliverAutomationSms, endExpiredRetry, retryDecision } from './automation-send-retry';
 import {
-  type CreditSettlement,
+  claimRetryDispatch,
+  deliverAutomationSms,
+  endExpiredRetry,
+  hasRetryDetails,
+  retryDecision,
+  settleAutomationCredits,
+  type RetryableSend,
+  type RetryCheck,
+} from './automation-send-retry';
+import {
   type Delivery,
   endWithUnknownOutcome,
   exited,
@@ -105,7 +113,8 @@ export class AutomationRunsService {
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
         await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
-      if (result.credits) await this.settleCredits(storeId, claim, result.credits);
+      if (result.credits)
+        await settleAutomationCredits(this.wallets, storeId, claim, result.credits);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
@@ -346,59 +355,24 @@ export class AutomationRunsService {
     return messageBody(step, optOut?.url);
   }
 
-  private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
-    const key = operationKey(claim);
-    // Every send row was written with its reservation, in the same transaction.
-    const reservationId = (await this.wallets.findByIdempotencyKey(storeId, key))!.entryId;
-    if (credits.settle === 'charge')
-      await this.wallets.charge(storeId, {
-        reservationId,
-        quantity: credits.quantity,
-        idempotencyKey: `${key}:charge`,
-        actor: system,
-      });
-    else
-      await this.wallets.release(storeId, {
-        reservationId,
-        idempotencyKey: `${key}:release`,
-        actor: system,
-      });
-  }
-
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
     const { storeId, contactId, wakeAt } = facts;
-    const { firstTriedAt, optOutUrl, destination } = started;
     const preflight = await this.repository.schedulerTime(storeId);
+    if (!hasRetryDetails(step, started))
+      return endWithUnknownOutcome(
+        failed('The SMS is missing its original delivery details', preflight),
+      );
+    const { firstTriedAt, optOutUrl } = started;
     const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
       ? undefined
       : await this.messaging.prepareSender(storeId);
-    const gated = await this.transaction.run(storeId, async () => {
-      const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
-      if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
-      const locked = await this.repository.findSendingStep(
-        storeId,
-        claim.runId,
-        claim.stepKey,
-        true,
-      );
-      if (!locked) return undefined;
-      const checkedAt = await this.repository.schedulerTime(storeId);
-      const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-      const { result, at } = early
-        ? { result: early, at: checkedAt }
-        : await this.recheckResend(step, facts, locked);
-      const claimedAt = await this.repository.schedulerTime(storeId);
-      if (!(await this.repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt })))
-        return undefined;
-      if (result) return { result, claim: { ...claim, claimedAt }, at: claimedAt };
-      const renewed = { ...claim, claimedAt };
-      // A slower worker must not age out a previously submitted message early.
-      const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
-      const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
-      await this.repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-      const afterWrite = await this.repository.schedulerTime(storeId);
-      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
-      return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
+    const gated = await claimRetryDispatch({
+      repository: this.repository,
+      transaction: this.transaction,
+      claim,
+      step,
+      facts,
+      recheck: (locked, lockWorkflow) => this.recheckResend(step, facts, locked, lockWorkflow),
     });
     if (!gated) {
       const run = await this.repository.findRun(storeId, claim.runId);
@@ -414,7 +388,7 @@ export class AutomationRunsService {
         contactId,
         step,
         body: messageBody(step, optOutUrl ?? undefined),
-        destination,
+        destination: gated.destination,
         preparedSender,
         isFirstTry: false,
       },
@@ -423,18 +397,36 @@ export class AutomationRunsService {
     );
   }
 
-  private async recheckResend(step: SendStep, facts: RunFacts, { id, firstTriedAt }: SendingStep) {
-    const { decision, at } = await this.sendPolicy.recheckForSend(
-      facts.storeId,
-      { contactId: facts.contactId, channel: 'sms', category: step.category },
+  private async recheckResend(
+    step: SendStep,
+    facts: RunFacts,
+    { id, firstTriedAt, destinationHash }: RetryableSend,
+    lockWorkflow: () => Promise<boolean>,
+  ): Promise<RetryCheck | undefined> {
+    const { storeId, contactId, wakeAt } = facts;
+    const gate = await this.sendPolicy.recheckForSend(
+      storeId,
+      { contactId, channel: 'sms', category: step.category },
       id,
+      lockWorkflow,
     );
+    if (!gate) return undefined;
+    const { decision, at } = gate;
     const exit = await this.refreshExitReason(facts, at);
-    const now = await this.repository.schedulerTime(facts.storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const result = exit
       ? endWithUnknownOutcome(exited(exit, now))
-      : (endExpiredRetry(step, firstTriedAt, facts.wakeAt, now) ??
+      : (endExpiredRetry(step, firstTriedAt, wakeAt, now) ??
         retryDecision(step, firstTriedAt, decision, now));
-    return { result, at };
+    if (result) return { result, at };
+    const destination = await this.contacts.getPhoneForSend(storeId, contactId);
+    if (destination && workflowDestinationHash(storeId, destination) === destinationHash)
+      return { result: undefined, at, destination };
+    return {
+      result: endWithUnknownOutcome(
+        failed("The contact's phone changed after this message was decided", now),
+      ),
+      at,
+    };
   }
 }

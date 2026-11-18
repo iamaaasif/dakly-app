@@ -101,16 +101,20 @@ class FakeRunsRepository {
     return (
       step && {
         id: step.id!,
-        firstTriedAt: step.firstTriedAt ?? step.sentAt!,
-        latestDispatchAt: step.sentAt!,
+        firstTriedAt: step.firstTriedAt ?? step.sentAt ?? null,
+        latestDispatchAt: step.sentAt ?? step.firstTriedAt ?? null,
         optOutUrl: step.optOutUrl ?? null,
-        destination: step.destination ?? null,
+        destinationHash: step.destinationHash ?? null,
       }
     );
   }
 
   async changeStep(_storeId: string, _runId: string, stepKey: string, change: RunStepChange) {
-    this.steps = this.steps.map((row) => (row.stepKey === stepKey ? { ...row, ...change } : row));
+    const retryDetails =
+      change.outcome === 'sending' ? {} : { destinationHash: null, optOutUrl: null };
+    this.steps = this.steps.map((row) =>
+      row.stepKey === stepKey ? { ...row, ...change, ...retryDetails } : row,
+    );
   }
 }
 
@@ -234,6 +238,7 @@ describe('AutomationRunsService', () => {
     const contacts = {
       findTags: async () => tags,
       findRecipients: async () => [{ phone: contactPhone }],
+      getPhoneForSend: async () => contactPhone,
       changeTag: async (
         _storeId: string,
         _contactId: string,
@@ -258,7 +263,16 @@ describe('AutomationRunsService', () => {
         destination: contactPhone,
         at: clockNow,
       }),
-      recheckForSend: async () => ({ decision: recheck(), at: clockNow }),
+      recheckForSend: async (
+        _storeId: string,
+        _request: unknown,
+        _stepId: string,
+        lockWorkflow: () => Promise<boolean>,
+      ) => {
+        const decision = recheck();
+        if (!(await lockWorkflow())) return undefined;
+        return { decision, at: clockNow };
+      },
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
@@ -499,7 +513,8 @@ describe('AutomationRunsService', () => {
           kind: 'send',
           category: 'marketing',
           channel: 'sms',
-          optOutUrl,
+          optOutUrl: null,
+          destinationHash: null,
           outcome: 'sent',
           providerMessageId: 'sms-1',
           sentAt: now,
@@ -747,10 +762,12 @@ describe('AutomationRunsService', () => {
       expect(sent).toHaveLength(1);
     });
 
-    it('freezes the phone and ends a resend to a contact whose phone changed as unconfirmed', async () => {
+    it('ends a resend to a contact whose phone no longer matches the saved hash as unconfirmed', async () => {
       providerError = new Error('connection reset');
       await start(send);
-      expect(repository.steps).toEqual([expect.objectContaining({ destination: '01712345678' })]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ destinationHash: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
+      ]);
       providerError = undefined;
       contactPhone = '01812345678';
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
@@ -764,7 +781,24 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
       expect(repository.run.lastError).toContain("The contact's phone changed");
       expect(repository.run.lastError).toContain('credits stay reserved');
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'unconfirmed', destinationHash: null, optOutUrl: null }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+    });
+
+    it('leaves a legacy send with incomplete retry details unconfirmed', async () => {
+      repository.steps = [{ id: 'legacy', stepKey: 'first', kind: 'send', outcome: 'sending' }];
+
+      await start(send);
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
+      expect(repository.run.lastError).toContain('credits stay reserved');
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ id: 'legacy', outcome: 'unconfirmed' }),
+      ]);
+      expect(ledger).toEqual([]);
     });
 
     it('does not resend a message whose run was due more than a day ago', async () => {

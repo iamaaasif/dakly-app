@@ -1,11 +1,14 @@
 import type { MessagingService } from '../messaging/messaging.service';
+import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
 import { serializeError } from '../platform/logging/safe-error';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
-import type { AutomationRunsRepository, RunClaim } from './automation-runs.repository';
+import type { WalletService } from '../wallets/wallet.service';
+import type { AutomationRunsRepository, RunClaim, SendingStep } from './automation-runs.repository';
 import {
+  type CreditSettlement,
   type Delivery,
   endWithUnknownOutcome,
   failed,
@@ -13,6 +16,7 @@ import {
   ifNotReachable,
   isLateSend,
   operationKey,
+  type RunFacts,
   type SendStep,
   type StepResult,
   UNKNOWN_OUTCOME,
@@ -20,6 +24,25 @@ import {
 
 const RETRY_LIMIT_MS = 36 * HOUR_MS;
 const MAX_DELAY_MS = 6 * HOUR_MS;
+const system = { kind: 'system' } as const;
+
+export type RetryableSend = SendingStep & {
+  firstTriedAt: Date;
+  latestDispatchAt: Date;
+  destinationHash: string;
+};
+
+export type RetryCheck =
+  { result: StepResult; at: Date } | { result: undefined; at: Date; destination: string };
+
+export function hasRetryDetails(step: SendStep, row: SendingStep): row is RetryableSend {
+  return (
+    row.firstTriedAt !== null &&
+    row.latestDispatchAt !== null &&
+    row.destinationHash !== null &&
+    (step.category !== 'marketing' || row.optOutUrl !== null)
+  );
+}
 
 function exhausted(firstTriedAt: Date, now: Date): StepResult | undefined {
   if (now.getTime() - firstTriedAt.getTime() < RETRY_LIMIT_MS) return undefined;
@@ -36,6 +59,48 @@ export function endExpiredRetry(
     exhausted(firstTriedAt, now) ??
     (isLateSend(wakeAt, now) ? endWithUnknownOutcome(goOn(step.next, now)) : undefined)
   );
+}
+
+// Recheck the destination under the contact lock and renew after waiting for the workflow lock.
+export async function claimRetryDispatch({
+  repository,
+  transaction,
+  claim,
+  step,
+  facts: { storeId, wakeAt },
+  recheck,
+}: {
+  repository: AutomationRunsRepository;
+  transaction: StoreTransaction;
+  claim: RunClaim;
+  step: SendStep;
+  facts: Pick<RunFacts, 'storeId' | 'wakeAt'>;
+  recheck: (
+    locked: RetryableSend,
+    lockWorkflow: () => Promise<boolean>,
+  ) => Promise<RetryCheck | undefined>;
+}) {
+  return transaction.run(storeId, async () => {
+    const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
+    if (!(await repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
+    const locked = await repository.findSendingStep(storeId, claim.runId, claim.stepKey, true);
+    if (!locked || !hasRetryDetails(step, locked)) return undefined;
+    const checkedAt = await repository.schedulerTime(storeId);
+    const { firstTriedAt, latestDispatchAt } = locked;
+    const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
+    const lockWorkflow = () => repository.moveRunIfLive(storeId, claim, unchanged, 'retry');
+    const checked = early
+      ? (await lockWorkflow()) && { result: early, at: checkedAt }
+      : await recheck(locked, lockWorkflow);
+    if (!checked) return undefined;
+    // A slower worker must not age out a previously submitted message early.
+    const sentAt = checked.at > latestDispatchAt ? checked.at : latestDispatchAt;
+    const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
+    if (!checked.result) await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
+    const claimedAt = await repository.schedulerTime(storeId);
+    await repository.moveRun(storeId, claim, { status: 'running', claimedAt });
+    return { ...checked, claim: { ...claim, claimedAt }, at: sentAt };
+  });
 }
 
 export function retryDecision(
@@ -127,4 +192,28 @@ export async function deliverAutomationSms(
   if (result.run.status === 'waiting')
     reporter.reportJob(serializeError(error), operationKey(claim));
   return result;
+}
+
+export async function settleAutomationCredits(
+  wallets: WalletService,
+  storeId: string,
+  claim: RunClaim,
+  credits: CreditSettlement,
+) {
+  const key = operationKey(claim);
+  // Every send row was written with its reservation, in the same transaction.
+  const reservationId = (await wallets.findByIdempotencyKey(storeId, key))!.entryId;
+  if (credits.settle === 'charge')
+    await wallets.charge(storeId, {
+      reservationId,
+      quantity: credits.quantity,
+      idempotencyKey: `${key}:charge`,
+      actor: system,
+    });
+  else
+    await wallets.release(storeId, {
+      reservationId,
+      idempotencyKey: `${key}:release`,
+      actor: system,
+    });
 }

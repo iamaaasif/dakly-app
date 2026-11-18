@@ -83,8 +83,14 @@ export class SendPolicyService {
   }
 
   // A retry keeps its reservation and replaces its prior count with the new dispatch.
-  async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>, workflowStepId: string) {
+  async recheckForSend(
+    storeId: string,
+    request: Omit<SendRequest, 'at'>,
+    workflowStepId: string,
+    lockWorkflow?: () => Promise<boolean>,
+  ) {
     const exists = await this.lockForDispatch(storeId, request.contactId);
+    if (lockWorkflow && !(await lockWorkflow())) return undefined;
     const at = this.clock.now();
     const decision = exists
       ? await this.recheck(storeId, { ...request, at }, workflowStepId)
