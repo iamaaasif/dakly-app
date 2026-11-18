@@ -10,7 +10,7 @@ import { useOrder } from '../api/get-order';
 import { canConfirmOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
 import { OrderDetails } from './order-details';
-import { orderStageActions, type StageAction } from './order-stage-actions';
+import { orderStageActions, stageActionLabels, type StageAction } from './order-stage-actions';
 import { OrderStageDialog } from './order-stage-dialog';
 import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
@@ -129,15 +129,15 @@ function OrderStageFooter({
           Mark confirmed
         </Button>
       )}
-      {actions.map((action) =>
-        action === 'to_confirm' ? (
+      {actions.map((action, index) =>
+        action === 'to_confirm' || action === 'delivered' ? (
           <Button
             key={action}
-            variant="secondary"
+            variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
             disabled={transition.isPending}
             onClick={(event) => changeStage({ to: action }, event.currentTarget)}
           >
-            Back to confirmation
+            {stageActionLabels[action]}
           </Button>
         ) : (
           <OrderStageDialog
@@ -145,6 +145,7 @@ function OrderStageFooter({
             order={order}
             action={action}
             stage={stage}
+            primary={!canConfirm && index === 0}
             disabled={transition.isPending}
           />
         ),
