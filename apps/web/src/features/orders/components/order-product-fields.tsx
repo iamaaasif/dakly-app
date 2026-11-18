@@ -8,9 +8,14 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
 import { formatMoney } from '@/lib/format-money';
-import { useProducts } from '@/lib/product-queries';
+import { useProductPages } from '@/lib/product-queries';
 
-export type VariantChoice = { label: string; price: number; stock: number | null };
+export type VariantChoice = {
+  productId: string;
+  label: string;
+  price: number;
+  stock: number | null;
+};
 
 type ProductFieldsProps = {
   fields: FieldArrayWithId<CreateOrderValues, 'items'>[];
@@ -33,8 +38,8 @@ export function OrderProductFields({
 }: ProductFieldsProps) {
   const [search, setSearch] = useState('');
   const term = search.trim();
-  const products = useProducts({ limit: 50, search: term.length >= 3 ? term : undefined });
-  const choices = productChoices(products.data?.items ?? []);
+  const products = useProductPages(term.length >= 3 ? term : undefined);
+  const choices = orderVariantChoices(products.data?.pages.flatMap((page) => page.items) ?? []);
   return (
     <fieldset className="space-y-2">
       <legend className="font-semibold">Products</legend>
@@ -54,6 +59,15 @@ export function OrderProductFields({
           onRemove={fields.length > 1 ? onRemove : undefined}
         />
       ))}
+      {products.hasNextPage && (
+        <Button
+          variant="secondary"
+          loading={products.isFetchingNextPage}
+          onClick={() => void products.fetchNextPage()}
+        >
+          Load more products
+        </Button>
+      )}
       <Button variant="secondary" disabled={fields.length >= 100} onClick={onAdd}>
         Add product
       </Button>
@@ -61,25 +75,24 @@ export function OrderProductFields({
   );
 }
 
-function productChoices(products: ProductResponse[]) {
+export function orderVariantChoices(products: ProductResponse[]) {
   return Object.fromEntries(
-    products
-      .filter((product) => !product.readiness.includes('hidden'))
-      .flatMap((product) =>
-        product.variants
-          .filter((variant) => variant.pricePoisha > 0)
-          .map(
-            (variant) =>
-              [
-                variant.id,
-                {
-                  label: variant.isDefault ? product.name : `${product.name} · ${variant.title}`,
-                  price: variant.pricePoisha,
-                  stock: product.isStockTracked ? variant.available : null,
-                },
-              ] as const,
-          ),
-      ),
+    products.flatMap((product) =>
+      product.variants
+        .filter((variant) => variant.pricePoisha > 0)
+        .map(
+          (variant) =>
+            [
+              variant.id,
+              {
+                productId: product.id,
+                label: variant.isDefault ? product.name : `${product.name} · ${variant.title}`,
+                price: variant.pricePoisha,
+                stock: product.isStockTracked ? variant.available : null,
+              },
+            ] as const,
+        ),
+    ),
   );
 }
 
@@ -97,8 +110,8 @@ function OrderProductLine({
   onRemove?: ProductFieldsProps['onRemove'];
 }) {
   const id = ids[index] ?? '';
-  const variant = variants[id] ?? choices[id];
-  const options = variant && !choices[id] ? { [id]: variant, ...choices } : choices;
+  const variant = variants[id];
+  const options = variant ? { ...choices, [id]: variant } : choices;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_5rem_auto] items-start gap-2 rounded-md border border-border p-2">
       <div>

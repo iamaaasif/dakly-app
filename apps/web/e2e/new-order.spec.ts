@@ -20,6 +20,11 @@ async function capture(page: Page, name: string) {
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
     if (name === 'new') {
+      if (width === 1440) {
+        await page
+          .locator('dialog[open] form > div.overflow-y-auto')
+          .evaluate((node) => node.scrollTo({ top: 0 }));
+      }
       if (width === 360) {
         await page.getByText('Cash on delivery').scrollIntoViewIfNeeded();
         await expect(page.getByRole('button', { name: 'Save order' })).toBeInViewport();
@@ -48,7 +53,8 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string; storeIds: string[] };
   const storeId = fixture.storeIds[0]!;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const productId = randomUUID();
+  const productId = `0${randomUUID().slice(1)}`;
+  const otherProducts = Array.from({ length: 50 }, () => `f${randomUUID().slice(1)}`);
   const variantId = randomUUID();
   const zoneId = randomUUID();
   let insertedCounter = false;
@@ -71,6 +77,12 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await database.pool.query(
       "insert into products (id,store_id,name,price_poisha) values ($1,$2,'Cotton Panjabi',125000)",
       [productId, storeId],
+    );
+    await database.pool.query(
+      `insert into products (id,store_id,name,price_poisha)
+       select id,$1,'Catalogue product ' || number,1000
+       from unnest($2::uuid[]) with ordinality as catalogue(id, number)`,
+      [storeId, otherProducts],
     );
     await database.pool.query(
       "insert into product_variants (id,store_id,product_id,title,on_hand) values ($1,$2,$3,'M',5)",
@@ -101,19 +113,51 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
     const variant = create.getByLabel('Product and variant 1');
+    await expect(variant.getByRole('option', { name: 'Cotton Panjabi · M' })).toHaveCount(0);
+    await create.getByRole('button', { name: 'Load more products' }).click();
     await variant.selectOption({ label: 'Cotton Panjabi · M' });
     await expect(variant).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
     await expect(create.getByText('৳1,310')).toBeVisible();
+    await create.getByRole('button', { name: 'Add product' }).click();
+    await expect(create.getByText('Cash on delivery')).toHaveCount(0);
+    await create.getByRole('button', { name: 'Remove' }).last().click();
+    const search = create.getByLabel('Search products');
+    await search.fill('Missing product');
+    await expect(create.getByText('5 in stock')).toBeVisible();
+    await expect(create.getByText('৳1,310')).toBeVisible();
+    await search.clear();
     await create.getByLabel('Delivery charge (৳)').fill('90.25');
     await expect(create.getByText('৳1,340.25')).toBeVisible();
     await capture(page, 'new');
+    let firstKey: string | undefined;
+    let firstBody: string | null;
+    await page.route('**/api/orders', async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') return route.continue();
+      const key = request.headers()['idempotency-key'];
+      if (firstKey) {
+        expect(key).toBe(firstKey);
+        expect(request.postData()).toBe(firstBody);
+        return route.continue();
+      }
+      firstKey = key;
+      firstBody = request.postData();
+      expect(firstKey).toBeTruthy();
+      const saved = await route.fetch();
+      expect(saved.status()).toBe(201);
+      await route.abort();
+    });
     await create.getByRole('button', { name: 'Save order' }).click();
+    await expect(create.getByText('Could not confirm the save')).toBeVisible();
+    await expect(recipientPhone).toBeDisabled();
+    await create.getByRole('button', { name: 'Retry save' }).click();
     const detail = page.getByRole('dialog', { name: /^Order #/ });
     await expect(detail.getByText('Karim Ahmed', { exact: true })).toBeVisible();
     await expect(detail.getByText('Buyer Rahim Ahmed')).toBeVisible();
     await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
     await expect(detail.getByText('৳1,340.25').first()).toBeVisible();
+    await page.unroute('**/api/orders');
   } finally {
     const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(
       'select id,buyer_contact_id from orders where store_id=$1 and delivery_zone_id=$2',
@@ -142,9 +186,9 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       storeId,
       variantId,
     ]);
-    await database.pool.query('delete from products where store_id=$1 and id=$2', [
+    await database.pool.query('delete from products where store_id=$1 and id=any($2::uuid[])', [
       storeId,
-      productId,
+      [productId, ...otherProducts],
     ]);
     await database.pool.query('delete from delivery_zones where store_id=$1 and id=$2', [
       storeId,

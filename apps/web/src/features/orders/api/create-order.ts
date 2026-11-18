@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
+import { ApiError } from '@dakly/ui/api-client';
 
 import { ordersKey } from './orders';
 import { productsKeys } from '@/lib/product-queries';
@@ -11,10 +12,20 @@ export function useCreateOrder() {
   const { request } = useStoreRequest();
   const client = useQueryClient();
   const key = useRef<string | undefined>(undefined);
-  return useMutation({
+  const [mustRetry, setMustRetry] = useState(false);
+  const create = useMutation({
     mutationFn: (body: CreateOrderInput) => {
       key.current ??= crypto.randomUUID();
       return request<OrderDetail>('/orders', { body, idempotencyKey: key.current });
+    },
+    onError: (error) => {
+      if (
+        !(error instanceof ApiError) ||
+        error.status === undefined ||
+        error.status === 408 ||
+        error.status >= 500
+      )
+        setMustRetry(true);
     },
     onSuccess: async () => {
       await Promise.all([
@@ -23,4 +34,5 @@ export function useCreateOrder() {
       ]);
     },
   });
+  return { ...create, mustRetry };
 }

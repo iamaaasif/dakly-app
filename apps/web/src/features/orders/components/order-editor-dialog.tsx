@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useRef, type FormEvent } from 'react';
 import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
 
 import {
@@ -12,10 +12,15 @@ import { Button } from '@dakly/ui/button';
 
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
-import { OrderProductFields, type VariantChoice } from './order-product-fields';
+import {
+  OrderProductFields,
+  orderVariantChoices,
+  type VariantChoice,
+} from './order-product-fields';
 import { OrderRecipientFields } from './order-recipient-fields';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
+import { useProductDetails } from '@/lib/product-detail-query';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 
@@ -31,9 +36,14 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       items: [newLine],
     },
   });
-  const submit = form.handleSubmit((input) =>
-    create.mutate(input, { onSuccess: (order) => onSaved(order.id) }),
-  );
+  function save(input: CreateOrderInput) {
+    create.mutate(input, { onSuccess: (order) => onSaved(order.id) });
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    if (!create.mustRetry) return void form.handleSubmit(save)(event);
+    event.preventDefault();
+    if (create.variables) save(create.variables);
+  }
 
   return (
     <SessionDialog
@@ -46,14 +56,16 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={create.isPending} className="space-y-3">
+            <fieldset disabled={create.isPending || create.mustRetry} className="space-y-3">
               <OrderRecipientFields />
               <ItemsAndAmounts />
             </fieldset>
           </div>
           {create.error && (
             <p role="alert" className="text-danger">
-              {create.error.message}
+              {create.mustRetry
+                ? 'Could not confirm the save. Retry with the same order details.'
+                : create.error.message}
             </p>
           )}
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -61,7 +73,7 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
               Cancel
             </Button>
             <Button type="submit" loading={create.isPending}>
-              Save order
+              {create.mustRetry ? 'Retry save' : 'Save order'}
             </Button>
           </div>
         </form>
@@ -71,10 +83,14 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
 }
 
 function ItemsAndAmounts() {
-  const [variants, setVariants] = useState<Record<string, VariantChoice>>({});
+  const productIds = useRef<Record<string, string>>({});
   const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' });
+  const selectedProducts = useProductDetails([
+    ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
+  ]);
+  const variants = orderVariantChoices(selectedProducts.flatMap(({ data }) => data ?? []));
 
   return (
     <>
@@ -86,7 +102,7 @@ function ItemsAndAmounts() {
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant) setVariants((current) => ({ ...current, [id]: variant }));
+          if (variant) productIds.current[id] = variant.productId;
           setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
         }}
       />
@@ -108,10 +124,12 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
   const quote = useOrderDelivery(areaId);
   const delivery = override ? takaInput.safeParse(override).data : quote.data?.chargePoisha;
   if (delivery === undefined) return null;
-  const total = items.reduce(
-    (sum, item) => sum + (variants[item.variantId]?.price ?? 0) * item.quantity,
-    delivery,
-  );
+  const total = items.reduce((sum, item) => {
+    const variant = variants[item.variantId];
+    return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
+      ? sum + variant.price * item.quantity
+      : NaN;
+  }, delivery);
   if (!Number.isSafeInteger(total) || total < 0) return null;
   return (
     <p className="rounded-md bg-surface-muted p-3">
