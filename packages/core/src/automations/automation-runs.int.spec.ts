@@ -157,6 +157,18 @@ const wait: AutomationStep = {
   next: 'end',
 };
 
+async function waitForBlocker(backendPid: number) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const waiting = await admin.pool.query(
+      'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+      [backendPid],
+    );
+    if (waiting.rowCount) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('The workflow did not wait for the held database lock');
+}
+
 describe('Workflow runner (Postgres and Valkey)', () => {
   beforeAll(async () => {
     await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
@@ -794,6 +806,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const jobs = await runner.queue.getJobs(['waiting']);
       const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
       const blocker = await admin.pool.connect();
+      const {
+        rows: [{ pid }],
+      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
       await blocker.query('begin');
       await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `send:${storeId}:${contact}`,
@@ -801,18 +816,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       let isHoldingLock = true;
       const pending = runner.runStep(job.data as StepJobData);
       try {
-        let isWaiting = false;
-        for (let attempt = 0; attempt < 100; attempt++) {
-          const waiting = await admin.pool.query(
-            "select 1 from pg_locks where locktype='advisory' and not granted and database=(select oid from pg_database where datname=current_database())",
-          );
-          if (waiting.rowCount) {
-            isWaiting = true;
-            break;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        expect(isWaiting).toBe(true);
+        await waitForBlocker(pid);
         await admin.pool.query("update contacts set tags=array['ordered'] where id=$1", [contact]);
         await blocker.query('commit');
         isHoldingLock = false;
@@ -828,6 +832,77 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         await job.remove();
       }
     });
+
+    it.each(['consent withdrawal', 'goal', 'quiet hours'] as const)(
+      'checks %s after a wallet-lock wait without reserving or sending',
+      async (change) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const automationId = await workflow('active');
+        const graph = {
+          ...graphWith(send('marketing')),
+          goal: { kind: 'got_tag', tag: 'ordered' },
+        } as const;
+        const versionId = await publish(automationId, 1, graph);
+        const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
+        await runner.sweep();
+        const jobs = await runner.queue.getJobs(['waiting']);
+        const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
+        const blocker = await admin.pool.connect();
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          `wallet:${storeId}:sms_credits`,
+        ]);
+        let isHoldingLock = true;
+        const pending = runner.runStep(job.data as StepJobData);
+        try {
+          await waitForBlocker(pid);
+          if (change === 'consent withdrawal')
+            await runner.consents.record(
+              storeId,
+              {
+                contactId: contact,
+                channel: 'sms',
+                status: 'withdrawn',
+                source: 'opt_out_link',
+                evidence: null,
+              },
+              { kind: 'system' },
+            );
+          else if (change === 'goal')
+            await admin.pool.query("update contacts set tags=array['ordered'] where id=$1", [
+              contact,
+            ]);
+          else
+            clockNow = new Date(
+              Date.UTC(daytime.getUTCFullYear(), daytime.getUTCMonth(), daytime.getUTCDate(), 16),
+            );
+          await blocker.query('commit');
+          isHoldingLock = false;
+          await pending;
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+          if (change === 'consent withdrawal')
+            expect(await sendStep(runId!)).toEqual([
+              expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_consent' }),
+            ]);
+          else {
+            expect(await sendStep(runId!)).toEqual([]);
+            expect(await run(runId!)).toMatchObject(
+              change === 'goal' ? { status: 'exited', exit_reason: 'goal' } : { status: 'waiting' },
+            );
+          }
+        } finally {
+          if (isHoldingLock) await blocker.query('rollback');
+          blocker.release();
+          await pending;
+          await job.remove();
+        }
+      },
+    );
 
     it('renews the lease after gate writes so a slow gate cannot lose credit settlement', async () => {
       const runner = await worker();

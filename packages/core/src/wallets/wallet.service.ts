@@ -64,6 +64,11 @@ export class WalletService {
     return entry && toResult(entry);
   }
 
+  // Dispatch takes this before its final checks, so a queued credit write cannot stale them.
+  lockForReservation(storeId: string, wallet: MessagingWallet): Promise<void> {
+    return this.ledger.lockWallet(storeId, wallet);
+  }
+
   async reserve(storeId: string, input: ReserveInput): Promise<WalletWriteResult> {
     const quantity = positiveQuantity(input.quantity);
     return this.transaction.run(storeId, () =>

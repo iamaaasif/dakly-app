@@ -158,6 +158,7 @@ describe('AutomationRunsService', () => {
     ledger = [];
     // Reservations by key, as the ledger keeps them; a repeated key changes nothing.
     const wallets = {
+      lockForReservation: async () => undefined,
       reserve: async (
         _storeId: string,
         { quantity, idempotencyKey }: { quantity: number; idempotencyKey: string },

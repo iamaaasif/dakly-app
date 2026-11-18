@@ -300,6 +300,7 @@ export class AutomationRunsService {
     // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
     if (!step.channels.includes('sms'))
       return { decision: { action: 'skip', reason: 'window_closed' } };
+    await this.wallets.lockForReservation(storeId, 'sms_credits');
     const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
       contactId,
       channel: 'sms',
