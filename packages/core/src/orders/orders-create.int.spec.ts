@@ -224,7 +224,8 @@ describe('Staff order creation', () => {
     const variantId = await variant(4);
     const request = editor();
     const original = await orders.createOrder(f.a, draft(variantId), request);
-    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(new Date(original.updatedAt));
+    const editedAt = new Date(Date.parse(original.updatedAt) + 1);
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(editedAt);
     try {
       const changed = await orders.editOrder(
         f.a,
@@ -232,7 +233,7 @@ describe('Staff order creation', () => {
         { items: [{ variantId, quantity: 2, lineDiscountPoisha: 0 }] },
         request,
       );
-      expect(Date.parse(changed.updatedAt)).toBeGreaterThan(Date.parse(original.updatedAt));
+      expect(changed.updatedAt).toBe(editedAt.toISOString());
       await expect(
         orders.editOrder(
           f.a,
@@ -255,6 +256,7 @@ describe('Staff order creation', () => {
         recipientAddress: 'Road 2, Dhanmondi',
         items: changed.items,
         codAmountPoisha: 256000,
+        updatedAt: editedAt.toISOString(),
       });
       expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
     } finally {

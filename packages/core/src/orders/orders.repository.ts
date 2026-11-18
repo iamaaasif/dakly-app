@@ -337,19 +337,11 @@ export class OrdersRepository {
     );
   }
 
-  async updateOrder(
-    storeId: string,
-    orderId: string,
-    values: Partial<OrderWrite> & { updatedAt: Date },
-  ): Promise<void> {
+  async updateOrder(storeId: string, orderId: string, values: Partial<OrderWrite>): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(orders)
-        .set({
-          ...values,
-          // Staff drafts use updatedAt as their revision even when writes share a clock tick.
-          updatedAt: sql`greatest(${orders.updatedAt} + interval '1 millisecond', ${values.updatedAt.toISOString()}::timestamptz)`,
-        })
+        .set(values)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
   }

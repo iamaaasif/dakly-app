@@ -44,11 +44,7 @@ export function orderStageCounts(rows: { stage: OrderStage; count: number }[]) {
   };
 }
 
-export function stageWrite(
-  change: OrderStageChange,
-  now: Date,
-  confirmed: boolean,
-): StageWrite & { updatedAt: Date } {
+export function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
   return {
     stage: change.to,
     onHoldReason: change.to === 'on_hold' ? change.reason : null,
