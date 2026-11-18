@@ -281,7 +281,7 @@ describe('Manual dispatch and delivery', () => {
   it('counts alerts across the store and searches one page by order number', async () => {
     const query = { stage: 'to_confirm', limit: 1 } as const;
     const initial = (await service.list(f.a, query)).alerts;
-    const phone = '01710000008';
+    const phone = '01710000009';
     const overdue = await order(f.a, 'to_confirm', { phone });
     await trackedLine(overdue, 2);
     await f.connection.pool.query(
