@@ -1,5 +1,5 @@
 import type { MessagingService } from '../messaging/messaging.service';
-import type { Clock } from '../platform/clock';
+import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
 import { serializeError } from '../platform/logging/safe-error';
@@ -91,33 +91,37 @@ export async function deliverAutomationSms(
   {
     messaging,
     reporter,
-    clock,
-  }: { messaging: MessagingService; reporter: ErrorReporter; clock: Clock },
+    transaction,
+  }: { messaging: MessagingService; reporter: ErrorReporter; transaction: StoreTransaction },
   { storeId, claim, contactId, step, body, destination, isFirstTry, preparedSender }: Delivery,
   firstTriedAt: Date,
   attemptedAt: Date,
 ): Promise<StepResult> {
-  try {
-    const message = {
-      channel: 'sms',
-      contactId,
-      body,
-      operationKey: operationKey(claim),
-      destination,
-    } as const;
-    const { providerMessageId, credits } = await messaging.send(storeId, message, preparedSender);
+  const message = {
+    channel: 'sms',
+    contactId,
+    body,
+    operationKey: operationKey(claim),
+    destination,
+  } as const;
+  const attempt = await messaging.send(storeId, message, preparedSender).then(
+    (receipt) => ({ receipt }),
+    (error: unknown) => ({ error }),
+  );
+  const now = await transaction.databaseTime(storeId);
+  if ('receipt' in attempt) {
+    const { providerMessageId, credits } = attempt.receipt;
     return {
-      ...goOn(step.next, clock.now()),
+      ...goOn(step.next, now),
       claim,
       stepChange: { outcome: 'sent', providerMessageId, sentAt: attemptedAt },
       credits: { settle: 'charge', quantity: credits },
     };
-  } catch (error) {
-    const now = clock.now();
-    if (error instanceof AppError) return refusedSend(claim, error.message, isFirstTry, now);
-    const result = retryAfterError(claim, firstTriedAt, now);
-    if (result.run.status === 'waiting')
-      reporter.reportJob(serializeError(error), operationKey(claim));
-    return result;
   }
+  const { error } = attempt;
+  if (error instanceof AppError) return refusedSend(claim, error.message, isFirstTry, now);
+  const result = retryAfterError(claim, firstTriedAt, now);
+  if (result.run.status === 'waiting')
+    reporter.reportJob(serializeError(error), operationKey(claim));
+  return result;
 }

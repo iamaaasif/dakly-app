@@ -1624,6 +1624,47 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it('does not submit a retry after waiting on its step row across the deadline', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const firstTriedAt = new Date(opensAt.getTime() - 48 * HOUR);
+      const expiresAt = firstTriedAt.getTime() + 36 * HOUR;
+      clockNow = firstTriedAt;
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, runId!);
+      await wakeNow(runId!);
+      clockNow = new Date(expiresAt - MINUTE);
+
+      const blocker = await admin.pool.connect();
+      let resending: Promise<void> | undefined;
+      try {
+        const { rows } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select id from automation_run_steps where run_id=$1 for update', [
+          runId,
+        ]);
+        resending = runDueStep(runner, runId!);
+        void resending.catch(() => undefined);
+        await waitForBlocker(rows[0]!.pid);
+        clockNow = new Date(expiresAt);
+        await blocker.query('commit');
+        await resending;
+
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([
+          expect.objectContaining({ outcome: 'unconfirmed' }),
+        ]);
+        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await resending?.catch(() => undefined);
+      }
+    });
+
     it('keeps the marketing cap when a slower worker settles a retry', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);

@@ -5,7 +5,6 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
 import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
-import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
@@ -249,7 +248,7 @@ describe('AutomationRunsService', () => {
         destination: contactPhone,
         at: databaseNow ?? clockNow,
       }),
-      recheckForSend: async () => ({ decision: recheck(), at: clockNow }),
+      recheckForSend: async () => ({ decision: recheck(), at: databaseNow ?? clockNow }),
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
@@ -291,7 +290,6 @@ describe('AutomationRunsService', () => {
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
-      { now: () => clockNow } as Clock,
       contacts as unknown as ContactsService,
       sendPolicy as unknown as SendPolicyService,
       stores as unknown as StoresService,

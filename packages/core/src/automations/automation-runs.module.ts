@@ -3,7 +3,6 @@ import { Module } from '@nestjs/common';
 import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
-import { ClockModule } from '../platform/clock.module';
 import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
@@ -16,7 +15,6 @@ import { AutomationRunsService } from './automation-runs.service';
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
   imports: [
-    ClockModule,
     ContactsModule,
     ErrorReportingModule,
     LinksModule,
