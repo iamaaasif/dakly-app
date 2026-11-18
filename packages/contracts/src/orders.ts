@@ -4,6 +4,7 @@ import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 import {
   productListQuerySchema,
+  takaInput,
   type ProductResponse,
   type ProductVariantResponse,
 } from './products';
@@ -309,13 +310,13 @@ const recipientSchema = z.strictObject({
   name: z.string().trim().min(1).max(120),
   phone: bdMobileSchema,
   address: z.string().trim().min(1).max(500),
-  areaId: z.int().positive().max(2147483647),
+  areaId: z.int().positive('Choose a district or upazila').max(2147483647),
   isBuyer: z.boolean().default(true),
 });
 const orderLines = z
   .array(
     z.strictObject({
-      variantId: z.uuid().toLowerCase(),
+      variantId: z.uuid('Choose a product and variant').toLowerCase(),
       quantity: z.int().positive().max(2147483647),
       lineDiscountPoisha: money.default(0),
     }),
@@ -336,6 +337,10 @@ export const createOrderSchema = z.strictObject({
   advancePaidPoisha: money.default(0),
 });
 
+export const createOrderFormSchema = createOrderSchema.extend({
+  deliveryChargePoisha: takaInput.optional(),
+});
+export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
