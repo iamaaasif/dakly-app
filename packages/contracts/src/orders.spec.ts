@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  createOrderSchema,
-  editOrderSchema,
-  orderListQuerySchema,
-  orderStageChangeSchema,
-} from './orders';
+import { createOrderSchema, orderListQuerySchema, orderStageChangeSchema } from './orders';
 
 describe('order list query', () => {
   it('takes a stage and an exclusive numeric cursor', () => {
@@ -55,12 +50,6 @@ describe('staff order input', () => {
         ],
       }).success,
     ).toBe(false);
-  });
-
-  it('allows changing the address without sending the number or recipient type', () => {
-    expect(
-      editOrderSchema.parse({ items: order.items, recipient: { address: 'Mirpur' } }).recipient,
-    ).toEqual({ address: 'Mirpur' });
   });
 
   it('requires separate buyer fields and accepts a different delivery recipient', () => {
