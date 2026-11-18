@@ -2,6 +2,12 @@ import { z } from 'zod';
 
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
+import {
+  productListQuerySchema,
+  takaInput,
+  type ProductResponse,
+  type ProductVariantResponse,
+} from './products';
 
 export const orderSources = [
   'messenger',
@@ -68,6 +74,17 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
+  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
+  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
+  to_pack: ['with_courier', 'on_hold', 'cancelled'],
+  with_courier: ['delivered', 'partially_delivered', 'returned'],
+  delivered: ['returned'],
+  partially_delivered: ['returned'],
+  returned: [],
+  cancelled: [],
+};
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',
@@ -146,6 +163,20 @@ export type OrderListResponse = {
   nextCursor: number | null;
 };
 
+export const orderCatalogueQuerySchema = productListQuerySchema.pick({
+  cursor: true,
+  limit: true,
+  search: true,
+});
+export type OrderCatalogueQuery = z.infer<typeof orderCatalogueQuerySchema>;
+export type OrderCatalogueProduct = Pick<ProductResponse, 'id' | 'name' | 'isStockTracked'> & {
+  variants: Pick<
+    ProductVariantResponse,
+    'id' | 'title' | 'isDefault' | 'pricePoisha' | 'available'
+  >[];
+};
+export type OrderCataloguePage = { items: OrderCatalogueProduct[]; nextCursor: string | null };
+
 export type OrderItem = {
   id: string;
   variantId: string;
@@ -173,6 +204,7 @@ export type OrderStageHistoryEntry = {
 export type OrderDetail = OrderSummary & {
   buyerContactId: string | null;
   isRecipientBuyer: boolean;
+  hasRecipientPhoneMatch: boolean;
   recipientPhone: string;
   recipientAddress: string;
   recipientDistrict: string;
@@ -222,21 +254,41 @@ const deliveredLines = z
     'Enter the delivered quantity for each item once',
   );
 
+const partialDeliverySchema = z.strictObject({
+  to: z.literal('partially_delivered'),
+  items: deliveredLines,
+  note: z.string('Enter a delivery note.').trim().min(1, 'Enter a delivery note.').max(200),
+});
+
+export function partialDeliveryFormSchema(ordered: Pick<OrderItem, 'id' | 'quantity'>[]) {
+  const quantities = new Map(ordered.map(({ id, quantity }) => [id, quantity]));
+  return partialDeliverySchema.extend({
+    items: deliveredLines
+      .refine((items) => items.some(({ quantity }) => quantity > 0), {
+        path: [0, 'quantity'],
+        message: 'Enter at least one delivered unit.',
+      })
+      .refine(
+        (items) => items.some(({ itemId, quantity }) => quantity < (quantities.get(itemId) ?? 0)),
+        {
+          path: [0, 'quantity'],
+          message: 'Use Mark delivered if all units arrived.',
+        },
+      ),
+  });
+}
+
 export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('to_confirm') }),
   z.strictObject({ to: z.literal('to_pack') }),
   z.strictObject({
     to: z.literal('on_hold'),
-    reason: z.enum(onHoldReasons),
+    reason: z.enum(onHoldReasons, 'Choose a reason.'),
     followUpOn: calendarDate.optional(),
   }),
-  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
+  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons, 'Choose a reason.') }),
   z.strictObject({ to: z.literal('delivered') }),
-  z.strictObject({
-    to: z.literal('partially_delivered'),
-    items: deliveredLines,
-    note: z.string().trim().min(1).max(200),
-  }),
+  partialDeliverySchema,
   z.strictObject({
     to: z.literal('returned'),
     reason: z.string().trim().min(1).max(200),
@@ -258,13 +310,13 @@ const recipientSchema = z.strictObject({
   name: z.string().trim().min(1).max(120),
   phone: bdMobileSchema,
   address: z.string().trim().min(1).max(500),
-  areaId: z.int().positive().max(2147483647),
+  areaId: z.int().positive('Choose a district or upazila').max(2147483647),
   isBuyer: z.boolean().default(true),
 });
 const orderLines = z
   .array(
     z.strictObject({
-      variantId: z.uuid().toLowerCase(),
+      variantId: z.uuid('Choose a product and variant').toLowerCase(),
       quantity: z.int().positive().max(2147483647),
       lineDiscountPoisha: money.default(0),
     }),
@@ -277,6 +329,7 @@ const orderLines = z
   );
 
 export const createOrderSchema = z.strictObject({
+  confirm: z.boolean().default(false),
   buyer: buyerSchema,
   recipient: recipientSchema,
   items: orderLines,
@@ -285,6 +338,12 @@ export const createOrderSchema = z.strictObject({
   advancePaidPoisha: money.default(0),
 });
 
+export const createOrderFormSchema = createOrderSchema.extend({
+  deliveryChargePoisha: takaInput.optional(),
+  orderDiscountPoisha: takaInput.default(0),
+  advancePaidPoisha: takaInput.default(0),
+});
+export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);

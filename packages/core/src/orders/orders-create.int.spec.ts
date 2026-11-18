@@ -107,6 +107,32 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('creates and confirms once when staff retry the same key', async () => {
+    const variantId = await variant(2);
+    const input = draft(variantId, { confirm: true });
+    const request = editor();
+    const first = await orders.createOrder(f.a, input, request);
+
+    expect(first).toMatchObject({
+      stage: 'to_pack',
+      timeline: [{ from: 'to_confirm', to: 'to_pack', actorUserId: request.actor.userId }],
+    });
+    const stored = await f.row('orders', first.id);
+    expect(stored.confirmation_method).toBe('staff');
+    expect(Date.parse(String(stored.confirmed_at))).toBe(Date.parse(first.createdAt));
+    expect(await orders.createOrder(f.a, input, request)).toEqual(first);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+    const events = await f.connection.pool.query<{ type: string }>(
+      "select type from outbox_events where store_id=$1 and payload->>'orderId'=$2 order by id",
+      [f.a, first.id],
+    );
+    expect(events.rows.map(({ type }) => type)).toEqual([
+      'order.created',
+      'order.stage_changed',
+      'order.confirmed',
+    ]);
+  });
+
   it('caps an overpayment at zero COD and rejects a discount above the items subtotal', async () => {
     const variantId = await variant(1);
     const items = [{ variantId, quantity: 1, lineDiscountPoisha: 500 }];
@@ -362,7 +388,14 @@ describe('Staff order creation', () => {
       }),
       editor(),
     );
-    expect(conflicting).toMatchObject({ buyerContactId: karimId, recipientPhone: editedPhone });
+    expect(conflicting).toMatchObject({
+      buyerContactId: karimId,
+      recipientPhone: editedPhone,
+      hasRecipientPhoneMatch: true,
+    });
+    expect(await orders.getById(f.a, conflicting.id, { seeFullPhone: false })).toMatchObject({
+      hasRecipientPhoneMatch: false,
+    });
     expect(await f.row('contacts', rahimId)).toMatchObject({ phone: editedPhone });
     expect(await f.row('contacts', karimId)).toMatchObject({ phone: null });
     const suggestions = await f.connection.pool.query(
@@ -372,6 +405,28 @@ describe('Staff order creation', () => {
     expect(suggestions.rows).toEqual([
       { contact_id: karimId, matched_contact_id: rahimId, reason: 'same_phone' },
     ]);
+    const newPhone = '01711110036';
+    await f.connection.pool.query('update contacts set phone=$1 where store_id=$2 and id=$3', [
+      newPhone,
+      f.a,
+      rahimId,
+    ]);
+    const repeated = await orders.createOrder(
+      f.a,
+      draft(variantId, {
+        buyer: { contactId: karimId },
+        recipient: {
+          name: 'Karim',
+          phone: newPhone,
+          address: 'Dhanmondi',
+          areaId: 301,
+          isBuyer: true,
+        },
+      }),
+      editor(),
+    );
+    expect(repeated).toMatchObject({ hasRecipientPhoneMatch: true, buyerContactId: karimId });
+    expect(await f.row('contacts', karimId)).toMatchObject({ phone: null });
     const consents = await f.connection.pool.query(
       'select id from consents where store_id=$1 and contact_id=any($2)',
       [f.a, [rahimId, karimId]],

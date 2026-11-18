@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -30,9 +31,10 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTransitions,
   productArchiveStages,
+  recordOrderCreation,
   recordOrderStage,
+  staffConfirmation,
   stageWrite,
   stagesForOrderTab,
 } from './order-stage';
@@ -123,10 +125,10 @@ export class OrdersService {
         idempotencyKey,
         ...delivery,
         ...totals,
+        ...stageWrite(input.confirm ? staffConfirmation : { to: 'to_confirm' }, now, input.confirm),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
         createdAt: now,
-        updatedAt: now,
       } satisfies OrderWrite;
       await this.saveNewOrder(storeId, order, items, actor);
       return this.getById(storeId, id, access);
@@ -239,6 +241,7 @@ export class OrdersService {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
+      hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),
       shippedAt: isoTime(order.shippedAt),
       deliveredAt: isoTime(order.deliveredAt),
@@ -355,12 +358,7 @@ export class OrdersService {
       items.map((item) => ({ ...item, createdAt })),
     );
     await this.contacts.markOrderLinked(storeId, buyerContactId, actor);
-    await this.outbox.publish({
-      type: 'order.created',
-      storeId,
-      occurredAt: createdAt.toISOString(),
-      payload: { orderId: id },
-    });
+    await recordOrderCreation(storeId, order, actor, { audit: this.audit, outbox: this.outbox });
   }
 
   private async editedDelivery(

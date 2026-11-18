@@ -16,6 +16,7 @@ type ApiFetchOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
+  idempotencyKey?: string;
   context?: { header: string; tag: string };
 };
 
@@ -25,6 +26,7 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
     method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
     headers: {
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
       ...(options.context ? { [options.context.header]: options.context.tag } : {}),
     },
     credentials: 'include',
@@ -43,11 +45,15 @@ export function readJson<T>(response: Response): Promise<T> {
 }
 
 async function readApiError(response: Response): Promise<ApiError> {
-  // A proxy 502 or an HTML error page has no JSON body; show the generic message instead.
+  // Proxies can return an error body that does not use the API shape.
   const payload = (await response.json().catch(() => undefined)) as ErrorResponse | undefined;
-  const error = payload?.error ?? {
-    code: 'REQUEST_FAILED',
-    message: 'Could not complete the request. Try again.',
-  };
-  return new ApiError(error.code, error.message, error.fields, response.status);
+  const error = payload?.error;
+  if (typeof error?.code === 'string' && typeof error.message === 'string')
+    return new ApiError(error.code, error.message, error.fields, response.status);
+  return new ApiError(
+    'REQUEST_FAILED',
+    'Could not complete the request. Try again.',
+    undefined,
+    response.status,
+  );
 }

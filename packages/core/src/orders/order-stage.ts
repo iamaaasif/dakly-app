@@ -13,16 +13,7 @@ import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { StageWrite } from './orders.repository';
 
-export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
-  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
-  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
-  to_pack: ['with_courier', 'on_hold', 'cancelled'],
-  with_courier: ['delivered', 'partially_delivered', 'returned'],
-  delivered: ['returned'],
-  partially_delivered: ['returned'],
-  returned: [],
-  cancelled: [],
-};
+export const staffConfirmation = { to: 'to_pack' } as const;
 
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 
@@ -92,6 +83,28 @@ export async function orderStageHistory(storeId: string, orderId: string, audit:
     to: stageSnapshot.parse(after).state,
     occurredAt: createdAt.toISOString(),
   }));
+}
+
+export async function recordOrderCreation(
+  storeId: string,
+  { id, stage, createdAt }: { id: string; stage?: OrderStage; createdAt: Date },
+  actor: AuditEntry['actor'],
+  services: { audit: AuditService; outbox: OutboxService },
+): Promise<void> {
+  const occurredAt = createdAt.toISOString();
+  await services.outbox.publish({
+    type: 'order.created',
+    storeId,
+    occurredAt,
+    payload: { orderId: id },
+  });
+  if (stage === staffConfirmation.to)
+    await recordOrderStage(
+      storeId,
+      id,
+      { from: 'to_confirm', change: staffConfirmation, actor, occurredAt, confirmed: true },
+      services,
+    );
 }
 
 export async function recordOrderStage(

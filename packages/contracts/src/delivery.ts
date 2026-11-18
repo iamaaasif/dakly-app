@@ -29,6 +29,7 @@ export const deliveryZoneListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
+export const deliveryChargeQuerySchema = z.strictObject({ areaId: queryAreaId });
 export const areaListQuerySchema = z.strictObject({
   parentId: queryAreaId.optional(),
   cursor: queryAreaId.optional(),

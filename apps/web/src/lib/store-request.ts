@@ -13,6 +13,7 @@ export function useStoreRequest() {
       options: {
         body?: unknown;
         signal?: AbortSignal;
+        idempotencyKey?: string;
         method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
       } = {},
     ) => {

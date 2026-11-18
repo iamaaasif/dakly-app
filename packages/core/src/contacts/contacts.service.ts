@@ -12,7 +12,7 @@ import type {
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
-import type { CreateOrderInput } from '@dakly/contracts/orders';
+import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
@@ -170,6 +170,24 @@ export class ContactsService {
         orderId,
         createdAt: now,
       });
+  }
+
+  async hasOrderPhoneMatch(
+    storeId: string,
+    {
+      buyerContactId,
+      recipientPhone,
+      isRecipientBuyer,
+    }: Pick<OrderDetail, 'buyerContactId' | 'recipientPhone' | 'isRecipientBuyer'>,
+    { seeFullPhone }: Access,
+  ): Promise<boolean> {
+    if (!isRecipientBuyer || !buyerContactId || !seeFullPhone) return false;
+    const [match] = await this.orderContacts.findOpenPhoneMatch(
+      storeId,
+      buyerContactId,
+      recipientPhone,
+    );
+    return match !== undefined;
   }
 
   // Import undo keeps a contact once a new order makes the imported record useful.

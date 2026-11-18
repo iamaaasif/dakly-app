@@ -274,6 +274,8 @@ describe('Session boundary over Fastify and Postgres', () => {
       canEditOrders: true,
       canViewProducts: true,
       canEditProducts: false,
+      canViewCampaigns: false,
+      canEditCampaigns: false,
       canViewSegments: true,
       canEditSegments: false,
       canApproveSupport: false,
@@ -476,7 +478,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       for (const level of ['none', 'view', 'edit'] as const) {
         await admin.db
           .update(roles)
-          .set({ permissions: { products: level } })
+          .set({ permissions: { products: level, campaigns: level } })
           .where(eq(roles.id, role!.id));
         const context = (
           await app.inject({ url: '/me/context', headers: { cookie: cookie() } })
@@ -484,6 +486,8 @@ describe('Session boundary over Fastify and Postgres', () => {
         expect(context.currentStore).toMatchObject({
           canViewProducts: level !== 'none',
           canEditProducts: level === 'edit',
+          canViewCampaigns: level !== 'none',
+          canEditCampaigns: level === 'edit',
         });
       }
     } finally {
