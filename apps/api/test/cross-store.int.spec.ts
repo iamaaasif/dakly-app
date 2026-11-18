@@ -152,6 +152,32 @@ fixture('POST /orders', async () => {
   expect(profileEdit.statusCode).toBe(403);
 });
 
+fixture('PATCH /orders/:orderId', async () => {
+  const { a, b } = await pair();
+  const foreignId = await order(a);
+  const ownId = await order(b);
+  const variantId = await orderVariant(b);
+  const edit = { items: [{ variantId, quantity: 2 }] };
+  const before = await f.row('orders', foreignId);
+  expect((await success(b, 'PATCH', `/orders/${ownId}`, 200, edit)).json()).toMatchObject({
+    id: ownId,
+    items: [{ variantId, quantity: 2 }],
+    itemsSubtotalPoisha: 250000,
+  });
+  await hidden(
+    b,
+    'PATCH',
+    (value) => `/orders/${value}`,
+    foreignId,
+    () => edit,
+  );
+  expect(await f.row('orders', foreignId)).toEqual(before);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'PATCH', `/orders/${ownId}`, edit)).statusCode).toBe(403);
+});
+
 fixture('GET /orders', async () => {
   const { a, b } = await pair();
   const ownA = await order(a);

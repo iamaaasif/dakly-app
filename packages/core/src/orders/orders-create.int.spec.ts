@@ -3,15 +3,19 @@ import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createOrderSchema, type CreateOrderInput } from '@dakly/contracts/orders';
+import { createOrderSchema, editOrderSchema, type CreateOrderInput } from '@dakly/contracts/orders';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { OrdersModule } from './orders.module';
+import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
 
 class TestModule {}
@@ -153,6 +157,107 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 0 });
   });
 
+  it('changes stock by the item difference, keeps prior prices, and rolls back an unavailable edit', async () => {
+    const variantId = await variant(4);
+    await f.connection.pool.query('update product_variants set cost_poisha=60000 where id=$1', [
+      variantId,
+    ]);
+    const request = editor();
+    const initial = await orders.createOrder(f.a, draft(variantId), request);
+    await f.connection.pool.query(
+      'update products set price_poisha=140000 where id=(select product_id from product_variants where id=$1)',
+      [variantId],
+    );
+    const edit = (quantity: number) =>
+      orders.editOrder(
+        f.a,
+        initial.id,
+        editOrderSchema.parse({ items: [{ variantId, quantity }], orderDiscountPoisha: 10000 }),
+        request,
+      );
+    const changed = await edit(2);
+    expect(changed).toMatchObject({
+      items: [{ id: initial.items[0]!.id, quantity: 2, unitPricePoisha: 125000 }],
+      itemsSubtotalPoisha: 250000,
+      codAmountPoisha: 246000,
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
+    expect(changed.items[0]).not.toHaveProperty('unitCostPoisha');
+    expect(await f.row('order_items', initial.items[0]!.id)).toMatchObject({
+      unit_cost_poisha: 60000,
+    });
+    await expect(edit(5)).rejects.toMatchObject({ code: 'STOCK_NOT_AVAILABLE' });
+    expect(await orders.getById(f.a, initial.id, request.access)).toEqual(changed);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
+    expect((await edit(1)).items[0]).toMatchObject({ quantity: 1 });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
+  it('replaces duplicate legacy lines without keeping a released reservation on the order', async () => {
+    const variantId = await variant(2);
+    const request = editor();
+    const order = await orders.createOrder(f.a, draft(variantId), request);
+    await f.connection.pool.query(
+      `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+       select $3::uuid,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked
+       from order_items where store_id=$1 and order_id=$2`,
+      [f.a, order.id, randomUUID()],
+    );
+    await f.connection.pool.query(
+      'update product_variants set reserved=2 where store_id=$1 and id=$2',
+      [f.a, variantId],
+    );
+    const changed = await orders.editOrder(
+      f.a,
+      order.id,
+      editOrderSchema.parse({ items: [{ variantId, quantity: 1 }] }),
+      request,
+    );
+    expect(changed.items).toHaveLength(1);
+    expect(changed.itemsSubtotalPoisha).toBe(125000);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
+  it('links a duplicate during an edit while cancellation holds the other order lock', async () => {
+    const variantId = await variant(2);
+    const request = editor();
+    const original = draft(variantId);
+    const duplicate = await orders.createOrder(f.a, original, request);
+    const edit = await orders.createOrder(
+      f.a,
+      draft(variantId, { recipient: { ...original.recipient, phone: '01712458910' } }),
+      editor(),
+    );
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const cancel = app.get(StoreTransaction).run(f.a, async () => {
+      await app.get(OrdersRepository).lock(f.a, duplicate.id);
+      entered.resolve();
+      await release.promise;
+      return orders.changeStage(f.a, duplicate.id, { to: 'cancelled', reason: 'other' }, request);
+    });
+    await entered.promise;
+    try {
+      const edited = await app.get(TenantDatabase).forStore(f.a, async (tx) => {
+        await tx.execute(sql`set local lock_timeout = '2500ms'`);
+        return orders.editOrder(
+          f.a,
+          edit.id,
+          editOrderSchema.parse({
+            items: original.items,
+            recipient: { phone: original.recipient.phone },
+          }),
+          request,
+        );
+      });
+      expect(edited.possibleDuplicateOfOrderId).toBe(duplicate.id);
+    } finally {
+      release.resolve();
+      await cancel;
+    }
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
   it('counts each purchase under its buyer when two people order for each other', async () => {
     const variantId = await variant(3);
     const rahimId = await buyer('Rahim');
@@ -194,6 +299,16 @@ describe('Staff order creation', () => {
       recipientName: 'Rahim',
       recipientPhone: forRahim.phone,
     });
+    const edited = await orders.editOrder(
+      f.a,
+      first.id,
+      editOrderSchema.parse({
+        items: [{ variantId, quantity: 1 }],
+        recipient: { ...forKarim, phone: '01711110033' },
+      }),
+      request,
+    );
+    expect(edited).toMatchObject({ buyerContactId: rahimId, recipientPhone: '01711110033' });
     await orders.changeStage(f.a, first.id, { to: 'to_pack' }, request);
     expect(await f.row('contacts', rahimId)).toMatchObject({ phone: null });
     expect(await f.row('contacts', karimId)).toMatchObject({ phone: forKarim.phone });
@@ -284,6 +399,29 @@ describe('Staff order creation', () => {
       possibleDuplicateOfOrderId: null,
       recipientPhone: '01712-XXX903',
     });
+    const changed = await orders.editOrder(
+      f.a,
+      second.id,
+      editOrderSchema.parse({
+        items: input.items,
+        recipient: { address: 'Mirpur' },
+      }),
+      { ...editor(), access: { seeFullPhone: false } },
+    );
+    expect(changed).toMatchObject({
+      recipientAddress: 'Mirpur',
+      recipientPhone: '01712-XXX903',
+      deliveryChargePoisha: 7000,
+      isDeliveryChargeOverridden: true,
+    });
+    await expect(
+      orders.editOrder(
+        f.a,
+        second.id,
+        editOrderSchema.parse({ items: input.items, recipient: { phone: '01712458904' } }),
+        editor(),
+      ),
+    ).resolves.toMatchObject({ possibleDuplicateOfOrderId: null });
     await f.connection.pool.query(
       "update orders set created_at=created_at - interval '25 hours' where store_id=$1 and id=any($2)",
       [f.a, [first.id, second.id]],
