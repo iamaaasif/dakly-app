@@ -7,8 +7,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createProductSchema, type ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
+import { useGetProduct } from '../api/get-product';
 import { ProductPhotos } from './product-photos';
-import { useGetProduct } from '@/lib/product-detail-query';
 import { sessionContextKey } from '@/lib/session-context';
 
 const productId = '019c01ea-cf15-7d31-a7f5-d73d66007ae2';
