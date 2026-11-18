@@ -118,7 +118,7 @@ Take over (or any reply typed by a person) switches the chat to human mode: the 
 
 ### Permissions
 
-View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Changing AI agent settings and knowledge: Owner and Admin only.
+View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Owners and admins change AI agent settings. Knowledge uses the store settings permission area.
 
 ### Events
 
@@ -375,6 +375,38 @@ in-process.
 ### Events
 
 Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_sent`. Listens to `order.created` to link the order to the chat.
+
+### Knowledge items
+
+Knowledge supports typed policies and PDF or plain text files. Reads require
+`storeSettings.view` and changes require `storeSettings.edit`. Owner and Admin
+have edit access by default. Images and URLs are for later work.
+
+`POST /knowledge-items/uploads` creates a pending file and returns a signed
+PUT URL. Upload the file before creating or changing the knowledge item.
+The worker indexes one item per job. It reads no more than 10 MiB per file
+and rejects PDFs over 100 pages or files with more than 200,000 characters
+of extracted text. A rejected file records the reason and produces no
+chunks. The worker saves the SHA-256 of the bytes it read. Typed and extracted
+text is untrusted data. The worker extracts only PDF text and disables PDF.js
+font faces and evaluation.
+
+Indexing uses 512-dimension embeddings in groups of up to 64 chunks.
+`AI_EMBEDDING_MODEL` defaults to `text-embedding-3-small`. An OpenAI model
+override needs a matching entry in `AI_MODEL_PRICES`. The worker needs the same
+AI settings as other AI callers. The local fake driver uses a fixed vector by
+default so local indexing needs no vendor key.
+A change marks the item processing and queues a new index. The job only
+replaces chunks for the revision that requested the job. Indexing
+retries with an initial 60-second delay. If AI still fails on the last attempt,
+the item shows a failure reason and can be saved again to retry.
+
+The worker uses `KnowledgeSearchService.search` to embed the query with the
+configured model and combine the exact vector rank and Postgres full-text
+rank with reciprocal rank fusion.
+Search returns passages from active items in the same store and embedding model.
+It skips items whose file was rejected. Full-text search normalizes equivalent
+Unicode spellings before matching.
 
 ### Data
 

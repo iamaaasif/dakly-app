@@ -239,8 +239,9 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 ![Orders](../design/screenshots/orders.webp)
 
-Pipeline by stage with counts and return risk badges.
-The pipeline URL keeps the stage, search, page cursor and selected order. Search uses the buyer or recipient name, order number or exact recipient phone for staff who can see full phones. The alert strip links to orders waiting over 12 hours, high-risk unconfirmed orders with no advance, and unpaid COD on delivered parcels. Counts cover the store. The out-of-stock alert waits for the staff oversell rule, since orders currently cannot reserve stock they do not have. Source, courier and date filters stay in the URL. Date filters include both selected days in Bangladesh time. The list shows up to two item lines. The order detail shows the recipient, buyer, each item and its line discount, amounts received, and the stage timeline. Open high-risk orders with no advance include a prompt to ask for one.
+Pipeline by stage with counts and return risk badges. To confirm includes On hold, and Delivered includes Partly delivered. Each combined tab counts both stages. Cards show the order age and use the total supplied by the API.
+The pipeline URL keeps the stage, search, page cursor and selected order. Search uses the buyer or recipient name, order number or exact recipient phone for staff who can see full phones. The alert strip links to orders waiting over 12 hours, high-risk unconfirmed orders with no advance, and unpaid COD on delivered parcels. Counts cover the store. The out-of-stock alert waits for the staff oversell rule, since orders currently cannot reserve stock they do not have. Source, courier and date filters stay in the URL. Use Filters to view cancelled orders. Date filters include both selected days in Bangladesh time. The list shows up to two item lines. The order detail shows the recipient, buyer, each item and its line discount, amounts received, and the stage timeline. The detail header shows where the order came from and how long ago it was placed. Staff with Orders edit access can use Mark confirmed at the foot of the drawer for staff-managed orders in To confirm or On hold. Open high-risk orders with no advance include a prompt to ask for one.
+
 Staff can enter the customer’s delivery details, select variants with their stock shown, and save a new order in To confirm. The first form uses the recipient as the buyer. It shows the zone charge, allows an override, and previews COD. Paste and fill waits for the AI layer, and the payment link waits for PAY-6.
 
 The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
@@ -263,6 +264,8 @@ An order has two state fields: `stage` for fulfilment and `paymentStatus` for mo
 
 The transition table is data in `orders/order-stage.ts`. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
 
+Product archive uses the same variant locks as order creation and edits. It returns `PRODUCT_HAS_OPEN_ORDERS` if any variant is on an order in To confirm, On hold or To pack.
+
 The order list uses an order-number cursor and returns counts for all stages. The detail includes the recipient snapshot, items, and stage history. Staff without the full-phone permission see a masked recipient number.
 
 Create order (`OrdersService.createOrder`, one transaction)
@@ -276,6 +279,8 @@ Create order (`OrdersService.createOrder`, one transaction)
 Staff without full-phone access do not see the linked duplicate order. The staff out-of-stock override waits for a rule for oversold stock at reservation, dispatch and cancellation.
 
 Staff orders use `POST /orders` with an `Idempotency-Key`. During order capture, Orders edit access allows staff to record a new buyer and fill an empty own-phone field under D27. Editing a profile separately requires Customers edit access. A retry returns the existing order. The order discount cannot exceed the item subtotal after line discounts. An advance above the total leaves zero COD. The order starts in To confirm. Order numbers come from the locked store counter. Creating an order updates the buyer's timestamp so import undo keeps that contact. Staff can record money already received by hand. Cancelling an advance-paid order sets `refund_due` in the same transaction as the cancellation audit and stock release. Payment links and `advance_requested` wait for PAY-6. Order creation from a chat waits for CHAT-1.
+
+Staff can edit items, discounts and the delivery snapshot in To confirm, On hold, and To pack before COD is collected. The buyer stays linked and their profile stays as it was. Changes to a recipient name or address keep the phone and charge unless staff supply new values. Choosing another area quotes its charge. New lines use the current variant price. Existing lines keep the price recorded on the order. The item and stock changes, totals, duplicate hint, and edit audit are saved together. The customer summary after confirmed edits waits for ORD-4. Adding items requires enough stock to reserve.
 
 Confirmation: a WhatsApp utility template, or an SMS with a confirm link (SMS cannot receive replies). A yes reply on WhatsApp ("হ্যাঁ", yes, ji, ok, confirm, "ঠিক আছে") moves the order to `to_pack` when it is the contact's only order in `to_confirm`; with two, the AI asks which.
 

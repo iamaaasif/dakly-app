@@ -1,71 +1,34 @@
 import Link from 'next/link';
-import { useRef } from 'react';
+import type { RefObject } from 'react';
 
 import type { OrderDetail } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
 
-import { useOrderStage } from '../api/change-order-stage';
 import { courierLabels, orderStageLabels } from '../order-labels';
 import { OrderItems } from './order-items';
 import { OrderRiskBadge } from './order-risk-badge';
 import { OrderTimeline } from './order-timeline';
-import { formatDateTime } from '@/lib/format-date';
 import { formatPhone } from '@/lib/format-phone';
 import { useSessionContext } from '@/lib/session-context';
 
-export function OrderDetails({ order }: { order: OrderDetail }) {
-  const { data } = useSessionContext();
-  const transition = useOrderStage(order.id);
-  const stage = useRef<HTMLSpanElement>(null);
-  const canConfirm =
-    data?.currentStore?.canEditOrders &&
-    ['to_confirm', 'on_hold'].includes(order.stage) &&
-    !['shopify', 'woocommerce'].includes(order.source);
-
+export function OrderDetails({
+  order,
+  stageRef,
+}: {
+  order: OrderDetail;
+  stageRef: RefObject<HTMLSpanElement | null>;
+}) {
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Badge
-          ref={stage}
-          tabIndex={-1}
-          role="status"
-          aria-label="Order stage"
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          {orderStageLabels[order.stage]}
-        </Badge>
-        {canConfirm ? (
-          <Button
-            disabled={transition.isPending}
-            onClick={(event) => {
-              const button = event.currentTarget;
-              transition.mutate(
-                { to: 'to_pack' },
-                {
-                  onSuccess: () => {
-                    if (
-                      document.activeElement === button ||
-                      document.activeElement === document.body
-                    )
-                      stage.current?.focus();
-                  },
-                },
-              );
-            }}
-          >
-            Mark confirmed
-          </Button>
-        ) : null}
-      </div>
-      {transition.error ? (
-        <p role="alert" className="text-danger">
-          {transition.error.message}
-        </p>
-      ) : null}
-      <p className="text-sm text-text-muted capitalize">
-        {order.source.replaceAll('_', ' ')} · {formatDateTime(order.createdAt)}
-      </p>
+      <Badge
+        ref={stageRef}
+        tabIndex={-1}
+        role="status"
+        aria-label="Order stage"
+        className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      >
+        {orderStageLabels[order.stage]}
+      </Badge>
       <DeliveryDetails order={order} />
       <ParcelDetails order={order} />
       <OrderItems order={order} />

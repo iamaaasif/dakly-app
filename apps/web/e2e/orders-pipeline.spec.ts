@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-test('filters orders, opens a detail and confirms an order in the active shop', async ({
+test('filters the active shop’s pipeline by alert, search and stage', async ({
   page,
   context,
   baseURL,
@@ -44,9 +44,9 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     orderIds.push(id);
     await database.pool.query(
       `insert into orders (id,store_id,number,source,created_by_type,stage,buyer_name,recipient_name,
-        recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+        recipient_phone,recipient_address,recipient_district,on_hold_reason,items_subtotal_poisha,
         delivery_charge_poisha,cod_amount_poisha,created_at)
-        values ($1,$2,$3,'manual','user',$4,$5,$5,$6,'House 14, Mirpur','Dhaka',$7,6000,$8,
+        values ($1,$2,$3,'manual','user',$4,$5,$5,$6,'House 14, Mirpur','Dhaka',case when $4='on_hold' then 'pre_order' end,$7,6000,$8,
           now() - ($9::int * interval '1 hour'))`,
       [id, storeId, number, stage, name, phone, cod - 6000, cod, hours],
     );
@@ -59,6 +59,17 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
+      if (name === 'pipeline' && width === 360) {
+        const action = page.getByRole('link', { name: 'Confirm order #1060' });
+        await action.scrollIntoViewIfNeeded();
+        await expect(action).toBeInViewport({ ratio: 1 });
+      }
+      if (name === 'filters' && width === 360) {
+        await page.getByText('Filters', { exact: true }).evaluate((summary) => {
+          summary.scrollIntoView({ block: 'start' });
+        });
+        await expect(page.getByRole('button', { name: 'Apply filters' })).toBeInViewport();
+      }
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -126,14 +137,26 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
       hours: 49,
       cod: 322000,
     });
-    await order({
+    const partial = await order({
       number: 1055,
-      stage: 'delivered',
+      stage: 'partially_delivered',
       name: 'Nusrat Jahan',
       phone: '01701000002',
       hours: 71,
       cod: 256000,
     });
+    await order({
+      number: 1054,
+      stage: 'on_hold',
+      name: 'Imran Khan',
+      phone: '01701000003',
+      hours: 4,
+      cod: 98000,
+    });
+    await database.pool.query(
+      'update orders set items_subtotal_poisha=450000, delivered_items_subtotal_poisha=252000, delivered_order_discount_poisha=2000 where id=$1',
+      [partial],
+    );
     await database.pool.query(
       "update orders set courier='pathao', source='whatsapp', created_at='2026-11-16T18:00:00Z' where store_id=$1 and id=$2",
       [storeId, delivered],
@@ -145,7 +168,17 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     );
 
     await page.goto('/orders?stage=to_confirm');
-    await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
+    await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Order stages' }).getByRole('link'),
+    ).toHaveCount(5);
+    await expect(page.getByRole('link', { name: 'To confirm 3' })).toBeVisible();
+    await expect(page.getByText('On hold', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Confirm order #1054' })).toBeVisible();
+    await expect(page.getByText('3 hours ago', { exact: true })).toHaveAttribute(
+      'title',
+      /Asia\/Dhaka/,
+    );
     await expect(page.getByText('1 order waiting over 12 hours')).toBeVisible();
     await expect(page.getByText('1 high-risk order')).toBeVisible();
     await expect(page.getByText('৳5,780 COD still with couriers')).toBeVisible();
@@ -154,22 +187,32 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
 
     await page.getByRole('link', { name: '1 high-risk order' }).click();
     await expect(page).toHaveURL(/alert=risk/);
-    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(0);
+    await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
     await page.getByRole('searchbox').fill('#1060');
-    await page.getByRole('button', { name: 'Search orders' }).click();
+    await page.getByRole('searchbox').press('Enter');
     await expect(page).toHaveURL(/search=%231060/);
-    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(0);
+    await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Kamal Hossain', { exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Confirm order #1060' }).click();
     const detail = page.getByRole('dialog', { name: 'Order #1060' });
+    await expect(detail.getByText('Staff ·')).toBeVisible();
+    await expect(detail.getByText('3 hours ago')).toHaveAttribute('title', /Asia\/Dhaka/);
     await expect(detail.getByText('High return risk')).toBeVisible();
     await expect(detail.getByText('Ask for a small advance first')).toBeVisible();
     await expect(detail.getByText('Line discount')).toBeVisible();
+    await verifyDrawerWhileSessionIsBlocked(page, detail);
     const confirm = detail.getByRole('button', { name: 'Mark confirmed' });
-    await confirm.focus();
+    await capture('detail');
+    await expect(confirm).toBeInViewport({ ratio: 1 });
+    const content = detail.getByRole('region', { name: 'Order #1060 content' });
+    await detail.getByRole('button', { name: 'Close' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(content).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(confirm).toBeFocused();
     await confirm.press('Enter');
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
     await expect(detail.getByRole('status', { name: 'Order stage' })).toBeFocused();
-    await capture('detail');
     await detail.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByRole('heading', { name: 'Orders', exact: true })).toBeFocused();
     await page.getByRole('link', { name: /^To pack/ }).click();
@@ -177,16 +220,34 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
     await page.getByRole('link', { name: 'Clear search' }).click();
     await page.getByRole('link', { name: /^Delivered/ }).click();
-    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(2);
+    await expect(page).toHaveURL(/stage=delivered/);
+    await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(2);
+    await expect(page.getByRole('link', { name: 'Delivered 2' })).toBeVisible();
+    await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
+    await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
     await page.getByText('Filters', { exact: true }).click();
-    await page.getByRole('combobox', { name: 'Source' }).selectOption('whatsapp');
-    await page.getByRole('combobox', { name: 'Courier' }).selectOption('pathao');
+    await page.getByRole('combobox', { name: 'Source' }).selectOption({ label: 'WhatsApp' });
+    await page.getByRole('combobox', { name: 'Courier' }).selectOption({ label: 'Pathao' });
     await page.getByLabel('From date').fill('2026-11-17');
     await page.getByLabel('Through date').fill('2026-11-17');
-    await page.getByRole('button', { name: 'Apply filters' }).click();
+    const applyFilters = page.getByRole('button', { name: 'Apply filters' });
+    await applyFilters.focus();
+    await applyFilters.press('Enter');
     await expect(page).toHaveURL(/courier=pathao/);
+    await expect(applyFilters).toBeFocused();
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
     await capture('filters');
+    await database.pool.query(
+      "update orders set stage='cancelled',cancel_reason='test' where id=$1",
+      [delivered],
+    );
+    await page.getByLabel('Cancelled orders').check();
+    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await expect(page).toHaveURL(/stage=cancelled/);
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page).toHaveURL(/stage=to_confirm/);
+    await expect(page.getByText('Filters', { exact: true })).toBeFocused();
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",
@@ -207,3 +268,32 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     await database.pool.end();
   }
 });
+
+async function verifyDrawerWhileSessionIsBlocked(page: Page, detail: Locator) {
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requested = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  await page.route('**/api/me/context', async (route) => {
+    entered();
+    await held;
+    await route.continue();
+  });
+  try {
+    const verified = page.waitForResponse((response) => response.url().endsWith('/api/me/context'));
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await requested;
+    await expect(detail).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+    release();
+    expect((await verified).status()).toBe(200);
+    await expect(detail).toBeVisible();
+  } finally {
+    release();
+    await page.unroute('**/api/me/context');
+  }
+}

@@ -2,9 +2,12 @@ import { ClipboardList, Instagram, MessageSquare, type LucideIcon } from 'lucide
 import Link from 'next/link';
 
 import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
+import { Badge } from '@dakly/ui/badge';
 
+import { canConfirmOrder } from '../order-actions';
+import { orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
-import { formatDateTime } from '@/lib/format-date';
+import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 import { formatMoney } from '@/lib/format-money';
 
 const sourceIcons: Partial<Record<OrderSummary['source'], LucideIcon>> = {
@@ -18,11 +21,7 @@ type OrderRowProps = { order: OrderListItem; href: string; canEdit: boolean };
 
 export function OrderRow({ order, href, canEdit }: OrderRowProps) {
   const Icon = sourceIcons[order.source] ?? ClipboardList;
-  const canConfirm =
-    canEdit &&
-    order.stage === 'to_confirm' &&
-    order.source !== 'shopify' &&
-    order.source !== 'woocommerce';
+  const canConfirm = canConfirmOrder(order, canEdit);
 
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto_auto] md:gap-4">
@@ -37,14 +36,13 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
           >
             {order.recipientName}
           </Link>
-          <OrderRiskBadge risk={order.returnRisk} />
-          {order.isWaitingForConfirmation ? (
-            <span className="text-xs font-medium text-warning">Waiting 12h+</span>
-          ) : null}
+          <OrderRowBadges order={order} />
         </div>
         <p className="text-xs text-text-muted">
           #{order.number} ·{' '}
-          <time dateTime={order.createdAt}>{formatDateTime(order.createdAt)}</time>
+          <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
+            {formatRelativeTime(order.createdAt)}
+          </time>
         </p>
         {order.itemPreview ? (
           <p className="mt-1 text-sm wrap-anywhere">{order.itemPreview}</p>
@@ -62,15 +60,24 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
   );
 }
 
-function OrderAmount({ order }: { order: OrderListItem }) {
-  const total =
-    BigInt(order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha) +
-    BigInt(order.deliveryChargePoisha) -
-    BigInt(order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha);
+function OrderRowBadges({ order }: { order: OrderListItem }) {
+  return (
+    <>
+      <OrderRiskBadge risk={order.returnRisk} />
+      {(order.stage === 'on_hold' || order.stage === 'partially_delivered') && (
+        <Badge>{orderStageLabels[order.stage]}</Badge>
+      )}
+      {order.isWaitingForConfirmation ? (
+        <span className="text-xs font-medium text-warning">Waiting 12h+</span>
+      ) : null}
+    </>
+  );
+}
 
+function OrderAmount({ order }: { order: OrderListItem }) {
   return (
     <p className="col-start-2 tabular-nums md:col-start-auto md:text-right">
-      <span className="block font-semibold">{formatMoney(total)}</span>
+      <span className="block font-semibold">{formatMoney(order.totalPoisha)}</span>
       <span className="text-xs text-text-muted">
         {order.advancePaidPoisha > 0 ? `Advance ${formatMoney(order.advancePaidPoisha)} · ` : ''}
         {order.codCollectedPoisha === null ? 'COD' : 'COD received'}{' '}

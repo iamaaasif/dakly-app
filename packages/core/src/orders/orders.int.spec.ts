@@ -10,6 +10,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OrdersModule } from './orders.module';
+import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
 
 class TestModule {}
@@ -274,5 +275,41 @@ describe('OrdersService', () => {
       stage: 'to_confirm',
       timeline: [],
     });
+  });
+
+  it('groups held and partly delivered orders into their pipeline tabs and counts only this store', async () => {
+    const previous = (await service.list(fixture.a, { limit: 20 })).counts;
+    const held = await order(fixture.a, 1100, 'on_hold');
+    const delivered = await order(fixture.a, 1101, 'delivered');
+    const partial = await order(fixture.a, 1102, 'partially_delivered');
+    await order(fixture.b, 1100, 'on_hold');
+    await order(fixture.b, 1102, 'partially_delivered');
+    const confirm = await service.list(fixture.a, { stage: 'to_confirm', limit: 20 });
+    expect(confirm.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: held, stage: 'on_hold', totalPoisha: 50000 }),
+      ]),
+    );
+    const complete = await service.list(fixture.a, { stage: 'delivered', limit: 20 });
+    expect(complete.items.map(({ id }) => id)).toEqual([partial, delivered]);
+    expect(complete.counts).toMatchObject({
+      delivered: previous.delivered + 2,
+      partially_delivered: previous.partially_delivered + 1,
+      on_hold: previous.on_hold + 1,
+    });
+    expect(confirm.counts.to_confirm).toBe(previous.to_confirm + 1);
+    expect(confirm.items).toHaveLength(confirm.counts.to_confirm);
+  });
+
+  it('finds open order items only in the verified store on an owner connection', async () => {
+    const id = await order(fixture.a, 1200, 'to_confirm');
+    const variantId = await trackedItem(id, 0);
+    const repository = new OrdersRepository(fixture.tenant);
+    await expect(repository.hasItemsInStages(fixture.a, [variantId], ['to_confirm'])).resolves.toBe(
+      true,
+    );
+    await expect(repository.hasItemsInStages(fixture.b, [variantId], ['to_confirm'])).resolves.toBe(
+      false,
+    );
   });
 });

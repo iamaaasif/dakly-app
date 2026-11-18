@@ -1,6 +1,6 @@
 import type { OrderStageHistoryEntry } from '@dakly/contracts/orders';
 
-import { orderStageLabels } from '../order-labels';
+import { cancelReasonLabels, onHoldReasonLabels, orderStageLabels } from '../order-labels';
 import { formatDateTime } from '@/lib/format-date';
 
 export function OrderTimeline({ timeline }: { timeline: OrderStageHistoryEntry[] }) {
@@ -14,13 +14,7 @@ export function OrderTimeline({ timeline }: { timeline: OrderStageHistoryEntry[]
               <p>
                 {orderStageLabels[event.from]} → {orderStageLabels[event.to]}
               </p>
-              {event.reason && (
-                <p className="wrap-anywhere">
-                  {['on_hold', 'cancelled'].includes(event.to)
-                    ? event.reason.replaceAll('_', ' ')
-                    : event.reason}
-                </p>
-              )}
+              {event.reason && <p className="wrap-anywhere">{timelineReason(event)}</p>}
               <time dateTime={event.occurredAt} className="text-xs text-text-muted">
                 {formatDateTime(event.occurredAt)}
               </time>
@@ -32,4 +26,15 @@ export function OrderTimeline({ timeline }: { timeline: OrderStageHistoryEntry[]
       )}
     </section>
   );
+}
+
+const reasonLabels: Partial<Record<OrderStageHistoryEntry['to'], Partial<Record<string, string>>>> =
+  {
+    on_hold: onHoldReasonLabels,
+    cancelled: cancelReasonLabels,
+  };
+
+function timelineReason({ to, reason }: OrderStageHistoryEntry) {
+  const labels = reasonLabels[to];
+  return labels && reason && Object.hasOwn(labels, reason) ? labels[reason] : reason;
 }

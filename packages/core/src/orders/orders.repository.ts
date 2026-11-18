@@ -1,7 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, type SQL, gte, ilike, inArray, lt, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  desc,
+  eq,
+  type SQL,
+  gte,
+  ilike,
+  inArray,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 
-import type { OrderListQuery } from '@dakly/contracts/orders';
+import type { OrderListQuery, OrderStage } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
@@ -83,7 +97,12 @@ export type StageWrite = Partial<
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string, query: OrderListQuery, overdueBefore: Date, phone?: string) {
+  list(
+    storeId: string,
+    query: Omit<OrderListQuery, 'stage'> & { stages?: OrderStage[] },
+    overdueBefore: Date,
+    phone?: string,
+  ) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
@@ -91,7 +110,7 @@ export class OrdersRepository {
         .where(
           and(
             eq(orders.storeId, storeId),
-            query.stage ? eq(orders.stage, query.stage) : undefined,
+            query.stages ? inArray(orders.stage, query.stages) : undefined,
             query.cursor ? lt(orders.number, query.cursor) : undefined,
             orderSearch(query.search, phone),
             orderFilters(query),
@@ -111,6 +130,28 @@ export class OrdersRepository {
         .where(eq(orders.storeId, storeId))
         .groupBy(orders.stage),
     );
+  }
+
+  async hasItemsInStages(
+    storeId: string,
+    variantIds: string[],
+    stages: OrderStage[],
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orderItems.id })
+        .from(orderItems)
+        .innerJoin(orders, and(eq(orders.storeId, storeId), eq(orders.id, orderItems.orderId)))
+        .where(
+          and(
+            eq(orderItems.storeId, storeId),
+            inArray(orderItems.variantId, variantIds),
+            inArray(orders.stage, stages),
+          ),
+        )
+        .limit(1),
+    );
+    return rows.length > 0;
   }
 
   async alertTotals(storeId: string, overdueBefore: Date) {
@@ -207,6 +248,32 @@ export class OrdersRepository {
     );
   }
 
+  async saveItems(storeId: string, orderId: string, items: OrderItemWrite[]): Promise<void> {
+    await this.database.forStore(storeId, async (tx) => {
+      await tx.delete(orderItems).where(
+        and(
+          eq(orderItems.storeId, storeId),
+          eq(orderItems.orderId, orderId),
+          notInArray(
+            orderItems.id,
+            items.flatMap(({ id }) => (id ? [id] : [])),
+          ),
+        ),
+      );
+      await tx
+        .insert(orderItems)
+        .values(items.map((item) => ({ ...item, storeId, orderId })))
+        .onConflictDoUpdate({
+          target: orderItems.id,
+          set: {
+            quantity: sql`excluded.quantity`,
+            lineDiscountPoisha: sql`excluded.line_discount_poisha`,
+          },
+          setWhere: and(eq(orderItems.storeId, storeId), eq(orderItems.orderId, orderId)),
+        });
+    });
+  }
+
   async find(storeId: string, orderId: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -248,7 +315,8 @@ export class OrdersRepository {
         })
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))
-        .for('update'),
+        // Allow foreign-key checks from other orders while serializing this order's writes.
+        .for('no key update'),
     );
     return row;
   }

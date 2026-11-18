@@ -1,5 +1,8 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRef, useTransition, type ReactNode } from 'react';
+import { Controller, FormProvider, useForm, useFormContext } from 'react-hook-form';
+import { z } from 'zod';
 
 import {
   couriers,
@@ -8,52 +11,88 @@ import {
   type OrderListQuery,
 } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
+import { Checkbox } from '@dakly/ui/checkbox';
+import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
 import { ordersSearch } from '../api/orders';
-import { courierLabels } from '../order-labels';
+import { courierLabels, orderSourceLabels } from '../order-labels';
+
+const filterFormSchema = orderListQuerySchema.safeExtend({ onlyCancelled: z.boolean() });
+type FilterFormValues = z.input<typeof filterFormSchema>;
+type FilterFormInput = z.output<typeof filterFormSchema>;
 
 export function OrderFilters({ query }: { query: OrderListQuery }) {
-  const router = useRouter();
-  const [error, setError] = useState('');
-  const { source, courier, createdFrom, createdThrough, ...other } = query;
-  const filter = Boolean(source || courier || createdFrom || createdThrough);
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const entries = Object.fromEntries(new FormData(event.currentTarget));
-    const parsed = orderListQuerySchema.safeParse({
-      ...other,
-      ...Object.fromEntries(Object.entries(entries).filter(([, value]) => value)),
-      cursor: undefined,
-    });
-    if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? 'Check the filters.');
-    setError('');
-    router.push(`/orders?${ordersSearch(parsed.data)}`);
-  }
+  const { source, courier, createdFrom, createdThrough, stage } = query;
+  const summary = useRef<HTMLElement>(null);
+  const applied = Boolean(
+    source || courier || createdFrom || createdThrough || stage === 'cancelled',
+  );
 
   return (
-    <details className="rounded-md border border-border bg-surface px-3" open={filter || undefined}>
-      <summary className="min-h-10 w-fit cursor-pointer py-2 font-medium">Filters</summary>
-      <form
-        key={ordersSearch({ source, courier, createdFrom, createdThrough })}
-        className="space-y-3 pb-3"
-        onSubmit={submit}
-      >
-        <FilterFields query={query} />
-        {error && (
-          <p role="alert" className="text-danger">
-            {error}
-          </p>
-        )}
+    <details
+      className="rounded-md border border-border bg-surface px-3"
+      open={applied || undefined}
+    >
+      <summary ref={summary} className="min-h-10 w-fit cursor-pointer py-2 font-medium">
+        Filters
+      </summary>
+      <FilterForm query={query} applied={applied} focusSummary={() => summary.current?.focus()} />
+    </details>
+  );
+}
+
+type FilterFormProps = {
+  query: OrderListQuery;
+  applied: boolean;
+  focusSummary: () => void;
+};
+
+function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const { source, courier, createdFrom, createdThrough, ...other } = query;
+  const onlyCancelled = query.stage === 'cancelled';
+  const base = {
+    ...other,
+    stage: onlyCancelled ? ('to_confirm' as const) : other.stage,
+    cursor: undefined,
+  };
+  const form = useForm<FilterFormValues, undefined, FilterFormInput>({
+    resolver: zodResolver(filterFormSchema),
+    values: { source, courier, createdFrom, createdThrough, onlyCancelled },
+  });
+  const navigate = (next: OrderListQuery) =>
+    startTransition(() => router.push(`/orders?${ordersSearch(next)}`));
+  const submit = form.handleSubmit(
+    ({ source, courier, createdFrom, createdThrough, onlyCancelled }) => {
+      if (pending) return;
+      navigate({
+        ...base,
+        source,
+        courier,
+        createdFrom,
+        createdThrough,
+        ...(onlyCancelled && { stage: 'cancelled', alert: undefined }),
+      });
+    },
+  );
+
+  return (
+    <FormProvider {...form}>
+      <form className="space-y-3 pb-3" onSubmit={submit}>
+        <FilterFields />
         <div className="flex flex-wrap gap-2">
-          <Button type="submit">Apply filters</Button>
-          {filter && (
+          <Button type="submit" aria-busy={pending} aria-disabled={pending}>
+            {pending ? 'Applying filters…' : 'Apply filters'}
+          </Button>
+          {applied && (
             <Button
               variant="secondary"
+              disabled={pending}
               onClick={() => {
-                setError('');
-                router.push(`/orders?${ordersSearch({ ...other, cursor: undefined })}`);
+                focusSummary();
+                navigate(base);
               }}
             >
               Clear filters
@@ -61,60 +100,91 @@ export function OrderFilters({ query }: { query: OrderListQuery }) {
           )}
         </div>
       </form>
-    </details>
+    </FormProvider>
   );
 }
 
-function FilterFields({ query }: { query: OrderListQuery }) {
-  const { source, courier, createdFrom, createdThrough } = query;
+function FilterFields() {
+  const { control, register } = useFormContext<FilterFormValues>();
   return (
     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      <OrderFilterSelect name="source" label="Source" value={source}>
+      <OrderFilterSelect name="source" label="Source">
         {orderSources.map((value) => (
           <option key={value} value={value}>
-            {value.replaceAll('_', ' ')}
+            {orderSourceLabels[value]}
           </option>
         ))}
       </OrderFilterSelect>
-      <OrderFilterSelect name="courier" label="Courier" value={courier}>
+      <OrderFilterSelect name="courier" label="Courier">
         {couriers.map((value) => (
           <option key={value} value={value}>
             {courierLabels[value]}
           </option>
         ))}
       </OrderFilterSelect>
-      <label>
-        From date <Input name="createdFrom" type="date" defaultValue={createdFrom} />
-      </label>
-      <label>
-        Through date <Input name="createdThrough" type="date" defaultValue={createdThrough} />
-      </label>
+      <FormField name="createdFrom" label="From date">
+        {(props) => (
+          <Input
+            {...props}
+            type="date"
+            {...register('createdFrom', { setValueAs: emptyAsUndefined })}
+          />
+        )}
+      </FormField>
+      <FormField name="createdThrough" label="Through date">
+        {(props) => (
+          <Input
+            {...props}
+            type="date"
+            {...register('createdThrough', { setValueAs: emptyAsUndefined })}
+          />
+        )}
+      </FormField>
+      <Controller
+        control={control}
+        name="onlyCancelled"
+        render={({ field }) => (
+          <div className="flex min-h-10 items-center gap-3 pl-2 sm:col-span-2 xl:col-span-4">
+            <Checkbox
+              id={field.name}
+              checked={field.value}
+              onCheckedChange={(value) => field.onChange(value === true)}
+              ref={field.ref}
+            />
+            <label htmlFor={field.name}>Only cancelled orders</label>
+          </div>
+        )}
+      />
     </div>
   );
+}
+
+function emptyAsUndefined(value: string) {
+  return value || undefined;
 }
 
 function OrderFilterSelect({
   name,
   label,
-  value,
   children,
 }: {
   name: 'source' | 'courier';
   label: string;
-  value?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
+  const { register } = useFormContext<FilterFormValues>();
   return (
-    <label>
-      {label}
-      <select
-        name={name}
-        defaultValue={value ?? ''}
-        className="block min-h-10 w-full rounded-md border border-input-border bg-surface px-2"
-      >
-        <option value="">All</option>
-        {children}
-      </select>
-    </label>
+    <FormField name={name} label={label}>
+      {(props) => (
+        <select
+          {...props}
+          {...register(name, { setValueAs: emptyAsUndefined })}
+          className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-invalid:border-danger"
+        >
+          <option value="">All</option>
+          {children}
+        </select>
+      )}
+    </FormField>
   );
 }

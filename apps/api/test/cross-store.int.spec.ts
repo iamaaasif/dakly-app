@@ -152,6 +152,32 @@ fixture('POST /orders', async () => {
   expect(profileEdit.statusCode).toBe(403);
 });
 
+fixture('PATCH /orders/:orderId', async () => {
+  const { a, b } = await pair();
+  const foreignId = await order(a);
+  const ownId = await order(b);
+  const variantId = await orderVariant(b);
+  const edit = { items: [{ variantId, quantity: 2 }] };
+  const before = await f.row('orders', foreignId);
+  expect((await success(b, 'PATCH', `/orders/${ownId}`, 200, edit)).json()).toMatchObject({
+    id: ownId,
+    items: [{ variantId, quantity: 2 }],
+    itemsSubtotalPoisha: 250000,
+  });
+  await hidden(
+    b,
+    'PATCH',
+    (value) => `/orders/${value}`,
+    foreignId,
+    () => edit,
+  );
+  expect(await f.row('orders', foreignId)).toEqual(before);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'PATCH', `/orders/${ownId}`, edit)).statusCode).toBe(403);
+});
+
 fixture('GET /orders', async () => {
   const { a, b } = await pair();
   const ownA = await order(a);
@@ -185,6 +211,10 @@ fixture('GET /orders', async () => {
     filtered.replace('source=whatsapp', 'source=manual'),
     filtered.replace('courier=pathao', 'courier=redx'),
     filtered.replaceAll('2026-11-17', '2026-11-18'),
+    filtered.replace(
+      '&createdFrom=2026-11-17&createdThrough=2026-11-17',
+      '&createdThrough=2026-11-16',
+    ),
   ]) {
     expect((await success(a, 'GET', unmatched, 200)).json().items).toEqual([]);
   }
@@ -547,6 +577,95 @@ fixture('GET /areas', async () => {
     nameBn: 'সাভার',
   });
 });
+async function knowledgeItem(shop: Shop, answer: string) {
+  return (await success(shop, 'POST', '/knowledge-items', 201, { kind: 'policy', answer })).json()
+    .id as string;
+}
+fixture('POST /knowledge-items', async () => {
+  const { a, b } = await pair();
+  const foreign = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+  const before = await f.row('knowledge_items', foreign);
+  const own = await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।');
+  expect((await f.row('knowledge_items', own)).store_id).toBe(b.id);
+  expect(await f.row('knowledge_items', foreign)).toEqual(before);
+  expect(
+    (
+      await f.request(b.member, 'POST', '/knowledge-items', {
+        kind: 'policy',
+        answer: 'বন্ধের সময় রাত আটটা।',
+      })
+    ).statusCode,
+  ).toBe(403);
+});
+fixture('POST /knowledge-items/uploads', async () => {
+  const { a, b } = await pair();
+  const url = '/knowledge-items/uploads';
+  const metadata = { contentType: 'text/plain', sizeBytes: 40 };
+  const foreign = (await success(a, 'POST', url, 201, metadata)).json();
+  const before = await f.row('files', foreign.fileId);
+
+  expect((await f.request(b.member, 'POST', url, metadata)).statusCode).toBe(403);
+  await f.admin.pool.query(
+    "update memberships set built_in_role = 'admin' where store_id = $1 and user_id = $2",
+    [b.id, b.member.id],
+  );
+  const res = await f.request(b.member, 'POST', url, metadata);
+  expect(res.statusCode, res.body).toBe(201);
+  const { fileId, uploadUrl } = res.json();
+  const objectKey = `stores/${b.id}/knowledge/${fileId}`;
+  expect(new URL(uploadUrl).pathname).toContain(objectKey);
+  expect(await f.row('files', fileId)).toMatchObject({
+    store_id: b.id,
+    object_key: objectKey,
+    purpose: 'knowledge_file',
+    status: 'pending',
+  });
+  await success(b, 'POST', '/knowledge-items', 201, { kind: 'file', fileId });
+  await hidden(
+    b,
+    'POST',
+    () => '/knowledge-items',
+    foreign.fileId,
+    (id) => ({
+      kind: 'file',
+      fileId: id,
+    }),
+  );
+  expect(await f.row('files', foreign.fileId)).toEqual(before);
+});
+fixture('GET /knowledge-items', async () => {
+  const { a, b } = await pair();
+  const first = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+  const second = await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।');
+  expect((await success(a, 'GET', '/knowledge-items', 200)).json().items).toMatchObject([
+    { id: first },
+  ]);
+  expect((await success(b, 'GET', '/knowledge-items', 200)).json().items).toMatchObject([
+    { id: second },
+  ]);
+});
+fixture('GET /knowledge-items/:knowledgeItemId', async () => {
+  const { a, b } = await pair();
+  const id = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+  expect((await success(a, 'GET', `/knowledge-items/${id}`, 200)).json().answer).toBe(
+    'ঢাকায় ৬০ টাকা।',
+  );
+  await hidden(b, 'GET', (value) => `/knowledge-items/${value}`, id);
+});
+for (const method of ['PATCH', 'DELETE'] as const)
+  fixture(`${method} /knowledge-items/:knowledgeItemId`, async () => {
+    const { a, b } = await pair();
+    const foreign = await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।');
+    const own = await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।');
+    const before = await f.row('knowledge_items', foreign);
+    const url = (id: string) => `/knowledge-items/${id}`;
+    const body = method === 'PATCH' ? { answer: 'ঢাকার বাইরে ১৫০ টাকা।' } : undefined;
+    const response = await success(b, method, url(own), method === 'PATCH' ? 200 : 204, body);
+    if (body) expect(response.json()).toMatchObject(body);
+    else expect(await f.row('knowledge_items', own)).toBeUndefined();
+    await hidden(b, method, url, foreign, body ? () => body : undefined);
+    expect(await f.row('knowledge_items', foreign)).toEqual(before);
+  });
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
     id = await contact(a);
@@ -1533,6 +1652,12 @@ describe('every production shop route isolates its data', () => {
     const rows: [string, string, string, string][] = [
       ['stores', 'id', a.id, b.id],
       ['memberships', 'id', a.membership, b.membership],
+      [
+        'knowledge_items',
+        'id',
+        await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।'),
+        await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।'),
+      ],
       ['contacts', 'id', await contact(a), await contact(b)],
       ['roles', 'id', await role(a), await role(b)],
       ['segments', 'id', await segment(a), await segment(b)],
@@ -1564,6 +1689,113 @@ describe('every production shop route isolates its data', () => {
     } finally {
       await client.query('rollback');
       client.release();
+    }
+  });
+  it('DELETE /products/:productId refuses variants on open orders', async () => {
+    const { a, b } = await pair();
+    const variantId = await orderVariant(b);
+    const { product_id: productId } = await f.row('product_variants', variantId);
+    const orderId = await order(b);
+    await f.admin.pool.query(
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+       values($1,$2,$3,$4,'Panjabi','Default',1,125000,false)`,
+      [randomUUID(), b.id, orderId, variantId],
+    );
+    await f.admin.pool.query("update product_variants set status='archived' where id=$1", [
+      variantId,
+    ]);
+    const url = `/products/${productId}`;
+    expect((await f.request(b.member, 'DELETE', url)).statusCode).toBe(403);
+    for (const change of [
+      undefined,
+      { to: 'on_hold', reason: 'cannot_reach' },
+      { to: 'to_pack' },
+    ]) {
+      if (change) await success(b, 'POST', `/orders/${orderId}/stage`, 200, change);
+      const denied = await f.request(b.owner, 'DELETE', url);
+      expect(denied.statusCode, denied.body).toBe(409);
+      expect(denied.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+      expect(await f.row('products', productId)).not.toMatchObject({ status: 'archived' });
+    }
+    await hidden(a, 'DELETE', (id) => `/products/${id}`, productId);
+    await success(b, 'POST', `/orders/${orderId}/stage`, 200, {
+      to: 'cancelled',
+      reason: 'customer_cancelled',
+    });
+    await success(b, 'DELETE', url, 204);
+    expect(await f.row('products', productId)).toMatchObject({ status: 'archived' });
+  });
+
+  it('DELETE /products/:productId races new order creation', async () => {
+    const { b } = await pair();
+    const variantId = await orderVariant(b);
+    const { product_id: productId } = await f.row('product_variants', variantId);
+    await deliveryZone(b);
+    await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
+    const startRequests = () =>
+      Promise.allSettled([
+        f.request(
+          b.owner,
+          'POST',
+          '/orders',
+          {
+            buyer: { name: 'Rahim' },
+            recipient: { name: 'Rahim', phone: b.owner.phone, address: 'Mirpur', areaId: 301 },
+            items: [{ variantId, quantity: 1 }],
+          },
+          { 'idempotency-key': randomUUID() },
+        ),
+        f.request(b.owner, 'DELETE', `/products/${productId}`),
+      ]);
+    const lock = await f.admin.pool.connect();
+    let requests: ReturnType<typeof startRequests> | undefined;
+    try {
+      await lock.query('begin');
+      const {
+        rows: [session],
+      } = await lock.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await lock.query('select id from product_variants where id=$1 for no key update', [
+        variantId,
+      ]);
+      requests = startRequests();
+      await expect
+        .poll(async () => {
+          const {
+            rows: [blocked],
+          } = await f.admin.pool.query<{ total: string }>(
+            `with recursive waiting(pid) as (
+             select $1::int
+             union
+             select activity.pid from pg_stat_activity activity
+             join waiting on waiting.pid=any(pg_blocking_pids(activity.pid))
+           ) select count(*)-1 as total from waiting`,
+            [session!.pid],
+          );
+          return Number(blocked!.total);
+        })
+        .toBe(2);
+    } finally {
+      let rolledBack = false;
+      try {
+        await lock.query('rollback');
+        rolledBack = true;
+      } finally {
+        lock.release(!rolledBack);
+        await requests;
+      }
+    }
+    const [creation, archive] = (await requests)!;
+    if (creation.status === 'rejected') throw creation.reason;
+    if (archive.status === 'rejected') throw archive.reason;
+    const created = creation.value;
+    const archived = archive.value;
+    if (created.statusCode === 201) {
+      expect(archived.statusCode, archived.body).toBe(409);
+      expect(archived.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+    } else {
+      expect(archived.statusCode, archived.body).toBe(204);
+      expect(created.statusCode, created.body).toBe(404);
+      expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
   for (const [route, run] of fixtures) it(route, run);

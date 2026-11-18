@@ -143,6 +143,7 @@ describe('Manual dispatch and delivery', () => {
       orderDiscountPoisha: 3001,
       deliveredItemsSubtotalPoisha: 249334,
       deliveredOrderDiscountPoisha: 2000,
+      totalPoisha: 253334,
       codAmountPoisha: 233334,
       items: [
         {
@@ -281,7 +282,7 @@ describe('Manual dispatch and delivery', () => {
   it('counts alerts across the store and searches one page by order number', async () => {
     const query = { stage: 'to_confirm', limit: 1 } as const;
     const initial = (await service.list(f.a, query)).alerts;
-    const phone = '01710000008';
+    const phone = '01710000009';
     const overdue = await order(f.a, 'to_confirm', { phone });
     await trackedLine(overdue, 2);
     await f.connection.pool.query(
@@ -316,5 +317,15 @@ describe('Manual dispatch and delivery', () => {
       codAwaitingOrders: initial.codAwaitingOrders + 1,
       codAwaitingPoisha: String(BigInt(initial.codAwaitingPoisha) + 381000n),
     });
+  });
+
+  it('shows some returns at 25 percent and a good buyer at 20 percent', async () => {
+    const phone = '01710000008';
+    const own = await order(f.a, 'to_confirm', { phone });
+    await order(f.a, 'returned', { phone });
+    for (let i = 0; i < 3; i++) await order(f.a, 'delivered', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('some_returns');
+    await order(f.a, 'delivered', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('good');
   });
 });

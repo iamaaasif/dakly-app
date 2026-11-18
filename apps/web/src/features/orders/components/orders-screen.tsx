@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type RefObject } from 'react';
 
-import { orderStages, type OrderListQuery } from '@dakly/contracts/orders';
+import { orderTabs, type OrderListQuery } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
@@ -36,13 +36,13 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           onSaved={(id) => router.replace(`/orders?${ordersSearch({ ...query, selected: id })}`)}
         />
         {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
-        <nav aria-label="Order stages" className="flex overflow-x-auto border-b border-border">
-          {orderStages.map((stage) => (
+        <nav aria-label="Order stages" className="flex flex-wrap border-b border-border">
+          {orderTabs.map((stage) => (
             <Link
               key={stage}
               href={`/orders?${ordersSearch({ ...query, stage, alert: undefined, cursor: undefined })}`}
               aria-current={stage === query.stage ? 'page' : undefined}
-              className="flex min-h-12 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 text-base whitespace-nowrap hover:bg-surface-muted aria-[current=page]:border-action aria-[current=page]:font-semibold"
+              className="flex min-h-10 shrink-0 items-center gap-1 border-b-2 border-transparent px-2 text-sm whitespace-nowrap hover:bg-surface-muted aria-[current=page]:border-action aria-[current=page]:font-semibold sm:min-h-12 sm:gap-2 sm:px-3 sm:text-base"
             >
               {orderStageLabels[stage]}
               {orders.data ? (
