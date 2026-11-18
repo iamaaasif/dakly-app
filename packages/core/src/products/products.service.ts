@@ -5,6 +5,7 @@ import type {
   OrderCataloguePage,
   OrderCatalogueProduct,
   OrderCatalogueQuery,
+  OrderCatalogueStock,
 } from '@dakly/contracts/orders';
 import type {
   CreateProductInput,
@@ -152,12 +153,12 @@ export class ProductsService {
     });
   }
 
-  async orderVariantProductIds(storeId: string, items: readonly { variantId: string }[]) {
-    const variantIds = items.map(({ variantId }) => variantId);
-    const rows = variantIds.length
-      ? await this.orderVariantRepository.productIds(storeId, variantIds)
-      : [];
-    return new Map(rows.map(({ variantId, productId }) => [variantId, productId]));
+  async orderVariantStock(storeId: string, variantIds: string[]): Promise<OrderCatalogueStock> {
+    const rows = await this.orderVariantRepository.stock(storeId, variantIds);
+    return rows.map(({ variantId, onHand, reserved, isStockTracked }) => ({
+      variantId,
+      available: isStockTracked ? onHand - reserved : null,
+    }));
   }
 
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {

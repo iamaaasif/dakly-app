@@ -31,7 +31,6 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTimes,
   productArchiveStages,
   recordOrderStage,
   stageWrite,
@@ -41,7 +40,7 @@ import { orderTotalPoisha, orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
-type Access = Pick<StoreAccess, 'seeFullPhone'> & Partial<Pick<StoreAccess, 'areas'>>;
+type Access = Pick<StoreAccess, 'seeFullPhone'>;
 type StageEditor = { actor: AuditEntry['actor']; access: Access };
 type CreateEditor = {
   actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
@@ -234,26 +233,22 @@ export class OrdersService {
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
-    const { buyerContactId, recipientPhone, isRecipientBuyer } = order;
-    const hasRecipientPhoneMatch =
-      isRecipientBuyer && access.seeFullPhone && buyerContactId
-        ? await this.contacts.hasOrderPhoneMatch(storeId, buyerContactId, recipientPhone)
-        : false;
-    const items = await this.repository.items(storeId, orderId);
-    const productIds =
-      access.areas?.orders === 'edit' && canEditOrder(order)
-        ? await this.products.orderVariantProductIds(storeId, items)
-        : undefined;
+    const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
+    const timeline = await orderStageHistory(storeId, orderId, this.audit);
     return {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
-      ...orderStageTimes(order),
-      hasRecipientPhoneMatch,
+      hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
+      createdAt: order.createdAt.toISOString(),
+      shippedAt: isoTime(order.shippedAt),
+      deliveredAt: isoTime(order.deliveredAt),
+      returnedAt: isoTime(order.returnedAt),
+      codCollectedAt: isoTime(order.codCollectedAt),
       totalPoisha: orderTotalPoisha(order),
-      returnRisk: returnRisk((await this.repository.parcelOutcomes(storeId, [recipientPhone]))[0]),
-      items: items.map((item) => ({ ...item, productId: productIds?.get(item.variantId) ?? null })),
-      timeline: await orderStageHistory(storeId, orderId, this.audit),
+      returnRisk: returnRisk(outcomes[0]),
+      items: await this.repository.items(storeId, orderId),
+      timeline,
     };
   }
 
@@ -408,7 +403,9 @@ export class OrdersService {
     previous: OrderItemWrite[] = [],
   ): Promise<OrderItemWrite[]> {
     const byId = new Map(previous.map((item) => [item.variantId, item]));
-    const newIds = items.flatMap(({ variantId }) => (byId.has(variantId) ? [] : [variantId]));
+    const newIds = items
+      .filter(({ variantId }) => !byId.has(variantId))
+      .map(({ variantId }) => variantId);
     const variants = await this.products.orderVariants(storeId, newIds, [...byId.keys()]);
     for (const variant of variants) {
       if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
@@ -416,4 +413,8 @@ export class OrdersService {
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
+}
+
+function isoTime(value: Date | null): string | null {
+  return value?.toISOString() ?? null;
 }

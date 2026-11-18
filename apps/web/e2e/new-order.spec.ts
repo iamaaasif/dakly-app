@@ -221,11 +221,17 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
     await expect(detail.getByText('৳1,110')).toBeVisible();
 
+    const newPrice = await context.request.patch(`/api/products/${productId}`, {
+      data: { pricePoisha: 140000 },
+      headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
+    });
+    expect(newPrice.status()).toBe(200);
+    await page.reload();
     const editButton = detail.getByRole('button', { name: 'Edit order' });
     await editButton.click();
     const edit = page.getByRole('dialog', { name: 'Edit order' });
     await expect(edit.getByText('Sonia Akter')).toBeVisible();
-    await expect(edit.getByText('3 in stock')).toBeVisible();
+    await expect(edit.getByText('৳1,250 · 3 in stock', { exact: true })).toBeVisible();
     await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
     await edit.getByLabel('Quantity 1').fill('2');
     await expect(

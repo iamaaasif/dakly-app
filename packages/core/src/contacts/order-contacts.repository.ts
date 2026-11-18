@@ -64,11 +64,19 @@ export class OrderContactsRepository {
       tx
         .select({ id: contactMatchSuggestions.id })
         .from(contactMatchSuggestions)
+        .innerJoin(
+          contacts,
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.id, contactMatchSuggestions.matchedContactId),
+          ),
+        )
         .where(
           and(
             eq(contactMatchSuggestions.storeId, storeId),
             eq(contactMatchSuggestions.contactId, contactId),
-            eq(contactMatchSuggestions.phone, phone),
+            eq(contacts.phone, phone),
+            isNull(contacts.deletedAt),
             eq(contactMatchSuggestions.reason, 'same_phone'),
             eq(contactMatchSuggestions.status, 'open'),
           ),

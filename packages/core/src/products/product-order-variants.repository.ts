@@ -45,12 +45,28 @@ export class ProductOrderVariantsRepository {
     );
   }
 
-  productIds(storeId: string, variantIds: string[]) {
+  stock(storeId: string, variantIds: string[]) {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ variantId: productVariants.id, productId: productVariants.productId })
+        .select({
+          variantId: productVariants.id,
+          onHand: productVariants.onHand,
+          reserved: productVariants.reserved,
+          isStockTracked: products.isStockTracked,
+        })
         .from(productVariants)
-        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds))),
+        .innerJoin(
+          products,
+          and(eq(products.storeId, storeId), eq(products.id, productVariants.productId)),
+        )
+        .where(
+          and(
+            eq(productVariants.storeId, storeId),
+            inArray(productVariants.id, variantIds),
+            ne(products.status, 'archived'),
+            ne(productVariants.status, 'archived'),
+          ),
+        ),
     );
   }
 

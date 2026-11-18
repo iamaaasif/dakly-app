@@ -10,7 +10,7 @@ import { useOrderCatalogue } from '../api/order-catalogue';
 import { formatMoney } from '@/lib/format-money';
 
 export type VariantChoice = {
-  productId: string;
+  productId?: string;
   label: string;
   price: number;
   stock: number | null;
@@ -74,7 +74,9 @@ export function OrderProductFields({
   );
 }
 
-export function orderVariantChoices(products: OrderCatalogueProduct[]) {
+export function orderVariantChoices(
+  products: OrderCatalogueProduct[],
+): Record<string, VariantChoice> {
   return Object.fromEntries(
     products.flatMap((product) =>
       product.variants

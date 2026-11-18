@@ -1,6 +1,10 @@
-import { useInfiniteQuery, useQueries } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
 
-import type { OrderCataloguePage, OrderCatalogueProduct } from '@dakly/contracts/orders';
+import type {
+  OrderCataloguePage,
+  OrderCatalogueProduct,
+  OrderCatalogueStock,
+} from '@dakly/contracts/orders';
 
 import { productsKeys } from '@/lib/product-query-keys';
 import { useSessionContext } from '@/lib/session-context';
@@ -33,5 +37,17 @@ export function useOrderCatalogueProducts(ids: readonly string[]) {
         request<OrderCatalogueProduct>(`/orders/catalogue/${id}`, { signal }),
       enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
     })),
+  });
+}
+
+export function useOrderCatalogueStock(variantIds: string[]) {
+  const { request, contextTag } = useStoreRequest();
+  const { data } = useSessionContext();
+  const args = new URLSearchParams({ variantIds: variantIds.join(',') });
+  return useQuery({
+    queryKey: [...productsKeys.all, contextTag, 'order-catalogue-stock', variantIds],
+    queryFn: ({ signal }) =>
+      request<OrderCatalogueStock>(`/orders/catalogue/stock?${args}`, { signal }),
+    enabled: Boolean(contextTag && data?.currentStore?.canEditOrders && variantIds.length),
   });
 }

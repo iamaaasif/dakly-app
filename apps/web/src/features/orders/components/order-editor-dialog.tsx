@@ -15,17 +15,19 @@ import {
   type CreateOrderValues,
   type OrderDetail,
   type OrderCatalogueProduct,
+  type OrderCatalogueStock,
   type OrderEditorValues,
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
+import { QueryError } from '@dakly/ui/query-error';
 
 import { useOrderStage } from '../api/change-order-stage';
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
-import { useOrderCatalogueProducts } from '../api/order-catalogue';
+import { useOrderCatalogueProducts, useOrderCatalogueStock } from '../api/order-catalogue';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -180,14 +182,11 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' });
-  const savedProductIds = order?.items.flatMap(({ productId }) => productId ?? []) ?? [];
+  const stock = useOrderCatalogueStock(order?.items.map(({ variantId }) => variantId) ?? []);
   const selectedProducts = useOrderCatalogueProducts([
-    ...new Set([
-      ...savedProductIds,
-      ...items.flatMap(({ variantId }) => productIds.current[variantId] ?? []),
-    ]),
+    ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
   ]).flatMap(({ data }) => data ?? []);
-  const variants = draftVariantChoices(selectedProducts, order);
+  const variants = draftVariantChoices(selectedProducts, order, stock.data);
 
   return (
     <>
@@ -199,10 +198,17 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant) productIds.current[id] = variant.productId;
+          if (variant?.productId) productIds.current[id] = variant.productId;
           setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
         }}
       />
+      {stock.error && (
+        <QueryError
+          message={stock.error.message}
+          onRetry={() => void stock.refetch()}
+          retryLabel="Retry stock"
+        />
+      )}
       {formState.errors.items && (
         <p role="alert" className="text-danger">
           Choose a different variant for each line and enter a positive quantity.
@@ -214,18 +220,18 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   );
 }
 
-function draftVariantChoices(products: OrderCatalogueProduct[], order?: OrderDetail) {
+function draftVariantChoices(
+  products: OrderCatalogueProduct[],
+  order?: OrderDetail,
+  stock?: OrderCatalogueStock,
+) {
   const variants = orderVariantChoices(products);
+  const stockByVariant = new Map(stock?.map(({ variantId, available }) => [variantId, available]));
   for (const item of order?.items ?? []) {
-    const live = products.find(({ id }) => id === item.productId);
-    const stock = live?.isStockTracked
-      ? live.variants.find(({ id }) => id === item.variantId)?.available
-      : null;
     variants[item.variantId] = {
-      productId: item.productId ?? '',
       label: [item.productName, item.variantTitle].filter(Boolean).join(' · '),
       price: item.unitPricePoisha,
-      stock: stock ?? null,
+      stock: stockByVariant.get(item.variantId) ?? null,
     };
   }
   return variants;
