@@ -25,9 +25,9 @@ Questions waiting for Asif. Until one is answered, build the "working assumption
 - Email sign-in and email code screens (the prototype has only the Email tab).
 - Remove the AI voice call card, the courier booking screens, the email campaign options and the Instagram DM campaign option from release 1 screens.
 
-## Import undo integration before beta
+## Import undo integration with related records
 
 ORD, CHAT, identity and merge changes must bump `contacts.updated_at` or provide an undo
-eligibility check before beta. Until then, an imported contact with a new order or chat can
+eligibility check as they add or change these related records. Until then, an imported contact with a new order or chat can
 still appear unedited and be removed by import undo. Consent changes are checked separately
 through their history; they do not need to modify the contact row.

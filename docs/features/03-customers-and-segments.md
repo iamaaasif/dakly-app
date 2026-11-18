@@ -226,7 +226,7 @@ undo the contacts it added and the consent grants it recorded.
   whose `updated_at` still equals `created_at` and whose SMS and WhatsApp channels have no
   answer after restoration. A later grant or withdrawal keeps the contact. Contacts that the
   import only updated stay. Chats and orders do not yet change `updated_at`, so a removed
-  contact may have had them; ORD, CHAT, identity and merge work must address this before beta.
+  contact may have had them; ORD, CHAT, identity and merge work must update undo eligibility as those relations change.
 - `ImportResponse.undoFinishedAt` is null while undo is pending. The job sets it when all work
   finishes. Reruns leave restored grants alone and remove only remaining eligible contacts.
   The sweep requeues unfinished undo after 15 minutes without progress, at most 100 imports
