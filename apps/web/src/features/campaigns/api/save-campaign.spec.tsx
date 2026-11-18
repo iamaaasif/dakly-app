@@ -166,33 +166,52 @@ it.each([
   expect(client.getQueryData(queryKey)).toEqual(terminal);
 });
 
-it('refreshes a scheduled summary when a late save conflict could hide an unscheduled draft', async () => {
-  const { client, queryKey, result } = setup();
-  let releaseConflict!: (response: Response) => void;
-  const conflict = new Promise<Response>((resolve) => (releaseConflict = resolve));
-  const fetch = vi.fn(() => conflict);
-  vi.stubGlobal('fetch', fetch);
-  const read = vi.fn(async () => original);
-  const observer = new QueryObserver(client, { queryKey, queryFn: read, staleTime: Infinity });
-  const unsubscribe = observer.subscribe(() => undefined);
-  try {
-    await act(async () => {
-      const pending = result.current
-        .mutateAsync({ id, input: { name: saved.name } })
-        .catch((error: unknown) => error);
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-      client.setQueryData(queryKey, { ...original, status: 'scheduled' });
-      releaseConflict(
-        Response.json(
-          { error: { code: 'CAMPAIGN_NOT_DRAFT', message: 'This campaign is no longer a draft' } },
-          { status: 409 },
-        ),
-      );
-      expect(await pending).toMatchObject({ code: 'CAMPAIGN_NOT_DRAFT' });
-    });
-    expect(read).toHaveBeenCalledOnce();
-    expect(client.getQueryData(queryKey)).toEqual(original);
-  } finally {
-    unsubscribe();
-  }
-});
+it.each([
+  { status: 'scheduled', conflict: true },
+  { status: 'scheduled', conflict: false },
+  { status: 'draft', conflict: true },
+] as const)(
+  'keeps $status visible while reconciling a save (conflict $conflict)',
+  async ({ status, conflict }) => {
+    const { client, queryKey, result } = setup();
+    let releaseSave!: (response: Response) => void;
+    let finishRead!: (campaign: CampaignResponse) => void;
+    const saveResponse = new Promise<Response>((resolve) => (releaseSave = resolve));
+    const current = { ...original, status, goal: 'win_back' } as const;
+    const refreshed = { ...current, status: 'draft' } as const;
+    const fetch = vi.fn(() => saveResponse);
+    vi.stubGlobal('fetch', fetch);
+    const read = vi.fn(() => new Promise<CampaignResponse>((resolve) => (finishRead = resolve)));
+    const observer = new QueryObserver(client, { queryKey, queryFn: read, staleTime: Infinity });
+    const unsubscribe = observer.subscribe(() => undefined);
+    try {
+      await act(async () => {
+        const pending = result.current
+          .mutateAsync({ id, input: { name: saved.name } })
+          .catch((error: unknown) => error);
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+        client.setQueryData(queryKey, current);
+        releaseSave(
+          conflict
+            ? Response.json(
+                {
+                  error: {
+                    code: 'CAMPAIGN_NOT_DRAFT',
+                    message: 'This campaign is no longer a draft',
+                  },
+                },
+                { status: 409 },
+              )
+            : Response.json(saved, { headers: { 'x-session-context': contextTag } }),
+        );
+        await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+        expect(client.getQueryData(queryKey)).toEqual(current);
+        finishRead(refreshed);
+        expect(await pending).toMatchObject(conflict ? { code: 'CAMPAIGN_NOT_DRAFT' } : saved);
+      });
+      expect(client.getQueryData(queryKey)).toEqual(refreshed);
+    } finally {
+      unsubscribe();
+    }
+  },
+);

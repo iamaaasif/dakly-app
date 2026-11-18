@@ -11,6 +11,10 @@ import { ApiError } from '@dakly/ui/api-client';
 import { campaignKeys } from './campaigns-key';
 import { useStoreRequest } from '@/lib/store-request';
 
+function canReturnToDraft(campaign?: CampaignResponse | null): boolean {
+  return campaign?.status === 'draft' || campaign?.status === 'scheduled';
+}
+
 export function useSaveCampaign() {
   const { request, contextTag } = useStoreRequest();
   const client = useQueryClient();
@@ -37,9 +41,8 @@ export function useSaveCampaign() {
         client.setQueryData(queryKey, null);
       }
       if (error.code !== 'CAMPAIGN_NOT_DRAFT') return;
-      const status = getCachedCampaign(change.id)?.status;
-      if (status === 'draft') await client.resetQueries({ queryKey, exact: true });
-      if (status === 'scheduled') await client.invalidateQueries({ queryKey, exact: true });
+      if (canReturnToDraft(getCachedCampaign(change.id)))
+        await client.invalidateQueries({ queryKey, exact: true });
     },
     onSuccess: async (saved, change, snapshot) => {
       const detail = campaignKeys.detail(contextTag, saved.id);
@@ -48,7 +51,7 @@ export function useSaveCampaign() {
       if (current !== snapshot?.before) {
         // An overlapping read could precede or follow the commit. Let the active detail
         // finish refreshing before the form reports success.
-        if (current?.status === 'draft')
+        if (canReturnToDraft(current))
           await client.invalidateQueries({ queryKey: detail, exact: true });
       } else if (current === undefined || current?.status === 'draft') {
         client.setQueryData(detail, saved);
