@@ -95,6 +95,15 @@ export function dhakaDateField(value: string, exclusiveEnd = false): string {
 
 export function dhakaDateBoundary(value: string, nextDay = false): string | undefined {
   if (!value) return undefined;
-  const instant = parseInstant(`${value}T00:00:00+06:00`);
-  return new Date(instant + (nextDay ? DAY_MS : 0)).toISOString();
+  const utcMidnight = parseInstant(`${value}T00:00:00Z`) + (nextDay ? DAY_MS : 0);
+  const targetDay = utcMidnight / DAY_MS;
+  // Dhaka's positive UTC offset puts the day boundary before UTC midnight.
+  let before = utcMidnight - DAY_MS;
+  let after = utcMidnight;
+  while (after - before > 1) {
+    const middle = before + Math.floor((after - before) / 2);
+    if (calendarDate(middle, 'Asia/Dhaka').day < targetDay) before = middle;
+    else after = middle;
+  }
+  return new Date(after).toISOString();
 }

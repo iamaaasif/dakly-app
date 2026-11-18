@@ -132,6 +132,7 @@ export const changeCampaignSchema = z
   );
 const campaignListTime = z.iso
   .datetime()
+  .refine((value) => !value.startsWith('0000-'), 'Enter a year after 0000')
   .refine(
     (value) => !/\.\d{4,}/u.test(value),
     'Use no more than three digits for fractional seconds',

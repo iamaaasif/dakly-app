@@ -51,6 +51,7 @@ describe('campaign list query', () => {
     { status: 'unknown' },
     { channel: 'email' },
     { createdBefore: '2026-02-30T00:00:00.000Z' },
+    { createdFrom: '0000-01-01T00:00:00Z' },
     { createdBefore: '2026-11-20T00:00:00.0001Z' },
     { createdFrom: '2026-11-20T00:00:00.000Z', createdBefore: '2026-11-19T00:00:00.000Z' },
   ])('rejects an invalid filter %o', (query) => {

@@ -30,11 +30,12 @@ const optional = { setValueAs: (value: string) => value.trim() || undefined };
 const selectClass =
   'min-h-10 w-full rounded-md border border-input-border bg-surface px-3 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
-export function CampaignFilters({ query }: { query: CampaignListQuery }) {
-  const router = useRouter();
-  const initialFrom = query.createdFrom ? dhakaDateField(query.createdFrom) : undefined;
-  const initialBefore = query.createdBefore ? dhakaDateField(query.createdBefore, true) : undefined;
-  const filtersSchema = filterFields
+function campaignFilterSchema(
+  query: CampaignListQuery,
+  initialFrom?: string,
+  initialBefore?: string,
+) {
+  return filterFields
     .transform(
       ({ createdFrom, createdBefore, ...filters }): z.input<typeof campaignListQuerySchema> => ({
         search: filters.search || undefined,
@@ -49,8 +50,14 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
       }),
     )
     .pipe(campaignListQuerySchema);
+}
+
+export function CampaignFilters({ query }: { query: CampaignListQuery }) {
+  const router = useRouter();
+  const initialFrom = query.createdFrom ? dhakaDateField(query.createdFrom) : undefined;
+  const initialBefore = query.createdBefore ? dhakaDateField(query.createdBefore, true) : undefined;
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
-    resolver: zodResolver(filtersSchema),
+    resolver: zodResolver(campaignFilterSchema(query, initialFrom, initialBefore)),
     defaultValues: {
       search: query.search ?? '',
       status: query.status ?? '',
