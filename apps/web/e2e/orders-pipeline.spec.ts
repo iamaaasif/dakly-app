@@ -118,7 +118,7 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
       hours: 72,
       cod: 248000,
     });
-    await order({
+    const delivered = await order({
       number: 1056,
       stage: 'delivered',
       name: 'Nusrat Jahan',
@@ -134,6 +134,10 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
       hours: 71,
       cod: 256000,
     });
+    await database.pool.query(
+      "update orders set courier='pathao', source='whatsapp', created_at='2026-11-16T18:00:00Z' where store_id=$1 and id=$2",
+      [storeId, delivered],
+    );
     await database.pool.query(
       `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
         values ($1,$2,$3,$4,'Cotton Panjabi','L',2,248000,false)`,
@@ -165,6 +169,18 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     await page.getByRole('link', { name: /^To pack/ }).click();
     await expect(page).toHaveURL(/stage=to_pack/);
     await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
+    await page.getByRole('link', { name: 'Clear search' }).click();
+    await page.getByRole('link', { name: /^Delivered/ }).click();
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(2);
+    await page.getByText('Filters', { exact: true }).click();
+    await page.getByRole('combobox', { name: 'Source' }).selectOption('whatsapp');
+    await page.getByRole('combobox', { name: 'Courier' }).selectOption('pathao');
+    await page.getByLabel('From date').fill('2026-11-17');
+    await page.getByLabel('Through date').fill('2026-11-17');
+    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await expect(page).toHaveURL(/courier=pathao/);
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
+    await capture('filters');
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",

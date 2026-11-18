@@ -94,6 +94,7 @@ export class OrdersRepository {
             query.stage ? eq(orders.stage, query.stage) : undefined,
             query.cursor ? lt(orders.number, query.cursor) : undefined,
             orderSearch(query.search, phone),
+            orderFilters(query),
             query.alert ? orderAlertFilter(tx, storeId, query.alert, overdueBefore) : undefined,
           ),
         )
@@ -289,6 +290,19 @@ const itemPreview = sql<string | null>`(
 )`;
 
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
+
+function orderFilters({ source, courier, createdFrom, createdThrough }: OrderListQuery) {
+  return and(
+    source ? eq(orders.source, source) : undefined,
+    courier ? eq(orders.courier, courier) : undefined,
+    createdFrom
+      ? sql`${orders.createdAt} >= ${createdFrom}::date::timestamp at time zone 'Asia/Dhaka'`
+      : undefined,
+    createdThrough
+      ? sql`${orders.createdAt} < (${createdThrough}::date + 1)::timestamp at time zone 'Asia/Dhaka'`
+      : undefined,
+  );
+}
 
 function orderSearch(search?: string, phone?: string) {
   if (!search) return;

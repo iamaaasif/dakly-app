@@ -164,6 +164,30 @@ fixture('GET /orders', async () => {
     expect(result.json()).toMatchObject({ items: [{ id }], counts: { to_confirm: 1 } });
     expect(result.json().items).toHaveLength(1);
   }
+  await f.admin.pool.query(
+    `update orders set stage='delivered', source='whatsapp', courier='pathao',
+      created_at=case when id=$1 then '2026-11-16T18:00:00Z'::timestamptz
+                      else '2026-11-17T17:59:59Z'::timestamptz end
+      where id in ($1,$2)`,
+    [ownA, ownB],
+  );
+  const filtered =
+    '/orders?stage=delivered&source=whatsapp&courier=pathao&createdFrom=2026-11-17&createdThrough=2026-11-17';
+  for (const [shop, id] of [
+    [a, ownA],
+    [b, ownB],
+  ] as const) {
+    expect((await success(shop, 'GET', filtered, 200)).json().items).toEqual([
+      expect.objectContaining({ id }),
+    ]);
+  }
+  for (const unmatched of [
+    filtered.replace('source=whatsapp', 'source=manual'),
+    filtered.replace('courier=pathao', 'courier=redx'),
+    filtered.replaceAll('2026-11-17', '2026-11-18'),
+  ]) {
+    expect((await success(a, 'GET', unmatched, 200)).json().items).toEqual([]);
+  }
 });
 
 fixture('GET /orders/:orderId', async () => {

@@ -71,16 +71,35 @@ export type OrderStage = (typeof orderStages)[number];
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
-export const orderListQuerySchema = z.strictObject({
-  stage: z.enum(orderStages).optional(),
-  alert: z.enum(['waiting', 'risk', 'cod']).optional(),
-  search: z.string().trim().min(1).max(120).optional(),
-  cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
-  limit: z.coerce.number<string>().int().min(1).max(100).default(50),
-});
+export const orderListQuerySchema = z
+  .strictObject({
+    stage: z.enum(orderStages).optional(),
+    source: z.enum(orderSources).optional(),
+    courier: z.enum(couriers).optional(),
+    createdFrom: z.iso
+      .date()
+      .refine((date) => !date.startsWith('0000-'))
+      .optional(),
+    createdThrough: z.iso
+      .date()
+      .refine((date) => !date.startsWith('0000-'))
+      .optional(),
+    alert: z.enum(['waiting', 'risk', 'cod']).optional(),
+    search: z.string().trim().min(1).max(120).optional(),
+    cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
+    limit: z.coerce.number<string>().int().min(1).max(100).default(50),
+  })
+  .refine(
+    ({ createdFrom, createdThrough }) =>
+      !createdFrom || !createdThrough || createdFrom <= createdThrough,
+    {
+      path: ['createdThrough'],
+      message: 'End date must be on or after the start date',
+    },
+  );
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
-export const orderScreenQuerySchema = orderListQuerySchema.extend({
+export const orderScreenQuerySchema = orderListQuerySchema.safeExtend({
   selected: z.uuid().optional(),
 });
 
