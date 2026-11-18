@@ -278,8 +278,15 @@
     {
       "idx": 39,
       "version": "7",
-      "when": 1794995830264,
-      "tag": "0039_automation_send_costs",
+      "when": 1795000947648,
+      "tag": "0039_bd_upazila_areas",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795011887598,
+      "tag": "0040_automation_send_costs",
       "breakpoints": true
     }
   ]

@@ -28,7 +28,7 @@ Milestones follow the build order in [development/build-order.md](development/bu
 | DB-3  | Store and account audit services                                                         | Done        | DB-5, REV-4 | #12      | Atomic audit writes and account retention; [plan](plans/core.md)                                                                                       |
 | DB-4  | Envelope encryption for shop credentials (`platform/crypto`)                             | Done        |             | #27      | Needed by ACC-7; [plan](plans/core.md)                                                                                                                 |
 | DB-5  | Release 1 schema, RLS, cross-store functions, ER diagram and data docs                   | Done        |             | #6       | Schema #6; core migration fold #43; [data/](data/README.md)                                                                                            |
-| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | Todo        | DB-5        |          |                                                                                                                                                        |
+| DB-6  | Upazila list and Bangla area names from the BBS list into `bd_areas`                     | In review   | DB-5        | #138     |                                                                                                                                                        |
 | DB-7  | `run-maintenance` job: partitions, daily rollups, R2 archive, batched purges             | Todo        | DB-5        |          | [growth.md](data/growth.md); all-store rollups; purge expired `files` objects; delete `stores/*/products/*` objects with no `files` row after 24 hours |
 | API-1 | Logging (nestjs-pino), request ids, Sentry                                               | Done        |             | #9       | [plan](plans/core.md)                                                                                                                                  |
 | API-2 | Rate limiting with Valkey storage                                                        | Done        |             | #10      | Valkey client and per-key limiter; [plan](plans/core.md)                                                                                               |
@@ -149,16 +149,16 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M7. AI layer
 
-| ID   | Task                                                                    | Status | Depends      | PR  | Notes |
-| ---- | ----------------------------------------------------------------------- | ------ | ------------ | --- | ----- |
-| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | Todo   |              |     | Q8    |
-| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Todo   | AI-1, PAY-1  |     | Q15   |
-| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Todo   | AI-2         |     |       |
-| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo   | AI-2, CHAT-3 |     |       |
-| AI-5 | Sales agent tools and the fact check before sending                     | Todo   | AI-4, ORD-3  |     |       |
-| AI-6 | Practice mode, test questions, Go live                                  | Todo   | AI-5         |     | Q10   |
-| AI-7 | Golden-set eval runner and nightly job                                  | Todo   | AI-5         |     |       |
-| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo   | AI-6         |     |       |
+| ID   | Task                                                                    | Status    | Depends      | PR   | Notes |
+| ---- | ----------------------------------------------------------------------- | --------- | ------------ | ---- | ----- |
+| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | In review |              | #137 | Q8    |
+| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | In review | AI-1, PAY-1  | #140 | Q15   |
+| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Todo      | AI-2         |      |       |
+| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo      | AI-2, CHAT-3 |      |       |
+| AI-5 | Sales agent tools and the fact check before sending                     | Todo      | AI-4, ORD-3  |      |       |
+| AI-6 | Practice mode, test questions, Go live                                  | Todo      | AI-5         |      | Q10   |
+| AI-7 | Golden-set eval runner and nightly job                                  | Todo      | AI-5         |      |       |
+| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo      | AI-6         |      |       |
 
 ## Later release: couriers and COD
 
