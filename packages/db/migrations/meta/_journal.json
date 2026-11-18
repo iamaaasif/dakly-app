@@ -309,6 +309,13 @@
       "when": 1795024576798,
       "tag": "0043_automation_send_retries",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795024684596,
+      "tag": "0044_automation_balance_pause",
+      "breakpoints": true
     }
   ]
 }
