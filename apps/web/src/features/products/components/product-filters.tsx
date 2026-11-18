@@ -10,8 +10,8 @@ import { cn } from '@dakly/ui/cn';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { productsSearch } from '@/lib/product-queries';
 import { readinessLabels } from '../product-labels';
+import { productsSearch } from '@/lib/product-queries';
 
 const searchSchema = productListQuerySchema.pick({ search: true });
 type ProductFiltersProps = { query: ProductListQuery };
