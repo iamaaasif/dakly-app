@@ -38,7 +38,7 @@ export class CampaignSendingRepository {
   async backfillStarts(storeId: string, limit: number): Promise<boolean> {
     const legacy = and(
       eq(campaigns.storeId, storeId),
-      inArray(campaigns.status, ['sending', 'paused', 'sent']),
+      sql`${campaigns.status} in ('sending', 'paused', 'sent')`,
       isNull(campaigns.startedAt),
       isNotNull(campaigns.approvedAt),
     );

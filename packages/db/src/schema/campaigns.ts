@@ -167,6 +167,11 @@ export const campaigns = pgTable(
     index('campaigns_sending_idx')
       .on(table.storeId, sql`coalesce(${table.startedAt}, ${table.approvedAt})`, table.id)
       .where(sql`${table.status} = 'sending'`),
+    index('campaigns_legacy_start_idx')
+      .on(table.storeId, table.status, table.createdAt, table.id)
+      .where(
+        sql`${table.startedAt} is null and ${table.approvedAt} is not null and ${table.status} in ('sending', 'paused', 'sent')`,
+      ),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),

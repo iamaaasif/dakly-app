@@ -1,5 +1,5 @@
 {
-  "id": "a140bed6-afb5-42ea-812d-fe540f3149ae",
+  "id": "c4062515-1516-465f-9d7f-038e9e5e09b7",
   "prevId": "b4433abc-6f4b-46b4-a8c6-3ca7b86f47fe",
   "version": "7",
   "dialect": "postgresql",
@@ -7622,6 +7622,40 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'sending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_legacy_start_idx": {
+          "name": "campaigns_legacy_start_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"campaigns\".\"started_at\" is null and \"campaigns\".\"approved_at\" is not null and \"campaigns\".\"status\" in ('sending', 'paused', 'sent')",
           "concurrently": false,
           "method": "btree",
           "with": {}
