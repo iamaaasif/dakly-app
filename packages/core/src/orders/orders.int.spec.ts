@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { OrdersModule } from './orders.module';
 import { OrdersService } from './orders.service';
 
@@ -177,6 +178,26 @@ describe('OrdersService', () => {
     } finally {
       now.mockRestore();
     }
+  });
+
+  it('orders stage history by when each audit was written rather than when the transaction began', async () => {
+    const id = await order(fixture.a, 1011, 'to_confirm');
+    const editor = { access, actor: { kind: 'user', userId: fixture.userA } } as const;
+    const started = Promise.withResolvers<void>();
+    const proceed = Promise.withResolvers<void>();
+    const second = app.get(StoreTransaction).run(fixture.a, async () => {
+      started.resolve();
+      await proceed.promise;
+      return service.changeStage(fixture.a, id, { to: 'to_pack' }, editor);
+    });
+
+    await started.promise;
+    try {
+      await service.changeStage(fixture.a, id, { to: 'on_hold', reason: 'pre_order' }, editor);
+    } finally {
+      proceed.resolve();
+    }
+    expect((await second).timeline.map(({ to }) => to)).toEqual(['on_hold', 'to_pack']);
   });
 
   it('releases a reservation once when two staff members cancel together', async () => {

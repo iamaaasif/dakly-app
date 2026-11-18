@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createOrderSchema, orderListQuerySchema } from './orders';
+import { createOrderSchema, orderListQuerySchema, orderStageChangeSchema } from './orders';
 
 describe('order list query', () => {
   it('takes a stage and an exclusive numeric cursor', () => {
@@ -62,4 +62,14 @@ describe('staff order input', () => {
   ])('rejects client totals or invalid line and money fields %j', (change) => {
     expect(createOrderSchema.safeParse({ ...order, ...change }).success).toBe(false);
   });
+});
+
+it('rejects a hold follow-up date in year zero', () => {
+  expect(
+    orderStageChangeSchema.safeParse({
+      to: 'on_hold',
+      reason: 'pre_order',
+      followUpOn: '0000-01-01',
+    }).success,
+  ).toBe(false);
 });
