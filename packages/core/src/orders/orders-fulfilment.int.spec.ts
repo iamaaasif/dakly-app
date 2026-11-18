@@ -121,6 +121,7 @@ describe('Manual dispatch and delivery', () => {
         orderId,
         {
           to: 'partially_delivered',
+          note: 'The customer kept two items',
           items: [{ itemId, quantity: 4 }],
         },
         editor(),
@@ -131,6 +132,7 @@ describe('Manual dispatch and delivery', () => {
       orderId,
       {
         to: 'partially_delivered',
+        note: 'The customer kept two items',
         items: [{ itemId, quantity: 2 }],
       },
       editor(),
@@ -151,6 +153,7 @@ describe('Manual dispatch and delivery', () => {
         },
       ],
     });
+    expect(partial.timeline.at(-1)).toMatchObject({ reason: 'The customer kept two items' });
     expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 1, reserved: 0 });
     const returned = await service.changeStage(
       f.a,

@@ -41,7 +41,10 @@ export function partialOrderTotals(
     OrderDetail,
     'itemsSubtotalPoisha' | 'orderDiscountPoisha' | 'deliveryChargePoisha' | 'advancePaidPoisha'
   >,
-  delivered: { item: OrderItem; quantity: number }[],
+  delivered: {
+    item: Pick<OrderItem, 'id' | 'quantity' | 'unitPricePoisha' | 'lineDiscountPoisha'>;
+    quantity: number;
+  }[],
 ) {
   let subtotal = 0n;
   const lines = delivered.map(({ item, quantity }) => {

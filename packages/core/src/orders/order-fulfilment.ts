@@ -37,7 +37,7 @@ export async function changeOrderStage(
   const now = deps.clock.now();
   const confirmed = change.to === 'to_pack' && !order.confirmedAt;
   const result = await fulfilmentWrite(storeId, { ...input, now }, order, deps);
-  const reason = 'reason' in change ? change.reason : undefined;
+  const reason = change.to === 'partially_delivered' ? change.note : stageReason(change);
   await deps.orders.updateOrder(storeId, orderId, {
     ...stageFields(change, now, confirmed),
     ...result,
@@ -65,6 +65,10 @@ export async function changeOrderStage(
       occurredAt,
       payload: { orderId },
     });
+}
+
+function stageReason(change: OrderStageChange): string | undefined {
+  return 'reason' in change ? change.reason : undefined;
 }
 
 function stageFields(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {

@@ -193,7 +193,11 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   }),
   z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
   z.strictObject({ to: z.literal('delivered') }),
-  z.strictObject({ to: z.literal('partially_delivered'), items: deliveredLines }),
+  z.strictObject({
+    to: z.literal('partially_delivered'),
+    items: deliveredLines,
+    note: z.string().trim().min(1).max(200),
+  }),
   z.strictObject({
     to: z.literal('returned'),
     reason: z.string().trim().min(1).max(200),
