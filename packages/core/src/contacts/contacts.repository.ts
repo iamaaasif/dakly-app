@@ -62,7 +62,11 @@ export type AudienceRecipient = Omit<ContactRecipient, 'hasPhone'> & {
 
 export type TagChange = { tag: string; change: 'add' | 'remove' };
 
-export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
+export type NewContact = Omit<CreateContactInput, 'phone'> & {
+  phone: string | null;
+  source: ContactSource;
+  kind: ContactKind;
+};
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
 

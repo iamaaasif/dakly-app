@@ -285,15 +285,15 @@
     {
       "idx": 40,
       "version": "7",
-      "when": 1795011887598,
-      "tag": "0040_automation_send_costs",
+      "when": 1795004972403,
+      "tag": "0040_partial_delivery_totals",
       "breakpoints": true
     },
     {
       "idx": 41,
       "version": "7",
-      "when": 1795014291724,
-      "tag": "0041_automation_send_retries",
+      "when": 1795015726719,
+      "tag": "0041_automation_send_costs",
       "breakpoints": true
     }
   ]

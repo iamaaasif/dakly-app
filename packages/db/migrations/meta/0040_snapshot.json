@@ -1,5 +1,5 @@
 {
-  "id": "48ca5aa9-51cd-474c-b097-654299076546",
+  "id": "b4433abc-6f4b-46b4-a8c6-3ca7b86f47fe",
   "prevId": "f3b512be-f797-44b0-8c3b-4d0feed44fa8",
   "version": "7",
   "dialect": "postgresql",
@@ -4574,7 +4574,7 @@
         },
         "automation_run_steps_skip_reason": {
           "name": "automation_run_steps_skip_reason",
-          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
+          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
         }
       },
       "isRLSEnabled": false
@@ -4953,7 +4953,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
@@ -7281,7 +7281,7 @@
         },
         "campaign_recipients_skip_reason_value": {
           "name": "campaign_recipients_skip_reason_value",
-          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
+          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
         }
       },
       "isRLSEnabled": false
@@ -14414,6 +14414,12 @@
           "notNull": true,
           "default": 0
         },
+        "delivered_line_discount_poisha": {
+          "name": "delivered_line_discount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_stock_tracked": {
           "name": "is_stock_tracked",
           "type": "boolean",
@@ -14725,6 +14731,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "delivered_items_subtotal_poisha": {
+          "name": "delivered_items_subtotal_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivered_order_discount_poisha": {
+          "name": "delivered_order_discount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
         },
         "discount_code_id": {
           "name": "discount_code_id",

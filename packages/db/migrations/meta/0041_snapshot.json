@@ -1,6 +1,6 @@
 {
-  "id": "0fdc91d1-72a7-4b1d-9963-f65b5687515a",
-  "prevId": "48ca5aa9-51cd-474c-b097-654299076546",
+  "id": "eb4c25b2-02ef-4bb3-b7fd-920f0e7ce739",
+  "prevId": "b4433abc-6f4b-46b4-a8c6-3ca7b86f47fe",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4340,24 +4340,6 @@
         "category": {
           "name": "category",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "opt_out_code": {
-          "name": "opt_out_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "destination": {
-          "name": "destination",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_tried_at": {
-          "name": "first_tried_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -14432,6 +14414,12 @@
           "notNull": true,
           "default": 0
         },
+        "delivered_line_discount_poisha": {
+          "name": "delivered_line_discount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_stock_tracked": {
           "name": "is_stock_tracked",
           "type": "boolean",
@@ -14743,6 +14731,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "delivered_items_subtotal_poisha": {
+          "name": "delivered_items_subtotal_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivered_order_discount_poisha": {
+          "name": "delivered_order_discount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
         },
         "discount_code_id": {
           "name": "discount_code_id",
