@@ -58,7 +58,7 @@ export class KnowledgeService {
       if (input.kind === 'file') await this.requireFile(storeId, input.fileId);
       const now = this.clock.now();
       const item = await this.repository.create(storeId, actor.userId, input, now);
-      await this.requestIndex(storeId, item.id, now);
+      await this.requestIndex(storeId, item);
       return toResponse(item);
     });
   }
@@ -89,7 +89,7 @@ export class KnowledgeService {
       const now = this.clock.now();
       const item = await this.repository.change(storeId, itemId, input, now);
       if (!item) throw knowledgeError('KNOWLEDGE_ITEM_NOT_FOUND');
-      await this.requestIndex(storeId, item.id, now);
+      await this.requestIndex(storeId, item);
       return toResponse(item);
     });
   }
@@ -105,12 +105,13 @@ export class KnowledgeService {
     if (!file || file.status === 'rejected') throw knowledgeError('KNOWLEDGE_FILE_NOT_FOUND');
   }
 
-  private requestIndex(storeId: string, itemId: string, now: Date): Promise<void> {
+  private requestIndex(storeId: string, item: KnowledgeItem): Promise<void> {
     return this.outbox.publish({
       type: 'knowledge.index_requested',
       storeId,
-      occurredAt: now.toISOString(),
-      payload: { knowledgeItemId: itemId },
+      // The event time is the stored revision, including edits in the same clock tick.
+      occurredAt: item.updatedAt.toISOString(),
+      payload: { knowledgeItemId: item.id },
     });
   }
 }
@@ -118,6 +119,10 @@ export class KnowledgeService {
 function toResponse(item: KnowledgeItem): KnowledgeItemResponse {
   return {
     ...item,
+    failureReason:
+      item.status === 'failed'
+        ? 'Dakly could not prepare this item for AI answers. Check the text or choose another file and save again.'
+        : null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };

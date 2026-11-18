@@ -6,7 +6,7 @@ import type {
   CreateKnowledgeItemInput,
   ListKnowledgeItemsQuery,
 } from '@dakly/contracts/knowledge';
-import { knowledgeItems } from '@dakly/db/schema/ai';
+import { knowledgeChunks, knowledgeItems } from '@dakly/db/schema/ai';
 import { files } from '@dakly/db/schema/platform';
 
 import { TenantDatabase } from '../../platform/database/tenant-database';
@@ -23,6 +23,11 @@ const columns = {
 };
 
 export type KnowledgeItem = Pick<typeof knowledgeItems.$inferSelect, keyof typeof columns>;
+export type KnowledgeChunk = Pick<
+  typeof knowledgeChunks.$inferInsert,
+  'content' | 'embedding' | 'embeddingModel' | 'tokenCount'
+>;
+
 @Injectable()
 export class KnowledgeRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -111,6 +116,65 @@ export class KnowledgeRepository {
         .returning({ id: knowledgeItems.id }),
     );
     return removed.length > 0;
+  }
+
+  async finishIndex(
+    storeId: string,
+    itemId: string,
+    revision: Date,
+    {
+      chunks,
+      file,
+    }: {
+      chunks: readonly KnowledgeChunk[];
+      file?: { rejection: string | null; sha256?: Buffer } | { sha256: Buffer };
+    },
+  ): Promise<boolean> {
+    return this.database.forStore(storeId, async (tx) => {
+      const [item] = await tx
+        .update(knowledgeItems)
+        .set({
+          status: chunks.length ? 'active' : 'failed',
+          factsCount: chunks.length,
+          updatedAt: knowledgeItems.updatedAt,
+        })
+        .where(
+          and(
+            eq(knowledgeItems.storeId, storeId),
+            eq(knowledgeItems.id, itemId),
+            eq(knowledgeItems.updatedAt, revision),
+            eq(knowledgeItems.status, 'processing'),
+          ),
+        )
+        .returning({ fileId: knowledgeItems.fileId });
+      if (!item) return false;
+      await tx
+        .delete(knowledgeChunks)
+        .where(
+          and(eq(knowledgeChunks.storeId, storeId), eq(knowledgeChunks.knowledgeItemId, itemId)),
+        );
+      if (chunks.length)
+        await tx
+          .insert(knowledgeChunks)
+          .values(chunks.map((chunk) => ({ ...chunk, storeId, knowledgeItemId: itemId })));
+      if (item.fileId && file)
+        await tx
+          .update(files)
+          .set({
+            ...('rejection' in file
+              ? { status: file.rejection ? 'rejected' : 'ready', rejectReason: file.rejection }
+              : {}),
+            sha256: file.sha256,
+          })
+          .where(
+            and(
+              eq(files.id, item.fileId),
+              eq(files.storeId, storeId),
+              eq(files.purpose, 'knowledge_file'),
+            ),
+          );
+      return true;
+    });
   }
 
   async createFile(

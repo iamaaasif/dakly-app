@@ -92,6 +92,11 @@ Release 1 is split into one migration per feature area, in dependency order. The
 
 A feature reads another feature's tables only through that feature's service ([rules/module-boundaries.md](../rules/module-boundaries.md)). Foreign keys across features are fine; queries across features are not.
 
+`knowledge_chunks.token_count` apportions the request's token count by each
+chunk's share of the batch's UTF-8 bytes. It is an estimate per chunk. The final
+chunk gets the remainder, and `ai_runs.input_tokens` holds the measured total
+for the request.
+
 ## Bangladesh areas
 
 `bd_areas` uses the Bangladesh Bureau of Statistics list published by UN OCHA on

@@ -14,6 +14,7 @@ import type {
   RunClaim,
   RunStepChange,
 } from './automation-runs.repository';
+import { wakeTime } from './automation-waits';
 
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
@@ -71,6 +72,22 @@ export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
 
 export function operationKey({ runId, stepKey }: RunClaim) {
   return `run:${runId}:${stepKey}`;
+}
+
+export function scheduleWait(
+  stepKey: string,
+  step: Extract<AutomationStep, { kind: 'wait' }>,
+  now: Date,
+  timeZone: string,
+): StepResult {
+  return {
+    run: {
+      status: 'waiting',
+      currentStepKey: step.next,
+      wakeAt: wakeTime(step.wait, now, timeZone),
+    },
+    step: { stepKey, kind: 'wait', outcome: 'scheduled' },
+  };
 }
 
 export function messageBody(step: SendStep, optOutUrl: string | undefined): string {
@@ -185,11 +202,6 @@ export function isLateSend(wakeAt: Date | null, now: Date): boolean {
   return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
 }
 
-export function shouldPrepareSender(step: AutomationStep, wakeAt: Date | null, now: Date): boolean {
-  return (
-    step.kind === 'send' &&
-    step.channels.includes('sms') &&
-    !step.reviewBeforeSending &&
-    !isLateSend(wakeAt, now)
-  );
+export function shouldPrepareSender(step: AutomationStep): boolean {
+  return step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending;
 }

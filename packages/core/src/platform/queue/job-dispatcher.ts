@@ -56,7 +56,7 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
     return runWithJobContext(async () => {
       let failed = false;
       try {
-        await handler.handle(job.data);
+        await handler.handle(job.data, job.attemptsMade + 1 >= (job.opts.attempts ?? 1));
         await job.updateProgress(100);
       } catch (error) {
         this.reporter.reportJob(serializeError(error), job.id!);

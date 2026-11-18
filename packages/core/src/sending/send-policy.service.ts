@@ -54,11 +54,11 @@ export class SendPolicyService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // Freeze the destination from the eligibility read and take the cap time after the lock.
+  // Freeze the destination from the eligibility read and use one database clock after the locks.
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
-    if (!(await this.lockForDispatch(storeId, request.contactId)))
-      return { decision: skip('no_address'), destination: null, at: this.clock.now() };
-    const at = this.clock.now();
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = await this.transaction.databaseTime(storeId);
+    if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.evaluateAudience(
       storeId,
       { contactIds: [request.contactId], channel: request.channel, category: request.category, at },

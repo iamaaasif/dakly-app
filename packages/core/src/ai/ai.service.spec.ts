@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { Database } from '@dakly/db/client';
 import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
-import { LlmError, type LlmResult } from '@dakly/providers/llm/llm-driver';
+import { LlmError, type LlmEmbedding, type LlmResult } from '@dakly/providers/llm/llm-driver';
 
 import { ScopedTransactions, type Transaction } from '../platform/database/scoped-transactions';
 import type { ConsumeUsageInput, UsageService } from '../usage/usage.service';
@@ -32,8 +32,12 @@ const billedRequest: AiRequest<z.infer<typeof schema>> = {
 };
 
 const config: AiConfig = {
+  embeddingModel: 'test-embedding',
   models: { reply: model, writer: model, vision: model, fast: 'gpt-6-luna' },
-  prices: { [model]: { input: 2_000_000, cachedInput: 250_000, output: 8_000_000 } },
+  prices: {
+    [model]: { input: 2_000_000, cachedInput: 250_000, output: 8_000_000 },
+    'test-embedding': { input: 20_000, cachedInput: 0, output: 0 },
+  },
 };
 const usage = { inputTokens: 1700, cachedInputTokens: 1024, outputTokens: 20 };
 const reply: LlmResult = {
@@ -45,6 +49,42 @@ const reply: LlmResult = {
 };
 
 describe('AiService', () => {
+  it('returns embeddings, records costs and leaves allowances untouched', async () => {
+    const embedding = {
+      model: 'test-embedding',
+      embeddings: [Array.from({ length: 512 }, (_, index) => index / 512)],
+      usage: { inputTokens: 150, cachedInputTokens: 0, outputTokens: 0 },
+    };
+    const { service, runs, used } = fixture([], {
+      embeddings: [embedding, new LlmError('LLM_TIMEOUT')],
+    });
+    await expect(service.embed(storeId, ['ঢাকায় ৬০ টাকা।'])).resolves.toEqual(embedding);
+    await expect(service.embed(storeId, ['ঢাকায় ৬০ টাকা।'])).rejects.toMatchObject({
+      code: 'LLM_TIMEOUT',
+    });
+    expect(runs).toEqual([
+      expect.objectContaining({
+        tier: 'embed',
+        purpose: 'embedding',
+        model: 'test-embedding',
+        costMicroUsd: 3,
+        outcome: 'completed',
+        ...embedding.usage,
+      }),
+      expect.objectContaining({ outcome: 'timeout', errorCode: 'LLM_TIMEOUT' }),
+    ]);
+    expect(used.size).toBe(0);
+  });
+
+  it('can index in local development without a vendor key or a script', async () => {
+    const { service, runs } = fixture([]);
+    await expect(service.embed(storeId, ['ঢাকায় ৬০ টাকা।'])).resolves.toMatchObject({
+      model: 'test-embedding',
+      embeddings: [expect.arrayContaining([0.5])],
+    });
+    expect(runs).toMatchObject([{ outcome: 'completed', costMicroUsd: 0 }]);
+  });
+
   it('records a healthy run and returns the parsed reply', async () => {
     const { service, runs } = fixture([reply]);
 
@@ -172,7 +212,11 @@ describe('AiService', () => {
 
 function fixture(
   script: (LlmResult | Error)[],
-  options: { pausedWhileAdmitting?: boolean; failWrites?: boolean } = {},
+  options: {
+    pausedWhileAdmitting?: boolean;
+    failWrites?: boolean;
+    embeddings?: (LlmEmbedding | Error)[];
+  } = {},
 ) {
   let failures = 0;
   const runs: AiRun[] = [];
@@ -201,7 +245,7 @@ function fixture(
     },
   } as unknown as AiGate;
   const clock = { now: () => new Date('2026-11-18T15:00:00Z') };
-  const driver = new FakeLlmDriver(script);
+  const driver = new FakeLlmDriver(script, options.embeddings);
   const service = new AiService(
     new AiRunsService(driver, repo, clock, gate),
     gate,

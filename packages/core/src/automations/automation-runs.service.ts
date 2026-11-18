@@ -42,12 +42,12 @@ import {
   operationKey,
   randomPath,
   runAction,
+  scheduleWait,
   shouldPrepareSender,
   type RunFacts,
   type SendStep,
   type StepResult,
 } from './automation-step-rules';
-import { wakeTime } from './automation-waits';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
@@ -139,7 +139,10 @@ export class AutomationRunsService {
       return started ? endWithUnknownOutcome(result) : result;
     }
     if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
-    if (shouldPrepareSender(step, facts.wakeAt, this.clock.now()))
+    if (
+      shouldPrepareSender(step) &&
+      !isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId))
+    )
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
   }
@@ -154,14 +157,7 @@ export class AutomationRunsService {
     switch (step.kind) {
       case 'wait': {
         const timeZone = (await this.stores.sendingSettings(facts.storeId)).timeZone;
-        return {
-          run: {
-            status: 'waiting',
-            currentStepKey: step.next,
-            wakeAt: wakeTime(step.wait, now, timeZone),
-          },
-          step: { stepKey, kind: 'wait', outcome: 'scheduled' },
-        };
+        return scheduleWait(stepKey, step, now, timeZone);
       }
       case 'condition': {
         const choice = (await this.conditions.firstHoldingPath(
@@ -215,9 +211,10 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      if (isLateSend(facts.wakeAt, this.clock.now())) return { outcome: 'late' };
+      if (isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId)))
+        return { outcome: 'late' };
       const result = await this.gateSend(renewed, step, facts);
-      const claimedAt = this.clock.now();
+      const claimedAt = await this.transaction.databaseTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
