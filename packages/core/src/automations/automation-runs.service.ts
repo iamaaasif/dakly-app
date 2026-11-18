@@ -261,6 +261,8 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
+      if (facts.wakeAt && this.clock.now().getTime() - facts.wakeAt.getTime() > DAY_MS)
+        return { outcome: 'late' };
       const result = await this.gateSend(renewed, step, facts);
       const claimedAt = this.clock.now();
       // The live move holds this run row; renew after the gate's other locks and writes.
@@ -270,7 +272,8 @@ export class AutomationRunsService {
     });
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
-      const held = await this.heldOrStale(storeId, renewed, this.clock.now());
+      const run = await this.repository.findRun(storeId, claim.runId);
+      const held = run && holdsClaim(run, renewed) ? holdOrEnd(run, this.clock.now()) : undefined;
       return held && { ...held, claim: renewed };
     }
     const gatedAt = this.clock.now();
@@ -333,11 +336,6 @@ export class AutomationRunsService {
     const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
     return this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
-  }
-
-  private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
-    const run = await this.repository.findRun(storeId, claim.runId);
-    return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves

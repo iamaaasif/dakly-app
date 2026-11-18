@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationStep, AutomationGraph } from '@dakly/contracts/automations/graph';
 
-import type { ContactsService } from '../contacts/contacts.service';
+import type { TagChange } from '../contacts/contacts.service';
 import type { PreparedSmsSender } from '../messaging/messaging.service';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
@@ -56,7 +56,7 @@ export type StepResult = {
   claim?: RunClaim;
   step?: NewRunStep;
   stepChange?: RunStepChange;
-  tagChange?: Parameters<ContactsService['changeTag']>[2];
+  tagChange?: TagChange;
   next?: Omit<RunClaim, 'runId'>;
 };
 

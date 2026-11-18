@@ -772,7 +772,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const contact = await customer(true, runner);
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
       const hook = vi
-        .spyOn(ContactsService.prototype, 'getById')
+        .spyOn(ContactsService.prototype, 'getPhoneForSend')
         .mockRejectedValueOnce(new Error('database unavailable'));
       try {
         await runDueStep(runner, first.runIds[0]!);
@@ -790,6 +790,79 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } finally {
         hook.mockRestore();
       }
+    });
+
+    it.each([
+      ['before gate', 'skip'],
+      ['during wallet wait', 'skip'],
+      ['before gate', 'exit'],
+      ['during wallet wait', 'exit'],
+    ] as const)('handles a contact removed %s with ifNotReachable=%s', async (when, action) => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing', action), 1, 'active', contact);
+      const remove = () =>
+        admin.pool.query('update contacts set deleted_at=now() where id=$1', [contact]);
+      if (when === 'before gate') {
+        await remove();
+        await runDueStep(runner, runId!);
+      } else {
+        await runner.sweep();
+        const jobs = await runner.queue.getJobs(['waiting']);
+        const job = jobs.find((job) => job.data.automationRunId === runId)!;
+        const blocker = await admin.pool.connect();
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [
+          `wallet:${storeId}:sms_credits`,
+        ]);
+        let isHolding = true;
+        const pending = runner.runStep(job.data as StepJobData);
+        try {
+          await waitForBlocker(pid);
+          await remove();
+          await blocker.query('commit');
+          isHolding = false;
+          await pending;
+        } finally {
+          if (isHolding) await blocker.query('rollback');
+          blocker.release();
+          await pending;
+          await job.remove();
+        }
+      }
+      expect(sentFor(runId!)).toEqual([]);
+      expect(await ledgerFor(runId!)).toEqual([]);
+      expect(await sendStep(runId!)).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_address' }),
+      ]);
+      expect(await run(runId!)).toMatchObject(
+        action === 'skip'
+          ? { status: 'running', current_step_key: 'end' }
+          : { status: 'exited', exit_reason: 'not_reachable' },
+      );
+    });
+
+    it('keeps the late fallback for a legacy non-SMS step under the live guard', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const step = { ...send('marketing', 'exit'), channels: ['whatsapp'] } as const;
+      const {
+        runIds: [runId],
+      } = await dueRuns(step, 1, 'active', contact);
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        runId,
+        new Date(daytime.getTime() - 25 * HOUR),
+      ]);
+      await runDueStep(runner, runId!);
+      expect(sentFor(runId!)).toEqual([]);
+      expect(await ledgerFor(runId!)).toEqual([]);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'late' })]);
+      expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'end' });
     });
 
     it('skips consent withdrawn while the sender is prepared before the final gate', async () => {

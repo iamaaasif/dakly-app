@@ -64,16 +64,15 @@ export class MessagingService {
     preparedSender?: PreparedSmsSender,
   ) {
     try {
-      const contact = await this.contactsService.getById(storeId, message.contactId, {
-        seeFullPhone: true,
-      });
-      if (message.destination !== undefined && contact.phone !== message.destination)
+      const sender = (preparedSender ?? (await this.prepareSender(storeId))).name;
+      const phone = await this.contactsService.getPhoneForSend(storeId, message.contactId);
+      if (message.destination !== undefined && phone !== message.destination)
         throw messagingError('MESSAGING_DESTINATION_CHANGED');
-      if (!contact.phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
+      if (!phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
       return {
-        to: contact.phone,
+        to: phone,
         parts: countSmsParts(message.body),
-        sender: (preparedSender ?? (await this.prepareSender(storeId))).name,
+        sender,
       };
     } catch (error) {
       if (error instanceof AppError) throw error;

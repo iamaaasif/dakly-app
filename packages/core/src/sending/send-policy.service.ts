@@ -58,7 +58,13 @@ export class SendPolicyService {
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, request.contactId);
-    await this.contacts.lockForConsent(storeId, [request.contactId]);
+    try {
+      await this.contacts.lockForConsent(storeId, [request.contactId]);
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND')
+        return { decision: skip('no_address'), destination: null, at: this.clock.now() };
+      throw error;
+    }
     const at = this.clock.now();
     const [checked] = await this.checkAudience(storeId, {
       contactIds: [request.contactId],

@@ -105,6 +105,12 @@ export class ContactsService {
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
+  async getPhoneForSend(storeId: string, id: string): Promise<string | null> {
+    const [contact] = await this.contactsRepository.findRecipients(storeId, [id]);
+    if (!contact) throw contactError('CONTACT_NOT_FOUND');
+    return contact.phone;
+  }
+
   async getById(storeId: string, id: string, access: Access): Promise<ContactDetailResponse> {
     const contact = await this.contactsRepository.findById(storeId, id);
     if (!contact) throw contactError('CONTACT_NOT_FOUND');
@@ -247,6 +253,8 @@ export class ContactsService {
     return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }
 }
+
+export type { TagChange } from './contacts.repository';
 
 // A partial number is a prefix search only for members who see full phones. Anyone may find a
 // contact by its exact full number; the result stays masked without the flag.
