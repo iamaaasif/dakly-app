@@ -238,10 +238,10 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('to_pack') }),
   z.strictObject({
     to: z.literal('on_hold'),
-    reason: z.enum(onHoldReasons),
+    reason: z.enum(onHoldReasons, 'Choose a reason.'),
     followUpOn: calendarDate.optional(),
   }),
-  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
+  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons, 'Choose a reason.') }),
   z.strictObject({ to: z.literal('delivered') }),
   z.strictObject({
     to: z.literal('partially_delivered'),

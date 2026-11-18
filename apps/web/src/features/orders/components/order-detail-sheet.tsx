@@ -16,9 +16,9 @@ import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
-type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'fallbackFocus'>;
+type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'restoreFocusTo'>;
 
-export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailSheetProps) {
+export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailSheetProps) {
   const query = useOrder(id);
   const order = query.data;
   const blocked = useContext(SessionInteraction);
@@ -34,7 +34,7 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
       {...orderHeading(order)}
       open={!blocked}
       onClose={onClose}
-      fallbackFocus={fallbackFocus}
+      restoreFocusTo={restoreFocusTo}
       footer={
         order &&
         (canConfirm || actions.length > 0) && (
@@ -147,6 +147,7 @@ function OrderStageFooter({
               action={action}
               stage={stage}
               primary={!canConfirm && index === 0}
+              disabled={transition.isPending}
             />
           ),
         )}

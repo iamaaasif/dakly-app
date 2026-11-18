@@ -51,9 +51,16 @@ type OrderStageDialogProps = {
   action: StageFormAction;
   stage: RefObject<HTMLSpanElement | null>;
   primary: boolean;
+  disabled: boolean;
 };
 
-export function OrderStageDialog({ order, action, stage, primary }: OrderStageDialogProps) {
+export function OrderStageDialog({
+  order,
+  action,
+  stage,
+  primary,
+  disabled,
+}: OrderStageDialogProps) {
   const [open, setOpen] = useState(false);
   const form = useForm<ActionValues, undefined, ActionInput>({
     resolver: zodResolver(actionSchema),
@@ -68,7 +75,11 @@ export function OrderStageDialog({ order, action, stage, primary }: OrderStageDi
   return (
     <SheetDialog
       title={title}
-      trigger={<Button variant={primary ? 'primary' : 'secondary'}>{label}</Button>}
+      trigger={
+        <Button variant={primary ? 'primary' : 'secondary'} disabled={disabled}>
+          {label}
+        </Button>
+      }
       open={open}
       onOpenChange={(next) => {
         if (!next) {

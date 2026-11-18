@@ -69,16 +69,22 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           <OrderDetailSheet
             key={selected}
             id={selected}
-            fallbackFocus={() =>
-              heading.current
-                ?.closest('main')
-                ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${selected}"]`) ??
-              heading.current
+            restoreFocusTo={() =>
+              orderRowFocus(heading.current, orders.fetchStatus === 'idle' ? selected : undefined)
             }
             onClose={() => router.replace(listHref)}
           />
         ) : null}
       </main>
     </StorePage>
+  );
+}
+
+function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | undefined) {
+  if (!orderId) return heading;
+  return (
+    heading
+      ?.closest('main')
+      ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${orderId}"]`) ?? heading
   );
 }

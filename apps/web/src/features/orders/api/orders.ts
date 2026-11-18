@@ -1,8 +1,7 @@
-import { useQuery, type QueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
 
-import { productsKeys } from '@/lib/product-query-keys';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
 
@@ -24,11 +23,4 @@ export function useOrders(query: OrderListQuery) {
       request<OrderListResponse>(`/orders?${ordersSearch(query)}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewOrders),
   });
-}
-
-export function refreshOrderQueries(client: QueryClient) {
-  return Promise.all([
-    client.invalidateQueries({ queryKey: ordersKey }),
-    client.invalidateQueries({ queryKey: productsKeys.all }),
-  ]);
 }
