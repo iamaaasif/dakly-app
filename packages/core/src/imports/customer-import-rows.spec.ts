@@ -1,8 +1,11 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { contactImportMappingSchema, createImportSchema } from '@dakly/contracts/contacts';
 
-import { readCustomerImportRows } from './customer-import-rows';
+import { decodeCustomerImportFile, readCustomerImportRows } from './customer-import-rows';
 
 const header = 'Name,Mobile,WhatsApp,Email,Area,Tags';
 const mapping = { name: 0, phone: 1, whatsappPhone: 2, email: 3, district: 4, tags: 5 };
@@ -31,6 +34,55 @@ describe('createImportSchema', () => {
 });
 
 describe('readCustomerImportRows', () => {
+  it('rejects a quote-heavy oversized cell without exhausting a bulk worker', () => {
+    const parser = fileURLToPath(new URL('./customer-import-rows.ts', import.meta.url));
+    const script = `
+      import(require('node:url').pathToFileURL(process.argv[1]).href).then(({ readCustomerImportRows }) => {
+      const file = 'Name,Mobile\\n"' + '""'.repeat(5_000_000) + '",01712345678\\n';
+      const result = readCustomerImportRows(file, { name: 0, phone: 1 });
+      process.stdout.write(JSON.stringify({
+        added: result.rows.length,
+        field: result.errors[0]?.field,
+        peakKiB: process.resourceUsage().maxRSS,
+      }));
+      });
+    `;
+    const loader = `export function resolve(name, context, next) {
+      if (name.startsWith('.') && context.parentURL?.endsWith('.ts'))
+        return next(name + '.ts', context);
+      return next(name, context);
+    }`;
+    // A separate process makes the peak independent of other tests' allocations.
+    const result = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          '--experimental-strip-types',
+          '--loader',
+          `data:text/javascript,${encodeURIComponent(loader)}`,
+          '-e',
+          script,
+          parser,
+        ],
+        {
+          encoding: 'utf8',
+          timeout: 10000,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      ),
+    ) as { added: number; field: string; peakKiB: number };
+    expect(result).toMatchObject({ added: 0, field: 'name' });
+    expect(result.peakKiB).toBeLessThan(192 * 1024);
+  });
+
+  it('reports a missing mapped phone when only a later unmapped column has content', () => {
+    const file = `Phone\n${','.repeat(200)}Rahima\n`;
+    expect(readCustomerImportRows(file, { phone: 0 })).toMatchObject({
+      rows: [],
+      errors: [{ rowNumber: 2, field: 'phone' }],
+    });
+  });
+
   it('maps each field from its column and leaves blank cells unset', () => {
     const file = `${header}\r\nRahima Begum,01712345678,,rahima@example.com,Dhaka,"vip, eid"\r\n`;
 
@@ -57,6 +109,16 @@ describe('readCustomerImportRows', () => {
     const { rows } = readCustomerImportRows(file, { phone: 1, name: 2 });
 
     expect(rows[0]?.contact).toEqual({ phone: '01712345678', name: 'Karim Uddin' });
+  });
+
+  it('keeps Bangla and supplementary characters when decoding escaped quotes', () => {
+    const file = 'Name,Mobile\n"নাসরিন ""\uD834\uDD1E"" বেগম",01712345678\n';
+    expect(readCustomerImportRows(file, { name: 0, phone: 1 })).toMatchObject({
+      rows: [
+        { rowNumber: 2, contact: { name: 'নাসরিন "\uD834\uDD1E" বেগম', phone: '01712345678' } },
+      ],
+      errors: [],
+    });
   });
 
   it('reads quoted cells with commas, line breaks and quotes, and a byte order mark', () => {
@@ -157,11 +219,67 @@ describe('readCustomerImportRows', () => {
     );
   });
 
+  // These two read 10 MB for real, which takes a few seconds while the whole suite runs at once.
+  it('reads a file of ten million empty lines as empty without keeping them', () => {
+    const file = `Mobile${'\n'.repeat(10_000_000)}`;
+
+    expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_EMPTY' }),
+    );
+  }, 30_000);
+
+  it('refuses a quote that never closes over 10 MB of text', () => {
+    const file = `Mobile\n"${'0'.repeat(10 * 1024 * 1024)}`;
+
+    expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
+    );
+  }, 30_000);
+
+  it('keeps no cells past the last column a mapping can name', () => {
+    const file = `Mobile${',x'.repeat(1_000)}\n01712345678${',y'.repeat(1_000)}`;
+
+    expect(readCustomerImportRows(file, { phone: 0 }).rows).toHaveLength(1);
+    expect(() => readCustomerImportRows(file, { phone: 0, name: 199 })).not.toThrow();
+  });
+
   it('refuses more than 50,000 customer rows', () => {
     const file = `Mobile\n${'01712345678\n'.repeat(50_001)}`;
 
     expect(() => readCustomerImportRows(file, { phone: 0 })).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_TOO_MANY_ROWS' }),
+    );
+  });
+});
+
+describe('decodeCustomerImportFile', () => {
+  it.each([0, 1, 8, 11, 12, 14, 31])('refuses control byte %i before database writes', (byte) => {
+    const bytes = new TextEncoder().encode(
+      `Name,Mobile\nনাসরিন${String.fromCharCode(byte)},01712345678\n`,
+    );
+    expect(() => decodeCustomerImportFile(bytes)).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
+    );
+  });
+
+  it('keeps tabs and CSV line breaks', () => {
+    const file = 'Name,Mobile\r\nনাসরিন\tবেগম,01712345678\n';
+    expect(decodeCustomerImportFile(new TextEncoder().encode(file))).toBe(file);
+  });
+
+  it('reads UTF-8 text, Bangla and a byte order mark included', () => {
+    const bytes = new TextEncoder().encode('\uFEFFনাম,Mobile\n');
+
+    expect(decodeCustomerImportFile(bytes)).toBe('নাম,Mobile\n');
+  });
+
+  it.each([
+    ['a UTF-16 file without a byte order mark', Buffer.from('Mobile\n01712345678\n', 'utf16le')],
+    ['a UTF-16 file', Buffer.from('\uFEFFMobile\n01712345678\n', 'utf16le')],
+    ['a file with an invalid byte', Uint8Array.from([0x4d, 0x6f, 0xff, 0x0a])],
+  ])('refuses %s as unreadable', (_case, bytes) => {
+    expect(() => decodeCustomerImportFile(bytes)).toThrow(
+      expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
     );
   });
 });

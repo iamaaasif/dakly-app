@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0033_snapshot.json`: **95 tables, 1248 columns, 373 explicit indexes and 297 foreign keys**.
+Built from `packages/db/migrations/meta/0035_snapshot.json`: **95 tables, 1251 columns, 374 explicit indexes and 297 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -618,12 +618,15 @@ erDiagram
         integer rows_updated "NULL; integer"
         integer rows_skipped "NULL; integer"
         integer rows_failed "NULL; integer"
+        jsonb checkpoint "NULL; jsonb"
         uuid report_file_id FK "NULL; uuid"
         uuid created_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         uuid started_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone last_progress_at "NULL; timestamp with time zone"
+        integer requeue_count "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }

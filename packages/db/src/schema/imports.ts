@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   foreignKey,
   type AnyPgColumn,
@@ -44,6 +45,8 @@ export const imports = pgTable(
     rowsUpdated: integer('rows_updated'),
     rowsSkipped: integer('rows_skipped'),
     rowsFailed: integer('rows_failed'),
+    // A retry must not replay a committed batch over a later member edit.
+    checkpoint: jsonb('checkpoint'),
     reportFileId: uuid('report_file_id').references(() => files.id),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     startedAt: timestamptz('started_at'),
@@ -51,6 +54,10 @@ export const imports = pgTable(
     finishedAt: timestamptz('finished_at'),
     // The running job's lease, renewed after each batch, so a redelivered job never runs beside it.
     claimedAt: timestamptz('claimed_at'),
+    // The last time a run made progress; the sweep judges a stalled import from it.
+    lastProgressAt: timestamptz('last_progress_at'),
+    // How often the sweep re-queued the import after it stalled.
+    requeueCount: integer('requeue_count').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -71,6 +78,9 @@ export const imports = pgTable(
     index('imports_file_id_idx').on(table.fileId),
     index('imports_report_file_id_idx').on(table.reportFileId),
     index('imports_created_by_user_id_idx').on(table.createdByUserId),
+    index('imports_importing_idx')
+      .on(table.storeId)
+      .where(sql`${table.status} = 'importing'`),
     index('imports_started_by_user_id_idx').on(table.startedByUserId),
     check('imports_kind', isOneOf(table.kind, importKinds)),
     check('imports_status', isOneOf(table.status, importStatuses)),
