@@ -14,3 +14,14 @@ describe('product screen query', () => {
     expect(productListQuerySchema.safeParse({ adjust }).success).toBe(false);
   });
 });
+
+describe('product editor selection', () => {
+  const product = '019c01ea-cf15-7d31-a7f5-d73d66007ae2';
+  it('opens creation and a saved product from the address', () => {
+    expect(productScreenQuerySchema.parse({ create: '1' })).toEqual({ create: '1', limit: 50 });
+    expect(productScreenQuerySchema.parse({ product })).toEqual({ product, limit: 50 });
+    expect(productScreenQuerySchema.safeParse({ product, create: '1' }).success).toBe(false);
+    expect(productScreenQuerySchema.safeParse({ product, adjust: product }).success).toBe(false);
+    expect(productScreenQuerySchema.safeParse({ create: 'yes' }).success).toBe(false);
+  });
+});
