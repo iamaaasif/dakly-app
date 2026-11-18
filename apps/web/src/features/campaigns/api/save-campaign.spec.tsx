@@ -68,6 +68,11 @@ it.each([
   ['approval', { ...saved, status: 'scheduled' }],
   ['deletion', null],
   ['draft edit', { ...saved, name: 'Later edit', updatedAt: '2026-11-18T06:00:01.000Z' }],
+  ['draft edit with the same timestamp', { ...saved, name: 'Later edit' }],
+  [
+    'draft edit with an earlier clock',
+    { ...saved, name: 'Later edit', updatedAt: '2026-11-18T05:59:59.000Z' },
+  ],
 ] as const)('keeps a newer %s when the save response arrives late', async (_, terminal) => {
   const { client, queryKey, result } = setup();
   let releaseSave!: (response: Response) => void;
