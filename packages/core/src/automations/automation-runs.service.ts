@@ -245,7 +245,7 @@ export class AutomationRunsService {
           preparedSender: facts.preparedSender,
           destination: started.destination,
         },
-        started.at,
+        started.firstTriedAt,
         started.at,
       );
     if (decision.action === 'defer')
@@ -280,12 +280,18 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (isLateSend(facts.wakeAt, await this.repository.schedulerTime(storeId)))
-      return { outcome: 'late' };
+    const firstTriedAt = await this.repository.schedulerTime(storeId);
+    if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
-    const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
+    const body = await this.writeSend(
+      { storeId, claim, contactId, step, destination },
+      {
+        sentAt: at,
+        firstTriedAt,
+      },
+    );
     if (body === undefined) return { decision: noCredits };
-    return { decision, body, destination, at };
+    return { decision, body, destination, at, firstTriedAt };
   }
 
   private async refreshExitReason(facts: RunFacts, at: Date) {
@@ -299,7 +305,7 @@ export class AutomationRunsService {
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
     { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body' | 'isFirstTry'>,
-    now: Date,
+    times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing
@@ -332,8 +338,7 @@ export class AutomationRunsService {
       id,
       outcome: 'sending',
       channel: 'sms',
-      sentAt: now,
-      firstTriedAt: now,
+      ...times,
       optOutUrl: optOut?.url,
       destination,
     });

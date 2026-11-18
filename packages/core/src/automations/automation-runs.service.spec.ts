@@ -562,6 +562,22 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
     });
 
+    it('starts the retry deadline on the sweep clock while keeping the send time', async () => {
+      databaseNow = now;
+      clockNow = new Date(now.getTime() - 6 * 60_000);
+      providerError = new Error('Connection closed before the provider replied');
+
+      await start(send);
+
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'sending', sentAt: clockNow, firstTriedAt: now }),
+      ]);
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        wakeAt: new Date(now.getTime() + 60_000),
+      });
+    });
+
     it('skips an expired send without a sender lookup when the worker clock is slow', async () => {
       databaseNow = new Date(claimedAt.getTime() + 24 * HOUR + 60_000);
       clockNow = new Date(claimedAt.getTime() + 24 * HOUR - 60_000);

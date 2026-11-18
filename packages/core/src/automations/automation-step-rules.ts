@@ -51,7 +51,13 @@ export type GateResult =
   | { outcome: 'late' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }
-  | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
+  | {
+      decision: { action: 'send' };
+      body: string;
+      destination: string | null;
+      at: Date;
+      firstTriedAt: Date;
+    };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
