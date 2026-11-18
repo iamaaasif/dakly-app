@@ -21,7 +21,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { reportCsv } from './customer-import-report';
+import { FIELD_LABELS, reportCsv } from './customer-import-report';
 import {
   type CustomerImportRows,
   decodeCustomerImportFile,
@@ -38,7 +38,7 @@ import {
 } from './imports.repository';
 
 type Actor = AuditEntry['actor'];
-type Run = { storeId: string; found: Import; lease: Date; finished: boolean };
+type Run = { storeId: string; found: Import; actor: Actor; lease: Date; finished: boolean };
 type Outcome = {
   status: 'done' | 'failed';
   counts?: ImportCounts;
@@ -52,7 +52,7 @@ const LINK_SECONDS = 15 * 60;
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
-const BATCH_ROWS = 500;
+const BATCH_ROWS = ConsentService.AUDIENCE_LIMIT;
 const MAX_REPORT_NOTES = 5000;
 const CSV = 'text/csv';
 // Each batch renews the lease; a run that has not renewed it for 5 minutes is gone.
@@ -65,7 +65,6 @@ const COUNT_FOR_OUTCOME = {
   updated: 'rowsUpdated',
   skipped: 'rowsSkipped',
 } as const satisfies Record<ImportedContact['outcome'], keyof ImportCounts>;
-const CONSENT_LABELS = { sms: 'SMS', whatsapp: 'WhatsApp' } as const;
 
 @Injectable()
 export class ImportsService {
@@ -153,7 +152,15 @@ export class ImportsService {
     // done, so it fails and is retried, and the sweep queues the import again if nothing moves.
     if (!(await this.repository.claim(storeId, importId, now, staleBefore)))
       throw importError('IMPORT_BEING_RUN');
-    const run: Run = { storeId, found, lease: now, finished: false };
+    const run: Run = {
+      storeId,
+      found,
+      actor: found.startedByUserId
+        ? { kind: 'user', userId: found.startedByUserId }
+        : { kind: 'system' },
+      lease: now,
+      finished: false,
+    };
     try {
       // The prior run may have committed a batch between the eligibility read and this claim.
       run.found = await this.findImport(storeId, importId);
@@ -263,10 +270,11 @@ export class ImportsService {
   }
 
   private async applyBatch(
-    { storeId, found }: Run,
+    run: Run,
     batch: CustomerImportRows['rows'],
     counts: ImportCounts,
   ): Promise<ReportLine[]> {
+    const { storeId, found, actor } = run;
     const rows = batch.map((row) => row.contact);
     const matches = await this.contacts.findImportMatches(
       storeId,
@@ -275,9 +283,6 @@ export class ImportsService {
     const ids = matches.map((contact) => contact.id);
     await this.contacts.lockForConsent(storeId, ids);
     const answers = await this.consents.currentForAudience(storeId, ids, 'whatsapp');
-    const actor: Actor = found.startedByUserId
-      ? { kind: 'user', userId: found.startedByUserId }
-      : { kind: 'system' };
     const saved = await this.contacts.saveImportedRows(
       storeId,
       found.id,
@@ -296,21 +301,18 @@ export class ImportsService {
       const rowNumber = rowNumbers.get(contact.phone)!;
       lines.push(...contact.notChanged.map((cell) => ({ rowNumber, ...cell })));
     }
-    lines.push(...(await this.grantConsent(storeId, found, rowNumbers, saved)));
+    lines.push(...(await this.grantConsent(run, rowNumbers, saved)));
     return lines;
   }
 
   // Skipped contacts keep their consent too: `skip` leaves an existing customer as it is.
   private async grantConsent(
-    storeId: string,
-    found: Import,
+    run: Run,
     rowNumbers: Map<string, number>,
     saved: ImportedContact[],
   ): Promise<ReportLine[]> {
+    const { storeId, found, actor } = run;
     const written = saved.filter((contact) => contact.outcome !== 'skipped');
-    const actor: Actor = found.startedByUserId
-      ? { kind: 'user', userId: found.startedByUserId }
-      : { kind: 'system' };
     const lines: ReportLine[] = [];
     for (const channel of ['sms', 'whatsapp'] as const) {
       const evidence = found.consentEvidence?.[channel];
@@ -341,7 +343,7 @@ export class ImportsService {
           .map((contact) => ({
             rowNumber: rowNumbers.get(contact.phone)!,
             field: channel,
-            message: `This customer said no to ${CONSENT_LABELS[channel]} messages, so the import did not change that`,
+            message: `This customer said no to ${FIELD_LABELS[channel]} messages, so the import did not change that`,
           })),
       );
     }

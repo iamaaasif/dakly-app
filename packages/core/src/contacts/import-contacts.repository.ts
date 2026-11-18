@@ -66,6 +66,7 @@ export class ImportContactsRepository {
     return inserted.map((row) => ({ ...row, phone: row.phone! }));
   }
 
+  // Matched contacts are already locked in id order before the caller reads their consent.
   async updateImported(storeId: string, changes: ImportedChange[]): Promise<void> {
     if (changes.length === 0) return;
     const values = changes.map((change) => ({
@@ -79,21 +80,6 @@ export class ImportContactsRepository {
       tags: change.tags,
     }));
     await this.database.forStore(storeId, async (tx) => {
-      await tx
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.storeId, storeId),
-            inArray(
-              contacts.id,
-              changes.map((change) => change.id),
-            ),
-            isNull(contacts.deletedAt),
-          ),
-        )
-        .orderBy(contacts.id)
-        .for('no key update');
       await tx.execute(sql`
         update contacts set
           name = coalesce(v.name, contacts.name),
