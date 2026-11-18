@@ -242,7 +242,10 @@ function PartialFields({ items }: { items: OrderDetail['items'] }) {
                 type="number"
                 min={0}
                 max={item.quantity}
-                {...register(name, { valueAsNumber: true })}
+                {...register(name, {
+                  valueAsNumber: true,
+                  deps: index > 0 ? 'items.0.quantity' : undefined,
+                })}
               />
             )}
           </FormField>
