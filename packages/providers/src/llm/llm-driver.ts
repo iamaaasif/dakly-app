@@ -31,6 +31,7 @@ export type LlmResult = { usage: LlmUsage; model: string; responseId: string } &
 export type LlmErrorCode =
   | 'LLM_ABORTED'
   | 'LLM_TIMEOUT'
+  | 'LLM_INVALID_TIMEOUT'
   | 'LLM_REQUEST_FAILED'
   | 'LLM_RATE_LIMITED'
   | 'LLM_UNAVAILABLE'

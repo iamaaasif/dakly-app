@@ -124,6 +124,41 @@ describe('OpenAiLlmDriver', () => {
     });
   });
 
+  it.each([
+    z.object({ reply: z.string().optional().default('খালি') }),
+    z.object({ amount: z.intersection(z.number().min(0), z.number().max(10)) }),
+  ])('refuses a schema with unsupported fields or composition', async (output) => {
+    const driver = new OpenAiLlmDriver('test-key', async () => Response.json(fixtures.reply));
+
+    await expect(driver.respond({ ...request, output })).rejects.toMatchObject({
+      code: 'LLM_INVALID_SCHEMA',
+    });
+  });
+
+  it('cancels a rejected HTTP response body without reading it', async () => {
+    let cancelled = false;
+    const body = new ReadableStream({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const driver = new OpenAiLlmDriver('test-key', async () => new Response(body, { status: 429 }));
+
+    await expect(driver.respond(request)).rejects.toMatchObject({ code: 'LLM_RATE_LIMITED' });
+    expect(cancelled).toBe(true);
+  });
+
+  it.each([0, -1, 1.5, NaN, 2_147_483_648])(
+    'rejects an invalid timeout of %s ms',
+    async (timeoutMs) => {
+      const driver = new OpenAiLlmDriver('test-key', async () => Response.json(fixtures.reply));
+
+      await expect(driver.respond({ ...request, timeoutMs })).rejects.toMatchObject({
+        code: 'LLM_INVALID_TIMEOUT',
+      });
+    },
+  );
+
   it('accepts nullable fields in a strict schema', async () => {
     const driver = new OpenAiLlmDriver('test-key', async (_url, options) => {
       expect(JSON.parse(String(options?.body))).toMatchObject({
