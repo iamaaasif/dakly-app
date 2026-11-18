@@ -46,7 +46,7 @@ describe('import filters without RLS assistance', () => {
           lease,
           result: { status: 'failed', finishedAt: now },
           report,
-          stalled: { before: new Date('2026-11-17T05:45:00Z'), limit: 4 },
+          exhausted: { before: new Date('2026-11-17T05:45:00Z'), limit: 4 },
         }),
       ).toBe(false);
       expect((await repository.findById(f.a, importId))?.status).toBe('importing');

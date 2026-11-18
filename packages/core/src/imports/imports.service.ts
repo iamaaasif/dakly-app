@@ -29,7 +29,7 @@ type Outcome = {
   status: 'done' | 'failed';
   counts?: ImportCounts;
   lines: ReportLine[];
-  stalled?: { before: Date; limit: number };
+  exhausted?: { before: Date; limit: number };
 };
 type ReportLine = {
   rowNumber?: number;
@@ -142,7 +142,7 @@ export class ImportsService {
           await this.finish(storeId, stuck.id, stuck.claimedAt, {
             status: 'failed',
             lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
-            stalled: { before, limit: MAX_REQUEUES },
+            exhausted: { before, limit: MAX_REQUEUES },
           });
       }
   }
@@ -151,7 +151,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines, stalled }: Outcome,
+    { status, counts, lines, exhausted }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
@@ -159,7 +159,7 @@ export class ImportsService {
       lease,
       result,
       report,
-      stalled,
+      exhausted,
     });
     if (!finished && report) await this.storage.deleteObject(report.objectKey);
   }
