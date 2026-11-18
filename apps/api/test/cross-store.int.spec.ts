@@ -1415,6 +1415,7 @@ describe('every production shop route isolates its data', () => {
   let logs: ReturnType<typeof captureRequestLogs>;
   beforeEach(() => logs.beginTest());
   beforeAll(async () => {
+    vi.stubEnv('LLM_DRIVER', 'fake');
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
     const adapter = new FastifyAdapter(createHttpServer(loadEnv().API_TRUSTED_PROXIES));
     adapter.getInstance().addHook('onRoute', (route) => {
