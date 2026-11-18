@@ -197,7 +197,7 @@ export class KnowledgeRepository {
         WITH eligible AS (
           SELECT chunk.id, chunk.knowledge_item_id, chunk.content,
             chunk.embedding <=> ${vector}::vector AS distance,
-            to_tsvector('simple', chunk.content) AS document
+            to_tsvector('simple', normalize(chunk.content)) AS document
           FROM knowledge_chunks chunk
           JOIN knowledge_items item
             ON item.store_id = chunk.store_id AND item.id = chunk.knowledge_item_id
@@ -207,7 +207,7 @@ export class KnowledgeRepository {
             AND chunk.embedding_model = ${model}
         ),
         terms AS (
-          SELECT plainto_tsquery('simple', ${query}) AS text
+          SELECT plainto_tsquery('simple', normalize(${query}::text)) AS text
         ),
         ranks AS (
           SELECT id, row_number() OVER (ORDER BY distance, id) AS rank FROM eligible

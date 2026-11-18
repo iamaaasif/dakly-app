@@ -400,7 +400,8 @@ replaces chunks if the item still has the revision the job read.
 Knowledge search embeds the query with the configured model, then combines the
 exact vector rank and Postgres full-text rank with reciprocal rank fusion.
 Search returns passages from active items in the same store and embedding model.
-It skips items whose file was rejected.
+It skips items whose file was rejected. Full-text search normalizes equivalent
+Unicode spellings before matching.
 
 ### Data
 

@@ -236,6 +236,8 @@ describe('KnowledgeRepository', () => {
   });
 
   it('merges text and vector ranks without returning another store or embedding model', async () => {
+    const answer = 'জ\u09df delivery';
+    const query = 'জয\u09bc';
     const embedding = [1, 0, ...Array.from({ length: 510 }, () => 0)];
     const closer = embedding;
     const farther = [0, 1, ...Array.from({ length: 510 }, () => 0)];
@@ -259,10 +261,10 @@ describe('KnowledgeRepository', () => {
       return item.id;
     };
     const closest = await create(fixture.a, 'Warranty and returns', closer, 'current');
-    const matching = await create(fixture.a, 'ঢাকা delivery', farther, 'current');
-    await create(fixture.a, 'ঢাকা delivery', closer, 'old');
-    await create(fixture.b, 'ঢাকা delivery', closer, 'current');
-    const edited = await create(fixture.a, 'ঢাকা delivery', closer, 'current');
+    const matching = await create(fixture.a, answer, farther, 'current');
+    await create(fixture.a, answer, closer, 'old');
+    await create(fixture.b, answer, closer, 'current');
+    const edited = await create(fixture.a, answer, closer, 'current');
     await repository.change(fixture.a, edited, { answer: 'নতুন মূল্য' }, now);
 
     const rejected = await createFile('text/plain', Buffer.from('ঢাকা'));
@@ -274,13 +276,13 @@ describe('KnowledgeRepository', () => {
     ]);
 
     const hits = await repository.search(fixture.a, {
-      query: 'ঢাকা',
+      query,
       embedding,
       model: 'current',
       limit: 10,
     });
     expect(hits.map((hit) => hit.itemId)).toEqual([matching, closest]);
-    expect(hits[0]?.content).toBe('ঢাকা delivery');
+    expect(hits[0]?.content).toBe(answer);
   });
 });
 
