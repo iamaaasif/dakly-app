@@ -41,6 +41,9 @@ describe('product photos with Postgres', () => {
   );
   const storage: FileStorageDriver = {
     createUploadUrl: signed.createUploadUrl.bind(signed),
+    deleteObject: signed.deleteObject.bind(signed),
+    readBytes: signed.readBytes.bind(signed),
+    writeText: signed.writeText.bind(signed),
     createDownloadUrl: signed.createDownloadUrl.bind(signed),
     getObjectMetadata: async (key) => {
       expect(tenant.isOpen()).toBe(false);

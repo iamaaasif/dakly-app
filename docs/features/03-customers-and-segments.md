@@ -123,7 +123,9 @@ contacts, with the consent evidence, comes in the next part, then undo.
   separately from the uploader.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
-  fills one field at most, so two columns with the same header stay apart.
+  fills one field at most, so two columns with the same header stay apart. Mapping uses
+  the first 200 columns; content in a later column still makes the row nonblank, so a
+  missing mapped phone is reported.
 - `readCustomerImportRows` reads RFC 4180 CSV: quoted cells may hold commas, line breaks and
   doubled quotes, and a byte order mark is dropped. A stray quote fails the whole file with
   `IMPORT_FILE_UNREADABLE` rather than shifting cells. A file with no rows under the header
@@ -139,6 +141,23 @@ contacts, with the consent evidence, comes in the next part, then undo.
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
 - Only CSV is read. XLSX comes with CUS-16.
+- Files must be UTF-8. NUL and other C0 control bytes are refused with
+  `IMPORT_FILE_UNREADABLE`; tab, CR and LF are allowed. UTF-16 files are refused
+  even without a byte order mark, before any rows reach the database.
+- The reader is one pass over the text. It drops blank lines as it goes, stops at 50,000
+  rows and keeps at most 200 cells a row, so neither a file of empty lines nor a quote that
+  never closes builds a large list. Quoted cells are scanned before they are decoded,
+  so escaped quotes do not allocate a new string for each pair.
+- The `fail-stuck-imports` sweep looks at imports still `importing` that made no progress for
+  15 minutes (`imports.last_progress_at`, else `started_at`). Their job may have died with its
+  worker or may still wait behind others, so each is queued again with a new `import.started`
+  event, up to 4 times, and failed only after that, with a line in its report. The report is a
+  CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
+  progress time, retry limit and observed lease in one update. A report from a sweep
+  that loses this check is deleted.
+- A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
+  the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
+  being read as records, so 10 MB of line breaks costs no memory.
 - The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
   agreed. It applies to every row, for the channels it names.
 - Not built yet: the job that applies the rows, undo, the import screens, a preview before

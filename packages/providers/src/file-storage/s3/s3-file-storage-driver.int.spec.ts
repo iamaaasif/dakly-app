@@ -101,6 +101,43 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
     expect(download.status).toBe(404);
   });
 
+  it('deletes a rejected report object and accepts repeating its cleanup', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    await driver.writeText(key, 'Row,Field,Problem\r\n', 'text/csv');
+    await driver.deleteObject(key);
+    expect(await driver.getObjectMetadata(key)).toBeNull();
+    await expect(driver.deleteObject(key)).resolves.toBeUndefined();
+  });
+
+  it('writes text the server makes and reads it back with its content type', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    const report = 'Row,Field,Problem\r\n"2","phone","ফোন নম্বর দিন"\r\n';
+
+    await driver.writeText(key, report, 'text/csv');
+
+    expect(await driver.readBytes(key, 1_000)).toEqual({
+      kind: 'found',
+      bytes: Buffer.from(report),
+    });
+    const download = await request(driver.createDownloadUrl(key, 60));
+    expect(download.headers.get('content-type')).toBe('text/csv');
+  });
+
+  it('reads a missing file as missing and stops reading past the size limit', async () => {
+    const driver = driverAt(new Date());
+    const key = `imports/${randomUUID()}/${randomUUID()}.csv`;
+    await driver.writeText(key, 'Mobile\n01712345678\n', 'text/csv');
+
+    expect(await driver.readBytes(`${key}-missing`, 1_000)).toEqual({ kind: 'missing' });
+    expect(await driver.readBytes(key, 10)).toEqual({ kind: 'too_large' });
+    expect(await driver.readBytes(key, 19)).toEqual({
+      kind: 'found',
+      bytes: Buffer.from('Mobile\n01712345678\n'),
+    });
+  });
+
   it('refuses an upload whose length or type differs from the signed one', async () => {
     const driver = driverAt(new Date());
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;

@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 
-import type { FileObjectMetadata, FileStorageDriver } from '../file-storage-driver';
+import type { FileObjectMetadata, FileStorageDriver, StoredFile } from '../file-storage-driver';
 
 export type S3Configuration = {
   endpoint: string;
@@ -10,8 +10,12 @@ export type S3Configuration = {
   secretAccessKey: string;
 };
 
+// The server signs each read or write for one request only.
+const REQUEST_SECONDS = 60;
+const REQUEST_TIMEOUT_MS = 60_000;
+
 type PresignRequest = {
-  method: 'GET' | 'PUT' | 'HEAD';
+  method: 'GET' | 'PUT' | 'HEAD' | 'DELETE';
   url: URL;
   region: string;
   accessKeyId: string;
@@ -61,6 +65,44 @@ export class S3FileStorageDriver implements FileStorageDriver {
         code: 'FILE_STORAGE_UNAVAILABLE',
       });
     }
+  }
+
+  // Counts the bytes as they arrive, so a file over the limit is never held in memory.
+  async readBytes(key: string, maxBytes: number): Promise<StoredFile> {
+    const response = await fetch(this.presign('GET', key, REQUEST_SECONDS), {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status === 404) return { kind: 'missing' };
+    if (!response.ok || !response.body)
+      throw new Error(`File storage read failed with ${response.status}`);
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.byteLength;
+      if (size > maxBytes) return { kind: 'too_large' };
+      chunks.push(chunk);
+    }
+    return { kind: 'found', bytes: Buffer.concat(chunks) };
+  }
+
+  async writeText(key: string, body: string, contentType: string): Promise<void> {
+    const content = { sizeBytes: Buffer.byteLength(body), contentType };
+    const response = await fetch(this.createUploadUrl(key, REQUEST_SECONDS, content), {
+      method: 'PUT',
+      body,
+      headers: { 'content-type': contentType },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`File storage write failed with ${response.status}`);
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    const response = await fetch(this.presign('DELETE', key, REQUEST_SECONDS), {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok && response.status !== 404)
+      throw new Error(`File storage delete failed with ${response.status}`);
   }
 
   private presign(

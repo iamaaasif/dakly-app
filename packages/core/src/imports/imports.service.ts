@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
+  ContactImportField,
   CreateImportInput,
   ImportResponse,
   ImportUploadResponse,
@@ -16,15 +17,35 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { importError } from './imports.errors';
-import { type Import, ImportsRepository, type NewImportFile } from './imports.repository';
+import {
+  type Import,
+  type ImportCounts,
+  ImportsRepository,
+  type NewImportFile,
+} from './imports.repository';
 
 type Actor = AuditEntry['actor'];
+type Outcome = {
+  status: 'done' | 'failed';
+  counts?: ImportCounts;
+  lines: ReportLine[];
+  exhausted?: { before: Date; limit: number };
+};
+type ReportLine = {
+  rowNumber?: number;
+  field?: ContactImportField | 'sms' | 'whatsapp';
+  message: string;
+};
 
 const LINK_SECONDS = 15 * 60;
 // Uploads consume R2 storage, so a shop can upload at most 20 customer files an hour.
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
+const CSV = 'text/csv';
+// An import with no progress for this long lost its job, or still waits behind a long queue.
+const STUCK_MS = 15 * 60 * 1000;
+const MAX_REQUEUES = 4;
 
 @Injectable()
 export class ImportsService {
@@ -45,10 +66,10 @@ export class ImportsService {
     if (!(await this.limiter.consume(`customer-import:${storeId}`, IMPORTS_PER_HOUR, 3600)).allowed)
       throw importError('IMPORT_RATE_LIMITED');
     const importId = newId();
-    const upload = this.newFile(storeId, input.sizeBytes);
+    const upload = this.newFile(storeId, input.sizeBytes, 'pending');
     const userId = actor.kind === 'user' ? actor.userId : null;
     await this.repository.createCustomerImport(storeId, importId, upload, userId);
-    const content = { sizeBytes: input.sizeBytes, contentType: 'text/csv' };
+    const content = { sizeBytes: input.sizeBytes, contentType: CSV };
     return {
       importId,
       uploadUrl: this.storage.createUploadUrl(upload.objectKey, LINK_SECONDS, content),
@@ -99,16 +120,82 @@ export class ImportsService {
     };
   }
 
+  // A stalled import is queued again up to MAX_REQUEUES times, because its job may only be waiting
+  // behind others or may have died with its worker. After that it fails, with a report.
+  async sweepStuckImports(): Promise<void> {
+    const now = this.clock.now();
+    const before = new Date(now.getTime() - STUCK_MS);
+    for (const storeId of await this.repository.storesWithStuckImports(before))
+      for (const stuck of await this.repository.listStuck(storeId, before)) {
+        const requeued = await this.transaction.run(storeId, async () => {
+          const requeue = { before, now, limit: MAX_REQUEUES };
+          if (!(await this.repository.requeue(storeId, stuck.id, requeue))) return false;
+          await this.outbox.publish({
+            type: 'import.started',
+            storeId,
+            occurredAt: now.toISOString(),
+            payload: { importId: stuck.id },
+          });
+          return true;
+        });
+        if (!requeued)
+          await this.finish(storeId, stuck.id, stuck.claimedAt, {
+            status: 'failed',
+            lines: [{ message: 'The import stopped before it finished. Upload the file again' }],
+            exhausted: { before, limit: MAX_REQUEUES },
+          });
+      }
+  }
+
+  private async finish(
+    storeId: string,
+    importId: string,
+    lease: Date | null,
+    { status, counts, lines, exhausted }: Outcome,
+  ): Promise<void> {
+    const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
+    const result = { status, counts, finishedAt: this.clock.now() };
+    const finished = await this.repository.finish(storeId, importId, {
+      lease,
+      result,
+      report,
+      exhausted,
+    });
+    if (!finished && report) await this.storage.deleteObject(report.objectKey);
+  }
+
   private async findImport(storeId: string, importId: string): Promise<Import> {
     const found = await this.repository.findById(storeId, importId);
     if (!found) throw importError('IMPORT_NOT_FOUND');
     return found;
   }
 
-  private newFile(storeId: string, sizeBytes: number): NewImportFile {
+  private newFile(
+    storeId: string,
+    sizeBytes: number,
+    status: NewImportFile['status'],
+  ): NewImportFile {
     const id = newId();
     const expiresAt = new Date(this.clock.now().getTime() + FILE_DAYS * 24 * 60 * 60 * 1000);
     // One R2 lifecycle rule on `imports/` deletes these after 7 days for every store.
-    return { id, objectKey: `imports/${storeId}/${id}.csv`, sizeBytes, expiresAt };
+    const objectKey = `imports/${storeId}/${id}.csv`;
+    return { id, objectKey, contentType: CSV, sizeBytes, status, expiresAt };
   }
+
+  private async uploadReport(storeId: string, lines: ReportLine[]): Promise<NewImportFile> {
+    const body = reportCsv(lines);
+    const report = this.newFile(storeId, Buffer.byteLength(body), 'ready');
+    await this.storage.writeText(report.objectKey, body, CSV);
+    return report;
+  }
+}
+
+// Every cell is quoted, so a message with a comma stays in one column.
+function reportCsv(lines: ReportLine[]): string {
+  const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const sorted = [...lines].sort((a, b) => (a.rowNumber ?? 0) - (b.rowNumber ?? 0));
+  const records = sorted.map((line) =>
+    [String(line.rowNumber ?? ''), line.field ?? '', line.message].map(cell).join(','),
+  );
+  return `${['Row,Field,Problem', ...records].join('\r\n')}\r\n`;
 }
