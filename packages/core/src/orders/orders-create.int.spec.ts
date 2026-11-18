@@ -269,6 +269,25 @@ describe('Staff order creation', () => {
       deliveryChargePoisha: 7000,
       isDeliveryChargeOverridden: true,
     });
+    expect(await orders.getById(f.a, second.id, { seeFullPhone: false })).toMatchObject({
+      possibleDuplicateOfOrderId: null,
+      recipientPhone: '01712-XXX903',
+    });
+    const changed = await orders.editOrder(
+      f.a,
+      second.id,
+      editOrderSchema.parse({
+        items: input.items,
+        recipient: { address: 'Mirpur' },
+      }),
+      { ...editor(), access: { seeFullPhone: false } },
+    );
+    expect(changed).toMatchObject({
+      recipientAddress: 'Mirpur',
+      recipientPhone: '01712-XXX903',
+      deliveryChargePoisha: 7000,
+      isDeliveryChargeOverridden: true,
+    });
     await f.connection.pool.query(
       "update orders set created_at=created_at - interval '25 hours' where store_id=$1 and id=any($2)",
       [f.a, [first.id, second.id]],

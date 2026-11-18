@@ -201,12 +201,21 @@ export class ProductsRepository {
   ): Promise<boolean> {
     try {
       await this.database.forStore(storeId, async (tx) => {
+        const forProduct = and(
+          eq(productVariants.storeId, storeId),
+          eq(productVariants.productId, productId),
+        );
+        // Order operations lock the same rows in ID order.
+        await tx
+          .select({ id: productVariants.id })
+          .from(productVariants)
+          .where(forProduct)
+          .orderBy(productVariants.id)
+          .for('no key update');
         await tx
           .update(productVariants)
           .set({ status: 'archived', isDefault: false, updatedAt: now })
-          .where(
-            and(eq(productVariants.storeId, storeId), eq(productVariants.productId, productId)),
-          );
+          .where(forProduct);
         await tx
           .insert(productVariants)
           .values(

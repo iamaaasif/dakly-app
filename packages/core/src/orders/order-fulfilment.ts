@@ -38,7 +38,7 @@ export async function changeOrderStage(
   const confirmed = change.to === 'to_pack' && !order.confirmedAt;
   const result = await fulfilmentWrite(storeId, { ...input, now }, order, deps);
   const reason = 'reason' in change ? change.reason : undefined;
-  await deps.orders.setStage(storeId, orderId, {
+  await deps.orders.updateOrder(storeId, orderId, {
     ...stageFields(change, now, confirmed),
     ...result,
   });

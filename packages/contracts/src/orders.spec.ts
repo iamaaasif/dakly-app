@@ -4,6 +4,7 @@ import {
   codCollectedSchema,
   createOrderSchema,
   dispatchOrderSchema,
+  editOrderSchema,
   orderListQuerySchema,
   orderStageChangeSchema,
 } from './orders';
@@ -40,6 +41,28 @@ describe('staff order input', () => {
       recipient: { phone: '01712458903', isBuyer: true },
       items: [{ variantId, quantity: 2, lineDiscountPoisha: 0 }],
     });
+  });
+
+  it('normalises a variant ID before checking for duplicate lines', () => {
+    const upper = variantId.toUpperCase();
+    expect(
+      createOrderSchema.parse({ ...order, items: [{ variantId: upper, quantity: 2 }] }).items[0],
+    ).toMatchObject({ variantId });
+    expect(
+      createOrderSchema.safeParse({
+        ...order,
+        items: [
+          { variantId, quantity: 1 },
+          { variantId: upper, quantity: 1 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('allows changing the address without sending the number or recipient type', () => {
+    expect(
+      editOrderSchema.parse({ items: order.items, recipient: { address: 'Mirpur' } }).recipient,
+    ).toEqual({ address: 'Mirpur' });
   });
 
   it('requires separate buyer fields and accepts a different delivery recipient', () => {

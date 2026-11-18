@@ -210,15 +210,6 @@ export class OrdersRepository {
     });
   }
 
-  async editOrder(storeId: string, orderId: string, values: Partial<OrderWrite>): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
-      tx
-        .update(orders)
-        .set(values)
-        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
-    );
-  }
-
   async find(storeId: string, orderId: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -281,7 +272,7 @@ export class OrdersRepository {
     );
   }
 
-  async setStage(storeId: string, orderId: string, values: StageWrite): Promise<void> {
+  async updateOrder(storeId: string, orderId: string, values: Partial<OrderWrite>): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(orders)
