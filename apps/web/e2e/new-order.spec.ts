@@ -35,7 +35,7 @@ async function capture(page: Page, name: string) {
   }
 }
 
-test('creates and confirms a staff order with a separate recipient', async ({
+test('creates a staff order with the zone charge, stock and computed COD', async ({
   page,
   context,
   baseURL,
@@ -81,8 +81,6 @@ test('creates and confirms a staff order with a separate recipient', async ({
     await capture(page, 'pipeline');
     await page.getByRole('button', { name: 'New order' }).click();
     const create = page.getByRole('dialog', { name: 'New order' });
-    await create.getByLabel('Buyer name').fill('Rahim Ahmed');
-    await create.getByLabel('Deliver to someone else').check();
     await create.getByLabel('Recipient name').fill('Karim Ahmed');
     await create.getByLabel('Recipient phone').fill('01701000015');
     await create.getByLabel('Address').fill('House 14, Mirpur');
@@ -90,14 +88,15 @@ test('creates and confirms a staff order with a separate recipient', async ({
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
     await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
-    await create.getByLabel('Advance paid (৳)').fill('200');
-    await expect(create.getByText('৳1,110')).toBeVisible();
+    await expect(create.getByText('5 in stock')).toBeVisible();
+    await expect(create.getByText('৳1,310')).toBeVisible();
     await capture(page, 'new');
-    await create.getByRole('button', { name: 'Save as confirmed' }).click();
+    await create.getByRole('button', { name: 'Save order' }).click();
     const detail = page.getByRole('dialog', { name: /^Order #/ });
     await expect(detail.getByText('Karim Ahmed', { exact: true })).toBeVisible();
-    await expect(detail.getByText('Buyer Rahim Ahmed')).toBeVisible();
-    await expect(detail.getByText('To confirm → To pack')).toBeVisible();
+    await expect(detail.getByText('Buyer Karim Ahmed')).toBeVisible();
+    await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
+    await expect(detail.getByText('৳1,310').first()).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string }>(
       'select id from orders where store_id=$1 and delivery_zone_id=$2',
