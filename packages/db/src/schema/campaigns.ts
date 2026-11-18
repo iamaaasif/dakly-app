@@ -215,10 +215,11 @@ export const campaignRecipients = pgTable(
     readAt: timestamptz('read_at'),
     tappedAt: timestamptz('tapped_at'),
     failedAt: timestamptz('failed_at'),
-    // For the sender (CAMP-3): its lease on a recipient in sending, the credits the message used,
-    // and how many sends the provider refused.
+    // Holds the sending recipient until the worker settles it or the claim expires.
     claimedAt: timestamptz('claimed_at'),
+    // Credits of a message the provider took or may have taken.
     smsCredits: integer('sms_credits'),
+    // Bounds provider calls when a previous attempt's outcome is unknown.
     sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },
