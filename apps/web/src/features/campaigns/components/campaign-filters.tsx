@@ -15,18 +15,16 @@ import { campaignChannelLabels, campaignStatusLabels } from '../campaign-labels'
 import { dhakaDateBoundary, dhakaDateField } from '@/lib/format-date';
 
 const { search, status, channel } = campaignListQuerySchema.shape;
-const dateField = z.iso.date().optional();
-const filtersSchema = z
-  .strictObject({ search, status, channel, createdFrom: dateField, createdBefore: dateField })
-  .transform(
-    ({ createdFrom, createdBefore, ...filters }): z.input<typeof campaignListQuerySchema> => ({
-      ...filters,
-      createdFrom: dhakaDateBoundary(createdFrom ?? ''),
-      createdBefore: dhakaDateBoundary(createdBefore ?? '', true),
-    }),
-  )
-  .pipe(campaignListQuerySchema);
-type FiltersInput = z.input<typeof filtersSchema>;
+const empty = z.literal('');
+const dateField = z.iso.date().or(empty).optional();
+const filterFields = z.strictObject({
+  search: search.or(empty),
+  status: status.or(empty),
+  channel: channel.or(empty),
+  createdFrom: dateField,
+  createdBefore: dateField,
+});
+type FiltersInput = z.input<typeof filterFields>;
 
 const optional = { setValueAs: (value: string) => value.trim() || undefined };
 const selectClass =
@@ -34,14 +32,31 @@ const selectClass =
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const router = useRouter();
+  const initialFrom = query.createdFrom ? dhakaDateField(query.createdFrom) : undefined;
+  const initialBefore = query.createdBefore ? dhakaDateField(query.createdBefore, true) : undefined;
+  const filtersSchema = filterFields
+    .transform(
+      ({ createdFrom, createdBefore, ...filters }): z.input<typeof campaignListQuerySchema> => ({
+        search: filters.search || undefined,
+        status: filters.status || undefined,
+        channel: filters.channel || undefined,
+        createdFrom:
+          createdFrom === initialFrom ? query.createdFrom : dhakaDateBoundary(createdFrom ?? ''),
+        createdBefore:
+          createdBefore === initialBefore
+            ? query.createdBefore
+            : dhakaDateBoundary(createdBefore ?? '', true),
+      }),
+    )
+    .pipe(campaignListQuerySchema);
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
     resolver: zodResolver(filtersSchema),
     defaultValues: {
-      search: query.search,
-      status: query.status,
-      channel: query.channel,
-      createdFrom: query.createdFrom ? dhakaDateField(query.createdFrom) : undefined,
-      createdBefore: query.createdBefore ? dhakaDateField(query.createdBefore, true) : undefined,
+      search: query.search ?? '',
+      status: query.status ?? '',
+      channel: query.channel ?? '',
+      createdFrom: initialFrom ?? '',
+      createdBefore: initialBefore ?? '',
     },
   });
   const apply = form.handleSubmit((filters) =>
@@ -50,10 +65,10 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   function clear() {
     form.reset({
       search: '',
-      status: undefined,
-      channel: undefined,
-      createdFrom: undefined,
-      createdBefore: undefined,
+      status: '',
+      channel: '',
+      createdFrom: '',
+      createdBefore: '',
     });
     router.push('/campaigns');
   }

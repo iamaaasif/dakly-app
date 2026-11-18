@@ -2,6 +2,8 @@
 
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 import type { CampaignListQuery } from '@dakly/contracts/campaigns';
 import { Button } from '@dakly/ui/button';
@@ -19,11 +21,16 @@ export function CampaignsScreen({
   query: CampaignListQuery;
   cursorShop?: string;
 }) {
+  const router = useRouter();
   const { data: session } = useSessionContext();
   const shopId = session?.currentStore?.storeId;
-  const query = cursorShop === shopId ? requested : { ...requested, cursor: undefined };
+  const staleCursor = Boolean(requested.cursor && cursorShop !== shopId);
+  const query = staleCursor ? { ...requested, cursor: undefined } : requested;
   const campaigns = useCampaigns(query);
   const filters = campaignListHref({ ...query, cursor: undefined });
+  useEffect(() => {
+    if (shopId && staleCursor) router.replace(filters);
+  }, [filters, router, shopId, staleCursor]);
   return (
     <main className="space-y-6 p-6 md:p-8">
       <header className="flex flex-wrap items-start justify-between gap-4">

@@ -11,10 +11,10 @@ export default async function CampaignsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await requireSession();
+  await requireSession();
   const { pageShop, ...filters } = await searchParams;
   const query = campaignListQuerySchema.safeParse(filters);
-  const cursorShop = typeof pageShop === 'string' ? pageShop : session.currentStore?.storeId;
+  const cursorShop = typeof pageShop === 'string' ? pageShop : undefined;
   return (
     <StorePage permission="canViewCampaigns">
       {query.success ? (

@@ -83,8 +83,8 @@ function calendarDate(instant: number, timeZone: string) {
 }
 
 // Store dates use Dhaka until a store time-zone setting is available.
-export function dhakaDateField(value: string, previousDay = false): string {
-  const instant = parseInstant(value) - (previousDay ? DAY_MS : 0);
+export function dhakaDateField(value: string, exclusiveEnd = false): string {
+  const instant = parseInstant(value) - (exclusiveEnd ? 1 : 0);
   return new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Dhaka',
     year: 'numeric',
