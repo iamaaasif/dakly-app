@@ -285,7 +285,7 @@ Partial delivery scales each line discount by the delivered quantity divided by 
 
 For example, an order has three items at ৳1,250 each, a ৳10 line discount, a ৳30.01 order discount, ৳60 delivery and a ৳200 advance. Two delivered items receive a ৳6.66 line discount, leaving ৳2,493.34 in items. Their share of the order discount is ৳20. COD becomes ৳2,333.34.
 
-Staff can record the COD amount once after delivery. The order list and details compute return risk from completed parcels for the recipient’s phone in the same store. A partly delivered parcel counts as delivered for risk. A single past parcel is too little for a badge.
+Staff can record the COD amount once after delivery. Returning an order with an advance, paid balance or collected COD sets `refund_due` in the return transaction. The order list and details compute return risk from completed parcels for the recipient’s phone in the same store. A partly delivered parcel counts as delivered for risk. A single past parcel is too little for a badge.
 
 Later release (D21), kept here so the data model does not block it: courier connections with the shop's own keys, booking as an idempotent job per order, parcel status by webhook or polling, and COD reconciliation from courier payouts matched by consignment id. Do not build any of it in release 1.
 
