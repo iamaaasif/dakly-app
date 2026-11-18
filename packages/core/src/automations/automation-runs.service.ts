@@ -31,7 +31,9 @@ import {
   type GateResult,
   failed,
   goOn,
+  hasHappened,
   holdOrEnd,
+  holdsClaim,
   ifNotReachable,
   messageBody,
   noCredits,
@@ -51,7 +53,6 @@ const CLAIMS_PER_STORE = 100;
 const system = { kind: 'system' } as const;
 
 type Condition = AutomationGraph['workflowFilters'][number];
-type ExitCondition = AutomationGraph['exitConditions'][number];
 type PathChoice = { outcome: string; next: string };
 const NO_ANSWER = 'The SMS provider did not answer';
 
@@ -256,11 +257,12 @@ export class AutomationRunsService {
     // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
     if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
       return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
-    let renewed = { ...claim, claimedAt: now };
+    let renewed = claim;
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
-      const result = await this.gateSend(claim, step, facts);
+      renewed = { ...claim, claimedAt: now };
+      const result = await this.gateSend(renewed, step, facts);
       const claimedAt = this.clock.now();
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
@@ -268,7 +270,10 @@ export class AutomationRunsService {
       return result;
     });
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
-    if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
+    if (started === 'not_live') {
+      const held = await this.heldOrStale(storeId, renewed, this.clock.now());
+      return held && { ...held, claim: renewed };
+    }
     const gatedAt = this.clock.now();
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     const { decision } = started;
@@ -306,6 +311,13 @@ export class AutomationRunsService {
       channel: 'sms',
       category: step.category,
     });
+    if (
+      !(await this.repository.moveRunIfLive(storeId, claim, {
+        status: 'running',
+        claimedAt: claim.claimedAt,
+      }))
+    )
+      return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
     if (decision.action !== 'send') return { decision };
@@ -364,8 +376,6 @@ export class AutomationRunsService {
     return messageBody(step, optOut?.url);
   }
 
-  // A balance that changes between the check and the write fails the transaction instead; the run
-  // is claimed again later.
   private async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
     try {
       await this.wallets.reserve(storeId, {
@@ -435,21 +445,4 @@ export class AutomationRunsService {
       return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim });
     }
   }
-}
-
-// Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish
-// refuses the tap exit until taps on workflow messages are recorded. Tags carry no time, so a tag
-// the person already had counts as got.
-function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
-  if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
-  if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
-  return false;
-}
-
-function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
-  return (
-    run.status === 'running' &&
-    run.currentStepKey === claim.stepKey &&
-    run.claimedAt?.getTime() === claim.claimedAt.getTime()
-  );
 }

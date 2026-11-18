@@ -148,3 +148,22 @@ export function runAction(
     tagChange: { tag: action.tag, change },
   };
 }
+
+export function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
+  return (
+    run.status === 'running' &&
+    run.currentStepKey === claim.stepKey &&
+    run.claimedAt?.getTime() === claim.claimedAt.getTime()
+  );
+}
+
+type ExitCondition = AutomationGraph['exitConditions'][number];
+
+// Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish
+// refuses the tap exit until taps on workflow messages are recorded. Tags carry no time, so a tag
+// the person already had counts as got.
+export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
+  if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
+  if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
+  return false;
+}

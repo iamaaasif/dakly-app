@@ -157,13 +157,13 @@ const wait: AutomationStep = {
   next: 'end',
 };
 
-async function waitForBlocker(backendPid: number) {
+async function waitForBlocker(backendPid: number, count = 1) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const waiting = await admin.pool.query(
       'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
       [backendPid],
     );
-    if (waiting.rowCount) return;
+    if ((waiting.rowCount ?? 0) >= count) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error('The workflow did not wait for the held database lock');
@@ -900,6 +900,69 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           blocker.release();
           await pending;
           await job.remove();
+        }
+      },
+    );
+
+    it.each(['paused', 'archived', 'version stopped'] as const)(
+      'holds two wallet waiters without sending when their workflows are %s',
+      async (change) => {
+        const runner = await worker();
+        const contacts = [await customer(true, runner), await customer(true, runner)];
+        const runs = await Promise.all(
+          contacts.map((contact) => dueRuns(send('marketing'), 1, 'active', contact)),
+        );
+        await runner.sweep();
+        const jobs = await runner.queue.getJobs(['waiting']);
+        const heldJobs = runs.map(({ runIds }) =>
+          jobs.find((job) => job.data.automationRunId === runIds[0])!,
+        );
+        const blocker = await admin.pool.connect();
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          `wallet:${storeId}:sms_credits`,
+        ]);
+        let isHoldingLock = true;
+        const pending = Promise.all(heldJobs.map((job) => runner.runStep(job.data as StepJobData)));
+        try {
+          await waitForBlocker(pid, 2);
+          const ids = runs.map((run) => run.automationId);
+          if (change === 'version stopped')
+            await admin.pool.query(
+              'update automation_versions set is_stopped=true where automation_id=any($1::uuid[])',
+              [ids],
+            );
+          else
+            await admin.pool.query('update automations set status=$1 where id=any($2::uuid[])', [
+              change,
+              ids,
+            ]);
+          await blocker.query('commit');
+          isHoldingLock = false;
+          await pending;
+          for (const {
+            runIds: [runId],
+          } of runs) {
+            expect(sentFor(runId!)).toEqual([]);
+            expect(await ledgerFor(runId!)).toEqual([]);
+            expect(await sendStep(runId!)).toEqual([]);
+            expect(await run(runId!)).toMatchObject(
+              change === 'paused'
+                ? { status: 'waiting' }
+                : {
+                    status: 'exited',
+                    exit_reason: change === 'archived' ? 'archived' : 'version_stopped',
+                  },
+            );
+          }
+        } finally {
+          if (isHoldingLock) await blocker.query('rollback');
+          blocker.release();
+          await pending;
+          await Promise.all(heldJobs.map((job) => job.remove()));
         }
       },
     );
