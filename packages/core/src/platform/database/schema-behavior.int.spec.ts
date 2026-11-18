@@ -145,7 +145,14 @@ describe('release schema behavior (Postgres)', () => {
       const versionId = await insertVersion(client, storeId);
       const runId = await insertRun(client, storeId, contactId, versionId, new Date(0));
       await asApp(client, storeId);
-      for (const reason of ['version_stopped', 'archived', null]) {
+      for (const reason of [
+        'version_stopped',
+        'archived',
+        'goal',
+        'exit_condition',
+        'workflow_filter',
+        null,
+      ]) {
         const saved = await client.query(
           'update automation_runs set exit_reason=$1 where id=$2 returning exit_reason',
           [reason, runId],

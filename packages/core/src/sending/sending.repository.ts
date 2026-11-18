@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, gt, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
 
 import type { campaignChannels } from '@dakly/contracts/campaigns';
-import { automationRunSteps, automationRuns, automations } from '@dakly/db/schema/automations';
+import { automationRunSteps } from '@dakly/db/schema/automations';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
@@ -17,7 +17,6 @@ export type MarketingSend = {
 type SendWindow = { storeId: string; contactIds: string[]; after: Date; until: Date };
 
 // Read-only: the frequency cap counts campaign and workflow sends together from Postgres (A2).
-// The campaigns and automations features that own these tables are not built yet.
 @Injectable()
 export class SendingRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -84,6 +83,7 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
     );
 }
 
+// A send step counts from its send time, while sending and once sent; a failed send does not.
 function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
   return tx
     .select({
@@ -92,20 +92,6 @@ function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: S
       sentAt: automationRunSteps.sentAt,
     })
     .from(automationRunSteps)
-    .innerJoin(
-      automationRuns,
-      and(
-        eq(automationRuns.storeId, automationRunSteps.storeId),
-        eq(automationRuns.id, automationRunSteps.runId),
-      ),
-    )
-    .innerJoin(
-      automations,
-      and(
-        eq(automations.storeId, automationRuns.storeId),
-        eq(automations.id, automationRuns.automationId),
-      ),
-    )
     .where(
       and(
         eq(automationRunSteps.storeId, storeId),
@@ -113,7 +99,8 @@ function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: S
         gt(automationRunSteps.sentAt, after),
         lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
-        eq(automations.isTransactional, false),
+        eq(automationRunSteps.category, 'marketing'),
+        inArray(automationRunSteps.outcome, ['sending', 'sent']),
       ),
     );
 }

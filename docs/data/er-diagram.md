@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0037_snapshot.json`: **95 tables, 1253 columns, 376 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0038_snapshot.json`: **95 tables, 1254 columns, 376 explicit indexes and 298 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1496,6 +1496,7 @@ erDiagram
         text kind "NOT NULL; text"
         text outcome "NOT NULL; text"
         text channel "NULL; text"
+        text category "NULL; text"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         bigint cost_poisha "NULL; bigint"

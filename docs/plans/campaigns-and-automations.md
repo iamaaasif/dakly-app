@@ -118,6 +118,7 @@ Branch: `feat/camp-7-messenger-campaigns`
 Branches: `feat/camp-4-campaign-list-and-results`, `feat/camp-4-campaign-builder`
 
 - Scope: two PRs. List with statuses (Draft, Scheduled, Sending with progress, Paused, Sent, Failed), search, channel and date filters in the URL; results page from feature 09 "Missing design" with sent, delivered, read, tapped and the failure groups (orders and revenue show "after Orders is set up" until ANA-2); builder steps Goal, Channel, Content, Audience, Schedule, Review with save draft on every step, live preview, SMS part counter, cost and balance after, and the approval checkbox. Send test to my phone.
+- Owner decision (18 Nov 2026): build the list and builder now from `campaigns.webp` and `campaigns-and-automations/`. Draft rows open the builder and sent rows open a read-only builder summary. Defer results until ORD-3, then build from the feature 09 screen table and "Missing design" section without a separate design. Keep CAMP-4 In progress after the list and builder merge.
 - Tests: component states for each step; Playwright creates an SMS campaign to a seeded segment, approves it and sees it sending with the fake SMS driver.
 
 ### Group 3: automations
@@ -130,7 +131,7 @@ Branches: `feat/camp-5-automation-versions`, then the runner in five: `feat/camp
 - Merge send-costs, send-retries and balance-pause back to back, with no deploy between them. Before balance-pause, a short balance skips a message, which the owner rejected.
 - Tests (integration): the feature 09 edge cases: a crash between claim and enqueue is recovered by the lease and sends once; a version published while 40 runs wait on a deleted step leaves them finishing on the old version; changing a delay affects only steps not yet scheduled; pausing then resuming skips sends more than 24 hours late; a consent withdrawal mid-run skips the send; publish refuses each blocked case.
 
-- Left for later, each with the task named: AUTO-R2 priority between two workflows on the same day (needs a ranking rule over waiting runs); waking a wait early on a reply or tap, and the wait before the Messenger window closes (CHAT-2); recording taps on workflow messages, which the `tapped` condition and the `tapped_link` exit need (CAMP-10 follow-up); the review list behind "Review before sending"; dynamic fields and tracked links in message text; the create task, notify team, hand to a person and give coupon actions (their owning features).
+- Left for later, each with the task named: AUTO-R2 priority between two workflows on the same day (needs a ranking rule over waiting runs); waking a wait early on a reply or tap, and the wait before the Messenger window closes (CHAT-2); recording taps on workflow messages, which the `tapped` condition and the `tapped_link` exit need (CAMP-10 follow-up); the review list behind "Review before sending"; dynamic fields and tracked links in message text; the create task, notify team, hand to a person and give coupon actions (their owning features); an audit row or event for a workflow's tag action, which writes neither yet, and the `contact.tag_added` event that CAMP-11's tag-added trigger needs.
 
 ### CAMP-11 · Triggers and entry rules
 

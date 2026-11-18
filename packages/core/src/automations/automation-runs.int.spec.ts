@@ -387,6 +387,40 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     );
   });
 
+  it('adds a tag with the step and reads it in the next condition', async () => {
+    const automationId = await workflow();
+    const versionId = await publish(automationId, 1, {
+      ...graphWith(wait),
+      steps: {
+        first: { kind: 'action', action: { action: 'add_tag', tag: 'ঈদ-ক্রেতা' }, next: 'check' },
+        check: {
+          kind: 'condition',
+          paths: [{ condition: { kind: 'has_tag', tag: 'ঈদ-ক্রেতা' }, next: 'yes' }],
+          elseNext: 'no',
+        },
+        yes: end,
+        no: end,
+      },
+    });
+    const [runId] = await startRuns(automationId, versionId);
+    const runner = await worker();
+    await runner.sweep();
+
+    await runner.runStep(await queuedStep(runner.queue, runId!));
+    const next = (await queuedSteps(runner.queue)).find(
+      (step) => step.automationRunId === runId && step.stepKey === 'check',
+    );
+    await runner.runStep(next!);
+
+    const tags = await admin.pool.query('select tags from contacts where id=$1', [contactId]);
+    expect(tags.rows[0].tags).toContain('ঈদ-ক্রেতা');
+    expect(await steps(runId!)).toEqual([
+      { step_key: 'first', kind: 'action', outcome: 'done' },
+      { step_key: 'check', kind: 'condition', outcome: 'path_1' },
+    ]);
+    expect((await run(runId!)).current_step_key).toBe('yes');
+  });
+
   it('does not count claims whose job never started toward the limit', async () => {
     const {
       runIds: [runId],

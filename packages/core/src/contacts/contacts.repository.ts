@@ -60,6 +60,8 @@ export type AudienceRecipient = Omit<ContactRecipient, 'hasPhone'> & {
   phone: string | null;
 };
 
+export type TagChange = { tag: string; change: 'add' | 'remove' };
+
 export type NewContact = CreateContactInput & { source: ContactSource; kind: ContactKind };
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
@@ -109,6 +111,18 @@ export class ContactsRepository {
         .limit(1),
     );
     return rows[0];
+  }
+
+  // A deleted contact has none.
+  async findTags(storeId: string, id: string): Promise<string[]> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ tags: contacts.tags })
+        .from(contacts)
+        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt)))
+        .limit(1),
+    );
+    return row?.tags ?? [];
   }
 
   findRecipients(storeId: string, ids: string[]): Promise<AudienceRecipient[]> {
@@ -209,6 +223,31 @@ export class ContactsRepository {
     }
   }
 
+  // Adding a tag the contact has, or one past the limit, and removing one it lacks change nothing.
+  async changeTag(storeId: string, id: string, change: TagChange, maxTags: number) {
+    const { tag } = change;
+    const adding = change.change === 'add';
+    const changesTags = adding
+      ? sql`not (${tag} = any(${contacts.tags})) and cardinality(${contacts.tags}) < ${maxTags}`
+      : sql`${tag} = any(${contacts.tags})`;
+    const tags = adding
+      ? sql`array_append(${contacts.tags}, ${tag})`
+      : sql`array_remove(${contacts.tags}, ${tag})`;
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contacts)
+        .set({ tags })
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.id, id),
+            isNull(contacts.deletedAt),
+            changesTags,
+          ),
+        ),
+    );
+  }
+
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -276,6 +315,17 @@ export class ContactsRepository {
       tx.select({ count: count() }).from(contacts).where(matching(storeId, rules)),
     );
     return row!.count;
+  }
+
+  async isMatching(storeId: string, id: string, rules: SegmentRules): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(and(matching(storeId, rules), eq(contacts.id, id)))
+        .limit(1),
+    );
+    return rows.length > 0;
   }
 
   async listIdsMatching(

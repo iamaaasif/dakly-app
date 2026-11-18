@@ -244,6 +244,8 @@ The campaign builder and the visual workflow editor are the strongest screens in
 
 ### Missing design: campaign results page and drafts
 
+Owner decision (18 Nov 2026): build the campaign list and builder from `campaigns.webp` and `campaigns-and-automations/` first. Draft rows open the builder; sent rows open a read-only summary in the builder until results exist. Build results after ORD-3 from the screen table above and this section, with no separate design. CAMP-4 stays In progress after the list and builder merge.
+
 **Why it's needed.** Clicking a campaign in the Campaigns list does nothing. Shop owners send a campaign and then want to know if it worked and who bought. The Dashboard, Analytics and notifications ("Kurti campaign earned ৳1,86,900 · Send it again") all point to a page that doesn't exist.
 
 **What to design.**
@@ -360,9 +362,9 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 3. SMS needs a phone, else `no_address`, for every category.
 4. Window: SMS has none. Messenger, Instagram and WhatsApp skip as `window_closed` until CHAT-2 stores inbound message times and CHN-3 adds WhatsApp templates.
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
-6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time from workflows that are not transactional, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
+6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time whose own `category` is `marketing`, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
 
-   A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts once it has `sent_at`: `automation_run_steps.outcome` is free text with no fixed values yet, so a failed outcome cannot be excluded until CAMP-5 defines them. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
+   A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending` or `sent`. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
@@ -414,6 +416,9 @@ Publish refuses these, with the step in the error's `fields`:
 
 - `AUTOMATION_TRIGGER_UNAVAILABLE`: the catalogue does not mark the trigger ready before Channels, or its source is a planned event that nothing emits. Birthday passes, because birthdays live on contacts.
 - `AUTOMATION_CHANNEL_UNREACHABLE`: a send step lists no SMS. SMS is the only channel that sends; Messenger and WhatsApp steps, and WhatsApp's approved template check, are not available.
+- `AUTOMATION_TAPS_UNAVAILABLE`: a `tapped` condition or workflow filter, or a `tapped_link` goal or exit. Taps on workflow messages are not recorded yet.
+- `AUTOMATION_REVIEW_UNAVAILABLE`: a send step with "Review before sending" on. The review list does not exist yet.
+- `AUTOMATION_ACTION_UNAVAILABLE`: an action other than adding or removing a tag.
 - `AUTOMATION_SPLIT_TOO_SOON`: under 120 minutes of wait on the shortest path from the send step a condition reads. Only a duration and a wait-for-reply-or-tap timeout count; a wait for a time of day, a weekday or the window closing may end a minute later.
 
 Publish shows no warnings.
@@ -426,10 +431,14 @@ Runs: `automation_runs` holds the current step, `status`, `wake_at` and the vers
 
 Runner: the `wake-due-runs` job on the `workflow` queue runs every minute in the worker. It claims due runs through `due_automation_runs`, no more than the queue has room for under 1,000 and at most 100 of one store a tick, stores in turn, and queues one `continue-automation-run` job per claim, deduplicated on the run, step and claim time. The step job renews the lease when it starts. The function skips runs of a paused workflow, so pausing holds everyone where they are. The step job does nothing unless the run still holds that claim on that step. A stopped version exits the run (`version_stopped`) at its next step, and so does an archived workflow (`archived`). The step row and the run's next state are written in one short transaction guarded by the run's `claimed_at` and current step, so a stale worker changes nothing. A step that goes straight on writes a fresh `claimed_at` and queues the next step's job with it. A committed step clears `last_error` and sets `attempts` back to 0; a run whose step job started more than 10 times without a committed step fails with "This step failed too many times in a row".
 
-- `wait` sets `wake_at` and moves the run to the next step. Quiet hours do not apply to waits. A wait for a reply or tap lasts its timeout, and a wait for the Messenger window ends at once, until CHAT-2 brings replies and windows.
+- Before every other step the goal (`goal`), the exit conditions (`exit_condition`) and the workflow filters (`workflow_filter`) are checked, in that order.
+- `wait` sets `wake_at` and moves the run to the next step: a duration, or a time of day or weekday in the store's time zone. Quiet hours do not apply to waits. A wait for a reply or tap lasts its timeout, and a wait for the Messenger window ends at once, until CHAT-2 brings replies and windows.
 - `random_split` picks its path from a hash of the run id and step key, so a retry takes the same path. The step row's `outcome` is `path_1` to `path_4`.
 - `exit` ends the run as `done`.
-- A wait for a time of day or a weekday, and `condition`, `send` and `action` steps, are not built yet: a run that reaches one fails with "This step cannot run yet".
+- `condition` takes the first path that holds, else Else; its row's `outcome` is `path_1` to `path_10` or `else`. A tag reads the contact's tags and a segment is matched live. Reachable means `SendPolicyService` would send a transactional message on that channel: an address and an open window, which only SMS has yet; consent is the send step's own check. A reply and an order never hold, as neither can happen yet, and publish refuses a tap. Tags carry no time, so the `got_tag` exit counts a tag the person already had.
+- `action` adds or removes a tag with the step, in the same guarded transaction, through `ContactsService.changeTag`; a contact with 50 tags gets no new one. Publish refuses the other actions, and a run that meets one fails.
+- `send` steps are not built yet: a run that reaches one fails with "This step cannot run yet".
+- Step outcomes: `scheduled` (wait), `path_N` or `else` (splits), `done` (action and exit).
 
 ### Workflow catalogue
 

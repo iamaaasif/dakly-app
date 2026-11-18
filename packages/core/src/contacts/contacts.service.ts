@@ -26,6 +26,7 @@ import {
   type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
+  type TagChange,
 } from './contacts.repository';
 import {
   ImportContactsRepository,
@@ -129,6 +130,15 @@ export class ContactsService {
     return toContactResponse(updated, editor.access.seeFullPhone);
   }
 
+  findTags(storeId: string, contactId: string): Promise<string[]> {
+    return this.contactsRepository.findTags(storeId, contactId);
+  }
+
+  // A workflow's tag action. A deleted contact is left as it is.
+  changeTag(storeId: string, contactId: string, change: TagChange, _actor: Actor): Promise<void> {
+    return this.contactsRepository.changeTag(storeId, contactId, change, MAX_CONTACT_TAGS);
+  }
+
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the
   // store already has. A filled cell replaces that field and tags are added; `skip` leaves it as it
   // is. A contact this import already added is not written again, so a rerun changes nothing.
@@ -223,6 +233,10 @@ export class ContactsService {
 
   countMatching(storeId: string, rules: SegmentRules): Promise<number> {
     return this.contactsRepository.countMatching(storeId, rules);
+  }
+
+  isMatching(storeId: string, contactId: string, rules: SegmentRules): Promise<boolean> {
+    return this.contactsRepository.isMatching(storeId, contactId, rules);
   }
 
   listIdsMatching(
