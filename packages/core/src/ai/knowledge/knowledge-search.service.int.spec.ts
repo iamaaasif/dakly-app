@@ -1,10 +1,12 @@
 import 'reflect-metadata';
+import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../../test/owner-isolation-fixture';
+import { loadEnv } from '../../platform/config/env';
 import { DatabaseModule } from '../../platform/database/database.module';
 import { KnowledgeIndexModule } from './knowledge-index.module';
 import { KnowledgeSearchService } from './knowledge-search.service';
@@ -22,6 +24,7 @@ describe('worker knowledge search', () => {
 
   beforeAll(async () => {
     vi.stubEnv('LLM_DRIVER', 'fake');
+    vi.stubEnv('QUEUE_PREFIX', `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`);
     await fixture.setup();
     worker = await NestFactory.createApplicationContext(KnowledgeWorkerTestModule, {
       logger: false,
