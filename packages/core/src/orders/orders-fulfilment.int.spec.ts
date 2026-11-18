@@ -165,7 +165,11 @@ describe('Manual dispatch and delivery', () => {
       },
       editor(),
     );
-    expect(returned).toMatchObject({ stage: 'returned', returnReason: 'Returned after delivery' });
+    expect(returned).toMatchObject({
+      stage: 'returned',
+      paymentStatus: 'refund_due',
+      returnReason: 'Returned after delivery',
+    });
     expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 3, reserved: 0 });
   });
 
@@ -212,6 +216,25 @@ describe('Manual dispatch and delivery', () => {
     expect(rows).toEqual([{ payload: { orderId } }]);
   });
 
+  it('sets refund due on a late return after COD collection', async () => {
+    const orderId = await order(f.a, 'to_pack');
+    const { variantId } = await trackedLine(orderId, 1);
+    await service.changeStage(f.a, orderId, { to: 'with_courier' }, editor());
+    await service.changeStage(f.a, orderId, { to: 'delivered' }, editor());
+    await service.recordCodCollected(f.a, orderId, { amountPoisha: 125000 }, editor());
+    const returned = await service.changeStage(
+      f.a,
+      orderId,
+      { to: 'returned', reason: 'Customer returned the parcel', isDamaged: false },
+      editor(),
+    );
+    expect(returned).toMatchObject({
+      stage: 'returned',
+      paymentStatus: 'refund_due',
+      codCollectedPoisha: 125000,
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 1, reserved: 0 });
+  });
   it('uses only the recipient phone and this store’s completed parcels for risk', async () => {
     const phone = '01710000006';
     await order(f.a, 'returned', { phone });
