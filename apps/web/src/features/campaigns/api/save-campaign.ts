@@ -22,8 +22,10 @@ export function useSaveCampaign() {
             body: change.input,
           })
         : request<CampaignResponse>('/campaigns', { method: 'POST', body: change.input }),
-    onSuccess: (saved) => {
-      client.setQueryData([...campaignsKey, contextTag, 'detail', saved.id], saved);
+    onSuccess: async (saved) => {
+      const detail = [...campaignsKey, contextTag, 'detail', saved.id];
+      await client.cancelQueries({ queryKey: detail, exact: true });
+      client.setQueryData(detail, saved);
       return client.invalidateQueries({ queryKey: [...campaignsKey, contextTag, 'list'] });
     },
   });
