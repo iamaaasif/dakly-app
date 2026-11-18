@@ -6,7 +6,6 @@ import type {
   ChangeCampaignInput,
   CreateCampaignInput,
 } from '@dakly/contracts/campaigns';
-
 import { ApiError } from '@dakly/ui/api-client';
 
 import { campaignKeys } from './campaigns-key';
