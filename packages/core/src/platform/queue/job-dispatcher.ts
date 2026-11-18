@@ -12,12 +12,14 @@ import { QUEUES, type QueueName } from './queues';
 // Overlapping transactional runs are safe: each job claims its notice or alert under a lease first.
 const TRANSACTIONAL_JOBS_AT_ONCE = 5;
 const BULK_JOBS_AT_ONCE = 1;
-// One job at a time on each worker. Two workers can still run campaign jobs at once, so each
-// job tolerates overlap (jobs.md).
+// Each step job guards its writes with the run's claim, so steps of many runs run side by side.
+const WORKFLOW_JOBS_AT_ONCE = 5;
+// One job at a time per worker. Campaign jobs still tolerate overlap between workers.
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
   bulk: BULK_JOBS_AT_ONCE,
+  workflow: WORKFLOW_JOBS_AT_ONCE,
   campaign: CAMPAIGN_JOBS_AT_ONCE,
 } satisfies Record<QueueName, number>;
 
@@ -87,6 +89,16 @@ export class BulkJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.bulk, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.workflow, { concurrency: concurrency.workflow, autorun: false })
+export class WorkflowJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.workflow, discovery, reporter);
   }
 }
 

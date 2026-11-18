@@ -92,7 +92,7 @@ Pending review: cross-store workers read due work through SECURITY DEFINER funct
 | `sync`          | Shopify and WooCommerce sync (Q13), Meta insights; courier status later | Low      |
 | `bulk`          | Imports, exports, segment rebuilds, attribution recalculation           | Lowest   |
 
-Repeating sweeps are BullMQ job schedulers that the worker upserts at startup under fixed ids, one job per interval across all workers ([rules/jobs.md](rules/jobs.md)). Today they are the account security notice sweep and the staff alert relay on `transactional` and staff audit maintenance on `bulk`, each every 30 seconds, and the outbox relay on `transactional` every second. Sign-in and TOTP recovery store their security notices, then queue one `send-security-notice` job per notice on `transactional`; the worker sends it, so no request waits for an email or SMS vendor. If queueing fails, the request still succeeds and the sweep sends the stored notice.
+Repeating sweeps are BullMQ job schedulers that the worker upserts at startup under fixed ids, one job per interval across all workers ([rules/jobs.md](rules/jobs.md)). Today they are the account security notice sweep and the staff alert relay on `transactional` and staff audit maintenance on `bulk`, each every 30 seconds, the outbox relay on `transactional` every second, and the workflow sweep on `workflow` every minute. Sign-in and TOTP recovery store their security notices, then queue one `send-security-notice` job per notice on `transactional`; the worker sends it, so no request waits for an email or SMS vendor. If queueing fails, the request still succeeds and the sweep sends the stored notice.
 
 Per-store concurrency limits on `campaign`, `bulk` and `sync` stop one shop from filling a queue. Failed jobs retry with exponential backoff, then move to a dead-letter list with an alert.
 | `payments` | Payment intent checks, renewals, reconciliation | High |
@@ -101,12 +101,17 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 
 ## Files
 
-- Cloudflare R2 bucket per environment; object keys `stores/<store_id>/<kind>/<uuid>`.
-- Uploads go from the browser straight to R2 with a short-lived presigned URL; the API records the file after upload.
-- `FileStorageDriver` in `packages/providers` makes the presigned PUT and GET URLs. `S3FileStorageDriver` signs them with AWS Signature Version 4 and path-style addresses, so it works with any S3 API. It reads `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
+- Cloudflare R2 bucket per environment; object keys `stores/<store_id>/<kind>/<uuid>`. Customer imports and their reports use `imports/<store_id>/<uuid>.csv` instead, so one lifecycle rule covers every store.
+- Uploads go from the browser straight to R2 with a short-lived presigned URL. An import records its `files` row as `pending` when it hands out the URL, and the import job marks it `ready` once it has read the file; the URL signs the declared size and content type, so R2 refuses any other body.
+- `FileStorageDriver` in `packages/providers` makes the presigned PUT and GET URLs, and reads and writes the files the API processes itself (an import and its report) through URLs signed for one request. A read stops at a size limit, so an oversized file is never held in memory. `S3FileStorageDriver` signs them with AWS Signature Version 4 and path-style addresses, so it works with any S3 API. It reads `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`. The shared `FileStorageModule` requires all four in every environment; local runs use the SeaweedFS values from `.env.example`.
 - Local development and CI use SeaweedFS from `docker compose` (S3 API on port 8333, bucket `dakly-local`) in place of R2, the way Mailpit stands in for SMS and email.
 - Downloads use signed URLs valid 15 minutes. Public order-link product images are served through Cloudflare with a public, cache-friendly path that contains no personal data.
-- Lifecycle rules: exports deleted after 7 days, khata photos after 30 days.
+- Lifecycle rules: exports deleted after 7 days, khata photos after 30 days, and everything under `imports/` after 7 days. These are set in the R2 bucket settings, an ops step; no job deletes the objects.
+- Open for Asif before beta:
+  - the R2 bucket for each environment;
+  - its access keys for `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`;
+  - a [bucket CORS rule](https://developers.cloudflare.com/r2/buckets/cors/) that allows the web origin for that environment to send `PUT` with `Content-Type`;
+  - the R2 lifecycle rule that deletes `imports/` after 7 days.
 
 ## Key flows
 

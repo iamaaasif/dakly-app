@@ -68,6 +68,26 @@ describe('Google identity configuration', () => {
   });
 });
 
+describe('LLM driver configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+
+  it('refuses the scripted LLM driver in production', () => {
+    expect(() => loadEnv({ ...base, NODE_ENV: 'production', LLM_DRIVER: 'fake' })).toThrow(
+      'LLM_DRIVER=fake is not allowed in production',
+    );
+  });
+
+  it('accepts the scripted driver during development', () => {
+    expect(loadEnv({ ...base, LLM_DRIVER: 'fake' }).LLM_DRIVER).toBe('fake');
+  });
+
+  it('requires an API key when selecting OpenAI', () => {
+    expect(() => loadEnv({ ...base, LLM_DRIVER: 'openai' })).toThrow(
+      'OPENAI_API_KEY is required for the OpenAI driver',
+    );
+  });
+});
+
 describe('encryption configuration', () => {
   const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
   const key = randomBytes(32).toString('base64');

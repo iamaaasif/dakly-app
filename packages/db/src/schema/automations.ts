@@ -16,11 +16,12 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import {
+  automationExitReasons,
   automationRunStatuses,
   automationStatuses,
   automationStepKinds,
 } from '@dakly/contracts/automations';
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import { type AutomationGraph, sendCategories } from '@dakly/contracts/automations/graph';
 import { recipientSkipReasons } from '@dakly/contracts/campaigns';
 
 import { users } from './auth';
@@ -123,7 +124,7 @@ export const automationRuns = pgTable(
     triggerKey: text('trigger_key').notNull(),
     currentStepKey: text('current_step_key').notNull(),
     status: text('status', { enum: automationRunStatuses }).notNull().default('waiting'),
-    exitReason: text('exit_reason'),
+    exitReason: text('exit_reason', { enum: automationExitReasons }),
     wakeAt: timestamptz('wake_at'),
     claimedAt: timestamptz('claimed_at'),
     attempts: smallint('attempts').notNull().default(0),
@@ -173,6 +174,7 @@ export const automationRuns = pgTable(
     index('automation_runs_version_id_idx').on(table.versionId),
     index('automation_runs_contact_id_idx').on(table.contactId),
     check('automation_runs_status', isOneOf(table.status, automationRunStatuses)),
+    check('automation_runs_exit_reason', isOneOf(table.exitReason, automationExitReasons)),
     check(
       'automation_runs_waiting_has_wake',
       sql`${table.status} <> 'waiting' or ${table.wakeAt} is not null`,
@@ -199,6 +201,8 @@ export const automationRunSteps = pgTable(
     kind: text('kind', { enum: automationStepKinds }).notNull(),
     outcome: text('outcome').notNull(),
     channel: text('channel'),
+    // A send step's own category, so the frequency cap counts only marketing sends.
+    category: text('category', { enum: sendCategories }),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),
@@ -233,6 +237,7 @@ export const automationRunSteps = pgTable(
     index('automation_run_steps_contact_id_idx').on(table.contactId),
     index('automation_run_steps_created_at_idx').on(table.createdAt),
     check('automation_run_steps_kind', isOneOf(table.kind, automationStepKinds)),
+    check('automation_run_steps_category', isOneOf(table.category, sendCategories)),
     check('automation_run_steps_skip_reason', isOneOf(table.skipReason, recipientSkipReasons)),
   ],
 );

@@ -23,7 +23,7 @@ type Contact = {
 
 describe('SendPolicyService', () => {
   let contact: Contact | undefined;
-  let consent: 'granted' | 'withdrawn' | undefined;
+  let consent: 'granted' | 'withdrawn' | 'not_answered' | undefined;
   let sends: MarketingSend[];
   let isTransactionOpen: boolean;
   let service: SendPolicyService;
@@ -103,6 +103,7 @@ describe('SendPolicyService', () => {
     ],
     ['no_consent', 'a contact who never answered', () => (consent = undefined), {}],
     ['no_consent', 'a withdrawal after approval', () => (consent = 'withdrawn'), {}],
+    ['no_consent', 'an import grant that was undone', () => (consent = 'not_answered'), {}],
     [
       'window_closed',
       'Messenger before inbound messages exist',

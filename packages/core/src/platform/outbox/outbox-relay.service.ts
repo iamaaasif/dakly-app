@@ -39,9 +39,10 @@ export class OutboxRelayService implements OnModuleInit {
     @Inject(Reflector) private readonly reflector: Reflector,
     @InjectQueue(QUEUES.transactional) transactional: Queue,
     @InjectQueue(QUEUES.bulk) bulk: Queue,
+    @InjectQueue(QUEUES.workflow) workflow: Queue,
     @InjectQueue(QUEUES.campaign) campaign: Queue,
   ) {
-    this.queues = { transactional, bulk, campaign };
+    this.queues = { transactional, bulk, workflow, campaign };
   }
 
   onModuleInit() {
@@ -61,6 +62,7 @@ export class OutboxRelayService implements OnModuleInit {
     const jobs: Record<QueueName, SubscriberJob[]> = {
       transactional: [],
       bulk: [],
+      workflow: [],
       campaign: [],
     };
     for (const { id, storeId, type, payload, occurredAt } of events)

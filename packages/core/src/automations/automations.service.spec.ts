@@ -149,6 +149,78 @@ describe('AutomationsService publish checks', () => {
     });
   });
 
+  it.each([
+    [
+      'a tap condition',
+      {
+        ...welcome,
+        firstStepKey: 'split',
+        steps: {
+          split: {
+            kind: 'condition',
+            paths: [{ condition: { kind: 'tapped', stepKey: 'offer' }, next: 'end' }],
+            elseNext: 'end',
+          },
+          offer: sms('end'),
+          end: { kind: 'exit' },
+        },
+      },
+      'AUTOMATION_TAPS_UNAVAILABLE',
+      'steps.split',
+    ],
+    [
+      'a tap exit',
+      { ...welcome, exitConditions: [{ kind: 'tapped_link' }] },
+      'AUTOMATION_TAPS_UNAVAILABLE',
+      'exitConditions',
+    ],
+    [
+      'a tap goal',
+      { ...welcome, goal: { kind: 'tapped_link' } },
+      'AUTOMATION_TAPS_UNAVAILABLE',
+      'goal',
+    ],
+    [
+      'review before sending',
+      {
+        ...welcome,
+        firstStepKey: 'offer',
+        steps: { offer: { ...sms('end'), reviewBeforeSending: true }, end: { kind: 'exit' } },
+      },
+      'AUTOMATION_REVIEW_UNAVAILABLE',
+      'steps.offer',
+    ],
+    [
+      'handing to a person',
+      {
+        ...welcome,
+        firstStepKey: 'act',
+        steps: {
+          act: { kind: 'action', action: { action: 'hand_to_person' }, next: 'end' },
+          end: { kind: 'exit' },
+        },
+      },
+      'AUTOMATION_ACTION_UNAVAILABLE',
+      'steps.act',
+    ],
+  ] as const)('refuses %s, which the runner cannot do yet', async (_case, graph, code, path) => {
+    await expect(
+      serviceFor(graph as AutomationGraph).publish(STORE_ID, AUTOMATION_ID, owner),
+    ).rejects.toMatchObject({ code, fields: [expect.objectContaining({ path })] });
+  });
+
+  it('publishes a tag action', async () => {
+    const graph: AutomationGraph = {
+      ...welcome,
+      firstStepKey: 'act',
+      steps: {
+        act: { kind: 'action', action: { action: 'add_tag', tag: 'vip' }, next: 'end' },
+        end: { kind: 'exit' },
+      },
+    };
+    expect((await serviceFor(graph).publish(STORE_ID, AUTOMATION_ID, owner)).status).toBe('active');
+  });
+
   it('publishes a birthday workflow, whose dates live on contacts', async () => {
     const graph = automationTemplates.birthday.graph;
 

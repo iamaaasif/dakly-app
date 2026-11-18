@@ -14,6 +14,8 @@ const stores = [
 ];
 const selected = {
   ...stores[1]!,
+  canViewProducts: false,
+  canEditProducts: false,
   canViewCustomers: true,
   canCreateCustomer: true,
   canViewSegments: true,

@@ -236,8 +236,50 @@
     {
       "idx": 33,
       "version": "7",
-      "when": 1794927535417,
-      "tag": "0033_campaign_sender",
+      "when": 1794932963787,
+      "tag": "0033_contact_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794933805979,
+      "tag": "0034_import_sweep",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794971971275,
+      "tag": "0035_import_checkpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794990397511,
+      "tag": "0036_automation_runner",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794991756021,
+      "tag": "0037_import_undo",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794994351581,
+      "tag": "0038_automation_steps",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795000947648,
+      "tag": "0039_bd_upazila_areas",
       "breakpoints": true
     }
   ]

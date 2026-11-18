@@ -2,15 +2,19 @@
 import { useEffect, useId, useRef, type ReactNode, type KeyboardEvent } from 'react';
 
 import { Button } from './button';
+import { cn } from './cn';
 
 export type DialogProps = {
   title: string;
   open: boolean;
   suspended?: boolean;
+  closeDisabled?: boolean;
+  className?: string;
   onClose: () => void;
   children: ReactNode;
 };
-export function Dialog({ title, open, suspended = false, onClose, children }: DialogProps) {
+export function Dialog(props: DialogProps) {
+  const { title, open, suspended = false, closeDisabled, className, onClose, children } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -33,16 +37,26 @@ export function Dialog({ title, open, suspended = false, onClose, children }: Di
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        event.stopPropagation();
+        if (!closeDisabled) onClose();
       }}
       onKeyDown={trapFocus}
-      className="fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50"
+      className={cn(
+        'fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50',
+        className,
+      )}
     >
       <div className="mb-4 flex items-start justify-between gap-4">
-        <h2 id={titleId} className="text-lg font-semibold">
+        <h2 id={titleId} className="min-w-0 text-lg font-semibold wrap-anywhere">
           {title}
         </h2>
-        <Button variant="secondary" aria-label="Close dialog" onClick={onClose}>
+        <Button
+          variant="secondary"
+          className="shrink-0"
+          aria-label="Close dialog"
+          disabled={closeDisabled}
+          onClick={onClose}
+        >
           Close
         </Button>
       </div>
