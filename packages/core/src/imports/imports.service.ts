@@ -21,6 +21,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { FIELD_LABELS, reportCsv } from './customer-import-report';
 import {
   type CustomerImportRows,
   decodeCustomerImportFile,
@@ -33,15 +34,17 @@ import {
   type ImportReportLine as ReportLine,
   ImportsRepository,
   type NewImportFile,
+  type StuckImport,
 } from './imports.repository';
 import { UndoCustomerImport } from './undo-customer-import';
 
 type Actor = AuditEntry['actor'];
-type Run = { storeId: string; found: Import; lease: Date; finished: boolean };
+type Run = { storeId: string; found: Import; actor: Actor; lease: Date; finished: boolean };
 type Outcome = {
   status: 'done' | 'failed';
   counts?: ImportCounts;
   lines: ReportLine[];
+  omittedRows?: number;
   exhausted?: { before: Date; limit: number };
 };
 
@@ -50,7 +53,8 @@ const LINK_SECONDS = 15 * 60;
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
-const BATCH_ROWS = 500;
+const BATCH_ROWS = ConsentService.AUDIENCE_LIMIT;
+const MAX_REPORT_NOTES = 5000;
 const CSV = 'text/csv';
 // Each batch renews the lease; a run that has not renewed it for 5 minutes is gone.
 const LEASE_MS = 5 * 60 * 1000;
@@ -62,19 +66,6 @@ const COUNT_FOR_OUTCOME = {
   updated: 'rowsUpdated',
   skipped: 'rowsSkipped',
 } as const satisfies Record<ImportedContact['outcome'], keyof ImportCounts>;
-const FIELD_LABELS = {
-  phone: 'Phone',
-  name: 'Name',
-  whatsappPhone: 'WhatsApp number',
-  email: 'Email',
-  address: 'Address',
-  district: 'District',
-  tags: 'Tags',
-  notes: 'Notes',
-  sms: 'SMS',
-  whatsapp: 'WhatsApp',
-} as const satisfies Record<NonNullable<ReportLine['field']>, string>;
-const CONSENT_LABELS = { sms: 'SMS', whatsapp: 'WhatsApp' } as const;
 
 @Injectable()
 export class ImportsService {
@@ -173,7 +164,15 @@ export class ImportsService {
     // done, so it fails and is retried, and the sweep queues the import again if nothing moves.
     if (!(await this.repository.claim(storeId, importId, now, staleBefore)))
       throw importError('IMPORT_BEING_RUN');
-    const run: Run = { storeId, found, lease: now, finished: false };
+    const run: Run = {
+      storeId,
+      found,
+      actor: found.startedByUserId
+        ? { kind: 'user', userId: found.startedByUserId }
+        : { kind: 'system' },
+      lease: now,
+      finished: false,
+    };
     try {
       // The prior run may have committed a batch between the eligibility read and this claim.
       run.found = await this.findImport(storeId, importId);
@@ -206,17 +205,33 @@ export class ImportsService {
         if (!requeued)
           await this.finish(storeId, stuck.id, stuck.claimedAt, {
             status: 'failed',
-            lines: [
-              ...(stuck.checkpoint?.report ?? []),
-              { message: 'The import stopped before it finished. Upload the file again' },
-            ],
+            lines: await this.stoppedImportReport(storeId, stuck),
+            omittedRows: stuck.checkpoint?.omittedRows ?? 0,
             exhausted: { before, limit: MAX_REQUEUES },
           });
       }
     }
   }
 
-  private async readImportFile(storeId: string, found: Import) {
+  private async stoppedImportReport(storeId: string, stuck: StuckImport): Promise<ReportLine[]> {
+    let errors: ReportLine[];
+    try {
+      errors = (await this.readImportFile(storeId, stuck)).file.errors;
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      errors = [{ message: error.message }];
+    }
+    return [
+      ...errors,
+      ...(stuck.checkpoint?.report ?? []),
+      { message: 'The import stopped before it finished. Upload the file again' },
+    ];
+  }
+
+  private async readImportFile(
+    storeId: string,
+    found: Pick<Import, 'uploadKey' | 'uploadFileId' | 'checkpoint' | 'columnMapping'>,
+  ) {
     const text = await this.download(found.uploadKey);
     const fileHash = createHash('sha256').update(text).digest('hex');
     if (found.checkpoint && found.checkpoint.fileHash !== fileHash)
@@ -227,6 +242,7 @@ export class ImportsService {
 
   private async importFile(run: Run): Promise<void> {
     const { storeId, found } = run;
+    const saved = found.checkpoint ?? { processedRows: 0, report: [], omittedRows: 0 };
     let read: { file: CustomerImportRows; fileHash: string };
     try {
       read = await this.readImportFile(storeId, found);
@@ -235,36 +251,44 @@ export class ImportsService {
       if (!(error instanceof AppError)) throw error;
       return this.finishRun(run, {
         status: 'failed',
-        lines: [...(found.checkpoint?.report ?? []), { message: error.message }],
+        lines: [...saved.report, { message: error.message }],
+        omittedRows: saved.omittedRows,
       });
     }
     const { file, fileHash } = read;
     const counts = resumedCounts(found, file);
-    const report: ReportLine[] = found.checkpoint?.report ?? [...file.errors];
-    for (
-      let first = found.checkpoint?.processedRows ?? 0;
-      first < file.rows.length;
-      first += BATCH_ROWS
-    ) {
+    const report: ReportLine[] = saved.report;
+    let omittedRows = saved.omittedRows;
+    for (let first = saved.processedRows; first < file.rows.length; first += BATCH_ROWS) {
       const batch = file.rows.slice(first, first + BATCH_ROWS);
       run.lease = await this.transaction.run(storeId, async () => {
-        report.push(...(await this.applyBatch(run, batch, counts)));
+        const notes = await this.applyBatch(run, batch, counts);
+        const kept = notes.slice(0, MAX_REPORT_NOTES - report.length);
+        report.push(...kept);
+        // One row can have several notes; count it once when notes are left out.
+        omittedRows += new Set(notes.slice(kept.length).map((line) => line.rowNumber)).size;
         const renewed = this.clock.now();
-        const checkpoint = { processedRows: first + batch.length, fileHash, report };
+        const checkpoint = { processedRows: first + batch.length, fileHash, report, omittedRows };
         const lease = { held: run.lease, renewed, checkpoint };
         if (!(await this.repository.saveProgress(storeId, found.id, counts, lease)))
           throw new Error('Another run took over this import');
         return renewed;
       });
     }
-    await this.finishRun(run, { status: 'done', counts, lines: report });
+    await this.finishRun(run, {
+      status: 'done',
+      counts,
+      lines: [...file.errors, ...report],
+      omittedRows,
+    });
   }
 
   private async applyBatch(
-    { storeId, found }: Run,
+    run: Run,
     batch: CustomerImportRows['rows'],
     counts: ImportCounts,
   ): Promise<ReportLine[]> {
+    const { storeId, found, actor } = run;
     const rows = batch.map((row) => row.contact);
     const matches = await this.contacts.findImportMatches(
       storeId,
@@ -273,9 +297,6 @@ export class ImportsService {
     const ids = matches.map((contact) => contact.id);
     await this.contacts.lockForConsent(storeId, ids);
     const answers = await this.consents.currentForAudience(storeId, ids, 'whatsapp');
-    const actor: Actor = found.startedByUserId
-      ? { kind: 'user', userId: found.startedByUserId }
-      : { kind: 'system' };
     const saved = await this.contacts.saveImportedRows(
       storeId,
       found.id,
@@ -298,21 +319,18 @@ export class ImportsService {
       const rowNumber = rowNumbers.get(contact.phone)!;
       lines.push(...contact.notChanged.map((cell) => ({ rowNumber, ...cell })));
     }
-    lines.push(...(await this.grantConsent(storeId, found, rowNumbers, saved)));
+    lines.push(...(await this.grantConsent(run, rowNumbers, saved)));
     return lines;
   }
 
   // Skipped contacts keep their consent too: `skip` leaves an existing customer as it is.
   private async grantConsent(
-    storeId: string,
-    found: Import,
+    run: Run,
     rowNumbers: Map<string, number>,
     saved: ImportedContact[],
   ): Promise<ReportLine[]> {
+    const { storeId, found, actor } = run;
     const written = saved.filter((contact) => contact.outcome !== 'skipped');
-    const actor: Actor = found.startedByUserId
-      ? { kind: 'user', userId: found.startedByUserId }
-      : { kind: 'system' };
     const lines: ReportLine[] = [];
     for (const channel of ['sms', 'whatsapp'] as const) {
       const evidence = found.consentEvidence?.[channel];
@@ -343,7 +361,7 @@ export class ImportsService {
           .map((contact) => ({
             rowNumber: rowNumbers.get(contact.phone)!,
             field: channel,
-            message: `This customer said no to ${CONSENT_LABELS[channel]} messages, so the import did not change that`,
+            message: `This customer said no to ${FIELD_LABELS[channel]} messages, so the import did not change that`,
           })),
       );
     }
@@ -360,9 +378,12 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines, exhausted }: Outcome,
+    { status, counts, lines, omittedRows = 0, exhausted }: Outcome,
   ): Promise<void> {
-    const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
+    const report =
+      lines.length > 0 || omittedRows > 0
+        ? await this.uploadReport(storeId, lines, omittedRows)
+        : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
     const finished = await this.repository.finish(storeId, importId, {
       lease,
@@ -398,24 +419,16 @@ export class ImportsService {
     return decodeCustomerImportFile(file.bytes);
   }
 
-  private async uploadReport(storeId: string, lines: ReportLine[]): Promise<NewImportFile> {
-    const body = reportCsv(lines);
+  private async uploadReport(
+    storeId: string,
+    lines: ReportLine[],
+    omittedRows: number,
+  ): Promise<NewImportFile> {
+    const body = reportCsv(lines, omittedRows);
     const report = this.newFile(storeId, Buffer.byteLength(body), 'ready');
     await this.storage.writeText(report.objectKey, body, CSV);
     return report;
   }
-}
-
-// Every cell is quoted, so a message with a comma stays in one column.
-function reportCsv(lines: ReportLine[]): string {
-  const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
-  const sorted = [...lines].sort((a, b) => (a.rowNumber ?? 0) - (b.rowNumber ?? 0));
-  const records = sorted.map((line) =>
-    [String(line.rowNumber ?? ''), line.field ? FIELD_LABELS[line.field] : '', line.message]
-      .map(cell)
-      .join(','),
-  );
-  return `${['Row,Field,Problem', ...records].join('\r\n')}\r\n`;
 }
 
 function resumedCounts(found: Import, file: CustomerImportRows): ImportCounts {

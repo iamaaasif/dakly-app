@@ -134,6 +134,12 @@ describe('Import checkpoints (Postgres and SeaweedFS)', () => {
     });
     await expect(service.runCustomerImport(storeId, importId)).rejects.toThrow();
     expect((await contactByPhone(value)).name).toBe('ফাইলের নাম');
+    const checkpoint = (await repository.findById(storeId, importId))!.checkpoint!;
+    expect(checkpoint.report).toEqual([
+      { rowNumber: 2, field: 'tags', message: '1 tags not added: a customer has at most 50' },
+    ]);
+    expect(checkpoint).toMatchObject({ omittedRows: 0 });
+
     await admin.pool.query('update contacts set name=$2, updated_at=now() where id=$1', [
       id,
       'সংশোধিত নাম',
@@ -182,7 +188,7 @@ describe('Import checkpoints (Postgres and SeaweedFS)', () => {
     expect(await committedCount(importId)).toEqual({ added: 500, contacts: 500 });
     expect(await report(result.reportUrl)).toContain('The uploaded file changed');
   });
-  it('keeps checkpointed row errors and warnings when the sweep exhausts retries', async () => {
+  it('recomputes parse errors and keeps saved notes when the sweep exhausts retries', async () => {
     const value = phone();
     const id = await existingLead(value);
     await admin.pool.query('update contacts set tags=$2 where id=$1', [

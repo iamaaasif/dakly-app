@@ -121,6 +121,9 @@ export const productListQuerySchema = z.strictObject({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
+export const productScreenQuerySchema = productListQuerySchema.extend({
+  adjust: z.uuid().optional(),
+});
 export type ProductOption = z.infer<typeof optionSchema>;
 export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   id: string;

@@ -39,10 +39,15 @@ export function Dialog({ title, open, suspended = false, onClose, children }: Di
       className="fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50"
     >
       <div className="mb-4 flex items-start justify-between gap-4">
-        <h2 id={titleId} className="text-lg font-semibold">
+        <h2 id={titleId} className="min-w-0 text-lg font-semibold wrap-anywhere">
           {title}
         </h2>
-        <Button variant="secondary" aria-label="Close dialog" onClick={onClose}>
+        <Button
+          variant="secondary"
+          className="shrink-0"
+          aria-label="Close dialog"
+          onClick={onClose}
+        >
           Close
         </Button>
       </div>

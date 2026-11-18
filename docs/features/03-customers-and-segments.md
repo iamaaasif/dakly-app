@@ -168,8 +168,8 @@ undo the contacts it added and the consent grants it recorded.
   event, up to 4 times, and failed only after that, with a line in its report. The report is a
   CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
   progress time, retry limit and observed lease in one update. A report from a sweep
-  that loses this check is deleted. The final failed report keeps checkpointed row errors and
-  warnings alongside the stopped-import message.
+  that loses this check is deleted. The final failed report recomputes parse errors from the same uploaded file and keeps
+  saved batch notes alongside the stopped-import message.
 - A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
   the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
   being read as records, so 10 MB of line breaks costs no memory.
@@ -193,11 +193,15 @@ undo the contacts it added and the consent grants it recorded.
   records nothing new. If the saved WhatsApp destination differs from the file, the import
   skips that grant and reports "WhatsApp consent skipped: number differs". Evidence for
   other channels still applies to that row.
-- Each batch saves a checkpoint with its completed row position, file hash and report entries
-  in the same transaction as contact writes and counts. A retry resumes after committed
+- Each batch saves a checkpoint with its completed row position, file hash and batch notes
+  in the same transaction as contact writes and counts. The checkpoint keeps at most 5,000
+  notes and counts rows with notes omitted beyond that cap. The report ends with
+  "N more rows had notes that are not listed" when any were omitted. Parse errors are not
+  stored in the checkpoint: the reader recomputes them from the hash-checked file on resume.
+  A retry resumes after committed
   batches, preserving their original results and any later member edits. A changed upload
   fails with `IMPORT_FILE_CHANGED` before any remaining rows are written; the committed
-  counts and report entries stay available.
+  counts and saved batch notes stay available.
 - The report is a CSV with the row, the field and the problem. Its `files` row has
   `expires_at` 7 days ahead, like the upload, and the R2 lifecycle rule on `imports/` deletes
   both objects after 7 days.

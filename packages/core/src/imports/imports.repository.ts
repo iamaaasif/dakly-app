@@ -34,6 +34,7 @@ export type ImportCheckpoint = {
   processedRows: number;
   fileHash: string;
   report: ImportReportLine[];
+  omittedRows: number;
 };
 
 export type NewImportFile = {
@@ -86,6 +87,11 @@ export type Import = {
   uploadKey: string;
   reportKey: string | null;
 } & { [Count in keyof ImportCounts]: number | null };
+
+export type StuckImport = Pick<
+  Import,
+  'id' | 'checkpoint' | 'columnMapping' | 'uploadKey' | 'uploadFileId'
+> & { claimedAt: Date | null };
 
 export type StartedImport = Pick<
   typeof imports.$inferInsert,
@@ -264,18 +270,19 @@ export class ImportsRepository {
   }
 
   // The last time a run made progress, or the start for an import no run has claimed yet.
-  listStuck(
-    storeId: string,
-    before: Date,
-  ): Promise<{ id: string; claimedAt: Date | null; checkpoint: ImportCheckpoint | null }[]> {
+  listStuck(storeId: string, before: Date): Promise<StuckImport[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
           id: imports.id,
           claimedAt: imports.claimedAt,
           checkpoint: importColumns.checkpoint,
+          columnMapping: importColumns.columnMapping,
+          uploadKey: uploads.objectKey,
+          uploadFileId: uploads.id,
         })
         .from(imports)
+        .innerJoin(uploads, and(eq(uploads.storeId, storeId), eq(uploads.id, imports.fileId)))
         .where(stalled(storeId, before)),
     );
   }
