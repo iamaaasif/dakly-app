@@ -36,43 +36,56 @@ export class MailpitSmsDriver implements SmsDriver {
 
   private async sendOnce(message: SmsMessage): Promise<SmsSendResult> {
     const messageId = message.idempotencyKey && `${message.idempotencyKey}@sms.dakly.test`;
-    const earlier =
-      messageId &&
-      (await this.findCaptured(messageId).catch(() => {
-        // SMTP has not been called. The caller may still need to reconcile an earlier attempt.
-        throw new SmsSendRefused();
-      }));
+    const earlier = await this.findBeforeSubmission(messageId);
     if (earlier) return { providerMessageId: earlier };
 
     try {
-      const result = await this.transport.sendMail({
-        // The store's sender shows as the From name; the shared sender has none.
-        from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
-        to: `${message.to}@sms.test`,
-        subject: 'SMS',
-        text: message.text,
-        messageId: messageId ? `<${messageId}>` : undefined,
-      });
-      // A duplicate accepted by Mailpit returns no queue id. Recover the original capture.
-      const providerMessageId =
-        /queued as ([\w-]+)$/u.exec(result.response)?.[1] ??
-        (messageId ? await this.findCaptured(messageId) : undefined);
-      if (!providerMessageId) throw new Error('Missing Mailpit message id');
-      return { providerMessageId };
+      return await this.submit(message, messageId);
     } catch (error) {
-      // Mailpit can return 451 after storing DATA if tagging the capture fails.
-      const { responseCode, command } = (error ?? {}) as {
-        responseCode?: unknown;
-        command?: unknown;
-      };
-      if (responseCode === 451 && command === 'DATA') {
-        const captured = messageId && (await this.findCaptured(messageId).catch(() => undefined));
-        if (captured) return { providerMessageId: captured };
-      } else if (typeof responseCode === 'number' && responseCode >= 400 && responseCode < 600) {
-        throw new SmsSendRefused();
-      }
-      throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
+      return this.resolveSmtpError(error, messageId);
     }
+  }
+
+  private async findBeforeSubmission(messageId?: string): Promise<string | undefined> {
+    if (!messageId) return undefined;
+    try {
+      return await this.findCaptured(messageId);
+    } catch {
+      // SMTP has not been called. The caller may still need to reconcile an earlier attempt.
+      throw new SmsSendRefused();
+    }
+  }
+
+  private async submit(message: SmsMessage, messageId?: string): Promise<SmsSendResult> {
+    const result = await this.transport.sendMail({
+      // The store's sender shows as the From name; the shared sender has none.
+      from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
+      to: `${message.to}@sms.test`,
+      subject: 'SMS',
+      text: message.text,
+      messageId: messageId ? `<${messageId}>` : undefined,
+    });
+    // A duplicate accepted by Mailpit returns no queue id. Recover the original capture.
+    const providerMessageId =
+      /queued as ([\w-]+)$/u.exec(result.response)?.[1] ??
+      (messageId ? await this.findCaptured(messageId) : undefined);
+    if (!providerMessageId) throw new Error('Missing Mailpit message id');
+    return { providerMessageId };
+  }
+
+  private async resolveSmtpError(error: unknown, messageId?: string): Promise<SmsSendResult> {
+    // Mailpit can return 451 after storing DATA if tagging the capture fails.
+    const { responseCode, command } = (error ?? {}) as {
+      responseCode?: unknown;
+      command?: unknown;
+    };
+    if (responseCode === 451 && command === 'DATA') {
+      const captured = messageId && (await this.findCaptured(messageId).catch(() => undefined));
+      if (captured) return { providerMessageId: captured };
+    } else if (typeof responseCode === 'number' && responseCode >= 400 && responseCode < 600) {
+      throw new SmsSendRefused();
+    }
+    throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
   }
 
   // Mailpit deduplicates by Message-ID. A real SMS driver's client reference comes with ACC-14.
