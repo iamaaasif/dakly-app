@@ -312,8 +312,8 @@ const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
 
 function balancePauseNotice(name: string) {
   return {
-    title: `"${name}" is paused: SMS credits ran out`,
-    body: `"${name}" stopped before its next SMS because the shop has no SMS credits left. It resumes on its own after a top-up, and messages waiting less than a day then go out.`,
+    title: `"${name}" paused: SMS balance too low`,
+    body: `"${name}" paused because its next SMS needed more credits than were available. A top-up resumes the workflow and lets eligible messages go out.`,
   };
 }
 

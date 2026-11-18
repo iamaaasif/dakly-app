@@ -1884,7 +1884,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await mailTo(ownerEmail)).toEqual([]);
       await runner.emailOwner(pausedEvent);
       await runner.emailOwner(pausedEvent);
-      expect(await mailTo(ownerEmail)).toEqual([expect.stringContaining('SMS credits ran out')]);
+      expect(await mailTo(ownerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
       // A worker that dies mid-send leaves a short claim: a retry that meets it fails, and one
       // after it lapses sends the email.
       const crashed = { ...pausedEvent, id: randomUUID() };
@@ -1921,7 +1921,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await expect(runner.emailOwner(inFlight)).rejects.toMatchObject({
         code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
       });
-      expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS credits ran out')]);
+      expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
       expect(await mailTo(ownerEmail)).toHaveLength(2);
       // A paused workflow's runs are not swept.
       await runner.sweep();
