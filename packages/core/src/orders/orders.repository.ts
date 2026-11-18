@@ -11,6 +11,7 @@ const summaryColumns = {
   number: orders.number,
   buyerName: orders.buyerName,
   recipientName: orders.recipientName,
+  recipientPhone: orders.recipientPhone,
   stage: orders.stage,
   source: orders.source,
   paymentStatus: orders.paymentStatus,
@@ -26,7 +27,6 @@ const detailColumns = {
   ...summaryColumns,
   buyerContactId: orders.buyerContactId,
   isRecipientBuyer: orders.isRecipientBuyer,
-  recipientPhone: orders.recipientPhone,
   recipientAddress: orders.recipientAddress,
   recipientDistrict: orders.recipientDistrict,
   recipientBdAreaId: orders.recipientBdAreaId,
@@ -106,6 +106,28 @@ export class OrdersRepository {
         .from(orders)
         .where(eq(orders.storeId, storeId))
         .groupBy(orders.stage),
+    );
+  }
+
+  parcelOutcomes(storeId: string, phones: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          phone: orders.recipientPhone,
+          parcels: count(),
+          returned: sql<number>`count(*) filter (where ${orders.stage} = 'returned')`.mapWith(
+            Number,
+          ),
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            inArray(orders.recipientPhone, phones),
+            inArray(orders.stage, ['delivered', 'partially_delivered', 'returned']),
+          ),
+        )
+        .groupBy(orders.recipientPhone),
     );
   }
 
