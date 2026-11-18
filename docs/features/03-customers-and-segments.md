@@ -158,7 +158,8 @@ comes in the next part.
   even without a byte order mark, before any rows reach the database.
 - The reader is one pass over the text. It drops blank lines as it goes, stops at 50,000
   rows and keeps at most 200 cells a row, so neither a file of empty lines nor a quote that
-  never closes builds a large list.
+  never closes builds a large list. Quoted cells are scanned before they are decoded,
+  so escaped quotes do not allocate a new string for each pair.
 - The `fail-stuck-imports` sweep looks at imports still `importing` that made no progress for
   15 minutes (`imports.last_progress_at`, else `started_at`). Their job may have died with its
   worker or may still wait behind others, so each is queued again with a new `import.started`
