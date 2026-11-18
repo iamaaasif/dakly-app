@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { productsKeys } from './products';
+import { productsKeys } from '@/lib/product-queries';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useRemoveProductPhoto(productId: string) {

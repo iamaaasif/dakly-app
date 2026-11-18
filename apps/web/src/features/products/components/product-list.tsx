@@ -6,9 +6,9 @@ import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
-import { productsSearch } from '../api/products';
 import { readinessLabels } from '../product-labels';
 import { formatMoney } from '@/lib/format-money';
+import { productsSearch } from '@/lib/product-queries';
 
 type ProductListProps = {
   products: ProductResponse[];

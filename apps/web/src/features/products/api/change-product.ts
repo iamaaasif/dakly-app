@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { ChangeProductInput, ProductResponse } from '@dakly/contracts/products';
 
-import { productsKeys } from './products';
+import { productsKeys } from '@/lib/product-queries';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useChangeProduct(productId: string) {
