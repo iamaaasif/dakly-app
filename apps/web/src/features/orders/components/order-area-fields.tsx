@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import type { AreaResponse } from '@dakly/contracts/delivery';
+import { FormField } from '@dakly/ui/form-field';
 
 import { useOrderAreas } from '../api/get-areas';
 
@@ -77,21 +78,23 @@ function AreaSelect({
   onChange: (id: number) => void;
 }) {
   return (
-    <label>
-      {label}
-      <select
-        className="min-h-10 w-full rounded-md border border-input-border bg-surface px-2"
-        value={value}
-        disabled={!items?.length}
-        onChange={(event) => onChange(Number(event.target.value))}
-      >
-        <option value={0}>{current ?? `Choose ${label.toLowerCase()}`}</option>
-        {items?.map((area) => (
-          <option key={area.id} value={area.id}>
-            {area.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <FormField name={label === 'District' ? 'recipient.areaId' : label.toLowerCase()} label={label}>
+      {(props) => (
+        <select
+          {...props}
+          className="min-h-10 w-full rounded-md border border-input-border bg-surface px-2 aria-invalid:border-danger"
+          value={value}
+          disabled={!items?.length}
+          onChange={(event) => onChange(Number(event.target.value))}
+        >
+          <option value={0}>{current ?? `Choose ${label.toLowerCase()}`}</option>
+          {items?.map((area) => (
+            <option key={area.id} value={area.id}>
+              {area.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </FormField>
   );
 }
