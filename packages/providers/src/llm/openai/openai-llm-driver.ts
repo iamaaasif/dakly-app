@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-import { LlmError, type LlmDriver, type LlmRequest, type LlmResult } from '../llm-driver';
+import {
+  LlmError,
+  type LlmDriver,
+  type LlmEmbedding,
+  type LlmEmbeddingRequest,
+  type LlmRequest,
+  type LlmResult,
+} from '../llm-driver';
 
 const unsupportedSchemaKeywords = [
   'allOf',
@@ -47,6 +54,17 @@ const message = z.object({
   ),
 });
 
+const embeddingEnvelope = z.object({
+  model: z.string().min(1),
+  data: z.array(
+    z.object({
+      embedding: z.array(z.number()),
+      index: z.int().nonnegative(),
+    }),
+  ),
+});
+const embeddingUsage = z.object({ usage: z.object({ prompt_tokens: z.int().nonnegative() }) });
+
 export class OpenAiLlmDriver implements LlmDriver {
   constructor(
     private readonly apiKey: string,
@@ -54,11 +72,47 @@ export class OpenAiLlmDriver implements LlmDriver {
   ) {}
 
   async respond(request: LlmRequest): Promise<LlmResult> {
-    const body = responseRequestBody(request);
+    return decodeResponse(await this.post('responses', responseRequestBody(request), request));
+  }
+
+  async embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding> {
+    const body = await this.post(
+      'embeddings',
+      JSON.stringify({
+        model: request.model,
+        input: request.input,
+        dimensions: 512,
+        encoding_format: 'float',
+      }),
+      request,
+    );
+    const reported = embeddingUsage.safeParse(body);
+    if (!reported.success) throw new LlmError('LLM_INVALID_RESPONSE');
+    const usage = {
+      inputTokens: reported.data.usage.prompt_tokens,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+    };
+    const result = embeddingEnvelope.safeParse(body);
+    if (!result.success) throw new LlmError('LLM_INVALID_RESPONSE', usage);
+    const rows = result.data.data.sort((a, b) => a.index - b.index);
+    if (
+      rows.length !== request.input.length ||
+      rows.some((row, index) => row.index !== index || row.embedding.length !== 512)
+    )
+      throw new LlmError('LLM_INVALID_RESPONSE', usage);
+    return { model: result.data.model, embeddings: rows.map(({ embedding }) => embedding), usage };
+  }
+
+  private async post(
+    path: 'responses' | 'embeddings',
+    body: string,
+    request: Pick<LlmRequest, 'timeoutMs' | 'signal'>,
+  ): Promise<unknown> {
     const deadline = AbortSignal.timeout(request.timeoutMs);
     const signal = request.signal ? AbortSignal.any([request.signal, deadline]) : deadline;
     try {
-      const response = await this.request('https://api.openai.com/v1/responses', {
+      const response = await this.request(`https://api.openai.com/v1/${path}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
         body,
@@ -69,8 +123,7 @@ export class OpenAiLlmDriver implements LlmDriver {
         void response.body?.cancel().catch(() => undefined);
         throw httpError(response.status);
       }
-      const payload: unknown = await response.json();
-      return decodeResponse(payload);
+      return (await response.json()) as unknown;
     } catch (error) {
       throw responseError(error, signal, deadline);
     }

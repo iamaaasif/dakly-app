@@ -222,6 +222,7 @@ export class IsolationFixture {
       'product_variants',
       'products',
       'imports',
+      'knowledge_items',
       'files',
       'sms_sender_ids',
       'notifications',
