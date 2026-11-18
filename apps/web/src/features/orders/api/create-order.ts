@@ -8,6 +8,16 @@ import { ordersKey } from './orders';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
+const rejectedOrders = new Set([
+  'CONTACT_NOT_FOUND',
+  'DELIVERY_AREA_INVALID',
+  'DELIVERY_DEFAULT_REQUIRED',
+  'ORDER_PRICE_REQUIRED',
+  'ORDER_TOTAL_INVALID',
+  'PRODUCT_VARIANT_NOT_FOUND',
+  'STOCK_NOT_AVAILABLE',
+]);
+
 export function useCreateOrder() {
   const { request } = useStoreRequest();
   const client = useQueryClient();
@@ -19,6 +29,12 @@ export function useCreateOrder() {
       return request<OrderDetail>('/orders', { body, idempotencyKey: key.current });
     },
     onError: (error) => {
+      if (error instanceof ApiError && rejectedOrders.has(error.code)) {
+        // The order service checks the request key before it checks these business rules.
+        key.current = undefined;
+        setMustRetry(false);
+        return;
+      }
       if (
         !(error instanceof ApiError) ||
         error.status === undefined ||
