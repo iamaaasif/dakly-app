@@ -211,9 +211,7 @@ export class OrdersService {
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       createdAt: order.createdAt.toISOString(),
-      items: (await this.repository.items(storeId, orderId)).map(
-        ({ unitCostPoisha: _unitCost, ...item }) => item,
-      ),
+      items: await this.repository.items(storeId, orderId),
       timeline: history.map(({ before, after, createdAt, ...row }) => ({
         ...row,
         from: stageSnapshot.parse(before).state,

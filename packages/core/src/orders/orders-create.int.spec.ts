@@ -159,6 +159,9 @@ describe('Staff order creation', () => {
 
   it('changes stock by the item difference, keeps prior prices, and rolls back an unavailable edit', async () => {
     const variantId = await variant(4);
+    await f.connection.pool.query('update product_variants set cost_poisha=60000 where id=$1', [
+      variantId,
+    ]);
     const request = editor();
     const initial = await orders.createOrder(f.a, draft(variantId), request);
     await f.connection.pool.query(
@@ -179,6 +182,10 @@ describe('Staff order creation', () => {
       codAmountPoisha: 246000,
     });
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
+    expect(changed.items[0]).not.toHaveProperty('unitCostPoisha');
+    expect(await f.row('order_items', initial.items[0]!.id)).toMatchObject({
+      unit_cost_poisha: 60000,
+    });
     await expect(edit(5)).rejects.toMatchObject({ code: 'STOCK_NOT_AVAILABLE' });
     expect(await orders.getById(f.a, initial.id, request.access)).toEqual(changed);
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });

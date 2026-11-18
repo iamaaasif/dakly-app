@@ -185,7 +185,6 @@ export class OrdersRepository {
           deliveredQuantity: orderItems.deliveredQuantity,
           isStockTracked: orderItems.isStockTracked,
           unitPricePoisha: orderItems.unitPricePoisha,
-          unitCostPoisha: orderItems.unitCostPoisha,
           lineDiscountPoisha: orderItems.lineDiscountPoisha,
         })
         .from(orderItems)
