@@ -318,6 +318,19 @@ Practice mode: each new channel starts with AI not live. The AI answers only the
 
 Comments: classified as question, positive, negative or spam. If "Answer post comments" is on, the AI posts a short public reply and one private reply with price. Spam is hidden; negative goes to Needs you. Nothing with a price, phone or address is posted publicly.
 
+### Model driver
+
+The OpenAI driver sends one Responses API request per call with `store: false`.
+It sends a strict JSON Schema from the caller's Zod schema. Use nullable fields
+when a value can be missing. The driver returns the output or the model's tool
+calls, along with input, cached input and output token counts. The caller runs
+the tools after checking their arguments. The timeout and caller cancellation
+both end the request.
+
+Local development can select `LLM_DRIVER=fake` and supply scripted responses.
+Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
+`OPENAI_API_KEY`. Tests use saved Responses API fixtures and make no network calls.
+
 ### Rules
 
 1. The AI may reply and draft orders without approval while auto-reply is on (D7). Every AI message is labelled AI.
