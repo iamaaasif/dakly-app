@@ -20,7 +20,9 @@ async function capture(page: Page, name: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
-    if (name !== 'pipeline') {
+    if (name === 'edit-detail') {
+      await expect(page.getByRole('button', { name: 'Edit order' })).toBeInViewport();
+    } else if (name !== 'pipeline') {
       const dialog = page.getByRole('dialog', {
         name: name === 'edit' ? 'Edit order' : 'New order',
       });
@@ -235,12 +237,14 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(detail.getByText('৳1,110')).toBeVisible();
 
     const newPrice = await context.request.patch(`/api/products/${productId}`, {
-      data: { pricePoisha: 140000 },
+      data: { pricePoisha: 140000, isStockTracked: false },
       headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
     });
     expect(newPrice.status()).toBe(200);
     await page.reload();
     const editButton = detail.getByRole('button', { name: 'Edit order' });
+    await expect(editButton).toBeVisible();
+    await capture(page, 'edit-detail');
     await editButton.click();
     const edit = page.getByRole('dialog', { name: 'Edit order' });
     await expect(edit.getByText('Sonia Akter')).toBeVisible();
@@ -254,6 +258,17 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await edit.getByRole('button', { name: 'Save order' }).click();
     await expect(edit).toBeHidden();
     await expect(editButton).toBeFocused();
+    await expect(detail.getByText('৳2,360')).toBeVisible();
+
+    await editButton.click();
+    await edit.getByLabel('Address').fill('Updated delivery address');
+    const patch = page.waitForRequest(
+      (req) => req.method() === 'PATCH' && /\/api\/orders\/[^/]+$/.test(req.url()),
+    );
+    await edit.getByRole('button', { name: 'Save order' }).click();
+    expect((await patch).postDataJSON()).not.toHaveProperty('items');
+    await expect(edit).toBeHidden();
+    await expect(detail.getByText('Updated delivery address')).toBeVisible();
     await expect(detail.getByText('৳2,360')).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(

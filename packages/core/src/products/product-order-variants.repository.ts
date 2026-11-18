@@ -52,7 +52,6 @@ export class ProductOrderVariantsRepository {
           variantId: productVariants.id,
           onHand: productVariants.onHand,
           reserved: productVariants.reserved,
-          isStockTracked: products.isStockTracked,
         })
         .from(productVariants)
         .innerJoin(

@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
-import { FormProvider, useForm, type FormState } from 'react-hook-form';
+import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
 import {
   editOrderFormSchema,
@@ -16,16 +16,24 @@ import { useEditOrder } from '../api/edit-order';
 import { OrderEditorFields } from './order-editor-dialog';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
+const resolveEdit = zodResolver(editOrderFormSchema);
+
 export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const edit = useEditOrder();
-  const form = useForm<EditOrderValues, undefined, EditOrderInput>({
-    resolver: zodResolver(editOrderFormSchema),
+  const form: UseFormReturn<EditOrderValues, undefined, EditOrderInput> = useForm({
+    resolver: (values, context, options) =>
+      resolveEdit(
+        { ...values, items: form.getFieldState('items').isDirty ? values.items : undefined },
+        context,
+        options,
+      ),
     defaultValues: orderDraft(order),
   });
 
+  const { dirtyFields } = form.formState;
   const submit = form.handleSubmit((input) => {
-    const body = editedFields(input, form.formState.dirtyFields);
+    const body = editedFields(input, dirtyFields);
     if (body.recipient?.isBuyer !== undefined && !body.recipient.phone) {
       form.setError('recipient.phone', { message: 'Enter the new recipient’s phone.' });
       return;
@@ -79,6 +87,7 @@ function editedFields(
 ): EditOrderInput {
   const { recipient, items, deliveryChargePoisha, orderDiscountPoisha, advancePaidPoisha } = input;
   return {
+    expectedUpdatedAt: input.expectedUpdatedAt,
     items,
     recipient: editedRecipient(recipient, changed.recipient),
     deliveryChargePoisha: changed.deliveryChargePoisha ? deliveryChargePoisha : undefined,
@@ -103,6 +112,7 @@ function editedRecipient(
 
 function orderDraft(order: OrderDetail): EditOrderValues {
   return {
+    expectedUpdatedAt: order.updatedAt,
     recipient: {
       name: order.recipientName,
       phone: bdMobileSchema.safeParse(order.recipientPhone).data,

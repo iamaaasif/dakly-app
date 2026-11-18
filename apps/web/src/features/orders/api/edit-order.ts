@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { EditOrderInput, OrderDetail } from '@dakly/contracts/orders';
+import { ApiError } from '@dakly/ui/api-client';
 
-import { prepareOrderRefresh } from './get-order';
+import { orderDetailKey, prepareOrderRefresh } from './get-order';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useEditOrder() {
@@ -13,5 +14,9 @@ export function useEditOrder() {
     mutationFn: ({ id, body }: { id: string; body: EditOrderInput }) =>
       request<OrderDetail>(`/orders/${id}`, { method: 'PATCH', body }),
     onSuccess: (order, _input, refresh) => refresh?.(order),
+    onError: (error, { id }) => {
+      if (error instanceof ApiError && error.code === 'ORDER_CHANGED')
+        void client.invalidateQueries({ queryKey: orderDetailKey(contextTag, id), exact: true });
+    },
   });
 }

@@ -193,8 +193,11 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   const productIds = useRef<Record<string, string>>({});
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
-  const items = useWatch({ control, name: 'items' });
-  const stock = useOrderCatalogueStock(order?.items.map(({ variantId }) => variantId) ?? []);
+  const items = useWatch({ control, name: 'items' }) ?? [];
+  const stock = useOrderCatalogueStock(
+    order?.items.filter(({ isStockTracked }) => isStockTracked).map(({ variantId }) => variantId) ??
+      [],
+  );
   const selectedProducts = useOrderCatalogueProducts([
     ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
   ]).flatMap(({ data }) => data ?? []);
@@ -211,7 +214,14 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
         onRemove={remove}
         onChoose={(index, id, variant) => {
           if (variant?.productId) productIds.current[id] = variant.productId;
-          setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
+          const savedLine = order?.items.find((item) => item.variantId === id);
+          setValue(`items.${index}.lineDiscountPoisha`, savedLine?.lineDiscountPoisha ?? 0, {
+            shouldDirty: true,
+          });
+          setValue(`items.${index}.variantId`, id, {
+            shouldDirty: true,
+            shouldValidate: formState.isSubmitted,
+          });
         }}
       />
       {stock.error && (
@@ -243,7 +253,7 @@ function draftVariantChoices(
     variants[item.variantId] = {
       label: [item.productName, item.variantTitle].filter(Boolean).join(' · '),
       price: item.unitPricePoisha,
-      stock: stockByVariant.get(item.variantId) ?? null,
+      stock: item.isStockTracked ? (stockByVariant.get(item.variantId) ?? null) : null,
     };
   }
   return variants;
@@ -331,11 +341,11 @@ function orderDraftSubtotal(
   items: OrderEditorValues['items'],
   variants: Record<string, VariantChoice>,
 ) {
-  return items.reduce((sum, item) => {
+  return (items ?? []).reduce((sum, item) => {
     const variant = variants[item.variantId];
-    return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
-      ? sum + variant.price * item.quantity - (item.lineDiscountPoisha ?? 0)
-      : NaN;
+    if (!variant || !Number.isSafeInteger(item.quantity) || item.quantity <= 0) return NaN;
+    const net = variant.price * item.quantity - (item.lineDiscountPoisha ?? 0);
+    return net >= 0 ? sum + net : NaN;
   }, 0);
 }
 

@@ -4,13 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createOrderSchema, editOrderSchema, type CreateOrderInput } from '@dakly/contracts/orders';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { DeliveryService } from '../delivery/delivery.service';
+import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -193,6 +194,48 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('preserves locked items on a delivery edit and refuses a stale draft', async () => {
+    const variantId = await variant(4);
+    const request = editor();
+    const original = await orders.createOrder(f.a, draft(variantId), request);
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(new Date(original.updatedAt));
+    try {
+      const changed = await orders.editOrder(
+        f.a,
+        original.id,
+        { items: [{ variantId, quantity: 2, lineDiscountPoisha: 0 }] },
+        request,
+      );
+      expect(Date.parse(changed.updatedAt)).toBeGreaterThan(Date.parse(original.updatedAt));
+      await expect(
+        orders.editOrder(
+          f.a,
+          original.id,
+          {
+            expectedUpdatedAt: original.updatedAt,
+            items: [{ variantId, quantity: 3, lineDiscountPoisha: 0 }],
+          },
+          request,
+        ),
+      ).rejects.toMatchObject({ code: 'ORDER_CHANGED' });
+      await expect(
+        orders.editOrder(
+          f.a,
+          original.id,
+          { expectedUpdatedAt: changed.updatedAt, recipient: { address: 'Road 2, Dhanmondi' } },
+          request,
+        ),
+      ).resolves.toMatchObject({
+        recipientAddress: 'Road 2, Dhanmondi',
+        items: changed.items,
+        codAmountPoisha: 256000,
+      });
+      expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('replaces duplicate legacy lines without keeping a released reservation on the order', async () => {
     const variantId = await variant(2);
     const request = editor();
@@ -207,6 +250,15 @@ describe('Staff order creation', () => {
       'update product_variants set reserved=2 where store_id=$1 and id=$2',
       [f.a, variantId],
     );
+    const withAddress = await orders.editOrder(
+      f.a,
+      order.id,
+      { recipient: { address: 'New address' } },
+      request,
+    );
+    expect(withAddress.items).toHaveLength(2);
+    expect(withAddress.recipientAddress).toBe('New address');
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
     const changed = await orders.editOrder(
       f.a,
       order.id,

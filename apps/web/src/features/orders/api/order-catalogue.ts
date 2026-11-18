@@ -40,9 +40,10 @@ export function useOrderCatalogueProducts(ids: readonly string[]) {
   });
 }
 
-export function useOrderCatalogueStock(variantIds: string[]) {
+export function useOrderCatalogueStock(ids: string[]) {
   const { request, contextTag } = useStoreRequest();
   const { data } = useSessionContext();
+  const variantIds = [...new Set(ids)].sort();
   const args = new URLSearchParams({ variantIds: variantIds.join(',') });
   return useQuery({
     queryKey: [...productsKeys.all, contextTag, 'order-catalogue-stock', variantIds],

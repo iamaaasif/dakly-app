@@ -155,9 +155,9 @@ export class ProductsService {
 
   async orderVariantStock(storeId: string, variantIds: string[]): Promise<OrderCatalogueStock> {
     const rows = await this.orderVariantRepository.stock(storeId, variantIds);
-    return rows.map(({ variantId, onHand, reserved, isStockTracked }) => ({
+    return rows.map(({ variantId, onHand, reserved }) => ({
       variantId,
-      available: isStockTracked ? onHand - reserved : null,
+      available: onHand - reserved,
     }));
   }
 
