@@ -226,16 +226,25 @@ export class ContactsRepository {
   // Adding a tag the contact has, or one past the limit, and removing one it lacks change nothing.
   async changeTag(storeId: string, id: string, change: TagChange, maxTags: number) {
     const { tag } = change;
-    const tags =
-      change.change === 'add'
-        ? sql`case when ${tag} = any(${contacts.tags}) or cardinality(${contacts.tags}) >= ${maxTags}
-            then ${contacts.tags} else array_append(${contacts.tags}, ${tag}) end`
-        : sql`array_remove(${contacts.tags}, ${tag})`;
+    const adding = change.change === 'add';
+    const changesTags = adding
+      ? sql`not (${tag} = any(${contacts.tags})) and cardinality(${contacts.tags}) < ${maxTags}`
+      : sql`${tag} = any(${contacts.tags})`;
+    const tags = adding
+      ? sql`array_append(${contacts.tags}, ${tag})`
+      : sql`array_remove(${contacts.tags}, ${tag})`;
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(contacts)
         .set({ tags })
-        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt))),
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.id, id),
+            isNull(contacts.deletedAt),
+            changesTags,
+          ),
+        ),
     );
   }
 

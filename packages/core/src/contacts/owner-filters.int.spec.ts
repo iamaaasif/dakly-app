@@ -172,6 +172,39 @@ describe('contact filters without RLS assistance', () => {
     expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
   });
 
+  it('keeps import undo eligibility for no-op tags and loses it for a real tag edit', async () => {
+    const importId = randomUUID();
+    const fileId = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileId, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importId, f.a, fileId],
+    );
+    const [contact] = await imports.insertImported(f.a, [
+      { importId, source: 'import', kind: 'customer', phone: '01711000024' },
+    ]);
+    const id = contact!.id;
+    await f.connection.pool.query(
+      "update contacts set tags = array['vip'], created_at = '2020-01-01T00:00:00Z', updated_at = '2020-01-01T00:00:00Z' where id = $1",
+      [id],
+    );
+    for (const change of [
+      { tag: 'absent', change: 'remove' },
+      { tag: 'vip', change: 'add' },
+      { tag: 'gold', change: 'add' },
+    ] as const) {
+      await repository.changeTag(f.a, id, change, 1);
+      expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([id]);
+      expect((await f.row('contacts', id)).tags).toEqual(['vip']);
+    }
+    await repository.changeTag(f.a, id, { tag: 'gold', change: 'add' }, 2);
+    expect((await f.row('contacts', id)).tags).toEqual(['vip', 'gold']);
+    expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([]);
+  });
+
   it('locks and soft deletes unedited contacts of an import only in the selected store', async () => {
     const importId = randomUUID();
     const fileId = randomUUID();
