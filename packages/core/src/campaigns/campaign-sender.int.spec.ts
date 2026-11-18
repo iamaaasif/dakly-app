@@ -150,6 +150,11 @@ describe('Campaign sweep (Postgres)', () => {
     const next = randomUUID();
     const connection = app.get(ValkeyClient).connection;
     const cursor = 'campaign-start:backfill-store';
+    const discover = vi
+      .spyOn(app.get(CampaignSendingRepository), 'nextBackfillStore')
+      .mockImplementation(async (after) =>
+        [firstStore, nextStore].find((id) => !after || id > after),
+      );
     const blocker = await admin.pool.connect();
     try {
       await connection.del(cursor);
@@ -175,6 +180,7 @@ describe('Campaign sweep (Postgres)', () => {
     } finally {
       await blocker.query('rollback');
       blocker.release();
+      discover.mockRestore();
       await connection.del(cursor);
       await admin.pool.query('delete from campaigns where id in ($1,$2)', [first, next]);
       await admin.pool.query('delete from stores where id=$1', [store]);

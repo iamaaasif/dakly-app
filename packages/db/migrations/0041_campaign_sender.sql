@@ -19,36 +19,39 @@ CREATE FUNCTION campaign_due_stores(p_as_of timestamptz, p_after uuid, p_limit i
   RETURNS TABLE(store_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
-  WITH RECURSIVE due(store_id, visit) AS (
-    SELECT first_store.store_id, 1 FROM (
+  WITH RECURSIVE scheduled(store_id, scheduled_for, visit, due_count) AS (
+    SELECT first_store.store_id, first_store.scheduled_for, 1,
+      CASE WHEN first_store.scheduled_for <= p_as_of THEN 1 ELSE 0 END
+    FROM (
       (
-        SELECT c.store_id FROM public.campaigns c
+        SELECT c.store_id, c.scheduled_for FROM public.campaigns c
         WHERE p_limit > 0 AND p_after IS NULL
-          AND c.status = 'scheduled' AND c.scheduled_for <= p_as_of
+          AND c.status = 'scheduled'
         ORDER BY c.store_id, c.scheduled_for, c.id
         LIMIT 1
       )
       UNION ALL
       (
-        SELECT c.store_id FROM public.campaigns c
+        SELECT c.store_id, c.scheduled_for FROM public.campaigns c
         WHERE p_limit > 0 AND p_after IS NOT NULL
-          AND c.status = 'scheduled' AND c.scheduled_for <= p_as_of AND c.store_id > p_after
+          AND c.status = 'scheduled' AND c.store_id > p_after
         ORDER BY c.store_id, c.scheduled_for, c.id
         LIMIT 1
       )
     ) first_store
     UNION ALL
-    SELECT next.store_id, due.visit + 1
-    FROM due JOIN LATERAL (
-      SELECT c.store_id FROM public.campaigns c
-      WHERE c.status = 'scheduled' AND c.scheduled_for <= p_as_of
-        AND c.store_id > due.store_id
+    SELECT next.store_id, next.scheduled_for, scheduled.visit + 1,
+      scheduled.due_count + CASE WHEN next.scheduled_for <= p_as_of THEN 1 ELSE 0 END
+    FROM scheduled JOIN LATERAL (
+      SELECT c.store_id, c.scheduled_for FROM public.campaigns c
+      WHERE c.status = 'scheduled' AND c.store_id > scheduled.store_id
       ORDER BY c.store_id, c.scheduled_for, c.id
       LIMIT 1
     ) next ON true
-    WHERE due.visit < least(p_limit, 100)
+    WHERE scheduled.due_count < least(p_limit, 100)
   )
-  SELECT due.store_id FROM due ORDER BY due.visit
+  SELECT scheduled.store_id FROM scheduled
+  WHERE scheduled.scheduled_for <= p_as_of ORDER BY scheduled.visit
 $$;--> statement-breakpoint
 REVOKE EXECUTE ON FUNCTION campaign_due_stores(timestamptz, uuid, integer) FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION campaign_due_stores(timestamptz, uuid, integer) TO dakly_app;
