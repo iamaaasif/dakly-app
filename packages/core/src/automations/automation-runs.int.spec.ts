@@ -536,6 +536,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         : new Date(opensAt.getTime() + (real > opensAt ? 24 * HOUR : 0));
     let clockNow = daytime;
     let databaseNow: Date | undefined;
+    const schedulerTime = AutomationRunsRepository.prototype.schedulerTime;
+    const fixtureSchedulerTime = async () => databaseNow ?? clockNow;
     const send = (
       category: 'marketing' | 'transactional',
       ifNotReachable: 'skip' | 'exit' = 'skip',
@@ -607,7 +609,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
       vi.spyOn(AutomationRunsRepository.prototype, 'schedulerTime').mockImplementation(
-        async () => databaseNow ?? clockNow,
+        fixtureSchedulerTime,
       );
     });
 
@@ -1321,27 +1323,40 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const {
         runIds: [runId],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
-      databaseNow = daytime;
-      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
-      let stolen = 0;
+      const scheduler = vi.mocked(AutomationRunsRepository.prototype.schedulerTime);
+      scheduler.mockImplementation(schedulerTime);
+      clockNow = new Date(Date.now() - 6 * MINUTE);
+      let reclaimed: boolean | undefined;
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
-        const result = await admin.pool.query(
-          "update automation_runs set claimed_at=$2 where id=$1 and status='running' and claimed_at < $2::timestamptz - interval '5 minutes' returning id",
-          [runId, daytime],
-        );
-        stolen = result.rowCount ?? 0;
+        const sweep = await admin.pool.connect();
+        try {
+          await sweep.query('begin');
+          const { rows } = await sweep.query<{ reclaimed: boolean }>(
+            'select exists (select 1 from due_automation_runs(1000, 100) where automation_run_id=$1) as reclaimed',
+            [runId],
+          );
+          reclaimed = rows[0]?.reclaimed;
+        } finally {
+          // The sweep may find other due fixtures. Leave all claims as they were.
+          await sweep.query('rollback');
+          sweep.release();
+        }
         return sms.send(message);
       });
 
-      await runDueStep(runner, runId!);
+      try {
+        await runDueStep(runner, runId!);
 
-      expect(stolen).toBe(0);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
-      expect(await ledgerFor(runId!)).toEqual([
-        { kind: 'reserve', delta: -1 },
-        { kind: 'release', delta: 1 },
-        { kind: 'charge', delta: -1 },
-      ]);
+        expect(reclaimed).toBe(false);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      } finally {
+        scheduler.mockImplementation(fixtureSchedulerTime);
+      }
     });
 
     it('counts an accepted send with a lost answer toward the marketing cap', async () => {
