@@ -16,7 +16,6 @@ const RELAY_ATTEMPT_LIMIT = 10;
 
 const subscriberJobOptions = {
   attempts: 3,
-  backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
   // A relay that queued but did not mark is re-claimed a minute later, at most ten times. Keeping
   // completed jobs an hour drops those re-adds; a relay outage longer than that can queue a job
   // twice, which is why subscribers stay idempotent.
@@ -25,7 +24,7 @@ const subscriberJobOptions = {
 } satisfies JobsOptions;
 
 type SubscriberJob = { name: string; data: unknown; opts: JobsOptions };
-type Subscriber = { queue: QueueName; name: string };
+type Subscriber = { queue: QueueName; name: string; retryBackoffMs?: number };
 
 @Injectable()
 export class OutboxRelayService implements OnModuleInit {
@@ -46,10 +45,13 @@ export class OutboxRelayService implements OnModuleInit {
 
   onModuleInit() {
     for (const wrapper of this.discovery.getProviders({ metadataKey: HandlesJob.KEY })) {
-      const type = this.reflector.get(SubscribedEvent, wrapper.instance.constructor);
-      if (!type) continue;
+      const event = this.reflector.get(SubscribedEvent, wrapper.instance.constructor);
+      if (!event) continue;
       const { queue, name } = this.discovery.getMetadataByDecorator(HandlesJob, wrapper)!;
-      this.subscribers.set(type, [...(this.subscribers.get(type) ?? []), { queue, name }]);
+      this.subscribers.set(event.type, [
+        ...(this.subscribers.get(event.type) ?? []),
+        { queue, name, retryBackoffMs: event.retryBackoffMs },
+      ]);
     }
   }
 
@@ -64,11 +66,15 @@ export class OutboxRelayService implements OnModuleInit {
       workflow: [],
     };
     for (const { id, storeId, type, payload, occurredAt } of events)
-      for (const { queue, name } of this.subscribers.get(type) ?? [])
+      for (const { queue, name, retryBackoffMs } of this.subscribers.get(type) ?? [])
         jobs[queue].push({
           name,
           data: { id, storeId, type, payload, occurredAt },
-          opts: { ...subscriberJobOptions, jobId: `${id}-${name}` },
+          opts: {
+            ...subscriberJobOptions,
+            jobId: `${id}-${name}`,
+            backoff: { type: 'exponential', delay: retryBackoffMs ?? JOB_POLL_INTERVAL_MS },
+          },
         });
     try {
       await Promise.all(

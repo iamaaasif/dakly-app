@@ -8,6 +8,7 @@ import { StaffAuditExportJob } from '@dakly/core/admin/jobs/staff-audit-export.j
 import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
+import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
@@ -73,6 +74,7 @@ import { JobSchedulers } from './job-schedulers';
     NotificationsModule,
     AutomationRunsModule,
     ImportsModule,
+    KnowledgeIndexModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();

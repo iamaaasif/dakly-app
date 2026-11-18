@@ -4,6 +4,7 @@ import {
   codCollectedSchema,
   createOrderSchema,
   dispatchOrderSchema,
+  editOrderSchema,
   orderListQuerySchema,
   orderStageChangeSchema,
 } from './orders';
@@ -59,6 +60,12 @@ describe('staff order input', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('allows changing the address without sending the number or recipient type', () => {
+    expect(
+      editOrderSchema.parse({ items: order.items, recipient: { address: 'Mirpur' } }).recipient,
+    ).toEqual({ address: 'Mirpur' });
   });
 
   it('requires separate buyer fields and accepts a different delivery recipient', () => {

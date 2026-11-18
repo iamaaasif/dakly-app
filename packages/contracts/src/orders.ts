@@ -68,6 +68,13 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderTabs = [
+  'to_confirm',
+  'to_pack',
+  'with_courier',
+  'delivered',
+  'returned',
+] as const;
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
@@ -97,6 +104,7 @@ export type OrderSummary = {
   itemsSubtotalPoisha: number;
   orderDiscountPoisha: number;
   deliveryChargePoisha: number;
+  totalPoisha: number;
   advancePaidPoisha: number;
   codAmountPoisha: number;
   codCollectedPoisha: number | null;
@@ -269,3 +277,15 @@ export const createOrderSchema = z.strictObject({
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
+export const editOrderSchema = z.strictObject({
+  items: orderLines,
+  recipient: recipientSchema
+    .omit({ isBuyer: true })
+    .partial()
+    .extend({ isBuyer: z.boolean().optional() })
+    .optional(),
+  deliveryChargePoisha: money.optional(),
+  orderDiscountPoisha: money.optional(),
+  advancePaidPoisha: money.optional(),
+});
+export type EditOrderInput = z.infer<typeof editOrderSchema>;
