@@ -477,6 +477,22 @@ fixture('POST /delivery-zones/initialize-defaults', async () => {
     expect((await f.row('delivery_zones', zone.id)).store_id).toBe(b.id);
   expect(await f.row('delivery_zones', id)).toEqual(before);
 });
+fixture('GET /delivery-zones/charge', async () => {
+  const { a, b } = await pair();
+  await deliveryZone(a);
+  await success(b, 'POST', '/delivery-zones', 201, {
+    name: 'Standard delivery',
+    chargePoisha: 6000,
+    isDefault: true,
+  });
+  const path = '/delivery-zones/charge?areaId=301';
+  expect((await success(a, 'GET', path, 200)).json().chargePoisha).toBe(12000);
+  expect((await success(b, 'GET', path, 200)).json().chargePoisha).toBe(6000);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', path)).statusCode).toBe(403);
+});
 fixture('GET /delivery-zones', async () => {
   const { a, b } = await pair(),
     aId = await deliveryZone(a),

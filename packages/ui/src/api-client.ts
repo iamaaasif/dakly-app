@@ -16,6 +16,7 @@ type ApiFetchOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
+  idempotencyKey?: string;
   context?: { header: string; tag: string };
 };
 
@@ -25,6 +26,7 @@ export async function apiFetch(url: string, options: ApiFetchOptions = {}): Prom
     method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
     headers: {
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
       ...(options.context ? { [options.context.header]: options.context.tag } : {}),
     },
     credentials: 'include',

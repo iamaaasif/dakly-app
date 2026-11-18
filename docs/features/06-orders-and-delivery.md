@@ -241,6 +241,8 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 Pipeline by stage with counts and return risk badges.
 The pipeline URL keeps the stage, search, page cursor and selected order. Search uses the buyer or recipient name, order number or exact recipient phone for staff who can see full phones. The alert strip links to orders waiting over 12 hours, high-risk unconfirmed orders with no advance, and unpaid COD on delivered parcels. Counts cover the store. The out-of-stock alert waits for the staff oversell rule, since orders currently cannot reserve stock they do not have. Source, courier and date filters stay in the URL. Date filters include both selected days in Bangladesh time. The list shows up to two item lines. The order detail shows the recipient, buyer, each item and its line discount, amounts received, and the stage timeline. Open high-risk orders with no advance include a prompt to ask for one.
+Staff can enter buyer and recipient details, select products, and save a new order with an optional manual advance. The form shows the zone charge and allows an override. Paste and fill waits for the AI layer, and the payment link waits for PAY-6.
+
 The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
 ### How it works

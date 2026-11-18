@@ -16,7 +16,7 @@ import { useSessionContext } from '@/lib/session-context';
 
 export function OrderDetails({ order }: { order: OrderDetail }) {
   const { data } = useSessionContext();
-  const transition = useOrderStage(order.id);
+  const transition = useOrderStage();
   const stage = useRef<HTMLSpanElement>(null);
   const canConfirm =
     data?.currentStore?.canEditOrders &&
@@ -41,7 +41,7 @@ export function OrderDetails({ order }: { order: OrderDetail }) {
             onClick={(event) => {
               const button = event.currentTarget;
               transition.mutate(
-                { to: 'to_pack' },
+                { id: order.id, body: { to: 'to_pack' } },
                 {
                   onSuccess: () => {
                     if (

@@ -285,6 +285,7 @@ export const createOrderSchema = z.strictObject({
   advancePaidPoisha: money.default(0),
 });
 
+export type CreateOrderValues = z.input<typeof createOrderSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
