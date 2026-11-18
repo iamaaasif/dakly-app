@@ -1,6 +1,6 @@
 {
-  "id": "14735e87-79fa-474c-abad-556b1e036b6c",
-  "prevId": "ed6ad400-81c4-42f1-bdcc-96f4768a3084",
+  "id": "deeacf4d-d2b9-4ef5-890f-e88c1dbb5729",
+  "prevId": "b4b6186f-dc51-4a46-b5bd-f7be23b02519",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4343,8 +4343,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "opt_out_code": {
-          "name": "opt_out_code",
+        "opt_out_url": {
+          "name": "opt_out_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
