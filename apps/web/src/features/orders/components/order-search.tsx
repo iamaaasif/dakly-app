@@ -15,8 +15,7 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = new FormData(event.currentTarget).get('search');
-    const search = typeof value === 'string' ? value.trim() : '';
+    const search = String(new FormData(event.currentTarget).get('search') ?? '').trim();
     router.push(filtered(search || undefined));
   }
 
@@ -33,7 +32,7 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
         type="search"
         name="search"
         id="order-search"
-        placeholder="Name, phone or order number"
+        placeholder="Name, phone or #"
         key={query.search}
         defaultValue={query.search}
         maxLength={120}
@@ -43,7 +42,10 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
         Search
       </Button>
       {query.search ? (
-        <Link href={filtered()} className="text-action underline">
+        <Link
+          href={filtered()}
+          className="inline-flex min-h-10 min-w-10 items-center text-action underline"
+        >
           Clear search
         </Link>
       ) : null}

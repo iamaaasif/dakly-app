@@ -5,6 +5,8 @@ import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders'
 import { ordersSearch } from '../api/orders';
 import { OrderRow } from './order-row';
 
+const linkStyle = 'inline-flex min-h-10 min-w-10 items-center text-action underline';
+
 type OrdersListProps = { page: OrderListResponse; query: OrderListQuery };
 
 export function OrdersList({ page, query }: OrdersListProps) {
@@ -25,12 +27,12 @@ export function OrdersList({ page, query }: OrdersListProps) {
       </ul>
       <nav aria-label="Order pages" className="flex gap-4">
         {query.cursor ? (
-          <Link href={pageHref()} className="text-action underline">
+          <Link href={pageHref()} className={linkStyle}>
             First page
           </Link>
         ) : null}
         {page.nextCursor ? (
-          <Link href={pageHref(page.nextCursor)} className="text-action underline">
+          <Link href={pageHref(page.nextCursor)} className={linkStyle}>
             Next page
           </Link>
         ) : null}

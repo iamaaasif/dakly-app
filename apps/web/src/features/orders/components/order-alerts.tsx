@@ -37,15 +37,17 @@ export function OrderAlerts({ alerts }: { alerts: Alerts }) {
   return (
     <section aria-label="Order alerts" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {cards.map(({ icon: Icon, className, title, detail, href }) => (
-        <article key={title} className={`flex items-start gap-3 rounded-lg p-4 ${className}`}>
+        <Link
+          key={href}
+          href={href}
+          className={`flex min-h-10 items-start gap-3 rounded-lg p-4 ${className}`}
+        >
           <Icon className="mt-0.5 shrink-0" size={16} strokeWidth={1.75} aria-hidden="true" />
           <div>
-            <Link href={href} className="font-semibold underline">
-              {title}
-            </Link>
+            <p className="font-semibold underline">{title}</p>
             <p className="mt-1 text-text">{detail}</p>
           </div>
-        </article>
+        </Link>
       ))}
     </section>
   );
