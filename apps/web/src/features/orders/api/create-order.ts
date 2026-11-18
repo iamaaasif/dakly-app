@@ -5,7 +5,7 @@ import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
 import { ApiError } from '@dakly/ui/api-client';
 
 import { ordersKey } from './orders';
-import { productsKeys } from '@/lib/product-queries';
+import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useCreateOrder() {

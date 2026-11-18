@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState, type RefObject } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -14,13 +15,13 @@ import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
+import { SheetDialog } from '@dakly/ui/sheet';
 
 import { useOrderStage } from '../api/change-order-stage';
 import { useCollectOrderCod } from '../api/collect-order-cod';
 import { useDispatchOrder } from '../api/dispatch-order';
 import { cancelReasonLabels, courierLabels, onHoldReasonLabels } from '../order-labels';
 import { stageActionLabels, type StageFormAction } from './order-stage-actions';
-import { SessionDialog } from '@/components/session-dialog';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
 const actionSchema = z.discriminatedUnion('to', [
@@ -45,18 +46,50 @@ function defaultFields(action: StageFormAction, order: OrderDetail): Partial<Act
   }
 }
 
-type OrderStageDialogProps = { order: OrderDetail; action: StageFormAction; onClose: () => void };
+type OrderStageDialogProps = {
+  order: OrderDetail;
+  action: StageFormAction;
+  stage: RefObject<HTMLSpanElement | null>;
+  primary: boolean;
+  disabled: boolean;
+};
 
-export function OrderStageDialog({ order, action, onClose }: OrderStageDialogProps) {
+export function OrderStageDialog({
+  order,
+  action,
+  stage,
+  primary,
+  disabled,
+}: OrderStageDialogProps) {
+  const [open, setOpen] = useState(false);
   const form = useForm<ActionValues, undefined, ActionInput>({
     resolver: zodResolver(actionSchema),
     defaultValues: defaultFields(action, order),
   });
-  const { submit, pending, error } = useStageSubmission(order.id, onClose);
-  const title =
-    action === 'cancelled' ? `Cancel order #${order.number}?` : stageActionLabels[action];
+  const { submit, pending, error, reset } = useStageSubmission(order.id, () => {
+    setOpen(false);
+    requestAnimationFrame(() => stage.current?.focus());
+  });
+  const label = stageActionLabels[action];
+  const title = action === 'cancelled' ? `Cancel order #${order.number}?` : label;
   return (
-    <SessionDialog title={title} open onClose={onClose} closeDisabled={pending}>
+    <SheetDialog
+      title={title}
+      trigger={
+        <Button variant={primary ? 'primary' : 'secondary'} disabled={disabled}>
+          {label}
+        </Button>
+      }
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          form.reset(defaultFields(action, order));
+          reset();
+        }
+        setOpen(next);
+      }}
+      pending={pending}
+    >
       <FormProvider {...form}>
         <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
           <fieldset disabled={pending} className="space-y-3">
@@ -67,21 +100,18 @@ export function OrderStageDialog({ order, action, onClose }: OrderStageDialogPro
               {error.message}
             </p>
           )}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" disabled={pending} onClick={onClose}>
-              Back
-            </Button>
+          <div className="flex justify-end">
             <Button
               type="submit"
               loading={pending}
               variant={action === 'cancelled' ? 'danger' : 'primary'}
             >
-              {stageActionLabels[action]}
+              {label}
             </Button>
           </div>
         </form>
       </FormProvider>
-    </SessionDialog>
+    </SheetDialog>
   );
 }
 
@@ -104,10 +134,15 @@ function useStageSubmission(id: string, onSaved: () => void) {
     submit,
     pending: stage.isPending || dispatch.isPending || cod.isPending,
     error: stage.error ?? dispatch.error ?? cod.error,
+    reset: () => {
+      stage.reset();
+      dispatch.reset();
+      cod.reset();
+    },
   };
 }
 
-function StageFields({ action, order }: Omit<OrderStageDialogProps, 'onClose'>) {
+function StageFields({ action, order }: Pick<OrderStageDialogProps, 'action' | 'order'>) {
   switch (action) {
     case 'with_courier':
       return <CourierFields />;
