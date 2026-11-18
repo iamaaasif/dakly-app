@@ -39,11 +39,7 @@ export class MailpitSmsDriver implements SmsDriver {
     const earlier = await this.findBeforeSubmission(messageId);
     if (earlier) return { providerMessageId: earlier };
 
-    try {
-      return await this.submit(message, messageId);
-    } catch (error) {
-      return this.resolveSmtpError(error, messageId);
-    }
+    return this.submit(message, messageId);
   }
 
   private async findBeforeSubmission(messageId?: string): Promise<string | undefined> {
@@ -57,30 +53,27 @@ export class MailpitSmsDriver implements SmsDriver {
   }
 
   private async submit(message: SmsMessage, messageId?: string): Promise<SmsSendResult> {
-    const result = await this.transport.sendMail({
-      // The store's sender shows as the From name; the shared sender has none.
-      from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
-      to: `${message.to}@sms.test`,
-      subject: 'SMS',
-      text: message.text,
-      messageId: messageId ? `<${messageId}>` : undefined,
-    });
-    // A duplicate accepted by Mailpit returns no queue id. Recover the original capture.
-    const providerMessageId =
-      /queued as ([\w-]+)$/u.exec(result.response)?.[1] ??
-      (messageId ? await this.findCaptured(messageId) : undefined);
-    if (!providerMessageId) throw new Error('Missing Mailpit message id');
-    return { providerMessageId };
-  }
-
-  private async resolveSmtpError(error: unknown, messageId?: string): Promise<SmsSendResult> {
-    const failure = classifySmtpFailure(error);
-    if (failure === 'refused') throw new SmsSendRefused();
-    if (failure === 'lookup' && messageId) {
-      const captured = await this.findCaptured(messageId).catch(() => undefined);
-      if (captured) return { providerMessageId: captured };
+    let response = '';
+    try {
+      ({ response } = await this.transport.sendMail({
+        // The store's sender shows as the From name; the shared sender has none.
+        from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
+        to: `${message.to}@sms.test`,
+        subject: 'SMS',
+        text: message.text,
+        messageId: messageId ? `<${messageId}>` : undefined,
+      }));
+    } catch (error) {
+      if (isSmtpRefusal(error)) throw new SmsSendRefused();
     }
-    throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
+    // Mailpit can store a message without returning a queue id, including on a lost reply.
+    const providerMessageId =
+      /queued as ([\w-]+)$/u.exec(response)?.[1] ??
+      (messageId ? await this.findCaptured(messageId).catch(() => undefined) : undefined);
+    if (!providerMessageId) {
+      throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
+    }
+    return { providerMessageId };
   }
 
   // A retained capture lets a later send recover its id by Message-ID.
@@ -111,24 +104,25 @@ type SmtpFailure = {
   code?: unknown;
   originalCode?: unknown;
   timeoutType?: unknown;
+  syscall?: unknown;
 };
 
-function classifySmtpFailure(error: unknown): 'refused' | 'lookup' | 'unknown' {
+function isSmtpRefusal(error: unknown): boolean {
   const failure = (error ?? {}) as SmtpFailure;
-  if (failedDuringSetup(failure)) return 'refused';
+  if (failedDuringSetup(failure)) return true;
   const { responseCode, command, code } = failure;
   // ECONNECTION on CONN can include an incomplete reply left in the receive buffer.
-  const disconnected = code === 'ECONNECTION' && command === 'CONN';
-  const bodySubmitted = code === 'EMESSAGE' && command === 'DATA';
+  if (code === 'ECONNECTION' && command === 'CONN') return false;
   // Mailpit can return 451 after storing DATA if tagging the capture fails.
-  if (responseCode === 451 && (bodySubmitted || disconnected)) return 'lookup';
-  return !disconnected && isSmtpRejection(responseCode) ? 'refused' : 'unknown';
+  if (responseCode === 451 && code === 'EMESSAGE' && command === 'DATA') return false;
+  return isSmtpRejection(responseCode);
 }
 
-function failedDuringSetup({ code, originalCode, timeoutType }: SmtpFailure): boolean {
+function failedDuringSetup({ code, originalCode, timeoutType, syscall }: SmtpFailure): boolean {
   return (
     code === 'EDNS' ||
     originalCode === 'ECONNREFUSED' ||
+    syscall === 'connect' ||
     timeoutType === 'CONNECT_TIMEOUT' ||
     timeoutType === 'GREETING_TIMEOUT'
   );
