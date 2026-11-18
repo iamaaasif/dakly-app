@@ -53,7 +53,6 @@ const CLAIMS_PER_STORE = 100;
 const system = { kind: 'system' } as const;
 
 type Condition = AutomationGraph['workflowFilters'][number];
-type PathChoice = { outcome: string; next: string };
 const NO_ANSWER = 'The SMS provider did not answer';
 
 @Injectable()
@@ -136,6 +135,8 @@ export class AutomationRunsService {
     };
     const exitReason = await this.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
+    if (step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending)
+      facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
   }
 
@@ -209,7 +210,7 @@ export class AutomationRunsService {
     paths: { condition: Condition; next: string }[],
     facts: RunFacts,
     at: Date,
-  ): Promise<PathChoice | undefined> {
+  ): Promise<{ outcome: string; next: string } | undefined> {
     for (const [index, path] of paths.entries())
       if (await this.holds(path.condition, facts, at))
         return { outcome: `path_${index + 1}`, next: path.next };
@@ -255,9 +256,6 @@ export class AutomationRunsService {
   ): Promise<StepResult | undefined> {
     const { storeId, contactId } = facts;
     const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
-    // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
-    if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
-      return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
     let renewed = claim;
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const renewal = { status: 'running', claimedAt: now } as const;
@@ -288,6 +286,7 @@ export class AutomationRunsService {
           contactId,
           step,
           body: started.body,
+          preparedSender: facts.preparedSender,
           destination: started.destination,
         },
         started.at,
@@ -410,7 +409,7 @@ export class AutomationRunsService {
 
   // Called with no transaction open, with the operation key the provider deduplicates on.
   private async deliver(
-    { storeId, claim, contactId, step, body, destination }: Delivery,
+    { storeId, claim, contactId, step, body, destination, preparedSender }: Delivery,
     sentAt: Date,
   ): Promise<StepResult> {
     try {
@@ -421,7 +420,11 @@ export class AutomationRunsService {
         operationKey: operationKey(claim),
         destination,
       } as const;
-      const { providerMessageId, credits } = await this.messaging.send(storeId, message);
+      const { providerMessageId, credits } = await this.messaging.send(
+        storeId,
+        message,
+        preparedSender,
+      );
       const now = this.clock.now();
       return {
         ...goOn(step.next, now),

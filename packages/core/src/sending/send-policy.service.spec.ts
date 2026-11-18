@@ -40,6 +40,7 @@ describe('SendPolicyService', () => {
     afterLock = () => undefined;
     // The batch reads answer the same for every contact id they are given.
     const contacts = {
+      lockForConsent: async () => [],
       findRecipient: async () => contact,
       findRecipients: async (_storeId: string, ids: string[]) =>
         contact

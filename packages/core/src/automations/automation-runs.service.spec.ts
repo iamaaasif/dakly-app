@@ -214,6 +214,7 @@ describe('AutomationRunsService', () => {
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
+      prepareSender: async () => ({ name: undefined }),
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (providerError) throw providerError;
         if (!sent.some((earlier) => earlier.operationKey === message.operationKey))

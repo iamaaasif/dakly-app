@@ -58,6 +58,7 @@ export class SendPolicyService {
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, request.contactId);
+    await this.contacts.lockForConsent(storeId, [request.contactId]);
     const at = this.clock.now();
     const [checked] = await this.checkAudience(storeId, {
       contactIds: [request.contactId],

@@ -4,6 +4,7 @@ import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationStep, AutomationGraph } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
+import type { PreparedSmsSender } from '../messaging/messaging.service';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
@@ -19,6 +20,7 @@ const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
 export type RunFacts = {
+  preparedSender?: PreparedSmsSender;
   graph: AutomationGraph;
   storeId: string;
   runId: string;
@@ -28,6 +30,7 @@ export type RunFacts = {
   wakeAt: Date | null;
 };
 export type Delivery = {
+  preparedSender?: PreparedSmsSender;
   storeId: string;
   claim: RunClaim;
   contactId: string;
@@ -107,7 +110,7 @@ export function holdOrEnd(run: ClaimedRun, now: Date): StepResult | undefined {
 // The next step's job takes over the claim with a fresh time, which also renews the lease.
 export function goOn(next: string, now: Date) {
   return {
-    run: { status: 'running', currentStepKey: next, claimedAt: now },
+    run: { status: 'running', currentStepKey: next, claimedAt: now, wakeAt: now },
     next: { stepKey: next, claimedAt: now },
   } as const;
 }

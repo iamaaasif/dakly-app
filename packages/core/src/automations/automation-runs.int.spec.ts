@@ -767,12 +767,12 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
     });
 
-    it('releases credits and leaves the cap free when sender preparation fails', async () => {
+    it('releases credits and leaves the cap free when the final contact lookup fails', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
       const hook = vi
-        .spyOn(SmsSendersService.prototype, 'approvedSenderName')
+        .spyOn(ContactsService.prototype, 'getById')
         .mockRejectedValueOnce(new Error('database unavailable'));
       try {
         await runDueStep(runner, first.runIds[0]!);
@@ -791,6 +791,135 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         hook.mockRestore();
       }
     });
+
+    it('skips consent withdrawn while the sender is prepared before the final gate', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const original = SmsSendersService.prototype.approvedSenderName;
+      const hook = vi
+        .spyOn(SmsSendersService.prototype, 'approvedSenderName')
+        .mockImplementationOnce(async function (store) {
+          const name = await original.call(this, store);
+          await runner.consents.record(
+            storeId,
+            {
+              contactId: contact,
+              channel: 'sms',
+              status: 'withdrawn',
+              source: 'opt_out_link',
+              evidence: null,
+            },
+            { kind: 'system' },
+          );
+          return name;
+        });
+      try {
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([
+          expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_consent' }),
+        ]);
+      } finally {
+        hook.mockRestore();
+      }
+    });
+
+    it('leaves credits and the cap untouched when the early sender lookup fails', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const first = await dueRuns(send('marketing'), 1, 'active', contact);
+      const hook = vi
+        .spyOn(SmsSendersService.prototype, 'approvedSenderName')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        await expect(runDueStep(runner, first.runIds[0]!)).rejects.toMatchObject({
+          code: 'MESSAGING_PREPARATION_FAILED',
+        });
+        expect(sentFor(first.runIds[0]!)).toEqual([]);
+        expect(await ledgerFor(first.runIds[0]!)).toEqual([]);
+        expect(await sendStep(first.runIds[0]!)).toEqual([]);
+        const second = await dueRuns(send('marketing'), 1, 'active', contact);
+        await runDueStep(runner, second.runIds[0]!);
+        expect(sentFor(second.runIds[0]!)).toHaveLength(1);
+      } finally {
+        hook.mockRestore();
+      }
+    });
+
+    it('dates an immediate second send from when it was reached, not the previous step due time', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const automationId = await workflow('active');
+      const graph = graphWith({ ...send('transactional'), next: 'second' });
+      graph.steps['second'] = send('transactional');
+      const versionId = await publish(automationId, 1, graph);
+      const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        runId,
+        new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+      ]);
+      await runDueStep(runner, runId!);
+      clockNow = new Date(daytime.getTime() + 2 * MINUTE);
+      await runDueStep(runner, runId!);
+      expect(sentFor(runId!)).toHaveLength(2);
+      expect(await sendStep(runId!)).toEqual([
+        expect.objectContaining({ outcome: 'sent' }),
+        expect.objectContaining({ outcome: 'sent' }),
+      ]);
+    });
+
+    it.each(['paused', 'archived', 'version stopped'] as const)(
+      'does not consume an overdue send when the workflow becomes %s after its initial read',
+      async (change) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+          runId,
+          new Date(daytime.getTime() - 25 * HOUR),
+        ]);
+        const original = ContactsService.prototype.findTags;
+        const hook = vi
+          .spyOn(ContactsService.prototype, 'findTags')
+          .mockImplementationOnce(async function (store, id) {
+            const tags = await original.call(this, store, id);
+            if (change === 'version stopped')
+              await admin.pool.query(
+                'update automation_versions set is_stopped=true where automation_id=$1',
+                [automationId],
+              );
+            else
+              await admin.pool.query('update automations set status=$1 where id=$2', [
+                change,
+                automationId,
+              ]);
+            return tags;
+          });
+        try {
+          await runDueStep(runner, runId!);
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+          expect(await sendStep(runId!)).toEqual([]);
+          expect(await run(runId!)).toMatchObject(
+            change === 'paused'
+              ? { status: 'waiting' }
+              : {
+                  status: 'exited',
+                  exit_reason: change === 'archived' ? 'archived' : 'version_stopped',
+                },
+          );
+        } finally {
+          hook.mockRestore();
+        }
+      },
+    );
 
     it('exits without reserving when the goal is reached during the send-lock wait', async () => {
       const runner = await worker();
@@ -1047,21 +1176,27 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           ]);
         const originalRead = ContactsService.prototype.findRecipients;
         const originalSend = MessagingService.prototype.send;
-        const hook =
+        let replacement: ReturnType<typeof replacePhone> | undefined;
+        const readHook =
           when === 'after eligibility read'
             ? vi
                 .spyOn(ContactsService.prototype, 'findRecipients')
                 .mockImplementationOnce(async function (store, ids) {
                   const rows = await originalRead.call(this, store, ids);
-                  await replacePhone();
+                  replacement = replacePhone().then(async (result) => {
+                    expect(await sendStep(runId!)).toHaveLength(1);
+                    return result;
+                  });
                   return rows;
                 })
-            : vi
-                .spyOn(MessagingService.prototype, 'send')
-                .mockImplementationOnce(async function (store, message) {
-                  await replacePhone();
-                  return originalSend.call(this, store, message);
-                });
+            : undefined;
+        const hook = vi
+          .spyOn(MessagingService.prototype, 'send')
+          .mockImplementationOnce(async function (store, message, prepared) {
+            if (when === 'after gate commit') replacement = replacePhone();
+            await replacement;
+            return originalSend.call(this, store, message, prepared);
+          });
         try {
           await runDueStep(runner, runId!);
           expect(sentFor(runId!)).toEqual([]);
@@ -1072,6 +1207,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           ]);
         } finally {
           hook.mockRestore();
+          readHook?.mockRestore();
         }
       },
     );

@@ -17,6 +17,8 @@ export type OutgoingMessage = {
   destination?: string | null;
 };
 
+export type PreparedSmsSender = { name: string | undefined };
+
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
 
 @Injectable()
@@ -29,9 +31,13 @@ export class MessagingService {
   ) {}
 
   // The caller records status and cost in its own short transaction, before and after this.
-  async send(storeId: string, message: OutgoingMessage): Promise<SentMessage> {
+  async send(
+    storeId: string,
+    message: OutgoingMessage,
+    preparedSender?: PreparedSmsSender,
+  ): Promise<SentMessage> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
-    const { to, parts, sender } = await this.prepareSend(storeId, message);
+    const { to, parts, sender } = await this.prepareSend(storeId, message, preparedSender);
     const { providerMessageId } = await this.smsService.send({
       to,
       text: message.body,
@@ -42,8 +48,21 @@ export class MessagingService {
     return { providerMessageId, parts, credits: parts };
   }
 
+  async prepareSender(storeId: string): Promise<PreparedSmsSender> {
+    try {
+      return { name: await this.smsSenders.approvedSenderName(storeId) };
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw messagingError('MESSAGING_PREPARATION_FAILED');
+    }
+  }
+
   // A failed lookup proves no provider submission happened, so callers can release its credits.
-  private async prepareSend(storeId: string, message: OutgoingMessage) {
+  private async prepareSend(
+    storeId: string,
+    message: OutgoingMessage,
+    preparedSender?: PreparedSmsSender,
+  ) {
     try {
       const contact = await this.contactsService.getById(storeId, message.contactId, {
         seeFullPhone: true,
@@ -54,7 +73,7 @@ export class MessagingService {
       return {
         to: contact.phone,
         parts: countSmsParts(message.body),
-        sender: await this.smsSenders.approvedSenderName(storeId),
+        sender: (preparedSender ?? (await this.prepareSender(storeId))).name,
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
