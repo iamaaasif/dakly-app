@@ -1,6 +1,6 @@
 import { createTransport } from 'nodemailer';
 
-import { type SmsDriver, type SmsMessage, type SmsSendResult } from '../sms-driver';
+import { type SmsDriver, type SmsMessage, type SmsSendResult, SmsSendRefused } from '../sms-driver';
 
 const SHARED_FROM = 'dakly@sms.dakly.test';
 
@@ -24,10 +24,16 @@ export class MailpitSmsDriver implements SmsDriver {
   }
 
   async send(message: SmsMessage): Promise<SmsSendResult> {
+    const messageId = message.idempotencyKey && `${message.idempotencyKey}@sms.dakly.test`;
+    const earlier =
+      messageId &&
+      (await this.findCaptured(messageId).catch(() => {
+        // SMTP has not been called. The caller may still need to reconcile an earlier attempt.
+        throw new SmsSendRefused();
+      }));
+    if (earlier) return { providerMessageId: earlier };
+
     try {
-      const messageId = message.idempotencyKey && `${message.idempotencyKey}@sms.dakly.test`;
-      const earlier = messageId && (await this.findCaptured(messageId));
-      if (earlier) return { providerMessageId: earlier };
       const result = await this.transport.sendMail({
         // The store's sender shows as the From name; the shared sender has none.
         from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
@@ -36,17 +42,29 @@ export class MailpitSmsDriver implements SmsDriver {
         text: message.text,
         messageId: messageId ? `<${messageId}>` : undefined,
       });
-      // Mailpit's queue id identifies the captured message in its API and UI.
-      const providerMessageId = /queued as ([\w-]+)$/u.exec(result.response)?.[1];
+      // A duplicate accepted by Mailpit returns no queue id. Recover the original capture.
+      const providerMessageId =
+        /queued as ([\w-]+)$/u.exec(result.response)?.[1] ??
+        (messageId ? await this.findCaptured(messageId) : undefined);
       if (!providerMessageId) throw new Error('Missing Mailpit message id');
       return { providerMessageId };
-    } catch {
-      // SMTP errors can contain the recipient or body. Keep them inside the driver.
+    } catch (error) {
+      // Mailpit can return 451 after storing DATA if tagging the capture fails.
+      const { responseCode, command } = (error ?? {}) as {
+        responseCode?: unknown;
+        command?: unknown;
+      };
+      if (responseCode === 451 && command === 'DATA') {
+        const captured = messageId && (await this.findCaptured(messageId).catch(() => undefined));
+        if (captured) return { providerMessageId: captured };
+      } else if (typeof responseCode === 'number' && responseCode >= 400 && responseCode < 600) {
+        throw new SmsSendRefused();
+      }
       throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
     }
   }
 
-  // Check-then-act: it only stands in for a real aggregator's client reference until ACC-14.
+  // Mailpit deduplicates by Message-ID. A real SMS driver's client reference comes with ACC-14.
   private async findCaptured(messageId: string): Promise<string | undefined> {
     const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '1' });
     const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, {
