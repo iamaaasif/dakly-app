@@ -102,7 +102,11 @@ describe('AutomationRunsService', () => {
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
-    return service.continueRun(STORE_ID, { runId, stepKey: 'first', claimedAt });
+    return service.continueRun(
+      STORE_ID,
+      { runId, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
   }
 
   beforeEach(() => {
@@ -232,11 +236,11 @@ describe('AutomationRunsService', () => {
     repository.run = { ...repository.run, status: 'running', claimedAt: now };
     repository.steps = [];
 
-    const next = await service.continueRun(STORE_ID, {
-      runId: RUN_ID,
-      stepKey: 'first',
-      claimedAt,
-    });
+    const next = await service.continueRun(
+      STORE_ID,
+      { runId: RUN_ID, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
 
     expect(next).toBeUndefined();
     expect(repository.run).toMatchObject({ status: 'running', claimedAt: now });

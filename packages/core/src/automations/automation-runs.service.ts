@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
 import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
@@ -27,7 +28,6 @@ const MAX_QUEUED_STEPS = 1000;
 const CLAIMS_PER_STORE = 100;
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
-const system = { kind: 'system' } as const;
 
 type Condition = AutomationGraph['workflowFilters'][number];
 type ExitCondition = AutomationGraph['exitConditions'][number];
@@ -71,7 +71,11 @@ export class AutomationRunsService {
   }
 
   // Returns the claim on the next step when the run goes straight on, for its job to queue.
-  async continueRun(storeId: string, queued: RunClaim): Promise<RunClaim | undefined> {
+  async continueRun(
+    storeId: string,
+    queued: RunClaim,
+    actor: AuditEntry['actor'],
+  ): Promise<RunClaim | undefined> {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
@@ -87,7 +91,7 @@ export class AutomationRunsService {
       if (result.step)
         await this.repository.insertStep(storeId, claim.runId, run.contactId, result.step);
       if (result.tagChange)
-        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, system);
+        await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
