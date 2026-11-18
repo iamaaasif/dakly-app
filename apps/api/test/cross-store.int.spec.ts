@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
 import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
@@ -1295,6 +1296,25 @@ describe('every production shop route isolates its data', () => {
   });
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
+  });
+  it('quotes Savar, another Dhaka upazila and an outside upazila from the defaults', async () => {
+    const shop = await f.shop();
+    const zones = await success(shop, 'POST', '/delivery-zones/initialize-defaults', 201);
+    const service = app.get(DeliveryService);
+    const cases = [
+      { areaId: 30260072, name: 'Dhaka suburbs', chargePoisha: 10000 },
+      { areaId: 30260014, name: 'Inside Dhaka', chargePoisha: 6000 },
+      { areaId: 20030004, name: 'Outside Dhaka', chargePoisha: 12000 },
+    ];
+
+    for (const { areaId, name, chargePoisha } of cases) {
+      const zone = zones.json().items.find((item: { name: string }) => item.name === name);
+      expect(zone).toBeDefined();
+      await expect(service.calculateDeliveryCharge(shop.id, areaId)).resolves.toEqual({
+        deliveryZoneId: zone.id,
+        chargePoisha,
+      });
+    }
   });
   it('uses the non-owner app role without bypassing row security', async () => {
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
