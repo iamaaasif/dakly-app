@@ -82,10 +82,13 @@ describe('import filters without RLS assistance', () => {
     expect(await repository.claim(f.b, importA, lease, stale)).toBe(false);
     expect(await repository.claim(f.a, importA, lease, stale)).toBe(true);
     expect(await repository.claim(f.a, importA, lease, stale)).toBe(false);
-    const renewed = { held: lease, renewed: new Date('2026-11-17T04:30:30Z') };
+    const checkpoint = { processedRows: 3, fileHash: 'saved-file-hash', report: [] };
+    const renewed = { held: lease, renewed: new Date('2026-11-17T04:30:30Z'), checkpoint };
     expect(await repository.saveProgress(f.b, importA, counts, renewed)).toBe(false);
     expect((await f.row('imports', importA)).rows_total).toBeNull();
+    expect((await f.row('imports', importA)).checkpoint).toBeNull();
     expect(await repository.saveProgress(f.a, importA, counts, renewed)).toBe(true);
+    expect((await repository.findById(f.a, importA))?.checkpoint).toEqual(checkpoint);
     await repository.releaseClaim(f.b, importA, renewed.renewed);
     expect((await f.row('imports', importA)).claimed_at).not.toBeNull();
     await repository.markUploadReady(f.b, fileA.id);

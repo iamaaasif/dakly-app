@@ -8,6 +8,10 @@ const IMPORT_ERRORS = {
     status: 400,
     message: 'This file is not a readable CSV. Save it as CSV (UTF-8) and upload it again',
   },
+  IMPORT_FILE_CHANGED: {
+    status: 409,
+    message: 'The uploaded file changed after a batch was saved. Start a new import',
+  },
   IMPORT_FILE_EMPTY: { status: 400, message: 'This file has no customer rows under its header' },
   IMPORT_FILE_TOO_MANY_ROWS: {
     status: 400,

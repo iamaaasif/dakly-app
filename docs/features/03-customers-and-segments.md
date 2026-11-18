@@ -192,8 +192,11 @@ comes in the next part.
   records nothing new. If the saved WhatsApp destination differs from the file, the import
   skips that grant and reports "WhatsApp consent skipped: number differs". Evidence for
   other channels still applies to that row.
-- A retried job finds the contacts this import already added and does not write them again,
-  so the counts and consent come out the same.
+- Each batch saves a checkpoint with its completed row position, file hash and report entries
+  in the same transaction as contact writes and counts. A retry resumes after committed
+  batches, preserving their original results and any later member edits. A changed upload
+  fails with `IMPORT_FILE_CHANGED` before any remaining rows are written; the committed
+  counts and report entries stay available.
 - The report is a CSV with the row, the field and the problem. Its `files` row has
   `expires_at` 7 days ahead, like the upload, and the R2 lifecycle rule on `imports/` deletes
   both objects after 7 days.
