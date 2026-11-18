@@ -826,9 +826,7 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
           if (pages === 2) throw new Error('Worker stopped');
           return restore(...args);
         });
-      await expect(service.finishUndo(storeId, importId)).rejects.toThrow(
-        'Worker stopped',
-      );
+      await expect(service.finishUndo(storeId, importId)).rejects.toThrow('Worker stopped');
       const counts = async () =>
         (
           await admin.pool.query(
