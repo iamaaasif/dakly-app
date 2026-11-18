@@ -137,28 +137,28 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M6. Orders
 
-| ID    | Task                                                                             | Status      | Depends        | PR   | Notes                                                                                                            |
-| ----- | -------------------------------------------------------------------------------- | ----------- | -------------- | ---- | ---------------------------------------------------------------------------------------------------------------- |
-| ORD-1 | Orders, items, stage table, stage events, order numbers                          | In progress | PROD-2, CUS-1  | #136 | Q7; archive guard follows ORD-3 so it can use its variant locks; order numbers and buyer timestamp move to ORD-3 |
-| ORD-2 | Delivery zones, areas and charges                                                | Done        | ACC-3          | #122 |                                                                                                                  |
-| ORD-3 | Create order from chat and from staff                                            | In review   | ORD-1, ORD-2   | #139 | D26/D27; oversell override deferred; edits in stacked PR                                                         |
-| ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo        | ORD-3, CAMP-11 |      | Was a separate confirmation sender; now runs on the workflow engine                                              |
-| ORD-5 | Web: orders pipeline and order detail                                            | In review   | ORD-3, WEB-2   | #144 | Pipeline, then detail, then source/courier/date filters                                                          |
-| ORD-6 | Public order link page and endpoint (Turnstile, limits)                          | Todo        | ORD-3          |      | Design needed                                                                                                    |
-| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | In review   | ORD-3          | #142 | D21; manual dispatch, delivery, returns and COD checks; return risk follows in a stacked PR                      |
+| ID    | Task                                                                             | Status      | Depends        | PR         | Notes                                                                                                            |
+| ----- | -------------------------------------------------------------------------------- | ----------- | -------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| ORD-1 | Orders, items, stage table, stage events, order numbers                          | In progress | PROD-2, CUS-1  | #136       | Q7; archive guard follows ORD-3 so it can use its variant locks; order numbers and buyer timestamp move to ORD-3 |
+| ORD-2 | Delivery zones, areas and charges                                                | Done        | ACC-3          | #122       |                                                                                                                  |
+| ORD-3 | Create order from chat and from staff                                            | In review   | ORD-1, ORD-2   | #139       | D26/D27; oversell override deferred; edits in stacked PR                                                         |
+| ORD-4 | Order triggers, COD confirmation workflow template and Confirm or Cancel replies | Todo        | ORD-3, CAMP-11 |            | Was a separate confirmation sender; now runs on the workflow engine                                              |
+| ORD-5 | Web: orders pipeline and order detail                                            | In review   | ORD-3, WEB-2   | #144       | Pipeline, then detail, then source/courier/date filters                                                          |
+| ORD-6 | Public order link page and endpoint (Turnstile, limits)                          | Todo        | ORD-3          |            | Design needed                                                                                                    |
+| ORD-9 | Manual dispatch, courier/tracking entry, delivery, returns and COD recording     | Done        | ORD-3          | #142, #150 | D21; manual dispatch, delivery, returns, COD checks and store-only return risk                                   |
 
 ## M7. AI layer
 
-| ID   | Task                                                                    | Status    | Depends      | PR   | Notes |
-| ---- | ----------------------------------------------------------------------- | --------- | ------------ | ---- | ----- |
-| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | In review |              | #137 | Q8    |
-| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | In review | AI-1, PAY-1  | #140 | Q15   |
-| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Todo      | AI-2         |      |       |
-| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo      | AI-2, CHAT-3 |      |       |
-| AI-5 | Sales agent tools and the fact check before sending                     | Todo      | AI-4, ORD-3  |      |       |
-| AI-6 | Practice mode, test questions, Go live                                  | Todo      | AI-5         |      | Q10   |
-| AI-7 | Golden-set eval runner and nightly job                                  | Todo      | AI-5         |      |       |
-| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo      | AI-6         |      |       |
+| ID   | Task                                                                    | Status    | Depends      | PR   | Notes                                                                                                                      |
+| ---- | ----------------------------------------------------------------------- | --------- | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | In review |              | #137 | Q8                                                                                                                         |
+| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | In review | AI-1, PAY-1  | #140 | Q15                                                                                                                        |
+| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | In review | AI-2         | #143 | PDF and plain text files. Items and uploads first, then indexing and search. Images and website links are for later tasks. |
+| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo      | AI-2, CHAT-3 |      |                                                                                                                            |
+| AI-5 | Sales agent tools and the fact check before sending                     | Todo      | AI-4, ORD-3  |      |                                                                                                                            |
+| AI-6 | Practice mode, test questions, Go live                                  | Todo      | AI-5         |      | Q10                                                                                                                        |
+| AI-7 | Golden-set eval runner and nightly job                                  | Todo      | AI-5         |      |                                                                                                                            |
+| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo      | AI-6         |      |                                                                                                                            |
 
 ## Later release: couriers and COD
 
