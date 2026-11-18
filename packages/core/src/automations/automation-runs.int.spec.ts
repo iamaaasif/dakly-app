@@ -1964,28 +1964,45 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runner.emailOwner(crashed);
       expect(await mailTo(ownerEmail)).toHaveLength(2);
 
-      // A confirmed delivery can arrive after its lease expires with no replacement.
-      const delayed = { ...pausedEvent, id: randomUUID() };
-      const delayedKey = `automation-pause-email:${delayed.id}:${ownerId}`;
-      let finishDelayedEmail!: () => void;
-      const delayedEmail = new Promise<void>((resolve) => (finishDelayedEmail = resolve));
-      vi.spyOn(EmailService.prototype, 'send').mockImplementationOnce(async function (
-        this: EmailService,
-        input,
-      ) {
-        await delayedEmail;
-        await deliverEmail.call(this, input);
-      });
-      const delayedDelivery = runner.emailOwner(delayed);
-      await vi.waitFor(async () =>
-        expect(await runner.valkey.get(delayedKey)).toMatch(/^sending:/),
-      );
-      await runner.valkey.del(delayedKey);
-      finishDelayedEmail();
-      await delayedDelivery;
-      expect(await runner.valkey.get(delayedKey)).toBe('sent');
-      await runner.emailOwner(delayed);
-      expect(await mailTo(ownerEmail)).toHaveLength(3);
+      // A late confirmation must survive expiry and a concurrent attempt's refusal.
+      for (const hasReplacement of [false, true]) {
+        const delayed = { ...pausedEvent, id: randomUUID() };
+        const delayedKey = `automation-pause-email:${delayed.id}:${ownerId}`;
+        const before = (await mailTo(ownerEmail)).length;
+        let finishDelayedEmail!: () => void;
+        const delayedEmail = new Promise<void>((resolve) => (finishDelayedEmail = resolve));
+        const mailer = vi.spyOn(EmailService.prototype, 'send');
+        mailer.mockImplementationOnce(async function (this: EmailService, input) {
+          await delayedEmail;
+          await deliverEmail.call(this, input);
+        });
+        const delayedDelivery = runner.emailOwner(delayed);
+        await vi.waitFor(async () =>
+          expect(await runner.valkey.get(delayedKey)).toMatch(/^sending:/u),
+        );
+        await runner.valkey.del(delayedKey);
+
+        let replacement: Promise<void> | undefined;
+        let refuseReplacement: ((error: Error) => void) | undefined;
+        if (hasReplacement) {
+          const refusal = new Promise<never>((_, reject) => (refuseReplacement = reject));
+          mailer.mockReturnValueOnce(refusal);
+          replacement = runner.emailOwner(delayed);
+          void replacement.catch(() => undefined);
+          await vi.waitFor(async () =>
+            expect(await runner.valkey.get(delayedKey)).toMatch(/^sending:/u),
+          );
+        }
+        finishDelayedEmail();
+        await delayedDelivery;
+        if (replacement) {
+          refuseReplacement?.(new Error('Replacement refused'));
+          await expect(replacement).rejects.toThrow('Replacement refused');
+        }
+        expect(await runner.valkey.get(delayedKey)).toBe('sent');
+        await runner.emailOwner(delayed);
+        expect(await mailTo(ownerEmail)).toHaveLength(before + 1);
+      }
 
       // An owner whose email is still in flight does not hold back another owner's email.
       const coOwnerEmail = `owner-${coOwnerId}@example.test`;
@@ -2009,7 +2026,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
       });
       expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
-      expect(await mailTo(ownerEmail)).toHaveLength(3);
+      expect(await mailTo(ownerEmail)).toHaveLength(4);
 
       const profiles = vi.spyOn(UsersService.prototype, 'profiles');
       const owners = [
@@ -2021,10 +2038,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const mail = vi.spyOn(EmailService.prototype, 'send');
       mail.mockRejectedValueOnce(new Error('mailbox refused'));
       await expect(runner.emailOwner(rejectedOwner)).rejects.toThrow('mailbox refused');
-      expect(await mailTo(ownerEmail)).toHaveLength(3);
+      expect(await mailTo(ownerEmail)).toHaveLength(4);
       expect(await mailTo(coOwnerEmail)).toHaveLength(2);
       await runner.emailOwner(rejectedOwner);
-      expect(await mailTo(ownerEmail)).toHaveLength(4);
+      expect(await mailTo(ownerEmail)).toHaveLength(5);
       expect(await mailTo(coOwnerEmail)).toHaveLength(2);
       // A paused workflow's runs are not swept.
       await runner.sweep();
