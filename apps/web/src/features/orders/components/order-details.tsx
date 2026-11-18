@@ -1,10 +1,11 @@
 import Link from 'next/link';
+import { useRef } from 'react';
 
 import type { OrderDetail } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 
-import { useOrderStage } from '../api/orders';
+import { useOrderStage } from '../api/change-order-stage';
 import { courierLabels, orderStageLabels } from '../order-labels';
 import { OrderItems } from './order-items';
 import { OrderRiskBadge } from './order-risk-badge';
@@ -16,6 +17,7 @@ import { useSessionContext } from '@/lib/session-context';
 export function OrderDetails({ order }: { order: OrderDetail }) {
   const { data } = useSessionContext();
   const transition = useOrderStage(order.id);
+  const stage = useRef<HTMLSpanElement>(null);
   const canConfirm =
     data?.currentStore?.canEditOrders &&
     ['to_confirm', 'on_hold'].includes(order.stage) &&
@@ -24,11 +26,33 @@ export function OrderDetails({ order }: { order: OrderDetail }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Badge>{orderStageLabels[order.stage]}</Badge>
+        <Badge
+          ref={stage}
+          tabIndex={-1}
+          role="status"
+          aria-label="Order stage"
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          {orderStageLabels[order.stage]}
+        </Badge>
         {canConfirm ? (
           <Button
             disabled={transition.isPending}
-            onClick={() => transition.mutate({ to: 'to_pack' })}
+            onClick={(event) => {
+              const button = event.currentTarget;
+              transition.mutate(
+                { to: 'to_pack' },
+                {
+                  onSuccess: () => {
+                    if (
+                      document.activeElement === button ||
+                      document.activeElement === document.body
+                    )
+                      stage.current?.focus();
+                  },
+                },
+              );
+            }}
           >
             Mark confirmed
           </Button>
@@ -42,20 +66,31 @@ export function OrderDetails({ order }: { order: OrderDetail }) {
       <p className="text-sm text-text-muted capitalize">
         {order.source.replaceAll('_', ' ')} · {formatDateTime(order.createdAt)}
       </p>
-      <section aria-label="Delivery details">
-        <h3 className="text-md font-semibold">Delivery details</h3>
-        <p className="wrap-anywhere">{order.recipientName}</p>
-        <p>{formatPhone(order.recipientPhone)}</p>
-        <OrderRiskBadge risk={order.returnRisk} />
-        <p className="wrap-anywhere">
-          {order.recipientAddress}, {order.recipientDistrict}
-        </p>
-        <BuyerDetails order={order} />
-      </section>
+      <DeliveryDetails order={order} />
       <ParcelDetails order={order} />
       <OrderItems order={order} />
       <OrderTimeline timeline={order.timeline} />
     </div>
+  );
+}
+
+function DeliveryDetails({ order }: { order: OrderDetail }) {
+  return (
+    <section aria-label="Delivery details">
+      <h3 className="text-md font-semibold">Delivery details</h3>
+      <p className="wrap-anywhere">{order.recipientName}</p>
+      <p>{formatPhone(order.recipientPhone)}</p>
+      <OrderRiskBadge risk={order.returnRisk} />
+      {order.returnRisk === 'high' &&
+        order.advancePaidPoisha === 0 &&
+        ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) && (
+          <p className="text-sm text-warning">Ask for a small advance first</p>
+        )}
+      <p className="wrap-anywhere">
+        {order.recipientAddress}, {order.recipientDistrict}
+      </p>
+      <BuyerDetails order={order} />
+    </section>
   );
 }
 
@@ -80,7 +115,10 @@ function BuyerDetails({ order }: { order: OrderDetail }) {
     <p className="mt-2 wrap-anywhere text-text-muted">
       Buyer {order.buyerName ?? 'Unnamed customer'}{' '}
       {canOpenBuyer && (
-        <Link className="text-action underline" href={`/customers/${order.buyerContactId}`}>
+        <Link
+          className="inline-flex min-h-10 min-w-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          href={`/customers/${order.buyerContactId}`}
+        >
           Open profile
         </Link>
       )}

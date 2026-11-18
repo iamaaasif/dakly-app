@@ -92,7 +92,7 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
       name: 'Kamal Hossain',
       phone: '01701000001',
       hours: 3,
-      cod: 502000,
+      cod: 501000,
     });
     await order({
       number: 1059,
@@ -139,8 +139,8 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
       [storeId, delivered],
     );
     await database.pool.query(
-      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
-        values ($1,$2,$3,$4,'Cotton Panjabi','L',2,248000,false)`,
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,line_discount_poisha,is_stock_tracked)
+        values ($1,$2,$3,$4,'Cotton Panjabi','L',2,248000,1000,false)`,
       [randomUUID(), storeId, kamal, variantId],
     );
 
@@ -162,10 +162,16 @@ test('filters orders, opens a detail and confirms an order in the active shop', 
     await page.getByRole('link', { name: 'Confirm order #1060' }).click();
     const detail = page.getByRole('dialog', { name: 'Order #1060' });
     await expect(detail.getByText('High return risk')).toBeVisible();
-    await detail.getByRole('button', { name: 'Mark confirmed' }).click();
+    await expect(detail.getByText('Ask for a small advance first')).toBeVisible();
+    await expect(detail.getByText('Line discount')).toBeVisible();
+    const confirm = detail.getByRole('button', { name: 'Mark confirmed' });
+    await confirm.focus();
+    await confirm.press('Enter');
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
+    await expect(detail.getByRole('status', { name: 'Order stage' })).toBeFocused();
     await capture('detail');
     await detail.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('heading', { name: 'Orders', exact: true })).toBeFocused();
     await page.getByRole('link', { name: /^To pack/ }).click();
     await expect(page).toHaveURL(/stage=to_pack/);
     await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();

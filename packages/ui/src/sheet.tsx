@@ -1,7 +1,7 @@
 'use client';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode, type RefObject } from 'react';
 
 import { Button } from './button';
 import { cn } from './cn';
@@ -16,10 +16,18 @@ export type SheetProps = {
   open: boolean;
   side?: keyof typeof sideClasses;
   onClose: () => void;
+  fallbackFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };
 
-export function Sheet({ title, open, side = 'right', onClose, children }: SheetProps) {
+export function Sheet({
+  title,
+  open,
+  side = 'right',
+  onClose,
+  fallbackFocus,
+  children,
+}: SheetProps) {
   const opener = useRef<Element | null>(null);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -31,7 +39,15 @@ export function Sheet({ title, open, side = 'right', onClose, children }: SheetP
           onOpenAutoFocus={() => (opener.current = document.activeElement)}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (opener.current instanceof HTMLElement) opener.current.focus();
+            if (
+              opener.current instanceof HTMLElement &&
+              opener.current.isConnected &&
+              opener.current !== document.body
+            ) {
+              opener.current.focus();
+            } else {
+              fallbackFocus?.current?.focus();
+            }
           }}
           className={cn(
             'fixed inset-y-0 z-50 flex h-dvh w-full max-w-sm flex-col overflow-y-auto border-border bg-surface p-6 text-text shadow-overlay',
