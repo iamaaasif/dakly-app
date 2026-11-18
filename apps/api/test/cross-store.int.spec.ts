@@ -1688,16 +1688,8 @@ describe('every production shop route isolates its data', () => {
     const { product_id: productId } = await f.row('product_variants', variantId);
     await deliveryZone(b);
     await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
-    const lock = await f.admin.pool.connect();
-    await lock.query('begin');
-    try {
-      const {
-        rows: [session],
-      } = await lock.query<{ pid: number }>('select pg_backend_pid() as pid');
-      await lock.query('select id from product_variants where id=$1 for no key update', [
-        variantId,
-      ]);
-      const requests = Promise.all([
+    const startRequests = () =>
+      Promise.allSettled([
         f.request(
           b.owner,
           'POST',
@@ -1711,38 +1703,55 @@ describe('every production shop route isolates its data', () => {
         ),
         f.request(b.owner, 'DELETE', `/products/${productId}`),
       ]);
+    const lock = await f.admin.pool.connect();
+    let requests: ReturnType<typeof startRequests> | undefined;
+    try {
+      await lock.query('begin');
+      const {
+        rows: [session],
+      } = await lock.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await lock.query('select id from product_variants where id=$1 for no key update', [
+        variantId,
+      ]);
+      requests = startRequests();
+      await expect
+        .poll(async () => {
+          const {
+            rows: [blocked],
+          } = await f.admin.pool.query<{ total: string }>(
+            `with recursive waiting(pid) as (
+             select $1::int
+             union
+             select activity.pid from pg_stat_activity activity
+             join waiting on waiting.pid=any(pg_blocking_pids(activity.pid))
+           ) select count(*)-1 as total from waiting`,
+            [session!.pid],
+          );
+          return Number(blocked!.total);
+        })
+        .toBe(2);
+    } finally {
+      let rolledBack = false;
       try {
-        await expect
-          .poll(async () => {
-            const {
-              rows: [blocked],
-            } = await f.admin.pool.query<{ total: string }>(
-              `with recursive waiting(pid) as (
-               select $1::int
-               union
-               select activity.pid from pg_stat_activity activity
-               join waiting on waiting.pid=any(pg_blocking_pids(activity.pid))
-             ) select count(*)-1 as total from waiting`,
-              [session!.pid],
-            );
-            return Number(blocked!.total);
-          })
-          .toBe(2);
-      } finally {
         await lock.query('rollback');
+        rolledBack = true;
+      } finally {
+        lock.release(!rolledBack);
         await requests;
       }
-      const [created, archived] = await requests;
-      if (created.statusCode === 201) {
-        expect(archived.statusCode, archived.body).toBe(409);
-        expect(archived.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
-      } else {
-        expect(archived.statusCode, archived.body).toBe(204);
-        expect(created.statusCode, created.body).toBe(404);
-        expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
-      }
-    } finally {
-      lock.release();
+    }
+    const [creation, archive] = (await requests)!;
+    if (creation.status === 'rejected') throw creation.reason;
+    if (archive.status === 'rejected') throw archive.reason;
+    const created = creation.value;
+    const archived = archive.value;
+    if (created.statusCode === 201) {
+      expect(archived.statusCode, archived.body).toBe(409);
+      expect(archived.json()).toMatchObject({ error: { code: 'PRODUCT_HAS_OPEN_ORDERS' } });
+    } else {
+      expect(archived.statusCode, archived.body).toBe(204);
+      expect(created.statusCode, created.body).toBe(404);
+      expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
   for (const [route, run] of fixtures) it(route, run);
