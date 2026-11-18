@@ -34,6 +34,7 @@ import {
   type ImportedChange,
   type ImportMatch,
 } from './import-contacts.repository';
+import { OrderContactsRepository } from './order-contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 // Writes take the actor (services.md); nothing records it for contacts yet.
@@ -63,6 +64,7 @@ export class ContactsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
+    @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
   ) {}
 
   async create(
@@ -152,10 +154,10 @@ export class ContactsService {
     contactId: string,
     { phone, orderId, now }: { phone: string; orderId: string; now: Date },
   ): Promise<void> {
-    if (await this.contactsRepository.saveOrderPhone(storeId, contactId, phone, now)) return;
+    if (await this.orderContacts.saveOrderPhone(storeId, contactId, phone, now)) return;
     const [owner] = await this.contactsRepository.list(storeId, { phone, limit: 1 });
     if (owner && owner.id !== contactId)
-      await this.contactsRepository.suggestOrderPhoneMatch(storeId, {
+      await this.orderContacts.suggestOrderPhoneMatch(storeId, {
         contactId,
         matchedContactId: owner.id,
         phone,
@@ -166,7 +168,7 @@ export class ContactsService {
 
   // Import undo keeps a contact once a new order makes the imported record useful.
   async markOrderLinked(storeId: string, contactId: string, _actor: Actor): Promise<void> {
-    if (!(await this.contactsRepository.markOrderLinked(storeId, contactId, this.clock.now())))
+    if (!(await this.orderContacts.markOrderLinked(storeId, contactId, this.clock.now())))
       throw contactError('CONTACT_NOT_FOUND');
   }
 

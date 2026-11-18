@@ -115,12 +115,14 @@ export class ProductsService {
     });
   }
 
-  async orderVariants(storeId: string, variantIds: string[], existingIds: string[]) {
-    await this.repository.lockVariants(storeId, [...variantIds, ...existingIds]);
-    if (!variantIds.length) return [];
-    const variants = await this.repository.orderVariants(storeId, variantIds);
-    if (variants.length !== variantIds.length) throw productError('PRODUCT_VARIANT_NOT_FOUND');
-    return variants;
+  orderVariants(storeId: string, variantIds: string[], existingIds: string[]) {
+    return this.transaction.run(storeId, async () => {
+      await this.repository.lockVariants(storeId, [...variantIds, ...existingIds]);
+      if (!variantIds.length) return [];
+      const variants = await this.repository.orderVariants(storeId, variantIds);
+      if (variants.length !== variantIds.length) throw productError('PRODUCT_VARIANT_NOT_FOUND');
+      return variants;
+    });
   }
 
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
