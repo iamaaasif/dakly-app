@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 import { LlmError, type LlmDriver, type LlmRequest, type LlmResult } from '../llm-driver';
 
-const timeoutMilliseconds = z.int().min(1).max(2_147_483_647);
 const unsupportedSchemaKeywords = [
   'allOf',
   'oneOf',
@@ -55,11 +54,8 @@ export class OpenAiLlmDriver implements LlmDriver {
   ) {}
 
   async respond(request: LlmRequest): Promise<LlmResult> {
-    if (request.signal?.aborted) throw new LlmError('LLM_ABORTED');
-    const timeout = timeoutMilliseconds.safeParse(request.timeoutMs);
-    if (!timeout.success) throw new LlmError('LLM_INVALID_TIMEOUT');
     const body = responseRequestBody(request);
-    const deadline = AbortSignal.timeout(timeout.data);
+    const deadline = AbortSignal.timeout(request.timeoutMs);
     const signal = request.signal ? AbortSignal.any([request.signal, deadline]) : deadline;
     try {
       const response = await this.request('https://api.openai.com/v1/responses', {

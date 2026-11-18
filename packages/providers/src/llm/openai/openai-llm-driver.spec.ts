@@ -169,17 +169,6 @@ describe('OpenAiLlmDriver', () => {
     expect(cancelled).toBe(true);
   });
 
-  it.each([0, -1, 1.5, NaN, 2_147_483_648])(
-    'rejects an invalid timeout of %s ms',
-    async (timeoutMs) => {
-      const driver = new OpenAiLlmDriver('test-key', async () => Response.json(fixtures.reply));
-
-      await expect(driver.respond({ ...request, timeoutMs })).rejects.toMatchObject({
-        code: 'LLM_INVALID_TIMEOUT',
-      });
-    },
-  );
-
   it('accepts nullable fields in a strict schema', async () => {
     const driver = new OpenAiLlmDriver('test-key', async (_url, options) => {
       expect(JSON.parse(String(options?.body))).toMatchObject({
