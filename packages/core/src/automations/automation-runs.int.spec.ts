@@ -1941,9 +1941,14 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       // after it lapses sends the email.
       const crashed = { ...pausedEvent, id: randomUUID() };
       const claimKey = `automation-pause-email:${crashed.id}:${ownerId}`;
-      vi.spyOn(EmailService.prototype, 'send').mockReturnValueOnce(new Promise(() => {}));
-      void runner.emailOwner(crashed);
-      await vi.waitFor(async () => expect(await runner.valkey.get(claimKey)).toBe('sending'));
+      let failExpiredSend!: (error: Error) => void;
+      const expiredSend = new Promise<never>((_, reject) => (failExpiredSend = reject));
+      vi.spyOn(EmailService.prototype, 'send').mockReturnValueOnce(expiredSend);
+      const crashedDelivery = runner.emailOwner(crashed);
+      void crashedDelivery.catch(() => undefined);
+      await vi.waitFor(async () =>
+        expect(await runner.valkey.get(claimKey)).toMatch(/^sending:[\da-f-]{36}$/u),
+      );
       expect(await runner.valkey.ttl(claimKey)).toBeLessThanOrEqual(20);
       await expect(runner.emailOwner(crashed)).rejects.toMatchObject({
         code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
@@ -1952,6 +1957,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runner.emailOwner(crashed);
       expect(await mailTo(ownerEmail)).toHaveLength(2);
       expect(await runner.valkey.ttl(claimKey)).toBeGreaterThan(6 * 24 * 60 * 60);
+      failExpiredSend(new Error('Old attempt failed after its claim expired'));
+      await expect(crashedDelivery).rejects.toThrow('Old attempt failed');
+      expect(await runner.valkey.get(claimKey)).toBe('sent');
+      await runner.emailOwner(crashed);
+      expect(await mailTo(ownerEmail)).toHaveLength(2);
       // An owner whose email is still in flight does not hold back another owner's email.
       const coOwnerEmail = `owner-${coOwnerId}@example.test`;
       await admin.pool.query("insert into users(id,name,email) values($1,'ফাহিম',$2)", [

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
@@ -230,9 +232,10 @@ export class AutomationsService {
     for (const { id, email } of owners) {
       if (!email) continue;
       const key = `automation-pause-email:${eventId}:${id}`;
+      const claim = `sending:${randomUUID()}`;
       const claimed = await this.valkey.connection.set(
         key,
-        'sending',
+        claim,
         'EX',
         SENDING_CLAIM_SECONDS,
         'NX',
@@ -245,11 +248,11 @@ export class AutomationsService {
         await this.email.send({ to: email, subject: title, text });
       } catch (error) {
         // Retry the failed recipient without preventing delivery to the other owners.
-        await this.valkey.connection.del(key);
+        await this.valkey.connection.eval(finishEmailClaim, 1, key, claim, 0);
         firstFailure ??= { error };
         continue;
       }
-      await this.valkey.connection.set(key, 'sent', 'EX', SENT_CLAIM_SECONDS);
+      await this.valkey.connection.eval(finishEmailClaim, 1, key, claim, SENT_CLAIM_SECONDS);
     }
     if (firstFailure) throw firstFailure.error;
     if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
@@ -312,6 +315,13 @@ const TOP_UP_PATH = '/settings';
 const SENDING_CLAIM_SECONDS = 20;
 // Longer than the outbox relay keeps retrying an event.
 const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
+
+// A worker whose lease expired must leave a newer worker's claim or delivery intact.
+const finishEmailClaim = `
+  if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+  if tonumber(ARGV[2]) == 0 then return redis.call('DEL', KEYS[1]) end
+  return redis.call('SET', KEYS[1], 'sent', 'EX', ARGV[2])
+`;
 
 function balancePauseNotice(name: string) {
   return {
