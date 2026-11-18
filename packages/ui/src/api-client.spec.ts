@@ -53,6 +53,15 @@ describe('apiFetch', () => {
     });
   });
 
+  it('keeps the proxy status when JSON uses a different error shape', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ error: 'Forbidden' }, { status: 403 }));
+    await expect(apiFetch('/api/orders', { body: {} })).rejects.toMatchObject({
+      code: 'REQUEST_FAILED',
+      message: 'Could not complete the request. Try again.',
+      status: 403,
+    });
+  });
+
   it('reads an empty response as undefined', async () => {
     vi.stubGlobal('fetch', async () => new Response(null, { status: 204 }));
     expect(

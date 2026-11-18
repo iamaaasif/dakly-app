@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { orderStageTransitions } from './order-stage';
+import { orderStageTransitions } from '@dakly/contracts/orders';
 
 describe('Order stage transitions', () => {
   it('allows only the fulfilment moves in the order rules', () => {

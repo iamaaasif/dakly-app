@@ -64,6 +64,12 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
         await action.scrollIntoViewIfNeeded();
         await expect(action).toBeInViewport({ ratio: 1 });
       }
+      if (name === 'filters' && width === 360) {
+        await page.getByText('Filters', { exact: true }).evaluate((summary) => {
+          summary.scrollIntoView({ block: 'start' });
+        });
+        await expect(page.getByRole('button', { name: 'Apply filters' })).toBeInViewport();
+      }
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -123,7 +129,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       hours: 72,
       cod: 248000,
     });
-    await order({
+    const delivered = await order({
       number: 1056,
       stage: 'delivered',
       name: 'Nusrat Jahan',
@@ -150,6 +156,10 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await database.pool.query(
       'update orders set items_subtotal_poisha=450000, delivered_items_subtotal_poisha=252000, delivered_order_discount_poisha=2000 where id=$1',
       [partial],
+    );
+    await database.pool.query(
+      "update orders set courier='pathao', source='whatsapp', created_at='2026-11-16T18:00:00Z' where store_id=$1 and id=$2",
+      [storeId, delivered],
     );
     await database.pool.query(
       `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,line_discount_poisha,is_stock_tracked)
@@ -215,6 +225,39 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByRole('link', { name: 'Delivered 2' })).toBeVisible();
     await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
     await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
+    await page.getByText('Filters', { exact: true }).click();
+    await page.getByRole('combobox', { name: 'Source' }).selectOption({ label: 'WhatsApp' });
+    await page.getByRole('combobox', { name: 'Courier' }).selectOption({ label: 'Pathao' });
+    await page.getByLabel('From date').fill('2026-11-17');
+    await page.getByLabel('Through date').fill('2026-11-17');
+    const applyFilters = page.getByRole('button', { name: 'Apply filters' });
+    await applyFilters.focus();
+    await applyFilters.press('Enter');
+    await expect(page).toHaveURL(/courier=pathao/);
+    await expect(applyFilters).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
+    await capture('filters');
+    await database.pool.query(
+      "update orders set stage='cancelled',cancel_reason='test' where id=$1",
+      [delivered],
+    );
+    await page.getByLabel('Cancelled orders').check();
+    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await expect(page).toHaveURL(/stage=cancelled/);
+    await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Clear filters' }).click();
+    await expect(page).toHaveURL(/stage=to_confirm/);
+    const summary = page.getByText('Filters', { exact: true });
+    await expect(summary).toBeFocused();
+    await summary.press('Enter');
+    await page.getByLabel('Cancelled orders').check();
+    await applyFilters.click();
+    await expect(page).toHaveURL(/stage=cancelled/);
+    await page.getByLabel('Cancelled orders').uncheck();
+    await applyFilters.focus();
+    await applyFilters.press('Enter');
+    await expect(page).toHaveURL(/stage=to_confirm/);
+    await expect(summary).toBeFocused();
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",

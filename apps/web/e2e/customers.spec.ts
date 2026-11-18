@@ -28,6 +28,11 @@ test('adds a customer, finds it by name and opens the profile', async ({
         sameSite: 'Lax',
       },
     ]);
+    const selected = await context.request.post('/api/me/active-store', {
+      headers: { Origin: baseURL! },
+      data: { storeId: fixture.storeIds[0] },
+    });
+    expect(selected.status()).toBe(204);
     await page.goto('/customers');
     await page.getByLabel('Name', { exact: true }).fill(name);
     await page.getByLabel('Phone', { exact: true }).fill(phone);

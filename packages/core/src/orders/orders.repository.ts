@@ -93,16 +93,16 @@ export type StageWrite = Partial<
   >
 >;
 
+type OrderFilters = Omit<OrderListQuery, 'stage'> & {
+  stages?: OrderStage[];
+  timeZone: string | null;
+};
+
 @Injectable()
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(
-    storeId: string,
-    query: Omit<OrderListQuery, 'stage'> & { stages?: OrderStage[] },
-    overdueBefore: Date,
-    phone?: string,
-  ) {
+  list(storeId: string, query: OrderFilters, overdueBefore: Date, phone?: string) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
@@ -113,6 +113,7 @@ export class OrdersRepository {
             query.stages ? inArray(orders.stage, query.stages) : undefined,
             query.cursor ? lt(orders.number, query.cursor) : undefined,
             orderSearch(query.search, phone),
+            orderFilters(query),
             query.alert ? orderAlertFilter(tx, storeId, query.alert, overdueBefore) : undefined,
           ),
         )
@@ -357,6 +358,19 @@ const itemPreview = sql<string | null>`(
 )`;
 
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
+
+function orderFilters({ source, courier, createdFrom, createdThrough, timeZone }: OrderFilters) {
+  return and(
+    source ? eq(orders.source, source) : undefined,
+    courier ? eq(orders.courier, courier) : undefined,
+    createdFrom
+      ? sql`${orders.createdAt} >= ${createdFrom}::date::timestamp at time zone ${timeZone}`
+      : undefined,
+    createdThrough
+      ? sql`${orders.createdAt} < (${createdThrough}::date + 1)::timestamp at time zone ${timeZone}`
+      : undefined,
+  );
+}
 
 function orderSearch(search?: string, phone?: string) {
   if (!search) return;
