@@ -103,6 +103,30 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('sets refund due when staff cancel after recording an advance', async () => {
+    const variantId = await variant(2);
+    const request = editor();
+    const created = await orders.createOrder(
+      f.a,
+      draft(variantId, { advancePaidPoisha: 20000 }),
+      request,
+    );
+    await expect(
+      orders.changeStage(
+        f.a,
+        created.id,
+        { to: 'cancelled', reason: 'customer_cancelled' },
+        request,
+      ),
+    ).resolves.toMatchObject({
+      stage: 'cancelled',
+      paymentStatus: 'refund_due',
+      advancePaidPoisha: 20000,
+      timeline: [{ from: 'to_confirm', to: 'cancelled', reason: 'customer_cancelled' }],
+    });
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 0 });
+  });
+
   it('changes stock by the item difference, keeps prior prices, and rolls back an unavailable edit', async () => {
     const variantId = await variant(4);
     const request = editor();

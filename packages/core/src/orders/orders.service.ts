@@ -4,12 +4,13 @@ import { z } from 'zod';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
   orderStages,
+  type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
-  type OrderStage,
+  type OrderReturnRisk,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
 import { maskPhone } from '@dakly/contracts/phone';
@@ -24,15 +25,10 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
-import { orderStageTransitions } from './order-stage';
+import { changeOrderStage, isSyncedOrder } from './order-fulfilment';
 import { orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
-import {
-  OrdersRepository,
-  type OrderItemWrite,
-  type OrderWrite,
-  type StageWrite,
-} from './orders.repository';
+import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
 const stageSnapshot = z.object({ state: z.enum(orderStages) });
 
@@ -144,7 +140,7 @@ export class OrdersService {
         advancePaidPoisha,
       });
       const now = this.clock.now();
-      await this.moveReservations(storeId, orderId, { before: previous, after: items }, { actor });
+      await this.moveReservations(storeId, orderId, { before: previous, after: items }, actor);
       await this.repository.saveItems(
         storeId,
         orderId,
@@ -169,9 +165,15 @@ export class OrdersService {
 
   async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
     const rows = await this.repository.list(storeId, query);
-    const items = rows.slice(0, query.limit).map((row) => ({
+    const page = rows.slice(0, query.limit);
+    const outcomes = await this.repository.parcelOutcomes(storeId, [
+      ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
+    ]);
+    const byPhone = new Map(outcomes.map((row) => [row.phone, row]));
+    const items = page.map(({ recipientPhone, createdAt, ...row }) => ({
       ...row,
-      createdAt: row.createdAt.toISOString(),
+      createdAt: createdAt.toISOString(),
+      returnRisk: returnRisk(byPhone.get(recipientPhone)),
     }));
     const counts = {
       to_confirm: 0,
@@ -194,6 +196,7 @@ export class OrdersService {
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
+    const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
     const history = await this.audit.history(storeId, {
       entityType: 'order',
       entityId: orderId,
@@ -204,6 +207,11 @@ export class OrdersService {
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       createdAt: order.createdAt.toISOString(),
+      shippedAt: isoTime(order.shippedAt),
+      deliveredAt: isoTime(order.deliveredAt),
+      returnedAt: isoTime(order.returnedAt),
+      codCollectedAt: isoTime(order.codCollectedAt),
+      returnRisk: returnRisk(outcomes[0]),
       items: (await this.repository.items(storeId, orderId)).map(
         ({ unitCostPoisha: _unitCost, ...item }) => item,
       ),
@@ -223,35 +231,57 @@ export class OrdersService {
     { actor, access }: StageEditor,
   ): Promise<OrderDetail> {
     return this.transaction.run(storeId, async () => {
+      await changeOrderStage(
+        storeId,
+        { orderId, change, actor },
+        {
+          orders: this.repository,
+          products: this.products,
+          audit: this.audit,
+          outbox: this.outbox,
+          clock: this.clock,
+        },
+      );
+      return this.getById(storeId, orderId, access);
+    });
+  }
+
+  recordCodCollected(
+    storeId: string,
+    orderId: string,
+    { amountPoisha }: CodCollectedInput,
+    { actor, access }: StageEditor,
+  ): Promise<OrderDetail> {
+    return this.transaction.run(storeId, async () => {
       const order = await this.repository.lock(storeId, orderId);
       if (!order) throw orderError('ORDER_NOT_FOUND');
-      if (!orderStageTransitions[order.stage].includes(change.to) || isSyncedOrder(order.source))
-        throw orderError('ORDER_STAGE_NOT_ALLOWED');
-
+      if (
+        isSyncedOrder(order.source) ||
+        !['delivered', 'partially_delivered'].includes(order.stage) ||
+        !['cod_pending', 'advance_paid'].includes(order.paymentStatus)
+      )
+        throw orderError('ORDER_COD_NOT_COLLECTABLE');
       const now = this.clock.now();
-      const confirmed = change.to === 'to_pack' && !order.confirmedAt;
-      if (change.to === 'cancelled') {
-        await this.moveReservations(
-          storeId,
-          orderId,
-          { before: await this.repository.items(storeId, orderId), after: [] },
-          { actor, reason: change.reason },
-        );
-      }
-      await this.repository.updateOrder(storeId, orderId, stageWrite(change, now, confirmed));
-      await this.recordStage(storeId, orderId, {
-        from: order.stage,
-        change,
-        actor,
-        occurredAt: now.toISOString(),
+      await this.repository.updateOrder(storeId, orderId, {
+        paymentStatus: 'cod_collected',
+        codCollectedPoisha: amountPoisha,
+        codCollectedAt: now,
+        updatedAt: now,
       });
-      if (confirmed)
-        await this.outbox.publish({
-          type: 'order.confirmed',
-          storeId,
-          occurredAt: now.toISOString(),
-          payload: { orderId },
-        });
+      await this.audit.record(storeId, {
+        actor,
+        action: 'order.cod_collected',
+        entityType: 'order',
+        entityId: orderId,
+        before: { state: order.paymentStatus },
+        after: { state: 'cod_collected' },
+      });
+      await this.outbox.publish({
+        type: 'order.cod_collected',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { orderId },
+      });
       return this.getById(storeId, orderId, access);
     });
   }
@@ -264,7 +294,7 @@ export class OrdersService {
   ): Promise<void> {
     const { id, createdAt, buyerContactId } = order;
     await this.repository.insert(storeId, order);
-    await this.moveReservations(storeId, id, { before: [], after: items }, { actor });
+    await this.moveReservations(storeId, id, { before: [], after: items }, actor);
     await this.repository.insertItems(
       storeId,
       id,
@@ -337,7 +367,7 @@ export class OrdersService {
     storeId: string,
     orderId: string,
     { before, after }: { before: OrderItemWrite[]; after: OrderItemWrite[] },
-    { actor, reason }: { actor: AuditEntry['actor']; reason?: string },
+    actor: AuditEntry['actor'],
   ): Promise<void> {
     const deltas = new Map<string, number>();
     for (const item of before)
@@ -351,58 +381,10 @@ export class OrdersService {
       await this.products.moveStock(storeId, variantId, {
         kind: delta > 0 ? 'reserve' : 'release',
         quantity: Math.abs(delta),
-        reference: { orderId, actor, reason },
+        reference: { orderId, actor },
       });
     }
   }
-
-  private async recordStage(
-    storeId: string,
-    orderId: string,
-    {
-      from,
-      change,
-      actor,
-      occurredAt,
-    }: {
-      from: OrderStage;
-      change: OrderStageChange;
-      actor: AuditEntry['actor'];
-      occurredAt: string;
-    },
-  ): Promise<void> {
-    await this.audit.record(storeId, {
-      actor,
-      action: 'order.stage_changed',
-      entityType: 'order',
-      entityId: orderId,
-      before: { state: from },
-      after: { state: change.to },
-      reason: 'reason' in change ? change.reason : undefined,
-    });
-    await this.outbox.publish({
-      type: 'order.stage_changed',
-      storeId,
-      occurredAt,
-      payload: { orderId, from, to: change.to },
-    });
-  }
-}
-
-function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
-  return {
-    stage: change.to,
-    onHoldReason: change.to === 'on_hold' ? change.reason : null,
-    followUpOn: change.to === 'on_hold' ? (change.followUpOn ?? null) : null,
-    cancelReason: change.to === 'cancelled' ? change.reason : null,
-    ...(confirmed && { confirmedAt: now, confirmationMethod: 'staff' }),
-    ...(change.to === 'cancelled' && { cancelledAt: now }),
-    updatedAt: now,
-  };
-}
-
-function isSyncedOrder(source: OrderDetail['source']): boolean {
-  return source === 'shopify' || source === 'woocommerce';
 }
 
 function canEditOrder(order: Pick<OrderDetail, 'source' | 'stage' | 'paymentStatus'>): boolean {
@@ -411,4 +393,15 @@ function canEditOrder(order: Pick<OrderDetail, 'source' | 'stage' | 'paymentStat
     ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) &&
     ['cod_pending', 'advance_paid'].includes(order.paymentStatus)
   );
+}
+
+function returnRisk(outcome?: { parcels: number; returned: number }): OrderReturnRisk {
+  if (!outcome) return 'new_customer';
+  if (outcome.parcels < 2) return null;
+  if (2 * outcome.returned >= outcome.parcels) return 'high';
+  return 5 * outcome.returned <= outcome.parcels ? 'good' : 'some_returns';
+}
+
+function isoTime(value: Date | null): string | null {
+  return value?.toISOString() ?? null;
 }

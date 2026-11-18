@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 
 export const orderSources = [
@@ -67,6 +68,7 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
 export const orderListQuerySchema = z.strictObject({
   stage: z.enum(orderStages).optional(),
@@ -93,6 +95,7 @@ export type OrderSummary = {
   advancePaidPoisha: number;
   codAmountPoisha: number;
   createdAt: string;
+  returnRisk: OrderReturnRisk;
 };
 
 export type OrderListResponse = {
@@ -111,6 +114,7 @@ export type OrderItem = {
   isStockTracked: boolean;
   unitPricePoisha: number;
   lineDiscountPoisha: number;
+  deliveredLineDiscountPoisha: number | null;
 };
 
 export type OrderStageHistoryEntry = {
@@ -135,10 +139,49 @@ export type OrderDetail = OrderSummary & {
   onHoldReason: (typeof onHoldReasons)[number] | null;
   followUpOn: string | null;
   cancelReason: (typeof cancelReasons)[number] | null;
+  courier: (typeof couriers)[number] | null;
+  courierOtherName: string | null;
+  trackingCode: string | null;
+  shippedAt: string | null;
+  shippedByUserId: string | null;
+  deliveredAt: string | null;
+  returnedAt: string | null;
+  returnReason: string | null;
+  codCollectedAt: string | null;
+  codCollectedPoisha: number | null;
+  deliveredItemsSubtotalPoisha: number | null;
+  deliveredOrderDiscountPoisha: number | null;
   possibleDuplicateOfOrderId: string | null;
   items: OrderItem[];
   timeline: OrderStageHistoryEntry[];
 };
+
+const courierText = z.string().trim().min(1).max(100).optional();
+export const dispatchOrderSchema = z
+  .strictObject({
+    courier: z.enum(couriers).optional(),
+    courierOtherName: courierText,
+    trackingCode: courierText,
+  })
+  .refine((input) => (input.courier === 'other') === (input.courierOtherName !== undefined), {
+    path: ['courierOtherName'],
+    message: 'Enter a name only for Other courier',
+  });
+export type DispatchOrderInput = z.infer<typeof dispatchOrderSchema>;
+
+const deliveredLines = z
+  .array(
+    z.strictObject({
+      itemId: z.uuid().toLowerCase(),
+      quantity: z.int().min(0).max(2147483647),
+    }),
+  )
+  .min(1)
+  .max(100)
+  .refine(
+    (items) => new Set(items.map(({ itemId }) => itemId)).size === items.length,
+    'Enter the delivered quantity for each item once',
+  );
 
 export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('to_confirm') }),
@@ -152,10 +195,25 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
       .optional(),
   }),
   z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
+  z.strictObject({ to: z.literal('delivered') }),
+  z.strictObject({
+    to: z.literal('partially_delivered'),
+    items: deliveredLines,
+    note: z.string().trim().min(1).max(200),
+  }),
+  z.strictObject({
+    to: z.literal('returned'),
+    reason: z.string().trim().min(1).max(200),
+    isDamaged: z.boolean().default(false),
+  }),
 ]);
-export type OrderStageChange = z.infer<typeof orderStageChangeSchema>;
+export type OrderStageChange =
+  z.infer<typeof orderStageChangeSchema> | ({ to: 'with_courier' } & DispatchOrderInput);
 
 const money = z.int().nonnegative();
+export const codCollectedSchema = z.strictObject({ amountPoisha: money });
+export type CodCollectedInput = z.infer<typeof codCollectedSchema>;
+
 const buyerSchema = z.union([
   z.strictObject({ contactId: z.uuid() }),
   z.strictObject({ name: z.string().trim().min(1).max(120), phone: bdMobileSchema.optional() }),
