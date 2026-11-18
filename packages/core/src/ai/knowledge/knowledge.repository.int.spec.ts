@@ -39,32 +39,4 @@ describe('KnowledgeRepository', () => {
       status: 'processing',
     });
   });
-
-  it('discards a completed index for an item changed after the indexing read', async () => {
-    const item = await repository.create(
-      fixture.a,
-      fixture.userA,
-      { kind: 'policy', answer: 'আগের তথ্য' },
-      now,
-    );
-    const changed = await repository.change(fixture.a, item.id, { answer: 'নতুন তথ্য' }, now);
-    expect(changed?.updatedAt.getTime()).toBeGreaterThan(item.updatedAt.getTime());
-
-    const chunks = [
-      {
-        content: 'আগের তথ্য',
-        embedding: Array.from({ length: 512 }, (_, index) => (index === 0 ? 1 : 0)),
-        embeddingModel: 'test-embedding',
-        tokenCount: 2,
-      },
-    ];
-    await expect(repository.finishIndex(fixture.a, item.id, item.updatedAt, chunks)).resolves.toBe(
-      false,
-    );
-    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
-      answer: 'নতুন তথ্য',
-      factsCount: 0,
-      status: 'processing',
-    });
-  });
 });

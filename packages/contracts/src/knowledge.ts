@@ -2,6 +2,14 @@ import { z } from 'zod';
 
 import { type knowledgeKinds, type knowledgeStatuses } from './ai';
 
+export const knowledgeFileBytes = 10 * 1024 * 1024;
+export const knowledgeUploadSchema = z.strictObject({
+  contentType: z.enum(['application/pdf', 'text/plain']),
+  sizeBytes: z.int().min(1).max(knowledgeFileBytes),
+});
+export type KnowledgeUploadInput = z.infer<typeof knowledgeUploadSchema>;
+export type KnowledgeUploadResponse = { fileId: string; uploadUrl: string };
+
 const answer = z.string().trim().min(1).max(20_000);
 const fileId = z.uuid();
 

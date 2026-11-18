@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import type { StoreTransaction } from '../../platform/database/store-transaction';
 import type { OutboxService } from '../../platform/outbox/outbox.service';
 import type { KnowledgeItem, KnowledgeRepository } from './knowledge.repository';
-import { KnowledgeService, splitKnowledgeText } from './knowledge.service';
+import { KnowledgeService } from './knowledge.service';
 
 const storeId = 'dffb765b-69e5-46fc-8adc-886147a476ec';
 const itemId = '8aa450d6-bf5b-4aef-945b-2777caff81e9';
@@ -30,6 +31,26 @@ describe('KnowledgeService', () => {
     ]);
   });
 
+  it('issues a signed upload for a new tenant-owned pending file', async () => {
+    const { service, files } = fixture();
+    const result = await service.requestUpload(storeId, actor, {
+      contentType: 'application/pdf',
+      sizeBytes: 500,
+    });
+    const key = `stores/${storeId}/knowledge/${result.fileId}`;
+    expect(result.uploadUrl).toBe(`https://files.test/${key}`);
+    expect(files).toEqual([
+      {
+        id: result.fileId,
+        objectKey: key,
+        contentType: 'application/pdf',
+        sizeBytes: 500,
+        uploadedByUserId: userId,
+        createdAt: now,
+      },
+    ]);
+  });
+
   it('rejects a missing knowledge file before creating an item', async () => {
     const { service, events } = fixture();
 
@@ -40,23 +61,9 @@ describe('KnowledgeService', () => {
   });
 });
 
-describe('splitKnowledgeText', () => {
-  it('preserves Bangla words and drops blank passages', () => {
-    expect(splitKnowledgeText('  ঢাকায় ডেলিভারি ৬০ টাকা।\n')).toEqual(['ঢাকায় ডেলিভারি ৬০ টাকা।']);
-    expect(splitKnowledgeText(' \n  ')).toEqual([]);
-  });
-
-  it('keeps large inputs bounded without breaking an astral character', () => {
-    const text = String.fromCodePoint(0x10437).repeat(3000);
-    const passages = splitKnowledgeText(text);
-    expect(passages.length).toBeGreaterThan(1);
-    expect(passages.every((passage) => Buffer.byteLength(passage) <= 2000)).toBe(true);
-    expect(passages.join('')).toBe(text);
-  });
-});
-
 function fixture() {
   const events: DaklyEvent[] = [];
+  const files: object[] = [];
   const repository = {
     async create(
       _storeId: string,
@@ -74,6 +81,9 @@ function fixture() {
         updatedAt: now,
       };
     },
+    async createFile(_storeId: string, file: object) {
+      files.push(file);
+    },
     async findFile() {
       return undefined;
     },
@@ -86,6 +96,8 @@ function fixture() {
   const transaction = {
     run: <T>(_storeId: string, work: () => Promise<T>) => work(),
   } as StoreTransaction;
-  const service = new KnowledgeService(repository, outbox, transaction, { now: () => now });
-  return { service, events };
+  const service = new KnowledgeService(repository, outbox, transaction, { now: () => now }, {
+    createUploadUrl: (key: string) => `https://files.test/${key}`,
+  } as FileStorageDriver);
+  return { service, events, files };
 }

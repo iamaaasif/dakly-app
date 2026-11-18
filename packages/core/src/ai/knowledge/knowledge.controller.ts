@@ -15,11 +15,14 @@ import {
 import {
   changeKnowledgeItemSchema,
   createKnowledgeItemSchema,
+  knowledgeUploadSchema,
   listKnowledgeItemsQuerySchema,
   type ChangeKnowledgeItemInput,
   type CreateKnowledgeItemInput,
   type KnowledgeItemListResponse,
   type KnowledgeItemResponse,
+  type KnowledgeUploadInput,
+  type KnowledgeUploadResponse,
   type ListKnowledgeItemsQuery,
 } from '@dakly/contracts/knowledge';
 
@@ -33,8 +36,18 @@ import { KnowledgeService } from './knowledge.service';
 export class KnowledgeController {
   constructor(@Inject(KnowledgeService) private readonly knowledge: KnowledgeService) {}
 
+  @Post('uploads')
+  @RequirePermission('storeSettings.edit')
+  requestUpload(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Body(new ZodValidationPipe(knowledgeUploadSchema)) input: KnowledgeUploadInput,
+  ): Promise<KnowledgeUploadResponse> {
+    return this.knowledge.requestUpload(storeId, { kind: 'user', userId }, input);
+  }
+
   @Post()
-  @RequirePermission('chats.edit')
+  @RequirePermission('storeSettings.edit')
   create(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
@@ -44,7 +57,7 @@ export class KnowledgeController {
   }
 
   @Get()
-  @RequirePermission('chats.view')
+  @RequirePermission('storeSettings.view')
   list(
     @CurrentStore() storeId: string,
     @Query(new ZodValidationPipe(listKnowledgeItemsQuerySchema)) query: ListKnowledgeItemsQuery,
@@ -53,7 +66,7 @@ export class KnowledgeController {
   }
 
   @Get(':knowledgeItemId')
-  @RequirePermission('chats.view')
+  @RequirePermission('storeSettings.view')
   view(
     @CurrentStore() storeId: string,
     @Param('knowledgeItemId', ParseUUIDPipe) itemId: string,
@@ -62,7 +75,7 @@ export class KnowledgeController {
   }
 
   @Patch(':knowledgeItemId')
-  @RequirePermission('chats.edit')
+  @RequirePermission('storeSettings.edit')
   change(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
@@ -74,7 +87,7 @@ export class KnowledgeController {
 
   @Delete(':knowledgeItemId')
   @HttpCode(204)
-  @RequirePermission('chats.edit')
+  @RequirePermission('storeSettings.edit')
   remove(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,

@@ -374,6 +374,17 @@ refusals and caller cancellations do not count as provider errors.
 
 Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_sent`. Listens to `order.created` to link the order to the chat.
 
+### Knowledge items
+
+Owners and admins can add or edit typed policies and upload PDF or plain text
+files. Knowledge reads require `storeSettings.view` and changes require
+`storeSettings.edit`. Images and URLs are for later work.
+
+The API routes are registered with the indexing worker. The upload route
+issues a signed PUT for a tenant-owned pending file. A shop uploads the
+file before creating or changing the item. The event that requests indexing
+carries only the store and item IDs.
+
 ### Data
 
 `conversations` (with `version` for the AI write check), `messages`, `social_comments`, `saved_replies`, `ai_agent_settings` (go-live test questions included), `ai_rule_changes` (before and after of every taught rule or settings save, for undo), `knowledge_items`, `knowledge_chunks` (pgvector, 512 dimensions, exact scan per store, with the embedding model), `ai_runs` (partitioned by month, kept 13 months), `assistant_messages`; customer memory is `contact_memories` in Customers. Its progress belongs to each conversation: `memory_built_through_message_id`, its paired `memory_built_through_message_at`, and `memory_version`. `contact_memories.version` guards concurrent changes across conversations and staff edits; `cleared_at` prevents old evidence from repopulating cleared memory. Photo questions compare a vision-tier description of the customer's photo, embedded, against `products.image_embedding`. Usage goes to `usage_events`. Full design: [docs/data](../data/README.md).

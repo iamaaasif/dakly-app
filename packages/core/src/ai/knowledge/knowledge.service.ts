@@ -5,11 +5,16 @@ import type {
   CreateKnowledgeItemInput,
   KnowledgeItemListResponse,
   KnowledgeItemResponse,
+  KnowledgeUploadInput,
+  KnowledgeUploadResponse,
   ListKnowledgeItemsQuery,
 } from '@dakly/contracts/knowledge';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { Clock } from '../../platform/clock';
+import { newId } from '../../platform/database/new-id';
 import { StoreTransaction } from '../../platform/database/store-transaction';
+import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../../platform/outbox/outbox.service';
 import { knowledgeError } from './knowledge.errors';
 import { KnowledgeRepository, type KnowledgeItem } from './knowledge.repository';
@@ -24,7 +29,26 @@ export class KnowledgeService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
   ) {}
+
+  async requestUpload(
+    storeId: string,
+    actor: UserActor,
+    input: KnowledgeUploadInput,
+  ): Promise<KnowledgeUploadResponse> {
+    const fileId = newId();
+    const objectKey = `stores/${storeId}/knowledge/${fileId}`;
+    const uploadUrl = this.storage.createUploadUrl(objectKey, 300, input);
+    await this.repository.createFile(storeId, {
+      ...input,
+      id: fileId,
+      objectKey,
+      uploadedByUserId: actor.userId,
+      createdAt: this.clock.now(),
+    });
+    return { fileId, uploadUrl };
+  }
 
   create(
     storeId: string,
@@ -79,7 +103,7 @@ export class KnowledgeService {
 
   private async requireFile(storeId: string, fileId: string): Promise<void> {
     const file = await this.repository.findFile(storeId, fileId);
-    if (!file || file.status !== 'ready') throw knowledgeError('KNOWLEDGE_FILE_NOT_FOUND');
+    if (!file || file.status === 'rejected') throw knowledgeError('KNOWLEDGE_FILE_NOT_FOUND');
     if (!knowledgeFileTypes.has(file.contentType))
       throw knowledgeError('KNOWLEDGE_FILE_TYPE_INVALID');
   }
@@ -100,30 +124,4 @@ function toResponse(item: KnowledgeItem): KnowledgeItemResponse {
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
-}
-
-const chunkBytes = 2000;
-const words = new Intl.Segmenter('bn', { granularity: 'word' });
-
-export function splitKnowledgeText(text: string): string[] {
-  const chunks: string[] = [];
-  let chunk = '';
-  let bytes = 0;
-  function append(segment: string): void {
-    const length = Buffer.byteLength(segment);
-    if (bytes + length > chunkBytes) {
-      chunks.push(chunk.trim());
-      chunk = '';
-      bytes = 0;
-    }
-    chunk += segment;
-    bytes += length;
-  }
-
-  for (const { segment } of words.segment(text.trim())) {
-    if (Buffer.byteLength(segment) <= chunkBytes) append(segment);
-    else for (const codePoint of segment) append(codePoint);
-  }
-  chunks.push(chunk.trim());
-  return chunks.filter(Boolean);
 }

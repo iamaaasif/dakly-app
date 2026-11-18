@@ -6,7 +6,7 @@ import type {
   CreateKnowledgeItemInput,
   ListKnowledgeItemsQuery,
 } from '@dakly/contracts/knowledge';
-import { knowledgeChunks, knowledgeItems } from '@dakly/db/schema/ai';
+import { knowledgeItems } from '@dakly/db/schema/ai';
 import { files } from '@dakly/db/schema/platform';
 
 import { TenantDatabase } from '../../platform/database/tenant-database';
@@ -23,11 +23,6 @@ const columns = {
 };
 
 export type KnowledgeItem = Pick<typeof knowledgeItems.$inferSelect, keyof typeof columns>;
-export type KnowledgeChunk = Pick<
-  typeof knowledgeChunks.$inferInsert,
-  'content' | 'embedding' | 'embeddingModel' | 'tokenCount'
->;
-
 @Injectable()
 export class KnowledgeRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -118,40 +113,16 @@ export class KnowledgeRepository {
     return removed.length > 0;
   }
 
-  async finishIndex(
+  async createFile(
     storeId: string,
-    itemId: string,
-    revision: Date,
-    chunks: readonly KnowledgeChunk[] | null,
-  ): Promise<boolean> {
-    return this.database.forStore(storeId, async (tx) => {
-      const rows = await tx
-        .update(knowledgeItems)
-        .set({
-          status: chunks ? 'active' : 'failed',
-          factsCount: chunks?.length ?? 0,
-        })
-        .where(
-          and(
-            eq(knowledgeItems.storeId, storeId),
-            eq(knowledgeItems.id, itemId),
-            eq(knowledgeItems.updatedAt, revision),
-            eq(knowledgeItems.status, 'processing'),
-          ),
-        )
-        .returning({ id: knowledgeItems.id });
-      if (!rows.length) return false;
-      await tx
-        .delete(knowledgeChunks)
-        .where(
-          and(eq(knowledgeChunks.storeId, storeId), eq(knowledgeChunks.knowledgeItemId, itemId)),
-        );
-      if (chunks?.length)
-        await tx
-          .insert(knowledgeChunks)
-          .values(chunks.map((chunk) => ({ ...chunk, storeId, knowledgeItemId: itemId })));
-      return true;
-    });
+    file: Pick<
+      typeof files.$inferInsert,
+      'id' | 'objectKey' | 'contentType' | 'sizeBytes' | 'uploadedByUserId' | 'createdAt'
+    >,
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx.insert(files).values({ ...file, storeId, purpose: 'knowledge_file' }),
+    );
   }
 
   async findFile(storeId: string, fileId: string) {
