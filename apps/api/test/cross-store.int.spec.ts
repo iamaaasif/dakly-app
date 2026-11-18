@@ -90,6 +90,68 @@ async function order(shop: Shop): Promise<string> {
   return id;
 }
 
+async function orderVariant(shop: Shop): Promise<string> {
+  const result = await success(shop, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+    isStockTracked: false,
+  });
+  return result.json().variants[0].id as string;
+}
+
+fixture('POST /orders', async () => {
+  const { a, b } = await pair();
+  const ownVariant = await orderVariant(b);
+  const foreignVariant = await orderVariant(a);
+  const ownBuyer = await contact(b);
+  const foreignBuyer = await contact(a);
+  await deliveryZone(b);
+  await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
+  const input = (contactId: string, variantId: string) => ({
+    buyer: { contactId },
+    recipient: { name: 'রিনা', phone: b.owner.phone, address: 'ধানমন্ডি', areaId: 301 },
+    items: [{ variantId, quantity: 1 }],
+  });
+  const create = (payload: object, key = randomUUID()) =>
+    f.request(b.member, 'POST', '/orders', payload, { 'idempotency-key': key });
+  const before = await f.row('product_variants', foreignVariant);
+  const buyerBefore = await f.row('contacts', foreignBuyer);
+  for (const [foreign, missing] of [
+    [input(foreignBuyer, ownVariant), input(randomUUID(), ownVariant)],
+    [input(ownBuyer, foreignVariant), input(ownBuyer, randomUUID())],
+  ] as const) {
+    const denied = await create(foreign);
+    const absent = await create(missing);
+    expect(denied.statusCode, denied.body).toBe(404);
+    expect(absent.statusCode, absent.body).toBe(404);
+    expect(denied.json()).toEqual(absent.json());
+  }
+  expect(await f.row('product_variants', foreignVariant)).toEqual(before);
+  expect(await f.row('contacts', foreignBuyer)).toEqual(buyerBefore);
+  const key = randomUUID();
+  const goodInput = input(ownBuyer, ownVariant);
+  const created = await create(goodInput, key);
+  expect(created.statusCode, created.body).toBe(201);
+  expect(created.json()).toMatchObject({
+    number: 1001,
+    buyerContactId: ownBuyer,
+    stage: 'to_confirm',
+  });
+  expect((await create(goodInput, key)).json()).toEqual(created.json());
+  expect((await f.request(b.member, 'POST', '/orders', goodInput)).statusCode).toBe(400);
+  const ownPhone = phone();
+  const captured = await create({
+    ...goodInput,
+    buyer: { name: 'Rahim' },
+    recipient: { ...goodInput.recipient, phone: ownPhone },
+  });
+  expect(captured.statusCode, captured.body).toBe(201);
+  const buyerId = captured.json().buyerContactId;
+  expect(await f.row('contacts', buyerId)).toMatchObject({ phone: ownPhone });
+  const profileEdit = await f.request(b.member, 'PATCH', `/contacts/${buyerId}`, { name: 'Karim' });
+  expect(profileEdit.statusCode).toBe(403);
+});
+
 fixture('GET /orders', async () => {
   const { a, b } = await pair();
   const ownA = await order(a);
@@ -118,6 +180,46 @@ fixture('GET /orders/:orderId', async () => {
     `${a.owner.phone.slice(0, 5)}-XXX${a.owner.phone.slice(-3)}`,
   );
   await hidden(b, 'GET', (value) => `/orders/${value}`, id);
+});
+
+fixture('POST /orders/:orderId/courier', async () => {
+  const { a, b } = await pair();
+  const foreign = await order(a);
+  const own = await order(b);
+  await f.admin.pool.query("update orders set stage='to_pack' where id=any($1::uuid[])", [
+    [foreign, own],
+  ]);
+  const url = (id: string) => `/orders/${id}/courier`;
+  const input = { courier: 'other', courierOtherName: 'Local rider', trackingCode: 'DP123' };
+  const before = await f.row('orders', foreign);
+  expect((await success(b, 'POST', url(own), 200, input)).json()).toMatchObject({
+    stage: 'with_courier',
+    courier: 'other',
+    courierOtherName: 'Local rider',
+    trackingCode: 'DP123',
+    shippedByUserId: b.owner.id,
+  });
+  await hidden(b, 'POST', url, foreign, () => input);
+  expect(await f.row('orders', foreign)).toEqual(before);
+});
+
+fixture('POST /orders/:orderId/cod-collected', async () => {
+  const { a, b } = await pair();
+  const foreign = await order(a);
+  const own = await order(b);
+  await f.admin.pool.query("update orders set stage='delivered' where id=any($1::uuid[])", [
+    [foreign, own],
+  ]);
+  const url = (id: string) => `/orders/${id}/cod-collected`;
+  const input = { amountPoisha: 9000 };
+  const before = await f.row('orders', foreign);
+  expect((await success(b, 'POST', url(own), 200, input)).json()).toMatchObject({
+    stage: 'delivered',
+    paymentStatus: 'cod_collected',
+    codCollectedPoisha: 9000,
+  });
+  await hidden(b, 'POST', url, foreign, () => input);
+  expect(await f.row('orders', foreign)).toEqual(before);
 });
 
 fixture('POST /orders/:orderId/stage', async () => {
@@ -1362,17 +1464,18 @@ describe('every production shop route isolates its data', () => {
     const zones = await success(shop, 'POST', '/delivery-zones/initialize-defaults', 201);
     const service = app.get(DeliveryService);
     const cases = [
-      { areaId: 30260072, name: 'Dhaka suburbs', chargePoisha: 10000 },
-      { areaId: 30260014, name: 'Inside Dhaka', chargePoisha: 6000 },
-      { areaId: 20030004, name: 'Outside Dhaka', chargePoisha: 12000 },
+      { areaId: 30260072, name: 'Dhaka suburbs', chargePoisha: 10000, district: 'Dhaka' },
+      { areaId: 30260014, name: 'Inside Dhaka', chargePoisha: 6000, district: 'Dhaka' },
+      { areaId: 20030004, name: 'Outside Dhaka', chargePoisha: 12000, district: 'Bandarban' },
     ];
 
-    for (const { areaId, name, chargePoisha } of cases) {
+    for (const { areaId, name, chargePoisha, district } of cases) {
       const zone = zones.json().items.find((item: { name: string }) => item.name === name);
       expect(zone).toBeDefined();
       await expect(service.calculateDeliveryCharge(shop.id, areaId)).resolves.toEqual({
         deliveryZoneId: zone.id,
         chargePoisha,
+        district,
       });
     }
   });

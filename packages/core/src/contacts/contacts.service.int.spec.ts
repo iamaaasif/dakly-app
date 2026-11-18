@@ -48,6 +48,87 @@ describe('ContactsService (Postgres)', () => {
   const search = (term: string, access = masked) =>
     service.list(storeId, { limit: 50, search: term }, access);
 
+  it('marks the buyer as changed when an order links to them', async () => {
+    const buyer = await add();
+    const previous = '2026-11-17T06:00:00.000Z';
+    await admin.pool.query('update contacts set updated_at=$2 where id=$1', [buyer.id, previous]);
+
+    await transaction.run(storeId, () => service.markOrderLinked(storeId, buyer.id, actor));
+
+    const updated = await admin.pool.query<{ updated_at: Date; phone: string }>(
+      'select updated_at, phone from contacts where id=$1',
+      [buyer.id],
+    );
+    expect(updated.rows[0]!.updated_at.getTime()).toBeGreaterThan(Date.parse(previous));
+    expect(updated.rows[0]!.phone).toBe(buyer.phone);
+  });
+
+  it('keeps two self-delivery buyers separate when they supply the same own phone at once', async () => {
+    const ownPhone = phone();
+    const orders = [randomUUID(), randomUUID()] as const;
+    const { id: firstId } = await service.resolveOrderBuyer(
+      storeId,
+      {
+        buyer: { name: 'Rahim' },
+        orderId: orders[0],
+      },
+      actor,
+    );
+    const { id: secondId } = await service.resolveOrderBuyer(
+      storeId,
+      {
+        buyer: { name: 'Karim' },
+        orderId: orders[1],
+      },
+      actor,
+    );
+    const [first, second] = await Promise.all([
+      service.resolveOrderBuyer(
+        storeId,
+        {
+          buyer: { contactId: firstId },
+          ownPhone,
+          orderId: orders[0],
+        },
+        actor,
+      ),
+      service.resolveOrderBuyer(
+        storeId,
+        {
+          buyer: { contactId: secondId },
+          ownPhone,
+          orderId: orders[1],
+        },
+        actor,
+      ),
+    ]);
+
+    expect([first.id, second.id]).toEqual([firstId, secondId]);
+    const profiles = await admin.pool.query(
+      'select id,phone,phone_verified_at from contacts where id=any($1) order by phone nulls last',
+      [[firstId, secondId]],
+    );
+    expect(
+      profiles.rows.map(({ phone, phone_verified_at }) => ({ phone, phone_verified_at })),
+    ).toEqual([
+      { phone: ownPhone, phone_verified_at: null },
+      { phone: null, phone_verified_at: null },
+    ]);
+    const suggestions = await admin.pool.query(
+      'select contact_id,matched_contact_id,reason,order_id from contact_match_suggestions where store_id=$1',
+      [storeId],
+    );
+    const [owner, conflict] = profiles.rows;
+    expect(suggestions.rows).toEqual([
+      {
+        contact_id: conflict.id,
+        matched_contact_id: owner.id,
+        reason: 'same_phone',
+        order_id: orders[conflict.id === firstId ? 0 : 1],
+      },
+    ]);
+  });
+
   it('finds a contact by its full number written any way, masked without the flag', async () => {
     const number = phone();
     const { id } = await add(number);

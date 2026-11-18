@@ -1,5 +1,5 @@
 {
-  "id": "8c5f6ed6-b8e8-45ab-bfeb-6d9d91d62766",
+  "id": "b4433abc-6f4b-46b4-a8c6-3ca7b86f47fe",
   "prevId": "f3b512be-f797-44b0-8c3b-4d0feed44fa8",
   "version": "7",
   "dialect": "postgresql",
@@ -7037,25 +7037,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sms_credits": {
-          "name": "sms_credits",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_attempts": {
-          "name": "send_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7585,62 +7566,6 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'scheduled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_start_due_by_store_idx": {
-          "name": "campaigns_start_due_by_store_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "scheduled_for",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'scheduled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_sending_idx": {
-          "name": "campaigns_sending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coalesce(\"started_at\", \"approved_at\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -14489,6 +14414,12 @@
           "notNull": true,
           "default": 0
         },
+        "delivered_line_discount_poisha": {
+          "name": "delivered_line_discount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_stock_tracked": {
           "name": "is_stock_tracked",
           "type": "boolean",
@@ -14800,6 +14731,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "delivered_items_subtotal_poisha": {
+          "name": "delivered_items_subtotal_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivered_order_discount_poisha": {
+          "name": "delivered_order_discount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
         },
         "discount_code_id": {
           "name": "discount_code_id",
