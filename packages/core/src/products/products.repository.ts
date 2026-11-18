@@ -6,8 +6,10 @@ import type {
   ProductListQuery,
   ProductOption,
   StockMovementKind,
+  ConfirmProductPhotoInput,
 } from '@dakly/contracts/products';
 import { MAX_STOCK_QUANTITY } from '@dakly/contracts/products';
+import { files } from '@dakly/db/schema/platform';
 import { products, productVariants, stockMovements } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
@@ -15,6 +17,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 
 // Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
 const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
+const productImagesColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.imageFileIds.name)}`;
 
 const productColumns = {
   id: products.id,
@@ -45,7 +48,15 @@ const variantColumns = {
   reserved: productVariants.reserved,
   isDefault: productVariants.isDefault,
 };
-type CatalogueProduct = Product & { variants: Variant[] };
+export type CatalogueProduct = Product & {
+  variants: Variant[];
+  photos: { id: string; objectKey: string }[];
+};
+type PhotoWrite = ConfirmProductPhotoInput & {
+  objectKey: string;
+  uploadedByUserId: string | null;
+  createdAt: Date;
+};
 
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
 export type Product = ProductDetails & {
@@ -87,7 +98,11 @@ export class ProductsRepository {
   async findById(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ ...productColumns, variants: variantSnapshot(storeId) })
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
         .from(products)
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
@@ -103,7 +118,11 @@ export class ProductsRepository {
   ): Promise<CatalogueProduct[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ ...productColumns, variants: variantSnapshot(storeId) })
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
         .from(products)
         .where(
           and(
@@ -182,12 +201,21 @@ export class ProductsRepository {
   ): Promise<boolean> {
     try {
       await this.database.forStore(storeId, async (tx) => {
+        const forProduct = and(
+          eq(productVariants.storeId, storeId),
+          eq(productVariants.productId, productId),
+        );
+        // Order operations lock the same rows in ID order.
+        await tx
+          .select({ id: productVariants.id })
+          .from(productVariants)
+          .where(forProduct)
+          .orderBy(productVariants.id)
+          .for('no key update');
         await tx
           .update(productVariants)
           .set({ status: 'archived', isDefault: false, updatedAt: now })
-          .where(
-            and(eq(productVariants.storeId, storeId), eq(productVariants.productId, productId)),
-          );
+          .where(forProduct);
         await tx
           .insert(productVariants)
           .values(
@@ -224,6 +252,47 @@ export class ProductsRepository {
       if (isConstraintViolation(error, '23505', 'product_variants_store_id_sku_key')) return false;
       throw error;
     }
+  }
+
+  async lockVariants(storeId: string, variantIds: string[]): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: productVariants.id })
+        .from(productVariants)
+        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds)))
+        .orderBy(productVariants.id)
+        .for('no key update'),
+    );
+  }
+
+  orderVariants(storeId: string, variantIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          variantId: productVariants.id,
+          productName: products.name,
+          variantTitle: productVariants.title,
+          unitPricePoisha:
+            sql<number>`coalesce(${productVariants.priceOverridePoisha}, ${products.pricePoisha})`.mapWith(
+              Number,
+            ),
+          unitCostPoisha: productVariants.costPoisha,
+          isStockTracked: products.isStockTracked,
+        })
+        .from(productVariants)
+        .innerJoin(
+          products,
+          and(eq(products.id, productVariants.productId), eq(products.storeId, storeId)),
+        )
+        .where(
+          and(
+            eq(productVariants.storeId, storeId),
+            inArray(productVariants.id, variantIds),
+            ne(products.status, 'archived'),
+            ne(productVariants.status, 'archived'),
+          ),
+        ),
+    );
   }
 
   async findStockVariant(
@@ -288,6 +357,46 @@ export class ProductsRepository {
     );
     return rows.length > 0;
   }
+
+  async insertPhoto(storeId: string, { fileId, ...input }: PhotoWrite): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(files)
+        .values({ ...input, id: fileId, storeId, purpose: 'product_image', status: 'ready' })
+        .onConflictDoNothing()
+        .returning({ id: files.id }),
+    );
+    return rows.length > 0;
+  }
+
+  async updatePhotos(
+    storeId: string,
+    id: string,
+    imageFileIds: string[],
+    now: Date,
+  ): Promise<{ id: string } | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(products)
+        .set({ imageFileIds, updatedAt: now })
+        .where(
+          and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
+        )
+        .returning({ id: products.id }),
+    );
+    return rows[0];
+  }
+
+  async expirePhoto(storeId: string, fileId: string, now: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(files)
+        .set({ expiresAt: now })
+        .where(
+          and(eq(files.storeId, storeId), eq(files.id, fileId), eq(files.purpose, 'product_image')),
+        ),
+    );
+  }
 }
 
 function variantSnapshot(storeId: string) {
@@ -298,4 +407,12 @@ function variantSnapshot(storeId: string) {
   ) order by v.position, v.id), '[]'::jsonb)
   from ${productVariants} v
   where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived')`;
+}
+
+function photoSnapshot(storeId: string) {
+  return sql<CatalogueProduct['photos']>`(select coalesce(jsonb_agg(
+    jsonb_build_object('id', f.id, 'objectKey', f.object_key)
+    order by array_position(${productImagesColumn}, f.id)), '[]'::jsonb)
+    from ${files} f where f.store_id = ${storeId} and f.id = any(${productImagesColumn})
+    and f.purpose = 'product_image' and f.status = 'ready')`;
 }

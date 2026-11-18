@@ -1,5 +1,6 @@
 ALTER TABLE "automation_run_steps" DROP CONSTRAINT "automation_run_steps_kind";--> statement-breakpoint
 ALTER TABLE "automation_run_steps" ADD CONSTRAINT "automation_run_steps_kind" CHECK ("automation_run_steps"."kind" in ('trigger', 'wait', 'condition', 'random_split', 'send', 'action', 'goal', 'exit'));--> statement-breakpoint
+ALTER TABLE "automation_runs" ADD CONSTRAINT "automation_runs_exit_reason" CHECK ("automation_runs"."exit_reason" in ('version_stopped', 'archived'));--> statement-breakpoint
 -- The sweep queues one job per (run, step), so the claim returns the step. A paused workflow
 -- holds its runs where they are; they are due again once it is enabled. The step job counts
 -- attempts when it starts work, so a lease that expired in a slow queue does not count.

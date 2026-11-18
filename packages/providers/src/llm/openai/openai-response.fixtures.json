@@ -1,0 +1,83 @@
+{
+  "reply": {
+    "object": "response",
+    "id": "resp_fixture",
+    "model": "test-model-2026-11-01",
+    "status": "completed",
+    "output": [
+      { "type": "reasoning", "id": "rs_fixture", "summary": [] },
+      {
+        "type": "message",
+        "id": "msg_fixture",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+          { "type": "output_text", "text": "{\"reply\":\"১০০ টাকা।\"}", "annotations": [] }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 1200,
+      "input_tokens_details": { "cached_tokens": 1024 },
+      "output_tokens": 15,
+      "total_tokens": 1215
+    }
+  },
+  "toolCalls": {
+    "object": "response",
+    "id": "resp_fixture",
+    "model": "test-model-2026-11-01",
+    "status": "completed",
+    "output": [
+      {
+        "type": "function_call",
+        "id": "fc_fixture",
+        "call_id": "call_fixture",
+        "name": "find_product",
+        "arguments": "{\"query\":\"কুর্তি\"}",
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 230,
+      "input_tokens_details": { "cached_tokens": 0 },
+      "output_tokens": 23,
+      "total_tokens": 253
+    }
+  },
+  "refusal": {
+    "object": "response",
+    "id": "resp_fixture",
+    "model": "test-model-2026-11-01",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg_fixture",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{ "type": "refusal", "refusal": "Refused." }]
+      }
+    ],
+    "usage": {
+      "input_tokens": 32,
+      "input_tokens_details": { "cached_tokens": 0 },
+      "output_tokens": 8,
+      "total_tokens": 40
+    }
+  },
+  "incomplete": {
+    "object": "response",
+    "id": "resp_fixture",
+    "model": "test-model-2026-11-01",
+    "status": "incomplete",
+    "incomplete_details": { "reason": "max_output_tokens" },
+    "output": [],
+    "usage": {
+      "input_tokens": 32,
+      "input_tokens_details": { "cached_tokens": 0 },
+      "output_tokens": 8,
+      "total_tokens": 40
+    }
+  }
+}

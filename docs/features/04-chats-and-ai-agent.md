@@ -118,7 +118,7 @@ Take over (or any reply typed by a person) switches the chat to human mode: the 
 
 ### Permissions
 
-View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Changing AI agent settings and knowledge: Owner and Admin only.
+View Chats: read all chats. Edit Chats: reply, take over, assign, label, create orders, mark not a customer. Owners and admins change AI agent settings. Knowledge uses the store settings permission area.
 
 ### Events
 
@@ -318,6 +318,42 @@ Practice mode: each new channel starts with AI not live. The AI answers only the
 
 Comments: classified as question, positive, negative or spam. If "Answer post comments" is on, the AI posts a short public reply and one private reply with price. Spam is hidden; negative goes to Needs you. Nothing with a price, phone or address is posted publicly.
 
+### Model driver
+
+The OpenAI driver sends one Responses API request per call with `store: false`.
+It sends a strict JSON Schema from the caller's Zod schema. Use nullable fields
+when a value can be missing. The driver returns the output or the model's tool
+calls, along with input, cached input and output token counts. The caller runs
+the tools after checking their arguments. The timeout and caller cancellation
+both end the request.
+
+Local development can select `LLM_DRIVER=fake` and supply scripted responses.
+Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
+`OPENAI_API_KEY`. Tests use saved Responses API fixtures and make no network calls.
+
+### Shared AI service
+
+Features pass a tier, versioned prompt and output schema to `AiService`.
+Reply, vision and writer use GPT-6.1 Terra by default. Fast uses GPT-6 Luna. Config can change each tier and prices per million input, cached
+input and output tokens. The defaults follow [OpenAI's standard prices](https://developers.openai.com/api/docs/pricing).
+
+Each model attempt records its token counts, cost in micro-USD, latency and
+outcome in `ai_runs`. A schema mismatch gets one retry within the 20-second
+model budget. The service returns the parsed output, tool calls or a typed
+failure.
+
+Content Studio and Ask Dakly supply a usage reference. The service consumes
+one unit after a schema-valid result, and the same reference makes a retry
+free. Chats checks its allowance before any model work and consumes the
+conversation unit when it saves the outgoing AI reply, using the contact and
+window as the reference.
+
+Valkey allows up to three calls at a time per store. Three provider errors
+within one minute pause new calls for two minutes across stores. Customer
+refusals and caller cancellations do not count as provider errors. BullMQ delays
+and retries jobs that receive `AI_STORE_BUSY` or `AI_PAUSED` so they never spin
+in-process.
+
 ### Rules
 
 1. The AI may reply and draft orders without approval while auto-reply is on (D7). Every AI message is labelled AI.
@@ -339,6 +375,17 @@ Comments: classified as question, positive, negative or spam. If "Answer post co
 ### Events
 
 Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_sent`. Listens to `order.created` to link the order to the chat.
+
+### Knowledge items
+
+Knowledge supports typed policies and PDF or plain text files. Reads require
+`storeSettings.view` and changes require `storeSettings.edit`. Owner and Admin
+have edit access by default. Images and URLs are for later work.
+
+The API routes are registered with the indexing worker. The upload route
+issues a signed PUT for a tenant-owned pending file. A shop uploads the
+file before creating or changing the item. The event that requests indexing
+carries only the store and item IDs.
 
 ### Data
 

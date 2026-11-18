@@ -189,7 +189,7 @@ describe('AutomationsService publish checks', () => {
       'a tap goal',
       { ...welcome, goal: { kind: 'tapped_link' } },
       'AUTOMATION_TAPS_UNAVAILABLE',
-      'exitConditions',
+      'goal',
     ],
     [
       'review before sending',

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
@@ -7,16 +7,30 @@ import type {
   ProductListQuery,
   ProductListResponse,
   ProductResponse,
+  ProductPhotoUploadInput,
+  ProductPhotoUploadResponse,
+  ConfirmProductPhotoInput,
+  ReorderProductPhotosInput,
   ProductReadiness,
   StockMovementKind,
 } from '@dakly/contracts/products';
+import { MAX_PRODUCT_PHOTOS } from '@dakly/contracts/products';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { Clock } from '../platform/clock';
+import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
+import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { productError } from './products.errors';
-import { type Product, ProductsRepository, type Variant } from './products.repository';
+import {
+  type CatalogueProduct,
+  type Product,
+  ProductsRepository,
+  type Variant,
+} from './products.repository';
 
 type Actor = AuditEntry['actor'];
 type StockReference = { actor: Actor } & (
@@ -33,12 +47,14 @@ type UpdatedStock = {
 
 @Injectable()
 export class ProductsService {
+  private readonly logger = new Logger(ProductsService.name);
   constructor(
     @Inject(ProductsRepository) private readonly repository: ProductsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
   ) {}
 
   create(storeId: string, input: CreateProductInput, _actor: Actor): Promise<ProductResponse> {
@@ -77,6 +93,7 @@ export class ProductsService {
       product,
       product.variants,
       (await this.stores.settings(storeId)).stock.lowStockThreshold,
+      this.storage,
     );
   }
 
@@ -85,7 +102,7 @@ export class ProductsService {
     const rows = await this.repository.list(storeId, query, stock.lowStockThreshold);
     const page = rows.slice(0, query.limit);
     const items = page.map((product) =>
-      toResponse(product, product.variants, stock.lowStockThreshold),
+      toResponse(product, product.variants, stock.lowStockThreshold, this.storage),
     );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
@@ -98,12 +115,22 @@ export class ProductsService {
     });
   }
 
+  orderVariants(storeId: string, variantIds: string[]) {
+    return this.transaction.run(storeId, async () => {
+      await this.repository.lockVariants(storeId, variantIds);
+      const variants = await this.repository.orderVariants(storeId, variantIds);
+      if (variants.length !== variantIds.length) throw productError('PRODUCT_VARIANT_NOT_FOUND');
+      return variants;
+    });
+  }
+
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
     return this.transaction.run(storeId, async () => {
       const variant = await this.repository.findStockVariant(storeId, variantId);
       if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
-      if (!variant.isStockTracked) return;
       const { kind, quantity } = input;
+      // Order movements follow the tracking flag saved on the order item.
+      if (!variant.isStockTracked && !input.reference.orderId) return;
       if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
         throw productError('STOCK_QUANTITY_INVALID');
       const change = {
@@ -161,6 +188,115 @@ export class ProductsService {
       });
   }
 
+  async requestPhotoUpload(
+    storeId: string,
+    productId: string,
+    input: ProductPhotoUploadInput,
+  ): Promise<ProductPhotoUploadResponse> {
+    const product = await this.repository.findById(storeId, productId);
+    if (!product) throw productError('PRODUCT_NOT_FOUND');
+    if (product.imageFileIds.length >= MAX_PRODUCT_PHOTOS)
+      throw productError('PRODUCT_PHOTO_LIMIT');
+    const fileId = newId();
+    return {
+      fileId,
+      uploadUrl: this.storage.createUploadUrl(`stores/${storeId}/products/${fileId}`, 300, input),
+    };
+  }
+
+  async confirmPhoto(
+    storeId: string,
+    productId: string,
+    input: ConfirmProductPhotoInput,
+    actor: Actor,
+  ): Promise<ProductResponse> {
+    if (!(await this.repository.findById(storeId, productId)))
+      throw productError('PRODUCT_NOT_FOUND');
+    const objectKey = `stores/${storeId}/products/${input.fileId}`;
+    const metadata = await measureVendorCall(
+      this.logger,
+      'product_photo_metadata',
+      'Product photo metadata request measured',
+      () => this.storage.getObjectMetadata(objectKey),
+    );
+    if (
+      !metadata ||
+      metadata.sizeBytes !== input.sizeBytes ||
+      metadata.contentType !== input.contentType
+    )
+      throw productError('PRODUCT_PHOTO_UPLOAD_INVALID');
+    return this.transaction.runLocked(storeId, async () => {
+      const product = await this.repository.findById(storeId, productId);
+      if (!product) throw productError('PRODUCT_NOT_FOUND');
+      if (product.imageFileIds.length >= MAX_PRODUCT_PHOTOS)
+        throw productError('PRODUCT_PHOTO_LIMIT');
+      const now = this.clock.now();
+      if (
+        !(await this.repository.insertPhoto(storeId, {
+          ...input,
+          objectKey,
+          uploadedByUserId: actor.kind === 'user' ? actor.userId : null,
+          createdAt: now,
+        }))
+      )
+        throw productError('PRODUCT_PHOTO_ALREADY_ADDED');
+      if (
+        !(await this.repository.updatePhotos(
+          storeId,
+          productId,
+          [...product.imageFileIds, input.fileId],
+          now,
+        ))
+      )
+        throw productError('PRODUCT_NOT_FOUND');
+      await this.publishUpdated(storeId, productId);
+      return this.getById(storeId, productId);
+    });
+  }
+
+  reorderPhotos(
+    storeId: string,
+    productId: string,
+    input: ReorderProductPhotosInput,
+    _actor: Actor,
+  ): Promise<ProductResponse> {
+    return this.transaction.runLocked(storeId, async () => {
+      const product = await this.repository.findById(storeId, productId);
+      if (!product) throw productError('PRODUCT_NOT_FOUND');
+      if (
+        input.fileIds.length !== product.imageFileIds.length ||
+        input.fileIds.some((id) => !product.imageFileIds.includes(id))
+      )
+        throw productError('PRODUCT_PHOTO_ORDER_INVALID');
+      if (
+        !(await this.repository.updatePhotos(storeId, productId, input.fileIds, this.clock.now()))
+      )
+        throw productError('PRODUCT_NOT_FOUND');
+      await this.publishUpdated(storeId, productId);
+      return this.getById(storeId, productId);
+    });
+  }
+
+  removePhoto(storeId: string, productId: string, fileId: string, _actor: Actor): Promise<void> {
+    return this.transaction.runLocked(storeId, async () => {
+      const product = await this.repository.findById(storeId, productId);
+      if (!product) throw productError('PRODUCT_NOT_FOUND');
+      if (!product.imageFileIds.includes(fileId)) throw productError('PRODUCT_PHOTO_NOT_FOUND');
+      const now = this.clock.now();
+      if (
+        !(await this.repository.updatePhotos(
+          storeId,
+          productId,
+          product.imageFileIds.filter((id) => id !== fileId),
+          now,
+        ))
+      )
+        throw productError('PRODUCT_NOT_FOUND');
+      await this.repository.expirePhoto(storeId, fileId, now);
+      await this.publishUpdated(storeId, productId);
+    });
+  }
+
   private async saveVariants(
     storeId: string,
     product: Product,
@@ -206,7 +342,12 @@ export class ProductsService {
   }
 }
 
-function toResponse(product: Product, rows: Variant[], lowStockThreshold: number): ProductResponse {
+function toResponse(
+  product: CatalogueProduct,
+  rows: Variant[],
+  lowStockThreshold: number,
+  storage: FileStorageDriver,
+): ProductResponse {
   const variants = rows.map(({ productId: _productId, ...variant }) => ({
     ...variant,
     pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
@@ -221,6 +362,10 @@ function toResponse(product: Product, rows: Variant[], lowStockThreshold: number
   return {
     ...product,
     status: product.status,
+    photos: product.photos.map((photo) => ({
+      id: photo.id,
+      url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
+    })),
     variants,
     readiness,
     createdAt: product.createdAt.toISOString(),

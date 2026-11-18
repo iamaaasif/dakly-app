@@ -31,6 +31,7 @@ export class IsolationFixture {
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     url: string,
     payload?: object,
+    headers?: Record<string, string>,
   ) {
     return this.app.inject({
       method,
@@ -40,6 +41,7 @@ export class IsolationFixture {
         host: 'localhost:3000',
         origin: 'http://localhost:3000',
         cookie: typeof actor === 'string' ? actor : actor.cookie,
+        ...headers,
       },
       remoteAddress: `2001:db8::${randomInt(1, 65535).toString(16)}`,
     });
@@ -212,11 +214,15 @@ export class IsolationFixture {
       'ownership_transfers',
       'campaigns',
       'segments',
+      'orders',
       'contacts',
       'stock_movements',
       'delivery_zones',
+      'store_counters',
       'product_variants',
       'products',
+      'imports',
+      'files',
       'sms_sender_ids',
       'notifications',
       'outbox_events',

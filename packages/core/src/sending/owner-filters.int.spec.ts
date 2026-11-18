@@ -71,10 +71,17 @@ describe('sending filters without RLS assistance', () => {
   it('lists only the selected store’s sends', async () => {
     const window = [new Date('2026-11-09T06:00:00Z'), new Date('2026-11-16T06:00:00Z')] as const;
 
-    expect(await repository.listMarketingSends(f.a, [contactA, contactB], ...window)).toEqual([
+    expect(
+      await repository.listMarketingSends(f.a, [contactA, contactB], {
+        after: window[0],
+        until: window[1],
+      }),
+    ).toEqual([
       { contactId: contactA, channel: 'sms', sentAt },
       { contactId: contactA, channel: 'sms', sentAt },
     ]);
-    expect(await repository.listMarketingSends(f.b, [contactA], ...window)).toEqual([]);
+    expect(
+      await repository.listMarketingSends(f.b, [contactA], { after: window[0], until: window[1] }),
+    ).toEqual([]);
   });
 });

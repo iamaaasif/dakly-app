@@ -257,7 +257,9 @@ An order has two state fields: `stage` for fulfilment and `paymentStatus` for mo
 
 `paymentStatus`: `cod_pending`, `advance_requested`, `advance_paid`, `paid`, `cod_collected`, `refund_due`, `refunded`.
 
-The transition table is data in `orders/order-stage.ts`. `OrdersService.changeStage` rejects anything not in it with `ORDER_STAGE_NOT_ALLOWED` and writes a stage event (from, to, actor, reason).
+The transition table is data in `orders/order-stage.ts`. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
+
+The order list uses an order-number cursor and returns counts for all stages. The detail includes the recipient snapshot, items, and stage history. Staff without the full-phone permission see a masked recipient number.
 
 Create order (`OrdersService.createOrder`, one transaction)
 
@@ -267,9 +269,21 @@ Create order (`OrdersService.createOrder`, one transaction)
 4. Copy prices from the variants, compute COD = items − discount + delivery − advance (never below 0), reserve stock, warn on a likely duplicate (same phone and variant within 24 hours), emit `order.created`.
 5. If the store's payment rule asks for an advance (always, or when return risk is High), create a payment intent and set `advance_requested`.
 
+Staff without full-phone access do not see the linked duplicate order. The staff out-of-stock override waits for a rule for oversold stock at reservation, dispatch and cancellation.
+
+Staff orders use `POST /orders` with an `Idempotency-Key`. During order capture, Orders edit access allows staff to record a new buyer and fill an empty own-phone field under D27. Editing a profile separately requires Customers edit access. A retry returns the existing order. The order discount cannot exceed the item subtotal after line discounts. An advance above the total leaves zero COD. The order starts in To confirm. Order numbers come from the locked store counter. Creating an order updates the buyer's timestamp so import undo keeps that contact. Staff can record money already received by hand. Cancelling an advance-paid order sets `refund_due` in the same transaction as the cancellation audit and stock release. Payment links and `advance_requested` wait for PAY-6. Order creation from a chat waits for CHAT-1.
+
 Confirmation: a WhatsApp utility template, or an SMS with a confirm link (SMS cannot receive replies). A yes reply on WhatsApp ("হ্যাঁ", yes, ji, ok, confirm, "ঠিক আছে") moves the order to `to_pack` when it is the contact's only order in `to_confirm`; with two, the AI asks which.
 
 Sending with a courier (release 1): staff move the order to `with_courier` and may type the courier name (from a fixed list: Steadfast, Pathao, RedX, own delivery, other) and the tracking code. Staff mark the order delivered, partly delivered or returned by hand, and mark COD collected when the money arrives. The shipping update message to the customer includes the tracking code when there is one.
+
+ORD-9 records dispatch through `POST /orders/:orderId/courier` and records the member who sent the parcel. Dispatch deducts reserved stock. A partial delivery records a note in the order history and each delivered quantity and returns the undelivered units to stock. A late return puts back only the delivered units. Damaged returns keep the units out of stock. The stage change and stock movement commit together. ORD-4 sends the shipping update from the stage event.
+
+Partial delivery scales each line discount by the delivered quantity divided by the ordered quantity. It scales the order discount by the delivered item subtotal divided by the ordered item subtotal. Round each discount down to a whole poisha. Apply no share of the order discount when the original item subtotal is zero. Keep the delivery charge and advance, then recompute COD with a minimum of zero. The original quantities, prices and discounts stay on the order. The delivered quantities, discounts and subtotal are saved separately.
+
+For example, an order has three items at ৳1,250 each, a ৳10 line discount, a ৳30.01 order discount, ৳60 delivery and a ৳200 advance. Two delivered items receive a ৳6.66 line discount, leaving ৳2,493.34 in items. Their share of the order discount is ৳20. COD becomes ৳2,333.34.
+
+Staff can record the COD amount once after delivery. Returning an order with an advance, paid balance or collected COD sets `refund_due` in the return transaction. Return risk follows in a separate PR.
 
 Later release (D21), kept here so the data model does not block it: courier connections with the shop's own keys, booking as an idempotent job per order, parcel status by webhook or polling, and COD reconciliation from courier payouts matched by consignment id. Do not build any of it in release 1.
 
@@ -286,9 +300,9 @@ before removal, and a zone used by orders cannot be deleted.
 
 `POST /delivery-zones/initialize-defaults` sets up an empty store with Inside Dhaka
 at 6,000 poisha, Dhaka suburbs at 10,000 and Outside Dhaka at 12,000. It refuses to
-replace existing zones. The mappings use the seeded Dhaka, Gazipur and Narayanganj
-district ids. Savar needs the upazila reference data from DB-6; no upazila names
-are added here. The three defaults use positions 0, 1 and 2, matching the seed.
+replace existing zones. Dhaka district is Inside Dhaka. Gazipur district,
+Narayanganj district and Savar upazila are in Dhaka suburbs. Savar's mapping takes
+precedence over its parent Dhaka district. The defaults use positions 0, 1 and 2.
 GET routes never initialize or change settings.
 
 This task adds the backend only. There is no delivery-settings image in the

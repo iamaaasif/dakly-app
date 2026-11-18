@@ -36,6 +36,8 @@ export type SessionContext = {
   hasMemberships: boolean;
   currentStore:
     | (UserStore & {
+        canViewProducts: boolean;
+        canEditProducts: boolean;
         canViewCustomers: boolean;
         canCreateCustomer: boolean;
         canViewSegments: boolean;

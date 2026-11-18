@@ -100,7 +100,8 @@ class FakeRunsRepository {
     const step = this.steps.find((row) => row.stepKey === stepKey && row.outcome === 'sending');
     return (
       step && {
-        sentAt: step.sentAt!,
+        id: step.id!,
+        firstTriedAt: step.firstTriedAt ?? step.sentAt!,
         optOutCode: step.optOutCode ?? null,
         destination: step.destination ?? null,
       }
@@ -131,6 +132,7 @@ describe('AutomationRunsService', () => {
   let decision: SendDecision;
   let recheckReason: SkipReason | undefined;
   let recheckDefer: Date | undefined;
+  let duringRecheck: () => void;
   let contactPhone: string;
   let reported: string[];
   let sent: OutgoingMessage[];
@@ -157,7 +159,11 @@ describe('AutomationRunsService', () => {
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
-    return service.continueRun(STORE_ID, { runId, stepKey: 'first', claimedAt });
+    return service.continueRun(
+      STORE_ID,
+      { runId, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
   }
 
   beforeEach(() => {
@@ -168,6 +174,7 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     recheckReason = undefined;
     recheckDefer = undefined;
+    duringRecheck = () => undefined;
     contactPhone = '01712345678';
     reported = [];
     sent = [];
@@ -176,6 +183,7 @@ describe('AutomationRunsService', () => {
     ledger = [];
     // Reservations by key, as the ledger keeps them; a repeated key changes nothing.
     const wallets = {
+      lockForReservation: async () => undefined,
       reserve: async (
         _storeId: string,
         { quantity, idempotencyKey }: { quantity: number; idempotencyKey: string },
@@ -225,17 +233,21 @@ describe('AutomationRunsService', () => {
       hasContact: async (_storeId: string, segmentId: string, contactId: string) =>
         segmentId === SEGMENT_ID && segmentMembers.includes(contactId),
     };
+    const recheck = (): SendDecision => {
+      duringRecheck();
+      if (recheckReason) return { action: 'skip', reason: recheckReason };
+      return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
+    };
     const sendPolicy = {
       check: async () => decision,
-      recheck: async () => {
-        if (recheckReason) return { action: 'skip', reason: recheckReason };
-        return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
-      },
+      checkForSend: async () => ({ decision, destination: contactPhone, at: clockNow }),
+      recheckForSend: async () => ({ decision: recheck(), at: clockNow }),
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
+      prepareSender: async () => ({ name: undefined }),
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (message.destination !== undefined && message.destination !== contactPhone)
           throw new AppError('MESSAGING_DESTINATION_CHANGED', {
@@ -375,11 +387,11 @@ describe('AutomationRunsService', () => {
     repository.run = { ...repository.run, status: 'running', claimedAt: now };
     repository.steps = [];
 
-    const next = await service.continueRun(STORE_ID, {
-      runId: RUN_ID,
-      stepKey: 'first',
-      claimedAt,
-    });
+    const next = await service.continueRun(
+      STORE_ID,
+      { runId: RUN_ID, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
 
     expect(next).toBeUndefined();
     expect(repository.run).toMatchObject({ status: 'running', claimedAt: now });
@@ -541,13 +553,59 @@ describe('AutomationRunsService', () => {
       providerError = undefined;
       clockNow = new Date(now.getTime() + 2 * 60 * 1000);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(sent.map((message) => message.body)).toEqual([`নতুন কালেকশন এসেছে\n${optOutUrl}`]);
       expect(repository.steps).toEqual([
         expect.objectContaining({ outcome: 'sent', sentAt: clockNow }),
       ]);
       expect(repository.run).toMatchObject({ currentStepKey: 'end', lastError: null });
+    });
+
+    it('holds a resend when the workflow pauses during the eligibility check', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      duringRecheck = () => {
+        repository.run = { ...repository.run, automationStatus: 'paused' };
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'waiting', currentStepKey: 'first' });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+      expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
+    });
+
+    it('ends an uncertain send when the goal is reached during the resend check', async () => {
+      providerError = new Error('connection reset');
+      await start(send, { graph: { ...graphWith(send), goal: { kind: 'got_tag', tag: 'paid' } } });
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      duringRecheck = () => {
+        tags = ['paid'];
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'goal' });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
     });
 
     it('fails the step before a resend when consent was withdrawn meanwhile', async () => {
@@ -557,7 +615,11 @@ describe('AutomationRunsService', () => {
       recheckReason = 'no_consent';
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
 
       expect(sent).toEqual([]);
       expect(repository.steps).toEqual([
@@ -578,7 +640,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date('2026-11-16T20:00:00Z');
       recheckDefer = new Date('2026-11-17T03:00:00Z');
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
       expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: recheckDefer });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
       expect(sent).toEqual([]);
@@ -586,7 +652,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date('2026-11-17T03:01:00Z');
       recheckDefer = undefined;
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(sent).toHaveLength(1);
     });
@@ -599,7 +669,11 @@ describe('AutomationRunsService', () => {
       contactPhone = '01812345678';
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
 
       expect(sent).toEqual([]);
       expect(repository.run.lastError).toContain("The contact's phone changed");
@@ -614,11 +688,40 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(now.getTime() + 26 * HOUR);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow, wakeAt: now };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(sent).toEqual([]);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       expect(repository.run).toMatchObject({ currentStepKey: 'end' });
+    });
+
+    it('wakes at the retry deadline when quiet hours last longer', async () => {
+      const deadline = new Date(now.getTime() + 36 * HOUR);
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      clockNow = new Date(deadline.getTime() - HOUR);
+      recheckDefer = new Date(deadline.getTime() + HOUR);
+      repository.run = {
+        ...repository.run,
+        status: 'running',
+        claimedAt: clockNow,
+        wakeAt: clockNow,
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: deadline });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
     });
 
     it('fails the run with a readable reason after 36 hours of temporary errors', async () => {
@@ -627,12 +730,18 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(now.getTime() + 36 * HOUR);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(repository.run).toMatchObject({
         status: 'failed',
+        currentStepKey: 'first',
         lastError: expect.stringContaining('The SMS provider did not answer for 36 hours.'),
       });
+      expect(repository.run.lastError).toContain('credits stay reserved');
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
@@ -682,7 +791,11 @@ describe('AutomationRunsService', () => {
       await start(send);
       providerError = undefined;
       repository.run = { ...repository.run, status: 'running', claimedAt: now, ...change };
-      return service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: now });
+      return service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
     }
 
     it.each([
@@ -723,7 +836,11 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(now.getTime() + 36 * HOUR);
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
-      await service.continueRun(STORE_ID, { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow });
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
 
       expect(repository.run.status).toBe('failed');
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gt, inArray, notExists, or } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
 import type { ConsentChannel, ConsentSource, ConsentStatus } from '@dakly/contracts/contacts';
 import { contactConsentCurrent } from '@dakly/db/schema/consents';
@@ -17,6 +18,7 @@ export type Consent = {
 };
 
 export type NewConsent = Omit<Consent, 'id'> & {
+  importId?: string;
   evidence: string | null;
   capturedByUserId: string | null;
 };
@@ -46,10 +48,76 @@ export class ConsentsRepository {
     return rows[0]!;
   }
 
+  async insertAll(storeId: string, rows: NewConsent[]): Promise<Consent[]> {
+    if (rows.length === 0) return [];
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(consents)
+        .values(rows.map((consent) => ({ storeId, ...consent })))
+        .returning(consentColumns),
+    );
+  }
+
+  listImportGrants(
+    storeId: string,
+    importId: string,
+    after: string | undefined,
+    limit: number,
+  ): Promise<Consent[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(consentColumns)
+        .from(consents)
+        .where(
+          and(
+            eq(consents.storeId, storeId),
+            eq(consents.importId, importId),
+            eq(consents.status, 'granted'),
+            eq(consents.source, 'import'),
+            after ? gt(consents.id, after) : undefined,
+          ),
+        )
+        .orderBy(consents.id)
+        .limit(limit),
+    );
+  }
+
+  // Re-read after locking the contacts: any answer later in the view's ordering wins.
+  listUnchangedGrants(storeId: string, ids: string[]): Promise<Consent[]> {
+    const later = alias(consents, 'later');
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(consentColumns)
+        .from(consents)
+        .where(
+          and(
+            eq(consents.storeId, storeId),
+            inArray(consents.id, ids),
+            notExists(
+              tx
+                .select({ id: later.id })
+                .from(later)
+                .where(
+                  and(
+                    eq(later.storeId, storeId),
+                    eq(later.contactId, consents.contactId),
+                    eq(later.channel, consents.channel),
+                    or(
+                      gt(later.capturedAt, consents.capturedAt),
+                      and(eq(later.capturedAt, consents.capturedAt), gt(later.id, consents.id)),
+                    ),
+                  ),
+                ),
+            ),
+          ),
+        ),
+    );
+  }
+
   listCurrent(
     storeId: string,
     contactIds: string[],
-    channel: ConsentChannel,
+    channel?: ConsentChannel,
   ): Promise<CurrentConsent[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
@@ -63,7 +131,7 @@ export class ConsentsRepository {
         .where(
           and(
             eq(contactConsentCurrent.storeId, storeId),
-            eq(contactConsentCurrent.channel, channel),
+            channel ? eq(contactConsentCurrent.channel, channel) : undefined,
             inArray(contactConsentCurrent.contactId, contactIds),
           ),
         ),

@@ -39,7 +39,7 @@ Each group is one worker run: one session with subagents, one PR per task, nothi
 | 7     | CAMP-5  | `feat/camp-5-automation-runner`         | main          | Runner, part 1 of 5: due runs, claims, step job, waits, splits, exits |
 | 7     | CAMP-5  | `feat/camp-5-automation-steps`          | CAMP-5 part 1 | Runner, part 2 of 5: conditions, exit checks, tag actions             |
 | 7     | CAMP-5  | `feat/camp-5-automation-send-costs`     | CAMP-5 part 2 | Runner, part 3 of 5: sends, opt-out links, SMS credits                |
-| 7     | CAMP-5  | `feat/camp-5-automation-send-retries`   | CAMP-5 part 3 | Runner, part 4 of 5: resends after an unknown outcome                 |
+| 7     | CAMP-5  | `feat/camp-5-automation-send-retries`   | CAMP-5 part 3 | Runner, part 4 of 5: provider retries and unknown sends               |
 | 7     | CAMP-5  | `feat/camp-5-automation-balance-pause`  | CAMP-5 part 4 | Runner, part 5 of 5: pause on a short balance, resume on top-up       |
 | 7     | CAMP-11 | `feat/camp-11-automation-triggers`      | CAMP-5 runner | Triggers and entry rules                                              |
 | 7     | CAMP-12 | `feat/camp-12-automation-templates`     | CAMP-11       | Automations list, template library and settings forms                 |
@@ -48,13 +48,14 @@ Each group is one worker run: one session with subagents, one PR per task, nothi
 
 Groups 2 and 3 run at the same time. Group 4 needs groups 2 and 3; each later group needs the one before it. Group 8 is small and can join the end of group 7 if CAMP-12 has merged.
 
+Campaign results follow ORD-3, using the feature 09 screen table and "Missing design: campaign results page" section without a separate design (Asif, 18 Nov 2026). Build the list and builder first; sent rows open a read-only builder summary and drafts open the builder. CAMP-4 remains In progress after those screens merge.
+
 ## Needed from Asif
 
 Settled on 16 Nov 2026: the frequency cap default follows CAMP-R3 (D41), and an import never changes consent without evidence (D42).
 
 | Item                                                                                                             | Needed by                    |
 | ---------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| Campaign results page: approve building it from the feature 09 text, or provide a design.                        | Group 6 (CAMP-4)             |
 | SMS provider account (ACC-14) for real sending and delivery receipts. Development and CI use Mailpit until then. | Before beta, not for coding  |
 | Short link domain (A4, `dkly.co` in the docs).                                                                   | Before beta, not for coding  |
 | Sentry alert rule for `OUTBOX_EVENTS_PARKED` to the staff Slack channel.                                         | Before production            |

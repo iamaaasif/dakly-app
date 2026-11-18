@@ -6,6 +6,14 @@ export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as c
 // Manual is the Pause button; balance is a short SMS balance, which a top-up ends on its own.
 export const automationPauseReasons = ['manual', 'balance'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
+export const automationExitReasons = [
+  'version_stopped',
+  'archived',
+  'goal',
+  'exit_condition',
+  'workflow_filter',
+  'not_reachable',
+] as const;
 export const automationStepKinds = [
   'trigger',
   'wait',
@@ -19,6 +27,7 @@ export const automationStepKinds = [
 export type AutomationStatus = (typeof automationStatuses)[number];
 export type AutomationPauseReason = (typeof automationPauseReasons)[number];
 export type AutomationRunStatus = (typeof automationRunStatuses)[number];
+export type AutomationExitReason = (typeof automationExitReasons)[number];
 export type AutomationStepKind = (typeof automationStepKinds)[number];
 
 export const MAX_AUTOMATIONS_PER_STORE = 100;

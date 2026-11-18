@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ConsentService } from '../consents/consent.service';
 import type { ContactsService } from '../contacts/contacts.service';
+import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { StoresService } from '../stores/stores.service';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
@@ -23,18 +24,23 @@ type Contact = {
 
 describe('SendPolicyService', () => {
   let contact: Contact | undefined;
-  let consent: 'granted' | 'withdrawn' | undefined;
-  let sends: MarketingSend[];
+  let consent: 'granted' | 'withdrawn' | 'not_answered' | undefined;
+  let sends: (MarketingSend & { workflowStepId?: string })[];
   let isTransactionOpen: boolean;
   let service: SendPolicyService;
+  let clockAt: Date;
+  let afterLock: () => void;
 
   beforeEach(() => {
     contact = { kind: 'customer', isBlocked: false, isOverPlanLimit: false, hasPhone: true };
     isTransactionOpen = true;
     consent = 'granted';
     sends = [];
+    clockAt = NOON_DHAKA;
+    afterLock = () => undefined;
     // The batch reads answer the same for every contact id they are given.
     const contacts = {
+      lockForConsent: async () => [],
       findRecipient: async () => contact,
       findRecipients: async (_storeId: string, ids: string[]) =>
         contact
@@ -55,11 +61,30 @@ describe('SendPolicyService', () => {
     };
     // Mirrors the repository's window: after the first date, up to and including the second.
     const repository = {
-      lockContact: async () => undefined,
-      listMarketingSends: async (_storeId: string, ids: string[], after: Date, until: Date) =>
+      lockContact: async () => afterLock(),
+      listMarketingSends: async (
+        _storeId: string,
+        ids: string[],
+        {
+          after,
+          until,
+          excludeWorkflowStepId,
+          includeCommittedFuture,
+        }: {
+          after: Date;
+          until: Date;
+          excludeWorkflowStepId?: string;
+          includeCommittedFuture?: boolean;
+        },
+      ) =>
         ids.flatMap((contactId) =>
           sends
-            .filter((send) => send.sentAt > after && send.sentAt <= until)
+            .filter(
+              (send) =>
+                send.sentAt > after &&
+                (includeCommittedFuture || send.sentAt <= until) &&
+                (!excludeWorkflowStepId || send.workflowStepId !== excludeWorkflowStepId),
+            )
             .map((send) => ({ ...send, contactId })),
         ),
     };
@@ -69,6 +94,7 @@ describe('SendPolicyService', () => {
       stores as unknown as StoresService,
       repository as unknown as SendingRepository,
       { isOpen: () => isTransactionOpen } as unknown as StoreTransaction,
+      { now: () => clockAt } as Clock,
     );
   });
 
@@ -85,6 +111,25 @@ describe('SendPolicyService', () => {
   function sentBefore(hours: number, channel = 'sms'): MarketingSend {
     return { channel, sentAt: new Date(NOON_DHAKA.getTime() - hours * HOUR) };
   }
+
+  it('freezes the eligibility phone and checks the cap at the time after the contact lock', async () => {
+    const later = new Date(NOON_DHAKA.getTime() + 1000);
+    sends.push({ channel: 'sms', sentAt: later });
+    afterLock = () => {
+      clockAt = later;
+    };
+    expect(
+      await service.checkForSend(STORE_ID, {
+        contactId: CONTACT_ID,
+        channel: 'sms',
+        category: 'marketing',
+      }),
+    ).toEqual({
+      decision: { action: 'skip', reason: 'frequency_cap' },
+      destination: '01712345678',
+      at: later,
+    });
+  });
 
   it('sends marketing SMS to a consented customer in the afternoon', async () => {
     expect(await service.check(STORE_ID, request())).toEqual({ action: 'send' });
@@ -103,6 +148,7 @@ describe('SendPolicyService', () => {
     ],
     ['no_consent', 'a contact who never answered', () => (consent = undefined), {}],
     ['no_consent', 'a withdrawal after approval', () => (consent = 'withdrawn'), {}],
+    ['no_consent', 'an import grant that was undone', () => (consent = 'not_answered'), {}],
     [
       'window_closed',
       'Messenger before inbound messages exist',
@@ -207,19 +253,29 @@ describe('SendPolicyService', () => {
     expect(await service.check(STORE_ID, request({ at: new Date(at) }))).toEqual(decision);
   });
 
-  it('rechecks consent and quiet hours but not the cap before a resend', async () => {
-    sends = [{ channel: 'sms', sentAt: new Date(NOON_DHAKA.getTime() - HOUR) }];
-    expect(await service.recheck(STORE_ID, request())).toEqual({ action: 'send' });
-    expect(
-      await service.recheck(STORE_ID, request({ at: new Date('2026-11-16T20:00:00Z') })),
-    ).toEqual({
-      action: 'defer',
-      until: new Date('2026-11-17T03:00:00Z'),
+  it('rechecks consent and quiet hours after the lock without counting the resend twice', async () => {
+    const stepId = 'earlier-step';
+    sends.push({ ...sentBefore(1), workflowStepId: stepId });
+    const retry = { contactId: CONTACT_ID, channel: 'sms', category: 'marketing' } as const;
+    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
+      decision: { action: 'send' },
+      at: NOON_DHAKA,
     });
-    consent = 'withdrawn';
-    expect(await service.recheck(STORE_ID, request())).toEqual({
-      action: 'skip',
-      reason: 'no_consent',
+    const late = new Date('2026-11-16T20:00:00Z');
+    afterLock = () => {
+      clockAt = late;
+    };
+    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
+      decision: { action: 'defer', until: new Date('2026-11-17T03:00:00Z') },
+      at: late,
+    });
+    afterLock = () => {
+      consent = 'withdrawn';
+      clockAt = NOON_DHAKA;
+    };
+    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
+      decision: { action: 'skip', reason: 'no_consent' },
+      at: NOON_DHAKA,
     });
   });
 

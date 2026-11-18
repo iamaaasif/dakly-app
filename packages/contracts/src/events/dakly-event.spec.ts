@@ -7,6 +7,7 @@ const contactId = '019c01ea-cf15-7d31-a7f5-d73d66007ad8';
 const conversationId = '019c01ea-cf15-7d31-a7f5-d73d66007ad9';
 const messageId = '019c01ea-cf15-7d31-a7f5-d73d66007ada';
 const connectionId = '019c01ea-cf15-7d31-a7f5-d73d66007adb';
+const orderId = '019c01ea-cf15-7d31-a7f5-d73d66007ae3';
 const occurredAt = '2026-11-16T04:30:00.000Z';
 const message = { messageId, conversationId, contactId, channel: 'messenger' } as const;
 const trackedLink = {
@@ -17,6 +18,21 @@ const trackedLink = {
 } as const;
 
 const examples: DaklyEvent[] = [
+  {
+    type: 'knowledge.index_requested',
+    storeId,
+    occurredAt,
+    payload: { knowledgeItemId: 'be82bf85-585b-4c33-960c-5acda9043aa1' },
+  },
+  {
+    type: 'order.stage_changed',
+    storeId,
+    occurredAt,
+    payload: { orderId, from: 'to_confirm', to: 'to_pack' },
+  },
+  { type: 'order.confirmed', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.created', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
     type: 'stock.changed',
     storeId,
@@ -53,6 +69,18 @@ const examples: DaklyEvent[] = [
     storeId,
     occurredAt,
     payload: { segmentId: '019c01ea-cf15-7d31-a7f5-d73d66007adf' },
+  },
+  {
+    type: 'import.started',
+    storeId,
+    occurredAt,
+    payload: { importId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
+  },
+  {
+    type: 'import.undo_requested',
+    storeId,
+    occurredAt,
+    payload: { importId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
   },
   {
     type: 'campaign.approved',

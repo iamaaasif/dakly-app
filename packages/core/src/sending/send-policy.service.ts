@@ -6,6 +6,7 @@ import type { SendingSettings } from '@dakly/contracts/stores';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { HOUR_MS } from '../platform/time';
@@ -29,6 +30,7 @@ export type SendDecision =
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
+type CapReadOptions = { excludeWorkflowStepId?: string; includeCommittedFuture?: boolean };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
@@ -49,10 +51,24 @@ export class SendPolicyService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(SendingRepository) private readonly repository: SendingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
+  // Freeze the destination from the eligibility read and take the cap time after the lock.
+  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+    if (!(await this.lockForDispatch(storeId, request.contactId)))
+      return { decision: skip('no_address'), destination: null, at: this.clock.now() };
+    const at = this.clock.now();
+    const [checked] = await this.evaluateAudience(
+      storeId,
+      { contactIds: [request.contactId], channel: request.channel, category: request.category, at },
+      { includeCommittedFuture: true },
+    );
+    return { decision: checked!.decision, destination: checked!.phone, at };
+  }
+
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
-    this.requireTransactionForMarketing(request.category);
+    if (request.category === 'marketing') this.requireTransaction();
     const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
@@ -62,19 +78,49 @@ export class SendPolicyService {
     const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
     await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at, {
+      includeCommittedFuture: true,
+    });
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
-  // Checks 1 to 5 without the cap. A workflow runs them right before resending a message whose
-  // first try had an unknown outcome: the cap already counts that message.
-  async recheck(storeId: string, request: SendRequest): Promise<SendDecision> {
+  // A retry keeps its reservation and replaces its prior count with the new dispatch.
+  async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>, workflowStepId: string) {
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = this.clock.now();
+    const decision = exists
+      ? await this.recheck(storeId, { ...request, at }, workflowStepId)
+      : skip('no_address');
+    return { decision, at };
+  }
+
+  private async lockForDispatch(storeId: string, contactId: string) {
+    this.requireTransaction();
+    await this.repository.lockContact(storeId, contactId);
+    try {
+      await this.contacts.lockForConsent(storeId, [contactId]);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
+      throw error;
+    }
+  }
+
+  private async recheck(
+    storeId: string,
+    request: SendRequest,
+    workflowStepId: string,
+  ): Promise<SendDecision> {
     const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
-    const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
-    return quietUntil ? { action: 'defer', until: quietUntil } : SEND;
+    const { contactId, channel, at } = request;
+    const limit = await this.audienceLimits(
+      storeId,
+      { contactIds: [contactId], channel, at },
+      { excludeWorkflowStepId: workflowStepId, includeCommittedFuture: true },
+    );
+    return limit(contactId);
   }
 
   private async recipientReason(
@@ -91,9 +137,14 @@ export class SendPolicyService {
 
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
   // check inside the send transaction can still skip a queued recipient, never send a skipped one.
-  async checkAudience(
+  async checkAudience(storeId: string, request: AudienceRequest): Promise<AudienceDecision[]> {
+    return this.evaluateAudience(storeId, request);
+  }
+
+  private async evaluateAudience(
     storeId: string,
     { contactIds, channel, category, at }: AudienceRequest,
+    capRead?: CapReadOptions,
   ): Promise<AudienceDecision[]> {
     const contacts = new Map(
       (await this.contacts.findRecipients(storeId, contactIds)).map((row) => [
@@ -107,7 +158,7 @@ export class SendPolicyService {
       : [];
     const consentOf = new Map(consents.map((row) => [row.contactId, row.status]));
     const limits = isMarketing
-      ? await this.audienceLimits(storeId, contactIds, channel, at)
+      ? await this.audienceLimits(storeId, { contactIds, channel, at }, capRead)
       : undefined;
     return contactIds.map((contactId) => {
       const contact = contacts.get(contactId);
@@ -118,22 +169,21 @@ export class SendPolicyService {
   }
 
   // The cap lock must last until the caller marks the message sending and commits.
-  private requireTransactionForMarketing(category: SendCategory): void {
-    if (category === 'marketing' && !this.transaction.isOpen())
+  private requireTransaction(): void {
+    if (!this.transaction.isOpen())
       throw new AppError('STORE_TRANSACTION_REQUIRED', PLATFORM_ERRORS.STORE_TRANSACTION_REQUIRED);
   }
 
   private async audienceLimits(
     storeId: string,
-    contactIds: string[],
-    channel: SendChannel,
-    at: Date,
+    { contactIds, channel, at }: Pick<AudienceRequest, 'contactIds' | 'channel' | 'at'>,
+    capRead?: CapReadOptions,
   ): Promise<(contactId: string) => SendDecision> {
     const settings = await this.stores.sendingSettings(storeId);
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
     if (quietUntil) return () => ({ action: 'defer', until: quietUntil });
     const sendsOf = new Map<string, MarketingSend[]>();
-    for (const send of await this.listWeekOfSends(storeId, contactIds, at)) {
+    for (const send of await this.listWeekOfSends(storeId, contactIds, at, capRead)) {
       const own = sendsOf.get(send.contactId);
       if (own) own.push(send);
       else sendsOf.set(send.contactId, [send]);
@@ -144,13 +194,18 @@ export class SendPolicyService {
         : SEND;
   }
 
-  private listWeekOfSends(storeId: string, contactIds: string[], at: Date) {
-    return this.repository.listMarketingSends(
-      storeId,
-      contactIds,
-      new Date(at.getTime() - 7 * 24 * HOUR_MS),
-      at,
-    );
+  // Live dispatches count already-committed rows even if another worker’s clock was ahead.
+  private listWeekOfSends(
+    storeId: string,
+    contactIds: string[],
+    at: Date,
+    capRead?: CapReadOptions,
+  ) {
+    return this.repository.listMarketingSends(storeId, contactIds, {
+      after: new Date(at.getTime() - 7 * 24 * HOUR_MS),
+      until: at,
+      ...capRead,
+    });
   }
 }
 

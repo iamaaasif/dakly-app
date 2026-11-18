@@ -115,7 +115,7 @@ Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialo
 
 ![Products](../design/screenshots/products.webp)
 
-List with readiness labels (Needs a price, Needs a photo, Hidden, Running low), stock per size, and "asked for in chats" counts. Fix the prototype's copy bug "1 people asked".
+List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
 ### How it works
 
@@ -150,6 +150,60 @@ ids, visibility and available stock. `settings.stock.lowStockThreshold` defaults
 3 and can be changed through Store settings. Lists accept the `running_low` filter.
 A `variant.restocked` event means availability crossed from zero or less to positive;
 notification sending still waits for PROD-6.
+
+PROD-3 adds photo upload, confirmation, reorder and removal. Upload URLs last five
+minutes and sign the declared content type and exact byte length. Only JPEG, PNG
+and WebP are accepted, up to 5,242,880 bytes. Keys are
+`stores/<store_id>/products/<uuid>`.
+
+Confirmation checks the object size and type before opening a store transaction.
+It then records a ready `files` row and appends the photo to the product together
+with `product.updated`. Photo changes are serialized per store, including the
+limit of ten photos. Reordering includes every current photo id once. Removing a
+photo detaches it and sets its file expiry for later object cleanup; this task
+does not run the object purge. Unconfirmed uploads have no file row; their object
+cleanup is also unimplemented. Scanning and image re-encoding wait for OPS-4.
+
+Product detail and list responses include ordered `photos` with signed download
+URLs lasting fifteen minutes. File metadata, product details and variants are
+read in one SQL snapshot; rows from another store or file purpose are excluded.
+The API requires the four `R2_*` values listed in `.env.example`.
+
+PROD-4's first web slice adds `/products`: search and readiness filters in the
+address, cursor pages, available stock per variant and signed photo thumbnails.
+The selected stock adjustment is in the address too; counts stay in the query
+cache while form input stays in React Hook Form.
+Members with product edit access can adjust a variant with a signed quantity and
+reason. Product view access is checked by the page and after shop changes.
+The editor opens from `create=1` or a product id in the address. New products
+have explicit **Save as hidden** and **Save and show** actions. Existing products
+use **Save product**; visibility changes use **Hide product** and **Show product**.
+A hidden product is how a shop keeps an unfinished product on the server.
+There is no autosave or local storage.
+
+The form takes Taka and converts to integer poisha during submission. It uses the
+existing contract rules for prices, aliases, options and variants. Other names
+are entered one per line in the saved-product editor and stored as a list.
+Stores edit channel visibility after saving. The editor supports up to three
+option types and manual variant rows; renaming an option preserves variant ids,
+prices, product codes and stock. A blank price override uses the product price. The editor for a product with no
+options shows an override only if it already has one.
+A background refresh keeps unsaved form input. A shop change clears it. Saving
+the form updates only the edited fields. Hide and Show update visibility separately.
+
+The product drawer shows confirmed photos through signed URLs. Members with
+product edit access can add a JPEG, PNG or WebP up to 5 MB, move photos earlier
+in the list, or remove a photo after confirming. The first photo appears on the
+products list. Each product has room for ten photos. Browser uploads need the
+[R2 bucket CORS rule](../architecture.md#files).
+
+Adjust opening stock after saving through the list. The low-stock threshold
+belongs to the shop.
+
+The list omits unsupported totals, sales, chat and waiting-list counts, category
+filters, best-selling order, import and promotion controls. The stock dialog
+changes one variant and requires a reason; it does not offer waiting-list
+messages. The shared sidebar and header are unchanged.
 
 ### Rules
 

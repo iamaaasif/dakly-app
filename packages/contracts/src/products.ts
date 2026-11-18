@@ -109,6 +109,63 @@ export const changeProductSchema = z
 
 export type ChangeProductInput = z.infer<typeof changeProductSchema>;
 
+const takaInput = z
+  .string()
+  .regex(/^\d+(?:\.\d{1,2})?$/, 'Enter Taka with at most two decimal places')
+  .transform((value) => {
+    const [whole, fraction = ''] = value.split('.');
+    return Number(BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')));
+  })
+  .pipe(money);
+const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput]);
+const optionalTextInput = z
+  .string()
+  .nullable()
+  .transform((value) => value?.trim() || null);
+
+export const productFormSchema = z
+  .strictObject({
+    ...createProductSchema.shape,
+    category: optionalTextInput.pipe(createProductSchema.shape.category.unwrap()).default(null),
+    description: optionalTextInput
+      .pipe(createProductSchema.shape.description.unwrap())
+      .default(null),
+    aliases: z
+      .array(z.string())
+      .transform((values) => values.filter((value) => value.trim()))
+      .pipe(createProductSchema.shape.aliases.unwrap())
+      .default([]),
+    pricePoisha: takaInput.default(0),
+    compareAtPricePoisha: optionalTakaInput.default(null),
+    variants: z
+      .array(
+        z.strictObject({
+          ...editVariantSchema.shape,
+          sku: optionalTextInput.pipe(editVariantSchema.shape.sku.unwrap()).default(null),
+          priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
+          costPoisha: optionalTakaInput.default(null),
+        }),
+      )
+      .max(100)
+      .default([]),
+  })
+  // Positions keep selections attached while option names are being edited.
+  .transform((input) => ({
+    ...input,
+    variants: input.variants.map((variant) => ({
+      ...variant,
+      optionValues: Object.fromEntries(
+        input.options.flatMap(({ name }, index) => {
+          const value = variant.optionValues[index];
+          return value ? [[name, value]] : [];
+        }),
+      ),
+    })),
+  }))
+  .superRefine(validateVariants);
+export type ProductFormValues = z.input<typeof productFormSchema>;
+export type ProductFormInput = z.output<typeof productFormSchema>;
+
 const productReadinessValues = ['needs_price', 'needs_photo', 'hidden', 'running_low'] as const;
 export type ProductReadiness = (typeof productReadinessValues)[number];
 
@@ -121,6 +178,16 @@ export const productListQuerySchema = z.strictObject({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
+export const productScreenQuerySchema = productListQuerySchema
+  .extend({
+    adjust: z.uuid().optional(),
+    product: z.uuid().optional(),
+    create: z.literal('1').optional(),
+  })
+  .refine(
+    (query) => [query.adjust, query.product, query.create].filter(Boolean).length <= 1,
+    'Choose one product action at a time',
+  );
 export type ProductOption = z.infer<typeof optionSchema>;
 export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   id: string;
@@ -135,6 +202,7 @@ export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   id: string;
   imageFileIds: string[];
   readiness: ProductReadiness[];
+  photos: ProductPhotoResponse[];
   variants: ProductVariantResponse[];
   createdAt: string;
   updatedAt: string;
@@ -153,3 +221,24 @@ export const stockAdjustmentSchema = z.strictObject({
   reason: z.string().trim().min(1).max(500),
 });
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
+export const MAX_PRODUCT_PHOTOS = 10;
+export const productPhotoUploadSchema = z.strictObject({
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(5 * 1024 * 1024),
+});
+export const confirmProductPhotoSchema = productPhotoUploadSchema.extend({ fileId: z.uuid() });
+export const reorderProductPhotosSchema = z.strictObject({
+  fileIds: z
+    .array(z.uuid())
+    .max(MAX_PRODUCT_PHOTOS)
+    .refine((ids) => new Set(ids).size === ids.length, 'Repeated photo'),
+});
+export type ProductPhotoUploadInput = z.infer<typeof productPhotoUploadSchema>;
+export type ConfirmProductPhotoInput = z.infer<typeof confirmProductPhotoSchema>;
+export type ReorderProductPhotosInput = z.infer<typeof reorderProductPhotosSchema>;
+export type ProductPhotoUploadResponse = { fileId: string; uploadUrl: string };
+export type ProductPhotoResponse = { id: string; url: string };

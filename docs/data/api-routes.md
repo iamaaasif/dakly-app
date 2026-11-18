@@ -104,37 +104,39 @@ atomically and retain business data when an extension is disabled.
 
 ## Customers and segments (03)
 
-| Route                                                                                                      | Permission                                                       |
-| ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `GET /contacts`, `GET /contacts/:contactId`                                                                | `customers` (phones masked unless "See full phone numbers")      |
-| `POST /contacts`, `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                              | `customers`                                                      |
-| `GET /contacts/:contactId/timeline`                                                                        | `customers`                                                      |
-| `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory` | View with `customers.view`; edit and clear with `customers.edit` |
-| `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                            | `customers`                                                      |
-| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                    | `customers`                                                      |
-| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                  | `customers`                                                      |
-| `POST /contacts/:contactId/consents`                                                                       | `customers`                                                      |
-| `POST /imports`, `PATCH /imports/:importId`, `POST /imports/:importId/start`, `GET /imports/:importId`     | `customers`                                                      |
-| `POST /contacts/exports`                                                                                   | `customers` + "Download customer lists"                          |
-| `GET /segments`, `POST /segments/preview` (count only)                                                     | `segments.view`                                                  |
-| `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`                              | `segments.edit`                                                  |
-| `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                        | `customers`                                                      |
+| Route                                                                                                                           | Permission                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /contacts`, `GET /contacts/:contactId`                                                                                     | `customers` (phones masked unless "See full phone numbers")      |
+| `POST /contacts`, `PATCH /contacts/:contactId`, `DELETE /contacts/:contactId`                                                   | `customers`                                                      |
+| `GET /contacts/:contactId/timeline`                                                                                             | `customers`                                                      |
+| `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory`                      | View with `customers.view`; edit and clear with `customers.edit` |
+| `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                                                 | `customers`                                                      |
+| `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                         | `customers`                                                      |
+| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                       | `customers`                                                      |
+| `POST /contacts/:contactId/consents`                                                                                            | `customers`                                                      |
+| `POST /imports`, `POST /imports/:importId/start`, `POST /imports/:importId/undo` (within 7 days, 202), `GET /imports/:importId` | `customers`                                                      |
+| `POST /contacts/exports`                                                                                                        | `customers` + "Download customer lists"                          |
+| `GET /segments`, `POST /segments/preview` (count only)                                                                          | `segments.view`                                                  |
+| `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`                                                   | `segments.edit`                                                  |
+| `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                                             | `customers`                                                      |
 
 ## Chats and AI agent (04)
 
-| Route                                                                                                                                  | Permission                                                        |
-| -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `GET /conversations`, `GET /conversations/:conversationId`, `GET /conversations/:conversationId/messages`                              | `chats`                                                           |
-| `POST /conversations/:conversationId/messages` (idem)                                                                                  | `chats`                                                           |
-| `PATCH /conversations/:conversationId` (status, assignee)                                                                              | `chats`                                                           |
-| `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`                                    | `chats`                                                           |
-| `POST /messages/:messageId/rating`                                                                                                     | `chats`                                                           |
-| `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                                       | `chats`                                                           |
-| `GET /saved-replies`, `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId`               | `chats`                                                           |
-| `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live`                      | `chats`                                                           |
-| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                                                 | Owner or Admin                                                    |
-| `GET /knowledge-items`, `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId` | `chats`                                                           |
-| `GET /events/stream`                                                                                                                   | any member; Server-Sent Events for new messages and notifications |
+| Route                                                                                                                    | Permission                                                        |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `GET /conversations`, `GET /conversations/:conversationId`, `GET /conversations/:conversationId/messages`                | `chats`                                                           |
+| `POST /conversations/:conversationId/messages` (idem)                                                                    | `chats`                                                           |
+| `PATCH /conversations/:conversationId` (status, assignee)                                                                | `chats`                                                           |
+| `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`                      | `chats`                                                           |
+| `POST /messages/:messageId/rating`                                                                                       | `chats`                                                           |
+| `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                         | `chats`                                                           |
+| `GET /saved-replies`, `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId` | `chats`                                                           |
+| `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live`        | `chats`                                                           |
+| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                                   | Owner or Admin                                                    |
+| `GET /knowledge-items`, `GET /knowledge-items/:knowledgeItemId`                                                          | `storeSettings`                                                   |
+| `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId`           | `storeSettings`                                                   |
+| `POST /knowledge-items/uploads` (returns a file ID and signed PUT URL for PDF or plain text)                             | `storeSettings`                                                   |
+| `GET /events/stream`                                                                                                     | any member; Server-Sent Events for new messages and notifications |
 
 ## Products and stock (05)
 
@@ -146,6 +148,10 @@ atomically and retain business data when an extension is disabled.
 | `POST /variants/:variantId/stock-adjustments`                                            | `products` |
 | `GET /variants/:variantId/stock-movements`                                               | `products` |
 | `GET /restock-requests`                                                                  | `products` |
+| `POST /products/:productId/photos/upload-url`                                            | `products` |
+| `POST /products/:productId/photos/confirm`                                               | `products` |
+| `PATCH /products/:productId/photos`                                                      | `products` |
+| `DELETE /products/:productId/photos/:fileId`                                             | `products` |
 
 ## Orders and delivery (06)
 

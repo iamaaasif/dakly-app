@@ -17,6 +17,10 @@ const scopeLabels = {
 // Separate account, staff and tenant connections cannot form one atomic action.
 const activeScopeName = new AsyncLocalStorage<ScopeName>();
 
+export function hasDatabaseTransactionScope(): boolean {
+  return activeScopeName.getStore() !== undefined;
+}
+
 export class ScopedTransactions {
   private readonly scope = new AsyncLocalStorage<Scope>();
 

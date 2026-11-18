@@ -52,4 +52,8 @@ export type AreaResponse = {
   kind: (typeof bdAreaKinds)[number];
 };
 export type AreaListResponse = { items: AreaResponse[]; nextCursor: number | null };
-export type DeliveryChargeResponse = { deliveryZoneId: string; chargePoisha: number };
+export type DeliveryChargeResponse = {
+  deliveryZoneId: string;
+  chargePoisha: number;
+  district: string;
+};
