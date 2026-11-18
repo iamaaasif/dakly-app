@@ -28,7 +28,7 @@ export function ProductForm({ product, onSaved }: ProductFormProps) {
   const mutation = product ? change : create;
   const { dirtyFields, errors, isDirty } = form.formState;
   const actions = product
-    ? [{ status: 'hidden' as const, label: 'Save product', variant: 'primary' as const }]
+    ? [{ label: 'Save product', variant: 'primary' as const }]
     : [
         { status: 'hidden' as const, label: 'Save as hidden', variant: 'secondary' as const },
         { status: 'active' as const, label: 'Save and show', variant: 'primary' as const },
@@ -59,12 +59,12 @@ export function ProductForm({ product, onSaved }: ProductFormProps) {
         <div className="flex flex-wrap justify-end gap-2">
           {actions.map((action) => (
             <Button
-              key={action.status}
+              key={action.label}
               type="submit"
               variant={action.variant}
               loading={mutation.isPending}
               disabled={Boolean(product && !isDirty)}
-              onClick={() => !product && form.setValue('status', action.status)}
+              onClick={() => 'status' in action && form.setValue('status', action.status)}
             >
               {action.label}
             </Button>
@@ -74,7 +74,7 @@ export function ProductForm({ product, onSaved }: ProductFormProps) {
     </FormProvider>
   );
 }
-function taka(value: number | null) {
+function takaInputFromPoisha(value: number | null) {
   if (value === null) return '';
   const amount = BigInt(value);
   return `${amount / 100n}.${(amount % 100n).toString().padStart(2, '0')}`;
@@ -96,8 +96,8 @@ function formValues(product?: ProductResponse): ProductFormValues {
     category: product.category,
     aliases: product.aliases,
     options: product.options,
-    pricePoisha: taka(product.pricePoisha),
-    compareAtPricePoisha: taka(product.compareAtPricePoisha),
+    pricePoisha: takaInputFromPoisha(product.pricePoisha),
+    compareAtPricePoisha: takaInputFromPoisha(product.compareAtPricePoisha),
     variants: product.variants.map(
       ({ id, optionValues, sku, priceOverridePoisha, costPoisha }) => ({
         id,
@@ -105,8 +105,8 @@ function formValues(product?: ProductResponse): ProductFormValues {
           product.options.map(({ name }, index) => [index, optionValues[name]!]),
         ),
         sku,
-        priceOverridePoisha: taka(priceOverridePoisha),
-        costPoisha: taka(costPoisha),
+        priceOverridePoisha: takaInputFromPoisha(priceOverridePoisha),
+        costPoisha: takaInputFromPoisha(costPoisha),
       }),
     ),
     isStockTracked: product.isStockTracked,

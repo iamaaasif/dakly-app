@@ -16,23 +16,19 @@ import { useSessionContext } from '@/lib/session-context';
 
 type ProductSheetProps = { productId: string; onClose: () => void };
 export function ProductSheet({ productId, onClose }: ProductSheetProps) {
-  const selected = useGetProduct(productId);
+  const { data, error, isPending, refetch } = useGetProduct(productId);
   return (
     <SessionDialog
-      title={selected.data?.name ?? 'Product'}
+      title={data?.name ?? 'Product'}
       className="inset-y-0 left-auto m-0 h-dvh max-w-sm rounded-none border-y-0 border-r-0"
       open
       onClose={onClose}
     >
-      {selected.error ? (
-        <QueryError
-          message={selected.error.message}
-          onRetry={() => void selected.refetch()}
-          retryLabel="Retry product"
-        />
+      {error ? (
+        <QueryError message={error.message} onRetry={() => refetch()} retryLabel="Retry product" />
       ) : null}
-      {selected.isPending ? <ProductsLoading /> : null}
-      {selected.data ? <ProductDetails product={selected.data} /> : null}
+      {isPending ? <ProductsLoading /> : null}
+      {data ? <ProductDetails product={data} /> : null}
     </SessionDialog>
   );
 }

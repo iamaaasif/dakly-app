@@ -119,8 +119,13 @@ test('saves unfinished products, edits variants without losing stock and manages
         })
       ).status(),
     ).toBe(201);
-    await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
-    await page.getByRole('link', { name, exact: true }).click();
+    await page.goto('/products');
+    const productLink = page.getByRole('link', { name, exact: true });
+    await expect(productLink.getByRole('img', { name, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: `Adjust stock for ${name}, Default` }),
+    ).toHaveText('Default: 3');
+    await productLink.click();
     await expect(page.getByRole('img', { name: `${name} photo 1` })).toBeVisible();
     await capture('detail');
 

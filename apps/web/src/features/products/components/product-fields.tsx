@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Controller, useFormContext } from 'react-hook-form';
 
 import type { ProductFormValues } from '@dakly/contracts/products';
@@ -12,8 +13,7 @@ const flags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-type ProductFieldsProps = { mode: 'create' | 'edit' };
-export function ProductFields({ mode }: ProductFieldsProps) {
+export function ProductFields({ mode }: { mode: 'create' | 'edit' }) {
   const form = useFormContext<ProductFormValues>();
   const visibleFlags = flags.filter(([name]) => mode === 'edit' || name === 'isStockTracked');
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
@@ -31,12 +31,7 @@ export function ProductFields({ mode }: ProductFieldsProps) {
           <ProductInputField name="variants.0.costPoisha" label="Your cost (Taka)" />
         ) : null}
       </div>
-      {mode === 'edit' && simple ? (
-        <ProductInputField
-          name="variants.0.priceOverridePoisha"
-          label="Default price override (Taka)"
-        />
-      ) : null}
+      {simple ? <DefaultOverride /> : null}
       <ProductLinesField name="description" label="Description" />
       {mode === 'edit' ? (
         <ProductLinesField name="aliases" label="Other names" hint="One name per line." />
@@ -64,4 +59,15 @@ export function ProductFields({ mode }: ProductFieldsProps) {
       </div>
     </>
   );
+}
+
+function DefaultOverride() {
+  const { getValues } = useFormContext<ProductFormValues>();
+  const [visible] = useState(() => Boolean(getValues('variants.0.priceOverridePoisha')));
+  return visible ? (
+    <ProductInputField
+      name="variants.0.priceOverridePoisha"
+      label="Default price override (Taka)"
+    />
+  ) : null;
 }

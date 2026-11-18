@@ -186,7 +186,8 @@ existing contract rules for prices, aliases, options and variants. Other names
 are entered one per line in the saved-product editor and stored as a list.
 Stores edit channel visibility after saving. The editor supports up to three
 option types and manual variant rows; renaming an option preserves variant ids,
-prices, product codes and stock. A blank price override uses the product price.
+prices, product codes and stock. A blank price override uses the product price. The editor for a product with no
+options shows an override only if it already has one.
 A background refresh keeps unsaved form input. A shop change clears it. Saving
 the form updates only the edited fields. Hide and Show update visibility separately.
 

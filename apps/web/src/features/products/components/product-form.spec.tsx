@@ -276,6 +276,26 @@ describe('Product form', () => {
     expect(aliases.getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('shows one selling price for a saved simple product without an override', () => {
+    show(product);
+    expect(screen.getByLabelText('Selling price (Taka)')).toBeTruthy();
+    expect(screen.queryByLabelText('Default price override (Taka)')).toBeNull();
+  });
+
+  it('keeps an entered variant override visible when the last option is removed', async () => {
+    show(product);
+    await userEvent.click(screen.getByRole('button', { name: 'Add option' }));
+    await userEvent.type(screen.getByLabelText('Price override for variant 1 (Taka)'), '450');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove option 1' }));
+    const override = screen.getByLabelText<HTMLInputElement>('Default price override (Taka)');
+    expect(override.value).toBe('450');
+    await userEvent.clear(override);
+    await userEvent.type(override, '500');
+    expect(screen.getByLabelText<HTMLInputElement>('Default price override (Taka)').value).toBe(
+      '500',
+    );
+  });
+
   it('lets an existing default variant return from its override to the product price', async () => {
     const overridden = {
       ...product,
