@@ -7,7 +7,7 @@ import { productsKeys } from '@/lib/product-query-keys';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
 
-export const orderDetailKey = (contextTag: string | undefined, id: string) =>
+const orderDetailKey = (contextTag: string | undefined, id: string) =>
   [...ordersKey, contextTag, 'detail', id] as const;
 
 export function useOrder(id: string) {
