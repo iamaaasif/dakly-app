@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0036_snapshot.json`: **95 tables, 1253 columns, 376 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0036_snapshot.json`: **95 tables, 1251 columns, 374 explicit indexes and 297 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -412,7 +412,6 @@ erDiagram
     stores ||..o{ consents : "store_id"
     contacts ||..o{ consents : "contact_id"
     users |o..o{ consents : "captured_by_user_id"
-    imports |o..o{ consents : "store_id, import_id"
     contacts ||..o{ consents : "store_id, contact_id"
     contacts ||--o| contact_stats : "contact_id"
     stores ||..o{ contact_stats : "store_id"
@@ -576,7 +575,6 @@ erDiagram
         text channel "NOT NULL; text"
         text status "NOT NULL; text"
         text source "NOT NULL; text"
-        uuid import_id FK "NULL; uuid"
         text evidence "NULL; text"
         uuid captured_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone captured_at "NOT NULL; timestamp with time zone"
@@ -628,7 +626,6 @@ erDiagram
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone last_progress_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone undo_finished_at "NULL; timestamp with time zone"
         integer requeue_count "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
@@ -1966,7 +1963,6 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `consents_store_id_stores_id_fk`                                     | `consents(store_id)`                                      | `stores(id)`                                | no action |
 | `consents_contact_id_contacts_id_fk`                                 | `consents(contact_id)`                                    | `contacts(id)`                              | cascade   |
 | `consents_captured_by_user_id_users_id_fk`                           | `consents(captured_by_user_id)`                           | `users(id)`                                 | no action |
-| `consents_import_id_store_fk`                                        | `consents(store_id, import_id)`                           | `imports(store_id, id)`                     | no action |
 | `consents_contact_id_store_fk`                                       | `consents(store_id, contact_id)`                          | `contacts(store_id, id)`                    | cascade   |
 | `contact_identities_store_id_stores_id_fk`                           | `contact_identities(store_id)`                            | `stores(id)`                                | no action |
 | `contact_identities_contact_id_contacts_id_fk`                       | `contact_identities(contact_id)`                          | `contacts(id)`                              | cascade   |

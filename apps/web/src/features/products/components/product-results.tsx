@@ -27,7 +27,7 @@ export function ProductResults({ query, products, onAdjust }: ProductResultsProp
   return (
     <>
       {products.data.items.length ? (
-        <ProductList products={products.data.items} onAdjust={onAdjust} />
+        <ProductList query={query} products={products.data.items} onAdjust={onAdjust} />
       ) : (
         <div className="space-y-2 rounded-lg border border-border bg-surface p-6">
           <p>No products on this page.</p>

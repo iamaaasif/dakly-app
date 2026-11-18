@@ -140,11 +140,30 @@ describe('release schema behavior (Postgres)', () => {
     });
   });
 
+  it('accepts supported workflow exit reasons and rejects an unknown one', async () => {
+    await withFixture(async ({ client, storeId, contactId }) => {
+      const versionId = await insertVersion(client, storeId);
+      const runId = await insertRun(client, storeId, contactId, versionId, new Date(0));
+      await asApp(client, storeId);
+      for (const reason of ['version_stopped', 'archived', null]) {
+        const saved = await client.query(
+          'update automation_runs set exit_reason=$1 where id=$2 returning exit_reason',
+          [reason, runId],
+        );
+        expect(saved.rows).toEqual([{ exit_reason: reason }]);
+      }
+      await expect(
+        client.query('update automation_runs set exit_reason=$1 where id=$2', ['invalid', runId]),
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+
   it('reclaims an expired workflow lease without claiming a current one', async () => {
     await withFixture(async ({ client, storeId, contactId }) => {
       const versionId = await insertVersion(client, storeId);
       const staleId = await insertRun(client, storeId, contactId, versionId, new Date(0));
       const currentId = await insertRun(client, storeId, contactId, versionId, new Date());
+      await client.query('update automation_runs set attempts = 3 where id = $1', [staleId]);
       await asApp(client, storeId);
       const claimed = await client.query(
         'select automation_run_id, claimed_at from due_automation_runs($1)',
@@ -158,7 +177,8 @@ describe('release schema behavior (Postgres)', () => {
         [staleId],
       );
       expect(retried.rows[0].claimed_at.getTime()).toBeGreaterThan(Date.now() - 60_000);
-      expect(retried.rows[0].attempts).toBe(1);
+      // The step job counts attempts when it starts work; the claim leaves them as they were.
+      expect(retried.rows[0].attempts).toBe(3);
       const lease = claimed.rows.find(
         (row: { automation_run_id: string }) => row.automation_run_id === staleId,
       );

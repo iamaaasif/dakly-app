@@ -175,8 +175,26 @@ The selected stock adjustment is in the address too; counts stay in the query
 cache while form input stays in React Hook Form.
 Members with product edit access can adjust a variant with a signed quantity and
 reason. Product view access is checked by the page and after shop changes.
-The editor and photo controls remain for the second PROD-4 PR.
+The editor opens from `create=1` or a product id in the address. New products
+have explicit **Save as hidden** and **Save and show** actions. Existing products
+use **Save product**; visibility changes use **Hide product** and **Show product**.
 A hidden product is how a shop keeps an unfinished product on the server.
+There is no autosave or local storage.
+
+The form takes Taka and converts to integer poisha during submission. It uses the
+existing contract rules for prices, aliases, options and variants. Other names
+are entered one per line in the saved-product editor and stored as a list.
+Stores edit channel visibility after saving. The editor supports up to three
+option types and manual variant rows; renaming an option preserves variant ids,
+prices, product codes and stock. A blank price override uses the product price. The editor for a product with no
+options shows an override only if it already has one.
+A background refresh keeps unsaved form input. A shop change clears it. Saving
+the form updates only the edited fields. Hide and Show update visibility separately.
+
+The product drawer shows confirmed photos through signed URLs. Photo upload,
+reorder and removal controls are the last PROD-4 slice. Opening stock is adjusted
+after saving through the list, and the low-stock threshold belongs to the shop;
+the editor does not add a per-product threshold or an initial-quantity field.
 
 The list omits unsupported totals, sales, chat and waiting-list counts, category
 filters, best-selling order, import and promotion controls. The stock dialog

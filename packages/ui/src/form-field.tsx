@@ -20,7 +20,10 @@ export type FormFieldProps = {
 export function FormField({ name, label, hint, children }: FormFieldProps) {
   const { errors } = useFormState({ name });
   // get() reads nested names such as "address.district".
-  const error: FieldError | undefined = get(errors, name);
+  const field = get(errors, name);
+  const error: FieldError | undefined = Array.isArray(field)
+    ? (get(field, 'root') ?? field.find((item) => item?.message))
+    : field;
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;

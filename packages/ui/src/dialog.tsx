@@ -2,15 +2,18 @@
 import { useEffect, useId, useRef, type ReactNode, type KeyboardEvent } from 'react';
 
 import { Button } from './button';
+import { cn } from './cn';
 
 export type DialogProps = {
   title: string;
   open: boolean;
   suspended?: boolean;
+  className?: string;
   onClose: () => void;
   children: ReactNode;
 };
-export function Dialog({ title, open, suspended = false, onClose, children }: DialogProps) {
+export function Dialog(props: DialogProps) {
+  const { title, open, suspended = false, className, onClose, children } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -36,7 +39,10 @@ export function Dialog({ title, open, suspended = false, onClose, children }: Di
         onClose();
       }}
       onKeyDown={trapFocus}
-      className="fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50"
+      className={cn(
+        'fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50',
+        className,
+      )}
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <h2 id={titleId} className="min-w-0 text-lg font-semibold wrap-anywhere">
