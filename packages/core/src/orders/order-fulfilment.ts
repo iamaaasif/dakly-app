@@ -5,7 +5,7 @@ import type { StockMovementKind } from '@dakly/contracts/products';
 import type { ProductsService } from '../products/products.service';
 import { partialOrderTotals } from './order-totals';
 import { orderError } from './orders.errors';
-import type { OrderItemWrite, OrdersRepository, StageWrite } from './orders.repository';
+import type { OrdersRepository, StageWrite } from './orders.repository';
 
 type Actor = AuditEntry['actor'];
 type LockedOrder = NonNullable<Awaited<ReturnType<OrdersRepository['lock']>>>;
@@ -129,28 +129,5 @@ async function moveOrderStock(
   for (const { variantId, quantity, isStockTracked } of items) {
     if (isStockTracked && quantity > 0)
       await products.moveStock(storeId, variantId, { ...movement, quantity });
-  }
-}
-
-export async function moveOrderReservations(
-  storeId: string,
-  products: ProductsService,
-  { orderId, actor, reason }: { orderId: string; actor: Actor; reason?: string },
-  { before, after }: { before: OrderItemWrite[]; after: OrderItemWrite[] },
-): Promise<void> {
-  const deltas = new Map<string, number>();
-  for (const item of before)
-    if (item.isStockTracked)
-      deltas.set(item.variantId, (deltas.get(item.variantId) ?? 0) - item.quantity);
-  for (const item of after)
-    if (item.isStockTracked)
-      deltas.set(item.variantId, (deltas.get(item.variantId) ?? 0) + item.quantity);
-  for (const [variantId, delta] of [...deltas].sort(([a], [b]) => a.localeCompare(b))) {
-    if (delta === 0) continue;
-    await products.moveStock(storeId, variantId, {
-      kind: delta > 0 ? 'reserve' : 'release',
-      quantity: Math.abs(delta),
-      reference: { orderId, actor, reason },
-    });
   }
 }

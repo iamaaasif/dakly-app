@@ -23,7 +23,8 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
-import { applyOrderFulfilment, moveOrderReservations } from './order-fulfilment';
+import { applyOrderFulfilment } from './order-fulfilment';
+import { moveOrderReservations } from './order-reservations';
 import {
   canEditOrder,
   isSyncedOrder,
