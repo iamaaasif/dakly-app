@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
 
@@ -60,7 +61,8 @@ function BuilderHeader({ title, editable }: { title: string; editable: boolean }
 function useCampaignDetailsForm(campaign?: CampaignResponse) {
   const save = useSaveCampaign();
   const router = useRouter();
-  const values = { name: campaign?.name ?? '', goal: campaign?.goal ?? null };
+  const name = campaign?.name ?? '';
+  const goal = campaign?.goal ?? null;
   const form = useForm<DetailsInput, unknown, Details>({
     resolver: zodResolver(detailsSchema, {
       error: (issue) =>
@@ -68,11 +70,19 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
           ? 'Enter a campaign name.'
           : undefined,
     }),
-    defaultValues: values,
-    values,
+    defaultValues: { name, goal },
+    values: { name, goal },
     resetOptions: { keepDirtyValues: true, keepErrors: true },
   });
   const { dirtyFields, isDirty } = form.formState;
+  const { getFieldState, getValues, resetField } = form;
+  useEffect(() => {
+    // A refetch can confirm a pending edit without clearing its dirty flag.
+    if (getFieldState('name').isDirty && getValues('name') === name)
+      resetField('name', { defaultValue: name, keepError: true, keepTouched: true });
+    if (getFieldState('goal').isDirty && getValues('goal') === goal)
+      resetField('goal', { defaultValue: goal, keepError: true, keepTouched: true });
+  }, [getFieldState, getValues, resetField, name, goal]);
   const opening = !campaign && save.isSuccess;
   const submit = form.handleSubmit((input) => {
     if (opening || save.isSaving()) return;

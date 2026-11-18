@@ -140,12 +140,37 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       otherEditor.getByRole('heading', { name: 'Winter Kurti collection' }),
     ).toBeVisible();
     await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('Winter Kurti collection');
+    const otherName = otherEditor.getByLabel('Campaign name');
+    const otherSave = otherEditor.getByRole('button', { name: 'Save draft' });
+    await otherName.fill('Summer Kurti collection');
+    await name.fill('Summer Kurti collection');
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByRole('heading', { name: 'Summer Kurti collection' })).toBeVisible();
+    await otherEditor.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await expect(otherSave).toBeDisabled();
+
+    await name.fill('Puja Kurti collection');
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByRole('heading', { name: 'Puja Kurti collection' })).toBeVisible();
+    await otherEditor.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+    await expect(otherName).toHaveValue('Puja Kurti collection');
+    await otherEditor.getByLabel('Goal').selectOption('seasonal');
+    const goalPatch = otherEditor.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await otherSave.click();
+    expect((await goalPatch).postDataJSON()).toEqual({ goal: 'seasonal' });
+    await expect(otherEditor.getByText('Draft saved.', { exact: true })).toBeVisible();
     await otherEditor.close();
+    await page.reload();
+    await expect(name).toHaveValue('Puja Kurti collection');
+    await expect(page.getByLabel('Goal')).toHaveValue('seasonal');
     const longName = 'W'.repeat(100);
     await name.fill(longName);
     await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(page.getByRole('heading', { name: longName })).toBeVisible();
-    await expect(page.getByLabel('Goal')).toHaveValue('from_scratch');
+    await expect(page.getByLabel('Goal')).toHaveValue('seasonal');
     await page.setViewportSize({ width: 360, height: 800 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
