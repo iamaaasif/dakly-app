@@ -274,9 +274,27 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       body: 'Your order is out for delivery',
       operationKey: `approved-${contact.id}`,
     });
+    const otherContact = await contacts.create(
+      storeA,
+      { name: 'Karim Hossain', phone: '01912345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const prepared = await messaging.prepareSender(storeB);
+    const other = await messaging.send(
+      storeA,
+      {
+        channel: 'sms',
+        contactId: otherContact.id,
+        body: 'Your order is out for delivery',
+        operationKey: `other-store-${otherContact.id}`,
+      },
+      prepared,
+    );
 
     expect(await capturedSenderName(shared.providerMessageId)).toBe('');
     expect(await capturedSenderName(own.providerMessageId)).toBe('Nusrat Fab');
+    expect(await capturedSenderName(other.providerMessageId)).toBe('');
   });
 
   it('calls the driver with no store transaction open', async () => {
