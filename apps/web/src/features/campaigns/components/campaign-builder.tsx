@@ -82,24 +82,23 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
   const { dirtyFields, isDirty } = form.formState;
   const opening = !campaign && save.isSuccess;
   const submit = form.handleSubmit((input) => {
-    if (opening) return;
     const change = {
       ...(dirtyFields.name && { name: input.name }),
       ...(dirtyFields.goal && { goal: input.goal }),
     };
     if (campaign && !Object.keys(change).length) return;
-    const request = campaign
-      ? { id: campaign.id, input: change }
-      : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) };
-    save.mutate(request, {
-      onSuccess: (saved) => {
-        if (!campaign) {
-          router.replace(`/campaigns/${saved.id}`);
-          return;
-        }
-        form.reset({ name: saved.name, goal: saved.goal });
+    save.mutate(
+      campaign ? { id: campaign.id, input: change } : { input: { ...input, channel: 'sms' } },
+      {
+        onSuccess: (saved) => {
+          if (!campaign) {
+            router.replace(`/campaigns/${saved.id}`);
+            return;
+          }
+          form.reset({ name: saved.name, goal: saved.goal });
+        },
       },
-    });
+    );
   });
   return { form, submit, save, isDirty, opening };
 }
