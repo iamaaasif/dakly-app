@@ -114,43 +114,41 @@ function OrderStageFooter({
   }
 
   return (
-    <>
+    <div className="flex flex-wrap gap-2">
       {transition.error && (
-        <p role="alert" className="mb-2 text-danger">
+        <p role="alert" className="w-full text-danger">
           {transition.error.message}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
-        {canConfirm && (
+      {canConfirm && (
+        <Button
+          className="w-full"
+          disabled={transition.isPending}
+          onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+        >
+          Mark confirmed
+        </Button>
+      )}
+      {actions.map((action) =>
+        action === 'to_confirm' ? (
           <Button
-            className="w-full"
+            key={action}
+            variant="secondary"
             disabled={transition.isPending}
-            onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+            onClick={(event) => changeStage({ to: action }, event.currentTarget)}
           >
-            Mark confirmed
+            Back to confirmation
           </Button>
-        )}
-        {actions.map((action) =>
-          action === 'to_confirm' ? (
-            <Button
-              key={action}
-              variant="secondary"
-              disabled={transition.isPending}
-              onClick={(event) => changeStage({ to: action }, event.currentTarget)}
-            >
-              Back to confirmation
-            </Button>
-          ) : (
-            <OrderStageDialog
-              key={action}
-              order={order}
-              action={action}
-              stage={stage}
-              disabled={transition.isPending}
-            />
-          ),
-        )}
-      </div>
-    </>
+        ) : (
+          <OrderStageDialog
+            key={action}
+            order={order}
+            action={action}
+            stage={stage}
+            disabled={transition.isPending}
+          />
+        ),
+      )}
+    </div>
   );
 }
