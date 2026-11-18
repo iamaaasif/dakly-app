@@ -1,12 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
 import { campaigns } from '@dakly/db/schema/campaigns';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { MINUTE_MS } from '../platform/time';
 import { statusWhere } from './campaigns.repository';
 
 export type CampaignRef = { storeId: string; campaignId: string };
@@ -19,23 +18,42 @@ export class CampaignSendingRepository {
     @Inject(DATABASE) private readonly global: Database,
   ) {}
 
-  // The sweeps run across stores, so SECURITY DEFINER functions name the campaigns with work.
-  async listDue(asOf: Date, limit: number): Promise<CampaignRef[]> {
-    const rotation = Math.floor(asOf.getTime() / MINUTE_MS) * limit;
-    const result = await this.global.execute<CampaignRef>(sql`
-      with ranked as (
-        select store_id, campaign_id,
-          row_number() over (partition by store_id order by campaign_id) as turn,
-          dense_rank() over (order by store_id) - 1 as store_slot
-        from due_campaigns(${asOf.toISOString()}::timestamptz)
-      ), sized as (
-        select *, max(store_slot) over () + 1 as store_count from ranked
-      )
-      select store_id as "storeId", campaign_id as "campaignId" from sized
-      order by turn, (store_slot + store_count - ${rotation}::bigint % store_count) % store_count
-      limit ${limit}
+  // Only the due store ids cross RLS. Candidate rows are read in the tenant transaction below.
+  async listDueStores(asOf: Date, after: string | null, limit: number): Promise<string[]> {
+    const result = await this.global.execute<{ storeId: string }>(sql`
+      select store_id as "storeId" from campaign_due_stores(${asOf.toISOString()}::timestamptz,
+        ${after}::uuid, ${limit}::integer)
     `);
-    return result.rows;
+    return result.rows.map(({ storeId }) => storeId);
+  }
+
+  async listDueInStore(
+    storeId: string,
+    { asOf, after, limit }: { asOf: Date; after: string | null; limit: number },
+  ): Promise<CampaignRef[]> {
+    return this.database.forStore(storeId, (tx) => {
+      const previous = after
+        ? tx
+            .select({ scheduledFor: campaigns.scheduledFor, id: campaigns.id })
+            .from(campaigns)
+            .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, after)))
+        : undefined;
+      return tx
+        .select({ storeId: campaigns.storeId, campaignId: campaigns.id })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            eq(campaigns.status, 'scheduled'),
+            lte(campaigns.scheduledFor, asOf),
+            previous
+              ? sql`(${campaigns.scheduledFor}, ${campaigns.id}) > (${previous})`
+              : undefined,
+          ),
+        )
+        .orderBy(asc(campaigns.scheduledFor), asc(campaigns.id))
+        .limit(limit);
+    });
   }
 
   // Guarded on the send time too, so a campaign edited and approved again meanwhile waits.

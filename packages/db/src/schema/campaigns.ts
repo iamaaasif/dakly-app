@@ -160,6 +160,9 @@ export const campaigns = pgTable(
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
+    index('campaigns_start_due_by_store_idx')
+      .on(table.storeId, table.scheduledFor, table.id)
+      .where(sql`${table.status} = 'scheduled'`),
     // Match the sweep's order, including immediate campaigns started by older app versions.
     index('campaigns_sending_idx')
       .on(table.storeId, sql`coalesce(${table.startedAt}, ${table.approvedAt})`, table.id)

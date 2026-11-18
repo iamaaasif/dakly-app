@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
@@ -16,6 +17,7 @@ import { CampaignsService } from './campaigns.service';
 
 @Module({
   imports: [
+    CacheModule,
     ClockModule,
     ErrorReportingModule,
     OutboxModule,
