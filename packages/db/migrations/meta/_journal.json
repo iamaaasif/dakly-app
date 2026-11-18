@@ -302,6 +302,13 @@
       "when": 1795024484066,
       "tag": "0042_automation_send_costs",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1795024576798,
+      "tag": "0043_automation_send_retries",
+      "breakpoints": true
     }
   ]
 }
