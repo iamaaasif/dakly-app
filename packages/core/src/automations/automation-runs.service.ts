@@ -274,7 +274,7 @@ export class AutomationRunsService {
       const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
       return held && { ...held, claim: renewed };
     }
-    const gatedAt = await this.transaction.databaseTime(storeId);
+    const gatedAt = renewed.claimedAt;
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     if ('outcome' in started)
       return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
