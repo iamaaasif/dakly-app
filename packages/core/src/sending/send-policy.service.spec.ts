@@ -284,7 +284,7 @@ describe('SendPolicyService', () => {
     });
     const late = new Date('2026-11-16T20:00:00Z');
     afterLock = () => {
-      databaseAt = late;
+      clockAt = late;
     };
     expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'defer', until: new Date('2026-11-17T03:00:00Z') },
@@ -292,7 +292,7 @@ describe('SendPolicyService', () => {
     });
     afterLock = () => {
       consent = 'withdrawn';
-      databaseAt = NOON_DHAKA;
+      clockAt = NOON_DHAKA;
     };
     expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'skip', reason: 'no_consent' },
