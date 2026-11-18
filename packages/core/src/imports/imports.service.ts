@@ -41,11 +41,11 @@ type Outcome = {
   status: 'done' | 'failed';
   counts?: ImportCounts;
   lines: ReportLine[];
-  stalled?: { before: Date; limit: number };
+  exhausted?: { before: Date; limit: number };
 };
 
 const LINK_SECONDS = 15 * 60;
-// Each import is a file in R2 and a bulk job, so a store starts at most 20 an hour.
+// Uploads consume R2 storage, so a shop can upload at most 20 customer files an hour.
 const IMPORTS_PER_HOUR = 20;
 // The upload and its report are kept for the 7 days an import can be undone.
 const FILE_DAYS = 7;
@@ -197,7 +197,7 @@ export class ImportsService {
               ...(stuck.checkpoint?.report ?? []),
               { message: 'The import stopped before it finished. Upload the file again' },
             ],
-            stalled: { before, limit: MAX_REQUEUES },
+            exhausted: { before, limit: MAX_REQUEUES },
           });
       }
   }
@@ -342,7 +342,7 @@ export class ImportsService {
     storeId: string,
     importId: string,
     lease: Date | null,
-    { status, counts, lines, stalled }: Outcome,
+    { status, counts, lines, exhausted }: Outcome,
   ): Promise<void> {
     const report = lines.length > 0 ? await this.uploadReport(storeId, lines) : undefined;
     const result = { status, counts, finishedAt: this.clock.now() };
@@ -350,7 +350,7 @@ export class ImportsService {
       lease,
       result,
       report,
-      stalled,
+      exhausted,
     });
     if (!finished && report) await this.storage.deleteObject(report.objectKey);
   }

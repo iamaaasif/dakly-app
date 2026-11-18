@@ -211,12 +211,12 @@ export class ImportsRepository {
       lease,
       result,
       report,
-      stalled: exhausted,
+      exhausted,
     }: {
       lease: Date | null;
       result: ImportResult;
       report?: NewImportFile;
-      stalled?: { before: Date; limit: number };
+      exhausted?: { before: Date; limit: number };
     },
   ): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {

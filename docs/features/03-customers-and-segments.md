@@ -111,7 +111,7 @@ comes in the next part.
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
   browser sends the file straight to R2 under `imports/<storeId>/<uuid>.csv`, with
   `Content-Type: text/csv` and exactly the declared size: both are signed into the URL, so R2
-  refuses any other body. A store starts at most 20 imports an hour (`IMPORT_RATE_LIMITED`).
+  refuses any other body. A shop can upload at most 20 customer files an hour (`IMPORT_RATE_LIMITED`).
 - The upload's `files` row has `expires_at` 7 days ahead, and an R2 lifecycle rule deletes
   everything under `imports/` after 7 days.
 - Start: `POST /imports/:importId/start` takes the column mapping, the duplicate mode

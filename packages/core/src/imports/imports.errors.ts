@@ -23,7 +23,10 @@ const IMPORT_ERRORS = {
   IMPORT_NOT_FOUND: { status: 404, message: 'Import not found' },
   IMPORT_ALREADY_STARTED: { status: 409, message: 'This import has already started' },
   IMPORT_BEING_RUN: { status: 409, message: 'Another run is still importing this file' },
-  IMPORT_RATE_LIMITED: { status: 429, message: 'A shop can start at most 20 imports an hour' },
+  IMPORT_RATE_LIMITED: {
+    status: 429,
+    message: 'A shop can upload at most 20 customer files an hour',
+  },
 } as const satisfies ErrorCatalog;
 
 export function importError(code: keyof typeof IMPORT_ERRORS): AppError {
