@@ -202,7 +202,8 @@ export class KnowledgeRepository {
           JOIN knowledge_items item
             ON item.store_id = chunk.store_id AND item.id = chunk.knowledge_item_id
           LEFT JOIN files file ON file.store_id = item.store_id AND file.id = item.file_id
-          WHERE file.status IS DISTINCT FROM 'rejected' AND chunk.store_id = ${storeId} AND item.status = 'active'
+          WHERE chunk.store_id = ${storeId} AND item.status = 'active'
+            AND file.status IS DISTINCT FROM 'rejected'
             AND chunk.embedding_model = ${model}
         ),
         terms AS (

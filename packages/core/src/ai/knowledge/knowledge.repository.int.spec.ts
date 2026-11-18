@@ -262,6 +262,8 @@ describe('KnowledgeRepository', () => {
     const matching = await create(fixture.a, 'ঢাকা delivery', farther, 'current');
     await create(fixture.a, 'ঢাকা delivery', closer, 'old');
     await create(fixture.b, 'ঢাকা delivery', closer, 'current');
+    const edited = await create(fixture.a, 'ঢাকা delivery', closer, 'current');
+    await repository.change(fixture.a, edited, { answer: 'নতুন মূল্য' }, now);
 
     const rejected = await createFile('text/plain', Buffer.from('ঢাকা'));
     await repository.finishIndex(fixture.a, rejected.id, rejected.updatedAt, {

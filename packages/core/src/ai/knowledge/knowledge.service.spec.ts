@@ -1,3 +1,4 @@
+import type { LazyModuleLoader } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
 
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
@@ -129,13 +130,18 @@ function fixture() {
       };
     },
   } as AiService;
+  const modules = {
+    async load() {
+      return { get: () => ai };
+    },
+  } as unknown as LazyModuleLoader;
   const service = new KnowledgeService(
     repository,
     outbox,
     transaction,
     { now: () => now },
     storage,
-    ai,
+    modules,
   );
   return { service, events, files };
 }
