@@ -12,9 +12,9 @@ import { createDatabase } from '@dakly/db/client';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 
+import { UsersService } from '../auth/users.service';
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
-import { UsersService } from '../auth/users.service';
 import { EmailService } from '../email/email.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
