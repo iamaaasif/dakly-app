@@ -85,6 +85,12 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
   cancelled: [],
 };
 
+export const editableOrderStages: readonly OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
+export const editablePaymentStatuses: readonly (typeof orderPaymentStatuses)[number][] = [
+  'cod_pending',
+  'advance_paid',
+];
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',

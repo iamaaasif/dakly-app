@@ -23,6 +23,7 @@ export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disab
   const edit = useEditOrder();
   const form: UseFormReturn<EditOrderValues, undefined, EditOrderInput> = useForm({
     resolver: (values, context, options) =>
+      // Saved orders can have repeated variants. Validate lines only when staff edit them.
       resolveEdit(
         { ...values, items: form.getFieldState('items').isDirty ? values.items : undefined },
         context,
@@ -88,7 +89,7 @@ function editedFields(
   const { recipient, items, deliveryChargePoisha, orderDiscountPoisha, advancePaidPoisha } = input;
   return {
     expectedUpdatedAt: input.expectedUpdatedAt,
-    items,
+    items: changed.items ? items : undefined,
     recipient: editedRecipient(recipient, changed.recipient),
     deliveryChargePoisha: changed.deliveryChargePoisha ? deliveryChargePoisha : undefined,
     orderDiscountPoisha: changed.orderDiscountPoisha ? orderDiscountPoisha : undefined,
