@@ -20,7 +20,7 @@ Questions waiting for Asif. Until one is answered, build the "working assumption
 ## Designs still needed before the screen is built
 
 - Fix the 8 numbers that disagree between prototype pages, using the glossary.
-- Campaign results page, order link page, WhatsApp embedded signup, the "not enough data" answer in Ask Dakly AI, the Analytics sales tab.
+- Order link page, WhatsApp embedded signup, the "not enough data" answer in Ask Dakly AI, the Analytics sales tab.
 - Phone layouts and empty states for every new page.
 - Email sign-in and email code screens (the prototype has only the Email tab).
 - Remove the AI voice call card, the courier booking screens, the email campaign options and the Instagram DM campaign option from release 1 screens.

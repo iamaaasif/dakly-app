@@ -37,6 +37,19 @@ describe('contact filters without RLS assistance', () => {
       hasPhone: true,
     });
     expect(await repository.findRecipient(f.b, a!.id)).toBeUndefined();
+    await repository.changeTag(f.b, a!.id, { tag: 'vip', change: 'add' }, 50);
+    expect(await repository.findTags(f.a, a!.id)).toEqual([]);
+    await repository.changeTag(f.a, a!.id, { tag: 'vip', change: 'add' }, 50);
+    await repository.changeTag(f.a, a!.id, { tag: 'vip', change: 'add' }, 50);
+    expect(await repository.findTags(f.b, a!.id)).toEqual([]);
+    expect(await repository.findTags(f.a, a!.id)).toEqual(['vip']);
+    // At the limit a new tag is not added.
+    await repository.changeTag(f.a, a!.id, { tag: 'gold', change: 'add' }, 1);
+    expect(await repository.findTags(f.a, a!.id)).toEqual(['vip']);
+    await repository.changeTag(f.b, a!.id, { tag: 'vip', change: 'remove' }, 50);
+    expect(await repository.findTags(f.a, a!.id)).toEqual(['vip']);
+    await repository.changeTag(f.a, a!.id, { tag: 'vip', change: 'remove' }, 50);
+    expect(await repository.findTags(f.a, a!.id)).toEqual([]);
     expect(await repository.findRecipients(f.b, [a!.id, b!.id])).toEqual([
       {
         id: b!.id,
@@ -100,6 +113,9 @@ describe('contact filters without RLS assistance', () => {
 
     expect(await repository.countMatching(f.b, rules)).toBe(1);
     expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
+    expect(await repository.isMatching(f.b, b!.id, rules)).toBe(true);
+    expect(await repository.isMatching(f.b, a!.id, rules)).toBe(false);
+    expect(await repository.isMatching(f.a, a!.id, rules)).toBe(true);
     await f.connection.pool.query(
       "insert into consents(id,store_id,contact_id,channel,status,source,captured_at) values(gen_random_uuid(),$1,$2,'sms','not_answered','import',now()+interval '1 minute')",
       [f.b, b!.id],
@@ -154,6 +170,39 @@ describe('contact filters without RLS assistance', () => {
     await imports.updateImported(f.a, [{ id: b!.id, name: 'অন্য দোকান' }]);
     expect(await f.row('contacts', added!.id)).toMatchObject({ name: 'শাহনাজ', tags: ['ঈদ'] });
     expect(await f.row('contacts', b!.id)).toMatchObject({ name: 'করিম' });
+  });
+
+  it('keeps import undo eligibility for no-op tags and loses it for a real tag edit', async () => {
+    const importId = randomUUID();
+    const fileId = randomUUID();
+    await f.connection.pool.query(
+      "insert into files(id,store_id,purpose,object_key,content_type,size_bytes) values($1::uuid,$2,'import',$1::text,'text/csv',10)",
+      [fileId, f.a],
+    );
+    await f.connection.pool.query(
+      "insert into imports(id,store_id,kind,file_id) values($1,$2,'customers_csv',$3)",
+      [importId, f.a, fileId],
+    );
+    const [contact] = await imports.insertImported(f.a, [
+      { importId, source: 'import', kind: 'customer', phone: '01711000024' },
+    ]);
+    const id = contact!.id;
+    await f.connection.pool.query(
+      "update contacts set tags = array['vip'], created_at = '2020-01-01T00:00:00Z', updated_at = '2020-01-01T00:00:00Z' where id = $1",
+      [id],
+    );
+    for (const change of [
+      { tag: 'absent', change: 'remove' },
+      { tag: 'vip', change: 'add' },
+      { tag: 'gold', change: 'add' },
+    ] as const) {
+      await repository.changeTag(f.a, id, change, 1);
+      expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([id]);
+      expect((await f.row('contacts', id)).tags).toEqual(['vip']);
+    }
+    await repository.changeTag(f.a, id, { tag: 'gold', change: 'add' }, 2);
+    expect((await f.row('contacts', id)).tags).toEqual(['vip', 'gold']);
+    expect(await repository.lockUneditedByImport(f.a, importId, { limit: 10 })).toEqual([]);
   });
 
   it('locks and soft deletes unedited contacts of an import only in the selected store', async () => {

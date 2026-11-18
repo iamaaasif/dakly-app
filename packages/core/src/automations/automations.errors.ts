@@ -23,6 +23,18 @@ const AUTOMATION_ERRORS = {
     status: 409,
     message: 'A message step has no channel the store can send on',
   },
+  AUTOMATION_ACTION_UNAVAILABLE: {
+    status: 409,
+    message: 'The store does not have this action yet',
+  },
+  AUTOMATION_TAPS_UNAVAILABLE: {
+    status: 409,
+    message: 'Taps on workflow messages are not recorded yet',
+  },
+  AUTOMATION_REVIEW_UNAVAILABLE: {
+    status: 409,
+    message: 'Review before sending is not available yet',
+  },
   AUTOMATION_SPLIT_TOO_SOON: {
     status: 409,
     message: 'Wait at least 2 hours before a split on taps or replies',
