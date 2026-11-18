@@ -93,8 +93,9 @@ export function messageBody(step: SendStep, optOutUrl: string | undefined): stri
 }
 
 export function workflowDestinationHash(storeId: string, phone: string | null): string | null {
-  const key = loadEnv().CODE_HASH_KEY;
-  return key && phone ? hashCode(key, JSON.stringify(['workflow-sms', storeId, phone])) : null;
+  return phone
+    ? hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify(['workflow-sms', storeId, phone]))
+    : null;
 }
 
 export function ifNotReachable(step: SendStep, now: Date) {
