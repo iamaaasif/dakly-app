@@ -59,6 +59,14 @@ describe('MailpitSmsDriver (SMTP and API)', () => {
       expect(new Set(receipts.map(({ providerMessageId }) => providerMessageId)).size).toBe(1);
       expect((await captures()).map(({ ID }) => ID)).toEqual([receipts[0]?.providerMessageId]);
       expect(await driver.send(message)).toEqual(receipts[0]);
+      await driver['transport'].sendMail({
+        from: 'sms@sms.dakly.test',
+        to: `${message.to}@sms.test`,
+        subject: 'SMS',
+        text: message.text,
+        messageId: `<${idempotencyKey}@sms.dakly.test>`,
+      });
+      expect((await captures()).map(({ ID }) => ID)).toEqual([receipts[0]?.providerMessageId]);
     } finally {
       const ids = (await captures()).map(({ ID }) => ID);
       if (ids.length) {
