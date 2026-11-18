@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import type { Database } from '@dakly/db/client';
 import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import { LlmError, type LlmResult } from '@dakly/providers/llm/llm-driver';
 
-import type { StoreTransaction } from '../platform/database/store-transaction';
-import type { UsageService } from '../usage/usage.service';
+import { ScopedTransactions, type Transaction } from '../platform/database/scoped-transactions';
+import type { ConsumeUsageInput, UsageService } from '../usage/usage.service';
 import type { AiGate } from './ai-gate';
 import type { AiRun, AiRunsRepository } from './ai-runs.repository';
 import { AiRunsService } from './ai-runs.service';
@@ -27,7 +28,7 @@ const billedRequest: AiRequest<z.infer<typeof schema>> = {
   ...request,
   tier: 'writer',
   purpose: 'content',
-  usage: { unit: 'ai_content', reference: 'draft-123' },
+  usageReference: 'draft-123',
 };
 
 const config: AiConfig = {
@@ -97,6 +98,14 @@ describe('AiService', () => {
     expect(runs.map((run) => run.outcome)).toEqual(['timeout']);
   });
 
+  it('uses the billing unit for the result purpose', async () => {
+    const { service, used } = fixture([reply, reply]);
+
+    await service.run(storeId, billedRequest);
+    await service.run(storeId, { ...billedRequest, purpose: 'ask', usageReference: 'question-1' });
+    expect(Array.from(used.values(), (event) => event.unit)).toEqual(['ai_content', 'ai_ask']);
+  });
+
   it('leaves the allowance untouched on a billed timeout or final schema mismatch', async () => {
     const bad = { ...reply, output: { reply: 100 } };
     const { service, used } = fixture([new LlmError('LLM_TIMEOUT'), bad, bad]);
@@ -141,24 +150,33 @@ describe('AiService', () => {
     });
   });
 
-  it('refuses to run inside a store transaction', async () => {
-    const { service, runs, used } = fixture([reply], { transactionOpen: true });
+  it.each(['store', 'account', 'staff'] as const)(
+    'refuses to run inside a %s transaction',
+    async (scope) => {
+      const { service, runs, used } = fixture([reply]);
+      const db = {
+        transaction: (work: (tx: Transaction) => Promise<unknown>) => work({} as Transaction),
+      } as unknown as Database;
+      const transaction = new ScopedTransactions(db, scope);
 
-    await expect(service.run(storeId, request)).rejects.toMatchObject({
-      code: 'AI_INSIDE_TRANSACTION',
-    });
-    expect(runs).toEqual([]);
-    expect(used.size).toBe(0);
-  });
+      await expect(
+        transaction.run(storeId, () => service.run(storeId, request)),
+      ).rejects.toMatchObject({
+        code: 'AI_INSIDE_TRANSACTION',
+      });
+      expect(runs).toEqual([]);
+      expect(used.size).toBe(0);
+    },
+  );
 });
 
 function fixture(
   script: (LlmResult | Error)[],
-  options: { transactionOpen?: boolean; pausedWhileAdmitting?: boolean; failWrites?: boolean } = {},
+  options: { pausedWhileAdmitting?: boolean; failWrites?: boolean } = {},
 ) {
   let failures = 0;
   const runs: AiRun[] = [];
-  const used = new Map<string, { id: string }>();
+  const used = new Map<string, { id: string; unit: ConsumeUsageInput['unit'] }>();
   const repo = {
     async insert(_storeId: string, run: AiRun) {
       if (options.failWrites) throw new Error('Run insert failed');
@@ -167,8 +185,8 @@ function fixture(
     },
   } as AiRunsRepository;
   const usageService = {
-    async consume(_storeId: string, { reference }: NonNullable<AiRequest<unknown>['usage']>) {
-      const event = used.get(reference) ?? { id: reference };
+    async consume(_storeId: string, { reference, unit }: ConsumeUsageInput) {
+      const event = used.get(reference) ?? { id: reference, unit };
       used.set(reference, event);
       return event;
     },
@@ -183,13 +201,11 @@ function fixture(
     },
   } as unknown as AiGate;
   const clock = { now: () => new Date('2026-11-18T15:00:00Z') };
-  const transaction = { isOpen: () => options.transactionOpen === true } as StoreTransaction;
   const driver = new FakeLlmDriver(script);
   const service = new AiService(
     new AiRunsService(driver, repo, clock, gate),
     gate,
     usageService,
-    transaction,
     config,
     clock,
   );

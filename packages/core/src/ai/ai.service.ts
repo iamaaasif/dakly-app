@@ -5,7 +5,7 @@ import type { aiRunPurposes } from '@dakly/contracts/ai';
 import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { Clock } from '../platform/clock';
-import { StoreTransaction } from '../platform/database/store-transaction';
+import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
 import { AppError } from '../platform/errors/app-error';
 import { UsageService, type ConsumeUsageInput } from '../usage/usage.service';
 import { AiGate } from './ai-gate';
@@ -13,18 +13,21 @@ import { AiRunsService, type AiAttempt } from './ai-runs.service';
 import { AI_CONFIG, aiTimeoutMs, type AiConfig, type AiTier } from './ai.config';
 import { aiError } from './ai.errors';
 
+const usageUnits = { content: 'ai_content', ask: 'ai_ask' } as const;
+type BillablePurpose = keyof typeof usageUnits;
+type AiPurpose = (typeof aiRunPurposes)[number];
+
 export type AiRequest<T> = {
   tier: AiTier;
-  purpose: (typeof aiRunPurposes)[number];
   prompt: { version: string; instructions: string };
   input: string;
   output: ZodType<T>;
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
-  usage?: Omit<ConsumeUsageInput, 'quantity' | 'unit'> & {
-    unit: Exclude<ConsumeUsageInput['unit'], 'ai_conversation'>;
-  };
-};
+} & (
+  | { purpose: BillablePurpose; usageReference?: string }
+  | { purpose: Exclude<AiPurpose, BillablePurpose>; usageReference?: never }
+);
 
 type GateFailure =
   'AI_PAUSED' | 'AI_STORE_BUSY' | 'USAGE_ALLOWANCE_EXCEEDED' | 'LLM_ABORTED' | 'LLM_TIMEOUT';
@@ -36,13 +39,12 @@ export class AiService {
     @Inject(AiRunsService) private readonly runs: AiRunsService,
     @Inject(AiGate) private readonly gate: AiGate,
     @Inject(UsageService) private readonly usage: UsageService,
-    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AI_CONFIG) private readonly config: AiConfig,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   async run<T>(storeId: string, request: AiRequest<T>): Promise<AiResult<T>> {
-    if (this.transaction.isOpen()) throw aiError('AI_INSIDE_TRANSACTION');
+    if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
     if (request.signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
     const deadline = this.clock.now().getTime() + aiTimeoutMs;
     const permit = await this.gate.acquire(storeId);
@@ -52,13 +54,18 @@ export class AiService {
     const result = await this.runWithRetry(storeId, request, deadline).finally(() =>
       this.gate.release(storeId, permit.ticket),
     );
-    if (result.kind !== 'output' || !request.usage) return result;
-    return this.billOutput(storeId, request.usage, result, request.signal);
+    if (result.kind !== 'output' || request.usageReference === undefined) return result;
+    return this.billOutput(
+      storeId,
+      { unit: usageUnits[request.purpose], reference: request.usageReference },
+      result,
+      request.signal,
+    );
   }
 
   private async billOutput<T>(
     storeId: string,
-    usage: NonNullable<AiRequest<T>['usage']>,
+    usage: Omit<ConsumeUsageInput, 'quantity'>,
     result: AiResult<T>,
     signal?: AbortSignal,
   ): Promise<AiResult<T>> {

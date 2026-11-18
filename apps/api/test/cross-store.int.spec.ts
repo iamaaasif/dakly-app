@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
 import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
@@ -78,6 +79,66 @@ async function smsCredits(shop: Shop, quantity: number) {
   );
   return id;
 }
+async function order(shop: Shop): Promise<string> {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into orders (id,store_id,number,source,created_by_type,recipient_name,
+       recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
+     values($1,$2,1001,'manual','user','রিনা',$3,'ধানমন্ডি','Dhaka',9000,9000)`,
+    [id, shop.id, shop.owner.phone],
+  );
+  return id;
+}
+
+fixture('GET /orders', async () => {
+  const { a, b } = await pair();
+  const ownA = await order(a);
+  const ownB = await order(b);
+  for (const [shop, id] of [
+    [a, ownA],
+    [b, ownB],
+  ] as const) {
+    const result = await success(shop, 'GET', '/orders?stage=to_confirm', 200);
+    expect(result.json()).toMatchObject({ items: [{ id }], counts: { to_confirm: 1 } });
+    expect(result.json().items).toHaveLength(1);
+  }
+});
+
+fixture('GET /orders/:orderId', async () => {
+  const { a, b } = await pair();
+  const id = await order(a);
+  expect((await success(a, 'GET', `/orders/${id}`, 200)).json()).toMatchObject({
+    id,
+    items: [],
+    timeline: [],
+  });
+  const restricted = await f.request(a.member, 'GET', `/orders/${id}`);
+  expect(restricted.statusCode, restricted.body).toBe(200);
+  expect(restricted.json().recipientPhone).toBe(
+    `${a.owner.phone.slice(0, 5)}-XXX${a.owner.phone.slice(-3)}`,
+  );
+  await hidden(b, 'GET', (value) => `/orders/${value}`, id);
+});
+
+fixture('POST /orders/:orderId/stage', async () => {
+  const { a, b } = await pair();
+  const foreignId = await order(a);
+  const ownId = await order(b);
+  const url = (id: string) => `/orders/${id}/stage`;
+  const change = { to: 'to_pack' };
+  const before = await f.row('orders', foreignId);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'POST', url(ownId), change)).statusCode).toBe(403);
+  expect((await success(b, 'POST', url(ownId), 200, change)).json()).toMatchObject({
+    stage: 'to_pack',
+    timeline: [{ from: 'to_confirm', to: 'to_pack', actorUserId: b.owner.id }],
+  });
+  await hidden(b, 'POST', url, foreignId, () => change);
+  expect(await f.row('orders', foreignId)).toEqual(before);
+});
+
 fixture('GET /contacts/:contactId', async () => {
   const { a, b } = await pair(),
     id = await contact(a);
@@ -279,6 +340,13 @@ fixture('POST /delivery-zones/initialize-defaults', async () => {
     before = await f.row('delivery_zones', id);
   const result = await success(b, 'POST', '/delivery-zones/initialize-defaults', 201);
   expect(result.json().items).toHaveLength(3);
+  expect(result.json().items).toContainEqual(
+    expect.objectContaining({
+      name: 'Dhaka suburbs',
+      chargePoisha: 10000,
+      bdAreaIds: [303, 309, 30260072],
+    }),
+  );
   for (const zone of result.json().items)
     expect((await f.row('delivery_zones', zone.id)).store_id).toBe(b.id);
   expect(await f.row('delivery_zones', id)).toEqual(before);
@@ -323,9 +391,19 @@ for (const method of ['PATCH', 'DELETE'] as const)
 fixture('GET /areas', async () => {
   const { a, b } = await pair();
   const own = (await success(a, 'GET', '/areas?parentId=3', 200)).json();
-  expect(own.items.map((area: { id: number }) => area.id)).toContain(301);
+  expect(own.items).toContainEqual(
+    expect.objectContaining({ id: 301, nameBn: 'ঢাকা', kind: 'district' }),
+  );
   expect((await success(b, 'GET', '/areas?parentId=3', 200)).json()).toEqual(own);
   expect((await f.request(b.member, 'GET', '/areas?parentId=3')).statusCode).toBe(200);
+  const upazilas = (await success(a, 'GET', '/areas?parentId=301', 200)).json();
+  expect(upazilas.items).toContainEqual({
+    id: 30260072,
+    kind: 'upazila',
+    parentId: 301,
+    name: 'Savar',
+    nameBn: 'সাভার',
+  });
 });
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
@@ -1278,6 +1356,25 @@ describe('every production shop route isolates its data', () => {
   });
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
+  });
+  it('quotes Savar, another Dhaka upazila and an outside upazila from the defaults', async () => {
+    const shop = await f.shop();
+    const zones = await success(shop, 'POST', '/delivery-zones/initialize-defaults', 201);
+    const service = app.get(DeliveryService);
+    const cases = [
+      { areaId: 30260072, name: 'Dhaka suburbs', chargePoisha: 10000 },
+      { areaId: 30260014, name: 'Inside Dhaka', chargePoisha: 6000 },
+      { areaId: 20030004, name: 'Outside Dhaka', chargePoisha: 12000 },
+    ];
+
+    for (const { areaId, name, chargePoisha } of cases) {
+      const zone = zones.json().items.find((item: { name: string }) => item.name === name);
+      expect(zone).toBeDefined();
+      await expect(service.calculateDeliveryCharge(shop.id, areaId)).resolves.toEqual({
+        deliveryZoneId: zone.id,
+        chargePoisha,
+      });
+    }
   });
   it('uses the non-owner app role without bypassing row security', async () => {
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);

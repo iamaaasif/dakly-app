@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const identifier = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_.]{0,79}$/);
 const change = z.strictObject({
+  state: identifier.optional(),
   ids: z.array(z.uuid()).max(100).optional(),
   changedFields: z.array(identifier).max(100).optional(),
   support: z
@@ -27,6 +28,9 @@ export const auditEntrySchema = z.strictObject({
   entityId: z.uuid(),
   before: change.optional(),
   after: change.optional(),
+  reason: z.string().trim().min(1).max(200).optional(),
   ip: z.union([z.ipv4(), z.ipv6()]).optional(),
 });
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
+
+export type AuditHistoryQuery = Pick<AuditEntry, 'entityType' | 'entityId' | 'action'>;

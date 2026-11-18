@@ -23,7 +23,7 @@ const DEFAULT_ZONES = [
   {
     name: 'Dhaka suburbs',
     chargePoisha: 10000,
-    bdAreaIds: [303, 309],
+    bdAreaIds: [303, 309, 30260072],
     isDefault: false,
     position: 1,
   },
