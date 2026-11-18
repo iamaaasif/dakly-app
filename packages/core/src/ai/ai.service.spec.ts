@@ -21,7 +21,13 @@ const request: AiRequest<z.infer<typeof schema>> = {
   prompt: { version: 'chat-reply.v1', instructions: 'Answer in Bangla.' },
   input: 'দাম কত?',
   output: schema,
-  usage: { unit: 'ai_conversation', reference: 'conversation-123' },
+};
+
+const billedRequest: AiRequest<z.infer<typeof schema>> = {
+  ...request,
+  tier: 'writer',
+  purpose: 'content',
+  usage: { unit: 'ai_content', reference: 'draft-123' },
 };
 
 const config: AiConfig = {
@@ -61,7 +67,7 @@ describe('AiService', () => {
   it('records both attempts after a schema mismatch and uses one allowance unit', async () => {
     const { service, runs, used } = fixture([{ ...reply, output: { reply: 100 } }, reply]);
 
-    await expect(service.run(storeId, request)).resolves.toMatchObject({
+    await expect(service.run(storeId, billedRequest)).resolves.toMatchObject({
       kind: 'output',
       aiRunId: 'run-2',
     });
@@ -89,6 +95,28 @@ describe('AiService', () => {
       code: 'LLM_TIMEOUT',
     });
     expect(runs.map((run) => run.outcome)).toEqual(['timeout']);
+  });
+
+  it('leaves the allowance untouched on a billed timeout or final schema mismatch', async () => {
+    const bad = { ...reply, output: { reply: 100 } };
+    const { service, used } = fixture([new LlmError('LLM_TIMEOUT'), bad, bad]);
+
+    await expect(service.run(storeId, billedRequest)).resolves.toMatchObject({
+      kind: 'failure',
+      code: 'LLM_TIMEOUT',
+    });
+    await expect(service.run(storeId, billedRequest)).resolves.toMatchObject({
+      kind: 'failure',
+      code: 'AI_OUTPUT_MISMATCH',
+    });
+    expect(used.size).toBe(0);
+  });
+
+  it('records chat calls without consuming a conversation unit', async () => {
+    const { service, used } = fixture([reply]);
+
+    await expect(service.run(storeId, request)).resolves.toMatchObject({ kind: 'output' });
+    expect(used.size).toBe(0);
   });
 
   it('stops a first dispatch when the circuit opens during admission', async () => {
@@ -139,7 +167,7 @@ function fixture(
     },
   } as AiRunsRepository;
   const usageService = {
-    async consume(_storeId: string, { reference }: AiRequest<unknown>['usage']) {
+    async consume(_storeId: string, { reference }: NonNullable<AiRequest<unknown>['usage']>) {
       const event = used.get(reference) ?? { id: reference };
       used.set(reference, event);
       return event;

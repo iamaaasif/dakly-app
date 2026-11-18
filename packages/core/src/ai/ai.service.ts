@@ -21,7 +21,9 @@ export type AiRequest<T> = {
   output: ZodType<T>;
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
-  usage: Omit<ConsumeUsageInput, 'quantity'>;
+  usage?: Omit<ConsumeUsageInput, 'quantity' | 'unit'> & {
+    unit: Exclude<ConsumeUsageInput['unit'], 'ai_conversation'>;
+  };
 };
 
 type GateFailure =
@@ -47,17 +49,28 @@ export class AiService {
     if (permit.kind === 'paused') return { kind: 'failure', code: 'AI_PAUSED' };
     if (permit.kind === 'busy') return { kind: 'failure', code: 'AI_STORE_BUSY' };
 
+    const result = await this.runWithRetry(storeId, request, deadline).finally(() =>
+      this.gate.release(storeId, permit.ticket),
+    );
+    if (result.kind !== 'output' || !request.usage) return result;
+    return this.billOutput(storeId, request.usage, result, request.signal);
+  }
+
+  private async billOutput<T>(
+    storeId: string,
+    usage: NonNullable<AiRequest<T>['usage']>,
+    result: AiResult<T>,
+    signal?: AbortSignal,
+  ): Promise<AiResult<T>> {
+    if (signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
     try {
-      if (this.clock.now().getTime() >= deadline) return { kind: 'failure', code: 'LLM_TIMEOUT' };
-      await this.usage.consume(storeId, { ...request.usage, quantity: 1 });
-      return await this.runWithRetry(storeId, request, deadline);
+      await this.usage.consume(storeId, { ...usage, quantity: 1 });
     } catch (error) {
       if (error instanceof AppError && error.code === 'USAGE_ALLOWANCE_EXCEEDED')
         return { kind: 'failure', code: 'USAGE_ALLOWANCE_EXCEEDED' };
       throw error;
-    } finally {
-      await this.gate.release(storeId, permit.ticket);
     }
+    return result;
   }
 
   private async runWithRetry<T>(
