@@ -100,7 +100,9 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
-    await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
+    const variant = create.getByLabel('Product and variant 1');
+    await variant.selectOption({ label: 'Cotton Panjabi · M' });
+    await expect(variant).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
     await expect(create.getByText('৳1,310')).toBeVisible();
     await create.getByLabel('Delivery charge (৳)').fill('90.25');
@@ -113,18 +115,24 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
     await expect(detail.getByText('৳1,340.25').first()).toBeVisible();
   } finally {
-    const orders = await database.pool.query<{ id: string }>(
-      'select id from orders where store_id=$1 and delivery_zone_id=$2',
+    const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(
+      'select id,buyer_contact_id from orders where store_id=$1 and delivery_zone_id=$2',
       [storeId, zoneId],
     );
     const ids = orders.rows.map((order) => order.id);
+    const buyerIds = orders.rows.flatMap(({ buyer_contact_id }) => buyer_contact_id ?? []);
     await database.pool.query(
-      "delete from outbox_events where store_id=$1 and (payload->>'orderId' = any($2::text[]) or payload->>'variantId'=$3)",
-      [storeId, ids, variantId],
+      `delete from outbox_events where store_id=$1 and
+       (payload->>'orderId' = any($2::text[]) or payload->>'variantId'=$3 or payload->>'contactId' = any($4::text[]))`,
+      [storeId, ids, variantId, buyerIds],
     );
     await database.pool.query('delete from orders where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       ids,
+    ]);
+    await database.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
+      storeId,
+      buyerIds,
     ]);
     await database.pool.query('delete from stock_movements where store_id=$1 and variant_id=$2', [
       storeId,

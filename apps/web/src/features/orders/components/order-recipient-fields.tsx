@@ -9,9 +9,8 @@ import { useOrderDelivery } from '../api/get-delivery-charge';
 import { OrderAreaFields } from './order-area-fields';
 
 export function OrderRecipientFields() {
-  const { control, register, setValue } = useFormContext<CreateOrderValues>();
-  const { areaId, isBuyer } = useWatch({ control, name: 'recipient' });
-  const { data: charge, error } = useOrderDelivery(areaId);
+  const { control, register } = useFormContext<CreateOrderValues>();
+  const isBuyer = useWatch({ control, name: 'recipient.isBuyer' });
 
   return (
     <fieldset className="space-y-2">
@@ -44,9 +43,22 @@ export function OrderRecipientFields() {
           </FormField>
         </div>
       </div>
+      <DeliveryChargeFields />
+    </fieldset>
+  );
+}
+
+function DeliveryChargeFields() {
+  const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
+  const areaId = useWatch({ control, name: 'recipient.areaId' });
+  const { data: charge, error } = useOrderDelivery(areaId);
+  return (
+    <>
       <div className="grid gap-2 sm:grid-cols-3">
         <OrderAreaFields
-          onChange={(id) => setValue('recipient.areaId', id ?? 0, { shouldValidate: true })}
+          onChange={(id) =>
+            setValue('recipient.areaId', id ?? 0, { shouldValidate: formState.isSubmitted })
+          }
         />
         <FormField name="deliveryChargePoisha" label="Delivery charge (৳)">
           {(props) => (
@@ -66,7 +78,7 @@ export function OrderRecipientFields() {
           {error.message}
         </p>
       )}
-    </fieldset>
+    </>
   );
 }
 

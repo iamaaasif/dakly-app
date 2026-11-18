@@ -265,7 +265,7 @@ const recipientSchema = z.strictObject({
 const orderLines = z
   .array(
     z.strictObject({
-      variantId: z.uuid().toLowerCase(),
+      variantId: z.uuid('Choose a product and variant').toLowerCase(),
       quantity: z.int().positive().max(2147483647),
       lineDiscountPoisha: money.default(0),
     }),
