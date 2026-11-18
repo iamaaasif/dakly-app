@@ -20,6 +20,7 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { SendingRepository } from '../sending/sending.repository';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
@@ -605,6 +606,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         sms.send(message),
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
+      vi.spyOn(SendingRepository.prototype, 'dispatchTime').mockImplementation(
+        async () => clockNow,
+      );
     });
 
     afterEach(() => {

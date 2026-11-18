@@ -6,7 +6,6 @@ import type { SendingSettings } from '@dakly/contracts/stores';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
-import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { StoresService } from '../stores/stores.service';
@@ -51,21 +50,13 @@ export class SendPolicyService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(SendingRepository) private readonly repository: SendingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // Freeze the destination from the eligibility read and take the cap time after the lock.
+  // Freeze the destination from the eligibility read and use one database clock after the locks.
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
-    this.requireTransaction();
-    await this.repository.lockContact(storeId, request.contactId);
-    try {
-      await this.contacts.lockForConsent(storeId, [request.contactId]);
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND')
-        return { decision: skip('no_address'), destination: null, at: this.clock.now() };
-      throw error;
-    }
-    const at = this.clock.now();
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = await this.repository.dispatchTime(storeId);
+    if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.checkAudience(storeId, {
       contactIds: [request.contactId],
       channel: request.channel,
@@ -73,6 +64,18 @@ export class SendPolicyService {
       at,
     });
     return { decision: checked!.decision, destination: checked!.phone, at };
+  }
+
+  private async lockForDispatch(storeId: string, contactId: string) {
+    this.requireTransaction();
+    await this.repository.lockContact(storeId, contactId);
+    try {
+      await this.contacts.lockForConsent(storeId, [contactId]);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
+      throw error;
+    }
   }
 
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {

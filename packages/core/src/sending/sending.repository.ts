@@ -31,6 +31,15 @@ export class SendingRepository {
     );
   }
 
+  async dispatchTime(storeId: string): Promise<Date> {
+    return this.database.inTransaction(storeId, async (tx) => {
+      const { rows } = await tx.execute<{ at: Date }>(sql`select clock_timestamp() as at`);
+      const [time] = rows;
+      if (!time) throw new Error('Postgres did not return the dispatch time');
+      return time.at;
+    });
+  }
+
   listMarketingSends(
     storeId: string,
     contactIds: string[],

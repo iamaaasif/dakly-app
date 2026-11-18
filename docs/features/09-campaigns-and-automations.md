@@ -366,6 +366,8 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 
    A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed`. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
 
+The final dispatch gate freezes the destination and checks quiet hours and the cap using the Postgres clock after taking the contact locks. The workflow records that time on the send step.
+
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
 `SendPolicyService.checkAudience(storeId, { contactIds, channel, category, at })` runs the same rules for a page of up to 500 contacts. It reads the contacts and their phones through `ContactsService.findRecipients` and, for marketing, their consent through `ConsentService.currentForAudience` (the only consent read allowed 500 contacts; everything else keeps 100), the sending settings and, outside quiet hours, the page's marketing sends. It takes no lock and needs no transaction. Approval freezes the skips it returns; the check inside the send transaction can still skip a queued recipient, but never sends a skipped one.
