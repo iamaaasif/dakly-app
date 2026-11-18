@@ -10,6 +10,7 @@ import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
+import { OrdersModule } from '@dakly/core/orders/orders.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { ProductsModule } from '@dakly/core/products/products.module';
@@ -31,6 +32,7 @@ import { HealthController } from './health.controller';
     ContactsModule,
     DeliveryModule,
     ProductsModule,
+    OrdersModule,
     ConsentsModule,
     ImportsModule,
     LinksModule,

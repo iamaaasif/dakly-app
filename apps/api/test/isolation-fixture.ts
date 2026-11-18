@@ -212,6 +212,7 @@ export class IsolationFixture {
       'ownership_transfers',
       'campaigns',
       'segments',
+      'orders',
       'contacts',
       'stock_movements',
       'delivery_zones',

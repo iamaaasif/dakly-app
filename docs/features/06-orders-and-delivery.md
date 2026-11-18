@@ -257,7 +257,9 @@ An order has two state fields: `stage` for fulfilment and `paymentStatus` for mo
 
 `paymentStatus`: `cod_pending`, `advance_requested`, `advance_paid`, `paid`, `cod_collected`, `refund_due`, `refunded`.
 
-The transition table is data in `orders/order-stage.ts`. `OrdersService.changeStage` rejects anything not in it with `ORDER_STAGE_NOT_ALLOWED` and writes a stage event (from, to, actor, reason).
+The transition table is data in `orders/order-stage.ts`. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
+
+The order list uses an order-number cursor and returns counts for all stages. The detail includes the recipient snapshot, items, and stage history. Staff without the full-phone permission see a masked recipient number.
 
 Create order (`OrdersService.createOrder`, one transaction)
 
@@ -286,9 +288,9 @@ before removal, and a zone used by orders cannot be deleted.
 
 `POST /delivery-zones/initialize-defaults` sets up an empty store with Inside Dhaka
 at 6,000 poisha, Dhaka suburbs at 10,000 and Outside Dhaka at 12,000. It refuses to
-replace existing zones. The mappings use the seeded Dhaka, Gazipur and Narayanganj
-district ids. Savar needs the upazila reference data from DB-6; no upazila names
-are added here. The three defaults use positions 0, 1 and 2, matching the seed.
+replace existing zones. Dhaka district is Inside Dhaka. Gazipur district,
+Narayanganj district and Savar upazila are in Dhaka suburbs. Savar's mapping takes
+precedence over its parent Dhaka district. The defaults use positions 0, 1 and 2.
 GET routes never initialize or change settings.
 
 This task adds the backend only. There is no delivery-settings image in the
