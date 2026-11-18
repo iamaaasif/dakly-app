@@ -100,7 +100,7 @@ class FakeRunsRepository {
         id: step.id!,
         firstTriedAt: step.firstTriedAt ?? step.sentAt!,
         latestDispatchAt: step.sentAt!,
-        optOutCode: step.optOutCode ?? null,
+        optOutUrl: step.optOutUrl ?? null,
         destination: step.destination ?? null,
       }
     );
@@ -492,7 +492,7 @@ describe('AutomationRunsService', () => {
           kind: 'send',
           category: 'marketing',
           channel: 'sms',
-          optOutCode: 'Ab3dE6gH',
+          optOutUrl,
           outcome: 'sent',
           providerMessageId: 'sms-1',
           sentAt: now,

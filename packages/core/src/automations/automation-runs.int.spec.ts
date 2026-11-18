@@ -16,7 +16,7 @@ import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
+import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
@@ -584,7 +584,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     async function sendStep(runId: string) {
       const result = await admin.pool.query(
-        'select outcome,category,channel,skip_reason,provider_message_id,opt_out_code from automation_run_steps where run_id=$1 and kind=$2',
+        'select outcome,category,channel,skip_reason,provider_message_id,opt_out_url from automation_run_steps where run_id=$1 and kind=$2',
         [runId, 'send'],
       );
       return result.rows;
@@ -631,6 +631,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     });
 
     it('sends through the gate with the opt-out link and the step key, and a retry sends once', async () => {
+      const firstLinkBase = loadEnv().SHORT_LINK_BASE_URL;
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
@@ -645,20 +646,32 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runDueStep(runner, runId!);
       expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
       const [started] = await sendStep(runId!);
-      expect(started).toMatchObject({ outcome: 'sending', opt_out_code: expect.any(String) });
+      expect(started).toMatchObject({ outcome: 'sending', opt_out_url: expect.any(String) });
 
-      await wakeNow(runId!);
-      await runDueStep(runner, runId!);
+      expect(started.opt_out_url).toContain(`${firstLinkBase}/s/`);
+      const code = new URL(started.opt_out_url).pathname.split('/').at(-1);
+
+      vi.stubEnv('SHORT_LINK_BASE_URL', 'https://a-longer-sms-short-link-base.example.test/l');
+      resetEnvForTests();
+      try {
+        await wakeNow(runId!);
+        await runDueStep(runner, runId!);
+        const retry = vi.mocked(MailpitSmsDriver.prototype.send).mock.lastCall?.[0];
+        expect(retry?.text).toBe(`নতুন কালেকশন এসেছে\n${started.opt_out_url}`);
+      } finally {
+        vi.unstubAllEnvs();
+        resetEnvForTests();
+      }
 
       const sent = sentFor(runId!);
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({
         idempotencyKey: `run:${runId}:first`,
-        text: `নতুন কালেকশন এসেছে\n${loadEnv().SHORT_LINK_BASE_URL}/s/${started.opt_out_code}`,
+        text: `নতুন কালেকশন এসেছে\n${started.opt_out_url}`,
       });
       const link = await admin.pool.query(
         'select kind,source_type,contact_id from tracked_links where code=$1',
-        [started.opt_out_code],
+        [code],
       );
       expect(link.rows).toEqual([
         { kind: 'sms_opt_out', source_type: 'automation', contact_id: contact },

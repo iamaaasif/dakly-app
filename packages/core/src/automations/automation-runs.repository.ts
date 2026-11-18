@@ -54,7 +54,7 @@ export type NewRunStep = {
   outcome: string;
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
-  optOutCode?: string | null;
+  optOutUrl?: string | null;
   destination?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
@@ -72,7 +72,7 @@ export type SendingStep = {
   id: string;
   firstTriedAt: Date;
   latestDispatchAt: Date;
-  optOutCode: string | null;
+  optOutUrl: string | null;
   destination: string | null;
 };
 
@@ -156,7 +156,7 @@ export class AutomationRunsRepository {
           id: automationRunSteps.id,
           firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
-          optOutCode: automationRunSteps.optOutCode,
+          optOutUrl: automationRunSteps.optOutUrl,
           destination: automationRunSteps.destination,
         })
         .from(automationRunSteps)

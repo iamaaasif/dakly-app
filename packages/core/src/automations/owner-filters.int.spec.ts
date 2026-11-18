@@ -130,7 +130,7 @@ describe('automation filters without RLS assistance', () => {
       firstTriedAt: claimedAt,
       latestDispatchAt: claimedAt,
       sentAt: claimedAt,
-      optOutCode: null,
+      optOutUrl: null,
       destination: null,
     });
     await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });

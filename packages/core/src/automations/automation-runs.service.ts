@@ -333,7 +333,7 @@ export class AutomationRunsService {
       channel: 'sms',
       sentAt: now,
       firstTriedAt: now,
-      optOutCode: optOut?.code,
+      optOutUrl: optOut?.url,
       destination,
     });
     return messageBody(step, optOut?.url);
@@ -360,7 +360,7 @@ export class AutomationRunsService {
 
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
     const { storeId, contactId, wakeAt } = facts;
-    const { firstTriedAt, optOutCode, destination } = started;
+    const { firstTriedAt, optOutUrl, destination } = started;
     const preflight = await this.transaction.databaseTime(storeId);
     const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
       ? undefined
@@ -406,7 +406,7 @@ export class AutomationRunsService {
         claim: gated.claim,
         contactId,
         step,
-        body: messageBody(step, optOutCode ? this.links.optOutUrl(optOutCode) : undefined),
+        body: messageBody(step, optOutUrl ?? undefined),
         destination,
         preparedSender,
         isFirstTry: false,
