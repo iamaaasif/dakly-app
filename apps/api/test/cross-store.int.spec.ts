@@ -113,7 +113,7 @@ fixture('POST /orders', async () => {
     items: [{ variantId, quantity: 1 }],
   });
   const create = (payload: object, key = randomUUID()) =>
-    f.request(b.owner, 'POST', '/orders', payload, { 'idempotency-key': key });
+    f.request(b.member, 'POST', '/orders', payload, { 'idempotency-key': key });
   const before = await f.row('product_variants', foreignVariant);
   const buyerBefore = await f.row('contacts', foreignBuyer);
   for (const [foreign, missing] of [
@@ -138,7 +138,18 @@ fixture('POST /orders', async () => {
     stage: 'to_confirm',
   });
   expect((await create(goodInput, key)).json()).toEqual(created.json());
-  expect((await f.request(b.owner, 'POST', '/orders', goodInput)).statusCode).toBe(400);
+  expect((await f.request(b.member, 'POST', '/orders', goodInput)).statusCode).toBe(400);
+  const ownPhone = phone();
+  const captured = await create({
+    ...goodInput,
+    buyer: { name: 'Rahim' },
+    recipient: { ...goodInput.recipient, phone: ownPhone },
+  });
+  expect(captured.statusCode, captured.body).toBe(201);
+  const buyerId = captured.json().buyerContactId;
+  expect(await f.row('contacts', buyerId)).toMatchObject({ phone: ownPhone });
+  const profileEdit = await f.request(b.member, 'PATCH', `/contacts/${buyerId}`, { name: 'Karim' });
+  expect(profileEdit.statusCode).toBe(403);
 });
 
 fixture('PATCH /orders/:orderId', async () => {
