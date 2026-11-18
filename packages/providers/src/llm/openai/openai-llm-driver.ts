@@ -70,7 +70,7 @@ export class OpenAiLlmDriver implements LlmDriver {
         signal,
       });
       if (!response.ok) {
-        await response.body?.cancel().catch(() => undefined);
+        void response.body?.cancel().catch(() => undefined);
         throw httpError(response.status);
       }
       const payload: unknown = await response.json();
@@ -129,7 +129,12 @@ function strictSchema(schema: z.ZodType): Record<string, unknown> {
   const generated = z.toJSONSchema(schema, {
     target: 'draft-7',
     io: 'input',
-    override: ({ jsonSchema }) => {
+    override: ({ zodSchema, jsonSchema }) => {
+      const definition = zodSchema._zod.def;
+      if ('discriminator' in definition && jsonSchema.oneOf) {
+        jsonSchema.anyOf = jsonSchema.oneOf;
+        delete jsonSchema.oneOf;
+      }
       if (unsupportedSchemaKeywords.some((keyword) => Object.hasOwn(jsonSchema, keyword)))
         throw new LlmError('LLM_INVALID_SCHEMA');
       if (jsonSchema.type !== 'object') return;
