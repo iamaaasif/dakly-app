@@ -118,10 +118,18 @@ const takaInput = z
   })
   .pipe(money);
 const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput]);
+const optionalTextInput = z
+  .string()
+  .nullable()
+  .transform((value) => value?.trim() || null);
 
 export const productFormSchema = z
   .strictObject({
     ...createProductSchema.shape,
+    category: optionalTextInput.pipe(createProductSchema.shape.category.unwrap()).default(null),
+    description: optionalTextInput
+      .pipe(createProductSchema.shape.description.unwrap())
+      .default(null),
     aliases: z
       .array(z.string())
       .transform((values) => values.filter((value) => value.trim()))
@@ -131,7 +139,9 @@ export const productFormSchema = z
     compareAtPricePoisha: optionalTakaInput.default(null),
     variants: z
       .array(
-        editVariantSchema.extend({
+        z.strictObject({
+          ...editVariantSchema.shape,
+          sku: optionalTextInput.pipe(editVariantSchema.shape.sku.unwrap()).default(null),
           priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
           costPoisha: optionalTakaInput.default(null),
         }),
@@ -139,6 +149,19 @@ export const productFormSchema = z
       .max(100)
       .default([]),
   })
+  // Positions keep selections attached while option names are being edited.
+  .transform((input) => ({
+    ...input,
+    variants: input.variants.map((variant) => ({
+      ...variant,
+      optionValues: Object.fromEntries(
+        input.options.flatMap(({ name }, index) => {
+          const value = variant.optionValues[index];
+          return value ? [[name, value]] : [];
+        }),
+      ),
+    })),
+  }))
   .superRefine(validateVariants);
 export type ProductFormValues = z.input<typeof productFormSchema>;
 export type ProductFormInput = z.output<typeof productFormSchema>;
@@ -155,9 +178,16 @@ export const productListQuerySchema = z.strictObject({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
-export const productScreenQuerySchema = productListQuerySchema.extend({
-  adjust: z.uuid().optional(),
-});
+export const productScreenQuerySchema = productListQuerySchema
+  .extend({
+    adjust: z.uuid().optional(),
+    product: z.uuid().optional(),
+    create: z.literal('1').optional(),
+  })
+  .refine(
+    (query) => [query.adjust, query.product, query.create].filter(Boolean).length <= 1,
+    'Choose one product action at a time',
+  );
 export type ProductOption = z.infer<typeof optionSchema>;
 export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   id: string;

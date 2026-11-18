@@ -11,7 +11,7 @@ const input = {
   variants: [
     {
       id: variantId,
-      optionValues: { Size: 'M' },
+      optionValues: { 0: 'M' },
       priceOverridePoisha: '',
       costPoisha: '1250.75',
     },
@@ -53,7 +53,7 @@ describe('product form', () => {
     expect(
       productFormSchema.safeParse({
         ...input,
-        variants: [{ ...input.variants[0], optionValues: { Size: 'XL' } }],
+        variants: [{ ...input.variants[0], optionValues: { 0: 'XL' } }],
       }).success,
     ).toBe(false);
     expect(

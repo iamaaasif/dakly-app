@@ -51,8 +51,22 @@ const response = (body: unknown) =>
   Response.json(body, { headers: { 'x-session-context': 'verified' } });
 function show(
   query: ProductListQuery = { limit: 50 },
-  { edit = true, view = true, adjust }: { edit?: boolean; view?: boolean; adjust?: string } = {},
+  {
+    edit = true,
+    view = true,
+    adjust,
+    productId,
+    create,
+  }: { edit?: boolean; view?: boolean; adjust?: string; productId?: string; create?: '1' } = {},
 ) {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
     user: { id: 'actor', name: 'Actor' },
@@ -79,12 +93,15 @@ function show(
   client.setQueryData(sessionContextKey, context);
   const content = () => (
     <QueryClientProvider client={client}>
-      <ProductsScreen query={query} adjust={adjust} />
+      <ProductsScreen query={query} adjust={adjust} productId={productId} create={create} />
     </QueryClientProvider>
   );
   const rendered = render(content());
   push.mockImplementation((href: string) => {
-    adjust = new URL(href, 'http://localhost').searchParams.get('adjust') ?? undefined;
+    const parameters = new URL(href, 'http://localhost').searchParams;
+    adjust = parameters.get('adjust') ?? undefined;
+    productId = parameters.get('product') ?? undefined;
+    create = parameters.get('create') === '1' ? '1' : undefined;
     rendered.rerender(content());
   });
   return { client, ...rendered };
@@ -278,5 +295,75 @@ describe('Products screen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save stock' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Not enough available stock');
     expect((screen.getByLabelText('Reason') as HTMLTextAreaElement).value).toBe('Damaged');
+  });
+});
+
+describe('Product editor navigation', () => {
+  it('opens creation from the list and selects the saved product', async () => {
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) =>
+      init.method === 'POST' || path === `/api/products/${product.id}`
+        ? response(product)
+        : response({ items: [product], nextCursor: null }),
+    );
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save as hidden' }));
+    expect(await screen.findByRole('dialog', { name: product.name })).toBeTruthy();
+    expect(
+      new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('product'),
+    ).toBe(product.id);
+  });
+
+  it('shows a saved product to viewers without edit or upload controls', async () => {
+    vi.stubGlobal('fetch', async (path: string) =>
+      response(
+        path === `/api/products/${product.id}` ? product : { items: [product], nextCursor: null },
+      ),
+    );
+    show({ limit: 50 }, { edit: false, productId: product.id });
+    const dialog = await screen.findByRole('dialog', { name: product.name });
+    expect(within(dialog).getByText('৳2,450')).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Edit product' })).toBeNull();
+    expect(within(dialog).queryByLabelText('Add photo')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add product' })).toBeNull();
+  });
+
+  it('shows the effective variant price when the product base price is zero', async () => {
+    const priced = {
+      ...product,
+      pricePoisha: 0,
+      variants: [{ ...product.variants[0]!, priceOverridePoisha: 45025, pricePoisha: 45025 }],
+    };
+    vi.stubGlobal('fetch', async (path: string) =>
+      response(
+        path === `/api/products/${product.id}` ? priced : { items: [priced], nextCursor: null },
+      ),
+    );
+    show({ limit: 50 }, { productId: product.id, edit: false });
+    const dialog = await screen.findByRole('dialog', { name: product.name });
+    expect(within(dialog).getByText('৳450.25')).toBeTruthy();
+  });
+
+  it('retries a failed selected product without losing its address', async () => {
+    let failed = true;
+    vi.stubGlobal('fetch', async (path: string) => {
+      if (path === `/api/products/${product.id}`)
+        return failed
+          ? Response.json(
+              { error: { code: 'UNAVAILABLE', message: 'Product could not load' } },
+              { status: 503 },
+            )
+          : response(product);
+      return response({ items: [], nextCursor: null });
+    });
+    show({ limit: 50 }, { productId: product.id });
+    expect((await screen.findByRole('alert')).textContent).toContain('Product could not load');
+    failed = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry product' }));
+    expect(await screen.findByRole('dialog', { name: product.name })).toBeTruthy();
+    expect(push).not.toHaveBeenCalled();
   });
 });

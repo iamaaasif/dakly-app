@@ -5,7 +5,11 @@ import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/pro
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
 
-export const productsKeys = { all: ['products'] as const };
+export const productsKeys = {
+  all: ['products'] as const,
+  detail: (contextTag: string | undefined, productId: string) =>
+    ['products', contextTag, 'detail', productId] as const,
+};
 export function productsSearch(query: Partial<ProductListQuery>) {
   const parameters = new URLSearchParams();
   for (const [key, value] of Object.entries(query))

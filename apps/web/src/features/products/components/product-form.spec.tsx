@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -84,6 +84,13 @@ afterEach(() => {
 });
 
 describe('Product form', () => {
+  it('keeps aliases and channel settings in the saved-product editor', () => {
+    show();
+    expect(screen.queryByLabelText('Other names')).toBeNull();
+    expect(screen.queryByLabelText('Show in chat replies')).toBeNull();
+    expect(screen.getByLabelText('Track stock')).toBeTruthy();
+  });
+
   it.each([
     ['Save as hidden', 'hidden'],
     ['Save and show', 'active'],
@@ -115,13 +122,13 @@ describe('Product form', () => {
     expect((screen.getByLabelText('Selling price (Taka)') as HTMLInputElement).value).toBe(
       '2450.50',
     );
+    await userEvent.type(screen.getByLabelText('Product code'), '-1');
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
     expect(submitted).toMatchObject({
-      status: 'hidden',
-      variants: [{ id: product.variants[0]!.id, sku: 'PAN-M', costPoisha: 120075 }],
+      variants: [{ id: product.variants[0]!.id, sku: 'PAN-M-1', costPoisha: 120075 }],
     });
-    expect(JSON.stringify(submitted)).not.toMatch(/onHand|reserved|available/);
+    expect(JSON.stringify(submitted)).not.toMatch(/status|onHand|reserved|available/);
   });
 
   it.each(['Fit', ' Fit '])(
@@ -171,11 +178,54 @@ describe('Product form', () => {
     });
     const { onSaved } = show(withOption);
     expect(
-      screen.getByRole('combobox', { name: 'Size (U.S.) for variant 1' }).textContent,
-    ).toContain('M');
+      (screen.getByRole('combobox', { name: 'Size (U.S.) for variant 1' }) as HTMLSelectElement)
+        .value,
+    ).toBe('M');
+    await userEvent.type(screen.getByLabelText('Product code for variant 1'), '-1');
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({ variants: [{ optionValues: { 'Size (U.S.)': 'M' } }] });
+  });
+
+  it('preserves both variant choices when an option name briefly matches another', async () => {
+    const withOptions: ProductResponse = {
+      ...product,
+      options: [
+        { name: 'Size', values: ['M'] },
+        { name: 'S', values: ['Silk'] },
+      ],
+      variants: [
+        { ...product.variants[0]!, isDefault: false, optionValues: { Size: 'M', S: 'Silk' } },
+      ],
+    };
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(withOptions, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(withOptions);
+    const name = screen.getByLabelText('Option 1 name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Size type');
+    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toMatchObject({
+      variants: [{ id: product.variants[0]!.id, optionValues: { 'Size type': 'M', S: 'Silk' } }],
+    });
+  });
+
+  it('saves a description without overwriting later visibility or variant changes', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved, refresh } = show({ ...product, status: 'active' });
+    await userEvent.type(screen.getByLabelText('Description'), 'Made with cotton');
+    refresh(product);
+    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({ description: 'Made with cotton' });
   });
 
   it('keeps separate aliases when another name is entered on a new line', async () => {
@@ -189,6 +239,63 @@ describe('Product form', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({ aliases: ['পাঞ্জাবি', 'Panjabi'] });
+  });
+
+  it('shows which textarea contains an invalid alias', async () => {
+    show(product);
+    const aliases = screen.getByLabelText('Other names');
+    fireEvent.change(aliases, { target: { value: 'Scarf\n' + 'A'.repeat(201) } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('200');
+    expect(aliases.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('lets an existing default variant return from its override to the product price', async () => {
+    const overridden = {
+      ...product,
+      pricePoisha: 0,
+      variants: [{ ...product.variants[0]!, priceOverridePoisha: 45025, pricePoisha: 45025 }],
+    };
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(overridden);
+    const override = screen.getByLabelText('Default price override (Taka)');
+    expect((override as HTMLInputElement).value).toBe('450.25');
+    await userEvent.clear(override);
+    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toMatchObject({
+      variants: [{ id: product.variants[0]!.id, priceOverridePoisha: null }],
+    });
+  });
+
+  it('shows an option-combination error before submitting duplicate default variants', async () => {
+    const optioned = {
+      ...product,
+      options: [{ name: 'Size', values: ['M', 'L'] }],
+      variants: [
+        { ...product.variants[0]!, isDefault: false, optionValues: { Size: 'M' } },
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
+          isDefault: false,
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    let submitted = false;
+    vi.stubGlobal('fetch', async () => {
+      submitted = true;
+      return Response.json(product);
+    });
+    show(optioned);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove option 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('distinct variants');
+    expect(submitted).toBe(false);
   });
 
   it('keeps unsaved values through refresh and a rejected save', async () => {

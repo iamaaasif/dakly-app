@@ -3,85 +3,46 @@ import { Controller, useFormContext } from 'react-hook-form';
 import type { ProductFormValues } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
-import { Input } from '@dakly/ui/input';
-import { Textarea } from '@dakly/ui/textarea';
 
-import { ProductMoneyField } from './product-money-field';
+import { ProductInputField } from './product-input-field';
+import { ProductLinesField } from './product-lines-field';
 
-export function ProductFields() {
+const flags = [
+  ['isStockTracked', 'Track stock'],
+  ['isVisibleInChats', 'Show in chat replies'],
+  ['isVisibleInOrderLink', 'Show in the order link'],
+] as const;
+type ProductFieldsProps = { mode: 'create' | 'edit' };
+export function ProductFields({ mode }: ProductFieldsProps) {
   const form = useFormContext<ProductFormValues>();
+  const visibleFlags = flags.filter(([name]) => mode === 'edit' || name === 'isStockTracked');
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
   return (
     <>
-      <FormField name="name" label="Name">
-        {(control) => <Input {...control} {...form.register('name')} />}
-      </FormField>
+      <ProductInputField name="name" label="Name" />
       <div className="grid gap-4 md:grid-cols-2">
-        <FormField name="category" label="Category">
-          {(control) => (
-            <Input
-              {...control}
-              {...form.register('category', {
-                setValueAs: (value: string | null) => value?.trim() || null,
-              })}
-            />
-          )}
-        </FormField>
-        {simple ? (
-          <FormField name="variants.0.sku" label="Product code">
-            {(control) => (
-              <Input
-                {...control}
-                {...form.register('variants.0.sku', {
-                  setValueAs: (value: string | null) => value?.trim() || null,
-                })}
-              />
-            )}
-          </FormField>
-        ) : null}
+        <ProductInputField name="category" label="Category" />
+        {simple ? <ProductInputField name="variants.0.sku" label="Product code" /> : null}
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        <ProductMoneyField name="pricePoisha" label="Selling price (Taka)" />
-        <ProductMoneyField name="compareAtPricePoisha" label="Old price (Taka)" />
+        <ProductInputField name="pricePoisha" label="Selling price (Taka)" />
+        <ProductInputField name="compareAtPricePoisha" label="Old price (Taka)" />
         {simple ? (
-          <ProductMoneyField name="variants.0.costPoisha" label="Your cost (Taka)" />
+          <ProductInputField name="variants.0.costPoisha" label="Your cost (Taka)" />
         ) : null}
       </div>
-      <FormField name="description" label="Description">
-        {(control) => (
-          <Textarea
-            {...control}
-            {...form.register('description', {
-              setValueAs: (value: string | null) => value?.trim() || null,
-            })}
-          />
-        )}
-      </FormField>
-      <FormField name="aliases" label="Other names" hint="One name per line.">
-        {(control) => (
-          <Controller
-            control={form.control}
-            name="aliases"
-            render={({ field }) => (
-              <Textarea
-                {...control}
-                value={field.value?.join('\n') ?? ''}
-                onBlur={field.onBlur}
-                onChange={(event) => field.onChange(event.target.value.split('\n'))}
-                ref={field.ref}
-              />
-            )}
-          />
-        )}
-      </FormField>
+      {mode === 'edit' && simple ? (
+        <ProductInputField
+          name="variants.0.priceOverridePoisha"
+          label="Default price override (Taka)"
+        />
+      ) : null}
+      <ProductLinesField name="description" label="Description" />
+      {mode === 'edit' ? (
+        <ProductLinesField name="aliases" label="Other names" hint="One name per line." />
+      ) : null}
       <div className="space-y-4">
-        {(
-          [
-            ['isStockTracked', 'Track stock'],
-            ['isVisibleInChats', 'Show in chat replies'],
-            ['isVisibleInOrderLink', 'Show in the order link'],
-          ] as const
-        ).map(([name, label]) => (
+        {visibleFlags.map(([name, label]) => (
           <FormField key={name} name={name} label={label}>
             {(control) => (
               <Controller

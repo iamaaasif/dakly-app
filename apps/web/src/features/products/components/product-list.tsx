@@ -1,18 +1,21 @@
 import Image from 'next/image';
+import Link from 'next/link';
 
-import type { ProductResponse } from '@dakly/contracts/products';
+import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
+import { productsSearch } from '../api/products';
 import { readinessLabels } from '../product-labels';
 import { formatMoney } from '@/lib/format-money';
 
 type ProductListProps = {
   products: ProductResponse[];
+  query: ProductListQuery;
   onAdjust?: (variantId: string) => void;
 };
-export function ProductList({ products, onAdjust }: ProductListProps) {
+export function ProductList({ products, query, onAdjust }: ProductListProps) {
   return (
     <>
       <div className="hidden md:block [&>div]:rounded-t-none [&>div]:border-t-0">
@@ -29,7 +32,7 @@ export function ProductList({ products, onAdjust }: ProductListProps) {
             {products.map((product) => (
               <TableRow key={product.id}>
                 <TableCell>
-                  <ProductIdentity product={product} />
+                  <ProductIdentity product={product} query={query} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   <ProductPrice product={product} />
@@ -48,7 +51,7 @@ export function ProductList({ products, onAdjust }: ProductListProps) {
       <ul aria-label="Products" className="space-y-3 md:hidden">
         {products.map((product) => (
           <li key={product.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
-            <ProductIdentity product={product} />
+            <ProductIdentity product={product} query={query} />
             <p className="font-semibold tabular-nums">
               <ProductPrice product={product} />
             </p>
@@ -62,9 +65,10 @@ export function ProductList({ products, onAdjust }: ProductListProps) {
 }
 
 type ProductPartProps = { product: ProductResponse };
-function ProductIdentity({ product }: ProductPartProps) {
+function ProductIdentity({ product, query }: ProductPartProps & { query: ProductListQuery }) {
+  const href = `/products?${productsSearch(query)}&product=${product.id}`;
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <Link href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
       {product.photos[0] ? (
         <Image
           src={product.photos[0].url}
@@ -88,7 +92,7 @@ function ProductIdentity({ product }: ProductPartProps) {
           <p className="text-sm break-words text-text-muted">{product.category}</p>
         ) : null}
       </div>
-    </div>
+    </Link>
   );
 }
 function ProductPrice({ product }: ProductPartProps) {

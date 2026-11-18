@@ -1,9 +1,10 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { FormProvider, useForm } from 'react-hook-form';
+import { FormProvider, useForm, type FormState } from 'react-hook-form';
 
 import {
   productFormSchema,
+  type ChangeProductInput,
   type ProductFormInput,
   type ProductFormValues,
   type ProductResponse,
@@ -20,95 +21,115 @@ type ProductFormProps = { product?: ProductResponse; onSaved: (product: ProductR
 export function ProductForm({ product, onSaved }: ProductFormProps) {
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: {
-      name: product?.name ?? '',
-      description: product?.description ?? null,
-      category: product?.category ?? null,
-      aliases: product?.aliases ?? [],
-      pricePoisha: taka(product?.pricePoisha ?? 0),
-      compareAtPricePoisha: taka(product?.compareAtPricePoisha ?? null),
-      options: product?.options ?? [],
-      variants: (
-        product?.variants ?? [
-          {
-            id: undefined,
-            optionValues: {},
-            sku: null,
-            priceOverridePoisha: null,
-            costPoisha: null,
-          },
-        ]
-      ).map((variant) => ({
-        id: variant.id,
-        optionValues: variant.optionValues,
-        sku: variant.sku,
-        priceOverridePoisha: taka(variant.priceOverridePoisha),
-        costPoisha: taka(variant.costPoisha),
-      })),
-      isStockTracked: product?.isStockTracked ?? true,
-      isVisibleInChats: product?.isVisibleInChats ?? true,
-      isVisibleInOrderLink: product?.isVisibleInOrderLink ?? true,
-      status: product?.status ?? 'hidden',
-    },
+    defaultValues: formValues(product),
   });
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
   const mutation = product ? change : create;
+  const { dirtyFields, errors, isDirty } = form.formState;
+  const actions = product
+    ? [{ status: 'hidden' as const, label: 'Save product', variant: 'primary' as const }]
+    : [
+        { status: 'hidden' as const, label: 'Save as hidden', variant: 'secondary' as const },
+        { status: 'active' as const, label: 'Save and show', variant: 'primary' as const },
+      ];
   return (
     <FormProvider {...form}>
       <form
         className="space-y-6"
-        onSubmit={form.handleSubmit((input) =>
-          mutation.mutate(input, {
-            onSuccess: (saved) => onSaved(saved),
-            onError: (error) =>
-              form.setError(
-                error instanceof ApiError && error.code === 'PRODUCT_SKU_TAKEN'
-                  ? 'variants'
-                  : 'root.server',
-                { message: error.message },
-              ),
-          }),
-        )}
+        onSubmit={form.handleSubmit((input) => {
+          const callbacks = {
+            onSuccess: (saved: ProductResponse) => onSaved(saved),
+            onError: (error: Error) =>
+              form.setError(productErrorField(error, input.variants.length), {
+                message: error.message,
+              }),
+          };
+          if (product) change.mutate(productChanges(input, dirtyFields), callbacks);
+          else create.mutate(input, callbacks);
+        })}
       >
-        <ProductFields />
+        <ProductFields mode={product ? 'edit' : 'create'} />
         <ProductOptions />
-        {form.formState.errors.root?.server ? (
+        {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">
-            {form.formState.errors.root.server.message}
+            {errors.root.server.message}
           </p>
         ) : null}
         <div className="flex flex-wrap justify-end gap-2">
-          {product ? (
-            <Button type="submit" loading={mutation.isPending}>
-              Save product
+          {actions.map((action) => (
+            <Button
+              key={action.status}
+              type="submit"
+              variant={action.variant}
+              loading={mutation.isPending}
+              disabled={Boolean(product && !isDirty)}
+              onClick={() => !product && form.setValue('status', action.status)}
+            >
+              {action.label}
             </Button>
-          ) : (
-            <>
-              <Button
-                type="submit"
-                variant="secondary"
-                loading={mutation.isPending}
-                onClick={() => form.setValue('status', 'hidden')}
-              >
-                Save as hidden
-              </Button>
-              <Button
-                type="submit"
-                loading={mutation.isPending}
-                onClick={() => form.setValue('status', 'active')}
-              >
-                Save and show
-              </Button>
-            </>
-          )}
+          ))}
         </div>
       </form>
     </FormProvider>
   );
 }
 function taka(value: number | null) {
-  return value === null
-    ? ''
-    : `${BigInt(value) / 100n}.${(BigInt(value) % 100n).toString().padStart(2, '0')}`;
+  if (value === null) return '';
+  const amount = BigInt(value);
+  return `${amount / 100n}.${(amount % 100n).toString().padStart(2, '0')}`;
+}
+
+function formValues(product?: ProductResponse): ProductFormValues {
+  if (!product)
+    return {
+      name: '',
+      options: [],
+      pricePoisha: '0.00',
+      variants: [{ optionValues: {}, sku: null, priceOverridePoisha: '', costPoisha: '' }],
+      isStockTracked: true,
+      status: 'hidden',
+    };
+  return {
+    name: product.name,
+    description: product.description,
+    category: product.category,
+    aliases: product.aliases,
+    options: product.options,
+    pricePoisha: taka(product.pricePoisha),
+    compareAtPricePoisha: taka(product.compareAtPricePoisha),
+    variants: product.variants.map(
+      ({ id, optionValues, sku, priceOverridePoisha, costPoisha }) => ({
+        id,
+        optionValues: Object.fromEntries(
+          product.options.map(({ name }, index) => [index, optionValues[name]!]),
+        ),
+        sku,
+        priceOverridePoisha: taka(priceOverridePoisha),
+        costPoisha: taka(costPoisha),
+      }),
+    ),
+    isStockTracked: product.isStockTracked,
+    isVisibleInChats: product.isVisibleInChats,
+    isVisibleInOrderLink: product.isVisibleInOrderLink,
+    status: product.status,
+  };
+}
+
+function productChanges(
+  { status: _status, options, variants, ...fields }: ProductFormInput,
+  dirty: FormState<ProductFormValues>['dirtyFields'],
+): ChangeProductInput {
+  const changes = Object.fromEntries(
+    Object.entries(fields).filter(([name]) => dirty[name as keyof typeof fields]),
+  );
+  return dirty.options || dirty.variants ? { ...changes, options, variants } : changes;
+}
+
+function productErrorField(
+  error: Error,
+  variantCount: number,
+): 'root.server' | 'variants' | 'variants.0.sku' {
+  if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
+  return variantCount === 1 ? 'variants.0.sku' : 'variants';
 }
