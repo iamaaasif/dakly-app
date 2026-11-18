@@ -198,7 +198,7 @@ export class AutomationsService {
   // workflow; the owner gets a card now and an email from the automation.paused event.
   async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
     const revision = await this.wallets.currentRevision(storeId, 'sms_credits');
-    const now = await this.transaction.databaseTime(storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const paused = await this.repository.pauseForBalance(storeId, automationId, revision, now);
     if (!paused) return;
     await this.notifications.notify(storeId, {
@@ -265,7 +265,7 @@ export class AutomationsService {
       if (revision === undefined) return;
       const ids = await this.repository.lockBalancePaused(storeId, revision);
       if (ids.length === 0) return;
-      const resumedAt = await this.transaction.databaseTime(storeId);
+      const resumedAt = await this.repository.schedulerTime(storeId);
       await this.repository.resumeBalancePaused(storeId, ids, resumedAt);
     });
   }

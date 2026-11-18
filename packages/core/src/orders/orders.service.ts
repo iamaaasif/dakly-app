@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -30,7 +31,6 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTransitions,
   productArchiveStages,
   recordOrderStage,
   stageWrite,
@@ -202,7 +202,14 @@ export class OrdersService {
     const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
     const { stage, ...filters } = query;
     const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
-    const rows = await this.repository.list(storeId, { ...filters, stages }, overdueBefore, phone);
+    const timeZone =
+      query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
+    const rows = await this.repository.list(
+      storeId,
+      { ...filters, stages, timeZone },
+      overdueBefore,
+      phone,
+    );
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
@@ -232,6 +239,7 @@ export class OrdersService {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
+      hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),
       shippedAt: isoTime(order.shippedAt),
       deliveredAt: isoTime(order.deliveredAt),

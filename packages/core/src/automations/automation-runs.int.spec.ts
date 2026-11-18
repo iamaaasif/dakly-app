@@ -19,9 +19,8 @@ import { EmailService } from '../email/email.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
+import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
@@ -30,6 +29,7 @@ import { WalletService } from '../wallets/wallet.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationsModule } from './automations.module';
+import { AutomationsRepository } from './automations.repository';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
 import { EmailOwnerOnAutomationPaused } from './jobs/email-owner-on-automation-paused.job';
 import { ResumeWorkflowsOnWalletCredited } from './jobs/resume-workflows-on-wallet-credited.job';
@@ -580,6 +580,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         : new Date(opensAt.getTime() + (real > opensAt ? 24 * HOUR : 0));
     let clockNow = daytime;
     let databaseNow: Date | undefined;
+    const schedulerTime = AutomationRunsRepository.prototype.schedulerTime;
+    const fixtureSchedulerTime = async () => databaseNow ?? clockNow;
     const send = (
       category: 'marketing' | 'transactional',
       ifNotReachable: 'skip' | 'exit' = 'skip',
@@ -627,7 +629,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     async function sendStep(runId: string) {
       const result = await admin.pool.query(
-        'select outcome,category,channel,skip_reason,provider_message_id,opt_out_code from automation_run_steps where run_id=$1 and kind=$2',
+        'select outcome,category,channel,skip_reason,provider_message_id,opt_out_url from automation_run_steps where run_id=$1 and kind=$2',
         [runId, 'send'],
       );
       return result.rows;
@@ -716,8 +718,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         sms.send(message),
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
-      vi.spyOn(StoreTransaction.prototype, 'databaseTime').mockImplementation(
-        async () => databaseNow ?? clockNow,
+      vi.spyOn(AutomationRunsRepository.prototype, 'schedulerTime').mockImplementation(
+        fixtureSchedulerTime,
+      );
+      vi.spyOn(AutomationsRepository.prototype, 'schedulerTime').mockImplementation(
+        fixtureSchedulerTime,
       );
     });
 
@@ -732,6 +737,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     });
 
     it('sends through the gate with the opt-out link and the step key, and a retry sends once', async () => {
+      const firstLinkBase = loadEnv().SHORT_LINK_BASE_URL;
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
@@ -746,20 +752,43 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runDueStep(runner, runId!);
       expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
       const [started] = await sendStep(runId!);
-      expect(started).toMatchObject({ outcome: 'sending', opt_out_code: expect.any(String) });
+      expect(started).toMatchObject({ outcome: 'sending', opt_out_url: expect.any(String) });
 
-      await wakeNow(runId!);
-      await runDueStep(runner, runId!);
+      expect(started.opt_out_url).toContain(`${firstLinkBase}/s/`);
+      const { rows: retryInputs } = await admin.pool.query(
+        "select destination,opt_out_url,first_tried_at from automation_run_steps where run_id=$1 and kind='send'",
+        [runId],
+      );
+      expect(retryInputs).toEqual([
+        {
+          destination: sentFor(runId!)[0]?.to,
+          opt_out_url: started.opt_out_url,
+          first_tried_at: daytime,
+        },
+      ]);
+      const code = new URL(started.opt_out_url).pathname.split('/').at(-1);
+
+      vi.stubEnv('SHORT_LINK_BASE_URL', 'https://a-longer-sms-short-link-base.example.test/l');
+      resetEnvForTests();
+      try {
+        await wakeNow(runId!);
+        await runDueStep(runner, runId!);
+        const retry = vi.mocked(MailpitSmsDriver.prototype.send).mock.lastCall?.[0];
+        expect(retry?.text).toBe(`নতুন কালেকশন এসেছে\n${started.opt_out_url}`);
+      } finally {
+        vi.unstubAllEnvs();
+        resetEnvForTests();
+      }
 
       const sent = sentFor(runId!);
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({
         idempotencyKey: `run:${runId}:first`,
-        text: `নতুন কালেকশন এসেছে\n${loadEnv().SHORT_LINK_BASE_URL}/s/${started.opt_out_code}`,
+        text: `নতুন কালেকশন এসেছে\n${started.opt_out_url}`,
       });
       const link = await admin.pool.query(
         'select kind,source_type,contact_id from tracked_links where code=$1',
-        [started.opt_out_code],
+        [code],
       );
       expect(link.rows).toEqual([
         { kind: 'sms_opt_out', source_type: 'automation', contact_id: contact },
@@ -1457,27 +1486,40 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const {
         runIds: [runId],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
-      databaseNow = daytime;
-      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
-      let stolen = 0;
+      const scheduler = vi.mocked(AutomationRunsRepository.prototype.schedulerTime);
+      scheduler.mockImplementation(schedulerTime);
+      clockNow = new Date(Date.now() - 6 * MINUTE);
+      let reclaimed: boolean | undefined;
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
-        const result = await admin.pool.query(
-          "update automation_runs set claimed_at=$2 where id=$1 and status='running' and claimed_at < $2::timestamptz - interval '5 minutes' returning id",
-          [runId, daytime],
-        );
-        stolen = result.rowCount ?? 0;
+        const sweep = await admin.pool.connect();
+        try {
+          await sweep.query('begin');
+          const { rows } = await sweep.query<{ reclaimed: boolean }>(
+            'select exists (select 1 from due_automation_runs(1000, 100) where automation_run_id=$1) as reclaimed',
+            [runId],
+          );
+          reclaimed = rows[0]?.reclaimed;
+        } finally {
+          // The sweep may find other due fixtures. Leave all claims as they were.
+          await sweep.query('rollback');
+          sweep.release();
+        }
         return sms.send(message);
       });
 
-      await runDueStep(runner, runId!);
+      try {
+        await runDueStep(runner, runId!);
 
-      expect(stolen).toBe(0);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
-      expect(await ledgerFor(runId!)).toEqual([
-        { kind: 'reserve', delta: -1 },
-        { kind: 'release', delta: 1 },
-        { kind: 'charge', delta: -1 },
-      ]);
+        expect(reclaimed).toBe(false);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      } finally {
+        scheduler.mockImplementation(fixtureSchedulerTime);
+      }
     });
 
     it('counts an accepted send with a lost answer toward the marketing cap', async () => {

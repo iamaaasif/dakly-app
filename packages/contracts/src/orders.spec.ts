@@ -7,6 +7,7 @@ import {
   editOrderSchema,
   orderListQuerySchema,
   orderStageChangeSchema,
+  partialDeliveryFormSchema,
 } from './orders';
 
 describe('order list query', () => {
@@ -16,6 +17,15 @@ describe('order list query', () => {
       cursor: 1003,
       limit: 10,
     });
+  });
+
+  it('rejects a reversed date range or unknown source and courier', () => {
+    for (const query of [
+      { createdFrom: '2026-11-18', createdThrough: '2026-11-17' },
+      { source: 'marketplace' },
+      { courier: 'unknown' },
+    ])
+      expect(orderListQuerySchema.safeParse(query).success).toBe(false);
   });
 
   it.each([
@@ -133,4 +143,18 @@ describe('manual delivery inputs', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it.each([
+  [0, 'Enter at least one delivered unit.'],
+  [2, 'Use Mark delivered if all units arrived.'],
+])('explains why %s of two units cannot be partly delivered', (quantity, message) => {
+  const id = 'e67183e9-ab27-4cf5-a671-7ee21a509efe';
+  const form = partialDeliveryFormSchema([{ id, quantity: 2 }]);
+  const result = form.safeParse({
+    to: 'partially_delivered',
+    items: [{ itemId: id, quantity }],
+    note: 'Staff counted the parcel',
+  });
+  expect(result.error?.issues).toMatchObject([{ path: ['items', 0, 'quantity'], message }]);
 });

@@ -66,10 +66,10 @@ export async function claimRetryDispatch({
     if (!(await repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
     const locked = await repository.findSendingStep(storeId, claim.runId, claim.stepKey, true);
     if (!locked) return undefined;
-    const checkedAt = await transaction.databaseTime(storeId);
+    const checkedAt = await repository.schedulerTime(storeId);
     const { firstTriedAt } = locked;
     const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-    const claimedAt = await transaction.databaseTime(storeId);
+    const claimedAt = await repository.schedulerTime(storeId);
     const lockWorkflow = () =>
       repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt }, 'retry');
     const checked = early
@@ -83,7 +83,7 @@ export async function claimRetryDispatch({
     const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
     const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
     await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-    const afterWrite = await transaction.databaseTime(storeId);
+    const afterWrite = await repository.schedulerTime(storeId);
     await repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
     return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
   });
@@ -141,8 +141,12 @@ export async function deliverAutomationSms(
   {
     messaging,
     reporter,
-    transaction,
-  }: { messaging: MessagingService; reporter: ErrorReporter; transaction: StoreTransaction },
+    repository,
+  }: {
+    messaging: MessagingService;
+    reporter: ErrorReporter;
+    repository: Pick<AutomationRunsRepository, 'schedulerTime'>;
+  },
   { storeId, claim, contactId, step, body, destination, isFirstTry, preparedSender }: Delivery,
   firstTriedAt: Date,
   attemptedAt: Date,
@@ -158,7 +162,7 @@ export async function deliverAutomationSms(
     (receipt) => ({ receipt }),
     (error: unknown) => ({ error }),
   );
-  const now = await transaction.databaseTime(storeId);
+  const now = await repository.schedulerTime(storeId);
   if ('receipt' in attempt) {
     const { providerMessageId, credits } = attempt.receipt;
     return {

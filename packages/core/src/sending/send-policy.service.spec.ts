@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConsentService } from '../consents/consent.service';
 import type { ContactsService } from '../contacts/contacts.service';
+import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { StoresService } from '../stores/stores.service';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
@@ -27,7 +28,7 @@ describe('SendPolicyService', () => {
   let sends: (MarketingSend & { workflowStepId?: string })[];
   let isTransactionOpen: boolean;
   let service: SendPolicyService;
-  let databaseAt: Date;
+  let clockAt: Date;
   let afterLock: () => void;
 
   beforeEach(() => {
@@ -35,7 +36,7 @@ describe('SendPolicyService', () => {
     isTransactionOpen = true;
     consent = 'granted';
     sends = [];
-    databaseAt = NOON_DHAKA;
+    clockAt = NOON_DHAKA;
     afterLock = () => undefined;
     // The batch reads answer the same for every contact id they are given.
     const contacts = {
@@ -58,7 +59,6 @@ describe('SendPolicyService', () => {
         frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
       }),
     };
-    // Mirrors the repository's window: after the first date, up to and including the second.
     const repository = {
       lockContact: async () => afterLock(),
       listMarketingSends: async (
@@ -92,10 +92,8 @@ describe('SendPolicyService', () => {
       consents as unknown as ConsentService,
       stores as unknown as StoresService,
       repository as unknown as SendingRepository,
-      {
-        isOpen: () => isTransactionOpen,
-        databaseTime: async () => databaseAt,
-      } as unknown as StoreTransaction,
+      { isOpen: () => isTransactionOpen } as unknown as StoreTransaction,
+      { now: () => clockAt } satisfies Clock,
     );
   });
 
@@ -117,7 +115,7 @@ describe('SendPolicyService', () => {
     const later = new Date(NOON_DHAKA.getTime() + 1000);
     sends.push({ channel: 'sms', sentAt: later });
     afterLock = () => {
-      databaseAt = later;
+      clockAt = later;
     };
     expect(
       await service.checkForSend(STORE_ID, {
@@ -134,7 +132,7 @@ describe('SendPolicyService', () => {
 
   it('keeps a marketing send capped when the worker clock is past the anniversary', async () => {
     sends.push(sentBefore(24));
-    databaseAt = new Date(NOON_DHAKA.getTime() - 50);
+    clockAt = new Date(NOON_DHAKA.getTime() - 50);
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       vi.setSystemTime(new Date(NOON_DHAKA.getTime() + 50));
@@ -147,7 +145,7 @@ describe('SendPolicyService', () => {
       ).toEqual({
         decision: { action: 'skip', reason: 'frequency_cap' },
         destination: '01712345678',
-        at: databaseAt,
+        at: clockAt,
       });
     } finally {
       vi.useRealTimers();
@@ -286,7 +284,7 @@ describe('SendPolicyService', () => {
     });
     const late = new Date('2026-11-16T20:00:00Z');
     afterLock = () => {
-      databaseAt = late;
+      clockAt = late;
     };
     expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'defer', until: new Date('2026-11-17T03:00:00Z') },
@@ -294,7 +292,7 @@ describe('SendPolicyService', () => {
     });
     afterLock = () => {
       consent = 'withdrawn';
-      databaseAt = NOON_DHAKA;
+      clockAt = NOON_DHAKA;
     };
     expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
       decision: { action: 'skip', reason: 'no_consent' },

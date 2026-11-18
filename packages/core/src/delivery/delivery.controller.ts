@@ -15,6 +15,8 @@ import {
 import {
   changeDeliveryZoneSchema,
   createDeliveryZoneSchema,
+  deliveryChargeQuerySchema,
+  type DeliveryChargeResponse,
   deliveryZoneListQuerySchema,
   type ChangeDeliveryZoneInput,
   type CreateDeliveryZoneInput,
@@ -40,6 +42,15 @@ export class DeliveryController {
     @Query(new ZodValidationPipe(deliveryZoneListQuerySchema)) query: DeliveryZoneListQuery,
   ): Promise<DeliveryZoneListResponse> {
     return this.service.listZones(storeId, query);
+  }
+
+  @Get('charge')
+  @RequirePermission('orders.edit')
+  charge(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(deliveryChargeQuerySchema)) query: { areaId: number },
+  ): Promise<DeliveryChargeResponse> {
+    return this.service.calculateDeliveryCharge(storeId, query.areaId);
   }
 
   @Post('initialize-defaults')

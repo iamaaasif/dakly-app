@@ -57,6 +57,8 @@ class FakeRunsRepository {
   run!: ClaimedRun & { id: string; lastError?: string | null };
   steps: NewRunStep[] = [];
 
+  constructor(readonly schedulerTime: () => Promise<Date>) {}
+
   async findRun(_storeId: string, runId: string) {
     return runId === this.run.id ? this.run : undefined;
   }
@@ -102,7 +104,7 @@ class FakeRunsRepository {
         id: step.id!,
         firstTriedAt: step.firstTriedAt ?? step.sentAt!,
         latestDispatchAt: step.sentAt!,
-        optOutCode: step.optOutCode ?? null,
+        optOutUrl: step.optOutUrl ?? null,
         destination: step.destination ?? null,
       }
     );
@@ -172,7 +174,11 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
-    repository = new FakeRunsRepository();
+    repository = new FakeRunsRepository(async () => {
+      if (clockFailsAfterGate && gateCommitted && !sent.length)
+        throw new Error('Scheduler clock unavailable before provider dispatch');
+      return databaseNow ?? clockNow;
+    });
     tags = [];
     segmentMembers = [];
     clockNow = now;
@@ -252,7 +258,7 @@ describe('AutomationRunsService', () => {
       checkForSend: async () => ({
         decision,
         destination: contactPhone,
-        at: databaseNow ?? clockNow,
+        at: clockNow,
       }),
       recheckForSend: async (
         _storeId: string,
@@ -262,16 +268,16 @@ describe('AutomationRunsService', () => {
       ) => {
         const decision = recheck();
         if (!(await lockWorkflow())) return undefined;
-        return { decision, at: databaseNow ?? clockNow };
+        return { decision, at: clockNow };
       },
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
-      prepareSender: async () => {
+      prepareSender: async (storeId: string) => {
         if (senderLookupError) throw senderLookupError;
-        return { name: undefined };
+        return { storeId, name: undefined };
       },
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (message.destination !== undefined && message.destination !== contactPhone)
@@ -302,11 +308,6 @@ describe('AutomationRunsService', () => {
         const result = await work();
         if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
         return result;
-      },
-      databaseTime: async () => {
-        if (clockFailsAfterGate && gateCommitted && !sent.length)
-          throw new Error('Database clock unavailable before provider dispatch');
-        return databaseNow ?? clockNow;
       },
     };
     service = new AutomationRunsService(
@@ -515,7 +516,7 @@ describe('AutomationRunsService', () => {
           kind: 'send',
           category: 'marketing',
           channel: 'sms',
-          optOutCode: 'Ab3dE6gH',
+          optOutUrl,
           outcome: 'sent',
           providerMessageId: 'sms-1',
           sentAt: now,
@@ -582,6 +583,22 @@ describe('AutomationRunsService', () => {
 
       expect(sent).toHaveLength(1);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+    });
+
+    it('starts the retry deadline on the sweep clock while keeping the send time', async () => {
+      databaseNow = now;
+      clockNow = new Date(now.getTime() - 6 * 60_000);
+      providerError = new Error('Connection closed before the provider replied');
+
+      await start(send);
+
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'sending', sentAt: clockNow, firstTriedAt: now }),
+      ]);
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        wakeAt: new Date(now.getTime() + 60_000),
+      });
     });
 
     it('skips an expired send without a sender lookup when the worker clock is slow', async () => {

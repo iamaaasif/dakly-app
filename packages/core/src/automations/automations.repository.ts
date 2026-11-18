@@ -11,6 +11,7 @@ import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { automations, automationVersions } from '@dakly/db/schema/automations';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { workflowSchedulerTime } from './workflow-scheduler-time';
 
 export type Automation = {
   id: string;
@@ -155,6 +156,10 @@ export class AutomationsRepository {
         .returning(automationColumns),
     );
     return row;
+  }
+
+  async schedulerTime(storeId: string): Promise<Date> {
+    return this.database.forStore(storeId, workflowSchedulerTime);
   }
 
   // The sender still holds the SMS wallet lock from its failed reservation.

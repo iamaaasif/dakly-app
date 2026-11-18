@@ -158,6 +158,7 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                                            | Permission      |
 | -------------------------------------------------------------------------------------------------------------------------------- | --------------- |
 | `GET /orders`, `GET /orders/:orderId`, `GET /orders/:orderId/timeline`                                                           | `orders`        |
+| `GET /orders/catalogue`, `GET /orders/catalogue/:productId`                                                                      | `orders.edit`   |
 | `POST /orders` (idem), `PATCH /orders/:orderId`                                                                                  | `orders`        |
 | `POST /orders/:orderId/stage` (to, reason, follow-up date)                                                                       | `orders`        |
 | `POST /orders/:orderId/courier` (courier name, tracking code)                                                                    | `orders`        |
@@ -166,6 +167,7 @@ atomically and retain business data when an extension is disabled.
 | `POST /orders/bulk-stage`                                                                                                        | `orders`        |
 | `GET /delivery-zones`, `POST /delivery-zones`, `PATCH /delivery-zones/:deliveryZoneId`, `DELETE /delivery-zones/:deliveryZoneId` | `storeSettings` |
 | `POST /delivery-zones/initialize-defaults` (empty stores only)                                                                   | `storeSettings` |
+| `GET /delivery-zones/charge?areaId=`                                                                                             | `orders.edit`   |
 | `GET /areas?parentId=`                                                                                                           | any member      |
 
 ## Payments and billing (07)

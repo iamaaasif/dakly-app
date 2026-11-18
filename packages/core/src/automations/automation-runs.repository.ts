@@ -19,6 +19,7 @@ import {
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
+import { workflowSchedulerTime } from './workflow-scheduler-time';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
@@ -57,7 +58,7 @@ export type NewRunStep = {
   outcome: string;
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
-  optOutCode?: string | null;
+  optOutUrl?: string | null;
   destination?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
@@ -75,7 +76,7 @@ export type SendingStep = {
   id: string;
   firstTriedAt: Date;
   latestDispatchAt: Date;
-  optOutCode: string | null;
+  optOutUrl: string | null;
   destination: string | null;
 };
 
@@ -94,6 +95,11 @@ export class AutomationRunsRepository {
         claimed_at as "claimedAt" from due_automation_runs(${limit}, ${perStore})`,
     );
     return result.rows.map((row) => ({ ...row, claimedAt: new Date(row.claimedAt) }));
+  }
+
+  // Lease and wake timestamps use the same clock as due_automation_runs.
+  async schedulerTime(storeId: string): Promise<Date> {
+    return this.database.forStore(storeId, workflowSchedulerTime);
   }
 
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
@@ -162,7 +168,7 @@ export class AutomationRunsRepository {
           id: automationRunSteps.id,
           firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
-          optOutCode: automationRunSteps.optOutCode,
+          optOutUrl: automationRunSteps.optOutUrl,
           destination: automationRunSteps.destination,
         })
         .from(automationRunSteps)

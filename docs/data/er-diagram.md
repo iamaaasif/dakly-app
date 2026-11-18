@@ -1504,7 +1504,7 @@ erDiagram
         text outcome "NOT NULL; text"
         text channel "NULL; text"
         text category "NULL; text"
-        text opt_out_code "NULL; text"
+        text opt_out_url "NULL; text"
         text destination "NULL; text"
         timestamp_with_time_zone first_tried_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
