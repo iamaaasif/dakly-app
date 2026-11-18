@@ -253,4 +253,14 @@ describe('Manual dispatch and delivery', () => {
     );
     expect(page.items[0]).not.toHaveProperty('recipientPhone');
   });
+
+  it('shows some returns at 25 percent and a good buyer at 20 percent', async () => {
+    const phone = '01710000008';
+    const own = await order(f.a, 'to_confirm', { phone });
+    await order(f.a, 'returned', { phone });
+    for (let i = 0; i < 3; i++) await order(f.a, 'delivered', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('some_returns');
+    await order(f.a, 'delivered', { phone });
+    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('good');
+  });
 });
