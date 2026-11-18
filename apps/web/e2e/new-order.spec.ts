@@ -126,44 +126,6 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     });
     expect(buyer.status()).toBe(201);
     const { id: buyerId } = await buyer.json();
-    await page.getByRole('button', { name: 'New order' }).click();
-    await create.getByLabel('Find a customer').fill('Sonia Akter');
-    await create.getByRole('button', { name: /Sonia Akter/ }).click();
-    await expect(recipientPhone).toHaveValue('01701000024');
-    await gift.check();
-    await expect(recipientPhone).toHaveValue('');
-    await create.getByLabel('Recipient name').fill('Nusrat Akter');
-    await recipientPhone.fill('01701000025');
-    await create.getByLabel('Address').fill('Road 4, Dhanmondi');
-    await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
-    await create.getByLabel('District').selectOption({ label: 'Dhaka' });
-    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
-    await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
-    await expect(create.getByText('4 in stock')).toBeVisible();
-    await create.getByLabel('Discount (৳)').fill('50');
-    await expect(create.getByText(/^Total/).getByText('৳1,260', { exact: true })).toBeVisible();
-    await create.getByLabel('Discount (৳)').clear();
-    await create.getByLabel('Advance paid (৳)').fill('200');
-    await expect(cod.getByText('৳1,110', { exact: true })).toBeVisible();
-    await capture(page, 'new');
-    await create.getByRole('button', { name: 'Save as confirmed' }).click();
-    await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
-    await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
-      'href',
-      `/customers/${buyerId}`,
-    );
-    await expect(detail.getByText('To confirm → To pack')).toBeVisible();
-    await expect(detail.getByText('৳1,110')).toBeVisible();
-
-    await detail.getByRole('button', { name: 'Close', exact: true }).click();
-    const storeContext = await context.request.get('/api/me/context');
-    const { contextTag: storeTag } = await storeContext.json();
-    const buyer = await context.request.post('/api/contacts', {
-      data: { name: 'Sonia Akter', phone: '01701000024' },
-      headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
-    });
-    expect(buyer.status()).toBe(201);
-    const { id: buyerId } = await buyer.json();
     existingBuyerId = buyerId;
     await page.getByRole('button', { name: 'New order' }).click();
     await create.getByLabel('Find a customer').fill('Sonia Akter');
