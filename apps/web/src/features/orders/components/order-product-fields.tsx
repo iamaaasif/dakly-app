@@ -94,6 +94,16 @@ function productChoices(products: ProductResponse[]) {
   );
 }
 
+type OrderProductLineProps = Pick<
+  ProductFieldsProps,
+  'ids' | 'variants' | 'register' | 'onChoose'
+> & {
+  choices: Record<string, VariantChoice>;
+  index: number;
+  canBrowse: boolean;
+  onRemove?: ProductFieldsProps['onRemove'];
+};
+
 function OrderProductLine({
   choices,
   ids,
@@ -103,12 +113,7 @@ function OrderProductLine({
   onChoose,
   onRemove,
   canBrowse,
-}: Pick<ProductFieldsProps, 'ids' | 'variants' | 'register' | 'onChoose'> & {
-  choices: Record<string, VariantChoice>;
-  index: number;
-  canBrowse: boolean;
-  onRemove?: ProductFieldsProps['onRemove'];
-}) {
+}: OrderProductLineProps) {
   const id = ids[index] ?? '';
   const saved = variants[id];
   const current = choices[id];
