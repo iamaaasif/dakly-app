@@ -10,6 +10,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OrdersModule } from './orders.module';
+import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
 
 class TestModule {}
@@ -273,5 +274,17 @@ describe('OrdersService', () => {
       stage: 'to_confirm',
       timeline: [],
     });
+  });
+
+  it('finds open order items only in the verified store on an owner connection', async () => {
+    const id = await order(fixture.a, 1100, 'to_confirm');
+    const variantId = await trackedItem(id, 0);
+    const repository = new OrdersRepository(fixture.tenant);
+    await expect(repository.hasItemsInStages(fixture.a, [variantId], ['to_confirm'])).resolves.toBe(
+      true,
+    );
+    await expect(repository.hasItemsInStages(fixture.b, [variantId], ['to_confirm'])).resolves.toBe(
+      false,
+    );
   });
 });

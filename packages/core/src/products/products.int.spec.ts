@@ -403,4 +403,17 @@ describe('ProductsService with Postgres', () => {
     ).toEqual([second.id]);
     expect((await service.list(f.a, { limit: 50, search: '_50%' })).items).toEqual([]);
   });
+
+  it('finds archive variants only for the product in the current store on an owner connection', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Archive fixture' }),
+      actor,
+    );
+    const repository = new ProductOrderVariantsRepository(f.tenant);
+    await expect(repository.lockArchiveVariants(f.a, product.id)).resolves.toEqual([
+      product.variants[0]!.id,
+    ]);
+    await expect(repository.lockArchiveVariants(f.b, product.id)).resolves.toBeNull();
+  });
 });

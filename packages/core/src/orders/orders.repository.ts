@@ -122,7 +122,7 @@ export class OrdersRepository {
         .where(
           and(
             eq(orderItems.storeId, storeId),
-            inArray(orderItems.variantId, variantIds),
+            sql`${orderItems.variantId} = any(${sql.param(variantIds)}::uuid[])`,
             inArray(orders.stage, stages),
           ),
         )
