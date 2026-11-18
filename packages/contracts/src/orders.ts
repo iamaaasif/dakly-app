@@ -378,7 +378,7 @@ export type EditOrderInput = z.infer<typeof editOrderSchema>;
 export const editOrderFormSchema = z.strictObject({
   ...editOrderSchema.shape,
   deliveryChargePoisha: takaInput.optional(),
-  orderDiscountPoisha: takaInput.optional(),
+  orderDiscountPoisha: takaInput.default(0),
   advancePaidPoisha: takaInput.optional(),
 });
 

@@ -311,7 +311,7 @@ function OrderPreview({
   });
   const quote = useOrderDelivery(areaId, order);
   const charge = override ? takaInput.safeParse(override).data : quote.chargePoisha;
-  const orderDiscount = moneyInputOr(discount, order?.orderDiscountPoisha);
+  const orderDiscount = moneyInputOr(discount);
   const paid = moneyInputOr(advance, order?.advancePaidPoisha);
   const subtotal = orderDraftSubtotal(items, variants);
   if (!Number.isSafeInteger(subtotal) || orderDiscount === undefined) return null;

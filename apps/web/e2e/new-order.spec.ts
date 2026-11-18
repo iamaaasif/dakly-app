@@ -256,9 +256,24 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),
     ).toBeVisible();
     await capture(page, 'edit');
+    await edit.getByLabel('Discount (৳)').fill('50');
+    await expect(
+      edit.getByText(/^Cash on delivery/).getByText('৳2,310', { exact: true }),
+    ).toBeVisible();
     await edit.getByRole('button', { name: 'Save order' }).click();
     await expect(edit).toBeHidden();
     await expect(editButton).toBeFocused();
+    await expect(detail.getByText('৳2,310')).toBeVisible();
+
+    await editButton.click();
+    const savedDiscount = edit.getByLabel('Discount (৳)');
+    await expect(savedDiscount).toHaveValue('50.00');
+    await savedDiscount.clear();
+    await expect(
+      edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),
+    ).toBeVisible();
+    await edit.getByRole('button', { name: 'Save order' }).click();
+    await expect(edit).toBeHidden();
     await expect(detail.getByText('৳2,360')).toBeVisible();
 
     await editButton.click();
