@@ -536,6 +536,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         ? real
         : new Date(opensAt.getTime() + (real > opensAt ? 24 * HOUR : 0));
     let clockNow = daytime;
+    let databaseNow: Date | undefined;
     const send = (
       category: 'marketing' | 'transactional',
       ifNotReachable: 'skip' | 'exit' = 'skip',
@@ -606,11 +607,14 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         sms.send(message),
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
-      vi.spyOn(StoreTransaction.prototype, 'databaseTime').mockImplementation(async () => clockNow);
+      vi.spyOn(StoreTransaction.prototype, 'databaseTime').mockImplementation(
+        async () => databaseNow ?? clockNow,
+      );
     });
 
     afterEach(() => {
       clockNow = daytime;
+      databaseNow = undefined;
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation((message) => sms.send(message));
     });
 
@@ -1282,6 +1286,35 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } finally {
         hook.mockRestore();
       }
+    });
+
+    it('keeps a dispatch lease current when the worker clock is slow', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      databaseNow = daytime;
+      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
+      let stolen = 0;
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        const result = await admin.pool.query(
+          "update automation_runs set claimed_at=$2 where id=$1 and status='running' and claimed_at < $2::timestamptz - interval '5 minutes' returning id",
+          [runId, daytime],
+        );
+        stolen = result.rowCount ?? 0;
+        return sms.send(message);
+      });
+
+      await runDueStep(runner, runId!);
+
+      expect(stolen).toBe(0);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(await ledgerFor(runId!)).toEqual([
+        { kind: 'reserve', delta: -1 },
+        { kind: 'release', delta: 1 },
+        { kind: 'charge', delta: -1 },
+      ]);
     });
 
     it('counts an accepted send with a lost answer toward the marketing cap', async () => {

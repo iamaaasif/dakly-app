@@ -20,7 +20,7 @@ export class StoreTransaction {
 
   // The caller takes any required locks before reading this time.
   async databaseTime(storeId: string): Promise<Date> {
-    return this.database.inTransaction(storeId, async (tx) => {
+    return this.database.forStore(storeId, async (tx) => {
       const { rows } = await tx.execute<{ milliseconds: string }>(
         sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
       );

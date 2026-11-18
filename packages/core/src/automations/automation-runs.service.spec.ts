@@ -117,6 +117,7 @@ describe('AutomationRunsService', () => {
   let tags: string[];
   let segmentMembers: string[];
   let clockNow: Date;
+  let databaseNow: Date | undefined;
   let decision: SendDecision;
   let sent: OutgoingMessage[];
   let providerError: Error | undefined;
@@ -151,6 +152,7 @@ describe('AutomationRunsService', () => {
     tags = [];
     segmentMembers = [];
     clockNow = now;
+    databaseNow = undefined;
     decision = { action: 'send' };
     sent = [];
     providerError = undefined;
@@ -209,7 +211,11 @@ describe('AutomationRunsService', () => {
     };
     const sendPolicy = {
       check: async () => decision,
-      checkForSend: async () => ({ decision, destination: '01711000201', at: clockNow }),
+      checkForSend: async () => ({
+        decision,
+        destination: '01711000201',
+        at: databaseNow ?? clockNow,
+      }),
     };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
@@ -227,7 +233,10 @@ describe('AutomationRunsService', () => {
         asked.map(() => ({ id: 'link-1', code: 'Ab3dE6gH', url: optOutUrl })),
       optOutUrl: (code: string) => `https://links.dakly.test/s/${code}`,
     };
-    const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
+    const transaction = {
+      run: (_storeId: string, work: () => Promise<unknown>) => work(),
+      databaseTime: async () => databaseNow ?? clockNow,
+    };
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
@@ -476,6 +485,16 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([
         expect.objectContaining({ outcome: 'skipped', skipReason: 'window_closed' }),
       ]);
+    });
+
+    it('does not expire a send early when the worker clock is fast', async () => {
+      databaseNow = new Date(claimedAt.getTime() + 24 * HOUR - 60_000);
+      clockNow = new Date(claimedAt.getTime() + 24 * HOUR + 60_000);
+
+      await start(send);
+
+      expect(sent).toHaveLength(1);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
     });
 
     it('skips a send that was due more than a day before it runs', async () => {
