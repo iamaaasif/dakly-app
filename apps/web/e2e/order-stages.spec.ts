@@ -97,8 +97,16 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
 
     await detail.getByRole('button', { name: 'Partly delivered' }).click();
     const partial = page.getByRole('dialog', { name: 'Partly delivered' });
-    await partial.getByLabel(`${panjabi} · M · delivered out of 2`).fill('1');
+    const delivered = partial.getByLabel(`${panjabi} · M · delivered out of 2`);
+    const savePartial = partial.getByRole('button', { name: 'Partly delivered' });
     await partial.getByLabel('Delivery note').fill('One item was sent back');
+    await expect(delivered).toHaveValue('0');
+    await savePartial.click();
+    await expect(partial.getByText('Enter at least one delivered unit.')).toBeVisible();
+    await delivered.fill('2');
+    await savePartial.click();
+    await expect(partial.getByText('Use Mark delivered if all units arrived.')).toBeVisible();
+    await delivered.fill('1');
     await capture(page, 'partial');
     await partial.getByRole('button', { name: 'Partly delivered' }).click();
     await expect(detail.getByText('With courier → Partly delivered')).toBeVisible();

@@ -8,6 +8,7 @@ import {
   couriers,
   dispatchOrderSchema,
   orderStageChangeSchema,
+  partialDeliveryFormSchema,
   type OrderDetail,
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
@@ -24,13 +25,18 @@ import { cancelReasonLabels, courierLabels, onHoldReasonLabels } from '../order-
 import { stageActionLabels, type StageFormAction } from './order-stage-actions';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
-const actionSchema = z.discriminatedUnion('to', [
-  ...orderStageChangeSchema.options,
-  dispatchOrderSchema.safeExtend({ to: z.literal('with_courier') }),
-  codCollectedSchema.extend({ to: z.literal('cod'), amountPoisha: takaInput }),
-]);
-type ActionValues = z.input<typeof actionSchema>;
-type ActionInput = z.output<typeof actionSchema>;
+function actionSchema(items: OrderDetail['items']) {
+  return z.discriminatedUnion('to', [
+    partialDeliveryFormSchema(items),
+    ...orderStageChangeSchema.options.filter(
+      ({ shape }) => shape.to.value !== 'partially_delivered',
+    ),
+    dispatchOrderSchema.safeExtend({ to: z.literal('with_courier') }),
+    codCollectedSchema.extend({ to: z.literal('cod'), amountPoisha: takaInput }),
+  ]);
+}
+type ActionValues = z.input<ReturnType<typeof actionSchema>>;
+type ActionInput = z.output<ReturnType<typeof actionSchema>>;
 
 function defaultFields(action: StageFormAction, order: OrderDetail): Partial<ActionValues> {
   switch (action) {
@@ -39,7 +45,7 @@ function defaultFields(action: StageFormAction, order: OrderDetail): Partial<Act
     case 'partially_delivered':
       return {
         to: action,
-        items: order.items.map(({ id, quantity }) => ({ itemId: id, quantity })),
+        items: order.items.map(({ id }) => ({ itemId: id, quantity: 0 })),
       };
     default:
       return { to: action };
@@ -63,7 +69,7 @@ export function OrderStageDialog({
 }: OrderStageDialogProps) {
   const [open, setOpen] = useState(false);
   const form = useForm<ActionValues, undefined, ActionInput>({
-    resolver: zodResolver(actionSchema),
+    resolver: zodResolver(actionSchema(order.items)),
     defaultValues: defaultFields(action, order),
   });
   const { submit, pending, error, reset } = useStageSubmission(order.id, () => {

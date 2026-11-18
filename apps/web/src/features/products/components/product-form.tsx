@@ -16,7 +16,6 @@ import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
 import { ProductFields } from './product-fields';
 import { ProductOptions } from './product-options';
-import { takaInputFromPoisha } from '@/lib/format-money';
 
 type ProductFormProps = { product?: ProductResponse; onSaved: (product: ProductResponse) => void };
 export function ProductForm({ product, onSaved }: ProductFormProps) {
@@ -74,6 +73,11 @@ export function ProductForm({ product, onSaved }: ProductFormProps) {
       </form>
     </FormProvider>
   );
+}
+function takaInputFromPoisha(value: number | null) {
+  if (value === null) return '';
+  const amount = BigInt(value);
+  return `${amount / 100n}.${(amount % 100n).toString().padStart(2, '0')}`;
 }
 
 function formValues(product?: ProductResponse): ProductFormValues {
