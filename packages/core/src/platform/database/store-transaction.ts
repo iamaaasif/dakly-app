@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { stores } from '@dakly/db/schema/stores';
 import { uuidv7 } from '@dakly/db/uuid-v7';
@@ -16,6 +16,18 @@ export class StoreTransaction {
 
   isOpen(): boolean {
     return this.database.isOpen();
+  }
+
+  // The caller takes any required locks before reading this time.
+  async databaseTime(storeId: string): Promise<Date> {
+    return this.database.inTransaction(storeId, async (tx) => {
+      const { rows } = await tx.execute<{ milliseconds: string }>(
+        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
+      );
+      const [time] = rows;
+      if (!time) throw new Error('Postgres did not return the current time');
+      return new Date(Number(time.milliseconds));
+    });
   }
 
   runLocked<TResult>(storeId: string, work: () => Promise<TResult>): Promise<TResult> {

@@ -61,7 +61,6 @@ describe('SendPolicyService', () => {
     // Mirrors the repository's window: after the first date, up to and including the second.
     const repository = {
       lockContact: async () => afterLock(),
-      dispatchTime: async () => databaseAt,
       listMarketingSends: async (_storeId: string, ids: string[], after: Date, until: Date) =>
         ids.flatMap((contactId) =>
           sends
@@ -74,7 +73,10 @@ describe('SendPolicyService', () => {
       consents as unknown as ConsentService,
       stores as unknown as StoresService,
       repository as unknown as SendingRepository,
-      { isOpen: () => isTransactionOpen } as unknown as StoreTransaction,
+      {
+        isOpen: () => isTransactionOpen,
+        databaseTime: async () => databaseAt,
+      } as unknown as StoreTransaction,
     );
   });
 

@@ -55,7 +55,7 @@ export class SendPolicyService {
   // Freeze the destination from the eligibility read and use one database clock after the locks.
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
     const exists = await this.lockForDispatch(storeId, request.contactId);
-    const at = await this.repository.dispatchTime(storeId);
+    const at = await this.transaction.databaseTime(storeId);
     if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.checkAudience(storeId, {
       contactIds: [request.contactId],
