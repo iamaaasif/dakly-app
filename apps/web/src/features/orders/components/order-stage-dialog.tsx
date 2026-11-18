@@ -19,10 +19,11 @@ type StageInput = z.output<typeof orderStageChangeSchema>;
 type OrderStageDialogProps = {
   order: OrderDetail;
   action: StageFormAction;
+  disabled: boolean;
   stage: RefObject<HTMLSpanElement | null>;
 };
 
-export function OrderStageDialog({ order, action, stage }: OrderStageDialogProps) {
+export function OrderStageDialog({ order, action, disabled, stage }: OrderStageDialogProps) {
   const [open, setOpen] = useState(false);
   const form = useForm<StageValues, undefined, StageInput>({
     resolver: zodResolver(orderStageChangeSchema),
@@ -38,7 +39,11 @@ export function OrderStageDialog({ order, action, stage }: OrderStageDialogProps
   return (
     <SheetDialog
       title={cancelling ? `Cancel order #${order.number}?` : label}
-      trigger={<Button variant="secondary">{label}</Button>}
+      trigger={
+        <Button variant="secondary" disabled={disabled}>
+          {label}
+        </Button>
+      }
       open={open}
       onOpenChange={(next) => {
         if (!next) {

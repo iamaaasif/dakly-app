@@ -18,7 +18,7 @@ export type SheetProps = {
   open: boolean;
   side?: keyof typeof sideClasses;
   onClose: () => void;
-  fallbackFocus?: () => HTMLElement | null;
+  restoreFocusTo?: () => HTMLElement | null;
   children: ReactNode;
 };
 
@@ -29,7 +29,7 @@ export function Sheet({
   open,
   side = 'right',
   onClose,
-  fallbackFocus,
+  restoreFocusTo,
   children,
 }: SheetProps) {
   const opener = useRef<Element | null>(null);
@@ -43,15 +43,9 @@ export function Sheet({
           onOpenAutoFocus={() => (opener.current = document.activeElement)}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (
-              opener.current instanceof HTMLElement &&
-              opener.current.isConnected &&
-              opener.current !== document.body
-            ) {
-              opener.current.focus();
-            } else {
-              fallbackFocus?.()?.focus();
-            }
+            const target = restoreFocusTo?.() ?? opener.current;
+            if (target instanceof HTMLElement && target.isConnected && target !== document.body)
+              target.focus();
           }}
           className={cn(
             'fixed inset-y-0 z-50 flex h-dvh w-full max-w-sm flex-col border-border bg-surface text-text shadow-overlay',

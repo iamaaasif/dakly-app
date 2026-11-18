@@ -81,12 +81,17 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await detail.getByRole('button', { name: 'Put on hold' }).click();
     const hold = page.getByRole('dialog', { name: 'Put on hold' });
     await expect(page.locator('[role="dialog"]').filter({ hasText: 'Order #1050' })).toHaveCount(1);
+    await hold.getByRole('button', { name: 'Put on hold' }).click();
+    await expect(hold.getByText('Choose a reason.', { exact: true })).toBeVisible();
     await hold.getByLabel('Reason').selectOption({ label: 'Pre-order' });
     await capture(page, 'hold');
+    const detailApi = '**/api/orders/' + orderId;
+    await page.route(detailApi, (route) => route.abort());
     await hold.getByRole('button', { name: 'Put on hold' }).click();
     await expect(detail.getByText('To confirm → On hold')).toBeVisible();
     await expect(detail.getByText('Pre-order')).toBeVisible();
     await expect(stage).toBeFocused();
+    await page.unroute(detailApi);
     await detail.getByRole('button', { name: 'Back to confirmation' }).click();
     await expect(detail.getByText('On hold → To confirm')).toBeVisible();
 
@@ -100,11 +105,30 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await cancelButton.click();
     await expect(cancel.getByLabel('Reason')).toHaveValue('');
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });
-    await cancel.getByRole('button', { name: 'Cancel order' }).click();
-    await expect(stage).toHaveText('Cancelled');
-    await expect(stage).toBeFocused();
-    await detail.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Orders', exact: true })).toBeFocused();
+    const listApi = '**/api/orders?*';
+    const refresh = Promise.withResolvers<void>();
+    await page.route(listApi, async (route) => {
+      await refresh.promise;
+      await route.continue();
+    });
+    try {
+      const refreshRequest = page.waitForRequest(listApi);
+      await cancel.getByRole('button', { name: 'Cancel order' }).click();
+      await expect(stage).toHaveText('Cancelled');
+      await expect(stage).toBeFocused();
+      await refreshRequest;
+      const rowAction = page.locator(`[data-order-row-action="${orderId}"]`);
+      await expect(rowAction).toHaveCount(1);
+      await detail.getByRole('button', { name: 'Close', exact: true }).click();
+      const heading = page.getByRole('heading', { name: 'Orders', exact: true });
+      await expect(heading).toBeFocused();
+      refresh.resolve();
+      await expect(rowAction).toHaveCount(0);
+      await expect(heading).toBeFocused();
+    } finally {
+      refresh.resolve();
+      await page.unroute(listApi);
+    }
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and (payload->>'orderId'=$2 or payload->>'variantId'=$3)",
