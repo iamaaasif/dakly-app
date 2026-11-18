@@ -17,7 +17,6 @@ const selected = {
   canViewProducts: false,
   canEditProducts: false,
   canViewOrders: false,
-  canEditOrders: false,
   canViewCustomers: true,
   canCreateCustomer: true,
   canViewSegments: true,

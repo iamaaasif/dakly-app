@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 import { orderStages, type OrderListQuery } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
@@ -10,18 +9,12 @@ import { QueryError } from '@dakly/ui/query-error';
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
 import { OrderAlerts } from './order-alerts';
-import { OrderDetailSheet } from './order-detail-sheet';
 import { OrderSearch } from './order-search';
 import { OrdersList } from './orders-list';
 import { StorePage } from '@/components/store-page';
 
-type OrdersScreenProps = { query: OrderListQuery; selected?: string };
-
-export function OrdersScreen({ query, selected }: OrdersScreenProps) {
+export function OrdersScreen({ query }: { query: OrderListQuery }) {
   const orders = useOrders(query);
-  const router = useRouter();
-  const listHref = `/orders?${ordersSearch(query)}`;
-
   return (
     <StorePage permission="canViewOrders">
       <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
@@ -55,9 +48,6 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           />
         ) : null}
         {orders.data ? <OrdersList page={orders.data} query={query} /> : null}
-        {selected ? (
-          <OrderDetailSheet key={selected} id={selected} onClose={() => router.replace(listHref)} />
-        ) : null}
       </main>
     </StorePage>
   );

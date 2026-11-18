@@ -1,5 +1,4 @@
 import { ClipboardList, Instagram, MessageSquare, type LucideIcon } from 'lucide-react';
-import Link from 'next/link';
 
 import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 
@@ -14,26 +13,16 @@ const sourceIcons: Partial<Record<OrderSummary['source'], LucideIcon>> = {
   comment: MessageSquare,
 };
 
-type OrderRowProps = { order: OrderListItem; href: string; canEdit: boolean };
-
-export function OrderRow({ order, href, canEdit }: OrderRowProps) {
+export function OrderRow({ order }: { order: OrderListItem }) {
   const Icon = sourceIcons[order.source] ?? ClipboardList;
-  const canConfirm =
-    canEdit &&
-    order.stage === 'to_confirm' &&
-    order.source !== 'shopify' &&
-    order.source !== 'woocommerce';
-
   return (
-    <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto_auto] md:gap-4">
+    <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto] md:gap-4">
       <span className="grid size-9 place-items-center rounded-md bg-surface-muted">
         <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
       </span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link href={href} className="font-semibold wrap-anywhere hover:underline">
-            {order.recipientName}
-          </Link>
+          <span className="font-semibold wrap-anywhere">{order.recipientName}</span>
           <OrderRiskBadge risk={order.returnRisk} />
           {order.isWaitingForConfirmation ? (
             <span className="text-xs font-medium text-warning">Waiting 12h+</span>
@@ -48,13 +37,6 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
         ) : null}
       </div>
       <OrderAmount order={order} />
-      <Link
-        href={href}
-        aria-label={`${canConfirm ? 'Confirm' : 'Details for'} order #${order.number}`}
-        className="col-start-2 inline-flex min-h-10 w-fit items-center rounded-md bg-inverse px-3 font-medium text-on-primary hover:underline md:col-start-auto"
-      >
-        {canConfirm ? 'Confirm' : 'Details'}
-      </Link>
     </li>
   );
 }
