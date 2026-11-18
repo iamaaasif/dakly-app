@@ -102,6 +102,7 @@ class FakeRunsRepository {
       step && {
         id: step.id!,
         firstTriedAt: step.firstTriedAt ?? step.sentAt!,
+        latestDispatchAt: step.sentAt!,
         optOutCode: step.optOutCode ?? null,
         destination: step.destination ?? null,
       }
@@ -564,6 +565,25 @@ describe('AutomationRunsService', () => {
         expect.objectContaining({ outcome: 'sent', sentAt: clockNow }),
       ]);
       expect(repository.run).toMatchObject({ currentStepKey: 'end', lastError: null });
+    });
+
+    it('keeps the original cap time when a slower worker settles a retry', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      clockNow = new Date(now.getTime() - 50);
+      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
+
+      expect(sent).toHaveLength(1);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'sent', firstTriedAt: now, sentAt: now }),
+      ]);
     });
 
     it('holds a resend when the workflow pauses during the eligibility check', async () => {

@@ -73,6 +73,7 @@ export type RunStepChange = {
 export type SendingStep = {
   id: string;
   firstTriedAt: Date;
+  latestDispatchAt: Date;
   optOutCode: string | null;
   destination: string | null;
 };
@@ -174,7 +175,9 @@ export class AutomationRunsRepository {
     );
     if (!row) return undefined;
     const firstTriedAt = row.firstTriedAt ?? row.sentAt;
-    return firstTriedAt ? { ...row, firstTriedAt } : undefined;
+    return firstTriedAt
+      ? { ...row, firstTriedAt, latestDispatchAt: row.sentAt ?? firstTriedAt }
+      : undefined;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
