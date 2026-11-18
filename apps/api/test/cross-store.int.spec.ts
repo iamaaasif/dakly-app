@@ -1424,17 +1424,18 @@ describe('every production shop route isolates its data', () => {
     const zones = await success(shop, 'POST', '/delivery-zones/initialize-defaults', 201);
     const service = app.get(DeliveryService);
     const cases = [
-      { areaId: 30260072, name: 'Dhaka suburbs', chargePoisha: 10000 },
-      { areaId: 30260014, name: 'Inside Dhaka', chargePoisha: 6000 },
-      { areaId: 20030004, name: 'Outside Dhaka', chargePoisha: 12000 },
+      { areaId: 30260072, name: 'Dhaka suburbs', chargePoisha: 10000, district: 'Dhaka' },
+      { areaId: 30260014, name: 'Inside Dhaka', chargePoisha: 6000, district: 'Dhaka' },
+      { areaId: 20030004, name: 'Outside Dhaka', chargePoisha: 12000, district: 'Bandarban' },
     ];
 
-    for (const { areaId, name, chargePoisha } of cases) {
+    for (const { areaId, name, chargePoisha, district } of cases) {
       const zone = zones.json().items.find((item: { name: string }) => item.name === name);
       expect(zone).toBeDefined();
       await expect(service.calculateDeliveryCharge(shop.id, areaId)).resolves.toEqual({
         deliveryZoneId: zone.id,
         chargePoisha,
+        district,
       });
     }
   });
