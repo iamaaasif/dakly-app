@@ -1,5 +1,5 @@
 {
-  "id": "c4062515-1516-465f-9d7f-038e9e5e09b7",
+  "id": "127c6853-fb60-4231-8c32-aeb59b57c292",
   "prevId": "b4433abc-6f4b-46b4-a8c6-3ca7b86f47fe",
   "version": "7",
   "dialect": "postgresql",
@@ -7594,68 +7594,6 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'scheduled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_sending_idx": {
-          "name": "campaigns_sending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coalesce(\"started_at\", \"approved_at\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_legacy_start_idx": {
-          "name": "campaigns_legacy_start_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"started_at\" is null and \"campaigns\".\"approved_at\" is not null and \"campaigns\".\"status\" in ('sending', 'paused', 'sent')",
           "concurrently": false,
           "method": "btree",
           "with": {}

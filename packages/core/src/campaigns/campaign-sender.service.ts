@@ -8,14 +8,9 @@ import { serializeError } from '../platform/logging/safe-error';
 import { DAY_MS } from '../platform/time';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 
-// One worker tick has finite room; store turns share it when many campaigns are due.
 const STORES_PER_TICK = 100;
-const CAMPAIGNS_PER_STORE = 2;
-const START_BACKFILL_BATCH = 100;
 const CURSOR_LIFETIME_SECONDS = (7 * DAY_MS) / 1000;
 const STORE_CURSOR = 'campaign-start:store';
-const BACKFILL_CURSOR = 'campaign-start:backfill-store';
-const BACKFILL_COMPLETE = 'complete';
 
 @Injectable()
 export class CampaignSenderService {
@@ -35,67 +30,13 @@ export class CampaignSenderService {
     if (!stores.length && after)
       stores = await this.repository.listDueStores(now, null, STORES_PER_TICK);
     for (const storeId of stores) {
-      await this.startStorePage(storeId, now).catch((error: unknown) => {
-        this.logger.error({ storeId }, 'Campaign store page failed');
-        this.reportJobError(error);
+      await this.repository.startDueInStore(storeId, now).catch((error: unknown) => {
+        this.logger.error({ storeId }, 'Campaign starts failed for store');
+        const { jobId } = jobLogBindings();
+        if (jobId) this.reporter.reportJob(serializeError(error), jobId);
       });
     }
     const last = stores.at(-1);
-    if (last) await this.saveCursor(STORE_CURSOR, last);
-  }
-
-  async backfillStarts(): Promise<void> {
-    const cursor = await this.valkey.connection.get(BACKFILL_CURSOR);
-    if (cursor === BACKFILL_COMPLETE) return;
-    const [after, pending] = cursor?.split(':') ?? [];
-    const storeId = await this.repository.nextBackfillStore(after || null);
-    if (!storeId) {
-      if (pending) await this.valkey.connection.del(BACKFILL_CURSOR);
-      else await this.saveCursor(BACKFILL_CURSOR, BACKFILL_COMPLETE);
-      return;
-    }
-    const hasMore = await this.repository
-      .backfillStarts(storeId, START_BACKFILL_BATCH)
-      .catch((error: unknown) => {
-        this.logger.error({ storeId }, 'Campaign start backfill failed');
-        this.reportJobError(error);
-        return true;
-      });
-    const next = pending || hasMore ? `${storeId}:pending` : storeId;
-    await this.saveCursor(BACKFILL_CURSOR, next);
-  }
-
-  private async startStorePage(storeId: string, asOf: Date): Promise<void> {
-    const key = `campaign-start:campaign:${storeId}`;
-    const after = await this.valkey.connection.get(key);
-    let page = await this.repository.listDueInStore(storeId, {
-      asOf,
-      after,
-      limit: CAMPAIGNS_PER_STORE,
-    });
-    if (!page.length && after)
-      page = await this.repository.listDueInStore(storeId, {
-        asOf,
-        after: null,
-        limit: CAMPAIGNS_PER_STORE,
-      });
-    for (const { campaignId } of page) {
-      // Move past a locked or failed row this tick. A later pass can try it again.
-      await this.repository.start(storeId, campaignId, asOf).catch((error: unknown) => {
-        this.logger.error({ storeId, campaignId }, 'Campaign start failed');
-        this.reportJobError(error);
-      });
-    }
-    const last = page.at(-1);
-    if (last) await this.saveCursor(key, last.campaignId);
-  }
-
-  private async saveCursor(key: string, value: string): Promise<void> {
-    await this.valkey.connection.set(key, value, 'EX', CURSOR_LIFETIME_SECONDS);
-  }
-
-  private reportJobError(error: unknown): void {
-    const { jobId } = jobLogBindings();
-    if (jobId) this.reporter.reportJob(serializeError(error), jobId);
+    if (last) await this.valkey.connection.set(STORE_CURSOR, last, 'EX', CURSOR_LIFETIME_SECONDS);
   }
 }

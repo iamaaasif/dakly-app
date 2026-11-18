@@ -44,9 +44,7 @@ describe('Campaign sweep (Postgres)', () => {
   });
 
   beforeEach(async () => {
-    await app
-      .get(ValkeyClient)
-      .connection.del('campaign-start:store', `campaign-start:campaign:${storeId}`);
+    await app.get(ValkeyClient).connection.del('campaign-start:store');
   });
 
   afterAll(async () => {
@@ -76,114 +74,47 @@ describe('Campaign sweep (Postgres)', () => {
     expect(await campaignRow(id)).toEqual({ status: 'sending', started_at: sendAt });
   });
 
-  it('starts the other due campaigns when one fails', async () => {
-    const [failing, other] = [randomUUID(), randomUUID()];
-    for (const id of [failing, other])
-      await admin.pool.query(
-        `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
-         values($1,$2,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$3,now())`,
-        [id, storeId, sendAt],
-      );
-    const start = CampaignSendingRepository.prototype.start;
-    const failStart = vi
-      .spyOn(CampaignSendingRepository.prototype, 'start')
+  it('continues and advances the store cursor when one store fails', async () => {
+    const store = randomUUID();
+    const [first, next] = [storeId, store].sort() as [string, string];
+    const [failing, healthy] = [randomUUID(), randomUUID()];
+    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
+    const start = CampaignSendingRepository.prototype.startDueInStore;
+    const failFirst = vi
+      .spyOn(CampaignSendingRepository.prototype, 'startDueInStore')
       .mockImplementation(async function (this: CampaignSendingRepository, ...args) {
-        if (args[1] === failing) throw new Error('database unavailable');
+        if (args[0] === first) throw new Error('database unavailable');
         return start.apply(this, args);
       });
     const quiet = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const report = vi
       .spyOn(app.get(ErrorReporter), 'reportJob')
       .mockImplementation(() => undefined);
-    clockNow = sendAt;
-
-    await runWithJobContext(() => sender.startDue(), 'sweep-job-1');
-
-    expect(report).toHaveBeenCalledOnce();
-    expect(report).toHaveBeenCalledWith(
-      expect.objectContaining({ errorClass: 'Error' }),
-      'sweep-job-1',
-    );
-    expect(await campaignRow(failing)).toMatchObject({ status: 'scheduled' });
-    expect(await campaignRow(other)).toMatchObject({ status: 'sending' });
-    failStart.mockRestore();
-    quiet.mockRestore();
-    report.mockRestore();
-  });
-
-  it('continues to the next store when the first store page fails', async () => {
-    const store = randomUUID();
-    const [firstStore, nextStore] = [storeId, store].sort() as [string, string];
-    const firstCampaign = randomUUID();
-    const nextCampaign = randomUUID();
     const connection = app.get(ValkeyClient).connection;
-    const cursor = `campaign-start:campaign:${firstStore}`;
-    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
     try {
       await admin.pool.query(
         `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
          values($1,$2,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$5,$5),
                ($3,$4,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$5,$5)`,
-        [firstCampaign, firstStore, nextCampaign, nextStore, sendAt],
+        [failing, first, healthy, next, sendAt],
       );
-      await connection.set(cursor, 'invalid-campaign-id');
       clockNow = sendAt;
 
-      await sender.startDue();
+      await runWithJobContext(() => sender.startDue(), 'sweep-job-1');
 
-      expect(await campaignRow(firstCampaign)).toMatchObject({ status: 'scheduled' });
-      expect(await campaignRow(nextCampaign)).toMatchObject({ status: 'sending' });
-      expect(await connection.get('campaign-start:store')).toBe(nextStore);
-    } finally {
-      await connection.del(cursor, `campaign-start:campaign:${nextStore}`);
-      await admin.pool.query('delete from campaigns where id in ($1,$2)', [
-        firstCampaign,
-        nextCampaign,
-      ]);
-      await admin.pool.query('delete from stores where id=$1', [store]);
-    }
-  });
-
-  it('backfills another store while the first legacy start is locked', async () => {
-    const store = randomUUID();
-    const [firstStore, nextStore] = [storeId, store].sort() as [string, string];
-    const first = randomUUID();
-    const next = randomUUID();
-    const connection = app.get(ValkeyClient).connection;
-    const cursor = 'campaign-start:backfill-store';
-    const discover = vi
-      .spyOn(app.get(CampaignSendingRepository), 'nextBackfillStore')
-      .mockImplementation(async (after) =>
-        [firstStore, nextStore].find((id) => !after || id > after),
+      expect(report).toHaveBeenCalledOnce();
+      expect(report).toHaveBeenCalledWith(
+        expect.objectContaining({ errorClass: 'Error' }),
+        'sweep-job-1',
       );
-    const blocker = await admin.pool.connect();
-    try {
-      await connection.del(cursor);
-      await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
-      await admin.pool.query(
-        `insert into campaigns(id,store_id,name,channel,content,status,approved_at)
-         values($1,$2,'পুরানো প্রচারণা','sms','{"text":"নতুন"}','sending',$5),
-               ($3,$4,'পুরানো প্রচারণা','sms','{"text":"নতুন"}','sending',$5)`,
-        [first, firstStore, next, nextStore, sendAt],
-      );
-      await blocker.query('begin');
-      await blocker.query('select id from campaigns where id=$1 for update', [first]);
-
-      await sender.backfillStarts();
-      await sender.backfillStarts();
-      expect(await campaignRow(first)).toMatchObject({ started_at: null });
-      expect(await campaignRow(next)).toMatchObject({ started_at: sendAt });
-
-      await blocker.query('commit');
-      await sender.backfillStarts();
-      await sender.backfillStarts();
-      expect(await campaignRow(first)).toMatchObject({ started_at: sendAt });
+      expect(await campaignRow(failing)).toMatchObject({ status: 'scheduled' });
+      expect(await campaignRow(healthy)).toMatchObject({ status: 'sending' });
+      expect(await connection.get('campaign-start:store')).toBe(next);
     } finally {
-      await blocker.query('rollback');
-      blocker.release();
-      discover.mockRestore();
-      await connection.del(cursor);
-      await admin.pool.query('delete from campaigns where id in ($1,$2)', [first, next]);
+      failFirst.mockRestore();
+      quiet.mockRestore();
+      report.mockRestore();
+      await admin.pool.query('delete from campaigns where id in ($1,$2)', [failing, healthy]);
       await admin.pool.query('delete from stores where id=$1', [store]);
     }
   });
@@ -206,37 +137,16 @@ describe('Campaign sweep (Postgres)', () => {
     }
   });
 
-  it('keeps an older immediate campaign first when its start time is missing', async () => {
-    const store = randomUUID();
-    const [legacy, newer] = [randomUUID(), randomUUID()];
-    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
-    try {
-      await admin.pool.query(
-        `insert into campaigns(id,store_id,name,channel,content,status,approved_at,started_at)
-         values($1,$3,'পুরানো','sms','{"text":"নতুন"}','sending',$4,null),
-               ($2,$3,'নতুন','sms','{"text":"নতুন"}','sending',$5,$5)`,
-        [legacy, newer, store, new Date(sendAt.getTime() - 60_000), sendAt],
-      );
-      const names = await admin.pool.query<{ campaign_id: string }>(
-        'select campaign_id from sending_campaigns() where store_id=$1',
-        [store],
-      );
-      expect(names.rows).toEqual([{ campaign_id: legacy }]);
-    } finally {
-      await admin.pool.query('delete from campaigns where store_id=$1', [store]);
-      await admin.pool.query('delete from stores where id=$1', [store]);
-    }
-  });
-
   it('starts another store’s campaign while the first due row is locked', async () => {
     const store = randomUUID();
-    const [locked, other] = [randomUUID(), randomUUID()];
+    const [locked, sameStore, other] = [randomUUID(), randomUUID(), randomUUID()];
     await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
     const blocker = await admin.pool.connect();
     let sweep: Promise<void> | undefined;
     try {
       for (const [id, owner] of [
         [locked, storeId],
+        [sameStore, storeId],
         [other, store],
       ]) {
         await admin.pool.query(
@@ -254,6 +164,7 @@ describe('Campaign sweep (Postgres)', () => {
       clockNow = sendAt;
       sweep = sender.startDue();
       await expect.poll(() => campaignRow(other)).toMatchObject({ status: 'sending' });
+      expect(await campaignRow(sameStore)).toMatchObject({ status: 'sending' });
       expect(await campaignRow(locked)).toMatchObject({ status: 'scheduled' });
     } finally {
       await blocker.query('rollback');
@@ -265,10 +176,10 @@ describe('Campaign sweep (Postgres)', () => {
     }
   });
 
-  it('gives a second store a turn inside the due campaign limit', async () => {
+  it('starts up to 100 due campaigns per store in one sweep', async () => {
     const store = randomUUID();
     await admin.pool.query("insert into stores(id,name) values($1,'আরেকটি দোকান')", [store]);
-    const backlog = Array.from({ length: 5 }, () => randomUUID());
+    const backlog = Array.from({ length: 103 }, () => randomUUID());
     const outsideBacklog = randomUUID();
     try {
       for (const [owner, ids] of [
@@ -289,6 +200,22 @@ describe('Campaign sweep (Postgres)', () => {
       const [first] = await repository.listDueStores(sendAt, null, 1);
       const [next] = await repository.listDueStores(sendAt, first!, 1);
       expect([first, next]).toEqual(selected);
+      clockNow = sendAt;
+      await sender.startDue();
+      const { rows } = await admin.pool.query(
+        `select count(*) filter (where status='sending')::int as sending,
+                count(*) filter (where status='scheduled')::int as scheduled
+         from campaigns where id=any($1::uuid[])`,
+        [backlog],
+      );
+      expect(rows).toEqual([{ sending: 100, scheduled: 3 }]);
+      expect(await campaignRow(outsideBacklog)).toMatchObject({ status: 'sending' });
+      await sender.startDue();
+      const remaining = await admin.pool.query(
+        "select count(*)::int as count from campaigns where id=any($1::uuid[]) and status='scheduled'",
+        [backlog],
+      );
+      expect(remaining.rows).toEqual([{ count: 0 }]);
     } finally {
       await admin.pool.query('delete from campaigns where id=any($1::uuid[])', [
         [...backlog, outsideBacklog],
@@ -320,39 +247,6 @@ describe('Campaign sweep (Postgres)', () => {
     } finally {
       await admin.pool.query('delete from campaigns where store_id=any($1::uuid[])', [stores]);
       await admin.pool.query('delete from stores where id=any($1::uuid[])', [stores]);
-    }
-  });
-
-  it('advances past a page whose campaigns keep failing', async () => {
-    const [first, second, healthy] = [randomUUID(), randomUUID(), randomUUID()];
-    const fixtureTime = new Date(sendAt.getTime() - 60_000);
-    for (const [id, scheduled] of [
-      [first, fixtureTime],
-      [second, fixtureTime],
-      [healthy, new Date(fixtureTime.getTime() + 1000)],
-    ] as const)
-      await admin.pool.query(
-        `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
-         values($1,$2,'পরের ক্যাম্পেইন','sms','{"text":"নতুন"}','scheduled',$3,$3)`,
-        [id, storeId, scheduled],
-      );
-    const start = CampaignSendingRepository.prototype.start;
-    const hook = vi
-      .spyOn(CampaignSendingRepository.prototype, 'start')
-      .mockImplementation(async function (this: CampaignSendingRepository, ...args) {
-        if (args[1] === first || args[1] === second) throw new Error('database unavailable');
-        return start.apply(this, args);
-      });
-    clockNow = sendAt;
-    try {
-      await sender.startDue();
-      expect(await campaignRow(healthy)).toMatchObject({ status: 'scheduled' });
-      await sender.startDue();
-      expect(await campaignRow(healthy)).toMatchObject({ status: 'sending' });
-      expect(await campaignRow(first)).toMatchObject({ status: 'scheduled' });
-      expect(await campaignRow(second)).toMatchObject({ status: 'scheduled' });
-    } finally {
-      hook.mockRestore();
     }
   });
 });

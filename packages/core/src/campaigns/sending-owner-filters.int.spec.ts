@@ -25,52 +25,13 @@ describe('campaign sending filters without RLS assistance', () => {
   });
   afterAll(() => f.close());
 
-  it('lists only the selected store’s campaigns and cannot use a foreign cursor', async () => {
-    const options = { asOf: now, after: null, limit: 2 };
-    expect(await repository.listDueInStore(f.a, options)).toEqual([
-      { storeId: f.a, campaignId: campaignA },
-    ]);
-    expect(await repository.listDueInStore(f.b, options)).toEqual([
-      { storeId: f.b, campaignId: campaignB },
-    ]);
-    expect(await repository.listDueInStore(f.b, { ...options, after: campaignA })).toEqual([]);
-  });
-
-  it('starts only the selected store’s campaigns', async () => {
+  it('starts only the selected store’s due campaigns', async () => {
     const before = await f.row('campaigns', campaignA);
 
-    await repository.start(f.b, campaignA, now);
+    await repository.startDueInStore(f.b, now);
     expect(await f.row('campaigns', campaignA)).toEqual(before);
-    await repository.start(f.a, campaignA, now);
+    expect((await f.row('campaigns', campaignB)).status).toBe('sending');
+    await repository.startDueInStore(f.a, now);
     expect((await f.row('campaigns', campaignA)).status).toBe('sending');
-  });
-
-  it('backfills legacy start times in batches and leaves the other store alone', async () => {
-    const legacy = Array.from({ length: 4 }, () => randomUUID());
-    for (const [storeId, ids] of [
-      [f.a, legacy.slice(0, 3)],
-      [f.b, legacy.slice(3)],
-    ] as const)
-      await f.connection.pool.query(
-        `insert into campaigns(id,store_id,name,channel,content,status,approved_at)
-         select id,$1,'ঈদের অফার','sms','{"text":"ঈদ"}','sending',$2
-         from unnest($3::uuid[]) as id`,
-        [storeId, now, ids],
-      );
-    expect(await repository.backfillStarts(f.a, 2)).toBe(true);
-    const starts = async () => {
-      const { rows } = await f.connection.pool.query<{ id: string; started_at: Date }>(
-        'select id, started_at from campaigns where id=any($1::uuid[]) and started_at is not null',
-        [legacy],
-      );
-      return rows;
-    };
-    expect(await starts()).toHaveLength(2);
-    expect(await repository.backfillStarts(f.a, 2)).toBe(false);
-    expect(await repository.backfillStarts(f.a, 2)).toBe(false);
-    const rows = await starts();
-    expect(rows).toHaveLength(3);
-    expect(rows.map(({ id }) => id).sort()).toEqual(legacy.slice(0, 3).sort());
-    expect(rows.map(({ started_at }) => started_at)).toEqual([now, now, now]);
   });
 });
