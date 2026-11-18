@@ -21,7 +21,7 @@ import {
   automationStatuses,
   automationStepKinds,
 } from '@dakly/contracts/automations';
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import { type AutomationGraph, sendCategories } from '@dakly/contracts/automations/graph';
 import { recipientSkipReasons } from '@dakly/contracts/campaigns';
 
 import { users } from './auth';
@@ -201,6 +201,8 @@ export const automationRunSteps = pgTable(
     kind: text('kind', { enum: automationStepKinds }).notNull(),
     outcome: text('outcome').notNull(),
     channel: text('channel'),
+    // A send step's own category, so the frequency cap counts only marketing sends.
+    category: text('category', { enum: sendCategories }),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),
@@ -235,6 +237,7 @@ export const automationRunSteps = pgTable(
     index('automation_run_steps_contact_id_idx').on(table.contactId),
     index('automation_run_steps_created_at_idx').on(table.createdAt),
     check('automation_run_steps_kind', isOneOf(table.kind, automationStepKinds)),
+    check('automation_run_steps_category', isOneOf(table.category, sendCategories)),
     check('automation_run_steps_skip_reason', isOneOf(table.skipReason, recipientSkipReasons)),
   ],
 );

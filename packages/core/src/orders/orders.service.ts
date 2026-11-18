@@ -1,14 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type {
-  CreateOrderInput,
-  EditOrderInput,
-  OrderDetail,
-  OrderListQuery,
-  OrderListResponse,
-  OrderStage,
-  OrderStageChange,
+import {
+  orderStages,
+  type CreateOrderInput,
+  type EditOrderInput,
+  type OrderDetail,
+  type OrderListQuery,
+  type OrderListResponse,
+  type OrderStage,
+  type OrderStageChange,
 } from '@dakly/contracts/orders';
 import { maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
@@ -31,6 +33,8 @@ import {
   type OrderWrite,
   type StageWrite,
 } from './orders.repository';
+
+const stageSnapshot = z.object({ state: z.enum(orderStages) });
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 type StageEditor = { actor: AuditEntry['actor']; access: Access };
@@ -157,44 +161,51 @@ export class OrdersService {
   }
 
   async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
-    const { items: rows, counts } = await this.repository.list(storeId, query);
+    const rows = await this.repository.list(storeId, query);
     const items = rows.slice(0, query.limit).map((row) => ({
       ...row,
       createdAt: row.createdAt.toISOString(),
     }));
+    const counts = {
+      to_confirm: 0,
+      on_hold: 0,
+      to_pack: 0,
+      with_courier: 0,
+      delivered: 0,
+      partially_delivered: 0,
+      returned: 0,
+      cancelled: 0,
+    };
+    for (const row of await this.repository.countByStage(storeId)) counts[row.stage] = row.count;
     return {
       items,
-      counts: {
-        to_confirm: 0,
-        on_hold: 0,
-        to_pack: 0,
-        with_courier: 0,
-        delivered: 0,
-        partially_delivered: 0,
-        returned: 0,
-        cancelled: 0,
-        ...counts,
-      },
+      counts,
       nextCursor: rows.length > query.limit ? (items.at(-1)?.number ?? null) : null,
     };
   }
 
-  getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
-    return this.transaction.run(storeId, async () => {
-      const order = await this.repository.find(storeId, orderId);
-      if (!order) throw orderError('ORDER_NOT_FOUND');
-      return {
-        ...order,
-        recipientPhone: access.seeFullPhone
-          ? order.recipientPhone
-          : maskPhone(order.recipientPhone),
-        createdAt: order.createdAt.toISOString(),
-        items: (await this.repository.items(storeId, orderId)).map(
-          ({ unitCostPoisha: _unitCost, ...item }) => item,
-        ),
-        timeline: await this.audit.orderStages(storeId, orderId),
-      };
+  async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
+    const order = await this.repository.find(storeId, orderId);
+    if (!order) throw orderError('ORDER_NOT_FOUND');
+    const history = await this.audit.history(storeId, {
+      entityType: 'order',
+      entityId: orderId,
+      action: 'order.stage_changed',
     });
+    return {
+      ...order,
+      recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
+      createdAt: order.createdAt.toISOString(),
+      items: (await this.repository.items(storeId, orderId)).map(
+        ({ unitCostPoisha: _unitCost, ...item }) => item,
+      ),
+      timeline: history.map(({ before, after, createdAt, ...row }) => ({
+        ...row,
+        from: stageSnapshot.parse(before).state,
+        to: stageSnapshot.parse(after).state,
+        occurredAt: createdAt.toISOString(),
+      })),
+    };
   }
 
   changeStage(
@@ -209,7 +220,6 @@ export class OrdersService {
       if (!orderStageTransitions[order.stage].includes(change.to) || isSyncedOrder(order.source))
         throw orderError('ORDER_STAGE_NOT_ALLOWED');
 
-      // Keep the audit timeline in transition order when clocks tie or drift.
       const now = this.clock.now();
       const confirmed = change.to === 'to_pack' && !order.confirmedAt;
       if (change.to === 'cancelled') {
@@ -352,10 +362,9 @@ export class OrdersService {
       action: 'order.stage_changed',
       entityType: 'order',
       entityId: orderId,
-      before: { stage: from },
-      after: { stage: change.to },
+      before: { state: from },
+      after: { state: change.to },
       reason: 'reason' in change ? change.reason : undefined,
-      occurredAt,
     });
     await this.outbox.publish({
       type: 'order.stage_changed',

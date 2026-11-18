@@ -49,7 +49,7 @@ export class ContinueAutomationRunJob implements JobHandler {
   async handle(data: unknown) {
     const { storeId, automationRunId, stepKey, claimedAt } = payload.parse(data);
     const claim = { runId: automationRunId, stepKey, claimedAt: new Date(claimedAt) };
-    const next = await this.runs.continueRun(storeId, claim);
+    const next = await this.runs.continueRun(storeId, claim, { kind: 'system' });
     if (!next) return;
     const job = continueRunJob(storeId, next);
     await this.queue.add(job.name, job.data, job.opts);

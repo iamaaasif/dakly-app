@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
+import type { ContactsService } from '../contacts/contacts.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { SegmentsService } from '../segments/segments.service';
+import type { SendPolicyService } from '../sending/send-policy.service';
+import type { StoresService } from '../stores/stores.service';
 import type {
   AutomationRunsRepository,
   ClaimedRun,
@@ -16,6 +20,7 @@ import { AutomationRunsService } from './automation-runs.service';
 const STORE_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a01';
 const RUN_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a02';
 const CONTACT_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a03';
+const SEGMENT_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a04';
 // Monday 16 November 2026, 11:00 in Dhaka (UTC+6).
 const now = new Date('2026-11-16T05:00:00Z');
 const claimedAt = new Date('2026-11-16T04:59:00Z');
@@ -59,6 +64,8 @@ class FakeRunsRepository {
     return true;
   }
 
+  tappedStepKeys: string[] = [];
+
   async startWork(storeId: string, claim: RunClaim, claimedAt: Date) {
     if (!(await this.moveRun(storeId, claim, { status: 'running', claimedAt }))) return undefined;
     this.run = { ...this.run, attempts: this.run.attempts + 1 };
@@ -68,10 +75,16 @@ class FakeRunsRepository {
   async insertStep(_storeId: string, _runId: string, _contactId: string, step: NewRunStep) {
     this.steps.push(step);
   }
+
+  async listTappedStepKeys() {
+    return this.tappedStepKeys;
+  }
 }
 
 describe('AutomationRunsService', () => {
   let repository: FakeRunsRepository;
+  let tags: string[];
+  let segmentMembers: string[];
   let service: AutomationRunsService;
 
   function start(first: AutomationStep, change: Partial<ClaimedRun> = {}, runId = RUN_ID) {
@@ -89,16 +102,42 @@ describe('AutomationRunsService', () => {
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
-    return service.continueRun(STORE_ID, { runId, stepKey: 'first', claimedAt });
+    return service.continueRun(
+      STORE_ID,
+      { runId, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
   }
 
   beforeEach(() => {
     repository = new FakeRunsRepository();
+    tags = [];
+    segmentMembers = [];
+    const contacts = {
+      findTags: async () => tags,
+      changeTag: async (
+        _storeId: string,
+        _contactId: string,
+        { tag, change }: { tag: string; change: 'add' | 'remove' },
+      ) => {
+        tags = change === 'add' ? [...new Set([...tags, tag])] : tags.filter((t) => t !== tag);
+      },
+    };
+    const segments = {
+      hasContact: async (_storeId: string, segmentId: string, contactId: string) =>
+        segmentId === SEGMENT_ID && segmentMembers.includes(contactId),
+    };
+    const sendPolicy = { check: async () => ({ action: 'send' }) };
+    const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
       { now: () => now } as Clock,
+      contacts as unknown as ContactsService,
+      segments as unknown as SegmentsService,
+      sendPolicy as unknown as SendPolicyService,
+      stores as unknown as StoresService,
     );
   });
 
@@ -109,19 +148,28 @@ describe('AutomationRunsService', () => {
       '2026-11-16T06:00:00.000Z',
     ],
     [{ until: 'window_closing', minutesBefore: 60 }, '2026-11-16T05:00:00.000Z'],
-  ] as const)('waits for %o until %s and moves to the next step', async (until, wakeAt) => {
-    const next = await start({ kind: 'wait', wait: until, next: 'end' });
+    [{ until: 'time_of_day', time: '12:30' }, '2026-11-16T06:30:00.000Z'],
+    [{ until: 'time_of_day', time: '10:00' }, '2026-11-17T04:00:00.000Z'],
+    [{ until: 'time_of_day', time: '11:00' }, '2026-11-16T05:00:00.000Z'],
+    [{ until: 'weekday', weekday: 'wed', time: '09:00' }, '2026-11-18T03:00:00.000Z'],
+    [{ until: 'weekday', weekday: 'mon', time: '10:00' }, '2026-11-23T04:00:00.000Z'],
+    [{ until: 'weekday', weekday: 'mon', time: '20:00' }, '2026-11-16T14:00:00.000Z'],
+  ] as const)(
+    'waits for %o until %s in store time and moves to the next step',
+    async (until, wakeAt) => {
+      const next = await start({ kind: 'wait', wait: until, next: 'end' });
 
-    expect(next).toBeUndefined();
-    expect(repository.run).toMatchObject({
-      status: 'waiting',
-      currentStepKey: 'end',
-      wakeAt: new Date(wakeAt),
-      attempts: 0,
-      lastError: null,
-    });
-    expect(repository.steps).toEqual([{ stepKey: 'first', kind: 'wait', outcome: 'scheduled' }]);
-  });
+      expect(next).toBeUndefined();
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        currentStepKey: 'end',
+        wakeAt: new Date(wakeAt),
+        attempts: 0,
+        lastError: null,
+      });
+      expect(repository.steps).toEqual([{ stepKey: 'first', kind: 'wait', outcome: 'scheduled' }]);
+    },
+  );
 
   it('picks the same random path for the same run and splits many runs by the percentages', async () => {
     const split: AutomationStep = {
@@ -183,15 +231,94 @@ describe('AutomationRunsService', () => {
     });
   });
 
-  it.each([
-    { kind: 'wait', wait: { until: 'time_of_day', time: '10:00' }, next: 'end' },
-    {
+  it('changes nothing for a worker whose claim was taken over', async () => {
+    await start(end);
+    repository.run = { ...repository.run, status: 'running', claimedAt: now };
+    repository.steps = [];
+
+    const next = await service.continueRun(
+      STORE_ID,
+      { runId: RUN_ID, stepKey: 'first', claimedAt },
+      { kind: 'system' },
+    );
+
+    expect(next).toBeUndefined();
+    expect(repository.run).toMatchObject({ status: 'running', claimedAt: now });
+    expect(repository.steps).toEqual([]);
+  });
+  describe('conditions and exits', () => {
+    const condition: AutomationStep = {
       kind: 'condition',
-      paths: [{ condition: { kind: 'placed_order' }, next: 'yes' }],
-      elseNext: 'no',
-    },
-  ] as const)('fails a run on a step it cannot run yet: %o', async (step) => {
-    await start(step);
+      paths: [
+        { condition: { kind: 'in_segment', segmentId: SEGMENT_ID }, next: 'yes' },
+        { condition: { kind: 'has_tag', tag: 'vip' }, next: 'no' },
+      ],
+      elseNext: 'end',
+    };
+    const withGraph = (graph: Partial<AutomationGraph>) => ({
+      graph: { ...graphWith(wait), ...graph },
+    });
+
+    it('takes the first path that holds, then a later one, then Else', async () => {
+      tags = ['vip'];
+      segmentMembers = [CONTACT_ID];
+      expect(await start(condition)).toEqual({ runId: RUN_ID, stepKey: 'yes', claimedAt: now });
+      segmentMembers = [];
+      expect(await start(condition)).toMatchObject({ stepKey: 'no' });
+      tags = [];
+      expect(await start(condition)).toMatchObject({ stepKey: 'end' });
+      expect(repository.steps.map((step) => step.outcome)).toEqual(['path_1', 'path_2', 'else']);
+    });
+
+    it('holds reachable when the gate would send a transactional message on the channel', async () => {
+      const reachable: AutomationStep = {
+        kind: 'condition',
+        paths: [{ condition: { kind: 'reachable', channel: 'sms' }, next: 'yes' }],
+        elseNext: 'end',
+      };
+      expect(await start(reachable)).toMatchObject({ stepKey: 'yes' });
+    });
+
+    it('never holds a reply or an order, which cannot happen yet', async () => {
+      const notYet: AutomationStep = {
+        kind: 'condition',
+        paths: [
+          { condition: { kind: 'replied', stepKey: 'first', buttonKeys: [] }, next: 'yes' },
+          { condition: { kind: 'placed_order' }, next: 'no' },
+        ],
+        elseNext: 'end',
+      };
+      expect(await start(notYet)).toMatchObject({ stepKey: 'end' });
+    });
+
+    it('exits on the goal before an exit condition, then on a failing workflow filter', async () => {
+      tags = ['ordered', 'vip'];
+      const goals = {
+        goal: { kind: 'got_tag', tag: 'ordered' },
+        exitConditions: [{ kind: 'got_tag', tag: 'vip' }],
+      } as const;
+      await start(wait, withGraph({ goal: goals.goal, exitConditions: [...goals.exitConditions] }));
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'goal' });
+
+      await start(wait, withGraph({ exitConditions: [...goals.exitConditions] }));
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'exit_condition' });
+
+      await start(wait, withGraph({ workflowFilters: [{ kind: 'has_tag', tag: 'gold' }] }));
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'workflow_filter' });
+      expect(repository.steps).toEqual([]);
+    });
+  });
+
+  it('fails a run on a send step, which is not built yet', async () => {
+    await start({
+      kind: 'send',
+      category: 'marketing',
+      channels: ['sms'],
+      message: { text: 'নতুন কালেকশন এসেছে', buttons: [] },
+      ifNotReachable: 'skip',
+      reviewBeforeSending: false,
+      next: 'end',
+    });
 
     expect(repository.run).toMatchObject({
       status: 'failed',
@@ -199,19 +326,48 @@ describe('AutomationRunsService', () => {
     });
   });
 
-  it('changes nothing for a worker whose claim was taken over', async () => {
-    await start(end);
-    repository.run = { ...repository.run, status: 'running', claimedAt: now };
-    repository.steps = [];
+  describe('action', () => {
+    const addVip: AutomationStep = {
+      kind: 'action',
+      action: { action: 'add_tag', tag: 'vip' },
+      next: 'end',
+    };
 
-    const next = await service.continueRun(STORE_ID, {
-      runId: RUN_ID,
-      stepKey: 'first',
-      claimedAt,
+    it('adds and removes a tag on the contact with the step', async () => {
+      await start(addVip);
+      expect(tags).toEqual(['vip']);
+      expect(repository.steps).toEqual([{ stepKey: 'first', kind: 'action', outcome: 'done' }]);
+
+      await start({ kind: 'action', action: { action: 'remove_tag', tag: 'vip' }, next: 'end' });
+      expect(tags).toEqual([]);
     });
 
-    expect(next).toBeUndefined();
-    expect(repository.run).toMatchObject({ status: 'running', claimedAt: now });
-    expect(repository.steps).toEqual([]);
+    it('leaves the tags alone for a worker whose claim was taken over meanwhile', async () => {
+      // The stale worker read the run just before another sweep claimed it again.
+      const read = repository.findRun.bind(repository);
+      repository.findRun = async (storeId: string, runId: string) => {
+        const current = await read(storeId, runId);
+        repository.run = { ...repository.run, claimedAt: now };
+        return current && { ...current };
+      };
+
+      await start(addVip);
+
+      expect(tags).toEqual([]);
+      expect(repository.steps).toEqual([]);
+    });
+
+    it('fails the run on an action with no owning service yet', async () => {
+      await start({
+        kind: 'action',
+        action: { action: 'create_task', title: 'ফোন করুন' },
+        next: 'end',
+      });
+
+      expect(repository.run).toMatchObject({
+        status: 'failed',
+        lastError: 'This action is not available yet',
+      });
+    });
   });
 });

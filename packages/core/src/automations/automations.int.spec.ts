@@ -55,7 +55,7 @@ function splitAfter(minutes: number): AutomationGraph {
       wait: { kind: 'wait', wait: { until: 'duration', minutes }, next: 'tapped' },
       tapped: {
         kind: 'condition',
-        paths: [{ condition: { kind: 'tapped', stepKey: 'offer' }, next: 'end' }],
+        paths: [{ condition: { kind: 'replied', stepKey: 'offer', buttonKeys: [] }, next: 'end' }],
         elseNext: 'reminder',
       },
       reminder: smsStep('end'),
@@ -171,7 +171,7 @@ describe('AutomationsService (Postgres)', () => {
       },
       'AUTOMATION_CHANNEL_UNREACHABLE',
     ],
-    ['a split on taps 119 minutes after the send', splitAfter(119), 'AUTOMATION_SPLIT_TOO_SOON'],
+    ['a split on replies 119 minutes after the send', splitAfter(119), 'AUTOMATION_SPLIT_TOO_SOON'],
   ] as const)('refuses to publish %s and writes no version', async (_name, graph, code) => {
     const automation = await draft(graph as AutomationGraph);
 

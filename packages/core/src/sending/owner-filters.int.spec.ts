@@ -42,7 +42,7 @@ describe('sending filters without RLS assistance', () => {
       [runId, storeId, automationId, versionId, contactId],
     );
     await sql.query(
-      "insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,channel,sent_at) values($1,$2,$3,$4,'send','send','sent','sms',$5)",
+      "insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,channel,category,sent_at) values($1,$2,$3,$4,'send','send','sent','sms','marketing',$5)",
       [randomUUID(), storeId, runId, contactId, sentAt],
     );
   }
