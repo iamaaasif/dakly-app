@@ -288,9 +288,9 @@ before removal, and a zone used by orders cannot be deleted.
 
 `POST /delivery-zones/initialize-defaults` sets up an empty store with Inside Dhaka
 at 6,000 poisha, Dhaka suburbs at 10,000 and Outside Dhaka at 12,000. It refuses to
-replace existing zones. The mappings use the seeded Dhaka, Gazipur and Narayanganj
-district ids. Savar needs the upazila reference data from DB-6; no upazila names
-are added here. The three defaults use positions 0, 1 and 2, matching the seed.
+replace existing zones. Dhaka district is Inside Dhaka. Gazipur district,
+Narayanganj district and Savar upazila are in Dhaka suburbs. Savar's mapping takes
+precedence over its parent Dhaka district. The defaults use positions 0, 1 and 2.
 GET routes never initialize or change settings.
 
 This task adds the backend only. There is no delivery-settings image in the
