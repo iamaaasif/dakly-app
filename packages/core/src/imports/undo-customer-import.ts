@@ -12,7 +12,7 @@ import { type Import, ImportsRepository } from './imports.repository';
 
 type Actor = AuditEntry['actor'];
 const UNDO_MILLISECONDS = 7 * 24 * 60 * 60 * 1000;
-const BATCH_ROWS = 500;
+const BATCH_ROWS = ConsentService.AUDIENCE_LIMIT;
 
 @Injectable()
 export class UndoCustomerImport {

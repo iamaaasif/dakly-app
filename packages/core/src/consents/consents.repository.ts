@@ -58,7 +58,12 @@ export class ConsentsRepository {
     );
   }
 
-  listImportGrants(storeId: string, importId: string, after?: string): Promise<Consent[]> {
+  listImportGrants(
+    storeId: string,
+    importId: string,
+    after: string | undefined,
+    limit: number,
+  ): Promise<Consent[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select(consentColumns)
@@ -73,7 +78,7 @@ export class ConsentsRepository {
           ),
         )
         .orderBy(consents.id)
-        .limit(500),
+        .limit(limit),
     );
   }
 

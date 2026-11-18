@@ -64,10 +64,10 @@ describe('consent filters without RLS assistance', () => {
       source: 'import',
       capturedAt: new Date('2026-11-18T00:00:00Z'),
     });
-    expect(await repository.listImportGrants(f.b, importId)).toEqual([]);
+    expect(await repository.listImportGrants(f.b, importId, undefined, 10)).toEqual([]);
     expect(await repository.listUnchangedGrants(f.b, [grant.id])).toEqual([]);
-    expect(await repository.listImportGrants(f.a, importId)).toEqual([grant]);
-    expect(await repository.listImportGrants(f.a, importId, grant.id)).toEqual([]);
+    expect(await repository.listImportGrants(f.a, importId, undefined, 10)).toEqual([grant]);
+    expect(await repository.listImportGrants(f.a, importId, grant.id, 10)).toEqual([]);
     expect(await repository.listUnchangedGrants(f.a, [grant.id])).toEqual([grant]);
     await repository.insert(f.a, {
       ...answer,
@@ -101,5 +101,17 @@ describe('consent filters without RLS assistance', () => {
     await expect(
       repository.insert(f.b, { ...answer, contactId: contactB, importId }),
     ).rejects.toThrow();
+    const second = await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      importId,
+      channel: 'whatsapp',
+      source: 'import',
+    });
+    const grants = [grant, second].sort((a, b) => a.id.localeCompare(b.id));
+    expect(await repository.listImportGrants(f.a, importId, undefined, 1)).toEqual([grants[0]]);
+    expect(await repository.listImportGrants(f.a, importId, grants[0]!.id, 1)).toEqual([grants[1]]);
+    expect(await repository.listImportGrants(f.a, importId, grants[1]!.id, 1)).toEqual([]);
+    expect(await repository.listImportGrants(f.b, importId, undefined, 1)).toEqual([]);
   });
 });

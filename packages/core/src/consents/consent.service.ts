@@ -129,8 +129,9 @@ export class ConsentService {
     after: string | undefined,
     actor: AuditEntry['actor'],
   ): Promise<{ after?: string; complete: boolean }> {
+    const limit = ConsentService.AUDIENCE_LIMIT;
     return this.transaction.run(storeId, async () => {
-      const grants = await this.repository.listImportGrants(storeId, importId, after);
+      const grants = await this.repository.listImportGrants(storeId, importId, after, limit);
       if (grants.length === 0) return { after, complete: true };
       await this.contacts.lockConsentHistory(storeId, [
         ...new Set(grants.map((row) => row.contactId)),
@@ -153,7 +154,7 @@ export class ConsentService {
         })),
       );
       await this.outbox.publishAll(restored.map((row) => consentChangedEvent(storeId, row)));
-      return { after: grants.at(-1)!.id, complete: grants.length < MAX_AUDIENCE_CONSENT_CONTACTS };
+      return { after: grants.at(-1)!.id, complete: grants.length < limit };
     });
   }
 
