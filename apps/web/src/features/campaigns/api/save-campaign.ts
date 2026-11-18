@@ -36,7 +36,8 @@ export function useSaveCampaign() {
         await client.cancelQueries({ queryKey, exact: true });
         client.setQueryData(queryKey, null);
       }
-      if (error.code === 'CAMPAIGN_NOT_DRAFT') await client.resetQueries({ queryKey, exact: true });
+      if (error.code === 'CAMPAIGN_NOT_DRAFT' && getCachedCampaign(change.id)?.status === 'draft')
+        await client.resetQueries({ queryKey, exact: true });
     },
     onSuccess: async (saved, change, snapshot) => {
       const detail = campaignKeys.detail(contextTag, saved.id);

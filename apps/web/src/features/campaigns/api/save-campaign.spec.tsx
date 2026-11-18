@@ -139,3 +139,29 @@ it.each([true, false])(
     }
   },
 );
+
+it.each([
+  ['sent summary', { ...saved, status: 'sent' }],
+  ['deletion', null],
+] as const)('keeps the confirmed %s when a save conflict arrives late', async (_, terminal) => {
+  const { client, queryKey, result } = setup();
+  let releaseConflict!: (response: Response) => void;
+  const conflict = new Promise<Response>((resolve) => (releaseConflict = resolve));
+  const fetch = vi.fn(() => conflict);
+  vi.stubGlobal('fetch', fetch);
+  await act(async () => {
+    const pending = result.current
+      .mutateAsync({ id, input: { name: saved.name } })
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await client.fetchQuery({ queryKey, queryFn: async () => terminal });
+    releaseConflict(
+      Response.json(
+        { error: { code: 'CAMPAIGN_NOT_DRAFT', message: 'This campaign is no longer a draft' } },
+        { status: 409 },
+      ),
+    );
+    expect(await pending).toMatchObject({ code: 'CAMPAIGN_NOT_DRAFT' });
+  });
+  expect(client.getQueryData(queryKey)).toEqual(terminal);
+});
