@@ -847,6 +847,33 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
     });
 
+    it.each(['transactional', 'marketing'] as const)(
+      'advances an expired %s SMS even when sender preparation is unavailable',
+      async (category) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          runIds: [runId],
+        } = await dueRuns(send(category), 1, 'active', contact);
+        await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+          runId,
+          new Date(daytime.getTime() - 25 * HOUR),
+        ]);
+        const hook = vi
+          .spyOn(SmsSendersService.prototype, 'approvedSenderName')
+          .mockRejectedValueOnce(new Error('database unavailable'));
+        try {
+          await runDueStep(runner, runId!);
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'late' })]);
+          expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'end' });
+        } finally {
+          hook.mockRestore();
+        }
+      },
+    );
+
     it('keeps the late fallback for a legacy non-SMS step under the live guard', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);

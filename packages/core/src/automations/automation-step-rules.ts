@@ -5,6 +5,7 @@ import type { AutomationStep, AutomationGraph } from '@dakly/contracts/automatio
 
 import type { TagChange } from '../contacts/contacts.service';
 import type { PreparedSmsSender } from '../messaging/messaging.service';
+import { DAY_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
@@ -170,4 +171,17 @@ export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
   if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
   return false;
+}
+
+export function isLateSend(wakeAt: Date | null, now: Date): boolean {
+  return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
+}
+
+export function shouldPrepareSender(step: AutomationStep, wakeAt: Date | null, now: Date): boolean {
+  return (
+    step.kind === 'send' &&
+    step.channels.includes('sms') &&
+    !step.reviewBeforeSending &&
+    !isLateSend(wakeAt, now)
+  );
 }

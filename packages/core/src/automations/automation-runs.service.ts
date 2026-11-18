@@ -12,7 +12,6 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
@@ -35,11 +34,13 @@ import {
   holdOrEnd,
   holdsClaim,
   ifNotReachable,
+  isLateSend,
   messageBody,
   noCredits,
   operationKey,
   randomPath,
   runAction,
+  shouldPrepareSender,
   type RunFacts,
   type SendStep,
   type StepResult,
@@ -135,7 +136,7 @@ export class AutomationRunsService {
     };
     const exitReason = await this.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
-    if (step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending)
+    if (shouldPrepareSender(step, facts.wakeAt, now))
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
   }
@@ -261,8 +262,7 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      if (facts.wakeAt && this.clock.now().getTime() - facts.wakeAt.getTime() > DAY_MS)
-        return { outcome: 'late' };
+      if (isLateSend(facts.wakeAt, this.clock.now())) return { outcome: 'late' };
       const result = await this.gateSend(renewed, step, facts);
       const claimedAt = this.clock.now();
       // The live move holds this run row; renew after the gate's other locks and writes.
@@ -325,7 +325,7 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (facts.wakeAt && at.getTime() - facts.wakeAt.getTime() > DAY_MS) return { outcome: 'late' };
+    if (isLateSend(facts.wakeAt, at)) return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
     const body = await this.writeSend({ storeId, claim, contactId, step }, at);
     if (body === undefined) return { decision: noCredits };
