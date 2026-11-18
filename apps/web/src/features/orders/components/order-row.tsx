@@ -31,7 +31,10 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
       </span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link href={href} className="font-semibold wrap-anywhere hover:underline">
+          <Link
+            href={href}
+            className="inline-flex min-h-10 max-w-full min-w-10 items-center font-semibold wrap-anywhere hover:underline"
+          >
             {order.recipientName}
           </Link>
           <OrderRiskBadge risk={order.returnRisk} />

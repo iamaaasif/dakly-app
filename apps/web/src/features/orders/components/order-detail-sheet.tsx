@@ -1,12 +1,12 @@
 import { QueryError } from '@dakly/ui/query-error';
-import { Sheet } from '@dakly/ui/sheet';
+import { Sheet, type SheetProps } from '@dakly/ui/sheet';
 
-import { useOrder } from '../api/orders';
+import { useOrder } from '../api/get-order';
 import { OrderDetails } from './order-details';
 
-type OrderDetailSheetProps = { id: string; onClose: () => void };
+type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'fallbackFocus'>;
 
-export function OrderDetailSheet({ id, onClose }: OrderDetailSheetProps) {
+export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailSheetProps) {
   const query = useOrder(id);
 
   return (
@@ -14,6 +14,7 @@ export function OrderDetailSheet({ id, onClose }: OrderDetailSheetProps) {
       title={query.data ? `Order #${query.data.number}` : 'Order details'}
       open
       onClose={onClose}
+      fallbackFocus={fallbackFocus}
     >
       {query.isPending ? <p role="status">Loading order…</p> : null}
       {query.error ? (

@@ -10,18 +10,26 @@ export function OrderItems({ order }: { order: OrderDetail }) {
     <section aria-label="Items">
       <h3 className="text-md font-semibold">Items</h3>
       <ul className="divide-y divide-border">
-        {order.items.map((item) => (
-          <li key={item.id} className="flex justify-between gap-4 py-2 text-sm">
-            <span className="min-w-0 wrap-anywhere">
-              {item.productName}
-              {item.variantTitle === 'Default' ? '' : ` · ${item.variantTitle}`}
-              {item.deliveredQuantity === null
-                ? ` × ${item.quantity}`
-                : ` · ${item.deliveredQuantity} of ${item.quantity} delivered`}
-            </span>
-            <span className="shrink-0 tabular-nums">{formatMoney(item.unitPricePoisha)} each</span>
-          </li>
-        ))}
+        {order.items.map((item) => {
+          const lineDiscount = item.deliveredLineDiscountPoisha ?? item.lineDiscountPoisha;
+          return (
+            <li key={item.id} className="flex justify-between gap-4 py-2 text-sm">
+              <span className="min-w-0 wrap-anywhere">
+                {item.productName}
+                {item.variantTitle === 'Default' ? '' : ` · ${item.variantTitle}`}
+                {item.deliveredQuantity === null
+                  ? ` × ${item.quantity}`
+                  : ` · ${item.deliveredQuantity} of ${item.quantity} delivered`}
+              </span>
+              <div className="shrink-0 text-right tabular-nums">
+                <span>{formatMoney(item.unitPricePoisha)} each</span>
+                {lineDiscount > 0 && (
+                  <p className="text-text-muted">Line discount {formatMoney(-lineDiscount)}</p>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
       <dl className="space-y-2 border-t border-border pt-3 text-sm tabular-nums">
         {order.deliveredItemsSubtotalPoisha !== null && (
