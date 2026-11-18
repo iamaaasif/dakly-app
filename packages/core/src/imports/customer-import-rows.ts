@@ -155,19 +155,32 @@ function plainCell(text: string, start: number) {
 }
 
 function quotedCell(text: string, start: number) {
-  let cell = '';
   let from = start + 1;
+  let escaped = 0;
   for (;;) {
     const quote = text.indexOf('"', from);
     if (quote === -1) throw importError('IMPORT_FILE_UNREADABLE');
-    cell += text.slice(from, quote);
     if (text[quote + 1] !== '"') {
       const end = quote + 1;
       if (end < text.length && !',\r\n'.includes(text[end]!))
         throw importError('IMPORT_FILE_UNREADABLE');
-      return { cell, end };
+      return { cell: decodeQuotedCell(text, start + 1, quote, escaped), end };
     }
-    cell += '"';
+    escaped += 1;
     from = quote + 2;
   }
+}
+
+// String concatenation and replacement allocate per escape on Node 22; one buffer bounds memory.
+function decodeQuotedCell(text: string, start: number, end: number, escaped: number): string {
+  if (escaped === 0) return text.slice(start, end);
+  const bytes = Buffer.allocUnsafe((end - start - escaped) * 2);
+  let offset = 0;
+  for (let index = start; index < end; index += 1) {
+    const value = text.charCodeAt(index);
+    bytes.writeUInt16LE(value, offset);
+    offset += 2;
+    if (value === 34) index += 1;
+  }
+  return bytes.toString('utf16le');
 }
