@@ -1,6 +1,6 @@
 {
-  "id": "96f90897-fa86-4e09-8609-c0829b94e9e1",
-  "prevId": "74b04ef6-020b-47b8-9158-b136a2022ff5",
+  "id": "ed6ad400-81c4-42f1-bdcc-96f4768a3084",
+  "prevId": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5212,24 +5212,6 @@
           "notNull": true,
           "default": "'draft'"
         },
-        "pause_reason": {
-          "name": "pause_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "balance_paused_at": {
-          "name": "balance_paused_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "balance_resumed_at": {
-          "name": "balance_resumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_transactional": {
           "name": "is_transactional",
           "type": "boolean",
@@ -5420,14 +5402,6 @@
         "automations_status": {
           "name": "automations_status",
           "value": "\"automations\".\"status\" in ('draft', 'active', 'paused', 'archived')"
-        },
-        "automations_pause_reason": {
-          "name": "automations_pause_reason",
-          "value": "\"automations\".\"pause_reason\" in ('manual', 'balance')"
-        },
-        "automations_paused_has_reason": {
-          "name": "automations_paused_has_reason",
-          "value": "(\"automations\".\"status\" = 'paused') = (\"automations\".\"pause_reason\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -7603,6 +7577,34 @@
           "columns": [
             {
               "expression": "scheduled_for",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"campaigns\".\"status\" = 'scheduled'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_start_due_by_store_idx": {
+          "name": "campaigns_start_due_by_store_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "scheduled_for",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -11,6 +11,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
@@ -25,6 +26,7 @@ describe('ProductsService stock ledger', () => {
   const repository = new ProductsRepository(tenant);
   const service = new ProductsService(
     repository,
+    new ProductOrderVariantsRepository(tenant),
     transaction,
     new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => now },
@@ -155,17 +157,30 @@ describe('ProductsService stock ledger', () => {
 
   it('publishes a restock only when availability crosses zero and keeps events with the movement', async () => {
     const id = await variant(0);
+    const outbox = () =>
+      f.connection.pool.query<{ id: string; type: string; payload: unknown }>(
+        "select id,type,payload from outbox_events where store_id=$1 and payload->>'variantId'=$2",
+        [f.a, id],
+      );
+
     await service.moveStock(f.a, id, { kind: 'adjust', quantity: 2, reference });
-    await service.moveStock(f.a, id, { kind: 'adjust', quantity: 1, reference });
-    const events = await f.connection.pool.query(
-      "select type,payload from outbox_events where store_id=$1 and payload->>'variantId'=$2 order by id",
-      [f.a, id],
-    );
-    expect(events.rows).toEqual([
+    const { rows: first } = await outbox();
+    expect(
+      first
+        .map(({ type, payload }) => ({ type, payload }))
+        .sort((a, b) => a.type.localeCompare(b.type)),
+    ).toEqual([
       { type: 'stock.changed', payload: { variantId: id, kind: 'adjust' } },
       { type: 'variant.restocked', payload: { variantId: id } },
-      { type: 'stock.changed', payload: { variantId: id, kind: 'adjust' } },
     ]);
+
+    const seen = new Set(first.map((event) => event.id));
+    await service.moveStock(f.a, id, { kind: 'adjust', quantity: 1, reference });
+    const { rows: after } = await outbox();
+    expect(after).toHaveLength(first.length + 1);
+    expect(
+      after.filter((event) => !seen.has(event.id)).map(({ type, payload }) => ({ type, payload })),
+    ).toEqual([{ type: 'stock.changed', payload: { variantId: id, kind: 'adjust' } }]);
   });
 
   it('hides foreign variants and preserves their stock', async () => {

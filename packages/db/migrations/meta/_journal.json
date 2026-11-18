@@ -292,22 +292,22 @@
     {
       "idx": 41,
       "version": "7",
-      "when": 1795015726719,
-      "tag": "0041_automation_send_costs",
+      "when": 1795022668605,
+      "tag": "0041_campaign_sender",
       "breakpoints": true
     },
     {
       "idx": 42,
       "version": "7",
-      "when": 1795016361179,
-      "tag": "0042_automation_send_retries",
+      "when": 1795024484066,
+      "tag": "0042_automation_send_costs",
       "breakpoints": true
     },
     {
       "idx": 43,
       "version": "7",
-      "when": 1795017876625,
-      "tag": "0043_automation_balance_pause",
+      "when": 1795024576798,
+      "tag": "0043_automation_send_retries",
       "breakpoints": true
     }
   ]

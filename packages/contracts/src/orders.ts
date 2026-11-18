@@ -68,16 +68,30 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderTabs = [
+  'to_confirm',
+  'to_pack',
+  'with_courier',
+  'delivered',
+  'returned',
+] as const;
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
+const searchText = z.string().trim().min(1).max(120);
+
 export const orderListQuerySchema = z.strictObject({
   stage: z.enum(orderStages).optional(),
+  alert: z.enum(['waiting', 'risk', 'cod']).optional(),
+  search: searchText.refine((text) => !text.includes('\0')).optional(),
   cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
   limit: z.coerce.number<string>().int().min(1).max(100).default(50),
 });
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
+export const orderScreenQuerySchema = orderListQuerySchema.extend({
+  selected: z.uuid().optional(),
+});
 
 export type OrderSummary = {
   id: string;
@@ -90,14 +104,30 @@ export type OrderSummary = {
   itemsSubtotalPoisha: number;
   orderDiscountPoisha: number;
   deliveryChargePoisha: number;
+  totalPoisha: number;
   advancePaidPoisha: number;
   codAmountPoisha: number;
+  codCollectedPoisha: number | null;
+  deliveredItemsSubtotalPoisha: number | null;
+  deliveredOrderDiscountPoisha: number | null;
   createdAt: string;
   returnRisk: OrderReturnRisk;
 };
 
+export type OrderListItem = OrderSummary & {
+  itemPreview: string | null;
+  isWaitingForConfirmation: boolean;
+};
+export type OrderAlerts = {
+  waiting: number;
+  highRisk: number;
+  codAwaitingOrders: number;
+  codAwaitingPoisha: string;
+};
+
 export type OrderListResponse = {
-  items: OrderSummary[];
+  items: OrderListItem[];
+  alerts: OrderAlerts;
   counts: Record<OrderStage, number>;
   nextCursor: number | null;
 };
@@ -146,9 +176,6 @@ export type OrderDetail = OrderSummary & {
   returnedAt: string | null;
   returnReason: string | null;
   codCollectedAt: string | null;
-  codCollectedPoisha: number | null;
-  deliveredItemsSubtotalPoisha: number | null;
-  deliveredOrderDiscountPoisha: number | null;
   possibleDuplicateOfOrderId: string | null;
   items: OrderItem[];
   timeline: OrderStageHistoryEntry[];

@@ -259,6 +259,7 @@ export class CampaignsService {
       status,
       approvedByUserId: actor.kind === 'user' ? actor.userId : null,
       approvedAt: now,
+      startedAt: status === 'sending' ? now : null,
       updatedAt: now,
       estimatedCostPoisha: estimate.costPoisha,
       recipientsCount: estimate.recipientsCount,

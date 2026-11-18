@@ -1,6 +1,6 @@
 {
-  "id": "74b04ef6-020b-47b8-9158-b136a2022ff5",
-  "prevId": "eb4c25b2-02ef-4bb3-b7fd-920f0e7ce739",
+  "id": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
+  "prevId": "127c6853-fb60-4231-8c32-aeb59b57c292",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4343,24 +4343,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "opt_out_code": {
-          "name": "opt_out_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "destination": {
-          "name": "destination",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_tried_at": {
-          "name": "first_tried_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "skip_reason": {
           "name": "skip_reason",
           "type": "text",
@@ -7577,6 +7559,34 @@
           "columns": [
             {
               "expression": "scheduled_for",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"campaigns\".\"status\" = 'scheduled'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_start_due_by_store_idx": {
+          "name": "campaigns_start_due_by_store_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "scheduled_for",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -40,7 +40,7 @@ describe('KnowledgeRepository owner filters', () => {
       status: 'pending',
     });
   });
-  it('refuses cross-store index writes before row security', async () => {
+  it('refuses cross-store index writes and filters search before row security', async () => {
     const item = await repository.create(
       fixture.a,
       fixture.userA,
@@ -62,5 +62,10 @@ describe('KnowledgeRepository owner filters', () => {
     await expect(
       repository.finishIndex(fixture.a, item.id, item.updatedAt, { chunks }),
     ).resolves.toBe(true);
+    const query = { query: 'ঢাকা', embedding, model: 'test-model', limit: 10 };
+    await expect(repository.search(fixture.b, query)).resolves.toEqual([]);
+    await expect(repository.search(fixture.a, query)).resolves.toEqual([
+      { itemId: item.id, content: 'ঢাকা ডেলিভারি' },
+    ]);
   });
 });

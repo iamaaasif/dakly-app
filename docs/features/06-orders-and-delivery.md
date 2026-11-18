@@ -239,7 +239,9 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 ![Orders](../design/screenshots/orders.webp)
 
-Pipeline by stage with counts and return risk badges. The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
+Pipeline by stage with counts and return risk badges. To confirm includes On hold, and Delivered includes Partly delivered. Each combined tab counts both stages. Cards show the order age and use the total supplied by the API.
+The pipeline URL keeps the stage, search, page cursor and selected order. Search uses the buyer or recipient name, order number or exact recipient phone for staff who can see full phones. The alert strip links to orders waiting over 12 hours, high-risk unconfirmed orders with no advance, and unpaid COD on delivered parcels. Counts cover the store. The out-of-stock alert waits for the staff oversell rule, since orders currently cannot reserve stock they do not have. The list shows up to two item lines. The order detail shows the recipient, buyer, each item and its line discount, amounts received, and the stage timeline. The detail header shows where the order came from and how long ago it was placed. Staff with Orders edit access can use Mark confirmed at the foot of the drawer for staff-managed orders in To confirm or On hold. Open high-risk orders with no advance include a prompt to ask for one.
+The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
 ### How it works
 
@@ -258,6 +260,8 @@ An order has two state fields: `stage` for fulfilment and `paymentStatus` for mo
 `paymentStatus`: `cod_pending`, `advance_requested`, `advance_paid`, `paid`, `cod_collected`, `refund_due`, `refunded`.
 
 The transition table is data in `orders/order-stage.ts`. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
+
+Product archive uses the same variant locks as order creation and edits. It returns `PRODUCT_HAS_OPEN_ORDERS` if any variant is on an order in To confirm, On hold or To pack.
 
 The order list uses an order-number cursor and returns counts for all stages. The detail includes the recipient snapshot, items, and stage history. Staff without the full-phone permission see a masked recipient number.
 
