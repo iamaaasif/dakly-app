@@ -650,6 +650,17 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(started).toMatchObject({ outcome: 'sending', opt_out_url: expect.any(String) });
 
       expect(started.opt_out_url).toContain(`${firstLinkBase}/s/`);
+      const { rows: retryInputs } = await admin.pool.query(
+        "select destination,opt_out_url,first_tried_at from automation_run_steps where run_id=$1 and kind='send'",
+        [runId],
+      );
+      expect(retryInputs).toEqual([
+        {
+          destination: sentFor(runId!)[0]?.to,
+          opt_out_url: started.opt_out_url,
+          first_tried_at: daytime,
+        },
+      ]);
       const code = new URL(started.opt_out_url).pathname.split('/').at(-1);
 
       vi.stubEnv('SHORT_LINK_BASE_URL', 'https://a-longer-sms-short-link-base.example.test/l');
