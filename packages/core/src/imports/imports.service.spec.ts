@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ImportConsentEvidence } from '@dakly/contracts/contacts';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
