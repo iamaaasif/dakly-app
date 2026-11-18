@@ -1,5 +1,5 @@
 {
-  "id": "89ccd482-5021-48c9-8eb1-9274e9448442",
+  "id": "e06b544c-6888-4241-85f8-159d8fd4386a",
   "prevId": "c43e2444-2f99-4b73-9685-659e036f26a5",
   "version": "7",
   "dialect": "postgresql",
@@ -4940,6 +4940,10 @@
         "automation_runs_status": {
           "name": "automation_runs_status",
           "value": "\"automation_runs\".\"status\" in ('waiting', 'running', 'done', 'exited', 'failed')"
+        },
+        "automation_runs_exit_reason": {
+          "name": "automation_runs_exit_reason",
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
