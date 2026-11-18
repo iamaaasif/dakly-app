@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, lt } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -12,6 +12,7 @@ import type {
 } from '@dakly/contracts/campaigns';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
+import { escapeLike } from '../platform/database/escape-like';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Campaign = {
@@ -91,6 +92,13 @@ export class CampaignsRepository {
           and(
             eq(campaigns.storeId, storeId),
             query.cursor ? lt(campaigns.id, query.cursor) : undefined,
+            query.search ? ilike(campaigns.name, `%${escapeLike(query.search)}%`) : undefined,
+            query.status ? eq(campaigns.status, query.status) : undefined,
+            query.channel ? eq(campaigns.channel, query.channel) : undefined,
+            query.createdFrom ? gte(campaigns.createdAt, new Date(query.createdFrom)) : undefined,
+            query.createdBefore
+              ? lt(campaigns.createdAt, new Date(query.createdBefore))
+              : undefined,
           ),
         )
         .orderBy(desc(campaigns.id))

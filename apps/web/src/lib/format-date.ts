@@ -81,3 +81,20 @@ function calendarDate(instant: number, timeZone: string) {
   date.setUTCFullYear(year, month - 1, day);
   return { year, day: date.getTime() / DAY_MS };
 }
+
+// Store dates use Dhaka until a store time-zone setting is available.
+export function dhakaDateField(value: string, previousDay = false): string {
+  const instant = parseInstant(value) - (previousDay ? DAY_MS : 0);
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
+export function dhakaDateBoundary(value: string, nextDay = false): string | undefined {
+  if (!value) return undefined;
+  const instant = parseInstant(`${value}T00:00:00+06:00`);
+  return new Date(instant + (nextDay ? DAY_MS : 0)).toISOString();
+}

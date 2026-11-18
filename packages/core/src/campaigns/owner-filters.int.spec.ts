@@ -29,6 +29,13 @@ describe('campaign filters without RLS assistance', () => {
     expect((await f.row('campaigns', b.id)).store_id).toBe(f.b);
     expect(await repository.find(f.b, a.id)).toBeUndefined();
     expect((await repository.list(f.b, page)).map((campaign) => campaign.id)).toEqual([b.id]);
+    const filtered = await repository.list(f.b, {
+      ...page,
+      search: 'ঈদ',
+      status: 'draft',
+      channel: 'sms',
+    });
+    expect(filtered.map(({ id }) => id)).toEqual([b.id]);
 
     const now = new Date('2026-11-16T05:00:00Z');
     expect(

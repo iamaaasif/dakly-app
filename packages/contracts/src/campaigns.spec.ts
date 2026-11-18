@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { changeCampaignSchema, createCampaignSchema } from './campaigns';
+import { campaignListQuerySchema, changeCampaignSchema, createCampaignSchema } from './campaigns';
 
 describe('campaign draft schemas', () => {
   it('accepts only SMS until Messenger content arrives', () => {
@@ -21,5 +21,37 @@ describe('campaign draft schemas', () => {
   it('refuses the same segment twice', () => {
     const id = '0195f8a2-5b1e-7c3d-9e4f-1a2b3c4d5e6f';
     expect(changeCampaignSchema.safeParse({ includeSegmentIds: [id, id] }).success).toBe(false);
+  });
+});
+
+describe('campaign list query', () => {
+  it('accepts bounded filters with the default page size', () => {
+    expect(
+      campaignListQuerySchema.parse({
+        search: ' ঈদের অফার ',
+        status: 'scheduled',
+        channel: 'sms',
+        createdFrom: '2026-11-01T00:00:00.000Z',
+        createdBefore: '2026-12-01T00:00:00.000Z',
+      }),
+    ).toEqual({
+      search: 'ঈদের অফার',
+      status: 'scheduled',
+      channel: 'sms',
+      createdFrom: '2026-11-01T00:00:00.000Z',
+      createdBefore: '2026-12-01T00:00:00.000Z',
+      limit: 50,
+    });
+  });
+
+  it.each([
+    { search: ' '.repeat(3) },
+    { search: 'x'.repeat(101) },
+    { status: 'unknown' },
+    { channel: 'email' },
+    { createdBefore: '2026-02-30T00:00:00.000Z' },
+    { createdFrom: '2026-11-20T00:00:00.000Z', createdBefore: '2026-11-19T00:00:00.000Z' },
+  ])('rejects an invalid filter %o', (query) => {
+    expect(campaignListQuerySchema.safeParse(query).success).toBe(false);
   });
 });

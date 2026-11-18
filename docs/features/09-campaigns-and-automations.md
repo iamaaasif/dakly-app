@@ -246,7 +246,9 @@ The campaign builder and the visual workflow editor are the strongest screens in
 
 Owner decision (18 Nov 2026): build the campaign list and builder from `campaigns.webp` and `campaigns-and-automations/` first. Draft rows open the builder; sent rows open a read-only summary in the builder until results exist. Build results after ORD-3 from the screen table above and this section, with no separate design. CAMP-4 stays In progress after the list and builder merge.
 
-The first builder slice opens an SMS draft, saves its name and goal, and shows a read-only summary for a sent campaign. It sends only changed fields, resets the form to the saved values on success, and shows a server error if a save is refused. After creating a draft, the form stays locked while the builder opens. The campaign list links these screens in the next slice. Content, audience, scheduling and approval controls follow separately.
+The first builder slice opens an SMS draft, saves its name and goal, and shows a read-only summary for a sent campaign. It sends only changed fields, resets the form to the saved values on success, and shows a server error if a save is refused. After creating a draft, the form stays locked while the builder opens. Content, audience, scheduling and approval controls follow separately.
+
+The campaign list opens the builder for drafts and the read-only summary for sent campaigns. It filters by name, status, channel and creation date in Dhaka time, and shows campaigns newest first. The name row shows the saved channel and goal. Create campaign is available to members who can edit campaigns in the selected shop.
 
 **Why it's needed.** Clicking a campaign in the Campaigns list does nothing. Shop owners send a campaign and then want to know if it worked and who bought. The Dashboard, Analytics and notifications ("Kurti campaign earned ৳1,86,900 · Send it again") all point to a page that doesn't exist.
 

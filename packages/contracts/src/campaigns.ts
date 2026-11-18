@@ -130,10 +130,21 @@ export const changeCampaignSchema = z
     (input) => Object.values(input).some((value) => value !== undefined),
     'Nothing to change',
   );
-export const campaignListQuerySchema = z.strictObject({
-  cursor: z.uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-});
+export const campaignListQuerySchema = z
+  .strictObject({
+    cursor: z.uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    search: z.string().trim().min(1).max(100).optional(),
+    status: z.enum(campaignStatuses).optional(),
+    channel: z.enum(campaignChannels).optional(),
+    createdFrom: z.iso.datetime().optional(),
+    createdBefore: z.iso.datetime().optional(),
+  })
+  .refine(
+    ({ createdFrom, createdBefore }) =>
+      !createdFrom || !createdBefore || Date.parse(createdFrom) < Date.parse(createdBefore),
+    { path: ['createdBefore'], message: 'End must be after start' },
+  );
 
 export type CampaignChannel = (typeof campaignChannels)[number];
 export type CampaignGoal = (typeof campaignGoals)[number];

@@ -1,7 +1,8 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { MessageSquare } from 'lucide-react';
+import { ArrowLeft, MessageSquare } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
@@ -48,7 +49,14 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
 
 function BuilderHeader({ title, editable }: { title: string; editable: boolean }) {
   return (
-    <header className="min-w-0">
+    <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3">
+      <Link
+        href="/campaigns"
+        aria-label="Back to campaigns"
+        className="row-span-2 inline-flex size-10 items-center justify-center rounded-md text-action hover:bg-primary-soft"
+      >
+        <ArrowLeft aria-hidden="true" size={20} strokeWidth={1.75} />
+      </Link>
       <h1 className="text-xl font-bold break-words">{title}</h1>
       <p className="mt-1 text-text-muted">
         {editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
