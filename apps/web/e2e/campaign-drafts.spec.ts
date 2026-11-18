@@ -63,7 +63,13 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.goto('/campaigns/new');
     await expect(page.getByRole('heading', { name: 'New campaign' })).toBeVisible();
     await capture(page, 'new');
+    const name = page.getByLabel('Campaign name');
+    await name.fill('   ');
+    await page.getByRole('button', { name: 'Create SMS draft' }).click();
+    await expect(name).toHaveAttribute('aria-invalid', 'true');
+    await expect(name).toHaveAccessibleDescription('Enter a campaign name.');
     await page.getByLabel('Campaign name').fill('New Kurti collection');
+    await expect(name).toHaveAttribute('aria-invalid', 'false');
     await page.getByLabel('Goal').selectOption('new_collection');
     const response = page.waitForResponse(
       (result) =>
@@ -81,8 +87,20 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.getByLabel('Campaign name').fill('Winter Kurti collection');
     await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+    await page.getByLabel('Goal').selectOption('from_scratch');
+    await expect(page.getByText('Draft saved.', { exact: true })).toHaveCount(0);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
+    await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
+    const longName = 'W'.repeat(100);
+    await name.fill(longName);
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByRole('heading', { name: longName })).toBeVisible();
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();

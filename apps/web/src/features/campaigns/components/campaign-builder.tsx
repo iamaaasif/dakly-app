@@ -1,8 +1,10 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
+import type { z } from 'zod';
 
 import {
   campaignGoals,
@@ -12,6 +14,7 @@ import {
 } from '@dakly/contracts/campaigns';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
+import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
 import { useSaveCampaign } from '../api/save-campaign';
@@ -22,6 +25,10 @@ import {
 } from '../campaign-labels';
 import { formatDateTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
+
+const detailsSchema = createCampaignSchema.pick({ name: true, goal: true });
+type DetailsInput = z.input<typeof detailsSchema>;
+type Details = z.output<typeof detailsSchema>;
 
 const goals: Record<CampaignGoal, string> = {
   win_back: 'Win back customers',
@@ -55,7 +62,7 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
 function BuilderHeader({ title, editable }: { title: string; editable: boolean }) {
   return (
     <header className="flex items-start gap-3">
-      <div>
+      <div className="min-w-0">
         <h1 className="text-xl font-bold break-words">{title}</h1>
         <p className="mt-1 text-text-muted">
           {editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
@@ -68,47 +75,54 @@ function BuilderHeader({ title, editable }: { title: string; editable: boolean }
 function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
   const save = useSaveCampaign();
   const router = useRouter();
-  const [error, setError] = useState<string>();
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const parsed = createCampaignSchema.safeParse({
-      channel: 'sms',
-      name: data.get('name'),
-      goal: data.get('goal') || null,
-    });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the campaign details.');
-      return;
-    }
-    setError(undefined);
-    const { name, goal } = parsed.data;
-    save.mutate(campaign ? { id: campaign.id, input: { name, goal } } : { input: parsed.data }, {
-      onSuccess: (saved) => {
-        if (!campaign) router.replace(`/campaigns/${saved.id}`);
+  const form = useForm<DetailsInput, unknown, Details>({
+    resolver: zodResolver(detailsSchema, {
+      error: (issue) =>
+        issue.path?.[0] === 'name' && issue.code === 'too_small'
+          ? 'Enter a campaign name.'
+          : undefined,
+    }),
+    defaultValues: { name: campaign?.name ?? '', goal: campaign?.goal ?? null },
+  });
+  const submit = form.handleSubmit((input) =>
+    save.mutate(
+      campaign
+        ? { id: campaign.id, input }
+        : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) },
+      {
+        onSuccess: (saved) => {
+          if (campaign) form.reset({ name: saved.name, goal: saved.goal });
+          else router.replace(`/campaigns/${saved.id}`);
+        },
       },
-    });
-  }
+    ),
+  );
+  const saved = save.isSuccess && !form.formState.isDirty;
   return (
-    <form
-      onSubmit={submit}
-      className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
-    >
-      <CampaignFields campaign={campaign} />
-      {(error || save.error) && (
-        <p role="alert" className="text-danger">
-          {error ?? save.error?.message}
-        </p>
-      )}
-      {save.isSuccess && <p role="status">Draft saved.</p>}
-      <Button type="submit" loading={save.isPending}>
-        {campaign ? 'Save draft' : 'Create SMS draft'}
-      </Button>
-    </form>
+    <FormProvider {...form}>
+      <form
+        onSubmit={submit}
+        className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
+      >
+        <fieldset className="min-w-0 space-y-4" disabled={save.isPending}>
+          <CampaignFields />
+        </fieldset>
+        {save.error && (
+          <p role="alert" className="text-danger">
+            {save.error.message}
+          </p>
+        )}
+        {saved && <p role="status">Draft saved.</p>}
+        <Button type="submit" loading={save.isPending}>
+          {campaign ? 'Save draft' : 'Create SMS draft'}
+        </Button>
+      </form>
+    </FormProvider>
   );
 }
 
-function CampaignFields({ campaign }: { campaign?: CampaignResponse }) {
+function CampaignFields() {
+  const { register } = useFormContext<DetailsInput>();
   return (
     <>
       <div className="space-y-2">
@@ -118,25 +132,25 @@ function CampaignFields({ campaign }: { campaign?: CampaignResponse }) {
         <h2 className="text-md font-semibold">SMS</h2>
         <p className="text-text-muted">Send a short text to customers who agreed to receive SMS.</p>
       </div>
-      <label className="grid gap-1">
-        Campaign name
-        <Input name="name" defaultValue={campaign?.name} required maxLength={100} />
-      </label>
-      <label className="grid gap-1">
-        Goal
-        <select
-          name="goal"
-          defaultValue={campaign?.goal ?? ''}
-          className="min-h-10 rounded-md border border-input-border bg-surface px-3 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          <option value="">Choose a goal</option>
-          {campaignGoals.map((goal) => (
-            <option key={goal} value={goal}>
-              {goals[goal]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <FormField name="name" label="Campaign name">
+        {(control) => <Input {...control} {...register('name')} aria-required="true" />}
+      </FormField>
+      <FormField name="goal" label="Goal">
+        {(control) => (
+          <select
+            {...control}
+            {...register('goal', { setValueAs: (value: string) => value || null })}
+            className="min-h-10 w-full rounded-md border border-input-border bg-surface px-3 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
+            <option value="">Choose a goal</option>
+            {campaignGoals.map((goal) => (
+              <option key={goal} value={goal}>
+                {goals[goal]}
+              </option>
+            ))}
+          </select>
+        )}
+      </FormField>
     </>
   );
 }
