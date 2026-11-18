@@ -141,28 +141,6 @@ fixture('POST /orders', async () => {
   expect((await f.request(b.owner, 'POST', '/orders', goodInput)).statusCode).toBe(400);
 });
 
-fixture('PATCH /orders/:orderId', async () => {
-  const { a, b } = await pair();
-  const foreignId = await order(a);
-  const ownId = await order(b);
-  const variantId = await orderVariant(b);
-  const edit = { items: [{ variantId, quantity: 2 }] };
-  const before = await f.row('orders', foreignId);
-  expect((await success(b, 'PATCH', `/orders/${ownId}`, 200, edit)).json()).toMatchObject({
-    id: ownId,
-    items: [{ variantId, quantity: 2 }],
-    itemsSubtotalPoisha: 250000,
-  });
-  await hidden(
-    b,
-    'PATCH',
-    (value) => `/orders/${value}`,
-    foreignId,
-    () => edit,
-  );
-  expect(await f.row('orders', foreignId)).toEqual(before);
-});
-
 fixture('GET /orders', async () => {
   const { a, b } = await pair();
   const ownA = await order(a);

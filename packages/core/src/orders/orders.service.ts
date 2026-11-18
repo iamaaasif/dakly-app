@@ -6,7 +6,6 @@ import {
   orderStages,
   type CodCollectedInput,
   type CreateOrderInput,
-  type EditOrderInput,
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
@@ -116,53 +115,6 @@ export class OrdersService {
     });
   }
 
-  editOrder(
-    storeId: string,
-    orderId: string,
-    input: EditOrderInput,
-    { actor, access }: StageEditor,
-  ): Promise<OrderDetail> {
-    return this.transaction.runLocked(storeId, async () => {
-      const order = await this.repository.lock(storeId, orderId);
-      if (!order) throw orderError('ORDER_NOT_FOUND');
-      if (!canEditOrder(order)) throw orderError('ORDER_NOT_EDITABLE');
-
-      const advancePaidPoisha = input.advancePaidPoisha ?? order.advancePaidPoisha;
-      if (order.advancePaidPoisha > 0 && order.advancePaidPoisha !== advancePaidPoisha)
-        throw orderError('ORDER_ADVANCE_ALREADY_PAID');
-
-      const delivery = await this.editedDelivery(storeId, input, order.recipientBdAreaId);
-      const previous = await this.repository.items(storeId, orderId);
-      const items = await this.orderItems(storeId, input.items, previous);
-      const totals = orderTotals(items, {
-        orderDiscountPoisha: input.orderDiscountPoisha ?? order.orderDiscountPoisha,
-        deliveryChargePoisha: delivery.deliveryChargePoisha ?? order.deliveryChargePoisha,
-        advancePaidPoisha,
-      });
-      const now = this.clock.now();
-      await this.moveReservations(storeId, orderId, { before: previous, after: items }, actor);
-      await this.repository.saveItems(
-        storeId,
-        orderId,
-        items.map((item) => ({ ...item, createdAt: now })),
-      );
-      await this.repository.updateOrder(storeId, orderId, {
-        ...delivery,
-        ...totals,
-        paymentStatus: advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
-        updatedAt: now,
-      });
-      await this.audit.record(storeId, {
-        action: 'order.edited',
-        entityType: 'order',
-        entityId: orderId,
-        actor,
-        after: { changedFields: Object.keys(input) },
-      });
-      return this.getById(storeId, orderId, access);
-    });
-  }
-
   async list(storeId: string, query: OrderListQuery): Promise<OrderListResponse> {
     const rows = await this.repository.list(storeId, query);
     const page = rows.slice(0, query.limit);
@@ -212,9 +164,7 @@ export class OrdersService {
       returnedAt: isoTime(order.returnedAt),
       codCollectedAt: isoTime(order.codCollectedAt),
       returnRisk: returnRisk(outcomes[0]),
-      items: (await this.repository.items(storeId, orderId)).map(
-        ({ unitCostPoisha: _unitCost, ...item }) => item,
-      ),
+      items: await this.repository.items(storeId, orderId),
       timeline: history.map(({ before, after, createdAt, ...row }) => ({
         ...row,
         from: stageSnapshot.parse(before).state,
@@ -309,28 +259,6 @@ export class OrdersService {
     });
   }
 
-  private async editedDelivery(
-    storeId: string,
-    input: EditOrderInput,
-    previousArea: number | null,
-  ) {
-    const recipient = input.recipient;
-    const override = input.deliveryChargePoisha;
-    const snapshot = {
-      recipientName: recipient?.name,
-      recipientPhone: recipient?.phone,
-      recipientAddress: recipient?.address,
-      isRecipientBuyer: recipient?.isBuyer,
-    };
-    if (recipient?.areaId !== undefined && recipient.areaId !== previousArea)
-      return { ...snapshot, ...(await this.quoteDelivery(storeId, recipient.areaId, override)) };
-    return {
-      ...snapshot,
-      deliveryChargePoisha: override,
-      isDeliveryChargeOverridden: override === undefined ? undefined : true,
-    };
-  }
-
   private async quoteDelivery(storeId: string, areaId: number, override?: number) {
     const zone = await this.delivery.calculateDeliveryCharge(storeId, areaId);
     return {
@@ -345,20 +273,16 @@ export class OrdersService {
   private async orderItems(
     storeId: string,
     items: CreateOrderInput['items'],
-    previous: OrderItemWrite[] = [],
   ): Promise<OrderItemWrite[]> {
-    const byId = new Map(previous.map((item) => [item.variantId, item]));
-    const newIds = items
-      .filter(({ variantId }) => !byId.has(variantId))
-      .map(({ variantId }) => variantId);
-    const variants = await this.products.orderVariants(storeId, newIds, [...byId.keys()]);
-    for (const variant of variants) {
-      if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
-      byId.set(variant.variantId, { ...variant, quantity: 0 });
-    }
+    const variants = await this.products.orderVariants(
+      storeId,
+      items.map(({ variantId }) => variantId),
+    );
+    const byId = new Map(variants.map((variant) => [variant.variantId, variant]));
     return items.map((item) => {
       const variant = byId.get(item.variantId);
-      if (!variant) throw orderError('ORDER_NOT_EDITABLE');
+      if (!variant) throw orderError('ORDER_NOT_FOUND');
+      if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
       return { ...variant, ...item };
     });
   }
@@ -385,14 +309,6 @@ export class OrdersService {
       });
     }
   }
-}
-
-function canEditOrder(order: Pick<OrderDetail, 'source' | 'stage' | 'paymentStatus'>): boolean {
-  return (
-    !isSyncedOrder(order.source) &&
-    ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) &&
-    ['cod_pending', 'advance_paid'].includes(order.paymentStatus)
-  );
 }
 
 function returnRisk(outcome?: { parcels: number; returned: number }): OrderReturnRisk {
