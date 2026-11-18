@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -16,12 +15,11 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { ordersKey } from '../api/orders';
+import { useRecordOrderAction } from '../api/record-order-action';
 import { cancelReasonLabels, courierLabels, onHoldReasonLabels } from '../order-labels';
 import { stageActionLabels, type StageFormAction } from './order-stage-actions';
 import { SessionDialog } from '@/components/session-dialog';
-import { productsKeys } from '@/lib/product-queries';
-import { useStoreRequest } from '@/lib/store-request';
+import { takaInputFromPoisha } from '@/lib/format-money';
 
 const actionSchema = z.discriminatedUnion('to', [
   ...orderStageChangeSchema.options,
@@ -34,7 +32,7 @@ type ActionInput = z.output<typeof actionSchema>;
 function defaultFields(action: StageFormAction, order: OrderDetail): Partial<ActionValues> {
   switch (action) {
     case 'cod':
-      return { to: action, amountPoisha: (order.codAmountPoisha / 100).toFixed(2) };
+      return { to: action, amountPoisha: takaInputFromPoisha(order.codAmountPoisha) };
     case 'partially_delivered':
       return {
         to: action,
@@ -48,34 +46,11 @@ function defaultFields(action: StageFormAction, order: OrderDetail): Partial<Act
 type OrderStageDialogProps = { order: OrderDetail; action: StageFormAction; onClose: () => void };
 
 export function OrderStageDialog({ order, action, onClose }: OrderStageDialogProps) {
-  const { request } = useStoreRequest();
-  const client = useQueryClient();
   const form = useForm<ActionValues, undefined, ActionInput>({
     resolver: zodResolver(actionSchema),
     defaultValues: defaultFields(action, order),
   });
-  const mutation = useMutation({
-    mutationFn: (input: ActionInput) => {
-      if (input.to === 'with_courier') {
-        const { courier, courierOtherName, trackingCode } = input;
-        return request<OrderDetail>(`/orders/${order.id}/courier`, {
-          body: { courier, courierOtherName, trackingCode },
-        });
-      }
-      if (input.to === 'cod')
-        return request<OrderDetail>(`/orders/${order.id}/cod-collected`, {
-          body: { amountPoisha: input.amountPoisha },
-        });
-      return request<OrderDetail>(`/orders/${order.id}/stage`, { body: input });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ordersKey }),
-        client.invalidateQueries({ queryKey: productsKeys.all }),
-      ]);
-      onClose();
-    },
-  });
+  const mutation = useRecordOrderAction(order.id, onClose);
   const title =
     action === 'cancelled' ? `Cancel order #${order.number}?` : stageActionLabels[action];
   return (
@@ -153,7 +128,7 @@ function ReturnFields() {
           checked={damaged ?? false}
           onCheckedChange={(value) => setValue('isDamaged', value === true)}
         />
-        <label htmlFor="damaged-items">Damaged items</label>
+        <label htmlFor="damaged-items">Damaged items. Skip restocking.</label>
       </div>
     </>
   );
@@ -185,6 +160,9 @@ function PartialFields({ items }: { items: OrderDetail['items'] }) {
   const { register } = useFormContext<ActionValues>();
   return (
     <>
+      <p className="text-sm text-text-muted">
+        Enter at least one delivered and one undelivered unit.
+      </p>
       {items.map((item, index) => {
         const name = `items.${index}.quantity` as const;
         return (

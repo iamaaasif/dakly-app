@@ -71,7 +71,9 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
       [randomUUID(), storeId, orderId, variantId],
     );
 
-    await page.goto(`/orders?stage=to_pack&selected=${orderId}`);
+    await page.goto('/orders?stage=to_pack');
+    const opener = page.getByRole('link', { name: 'Details for order #1050' });
+    await opener.click();
     const detail = page.getByRole('dialog', { name: 'Order #1050' });
     await expect(detail.getByRole('button', { name: 'Sent with courier' })).toBeVisible();
     await capture(page, 'detail');
@@ -81,6 +83,7 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await capture(page, 'hold');
     await hold.getByRole('button', { name: 'Put on hold' }).click();
     await expect(detail.getByText('To pack → On hold')).toBeVisible();
+    await expect(detail.getByRole('status', { name: 'Order stage' })).toBeFocused();
     await expect(detail.getByText('Pre-order')).toBeVisible();
     await detail.getByRole('button', { name: 'Mark confirmed' }).click();
     await expect(detail.getByText('On hold → To pack')).toBeVisible();
@@ -89,6 +92,10 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });
     await capture(page, 'cancel');
     await cancel.getByRole('button', { name: 'Back' }).click();
+    await expect(detail.getByRole('button', { name: 'Cancel order' })).toBeFocused();
+    await detail.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(opener).toBeFocused();
+    await opener.click();
 
     await detail.getByRole('button', { name: 'Sent with courier' }).click();
     const dispatch = page.getByRole('dialog', { name: 'Sent with courier' });
