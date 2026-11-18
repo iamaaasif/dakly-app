@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
 
-import { refreshOrderQueries } from './orders';
+import { ordersKey } from './orders';
+import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useOrderStage(onSaved?: () => void) {
@@ -11,11 +12,11 @@ export function useOrderStage(onSaved?: () => void) {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: OrderStageChange }) =>
       request<OrderDetail>(`/orders/${id}/stage`, { method: 'POST', body }),
-    onSuccess: async (_, { body }) => {
-      await refreshOrderQueries(
-        client,
-        ['cancelled', 'partially_delivered', 'returned'].includes(body.to),
-      );
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ordersKey }),
+        client.invalidateQueries({ queryKey: productsKeys.all }),
+      ]);
       onSaved?.();
     },
   });

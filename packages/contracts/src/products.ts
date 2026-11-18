@@ -109,7 +109,7 @@ export const changeProductSchema = z
 
 export type ChangeProductInput = z.infer<typeof changeProductSchema>;
 
-export const takaInput = z
+const takaInput = z
   .string()
   .regex(/^\d+(?:\.\d{1,2})?$/, 'Enter Taka with at most two decimal places')
   .transform((value) => {

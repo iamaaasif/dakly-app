@@ -68,6 +68,17 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
+  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
+  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
+  to_pack: ['with_courier', 'on_hold', 'cancelled'],
+  with_courier: ['delivered', 'partially_delivered', 'returned'],
+  delivered: ['returned'],
+  partially_delivered: ['returned'],
+  returned: [],
+  cancelled: [],
+};
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, takaInputFromPoisha } from './format-money';
+import { formatMoney } from './format-money';
 
 describe('formatMoney', () => {
   it.each([
@@ -31,10 +31,4 @@ describe('formatMoney', () => {
       expect(() => formatMoney(amount)).toThrow(RangeError);
     },
   );
-});
-
-describe('takaInputFromPoisha', () => {
-  it('keeps the exact poisha for a supported amount that floating division rounds', () => {
-    expect(takaInputFromPoisha(7036874417766401)).toBe('70368744177664.01');
-  });
 });

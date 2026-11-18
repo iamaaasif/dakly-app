@@ -8,7 +8,7 @@ import type { ProductListQuery, ProductResponse } from '@dakly/contracts/product
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { ProductsScreen } from './products-screen';
-import { productsKeys } from '@/lib/product-queries';
+import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.hoisted(() => vi.fn());
