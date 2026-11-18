@@ -42,12 +42,12 @@ import {
   operationKey,
   randomPath,
   runAction,
+  scheduleWait,
   shouldPrepareSender,
   type RunFacts,
   type SendStep,
   type StepResult,
 } from './automation-step-rules';
-import { wakeTime } from './automation-waits';
 import { AutomationsService } from './automations.service';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
@@ -129,7 +129,6 @@ export class AutomationRunsService {
     const facts: RunFacts = {
       graph: run.graph,
       automationId: run.automationId,
-      balanceResumedAt: run.balanceResumedAt,
       storeId,
       runId: claim.runId,
       contactId: run.contactId,
@@ -158,14 +157,7 @@ export class AutomationRunsService {
     switch (step.kind) {
       case 'wait': {
         const timeZone = (await this.stores.sendingSettings(facts.storeId)).timeZone;
-        return {
-          run: {
-            status: 'waiting',
-            currentStepKey: step.next,
-            wakeAt: wakeTime(step.wait, now, timeZone),
-          },
-          step: { stepKey, kind: 'wait', outcome: 'scheduled' },
-        };
+        return scheduleWait(stepKey, step, now, timeZone);
       }
       case 'condition': {
         const choice = (await this.conditions.firstHoldingPath(
@@ -219,7 +211,7 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      if (isLateSend(facts.wakeAt, this.clock.now())) return { outcome: 'late' };
+      if (isLateSend(facts.wakeAt, this.clock.now())) return this.readLateGateResult(facts);
       const result = await this.gateSend(renewed, step, facts);
       const claimedAt = this.clock.now();
       // The live move holds this run row; renew after the gate's other locks and writes.
@@ -235,8 +227,10 @@ export class AutomationRunsService {
     }
     const gatedAt = this.clock.now();
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
-    if ('outcome' in started)
-      return { ...lateSend(step, claim.stepKey, facts, gatedAt), claim: renewed };
+    if ('outcome' in started) {
+      const late = lateSend(step, claim.stepKey, { wakeAt: facts.wakeAt, ...started }, gatedAt);
+      return { ...late, claim: renewed };
+    }
     const { decision } = started;
     if ('body' in started)
       return deliverAutomationSms(
@@ -286,7 +280,7 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (isLateSend(facts.wakeAt, at)) return { outcome: 'late' };
+    if (isLateSend(facts.wakeAt, at)) return this.readLateGateResult(facts);
     if (decision.action !== 'send') return { decision };
     const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
     if (body === undefined) {
@@ -298,14 +292,15 @@ export class AutomationRunsService {
   }
 
   private async refreshExitReason(facts: RunFacts, at: Date) {
-    const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
-    const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
-    return this.conditions.exitReason(
-      facts.storeId,
-      facts.graph,
-      { ...facts, tags, tappedStepKeys },
-      at,
-    );
+    const { storeId, contactId, runId, graph } = facts;
+    const tags = await this.contacts.findTags(storeId, contactId);
+    const tappedStepKeys = await this.repository.listTappedStepKeys(storeId, runId);
+    return this.conditions.exitReason(storeId, graph, { ...facts, tags, tappedStepKeys }, at);
+  }
+
+  private async readLateGateResult({ storeId, runId }: RunFacts) {
+    const run = await this.repository.findRun(storeId, runId);
+    return { outcome: 'late', balanceResumedAt: run?.balanceResumedAt ?? null } as const;
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves

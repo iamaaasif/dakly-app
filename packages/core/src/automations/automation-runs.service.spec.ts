@@ -931,6 +931,25 @@ describe('AutomationRunsService', () => {
       expect(sent).toHaveLength(1);
     });
 
+    it('uses a balance resume that commits after the run was first loaded', async () => {
+      const read = repository.findRun.bind(repository);
+      const resumedAt = new Date(claimedAt.getTime() + 25 * HOUR);
+      clockNow = new Date(claimedAt.getTime() + 26 * HOUR);
+      repository.findRun = async (storeId: string, runId: string) => {
+        const found = await read(storeId, runId);
+        repository.run = { ...repository.run, balanceResumedAt: resumedAt };
+        return found;
+      };
+
+      await start(send);
+
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skipReason: 'no_credits' }),
+      ]);
+      expect(sent).toEqual([]);
+      expect(ledger).toEqual([]);
+    });
+
     it('judges a held send at the balance resume, so a later manual pause makes it late', async () => {
       // Two hours old at the resume, then held a day longer by a manual pause.
       clockNow = new Date(claimedAt.getTime() + 30 * HOUR);

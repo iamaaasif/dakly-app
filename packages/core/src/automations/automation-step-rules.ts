@@ -14,6 +14,7 @@ import type {
   RunClaim,
   RunStepChange,
 } from './automation-runs.repository';
+import { wakeTime } from './automation-waits';
 
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
@@ -27,7 +28,6 @@ export type RunFacts = {
   preparedSender?: PreparedSmsSender;
   graph: AutomationGraph;
   automationId: string;
-  balanceResumedAt: Date | null;
   storeId: string;
   runId: string;
   contactId: string;
@@ -49,7 +49,7 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
-  | { outcome: 'late' }
+  | { outcome: 'late'; balanceResumedAt: Date | null }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }
   | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
@@ -74,21 +74,36 @@ export function operationKey({ runId, stepKey }: RunClaim) {
 // A send due more than a day before it runs is skipped (feature 09): as no_credits when it was
 // already a day old at the top-up that ended a pause for balance, else as late, as after a manual
 // pause that held it longer.
-export function lateSend(step: SendStep, stepKey: string, facts: RunFacts, now: Date): StepResult {
-  const { wakeAt, balanceResumedAt } = facts;
+export function lateSend(
+  step: SendStep,
+  stepKey: string,
+  { wakeAt, balanceResumedAt }: { wakeAt: Date | null; balanceResumedAt: Date | null },
+  now: Date,
+): StepResult {
   const row = { stepKey, kind: 'send', category: step.category } as const;
   // Held through a balance pause and already a day old when the top-up ended it.
-  if (
-    balanceResumedAt &&
-    wakeAt &&
-    balanceResumedAt > wakeAt &&
-    balanceResumedAt.getTime() - wakeAt.getTime() > DAY_MS
-  )
+  if (balanceResumedAt && wakeAt && balanceResumedAt.getTime() - wakeAt.getTime() > DAY_MS)
     return {
       ...ifNotReachable(step, now),
       step: { ...row, outcome: 'skipped', skipReason: 'no_credits' },
     };
   return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
+}
+
+export function scheduleWait(
+  stepKey: string,
+  step: Extract<AutomationStep, { kind: 'wait' }>,
+  now: Date,
+  timeZone: string,
+): StepResult {
+  return {
+    run: {
+      status: 'waiting',
+      currentStepKey: step.next,
+      wakeAt: wakeTime(step.wait, now, timeZone),
+    },
+    step: { stepKey, kind: 'wait', outcome: 'scheduled' },
+  };
 }
 
 export function messageBody(step: SendStep, optOutUrl: string | undefined): string {
