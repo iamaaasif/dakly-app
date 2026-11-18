@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useRef } from 'react';
 
 import { orderTabs, type OrderListQuery } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
@@ -9,17 +11,30 @@ import { QueryError } from '@dakly/ui/query-error';
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
 import { OrderAlerts } from './order-alerts';
+import { OrderDetailSheet } from './order-detail-sheet';
 import { OrderSearch } from './order-search';
 import { OrdersList } from './orders-list';
 import { StorePage } from '@/components/store-page';
 
-export function OrdersScreen({ query }: { query: OrderListQuery }) {
+type OrdersScreenProps = { query: OrderListQuery; selected?: string };
+
+export function OrdersScreen({ query, selected }: OrdersScreenProps) {
   const orders = useOrders(query);
+  const router = useRouter();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const listHref = `/orders?${ordersSearch(query)}`;
+
   return (
     <StorePage permission="canViewOrders">
       <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
         <header>
-          <h1 className="text-xl font-bold">Orders</h1>
+          <h1
+            ref={heading}
+            tabIndex={-1}
+            className="text-xl font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
+            Orders
+          </h1>
           <p className="mt-1 text-text-muted">Follow each order from confirmation to delivery.</p>
         </header>
         {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
@@ -48,6 +63,14 @@ export function OrdersScreen({ query }: { query: OrderListQuery }) {
           />
         ) : null}
         {orders.data ? <OrdersList page={orders.data} query={query} /> : null}
+        {selected ? (
+          <OrderDetailSheet
+            key={selected}
+            id={selected}
+            fallbackFocus={heading}
+            onClose={() => router.replace(listHref)}
+          />
+        ) : null}
       </main>
     </StorePage>
   );
