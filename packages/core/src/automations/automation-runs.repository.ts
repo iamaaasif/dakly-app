@@ -222,17 +222,21 @@ export class AutomationRunsRepository {
     storeId: string,
     claim: RunClaim,
     change: RunChange,
-    lockVersion = false,
+    gate?: 'first_send' | 'retry',
   ): Promise<boolean> {
-    // The final send gate holds this lock through the dispatch or balance-pause write.
-    const versionLock = lockVersion ? sql`for share of ${automationVersions}` : sql.empty();
+    // A first send may have to write the pause itself. A retry holds the workflow until
+    // its dispatch commits so a pause and a new dispatch cannot pass each other.
+    const lock = {
+      first_send: sql`for share of ${automationVersions}`,
+      retry: sql`for share of ${automations}, ${automationVersions}`,
+    };
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
         and ${automations.status} = 'active' and not ${automationVersions.isStopped}
-      ${versionLock})`;
+      ${gate ? lock[gate] : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

@@ -23,6 +23,7 @@ import {
   type SendingStep,
 } from './automation-runs.repository';
 import {
+  claimRetryDispatch,
   deliverAutomationSms,
   endExpiredRetry,
   retryDecision,
@@ -285,7 +286,7 @@ export class AutomationRunsService {
         storeId,
         claim,
         { status: 'running', claimedAt: claim.claimedAt },
-        true,
+        'first_send',
       ))
     )
       return 'not_live';
@@ -367,33 +368,13 @@ export class AutomationRunsService {
     const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
       ? undefined
       : await this.messaging.prepareSender(storeId);
-    const gated = await this.transaction.run(storeId, async () => {
-      const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
-      if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
-      const locked = await this.repository.findSendingStep(
-        storeId,
-        claim.runId,
-        claim.stepKey,
-        true,
-      );
-      if (!locked) return undefined;
-      const checkedAt = await this.transaction.databaseTime(storeId);
-      const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-      const { result, at } = early
-        ? { result: early, at: checkedAt }
-        : await this.recheckResend(step, facts, locked);
-      const claimedAt = await this.transaction.databaseTime(storeId);
-      if (!(await this.repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt })))
-        return undefined;
-      if (result) return { result, claim: { ...claim, claimedAt }, at: claimedAt };
-      const renewed = { ...claim, claimedAt };
-      // A slower worker must not age out a previously submitted message early.
-      const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
-      const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
-      await this.repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-      const afterWrite = await this.transaction.databaseTime(storeId);
-      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
-      return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
+    const gated = await claimRetryDispatch({
+      repository: this.repository,
+      transaction: this.transaction,
+      claim,
+      step,
+      facts,
+      recheck: (locked) => this.recheckResend(step, facts, locked),
     });
     if (!gated) {
       const run = await this.repository.findRun(storeId, claim.runId);

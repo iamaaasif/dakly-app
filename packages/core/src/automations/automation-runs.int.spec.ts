@@ -1727,6 +1727,46 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it('holds a retry when a concurrent balance pause commits', async () => {
+      await setCredits(1);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, runId!);
+      await wakeNow(runId!);
+
+      const blocker = await admin.pool.connect();
+      let retry: Promise<void> | undefined;
+      try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query(
+          "update automations set status='paused', pause_reason='balance', balance_pause_revision=0 where id=$1",
+          [automationId],
+        );
+        retry = runDueStep(runner, runId!);
+        void retry.catch(() => undefined);
+        await waitForBlocker(pid);
+        await blocker.query('commit');
+        await retry;
+
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await retry?.catch(() => undefined);
+      }
+    });
+
     it('does not submit a retry after waiting on its step row across the deadline', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);

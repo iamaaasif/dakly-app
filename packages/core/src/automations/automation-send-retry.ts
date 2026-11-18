@@ -6,7 +6,7 @@ import { serializeError } from '../platform/logging/safe-error';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type { WalletService } from '../wallets/wallet.service';
-import type { RunClaim } from './automation-runs.repository';
+import type { AutomationRunsRepository, RunClaim, SendingStep } from './automation-runs.repository';
 import {
   type CreditSettlement,
   type Delivery,
@@ -16,6 +16,7 @@ import {
   ifNotReachable,
   isLateSend,
   operationKey,
+  type RunFacts,
   type SendStep,
   type StepResult,
   UNKNOWN_OUTCOME,
@@ -39,6 +40,50 @@ export function endExpiredRetry(
     exhausted(firstTriedAt, now) ??
     (isLateSend(wakeAt, now) ? endWithUnknownOutcome(goOn(step.next, now)) : undefined)
   );
+}
+
+// Lock the contact through the resend checks before taking the workflow lock for dispatch.
+export async function claimRetryDispatch({
+  repository,
+  transaction,
+  claim,
+  step,
+  facts: { storeId, wakeAt },
+  recheck,
+}: {
+  repository: AutomationRunsRepository;
+  transaction: StoreTransaction;
+  claim: RunClaim;
+  step: SendStep;
+  facts: Pick<RunFacts, 'storeId' | 'wakeAt'>;
+  recheck: (locked: SendingStep) => Promise<{ result: StepResult | undefined; at: Date }>;
+}) {
+  return transaction.run(storeId, async () => {
+    const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
+    if (!(await repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
+    const locked = await repository.findSendingStep(storeId, claim.runId, claim.stepKey, true);
+    if (!locked) return undefined;
+    const checkedAt = await transaction.databaseTime(storeId);
+    const { firstTriedAt } = locked;
+    const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
+    const { result, at } = early ? { result: early, at: checkedAt } : await recheck(locked);
+    const claimedAt = await transaction.databaseTime(storeId);
+    if (
+      !(await repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt }, 'retry'))
+    )
+      return undefined;
+    const checkedDispatchAt = await transaction.databaseTime(storeId);
+    const stopped = result ?? endExpiredRetry(step, firstTriedAt, wakeAt, checkedDispatchAt);
+    if (stopped) return { result: stopped, claim: { ...claim, claimedAt }, at: checkedDispatchAt };
+    const renewed = { ...claim, claimedAt };
+    // A slower worker must not age out a previously submitted message early.
+    const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
+    const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
+    await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
+    const afterWrite = await transaction.databaseTime(storeId);
+    await repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
+    return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
+  });
 }
 
 export function retryDecision(
