@@ -15,6 +15,8 @@ const envSchema = z.object({
   SENDGRID_API_KEY: z.string().min(1).optional(),
   GOOGLE_IDENTITY_DRIVER: z.enum(['fake', 'google']).optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  LLM_DRIVER: z.enum(['openai', 'fake']).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
   SMS_DRIVER: z.literal('mailpit').optional(),
   MAILPIT_SMTP_HOST: z.string().min(1).default('127.0.0.1'),
   MAILPIT_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
@@ -85,6 +87,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
 function parseEnv(source: NodeJS.ProcessEnv): Env {
   const env = envSchema.parse(source);
+  assertLlmEnv(env);
   if (env.NODE_ENV === 'production' && env.SMS_DRIVER === 'mailpit') {
     throw new Error('SMS_DRIVER=mailpit is not allowed in production');
   }
@@ -101,6 +104,13 @@ function parseEnv(source: NodeJS.ProcessEnv): Env {
       source.ENCRYPTION_MASTER_KEYS,
     ),
   };
+}
+
+function assertLlmEnv(env: z.infer<typeof envSchema>): void {
+  if (env.NODE_ENV === 'production' && env.LLM_DRIVER === 'fake')
+    throw new Error('LLM_DRIVER=fake is not allowed in production');
+  if (env.LLM_DRIVER === 'openai' && !env.OPENAI_API_KEY)
+    throw new Error('OPENAI_API_KEY is required for the OpenAI driver');
 }
 
 export function loadStaffEnv(source: NodeJS.ProcessEnv = process.env): Env {

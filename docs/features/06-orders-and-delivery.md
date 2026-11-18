@@ -271,9 +271,9 @@ Create order (`OrdersService.createOrder`, one transaction)
 4. Copy prices from the variants, compute COD = items − discount + delivery − advance (never below 0), reserve stock, warn on a likely duplicate (same phone and variant within 24 hours), emit `order.created`.
 5. If the store's payment rule asks for an advance (always, or when return risk is High), create a payment intent and set `advance_requested`.
 
-Staff orders use `POST /orders` with an `Idempotency-Key`. A retry returns the existing order. The order starts in To confirm. Order numbers come from the locked store counter. Creating an order updates the buyer's timestamp so import undo keeps that contact. Staff can record money already received by hand. Cancelling an advance-paid order sets `refund_due` in the same transaction as the cancellation audit and stock release. Payment links and `advance_requested` wait for PAY-6. Order creation from a chat waits for CHAT-1.
+Staff without full-phone access do not see the linked duplicate order. The staff out-of-stock override waits for a rule for oversold stock at reservation, dispatch and cancellation.
 
-Staff can edit items, discounts and the delivery snapshot in To confirm, On hold, and To pack before COD is collected. The buyer stays linked and their profile stays as it was. Changes to a recipient name or address keep the phone and charge unless staff supply new values. Choosing another area quotes its charge. Staff without full-phone access do not see the linked duplicate order. New lines use the current variant price. Existing lines keep the price recorded on the order. The item and stock changes, totals, and edit audit are saved together. Adding items requires enough stock to reserve. The staff out-of-stock override waits for a rule for oversold stock at reservation, dispatch and cancellation.
+Staff orders use `POST /orders` with an `Idempotency-Key`. During order capture, Orders edit access allows staff to record a new buyer and fill an empty own-phone field under D27. Editing a profile separately requires Customers edit access. A retry returns the existing order. The order discount cannot exceed the item subtotal after line discounts. An advance above the total leaves zero COD. The order starts in To confirm. Order numbers come from the locked store counter. Creating an order updates the buyer's timestamp so import undo keeps that contact. Staff can record money already received by hand. Cancelling an advance-paid order sets `refund_due` in the same transaction as the cancellation audit and stock release. Payment links and `advance_requested` wait for PAY-6. Order creation from a chat waits for CHAT-1.
 
 Confirmation: a WhatsApp utility template, or an SMS with a confirm link (SMS cannot receive replies). A yes reply on WhatsApp ("হ্যাঁ", yes, ji, ok, confirm, "ঠিক আছে") moves the order to `to_pack` when it is the contact's only order in `to_confirm`; with two, the AI asks which.
 
@@ -285,7 +285,7 @@ Partial delivery scales each line discount by the delivered quantity divided by 
 
 For example, an order has three items at ৳1,250 each, a ৳10 line discount, a ৳30.01 order discount, ৳60 delivery and a ৳200 advance. Two delivered items receive a ৳6.66 line discount, leaving ৳2,493.34 in items. Their share of the order discount is ৳20. COD becomes ৳2,333.34.
 
-Staff can record the COD amount once after delivery. The order list and details compute return risk from completed parcels for the recipient's phone in the same store. A partly delivered parcel counts as delivered for risk. A single past parcel is too little for a badge.
+Staff can record the COD amount once after delivery. The order list and details compute return risk from completed parcels for the recipient’s phone in the same store. A partly delivered parcel counts as delivered for risk. A single past parcel is too little for a badge.
 
 Later release (D21), kept here so the data model does not block it: courier connections with the shop's own keys, booking as an idempotent job per order, parcel status by webhook or polling, and COD reconciliation from courier payouts matched by consignment id. Do not build any of it in release 1.
 
@@ -302,9 +302,9 @@ before removal, and a zone used by orders cannot be deleted.
 
 `POST /delivery-zones/initialize-defaults` sets up an empty store with Inside Dhaka
 at 6,000 poisha, Dhaka suburbs at 10,000 and Outside Dhaka at 12,000. It refuses to
-replace existing zones. The mappings use the seeded Dhaka, Gazipur and Narayanganj
-district ids. Savar needs the upazila reference data from DB-6; no upazila names
-are added here. The three defaults use positions 0, 1 and 2, matching the seed.
+replace existing zones. Dhaka district is Inside Dhaka. Gazipur district,
+Narayanganj district and Savar upazila are in Dhaka suburbs. Savar's mapping takes
+precedence over its parent Dhaka district. The defaults use positions 0, 1 and 2.
 GET routes never initialize or change settings.
 
 This task adds the backend only. There is no delivery-settings image in the
