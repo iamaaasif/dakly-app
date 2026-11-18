@@ -282,16 +282,22 @@ fixture('GET /orders/catalogue/:productId', async () => {
       pricePoisha: 125000,
     })
   ).json();
+  await f.admin.pool.query(
+    "insert into product_variants (id,store_id,product_id,title,status) values ($1,$2,$3,'Old size','archived')",
+    [randomUUID(), a.id, product.id],
+  );
   const url = (id: string) => `/orders/catalogue/${id}`;
   expect((await success(a, 'GET', url(product.id), 200)).json()).toMatchObject({
     id: product.id,
-    variants: [{ pricePoisha: 125000 }],
+    variants: [{ id: product.variants[0].id, pricePoisha: 125000 }],
   });
   await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
     a.membership,
   ]);
   expect((await f.request(a.member, 'GET', url(product.id))).statusCode).toBe(403);
   await hidden(b, 'GET', url, product.id);
+  await success(a, 'DELETE', `/products/${product.id}`, 204);
+  await hidden(a, 'GET', url, product.id);
 });
 
 fixture('GET /orders/:orderId', async () => {

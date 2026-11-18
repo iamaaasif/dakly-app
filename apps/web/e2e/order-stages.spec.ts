@@ -41,7 +41,8 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const orderId = randomUUID();
   const productId = randomUUID();
-  const variantId = randomUUID();
+  const variantId = `0${randomUUID().slice(1)}`;
+  const largerVariant = `f${randomUUID().slice(1)}`;
   const panjabi = 'CottonPanjabi'.repeat(9);
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
@@ -59,8 +60,9 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
       [productId, storeId, panjabi],
     );
     await database.pool.query(
-      "insert into product_variants (id,store_id,product_id,title,on_hand,reserved) values ($1,$2,$3,'M',5,2)",
-      [variantId, storeId, productId],
+      `insert into product_variants (id,store_id,product_id,title,on_hand,reserved)
+       values ($1,$2,$3,'M',5,1), ($4,$2,$3,'L',5,1)`,
+      [variantId, storeId, productId, largerVariant],
     );
     await database.pool.query(
       `insert into orders (id,store_id,number,source,created_by_type,stage,buyer_name,recipient_name,
@@ -73,8 +75,8 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await database.pool.query(
       `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,
         unit_price_poisha,is_stock_tracked)
-        values ($1,$2,$3,$4,$5,'M',2,125000,true)`,
-      [randomUUID(), storeId, orderId, variantId, panjabi],
+        values ($1,$2,$3,$4,$5,'M',1,125000,true), ($6,$2,$3,$7,$5,'L',1,125000,true)`,
+      [randomUUID(), storeId, orderId, variantId, panjabi, randomUUID(), largerVariant],
     );
 
     await page.goto('/orders?stage=to_pack');
@@ -97,7 +99,22 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
 
     await detail.getByRole('button', { name: 'Partly delivered' }).click();
     const partial = page.getByRole('dialog', { name: 'Partly delivered' });
-    await partial.getByLabel(`${panjabi} · M · delivered out of 2`).fill('1');
+    const medium = partial.getByLabel(`${panjabi} · M · delivered out of 1`);
+    const large = partial.getByLabel(`${panjabi} · L · delivered out of 1`);
+    const savePartial = partial.getByRole('button', { name: 'Partly delivered' });
+    await expect(medium).toHaveValue('0');
+    await expect(large).toHaveValue('0');
+    await savePartial.click();
+    await expect(partial.getByText('Enter at least one delivered unit.')).toBeVisible();
+    await expect(partial.getByText('Enter a delivery note.')).toBeVisible();
+    await medium.fill('1');
+    await large.fill('1');
+    await savePartial.click();
+    const allDelivered = partial.getByText('Use Mark delivered if all units arrived.');
+    await expect(allDelivered).toBeVisible();
+    await expect(medium).toHaveAttribute('aria-invalid', 'true');
+    await large.fill('0');
+    await expect(allDelivered).toHaveCount(0);
     await partial.getByLabel('Delivery note').fill('One item was sent back');
     await capture(page, 'partial');
     await partial.getByRole('button', { name: 'Partly delivered' }).click();
@@ -120,18 +137,18 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await expect(detail.getByText('Partly delivered → Returned')).toBeVisible();
   } finally {
     await database.pool.query(
-      "delete from outbox_events where store_id=$1 and (payload->>'orderId'=$2 or payload->>'variantId'=$3)",
-      [storeId, orderId, variantId],
+      "delete from outbox_events where store_id=$1 and (payload->>'orderId'=$2 or payload->>'variantId'=any($3::text[]))",
+      [storeId, orderId, [variantId, largerVariant]],
     );
     await database.pool.query('delete from orders where store_id=$1 and id=$2', [storeId, orderId]);
-    await database.pool.query('delete from stock_movements where store_id=$1 and variant_id=$2', [
-      storeId,
-      variantId,
-    ]);
-    await database.pool.query('delete from product_variants where store_id=$1 and id=$2', [
-      storeId,
-      variantId,
-    ]);
+    await database.pool.query(
+      'delete from stock_movements where store_id=$1 and variant_id=any($2::uuid[])',
+      [storeId, [variantId, largerVariant]],
+    );
+    await database.pool.query(
+      'delete from product_variants where store_id=$1 and id=any($2::uuid[])',
+      [storeId, [variantId, largerVariant]],
+    );
     await database.pool.query('delete from products where store_id=$1 and id=$2', [
       storeId,
       productId,
