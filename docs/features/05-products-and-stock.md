@@ -227,7 +227,7 @@ Product CSV imports use `imports.kind = products_csv` with the same mapping, pre
 
 Variant external identity is `(store_id, external_source, external_account_id, external_ref)`. Source names the provider; account is its stable shop/account ID, never a display name. All three external fields are supplied together or all are null. Provider synchronization remains planned work.
 
-The open-order guard on archive comes with ORD-1.
+A product cannot be archived while any of its variants appears in an order in To confirm, On hold or To pack. This includes archived variants and products that do not track stock.
 
 ### Edge cases to test
 
