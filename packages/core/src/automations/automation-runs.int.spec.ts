@@ -16,7 +16,7 @@ import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
+import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
@@ -171,6 +171,8 @@ async function waitForBlocker(backendPid: number, count = 1) {
 
 describe('Workflow runner (Postgres and Valkey)', () => {
   beforeAll(async () => {
+    vi.stubEnv('CODE_HASH_KEY', Buffer.alloc(32, 5).toString('base64'));
+    resetEnvForTests();
     await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
     await admin.pool.query(
       "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'সুমি আক্তার','01711000201','manual','customer')",
@@ -196,6 +198,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from contacts where store_id=$1', [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
     } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
       await admin.pool.end();
     }
   });
@@ -629,6 +633,18 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const {
         runIds: [runId],
       } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const retryFields = async () =>
+        (
+          await admin.pool.query(
+            "select destination_hash,opt_out_url,first_tried_at from automation_run_steps where run_id=$1 and kind='send'",
+            [runId],
+          )
+        ).rows;
+      let inFlight: Awaited<ReturnType<typeof retryFields>> = [];
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        inFlight = await retryFields();
+        return sms.send(message);
+      });
 
       await runDueStep(runner, runId!);
 
@@ -644,12 +660,15 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         idempotencyKey: `run:${runId}:first`,
         text: `নতুন কালেকশন এসেছে\n${optOutUrl}`,
       });
-      const { rows: retryInputs } = await admin.pool.query(
-        "select destination,opt_out_url,first_tried_at from automation_run_steps where run_id=$1 and kind='send'",
-        [runId],
-      );
-      expect(retryInputs).toEqual([
-        { destination: sent[0]?.to, opt_out_url: optOutUrl, first_tried_at: daytime },
+      expect(inFlight).toEqual([
+        {
+          destination_hash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          opt_out_url: optOutUrl,
+          first_tried_at: daytime,
+        },
+      ]);
+      expect(await retryFields()).toEqual([
+        { destination_hash: null, opt_out_url: null, first_tried_at: daytime },
       ]);
       expect(await sendStep(runId!)).toEqual([
         expect.objectContaining({ outcome: 'sent', category: 'marketing', channel: 'sms' }),

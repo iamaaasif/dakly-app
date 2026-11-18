@@ -130,7 +130,7 @@ describe('automation filters without RLS assistance', () => {
       firstTriedAt: claimedAt,
       latestDispatchAt: claimedAt,
       optOutUrl: null,
-      destination: null,
+      destinationHash: null,
     });
     const incompleteId = randomUUID();
     await runs.insertStep(f.a, runId, contactId, {
@@ -144,7 +144,7 @@ describe('automation filters without RLS assistance', () => {
       firstTriedAt: null,
       latestDispatchAt: null,
       optOutUrl: null,
-      destination: null,
+      destinationHash: null,
     });
     await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
     expect(await runs.findSendingStep(f.a, runId, 'offer')).toBeUndefined();

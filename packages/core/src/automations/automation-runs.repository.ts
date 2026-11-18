@@ -55,7 +55,7 @@ export type NewRunStep = {
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutUrl?: string | null;
-  destination?: string | null;
+  destinationHash?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
   firstTriedAt?: Date;
@@ -73,7 +73,7 @@ export type SendingStep = {
   firstTriedAt: Date | null;
   latestDispatchAt: Date | null;
   optOutUrl: string | null;
-  destination: string | null;
+  destinationHash: string | null;
 };
 
 @Injectable()
@@ -169,7 +169,7 @@ export class AutomationRunsRepository {
           firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
           optOutUrl: automationRunSteps.optOutUrl,
-          destination: automationRunSteps.destination,
+          destinationHash: automationRunSteps.destinationHash,
         })
         .from(automationRunSteps)
         .where(
@@ -189,7 +189,7 @@ export class AutomationRunsRepository {
       firstTriedAt: row.firstTriedAt ?? row.sentAt,
       latestDispatchAt: row.sentAt ?? row.firstTriedAt,
       optOutUrl: row.optOutUrl,
-      destination: row.destination,
+      destinationHash: row.destinationHash,
     };
   }
 
@@ -197,7 +197,10 @@ export class AutomationRunsRepository {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRunSteps)
-        .set(change)
+        .set({
+          ...change,
+          ...(change.outcome !== 'sending' && { destinationHash: null, optOutUrl: null }),
+        })
         .where(
           and(
             eq(automationRunSteps.storeId, storeId),
