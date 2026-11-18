@@ -1,12 +1,12 @@
-// The provider accepts a message once per idempotency key and returns the first result again.
+// Retries reuse the idempotency key so the driver can recover a previous result.
 // Without a sender the message goes from Dakly's shared sender.
 export type SmsMessage = { to: string; text: string; idempotencyKey?: string; sender?: string };
 
 export type SmsSendResult = { providerMessageId: string };
 
-// The contract every SMS driver keeps: send throws SmsSendRefused only when the provider
-// definitely did not take the message. Any other error, a timeout included, means the outcome
-// is unknown, and the caller sends again under the same idempotency key.
+// SmsSendRefused means this attempt did not reach provider acceptance. Any other send error
+// leaves the outcome unknown. Callers reconcile earlier attempts and apply their send rules
+// before retrying under the same key.
 export type SmsDriver = {
   send(message: SmsMessage): Promise<SmsSendResult>;
 };
