@@ -181,14 +181,23 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       "update campaigns set status='sent', finished_at=now() where store_id=$1 and id=$2",
       [storeId, draft.id],
     );
+    const detailUrl = `**/api/campaigns/${draft.id}`;
+    let failStatusRefresh = true;
+    await page.route(detailUrl, (route) =>
+      route.request().method() === 'GET' && failStatusRefresh
+        ? route.fulfill({ status: 503 })
+        : route.continue(),
+    );
     const conflict = page.waitForResponse(
       (result) => result.request().method() === 'PATCH' && result.status() === 409,
     );
     await name.fill('A change after approval');
     await page.getByRole('button', { name: 'Save draft' }).click();
     expect(await (await conflict).json()).toMatchObject({ error: { code: 'CAMPAIGN_NOT_DRAFT' } });
-    await expect(page.getByRole('region', { name: 'Saved campaign' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
+    failStatusRefresh = false;
+    await expect(page.getByRole('region', { name: 'Saved campaign' })).toBeVisible();
+    await page.unroute(detailUrl);
 
     await database.pool.query('delete from campaigns where store_id=$1 and id=$2', [
       storeId,

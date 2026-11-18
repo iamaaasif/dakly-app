@@ -27,15 +27,13 @@ export function useSaveCampaign() {
           })
         : request<CampaignResponse>('/campaigns', { method: 'POST', body: change.input }),
     onError: async (error, change) => {
-      if (
-        'id' in change &&
-        error instanceof ApiError &&
-        (error.code === 'CAMPAIGN_NOT_DRAFT' || error.code === 'CAMPAIGN_NOT_FOUND')
-      )
-        await client.invalidateQueries({
-          queryKey: campaignKeys.detail(contextTag, change.id),
-          exact: true,
-        });
+      if (!('id' in change) || !(error instanceof ApiError)) return;
+      const queryKey = campaignKeys.detail(contextTag, change.id);
+      if (error.code === 'CAMPAIGN_NOT_FOUND') {
+        await client.cancelQueries({ queryKey, exact: true });
+        client.setQueryData(queryKey, null);
+      }
+      if (error.code === 'CAMPAIGN_NOT_DRAFT') await client.resetQueries({ queryKey, exact: true });
     },
     onSuccess: async (saved) => {
       const detail = campaignKeys.detail(contextTag, saved.id);
