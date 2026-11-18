@@ -108,6 +108,32 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('creates and confirms once when staff retry the same key', async () => {
+    const variantId = await variant(2);
+    const input = draft(variantId, { confirm: true });
+    const request = editor();
+    const first = await orders.createOrder(f.a, input, request);
+
+    expect(first).toMatchObject({
+      stage: 'to_pack',
+      timeline: [{ from: 'to_confirm', to: 'to_pack', actorUserId: request.actor.userId }],
+    });
+    const stored = await f.row('orders', first.id);
+    expect(stored.confirmation_method).toBe('staff');
+    expect(Date.parse(String(stored.confirmed_at))).toBe(Date.parse(first.createdAt));
+    expect(await orders.createOrder(f.a, input, request)).toEqual(first);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+    const events = await f.connection.pool.query<{ type: string }>(
+      "select type from outbox_events where store_id=$1 and payload->>'orderId'=$2 order by id",
+      [f.a, first.id],
+    );
+    expect(events.rows.map(({ type }) => type)).toEqual([
+      'order.created',
+      'order.stage_changed',
+      'order.confirmed',
+    ]);
+  });
+
   it('caps an overpayment at zero COD and rejects a discount above the items subtotal', async () => {
     const variantId = await variant(1);
     const items = [{ variantId, quantity: 1, lineDiscountPoisha: 500 }];

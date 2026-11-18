@@ -1,32 +1,20 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRef, type FormEvent } from 'react';
-import {
-  FormProvider,
-  useFieldArray,
-  useForm,
-  useFormContext,
-  useWatch,
-  type UseFormHandleSubmit,
-} from 'react-hook-form';
+import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
 
 import {
   createOrderFormSchema,
   type CreateOrderInput,
   type CreateOrderValues,
-  type OrderDetail,
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { useOrderStage } from '../api/change-order-stage';
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
-import { useOrder } from '../api/get-order';
 import { useOrderCatalogueProducts } from '../api/order-catalogue';
-import { ordersKey } from '../api/orders';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -37,143 +25,71 @@ import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
+const newOrderDefaults: CreateOrderValues = {
+  buyer: { name: '' },
+  recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
+  items: [newLine],
+};
 
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
 export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
+  const create = useCreateOrder();
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
     resolver: zodResolver(createOrderFormSchema),
-    defaultValues: {
-      buyer: { name: '' },
-      recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
-      items: [newLine],
-    },
+    defaultValues: newOrderDefaults,
   });
-
-  const { saved, pending, retry, error, close, submit, saveConfirmed } = useNewOrderSubmission(
-    { onClose, onSaved },
-    form.handleSubmit,
-  );
+  const busy = create.isPending || create.mustRetry;
+  function save(input: CreateOrderInput) {
+    create.mutate(input, { onSuccess: (order) => onSaved(order.id) });
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    if (!create.mustRetry) return void form.handleSubmit(save)(event);
+    event.preventDefault();
+    if (create.variables) save(create.variables);
+  }
 
   return (
     <SessionDialog
       title="New order"
       open
-      onClose={close}
-      closeDisabled={pending || retry}
+      onClose={onClose}
+      closeDisabled={busy}
       className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
     >
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={pending || retry || saved} className="space-y-3">
+            <fieldset disabled={busy} className="space-y-3">
               <OrderRecipientFields />
               <ItemsAndAmounts />
             </fieldset>
           </div>
-          {error && (
+          {create.error && (
             <p role="alert" className="text-danger">
-              {retry
+              {create.mustRetry
                 ? 'Could not confirm the save. Retry with the same order details.'
-                : error.message}
+                : create.error.message}
             </p>
           )}
-          <OrderSaveActions
-            saved={saved}
-            retry={retry}
-            pending={pending}
-            onClose={close}
-            onConfirm={saveConfirmed}
-          />
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={create.isPending}>
+              {create.mustRetry ? 'Retry save' : 'Save order'}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={form.handleSubmit((input) => save({ ...input, confirm: true }))}
+            >
+              Save as confirmed
+            </Button>
+          </div>
         </form>
       </FormProvider>
     </SessionDialog>
-  );
-}
-
-function useNewOrderSubmission(
-  { onClose, onSaved }: NewOrderDialogProps,
-  handleSubmit: UseFormHandleSubmit<CreateOrderValues, CreateOrderInput>,
-) {
-  const create = useCreateOrder();
-  const transition = useOrderStage();
-  const client = useQueryClient();
-  const confirmAfterSave = useRef(false);
-  const saved = create.data;
-  const latest = useOrder(saved?.id ?? '', false);
-  const pending = create.isPending || transition.isPending || latest.isFetching;
-  const error = create.error ?? latest.error ?? transition.error;
-  const close = () => (saved ? onSaved(saved.id) : onClose());
-  function confirm(order: OrderDetail) {
-    transition.mutate(
-      { id: order.id, body: { to: 'to_pack' } },
-      { onSuccess: () => onSaved(order.id) },
-    );
-  }
-  function save(input: CreateOrderInput) {
-    create.mutate(input, {
-      onSuccess: (order) =>
-        confirmAfterSave.current && order.stage === 'to_confirm'
-          ? confirm(order)
-          : onSaved(order.id),
-    });
-  }
-  function submit(event: FormEvent<HTMLFormElement>) {
-    if (create.mustRetry) {
-      event.preventDefault();
-      if (create.variables) save(create.variables);
-    } else {
-      confirmAfterSave.current = false;
-      void handleSubmit(save)(event);
-    }
-  }
-  async function saveConfirmed() {
-    if (saved) {
-      const { data: current, isSuccess } = await latest.refetch();
-      if (!isSuccess) return;
-      if (current.stage === 'to_confirm') return confirm(current);
-      void client.invalidateQueries({ queryKey: ordersKey });
-      onSaved(current.id);
-      return;
-    }
-    confirmAfterSave.current = true;
-    void handleSubmit(save)();
-  }
-
-  return {
-    saved: Boolean(saved),
-    pending,
-    retry: create.mustRetry,
-    error,
-    close,
-    submit,
-    saveConfirmed,
-  };
-}
-
-type OrderSaveActionsProps = {
-  saved: boolean;
-  retry: boolean;
-  pending: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-};
-
-function OrderSaveActions({ saved, retry, pending, onClose, onConfirm }: OrderSaveActionsProps) {
-  return (
-    <div className="flex shrink-0 flex-wrap justify-end gap-2">
-      <Button variant="secondary" disabled={pending || retry} onClick={onClose}>
-        {saved ? 'Open saved order' : 'Cancel'}
-      </Button>
-      {!saved && (
-        <Button type="submit" loading={pending}>
-          {retry ? 'Retry save' : 'Save order'}
-        </Button>
-      )}
-      <Button variant="secondary" disabled={pending || retry} onClick={onConfirm}>
-        {saved ? 'Confirm saved order' : 'Save as confirmed'}
-      </Button>
-    </div>
   );
 }
 
