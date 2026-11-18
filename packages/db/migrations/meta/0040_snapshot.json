@@ -1,5 +1,5 @@
 {
-  "id": "f43d7667-687c-4adf-aa74-cf984a9ee136",
+  "id": "05ba8280-a2a1-4d1a-a795-d0ccc86312cb",
   "prevId": "f3b512be-f797-44b0-8c3b-4d0feed44fa8",
   "version": "7",
   "dialect": "postgresql",
@@ -7599,9 +7599,9 @@
               "nulls": "last"
             },
             {
-              "expression": "started_at",
-              "isExpression": false,
+              "expression": "coalesce(\"started_at\", \"approved_at\")",
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             },
             {

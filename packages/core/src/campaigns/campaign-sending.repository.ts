@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, lte, sql } from 'drizzle-orm';
+import { and, eq, inArray, lte, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
 import { campaigns } from '@dakly/db/schema/campaigns';
@@ -28,11 +28,17 @@ export class CampaignSendingRepository {
 
   // Guarded on the send time too, so a campaign edited and approved again meanwhile waits.
   async start(storeId: string, id: string, now: Date): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
-      tx
+    await this.database.forStore(storeId, async (tx) => {
+      const due = tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(and(statusWhere(storeId, id, 'scheduled'), lte(campaigns.scheduledFor, now)))
+        .for('update', { skipLocked: true });
+      // An in-flight edit or cancellation should not delay the sweep for other stores.
+      await tx
         .update(campaigns)
         .set({ status: 'sending', startedAt: now, updatedAt: now })
-        .where(and(statusWhere(storeId, id, 'scheduled'), lte(campaigns.scheduledFor, now))),
-    );
+        .where(and(eq(campaigns.storeId, storeId), inArray(campaigns.id, due)));
+    });
   }
 }

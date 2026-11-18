@@ -347,7 +347,7 @@ Each change is a guarded update from one state, listed in a table in `CampaignsS
 
 ### Sender (CAMP-3)
 
-The sender runs on the `campaign` queue in `apps/worker`. The `start-due-campaigns` sweep moves each campaign from `due_campaigns` to `sending` with `started_at`, guarded on `scheduled` and the send time, so a campaign edited meanwhile waits. A failure on one campaign is logged with its ids and the sweep goes on to the next. The worker does not schedule the sweep yet: it is scheduled every minute together with the batch job that sends to the recipients.
+The sender runs on the `campaign` queue in `apps/worker`. The `start-due-campaigns` sweep moves each campaign from `due_campaigns` to `sending` with `started_at`, guarded on `scheduled` and the send time, so a campaign edited meanwhile waits. The sweep skips a campaign whose row is locked by an edit or cancellation. A failure on one campaign is logged with its ids and the sweep goes on to the next. The sending sweep orders campaigns by start time, with approval time as the fallback for older immediate approvals. The worker does not schedule the sweep yet: it is scheduled every minute together with the batch job that sends to the recipients.
 
 ### Frozen destinations and final send checks
 

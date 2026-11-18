@@ -160,9 +160,9 @@ export const campaigns = pgTable(
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
-    // The sender's sweep takes each store's earliest started sending campaign.
+    // Match the sweep's order, including immediate campaigns started by older app versions.
     index('campaigns_sending_idx')
-      .on(table.storeId, table.startedAt, table.id)
+      .on(table.storeId, sql`coalesce(${table.startedAt}, ${table.approvedAt})`, table.id)
       .where(sql`${table.status} = 'sending'`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),

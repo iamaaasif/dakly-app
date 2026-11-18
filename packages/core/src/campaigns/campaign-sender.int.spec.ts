@@ -102,4 +102,62 @@ describe('Campaign sweep (Postgres)', () => {
     quiet.mockRestore();
     report.mockRestore();
   });
+
+  it('keeps an older immediate campaign first when its start time is missing', async () => {
+    const store = randomUUID();
+    const [legacy, newer] = [randomUUID(), randomUUID()];
+    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
+    try {
+      await admin.pool.query(
+        `insert into campaigns(id,store_id,name,channel,content,status,approved_at,started_at)
+         values($1,$3,'পুরানো','sms','{"text":"নতুন"}','sending',$4,null),
+               ($2,$3,'নতুন','sms','{"text":"নতুন"}','sending',$5,$5)`,
+        [legacy, newer, store, new Date(sendAt.getTime() - 60_000), sendAt],
+      );
+      const names = await admin.pool.query<{ campaign_id: string }>(
+        'select campaign_id from sending_campaigns() where store_id=$1',
+        [store],
+      );
+      expect(names.rows).toEqual([{ campaign_id: legacy }]);
+    } finally {
+      await admin.pool.query('delete from campaigns where store_id=$1', [store]);
+      await admin.pool.query('delete from stores where id=$1', [store]);
+    }
+  });
+
+  it('starts another store’s campaign while the first due row is locked', async () => {
+    const store = randomUUID();
+    const [locked, other] = [randomUUID(), randomUUID()];
+    await admin.pool.query("insert into stores(id,name) values($1,'নতুন দোকান')", [store]);
+    const blocker = await admin.pool.connect();
+    let sweep: Promise<void> | undefined;
+    try {
+      for (const [id, owner] of [
+        [locked, storeId],
+        [other, store],
+      ]) {
+        await admin.pool.query(
+          `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
+           values($1,$2,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$3,$3)`,
+          [id, owner, sendAt],
+        );
+      }
+      await blocker.query('begin');
+      await blocker.query('select id from campaigns where id=$1 for update', [locked]);
+      vi.spyOn(app.get(CampaignSendingRepository), 'listDue').mockResolvedValueOnce([
+        { storeId, campaignId: locked },
+        { storeId: store, campaignId: other },
+      ]);
+      clockNow = sendAt;
+      sweep = sender.startDue();
+      await expect.poll(() => campaignRow(other)).toMatchObject({ status: 'sending' });
+      expect(await campaignRow(locked)).toMatchObject({ status: 'scheduled' });
+    } finally {
+      await blocker.query('rollback');
+      blocker.release();
+      await sweep;
+      await admin.pool.query('delete from campaigns where store_id=$1', [store]);
+      await admin.pool.query('delete from stores where id=$1', [store]);
+    }
+  });
 });
