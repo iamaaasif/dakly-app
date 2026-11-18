@@ -73,6 +73,17 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
+  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
+  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
+  to_pack: ['with_courier', 'on_hold', 'cancelled'],
+  with_courier: ['delivered', 'partially_delivered', 'returned'],
+  delivered: ['returned'],
+  partially_delivered: ['returned'],
+  returned: [],
+  cancelled: [],
+};
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',
@@ -247,10 +258,10 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('to_pack') }),
   z.strictObject({
     to: z.literal('on_hold'),
-    reason: z.enum(onHoldReasons),
+    reason: z.enum(onHoldReasons, 'Choose a reason.'),
     followUpOn: calendarDate.optional(),
   }),
-  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
+  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons, 'Choose a reason.') }),
   z.strictObject({ to: z.literal('delivered') }),
   z.strictObject({
     to: z.literal('partially_delivered'),

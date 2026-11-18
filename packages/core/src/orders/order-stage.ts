@@ -13,17 +13,6 @@ import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { OrdersRepository, StageWrite } from './orders.repository';
 
-export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
-  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
-  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
-  to_pack: ['with_courier', 'on_hold', 'cancelled'],
-  with_courier: ['delivered', 'partially_delivered', 'returned'],
-  delivered: ['returned'],
-  partially_delivered: ['returned'],
-  returned: [],
-  cancelled: [],
-};
-
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 
 const groupedStages: Partial<Record<OrderStage, OrderStage[]>> = {

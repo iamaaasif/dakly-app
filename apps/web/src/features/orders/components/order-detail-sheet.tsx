@@ -1,6 +1,6 @@
 import { useContext, useRef, type RefObject } from 'react';
 
-import type { OrderDetail } from '@dakly/contracts/orders';
+import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Sheet, type SheetProps } from '@dakly/ui/sheet';
@@ -10,33 +10,52 @@ import { useOrder } from '../api/get-order';
 import { canConfirmOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
 import { OrderDetails } from './order-details';
+import { orderStageActions, type StageAction } from './order-stage-actions';
+import { OrderStageDialog } from './order-stage-dialog';
 import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
-type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'fallbackFocus'>;
+type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'restoreFocusTo'>;
 
-export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailSheetProps) {
+export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailSheetProps) {
   const query = useOrder(id);
   const order = query.data;
   const blocked = useContext(SessionInteraction);
   const { data } = useSessionContext();
-  const transition = useOrderStage(id);
+  const transition = useOrderStage();
   const stage = useRef<HTMLSpanElement>(null);
+  const canEdit = data?.currentStore?.canEditOrders;
+  const canConfirm = canConfirmOrder(order, canEdit);
+  const actions = orderStageActions(order, canEdit);
 
   return (
     <Sheet
-      title={order ? `Order #${order.number}` : 'Order details'}
-      description={order && <OrderDescription order={order} />}
+      {...orderHeading(order)}
       open={!blocked}
       onClose={onClose}
-      fallbackFocus={fallbackFocus}
+      restoreFocusTo={restoreFocusTo}
       footer={
-        canConfirmOrder(order, data?.currentStore?.canEditOrders) && (
-          <ConfirmOrderFooter transition={transition} stage={stage} />
+        order &&
+        (canConfirm || actions.length > 0) && (
+          <OrderStageFooter {...{ order, transition, stage, canConfirm, actions }} />
         )
       }
     >
+      <OrderDetailContent query={query} stage={stage} />
+    </Sheet>
+  );
+}
+
+function OrderDetailContent({
+  query,
+  stage,
+}: {
+  query: ReturnType<typeof useOrder>;
+  stage: RefObject<HTMLSpanElement | null>;
+}) {
+  return (
+    <>
       {query.isPending ? <p role="status">Loading order…</p> : null}
       {query.error ? (
         <QueryError
@@ -45,56 +64,91 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
           retryLabel="Retry order"
         />
       ) : null}
-      {order ? <OrderDetails order={order} stageRef={stage} /> : null}
-    </Sheet>
-  );
-}
-
-function OrderDescription({ order }: { order: OrderDetail }) {
-  return (
-    <>
-      {orderSourceLabels[order.source]} ·{' '}
-      <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
-        {formatRelativeTime(order.createdAt)}
-      </time>
+      {query.data ? <OrderDetails order={query.data} stageRef={stage} /> : null}
     </>
   );
 }
 
-function ConfirmOrderFooter({
-  transition,
-  stage,
-}: {
+function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'description'> {
+  if (!order) return { title: 'Order details' };
+  return {
+    title: `Order #${order.number}`,
+    description: (
+      <>
+        {orderSourceLabels[order.source]} ·{' '}
+        <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
+          {formatRelativeTime(order.createdAt)}
+        </time>
+      </>
+    ),
+  };
+}
+
+type OrderStageFooterProps = {
+  order: OrderDetail;
   transition: ReturnType<typeof useOrderStage>;
   stage: RefObject<HTMLSpanElement | null>;
-}) {
+  canConfirm: boolean;
+  actions: readonly StageAction[];
+};
+
+function OrderStageFooter({
+  order,
+  transition,
+  stage,
+  canConfirm,
+  actions,
+}: OrderStageFooterProps) {
+  function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
+    const drawer = button.closest('[role="dialog"]');
+    transition.mutate(
+      { id: order.id, body: change },
+      {
+        onSuccess: () => {
+          const focused = document.activeElement;
+          if (focused === button || focused === drawer || focused === document.body)
+            stage.current?.focus();
+        },
+      },
+    );
+  }
+
   return (
-    <>
+    <div className="flex flex-wrap gap-2">
       {transition.error && (
-        <p role="alert" className="mb-2 text-danger">
+        <p role="alert" className="w-full text-danger">
           {transition.error.message}
         </p>
       )}
-      <Button
-        className="w-full"
-        disabled={transition.isPending}
-        onClick={(event) => {
-          const button = event.currentTarget;
-          const drawer = button.closest('[role="dialog"]');
-          transition.mutate(
-            { to: 'to_pack' },
-            {
-              onSuccess: () => {
-                const focused = document.activeElement;
-                if (focused === button || focused === drawer || focused === document.body)
-                  stage.current?.focus();
-              },
-            },
-          );
-        }}
-      >
-        Mark confirmed
-      </Button>
-    </>
+      {canConfirm && (
+        <Button
+          className="w-full"
+          disabled={transition.isPending}
+          onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+        >
+          Mark confirmed
+        </Button>
+      )}
+      {actions.map((action) =>
+        action === 'to_confirm' ? (
+          <Button
+            key={action}
+            variant="secondary"
+            disabled={transition.isPending}
+            onClick={(event) => changeStage({ to: action }, event.currentTarget)}
+          >
+            Back to confirmation
+          </Button>
+        ) : (
+          <OrderStageDialog
+            key={action}
+            order={order}
+            action={action}
+            stage={stage}
+            disabled={transition.isPending}
+          />
+        ),
+      )}
+    </div>
   );
 }
