@@ -124,7 +124,7 @@ async function fulfilmentWrite(
       });
       return {
         cancelledAt: now,
-        ...(order.advancePaidPoisha > 0 && { paymentStatus: 'refund_due' }),
+        ...(order.paymentStatus === 'advance_paid' && { paymentStatus: 'refund_due' }),
       };
     default:
       return {};

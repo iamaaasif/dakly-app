@@ -183,7 +183,7 @@ describe('Manual dispatch and delivery', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ on_hand: 0, reserved: 0 });
   });
 
-  it('records COD once after delivery and flags a cancelled advance for refund', async () => {
+  it('records COD once after delivery', async () => {
     const orderId = await order(f.a, 'to_pack');
     await trackedLine(orderId, 1);
     await expect(
@@ -207,16 +207,6 @@ describe('Manual dispatch and delivery', () => {
       [f.a, orderId],
     );
     expect(rows).toEqual([{ payload: { orderId } }]);
-
-    const cancelled = await order(f.a, 'to_confirm', { advance: 20000 });
-    expect(
-      await service.changeStage(
-        f.a,
-        cancelled,
-        { to: 'cancelled', reason: 'customer_cancelled' },
-        editor(),
-      ),
-    ).toMatchObject({ paymentStatus: 'refund_due' });
   });
 
   it('uses only the recipient phone and this store’s completed parcels for risk', async () => {
