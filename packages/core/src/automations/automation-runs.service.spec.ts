@@ -129,6 +129,7 @@ describe('AutomationRunsService', () => {
   let decision: SendDecision;
   let recheckReason: SkipReason | undefined;
   let recheckDefer: Date | undefined;
+  let duringRecheck: () => void;
   let contactPhone: string;
   let reported: string[];
   let sent: OutgoingMessage[];
@@ -167,6 +168,7 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     recheckReason = undefined;
     recheckDefer = undefined;
+    duringRecheck = () => undefined;
     contactPhone = '01712345678';
     reported = [];
     sent = [];
@@ -225,13 +227,15 @@ describe('AutomationRunsService', () => {
       hasContact: async (_storeId: string, segmentId: string, contactId: string) =>
         segmentId === SEGMENT_ID && segmentMembers.includes(contactId),
     };
+    const recheck = (): SendDecision => {
+      duringRecheck();
+      if (recheckReason) return { action: 'skip', reason: recheckReason };
+      return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
+    };
     const sendPolicy = {
       check: async () => decision,
       checkForSend: async () => ({ decision, destination: contactPhone, at: clockNow }),
-      recheck: async () => {
-        if (recheckReason) return { action: 'skip', reason: recheckReason };
-        return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
-      },
+      recheckForSend: async () => ({ decision: recheck(), at: clockNow }),
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
@@ -548,6 +552,48 @@ describe('AutomationRunsService', () => {
       expect(repository.run).toMatchObject({ currentStepKey: 'end', lastError: null });
     });
 
+    it('holds a resend when the workflow pauses during the eligibility check', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      duringRecheck = () => {
+        repository.run = { ...repository.run, automationStatus: 'paused' };
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'waiting', currentStepKey: 'first' });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+      expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
+    });
+
+    it('ends an uncertain send when the goal is reached during the resend check', async () => {
+      providerError = new Error('connection reset');
+      await start(send, { graph: { ...graphWith(send), goal: { kind: 'got_tag', tag: 'paid' } } });
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      duringRecheck = () => {
+        tags = ['paid'];
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'goal' });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
+    });
+
     it('fails the step before a resend when consent was withdrawn meanwhile', async () => {
       providerError = new Error('connection reset');
       await start(send);
@@ -637,6 +683,31 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       expect(repository.run).toMatchObject({ currentStepKey: 'end' });
+    });
+
+    it('wakes at the retry deadline when quiet hours last longer', async () => {
+      const deadline = new Date(now.getTime() + 36 * HOUR);
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      clockNow = new Date(deadline.getTime() - HOUR);
+      recheckDefer = new Date(deadline.getTime() + HOUR);
+      repository.run = {
+        ...repository.run,
+        status: 'running',
+        claimedAt: clockNow,
+        wakeAt: clockNow,
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: deadline });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
     });
 
     it('fails the run with a readable reason after 36 hours of temporary errors', async () => {

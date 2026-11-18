@@ -12,8 +12,6 @@ import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { ErrorReporter } from '../platform/logging/error-reporter';
-import { serializeError } from '../platform/logging/safe-error';
-import { DAY_MS, HOUR_MS, MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -25,6 +23,7 @@ import {
   type RunClaim,
   type SendingStep,
 } from './automation-runs.repository';
+import { deliverAutomationSms, endExpiredRetry, retryDecision } from './automation-send-retry';
 import {
   type CreditSettlement,
   type Delivery,
@@ -46,7 +45,6 @@ import {
   type RunFacts,
   type SendStep,
   type StepResult,
-  UNKNOWN_OUTCOME,
 } from './automation-step-rules';
 import { wakeTime } from './automation-waits';
 
@@ -54,9 +52,6 @@ import { wakeTime } from './automation-waits';
 const MAX_QUEUED_STEPS = 1000;
 // And at most this many of one store's runs, so a backlog cannot hold back other stores.
 const CLAIMS_PER_STORE = 100;
-// Temporary provider errors retry for this long from the first try (feature 09).
-const SEND_RETRY_LIMIT_MS = 36 * HOUR_MS;
-const SEND_RETRY_MAX_DELAY_MS = 6 * HOUR_MS;
 const system = { kind: 'system' } as const;
 
 @Injectable()
@@ -128,14 +123,6 @@ export class AutomationRunsService {
         : undefined;
     const held = holdOrEnd(run, now);
     if (held) return started ? endWithUnknownOutcome(held) : held;
-    // A send already handed to the provider is finished before the exit checks.
-    if (step.kind === 'send' && started)
-      return this.resend(
-        { storeId, claim, contactId: run.contactId, step },
-        started,
-        run.wakeAt,
-        now,
-      );
     const facts: RunFacts = {
       graph: run.graph,
       storeId,
@@ -145,8 +132,12 @@ export class AutomationRunsService {
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
     };
-    const exitReason = await this.conditions.exitReason(run.graph, facts, now);
-    if (exitReason) return exited(exitReason, now);
+    const exitReason = await this.conditions.exitReason(storeId, run.graph, facts, now);
+    if (exitReason) {
+      const result = exited(exitReason, now);
+      return started ? endWithUnknownOutcome(result) : result;
+    }
+    if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
     if (shouldPrepareSender(step, facts.wakeAt, this.clock.now()))
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
@@ -172,7 +163,12 @@ export class AutomationRunsService {
         };
       }
       case 'condition': {
-        const choice = (await this.conditions.firstHoldingPath(step.paths, facts, now)) ?? {
+        const choice = (await this.conditions.firstHoldingPath(
+          facts.storeId,
+          step.paths,
+          facts,
+          now,
+        )) ?? {
           outcome: 'else',
           next: step.elseNext,
         };
@@ -238,7 +234,8 @@ export class AutomationRunsService {
       return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
     const { decision } = started;
     if ('body' in started)
-      return this.deliver(
+      return deliverAutomationSms(
+        { messaging: this.messaging, reporter: this.reporter, clock: this.clock },
         {
           storeId,
           claim: renewed,
@@ -294,13 +291,18 @@ export class AutomationRunsService {
   private async refreshExitReason(facts: RunFacts, at: Date) {
     const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
-    return this.conditions.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
+    return this.conditions.exitReason(
+      facts.storeId,
+      facts.graph,
+      { ...facts, tags, tappedStepKeys },
+      at,
+    );
   }
 
-  private async heldOrStale(storeId: string, claim: RunClaim, now: Date, hasSendingRow = false) {
+  private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
     const run = await this.repository.findRun(storeId, claim.runId);
     const held = run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
-    return held && hasSendingRow ? endWithUnknownOutcome(held) : held;
+    return held && endWithUnknownOutcome(held);
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
@@ -374,111 +376,54 @@ export class AutomationRunsService {
       });
   }
 
-  // Feature 09: consent, block, the address and quiet hours are checked again right before the
-  // provider gets the message; the cap is not, because the send row already counts. The first try
-  // may have reached the provider, so a step ended here is unconfirmed and keeps its credits.
-  private async resend(
-    delivery: Omit<Delivery, 'body' | 'destination' | 'isFirstTry'>,
-    started: SendingStep,
-    wakeAt: Date | null,
-    now: Date,
-  ): Promise<StepResult | undefined> {
-    const { storeId, contactId, step } = delivery;
-    const renewal = { status: 'running', claimedAt: now } as const;
-    // A stopped, paused or archived workflow is not resent.
-    if (!(await this.repository.moveRunIfLive(storeId, delivery.claim, renewal)))
-      return this.heldOrStale(storeId, delivery.claim, now, true);
-    const claim = { ...delivery.claim, claimedAt: now };
-    const unconfirmed = { claim, stepChange: { outcome: 'unconfirmed' } } as const;
-    if (now.getTime() - started.sentAt.getTime() >= SEND_RETRY_LIMIT_MS)
-      return {
-        ...failed(`The SMS provider did not answer for 36 hours. ${UNKNOWN_OUTCOME}`, now),
-        ...unconfirmed,
-      };
-    // As for a fresh send, a message due more than a day ago is not sent.
-    if (wakeAt && now.getTime() - wakeAt.getTime() > DAY_MS)
-      return { ...goOn(step.next, now), ...unconfirmed };
-    const request = { contactId, channel: 'sms', category: step.category, at: now } as const;
-    const decision = await this.sendPolicy.recheck(storeId, request);
-    if (decision.action === 'defer')
-      return { claim, run: { status: 'waiting', wakeAt: decision.until } };
-    if (decision.action === 'skip') {
-      const next = ifNotReachable(step, now);
-      return {
-        ...next,
-        run: { ...next.run, lastError: UNKNOWN_OUTCOME },
-        claim,
-        stepChange: { outcome: 'unconfirmed', skipReason: decision.reason },
-      };
-    }
-    const optOutUrl = started.optOutCode ? this.links.optOutUrl(started.optOutCode) : undefined;
-    const body = messageBody(step, optOutUrl);
-    const { destination } = started;
-    return this.deliver(
-      { ...delivery, claim, body, destination, isFirstTry: false },
-      started.sentAt,
-      now,
+  private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
+    const { storeId, contactId, wakeAt } = facts;
+    const { sentAt, optOutCode, destination } = started;
+    const preparedSender = endExpiredRetry(step, sentAt, wakeAt, this.clock.now())
+      ? undefined
+      : await this.messaging.prepareSender(storeId);
+    const gated = await this.transaction.run(storeId, async () => {
+      const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
+      if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
+      const early = endExpiredRetry(step, sentAt, wakeAt, this.clock.now());
+      const result = early ?? (await this.recheckResend(step, facts, sentAt));
+      const claimedAt = this.clock.now();
+      const renewal = { status: 'running', claimedAt } as const;
+      if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return undefined;
+      return { result, claim: { ...claim, claimedAt } };
+    });
+    if (!gated) return this.heldOrStale(storeId, claim, this.clock.now());
+    if (gated.result) return { ...gated.result, claim: gated.claim };
+    const optOutUrl = optOutCode ? this.links.optOutUrl(optOutCode) : undefined;
+    return deliverAutomationSms(
+      { messaging: this.messaging, reporter: this.reporter, clock: this.clock },
+      {
+        storeId,
+        claim: gated.claim,
+        contactId,
+        step,
+        body: messageBody(step, optOutUrl),
+        destination,
+        preparedSender,
+        isFirstTry: false,
+      },
+      sentAt,
+      gated.claim.claimedAt,
     );
   }
 
-  // Called with no transaction open. The operation key makes a repeat return the first result, so
-  // a retry after an unknown outcome sends once.
-  private async deliver(
-    { storeId, claim, contactId, step, body, destination, isFirstTry, preparedSender }: Delivery,
-    firstTriedAt: Date,
-    now: Date,
-  ): Promise<StepResult> {
-    try {
-      const message = {
-        channel: 'sms',
-        contactId,
-        body,
-        operationKey: operationKey(claim),
-        destination,
-      } as const;
-      const { providerMessageId, credits } = await this.messaging.send(
-        storeId,
-        message,
-        preparedSender,
-      );
-      return {
-        ...goOn(step.next, now),
-        claim,
-        stepChange: { outcome: 'sent', providerMessageId, sentAt: now },
-        credits: { settle: 'charge', quantity: credits },
-      };
-    } catch (error) {
-      // MessagingService refuses before it calls the provider, so a refused first try never
-      // reached it. After an earlier try with an unknown outcome the credits stay reserved.
-      if (error instanceof AppError)
-        return isFirstTry
-          ? {
-              ...failed(error.message, now),
-              claim,
-              stepChange: { outcome: 'failed' },
-              credits: { settle: 'release' },
-            }
-          : {
-              ...failed(`${error.message}. ${UNKNOWN_OUTCOME}`, now),
-              claim,
-              stepChange: { outcome: 'unconfirmed' },
-            };
-      const tried = now.getTime() - firstTriedAt.getTime();
-      if (tried >= SEND_RETRY_LIMIT_MS)
-        return {
-          ...failed(`The SMS provider did not answer for 36 hours. ${UNKNOWN_OUTCOME}`, now),
-          claim,
-          stepChange: { outcome: 'unconfirmed' },
-        };
-      // The run retries on its own; the report holds ids only.
-      this.reporter.reportJob(serializeError(error), operationKey(claim));
-      // The wait doubles with the time already spent, from a minute up to six hours.
-      const delay = Math.min(Math.max(tried, MINUTE_MS), SEND_RETRY_MAX_DELAY_MS);
-      const lastError = 'The SMS provider did not answer; trying again';
-      return {
-        claim,
-        run: { status: 'waiting', wakeAt: new Date(now.getTime() + delay), lastError },
-      };
-    }
+  private async recheckResend(step: SendStep, facts: RunFacts, firstTriedAt: Date) {
+    const { decision, at } = await this.sendPolicy.recheckForSend(facts.storeId, {
+      contactId: facts.contactId,
+      channel: 'sms',
+      category: step.category,
+    });
+    const exit = await this.refreshExitReason(facts, at);
+    const now = this.clock.now();
+    if (exit) return endWithUnknownOutcome(exited(exit, now));
+    return (
+      endExpiredRetry(step, firstTriedAt, facts.wakeAt, now) ??
+      retryDecision(step, firstTriedAt, decision, now)
+    );
   }
 }

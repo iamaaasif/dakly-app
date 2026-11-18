@@ -55,15 +55,8 @@ export class SendPolicyService {
 
   // Freeze the destination from the eligibility read and take the cap time after the lock.
   async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
-    this.requireTransaction();
-    await this.repository.lockContact(storeId, request.contactId);
-    try {
-      await this.contacts.lockForConsent(storeId, [request.contactId]);
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND')
-        return { decision: skip('no_address'), destination: null, at: this.clock.now() };
-      throw error;
-    }
+    if (!(await this.lockForDispatch(storeId, request.contactId)))
+      return { decision: skip('no_address'), destination: null, at: this.clock.now() };
     const at = this.clock.now();
     const [checked] = await this.checkAudience(storeId, {
       contactIds: [request.contactId],
@@ -89,9 +82,27 @@ export class SendPolicyService {
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
-  // Checks 1 to 5 without the cap. A workflow runs them right before resending a message whose
-  // first try had an unknown outcome: the cap already counts that message.
-  async recheck(storeId: string, request: SendRequest): Promise<SendDecision> {
+  // A retry keeps its first reservation and already counts toward the cap.
+  async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = this.clock.now();
+    const decision = exists ? await this.recheck(storeId, { ...request, at }) : skip('no_address');
+    return { decision, at };
+  }
+
+  private async lockForDispatch(storeId: string, contactId: string) {
+    this.requireTransaction();
+    await this.repository.lockContact(storeId, contactId);
+    try {
+      await this.contacts.lockForConsent(storeId, [contactId]);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
+      throw error;
+    }
+  }
+
+  private async recheck(storeId: string, request: SendRequest): Promise<SendDecision> {
     const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
