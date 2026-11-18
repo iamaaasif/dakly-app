@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import type { AuditEntry, AuditHistoryQuery } from '@dakly/contracts/audit';
 import { auditLog } from '@dakly/db/schema/platform';
@@ -50,6 +50,8 @@ export class AuditRepository {
         after: entry.after,
         ip: entry.ip,
         reason: entry.reason,
+        // A transaction can begin before it acquires the row lock for the change.
+        createdAt: sql`statement_timestamp()`,
       }),
     );
   }

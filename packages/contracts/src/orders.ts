@@ -140,7 +140,10 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({
     to: z.literal('on_hold'),
     reason: z.enum(onHoldReasons),
-    followUpOn: z.iso.date().optional(),
+    followUpOn: z.iso
+      .date()
+      .refine((date) => !date.startsWith('0000-'), 'Enter a valid follow-up date')
+      .optional(),
   }),
   z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
 ]);
