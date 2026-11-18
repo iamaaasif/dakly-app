@@ -25,6 +25,7 @@ const examples: DaklyEvent[] = [
     payload: { orderId, from: 'to_confirm', to: 'to_pack' },
   },
   { type: 'order.confirmed', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   {
     type: 'stock.changed',
     storeId,

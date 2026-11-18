@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, lt } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 
 import type { OrderListQuery } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
@@ -34,7 +34,11 @@ const detailColumns = {
   onHoldReason: orders.onHoldReason,
   followUpOn: orders.followUpOn,
   cancelReason: orders.cancelReason,
+  possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
 };
+
+export type OrderWrite = Omit<typeof orders.$inferInsert, 'storeId'>;
+export type OrderItemWrite = Omit<typeof orderItems.$inferInsert, 'storeId' | 'orderId'>;
 
 export type StageWrite = Pick<
   typeof orders.$inferInsert,
@@ -45,6 +49,7 @@ export type StageWrite = Pick<
   | 'confirmationMethod'
   | 'confirmedAt'
   | 'cancelledAt'
+  | 'paymentStatus'
   | 'updatedAt'
 >;
 
@@ -76,6 +81,59 @@ export class OrdersRepository {
         .from(orders)
         .where(eq(orders.storeId, storeId))
         .groupBy(orders.stage),
+    );
+  }
+
+  async findByIdempotencyKey(storeId: string, key: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), eq(orders.idempotencyKey, key)))
+        .limit(1),
+    );
+    return row;
+  }
+
+  async findDuplicate(
+    storeId: string,
+    {
+      orderId,
+      phone,
+      variantIds,
+      since,
+    }: { orderId: string; phone: string; variantIds: string[]; since: Date },
+  ) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orders.id })
+        .from(orders)
+        .innerJoin(
+          orderItems,
+          and(eq(orderItems.storeId, storeId), eq(orderItems.orderId, orders.id)),
+        )
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.recipientPhone, phone),
+            inArray(orderItems.variantId, variantIds),
+            gte(orders.createdAt, since),
+            ne(orders.id, orderId),
+          ),
+        )
+        .orderBy(desc(orders.createdAt), desc(orders.id))
+        .limit(1),
+    );
+    return row?.id ?? null;
+  }
+
+  async insert(storeId: string, order: OrderWrite): Promise<void> {
+    await this.database.forStore(storeId, (tx) => tx.insert(orders).values({ ...order, storeId }));
+  }
+
+  async insertItems(storeId: string, orderId: string, items: OrderItemWrite[]): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx.insert(orderItems).values(items.map((item) => ({ ...item, orderId, storeId }))),
     );
   }
 
@@ -117,6 +175,7 @@ export class OrdersRepository {
           stage: orders.stage,
           confirmedAt: orders.confirmedAt,
           source: orders.source,
+          paymentStatus: orders.paymentStatus,
         })
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))
