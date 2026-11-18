@@ -31,7 +31,7 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     token: string;
     storeIds: [string, string];
   };
-  const storeId = fixture.storeIds[0];
+  const [storeId, otherStoreId] = fixture.storeIds;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const ids: string[] = [];
   await context.addCookies([
@@ -88,6 +88,7 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await create(longName);
     await page.reload();
     await page.setViewportSize({ width: 360, height: 800 });
+    await expect(page.getByRole('list', { name: 'Campaigns' })).toBeVisible();
     await expect(page.getByRole('link', { name: longName })).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -98,6 +99,10 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect(page).toHaveURL(new RegExp(`/campaigns/${draft}$`));
     await expect(page.getByRole('button', { name: 'Save draft' })).toBeVisible();
     await page.getByRole('link', { name: 'Back to campaigns' }).click();
+    const search = page.getByLabel('Search', { exact: true });
+    await search.fill('Unapplied name');
+    await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+    await expect(search).toHaveValue('');
     await page.getByLabel('Search', { exact: true }).fill('Puja');
     await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('sent');
     await page.getByRole('button', { name: 'Apply filters' }).click();
@@ -107,11 +112,28 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
+
+    const otherCampaign = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    await database.pool.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'Sylhet new collection','sms','{}')",
+      [otherCampaign, otherStoreId],
+    );
+    ids.push(otherCampaign);
+    await page.goto('/campaigns?limit=1');
+    await page.getByRole('link', { name: 'Next page' }).click();
+    await expect(page.getByRole('link', { name: 'First page' })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Current shop' }).selectOption(otherStoreId);
+    await expect(page.getByRole('link', { name: 'Sylhet new collection' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'First page' })).toHaveCount(0);
   } finally {
-    await database.pool.query('delete from campaigns where store_id=$1 and id=any($2::uuid[])', [
-      storeId,
-      ids,
-    ]);
-    await database.pool.end();
+    try {
+      expect((await post('/me/active-store', { storeId })).status()).toBe(204);
+      await database.pool.query(
+        'delete from campaigns where store_id=any($1::uuid[]) and id=any($2::uuid[])',
+        [fixture.storeIds, ids],
+      );
+    } finally {
+      await database.pool.end();
+    }
   }
 });
