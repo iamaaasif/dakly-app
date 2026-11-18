@@ -136,7 +136,7 @@ function readRecord(text: string, start: number) {
     position = end + 1;
     if (text[end] !== ',') break;
     if (position >= text.length) {
-      cells.push('');
+      if (cells.length < MAX_IMPORT_COLUMNS) cells.push('');
       break;
     }
   }
