@@ -33,6 +33,7 @@ import {
   failed,
   goOn,
   holdOrEnd,
+  holdOwnedClaim,
   holdsClaim,
   ifNotReachable,
   isLateSend,
@@ -225,7 +226,7 @@ export class AutomationRunsService {
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      const held = run && holdsClaim(run, renewed) ? holdOrEnd(run, this.clock.now()) : undefined;
+      const held = holdOwnedClaim(run, renewed, this.clock.now());
       return held && { ...held, claim: renewed };
     }
     const gatedAt = this.clock.now();
@@ -297,12 +298,6 @@ export class AutomationRunsService {
       { ...facts, tags, tappedStepKeys },
       at,
     );
-  }
-
-  private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
-    const run = await this.repository.findRun(storeId, claim.runId);
-    const held = run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
-    return held && endWithUnknownOutcome(held);
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
@@ -389,20 +384,23 @@ export class AutomationRunsService {
       const early = endExpiredRetry(step, firstTriedAt, wakeAt, this.clock.now());
       const result = early ?? (await this.recheckResend(step, facts, started));
       const claimedAt = this.clock.now();
-      const renewal = { status: 'running', claimedAt } as const;
-      if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return undefined;
+      if (!(await this.repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt })))
+        return undefined;
       if (result) return { result, claim: { ...claim, claimedAt }, at: claimedAt };
       const renewed = { ...claim, claimedAt };
-      await this.repository.changeStep(storeId, claim.runId, claim.stepKey, {
-        outcome: 'sending',
-        sentAt: claimedAt,
-        firstTriedAt,
-      });
+      // A slower worker must not age out a previously submitted message early.
+      const sentAt = claimedAt > started.latestDispatchAt ? claimedAt : started.latestDispatchAt;
+      const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
+      await this.repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
       const afterWrite = this.clock.now();
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
-      return { result, claim: { ...claim, claimedAt: afterWrite }, at: claimedAt };
+      return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
     });
-    if (!gated) return this.heldOrStale(storeId, claim, this.clock.now());
+    if (!gated) {
+      const run = await this.repository.findRun(storeId, claim.runId);
+      const held = holdOwnedClaim(run, claim, this.clock.now());
+      return held && endWithUnknownOutcome(held);
+    }
     if (gated.result) return { ...gated.result, claim: gated.claim };
     return deliverAutomationSms(
       { messaging: this.messaging, reporter: this.reporter, clock: this.clock },

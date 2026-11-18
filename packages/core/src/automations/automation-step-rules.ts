@@ -166,6 +166,10 @@ export function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
   );
 }
 
+export function holdOwnedClaim(run: ClaimedRun | undefined, claim: RunClaim, now: Date) {
+  return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
+}
+
 type ExitCondition = AutomationGraph['exitConditions'][number];
 
 // Orders arrive with ORD-1 and replies with CHAT-2, so those exits cannot happen yet; publish

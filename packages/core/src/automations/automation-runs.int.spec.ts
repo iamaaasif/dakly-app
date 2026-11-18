@@ -1561,6 +1561,42 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it('keeps the marketing cap when a slower worker settles a retry', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const firstTriedAt = new Date(opensAt.getTime() - 24 * HOUR);
+      clockNow = firstTriedAt;
+      const {
+        runIds: [earlier],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        await sms.send(message);
+        throw new Error('socket hang up');
+      });
+      await runDueStep(runner, earlier!);
+
+      clockNow = new Date(firstTriedAt.getTime() - 100);
+      await wakeNow(earlier!);
+      await runDueStep(runner, earlier!);
+      const timings = await admin.pool.query(
+        'select first_tried_at, sent_at from automation_run_steps where run_id=$1 and kind=$2',
+        [earlier, 'send'],
+      );
+      expect(timings.rows).toEqual([{ first_tried_at: firstTriedAt, sent_at: firstTriedAt }]);
+      expect(sentFor(earlier!)).toHaveLength(1);
+      expect(await sendStep(earlier!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+
+      clockNow = new Date(firstTriedAt.getTime() + 24 * HOUR - 25);
+      const {
+        runIds: [newer],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      await runDueStep(runner, newer!);
+      expect(sentFor(newer!)).toEqual([]);
+      expect(await sendStep(newer!)).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' }),
+      ]);
+    });
+
     // Last: it drains the store's credits.
     it('charges the credits a sent SMS reserved, and skips a send the balance cannot cover', async () => {
       const runner = await worker();
