@@ -6,6 +6,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { SmsSendRefused } from '../sms-driver';
 import { MailpitSmsDriver } from './mailpit-sms-driver';
 
+function smtpPeer(afterData: (socket: Socket) => void) {
+  return createServer((socket) => {
+    socket.setEncoding('utf8');
+    socket.write('220 smtp.test ESMTP\r\n');
+    let buffer = '';
+    let receivingBody = false;
+    socket.on('data', (chunk: string) => {
+      buffer += chunk;
+      let end = buffer.indexOf('\r\n');
+      while (end >= 0) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        if (receivingBody && line === '.') return afterData(socket);
+        if (!receivingBody) {
+          receivingBody = line === 'DATA';
+          socket.write(receivingBody ? '354 send the message\r\n' : '250 OK\r\n');
+        }
+        end = buffer.indexOf('\r\n');
+      }
+    });
+  });
+}
+
 describe('MailpitSmsDriver', () => {
   it.each([554, 421])('refuses on SMTP reply %s without exposing recipient data', async (code) => {
     const server = createServer((socket) =>
@@ -196,9 +219,49 @@ describe('MailpitSmsDriver', () => {
     }
   });
 
-  it('reports an unknown outcome, not a refusal, when the server stops answering', async () => {
-    const sockets: Socket[] = [];
-    const server = createServer((socket) => void sockets.push(socket));
+  it.each([true, false])(
+    'reconciles a truncated 451 after DATA when a capture exists (%s)',
+    async (found) => {
+      const server = smtpPeer((socket) => socket.end('451 4.3'));
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing test server port');
+      const driver = new MailpitSmsDriver({
+        host: '127.0.0.1',
+        port: address.port,
+        apiUrl: 'http://127.0.0.1:1',
+      });
+      const lookup = vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ messages: [] }))
+        .mockResolvedValueOnce(
+          found
+            ? Response.json({
+                messages: [{ ID: 'first-capture', MessageID: 'partial-451@sms.dakly.test' }],
+              })
+            : new Response(null, { status: 503 }),
+        );
+      vi.stubGlobal('fetch', lookup);
+      try {
+        const sent = driver.send({
+          to: '+8801700000000',
+          text: 'SMS',
+          idempotencyKey: 'partial-451',
+        });
+        if (found) await expect(sent).resolves.toEqual({ providerMessageId: 'first-capture' });
+        else await expect(sent).rejects.toMatchObject({ code: 'SMS_SEND_FAILED' });
+        expect(lookup).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.unstubAllGlobals();
+        server.close();
+        await once(server, 'close');
+      }
+    },
+  );
+
+  it('reports an unknown outcome, not a refusal, when the server stops answering after DATA', async () => {
+    const server = smtpPeer((socket) => socket.end());
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const address = server.address();
@@ -215,6 +278,28 @@ describe('MailpitSmsDriver', () => {
       expect(error).not.toBeInstanceOf(SmsSendRefused);
       expect(error).toMatchObject({ code: 'SMS_SEND_FAILED', message: 'SMS delivery failed' });
       expect(JSON.stringify(error)).not.toContain('+8801700000000');
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  });
+
+  it('refuses when the SMTP greeting times out before any submission', async () => {
+    const sockets: Socket[] = [];
+    const server = createServer((socket) => void sockets.push(socket));
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Missing test server port');
+    const driver = new MailpitSmsDriver({
+      host: '127.0.0.1',
+      port: address.port,
+      apiUrl: 'http://127.0.0.1:1',
+    });
+    try {
+      await expect(
+        driver.send({ to: '+8801700000000', text: 'secret-code' }),
+      ).rejects.toBeInstanceOf(SmsSendRefused);
     } finally {
       for (const socket of sockets) socket.destroy();
       server.close();

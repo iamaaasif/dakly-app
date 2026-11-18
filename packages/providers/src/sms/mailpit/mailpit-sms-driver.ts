@@ -75,14 +75,30 @@ export class MailpitSmsDriver implements SmsDriver {
 
   private async resolveSmtpError(error: unknown, messageId?: string): Promise<SmsSendResult> {
     // Mailpit can return 451 after storing DATA if tagging the capture fails.
-    const { responseCode, command } = (error ?? {}) as {
+    const { responseCode, command, code, originalCode, timeoutType } = (error ?? {}) as {
       responseCode?: unknown;
       command?: unknown;
+      code?: unknown;
+      originalCode?: unknown;
+      timeoutType?: unknown;
     };
-    if (responseCode === 451 && command === 'DATA') {
+    if (
+      code === 'EDNS' ||
+      originalCode === 'ECONNREFUSED' ||
+      timeoutType === 'CONNECT_TIMEOUT' ||
+      timeoutType === 'GREETING_TIMEOUT'
+    )
+      throw new SmsSendRefused();
+    // A disconnect may leave part of the DATA acknowledgment in Nodemailer's error.
+    if (responseCode === 451 && (command === 'DATA' || code === 'ECONNECTION')) {
       const captured = messageId && (await this.findCaptured(messageId).catch(() => undefined));
       if (captured) return { providerMessageId: captured };
-    } else if (typeof responseCode === 'number' && responseCode >= 400 && responseCode < 600) {
+    } else if (
+      code !== 'ECONNECTION' &&
+      typeof responseCode === 'number' &&
+      responseCode >= 400 &&
+      responseCode < 600
+    ) {
       throw new SmsSendRefused();
     }
     throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
