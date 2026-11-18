@@ -5,7 +5,6 @@ import { formatMoney } from '@/lib/format-money';
 export function OrderItems({ order }: { order: OrderDetail }) {
   const subtotal = order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha;
   const discount = order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha;
-  const total = BigInt(subtotal) + BigInt(order.deliveryChargePoisha) - BigInt(discount);
   return (
     <section aria-label="Items">
       <h3 className="text-md font-semibold">Items</h3>
@@ -41,7 +40,7 @@ export function OrderItems({ order }: { order: OrderDetail }) {
         />
         <PriceLine label="Delivery" amount={order.deliveryChargePoisha} />
         {discount > 0 && <PriceLine label="Discount" amount={-discount} />}
-        <PriceLine label="Total" amount={total} />
+        <PriceLine label="Total" amount={order.totalPoisha} />
         <PriceLine label="Advance paid" amount={order.advancePaidPoisha} />
         <PriceLine label="COD amount" amount={order.codAmountPoisha} />
         {order.codCollectedPoisha !== null && (
@@ -53,7 +52,7 @@ export function OrderItems({ order }: { order: OrderDetail }) {
   );
 }
 
-function PriceLine({ label, amount }: { label: string; amount: number | bigint }) {
+function PriceLine({ label, amount }: { label: string; amount: number }) {
   return (
     <div className="flex justify-between">
       <dt>{label}</dt>

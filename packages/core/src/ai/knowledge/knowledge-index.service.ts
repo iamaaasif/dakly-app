@@ -1,0 +1,208 @@
+import { createHash } from 'node:crypto';
+
+import { Inject, Injectable } from '@nestjs/common';
+import { getResolvedPDFJS } from 'unpdf';
+
+import { knowledgeFileBytes } from '@dakly/contracts/knowledge';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
+import { LlmError } from '@dakly/providers/llm/llm-driver';
+
+import { AppError } from '../../platform/errors/app-error';
+import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
+import { AiService } from '../ai.service';
+import {
+  KnowledgeRepository,
+  type KnowledgeChunk,
+  type KnowledgeItem,
+} from './knowledge.repository';
+
+const textLimit = 200_000;
+
+type FileText = ({ text: string } | { rejection: string }) & { sha256?: Buffer };
+
+@Injectable()
+export class KnowledgeIndexService {
+  constructor(
+    @Inject(KnowledgeRepository) private readonly repository: KnowledgeRepository,
+    @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
+    @Inject(AiService) private readonly ai: AiService,
+  ) {}
+
+  async index(
+    storeId: string,
+    itemId: string,
+    attempt: { revision: string; finalAttempt: boolean },
+  ): Promise<void> {
+    const item = await this.repository.find(storeId, itemId);
+    if (!isCurrentRevision(item, attempt.revision)) return;
+    const source: FileText = item.fileId
+      ? await this.fileText(storeId, item.fileId)
+      : { text: item.answer ?? '' };
+    const rejection = 'rejection' in source ? source.rejection : 'knowledge_file_empty';
+    const passages =
+      'text' in source ? splitKnowledgeText(source.text.replaceAll('\u0000', '')) : [];
+
+    const chunks = await this.embedPassages(storeId, passages, attempt.finalAttempt);
+    await this.repository.finishIndex(
+      storeId,
+      item.id,
+      item.updatedAt,
+      chunks
+        ? { chunks, file: { rejection: chunks.length ? null : rejection, sha256: source.sha256 } }
+        : { chunks: [], file: source.sha256 && { sha256: source.sha256 } },
+    );
+  }
+
+  private async embedPassages(
+    storeId: string,
+    passages: string[],
+    finalAttempt: boolean,
+  ): Promise<KnowledgeChunk[] | null> {
+    const chunks: KnowledgeChunk[] = [];
+    try {
+      for (let start = 0; start < passages.length; start += 64)
+        chunks.push(...(await this.embedBatch(storeId, passages.slice(start, start + 64))));
+      return chunks;
+    } catch (error) {
+      if (!finalAttempt || !isIndexAiFailure(error)) throw error;
+      return null;
+    }
+  }
+
+  private async embedBatch(storeId: string, passages: string[]): Promise<KnowledgeChunk[]> {
+    const { embeddings, model, usage } = await this.ai.embed(storeId, passages);
+    const totalBytes = Buffer.byteLength(passages.join(''));
+    let remaining = usage.inputTokens;
+    return passages.map((content, index) => {
+      const embedding = embeddings[index];
+      if (!embedding) throw new Error('Embedding result is missing a vector');
+      const tokenCount =
+        index === passages.length - 1
+          ? remaining
+          : Math.floor((usage.inputTokens * Buffer.byteLength(content)) / totalBytes);
+      remaining -= tokenCount;
+      return { content, embedding, embeddingModel: model, tokenCount };
+    });
+  }
+
+  private async fileText(storeId: string, fileId: string): Promise<FileText> {
+    const file = await this.repository.findFile(storeId, fileId);
+    if (!file) return { rejection: 'knowledge_file_missing' };
+    if (file.sizeBytes > knowledgeFileBytes) return { rejection: 'knowledge_file_size_limit' };
+    const stored = await this.storage.readBytes(file.objectKey, file.sizeBytes);
+    if (stored.kind === 'too_large') return { rejection: 'knowledge_file_size_limit' };
+    if (stored.kind === 'missing') return { rejection: 'knowledge_file_missing' };
+    const sha256 = createHash('sha256').update(stored.bytes).digest();
+    if (stored.bytes.length !== file.sizeBytes)
+      return { rejection: 'knowledge_file_invalid', sha256 };
+    try {
+      if (file.contentType === 'application/pdf')
+        return { ...(await readPdf(stored.bytes)), sha256 };
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(stored.bytes);
+      return text.length > textLimit
+        ? { rejection: 'knowledge_file_text_limit', sha256 }
+        : { text, sha256 };
+    } catch {
+      return { rejection: 'knowledge_file_invalid', sha256 };
+    }
+  }
+}
+
+function isCurrentRevision(
+  item: KnowledgeItem | undefined,
+  revision: string,
+): item is KnowledgeItem {
+  return item?.status === 'processing' && item.updatedAt.toISOString() === revision;
+}
+
+function isIndexAiFailure(error: unknown): boolean {
+  if (error instanceof LlmError) return true;
+  return (
+    error instanceof AppError && (error.code === 'AI_PAUSED' || error.code === 'AI_STORE_BUSY')
+  );
+}
+
+async function readPdf(bytes: Uint8Array): Promise<FileText> {
+  const { getDocument } = await getResolvedPDFJS();
+  const options = {
+    data: new Uint8Array(bytes),
+    // Keep font evaluation off on PDF.js builds that expose this option.
+    isEvalSupported: false,
+    disableFontFace: true,
+    useWorkerFetch: false,
+    useSystemFonts: false,
+    stopAtErrors: true,
+    verbosity: 0,
+  };
+  const loading = getDocument(options);
+  try {
+    const pdf = await loading.promise;
+    if (pdf.numPages > 100) return { rejection: 'knowledge_file_page_limit' };
+    let text = '';
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const reader = page.streamTextContent().getReader();
+      const pageText = await readPdfPage(reader, textLimit - text.length);
+      if (pageText === null) return { rejection: 'knowledge_file_text_limit' };
+      text += pageText;
+      page.cleanup();
+    }
+    return { text };
+  } finally {
+    await loading.destroy();
+  }
+}
+
+async function readPdfPage(
+  reader: ReadableStreamDefaultReader<{
+    items: object[];
+  }>,
+  limit: number,
+): Promise<string | null> {
+  let text = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return text;
+    text += pdfTextItems(value.items);
+    if (text.length > limit) {
+      // Destroying the document stops PDF.js after the reader releases its lock.
+      reader.releaseLock();
+      return null;
+    }
+  }
+}
+
+function pdfTextItems(items: object[]): string {
+  let text = '';
+  for (const item of items) {
+    if ('str' in item && typeof item.str === 'string')
+      text += item.str + ('hasEOL' in item && item.hasEOL ? '\n' : ' ');
+  }
+  return text;
+}
+
+const chunkBytes = 2000;
+const words = new Intl.Segmenter('bn', { granularity: 'word' });
+
+export function splitKnowledgeText(text: string): string[] {
+  const chunks: string[] = [];
+  let chunk = '';
+  let bytes = 0;
+  function append(segment: string): void {
+    const length = Buffer.byteLength(segment);
+    if (bytes + length > chunkBytes) {
+      chunks.push(chunk.trim());
+      chunk = '';
+      bytes = 0;
+    }
+    chunk += segment;
+    bytes += length;
+  }
+
+  for (const { segment } of words.segment(text.trim())) {
+    if (Buffer.byteLength(segment) <= chunkBytes) append(segment);
+    else for (const codePoint of segment) append(codePoint);
+  }
+  chunks.push(chunk.trim());
+  return chunks.filter(Boolean);
+}

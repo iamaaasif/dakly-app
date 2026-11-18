@@ -5,8 +5,8 @@ const labels: Record<
   NonNullable<OrderReturnRisk>,
   { label: string; variant: BadgeProps['variant'] }
 > = {
-  new_customer: { label: 'New delivery recipient', variant: 'neutral' },
-  good: { label: 'Low return risk', variant: 'success' },
+  new_customer: { label: 'New customer', variant: 'neutral' },
+  good: { label: 'Good buyer', variant: 'success' },
   some_returns: { label: 'Some returns', variant: 'warning' },
   high: { label: 'High return risk', variant: 'danger' },
 };

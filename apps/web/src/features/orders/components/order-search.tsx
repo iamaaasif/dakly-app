@@ -1,9 +1,9 @@
+import { Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
 
 import type { OrderListQuery } from '@dakly/contracts/orders';
-import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
 
 import { ordersSearch } from '../api/orders';
@@ -20,27 +20,29 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
   }
 
   return (
-    <form
-      role="search"
-      onSubmit={submit}
-      className="grid w-fit max-w-full grid-cols-[minmax(0,18rem)_auto] items-center gap-2"
-    >
-      <label htmlFor="order-search" className="col-span-2 text-sm font-medium">
-        Search orders
-      </label>
-      <Input
-        type="search"
-        name="search"
-        id="order-search"
-        placeholder="Name, phone or #"
-        key={query.search}
-        defaultValue={query.search}
-        maxLength={120}
-        className="min-w-0"
-      />
-      <Button type="submit" variant="secondary" aria-label="Search orders">
-        Search
-      </Button>
+    <form role="search" onSubmit={submit} className="flex flex-wrap items-end gap-2">
+      <div className="w-72 max-w-full">
+        <label htmlFor="order-search" className="mb-1 block text-sm font-medium">
+          Search orders
+        </label>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-muted"
+            size={16}
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            name="search"
+            id="order-search"
+            placeholder="Name, phone or order number"
+            key={query.search}
+            defaultValue={query.search}
+            maxLength={120}
+            className="pl-9"
+          />
+        </div>
+      </div>
       {query.search ? (
         <Link
           href={filtered()}
