@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const orderSources = [
   'messenger',
   'instagram',
@@ -61,3 +63,85 @@ export const bdAreaKinds = ['division', 'district', 'upazila'] as const;
 // A shop's own discount code, given in a campaign offer, a workflow step or by hand.
 export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const;
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
+
+export type OrderStage = (typeof orderStages)[number];
+
+export const orderListQuerySchema = z.strictObject({
+  stage: z.enum(orderStages).optional(),
+  cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
+  limit: z.coerce.number<string>().int().min(1).max(100).default(50),
+});
+
+export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
+
+export type OrderSummary = {
+  id: string;
+  number: number;
+  buyerName: string | null;
+  recipientName: string;
+  stage: OrderStage;
+  source: (typeof orderSources)[number];
+  paymentStatus: (typeof orderPaymentStatuses)[number];
+  itemsSubtotalPoisha: number;
+  orderDiscountPoisha: number;
+  deliveryChargePoisha: number;
+  advancePaidPoisha: number;
+  codAmountPoisha: number;
+  createdAt: string;
+};
+
+export type OrderListResponse = {
+  items: OrderSummary[];
+  counts: Record<OrderStage, number>;
+  nextCursor: number | null;
+};
+
+export type OrderItem = {
+  id: string;
+  variantId: string;
+  productName: string;
+  variantTitle: string;
+  quantity: number;
+  deliveredQuantity: number | null;
+  isStockTracked: boolean;
+  unitPricePoisha: number;
+  lineDiscountPoisha: number;
+};
+
+export type OrderStageHistoryEntry = {
+  id: string;
+  from: OrderStage;
+  to: OrderStage;
+  actorType: string;
+  actorUserId: string | null;
+  actorStaffId: string | null;
+  reason: string | null;
+  occurredAt: string;
+};
+
+export type OrderDetail = OrderSummary & {
+  buyerContactId: string | null;
+  isRecipientBuyer: boolean;
+  recipientPhone: string;
+  recipientAddress: string;
+  recipientDistrict: string;
+  recipientBdAreaId: number | null;
+  isDeliveryChargeOverridden: boolean;
+  onHoldReason: (typeof onHoldReasons)[number] | null;
+  followUpOn: string | null;
+  cancelReason: (typeof cancelReasons)[number] | null;
+  items: OrderItem[];
+  timeline: OrderStageHistoryEntry[];
+};
+
+export const orderStageChangeSchema = z.discriminatedUnion('to', [
+  z.strictObject({ to: z.literal('to_confirm') }),
+  z.strictObject({ to: z.literal('to_pack') }),
+  z.strictObject({
+    to: z.literal('on_hold'),
+    reason: z.enum(onHoldReasons),
+    followUpOn: z.iso.date().optional(),
+  }),
+  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
+]);
+export type OrderStageChange = z.infer<typeof orderStageChangeSchema>;

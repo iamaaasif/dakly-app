@@ -113,6 +113,12 @@ export class ContactsService {
     };
   }
 
+  // Import undo keeps a contact once a new order makes the imported record useful.
+  async markOrderLinked(storeId: string, contactId: string, _actor: Actor): Promise<void> {
+    if (!(await this.contactsRepository.markOrderLinked(storeId, contactId, this.clock.now())))
+      throw contactError('CONTACT_NOT_FOUND');
+  }
+
   async editDetails(
     storeId: string,
     id: string,

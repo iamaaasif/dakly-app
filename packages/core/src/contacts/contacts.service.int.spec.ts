@@ -48,6 +48,21 @@ describe('ContactsService (Postgres)', () => {
   const search = (term: string, access = masked) =>
     service.list(storeId, { limit: 50, search: term }, access);
 
+  it('marks the buyer as changed when an order links to them', async () => {
+    const buyer = await add();
+    const previous = '2026-11-17T06:00:00.000Z';
+    await admin.pool.query('update contacts set updated_at=$2 where id=$1', [buyer.id, previous]);
+
+    await transaction.run(storeId, () => service.markOrderLinked(storeId, buyer.id, actor));
+
+    const updated = await admin.pool.query<{ updated_at: Date; phone: string }>(
+      'select updated_at, phone from contacts where id=$1',
+      [buyer.id],
+    );
+    expect(updated.rows[0]!.updated_at.getTime()).toBeGreaterThan(Date.parse(previous));
+    expect(updated.rows[0]!.phone).toBe(buyer.phone);
+  });
+
   it('finds a contact by its full number written any way, masked without the flag', async () => {
     const number = phone();
     const { id } = await add(number);

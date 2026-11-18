@@ -209,6 +209,25 @@ export class ContactsRepository {
     }
   }
 
+  async markOrderLinked(storeId: string, contactId: string, now: Date): Promise<boolean> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contacts)
+        .set({
+          updatedAt: sql`greatest(${contacts.updatedAt} + interval '1 millisecond', ${now.toISOString()}::timestamptz)`,
+        })
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.id, contactId),
+            isNull(contacts.deletedAt),
+          ),
+        )
+        .returning({ id: contacts.id }),
+    );
+    return row !== undefined;
+  }
+
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
