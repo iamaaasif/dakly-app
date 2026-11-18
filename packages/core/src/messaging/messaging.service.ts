@@ -17,11 +17,7 @@ export type OutgoingMessage = {
   destination?: string | null;
 };
 
-const PREPARED_SENDER_STORE = Symbol('prepared SMS sender store');
-export type PreparedSmsSender = Readonly<{
-  [PREPARED_SENDER_STORE]: string;
-  name: string | undefined;
-}>;
+export type PreparedSmsSender = { storeId: string; name: string | undefined };
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
 
@@ -54,10 +50,7 @@ export class MessagingService {
 
   async prepareSender(storeId: string): Promise<PreparedSmsSender> {
     try {
-      return Object.freeze({
-        [PREPARED_SENDER_STORE]: storeId,
-        name: await this.smsSenders.approvedSenderName(storeId),
-      });
+      return { storeId, name: await this.smsSenders.approvedSenderName(storeId) };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');
@@ -72,18 +65,14 @@ export class MessagingService {
   ) {
     try {
       const sender =
-        preparedSender?.[PREPARED_SENDER_STORE] === storeId
+        preparedSender?.storeId === storeId
           ? preparedSender.name
           : (await this.prepareSender(storeId)).name;
       const phone = await this.contactsService.getPhoneForSend(storeId, message.contactId);
       if (message.destination !== undefined && phone !== message.destination)
         throw messagingError('MESSAGING_DESTINATION_CHANGED');
       if (!phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
-      return {
-        to: phone,
-        parts: countSmsParts(message.body),
-        sender,
-      };
+      return { to: phone, parts: countSmsParts(message.body), sender };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');

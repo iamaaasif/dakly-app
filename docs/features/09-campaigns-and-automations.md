@@ -384,7 +384,7 @@ Quiet hours, the cap and the approval setting are the `sending` section of `stor
 
 The gate does not reserve cost: the campaign reserves at approval (CAMP-2) and the sending job reserves or releases around the gate in the same transaction (CAMP-3, CAMP-5).
 
-The workflow dispatch gate can take the contact and frequency locks and read the database clock after the waits. It returns the checked destination and time. The wallet service exposes the reservation lock so callers can take it before the gate. The schema accepts `no_credits` as a skipped-send reason and `not_reachable` as a workflow exit reason.
+The workflow dispatch gate can take the contact and frequency locks and then read the shared application clock. It counts earlier committed submissions even if another worker's clock stamped them later than this worker's check. The gate returns the checked destination and time. The wallet service exposes the reservation lock so callers can take it before the gate. The schema accepts `no_credits` as a skipped-send reason and `not_reachable` as a workflow exit reason.
 
 ### Channel rules
 
