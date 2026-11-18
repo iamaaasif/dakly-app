@@ -92,7 +92,10 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
         result.status() === 201,
     );
     const create = page.getByRole('button', { name: 'Create SMS draft' });
-    await create.click();
+    await create.evaluate((button: HTMLButtonElement) => {
+      button.form?.requestSubmit();
+      button.form?.requestSubmit();
+    });
     const draft: CampaignResponse = await (await response).json();
     ids.push(draft.id);
     try {
@@ -114,6 +117,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     const otherEditor = await context.newPage();
     await otherEditor.goto(`/campaigns/${draft.id}`);
     await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('New Kurti collection');
+    await otherEditor.getByLabel('Campaign name').fill('New Kurti collection ');
     await otherEditor.getByLabel('Goal').selectOption('from_scratch');
     await page.getByLabel('Campaign name').fill('Winter Kurti collection');
     await page.getByRole('button', { name: 'Save draft' }).click();

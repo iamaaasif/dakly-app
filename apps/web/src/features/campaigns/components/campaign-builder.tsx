@@ -75,7 +75,7 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
   const { dirtyFields, isDirty } = form.formState;
   const opening = !campaign && save.isSuccess;
   const submit = form.handleSubmit((input) => {
-    if (save.isPending || opening) return;
+    if (opening || save.isSaving()) return;
     const change = {
       ...(dirtyFields.name && { name: input.name }),
       ...(dirtyFields.goal && { goal: input.goal }),
@@ -136,7 +136,13 @@ function CampaignFields() {
         <p className="text-text-muted">Send a short text to customers who agreed to receive SMS.</p>
       </div>
       <FormField name="name" label="Campaign name">
-        {(control) => <Input {...control} {...register('name')} aria-required="true" />}
+        {(control) => (
+          <Input
+            {...control}
+            {...register('name', { setValueAs: (value: string) => value.trim() })}
+            aria-required="true"
+          />
+        )}
       </FormField>
       <FormField name="goal" label="Goal">
         {(control) => (

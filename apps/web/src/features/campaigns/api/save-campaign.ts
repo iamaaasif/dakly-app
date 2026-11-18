@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useId } from 'react';
 
 import type {
   CampaignResponse,
@@ -12,7 +13,9 @@ import { useStoreRequest } from '@/lib/store-request';
 export function useSaveCampaign() {
   const { request, contextTag } = useStoreRequest();
   const client = useQueryClient();
-  return useMutation({
+  const mutationKey = ['save-campaign', useId()] as const;
+  const save = useMutation({
+    mutationKey,
     mutationFn: (
       change: { id: string; input: ChangeCampaignInput } | { input: CreateCampaignInput },
     ) =>
@@ -29,4 +32,5 @@ export function useSaveCampaign() {
       return client.invalidateQueries({ queryKey: campaignKeys.list(contextTag) });
     },
   });
+  return { ...save, isSaving: () => client.isMutating({ mutationKey, exact: true }) > 0 };
 }
