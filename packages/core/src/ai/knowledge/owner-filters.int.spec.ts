@@ -40,4 +40,27 @@ describe('KnowledgeRepository owner filters', () => {
       status: 'pending',
     });
   });
+  it('refuses cross-store index writes before row security', async () => {
+    const item = await repository.create(
+      fixture.a,
+      fixture.userA,
+      { kind: 'policy', answer: 'ঢাকা ডেলিভারি' },
+      now,
+    );
+    const embedding = Array.from({ length: 512 }, () => 0.5);
+    const chunks = [
+      {
+        content: 'ঢাকা ডেলিভারি',
+        embedding,
+        embeddingModel: 'test-model',
+        tokenCount: 4,
+      },
+    ];
+    await expect(
+      repository.finishIndex(fixture.b, item.id, item.updatedAt, { chunks }),
+    ).resolves.toBe(false);
+    await expect(
+      repository.finishIndex(fixture.a, item.id, item.updatedAt, { chunks }),
+    ).resolves.toBe(true);
+  });
 });
