@@ -347,6 +347,8 @@ Each change is a guarded update from one state, listed in a table in `CampaignsS
 
 ### Sender (CAMP-3)
 
+Approval also saves the short-link base used to estimate and reserve SMS credits. An opt-out code can be reused for that contact at the saved base if the configured domain changes. Recipient rows have fields for the dispatch claim, provider attempts and charged SMS credits. The recovery query can find one sending campaign per store, and the send gate can check current consent and frequency after the contact lock. The batch worker uses these in the sender PR.
+
 The sender runs on the `campaign` queue in `apps/worker`. The `start-due-campaigns` sweep gets up to 100 due store IDs from `campaign_due_stores` and saves the last ID in Valkey to continue next tick. For each store, one guarded update sets `sending` and `started_at` on up to 100 due scheduled rows under store RLS. It skips rows locked by edits or cancellation. A failed store is logged and the sweep continues to the next one. Immediate approvals record the start time when approved. The sender PR adds the recurring schedule and the batch job that sends to recipients.
 
 ### Frozen destinations and final send checks

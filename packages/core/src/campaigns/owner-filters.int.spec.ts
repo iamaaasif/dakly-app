@@ -67,6 +67,7 @@ describe('campaign filters without RLS assistance', () => {
       status: 'sending',
       approvedByUserId: f.userB,
       approvedAt: now,
+      shortLinkBase: 'http://localhost:4000/l',
       startedAt: now,
       updatedAt: now,
       estimatedCostPoisha: 0,

@@ -52,24 +52,46 @@ export class SendPolicyService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
-  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
+  async check(
+    storeId: string,
+    request: Omit<SendRequest, 'at'> & { at: Date | (() => Date) },
+  ): Promise<SendDecision> {
     this.requireTransactionForMarketing(request.category);
+    if (
+      request.category === 'marketing' &&
+      !(await this.lockForDispatch(storeId, request.contactId))
+    )
+      return skip('no_address');
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =
-      contact && request.category === 'marketing'
+      request.category === 'marketing'
         ? await this.consents.current(storeId, [request.contactId], request.channel)
         : [];
     const reason = recipientSkip(contact, consent?.status, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
 
-    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
+    // A campaign samples its clock after waiting on the contact locks.
+    const at = typeof request.at === 'function' ? request.at() : request.at;
     const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
+    const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
-    await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
-    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], at, true);
+    return capReached(sends, { ...request, at }, settings.frequencyCap)
+      ? skip('frequency_cap')
+      : SEND;
+  }
+
+  // Hold the consent and frequency locks until the caller commits the claim.
+  private async lockForDispatch(storeId: string, contactId: string) {
+    await this.repository.lockContact(storeId, contactId);
+    try {
+      await this.contacts.lockForConsent(storeId, [contactId]);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
+      throw error;
+    }
   }
 
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
@@ -127,12 +149,13 @@ export class SendPolicyService {
         : SEND;
   }
 
-  private listWeekOfSends(storeId: string, contactIds: string[], at: Date) {
+  private listWeekOfSends(storeId: string, contactIds: string[], at: Date, dispatch = false) {
     return this.repository.listMarketingSends(
       storeId,
       contactIds,
       new Date(at.getTime() - 7 * 24 * HOUR),
       at,
+      dispatch,
     );
   }
 }

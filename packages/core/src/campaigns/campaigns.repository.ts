@@ -42,6 +42,7 @@ export type FrozenRecipient = {
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
   approvedByUserId: string | null;
   approvedAt: Date;
+  shortLinkBase: string;
   startedAt: Date | null;
   estimatedCostPoisha: number;
   recipientsCount: number;
@@ -59,6 +60,7 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   finishedAt?: Date;
   approvedByUserId?: null;
   approvedAt?: null;
+  shortLinkBase?: null;
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
@@ -253,11 +255,11 @@ export class CampaignsRepository {
   }
 }
 
-function statusWhere(storeId: string, id: string, status: CampaignStatus) {
+export function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 
-function recipientsWhere(storeId: string, campaignId: string) {
+export function recipientsWhere(storeId: string, campaignId: string) {
   return and(
     eq(campaignRecipients.storeId, storeId),
     eq(campaignRecipients.campaignId, campaignId),

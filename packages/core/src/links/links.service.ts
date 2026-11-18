@@ -25,6 +25,7 @@ export type TrackedLink = { id: string; url: string };
 export type Visitor = { ip: string; userAgent: string | undefined };
 
 const CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const CODE_LENGTH = 8;
 const CODE_ATTEMPTS = 3;
 // Shared mobile carrier addresses put many customers behind one IP, so the limit is generous.
 const TAPS_PER_IP_PER_MINUTE = 120;
@@ -55,6 +56,7 @@ export class LinksService {
     storeId: string,
     links: NewTrackedLink[],
     _actor: AuditEntry['actor'],
+    base = this.shortLinkBase(),
   ): Promise<TrackedLink[]> {
     let pending: NewTrackedLinkRow[] = links.map((link) => ({
       targetUrl: null,
@@ -69,7 +71,29 @@ export class LinksService {
       for (const row of pending) row.code = newCode();
     }
     if (pending.length) throw linkError('LINK_CODES_EXHAUSTED');
-    return rows.map((row) => ({ id: row.id, url: linkUrl(row.kind, row.code) }));
+    return rows.map((row) => ({ id: row.id, url: linkUrl(row.kind, row.code, base) }));
+  }
+
+  // A resend must carry the same text, so a contact has one opt-out link per source.
+  async optOutLink(
+    storeId: string,
+    link: LinkSource & { contactId: string },
+    actor: AuditEntry['actor'],
+    base = this.shortLinkBase(),
+  ): Promise<TrackedLink> {
+    const existing = await this.repository.findOptOutLinkFor(storeId, link);
+    if (existing) return { id: existing.id, url: linkUrl('sms_opt_out', existing.code, base) };
+    const [created] = await this.create(storeId, [{ ...link, kind: 'sms_opt_out' }], actor, base);
+    return created!;
+  }
+
+  shortLinkBase(): string {
+    return loadEnv().SHORT_LINK_BASE_URL;
+  }
+
+  // An opt-out address as long as a real one, so an estimate counts the characters it adds.
+  sampleOptOutUrl(base = this.shortLinkBase()): string {
+    return linkUrl('sms_opt_out', CODE_ALPHABET[0]!.repeat(CODE_LENGTH), base);
   }
 
   // D31: a visit keeps only an HMAC of the address and browser, never either value.
@@ -164,10 +188,12 @@ export class LinksService {
 }
 
 function newCode(): string {
-  return Array.from({ length: 8 }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join('');
+  return Array.from(
+    { length: CODE_LENGTH },
+    () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)],
+  ).join('');
 }
 
-function linkUrl(kind: NewTrackedLink['kind'], code: string): string {
-  const base = loadEnv().SHORT_LINK_BASE_URL;
+function linkUrl(kind: NewTrackedLink['kind'], code: string, base: string): string {
   return kind === 'redirect' ? `${base}/${code}` : `${base}/s/${code}`;
 }
