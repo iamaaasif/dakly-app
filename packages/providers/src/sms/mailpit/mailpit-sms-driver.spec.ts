@@ -82,7 +82,9 @@ describe('MailpitSmsDriver', () => {
         .mockResolvedValueOnce(Response.json({ messages: [] }))
         .mockResolvedValueOnce(
           found
-            ? Response.json({ messages: [{ ID: 'first-capture' }] })
+            ? Response.json({
+                messages: [{ ID: 'first-capture', MessageID: 'campaign-451@sms.dakly.test' }],
+              })
             : new Response(null, { status: 503 }),
         );
       vi.stubGlobal('fetch', lookup);
@@ -99,6 +101,36 @@ describe('MailpitSmsDriver', () => {
       }
     },
   );
+
+  it('finds the full operation id past a substring match', async () => {
+    const driver = new MailpitSmsDriver({
+      host: '127.0.0.1',
+      port: 1,
+      apiUrl: 'http://127.0.0.1:1',
+    });
+    const lookup = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          messages: [{ ID: 'unrelated', MessageID: 'other-campaign-1@sms.dakly.test' }],
+          total: 2,
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          messages: [{ ID: 'matching', MessageID: 'campaign-1@sms.dakly.test' }],
+          total: 2,
+        }),
+      );
+    vi.stubGlobal('fetch', lookup);
+    try {
+      await expect(
+        driver.send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
+      ).resolves.toEqual({ providerMessageId: 'matching' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 
   it('reports an unknown outcome, not a refusal, when the server stops answering', async () => {
     const sockets: Socket[] = [];

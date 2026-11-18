@@ -90,12 +90,22 @@ export class MailpitSmsDriver implements SmsDriver {
 
   // Mailpit deduplicates by Message-ID. A real SMS driver's client reference comes with ACC-14.
   private async findCaptured(messageId: string): Promise<string | undefined> {
-    const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '1' });
-    const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) throw new Error('Mailpit search failed');
-    const found = (await response.json()) as { messages: { ID: string }[] };
-    return found.messages[0]?.ID;
+    const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '100' });
+    const signal = AbortSignal.timeout(5000);
+    let start = 0;
+    // Mailpit searches substrings, so only an exact Message-ID proves a prior submission.
+    for (;;) {
+      query.set('start', String(start));
+      const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, { signal });
+      if (!response.ok) throw new Error('Mailpit search failed');
+      const { messages, total } = (await response.json()) as {
+        messages: { ID: string; MessageID: string }[];
+        total: number;
+      };
+      const match = messages.find(({ MessageID }) => MessageID === messageId);
+      if (match) return match.ID;
+      start += messages.length;
+      if (messages.length === 0 || start >= total) return undefined;
+    }
   }
 }
