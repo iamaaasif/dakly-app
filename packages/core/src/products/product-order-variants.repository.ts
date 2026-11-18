@@ -54,18 +54,7 @@ export class ProductOrderVariantsRepository {
           reserved: productVariants.reserved,
         })
         .from(productVariants)
-        .innerJoin(
-          products,
-          and(eq(products.storeId, storeId), eq(products.id, productVariants.productId)),
-        )
-        .where(
-          and(
-            eq(productVariants.storeId, storeId),
-            inArray(productVariants.id, variantIds),
-            ne(products.status, 'archived'),
-            ne(productVariants.status, 'archived'),
-          ),
-        ),
+        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds))),
     );
   }
 

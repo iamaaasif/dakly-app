@@ -31,7 +31,7 @@ export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disab
     defaultValues: orderDraft(order),
   });
 
-  const { dirtyFields } = form.formState;
+  const { dirtyFields, isDirty } = form.formState;
   const submit = form.handleSubmit((input) => {
     const body = editedFields(input, dirtyFields);
     if (body.recipient?.isBuyer !== undefined && !body.recipient.phone) {
@@ -71,7 +71,7 @@ export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disab
             </p>
           )}
           <div className="flex shrink-0 justify-end">
-            <Button type="submit" loading={edit.isPending}>
+            <Button type="submit" loading={edit.isPending} disabled={!isDirty}>
               Save order
             </Button>
           </div>

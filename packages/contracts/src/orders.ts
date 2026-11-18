@@ -355,20 +355,27 @@ export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
-export const editOrderSchema = z.strictObject({
-  expectedUpdatedAt: z.iso.datetime().optional(),
-  items: orderLines.optional(),
-  recipient: recipientSchema
-    .omit({ isBuyer: true })
-    .partial()
-    .extend({ isBuyer: z.boolean().optional() })
-    .optional(),
-  deliveryChargePoisha: money.optional(),
-  orderDiscountPoisha: money.optional(),
-  advancePaidPoisha: money.optional(),
-});
+export const editOrderSchema = z
+  .strictObject({
+    expectedUpdatedAt: z.iso.datetime({ precision: 3 }).optional(),
+    items: orderLines.optional(),
+    recipient: recipientSchema
+      .omit({ isBuyer: true })
+      .partial()
+      .extend({ isBuyer: z.boolean().optional() })
+      .optional(),
+    deliveryChargePoisha: money.optional(),
+    orderDiscountPoisha: money.optional(),
+    advancePaidPoisha: money.optional(),
+  })
+  .refine(
+    ({ expectedUpdatedAt: _expectedUpdatedAt, recipient, ...changes }) =>
+      Object.values(changes).some((value) => value !== undefined) ||
+      Object.values(recipient ?? {}).some((value) => value !== undefined),
+    'Change at least one order field',
+  );
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
-export const editOrderFormSchema = editOrderSchema.extend({
+export const editOrderFormSchema = editOrderSchema.safeExtend({
   deliveryChargePoisha: takaInput.optional(),
   orderDiscountPoisha: takaInput.optional(),
   advancePaidPoisha: takaInput.optional(),

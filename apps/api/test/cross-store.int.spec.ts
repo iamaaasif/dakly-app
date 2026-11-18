@@ -286,7 +286,7 @@ fixture('GET /orders/catalogue/stock', async () => {
   const own = product.variants[0].id as string;
   const foreign = await orderVariant(a);
   await f.admin.pool.query(
-    'update product_variants set on_hand=7,reserved=3 where store_id=$1 and id=$2',
+    "update product_variants set on_hand=7,reserved=3,status='archived' where store_id=$1 and id=$2",
     [b.id, own],
   );
   const url = `/orders/catalogue/stock?variantIds=${own},${foreign},${randomUUID()}`;
