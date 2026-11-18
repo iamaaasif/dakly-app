@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
   orderStages,
+  type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
   type OrderDetail,
@@ -24,6 +25,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
+import { applyOrderFulfilment } from './order-fulfilment';
 import { orderStageTransitions } from './order-stage';
 import { orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
@@ -211,6 +213,10 @@ export class OrdersService {
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       createdAt: order.createdAt.toISOString(),
+      shippedAt: isoTime(order.shippedAt),
+      deliveredAt: isoTime(order.deliveredAt),
+      returnedAt: isoTime(order.returnedAt),
+      codCollectedAt: isoTime(order.codCollectedAt),
       items: await this.repository.items(storeId, orderId),
       timeline: history.map(({ before, after, createdAt, ...row }) => ({
         ...row,
@@ -243,7 +249,13 @@ export class OrdersService {
           { actor, reason: change.reason },
         );
       }
+      const fulfilment = await applyOrderFulfilment(
+        storeId,
+        { order, change, actor, now },
+        { orders: this.repository, products: this.products },
+      );
       await this.repository.updateOrder(storeId, orderId, {
+        ...fulfilment,
         ...stageWrite(change, now, confirmed),
         ...(change.to === 'cancelled' && order.paymentStatus === 'advance_paid'
           ? { paymentStatus: 'refund_due' }
@@ -262,6 +274,46 @@ export class OrdersService {
           occurredAt: now.toISOString(),
           payload: { orderId },
         });
+      return this.getById(storeId, orderId, access);
+    });
+  }
+
+  recordCodCollected(
+    storeId: string,
+    orderId: string,
+    { amountPoisha }: CodCollectedInput,
+    { actor, access }: StageEditor,
+  ): Promise<OrderDetail> {
+    return this.transaction.run(storeId, async () => {
+      const order = await this.repository.lock(storeId, orderId);
+      if (!order) throw orderError('ORDER_NOT_FOUND');
+      if (
+        isSyncedOrder(order.source) ||
+        !['delivered', 'partially_delivered'].includes(order.stage) ||
+        !['cod_pending', 'advance_paid'].includes(order.paymentStatus)
+      )
+        throw orderError('ORDER_COD_NOT_COLLECTABLE');
+      const now = this.clock.now();
+      await this.repository.updateOrder(storeId, orderId, {
+        paymentStatus: 'cod_collected',
+        codCollectedPoisha: amountPoisha,
+        codCollectedAt: now,
+        updatedAt: now,
+      });
+      await this.audit.record(storeId, {
+        actor,
+        action: 'order.cod_collected',
+        entityType: 'order',
+        entityId: orderId,
+        before: { state: order.paymentStatus },
+        after: { state: 'cod_collected' },
+      });
+      await this.outbox.publish({
+        type: 'order.cod_collected',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { orderId },
+      });
       return this.getById(storeId, orderId, access);
     });
   }
@@ -377,6 +429,7 @@ export class OrdersService {
       occurredAt: string;
     },
   ): Promise<void> {
+    const reason = 'reason' in change ? change.reason : undefined;
     await this.audit.record(storeId, {
       actor,
       action: 'order.stage_changed',
@@ -384,7 +437,7 @@ export class OrdersService {
       entityId: orderId,
       before: { state: from },
       after: { state: change.to },
-      reason: 'reason' in change ? change.reason : undefined,
+      reason: 'note' in change ? change.note : reason,
     });
     await this.outbox.publish({
       type: 'order.stage_changed',
@@ -417,4 +470,8 @@ function canEditOrder(order: Pick<OrderDetail, 'source' | 'stage' | 'paymentStat
     ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) &&
     ['cod_pending', 'advance_paid'].includes(order.paymentStatus)
   );
+}
+
+function isoTime(value: Date | null): string | null {
+  return value?.toISOString() ?? null;
 }
