@@ -50,6 +50,8 @@ export class SessionsService {
         selected && access
           ? {
               ...selected,
+              canViewProducts: this.team.canAccess(access, 'products', 'view'),
+              canEditProducts: this.team.canAccess(access, 'products', 'edit'),
               canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
               canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
               canViewSegments: this.team.canAccess(access, 'segments', 'view'),
