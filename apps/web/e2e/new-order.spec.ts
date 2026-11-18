@@ -122,7 +122,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     zoneIds = zones.items.map(({ id }) => id);
     zoneId = zones.items.find(({ name }) => name === 'Inside Dhaka')?.id;
     expect(zoneId).toBeDefined();
-    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
+    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60.00');
     const variant = create.getByLabel('Product and variant 1');
     await expect(variant.getByRole('option', { name: 'Cotton Panjabi · M' })).toHaveCount(0);
     await create.getByRole('button', { name: 'Load more products' }).click();
@@ -196,7 +196,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Address').fill('Road 4, Dhanmondi');
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
-    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
+    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60.00');
     await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
     await expect(create.getByText('4 in stock')).toBeVisible();
     await create.getByLabel('Discount (৳)').fill('1260');

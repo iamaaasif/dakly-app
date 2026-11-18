@@ -8,16 +8,6 @@ import { ordersKey } from './orders';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
-const rejectedOrders = new Set([
-  'CONTACT_NOT_FOUND',
-  'DELIVERY_AREA_INVALID',
-  'DELIVERY_DEFAULT_REQUIRED',
-  'ORDER_PRICE_REQUIRED',
-  'ORDER_TOTAL_INVALID',
-  'PRODUCT_VARIANT_NOT_FOUND',
-  'STOCK_NOT_AVAILABLE',
-]);
-
 export function useCreateOrder() {
   const { request } = useStoreRequest();
   const client = useQueryClient();
@@ -29,19 +19,16 @@ export function useCreateOrder() {
       return request<OrderDetail>('/orders', { body, idempotencyKey: key.current });
     },
     onError: (error) => {
-      if (error instanceof ApiError && rejectedOrders.has(error.code)) {
-        // The order service checks the request key before it checks these business rules.
-        key.current = undefined;
-        setMustRetry(false);
-        return;
-      }
-      if (
-        !(error instanceof ApiError) ||
-        error.status === undefined ||
-        error.status === 408 ||
-        error.status >= 500
-      )
-        setMustRetry(true);
+      const reply = error instanceof ApiError ? error : undefined;
+      const status = reply?.status;
+      const unanswered =
+        status === undefined ||
+        status === 408 ||
+        status === 429 ||
+        status >= 500 ||
+        reply?.code === 'REQUEST_FAILED';
+      if (!unanswered) key.current = undefined;
+      setMustRetry(unanswered);
     },
     onSuccess: () => {
       setMustRetry(false);

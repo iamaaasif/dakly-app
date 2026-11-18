@@ -1,4 +1,3 @@
-import { useMutation } from '@tanstack/react-query';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import type { OrderDetail, OrderEditorValues } from '@dakly/contracts/orders';
@@ -10,10 +9,11 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
 import { useOrderDelivery } from '../api/get-delivery-charge';
+import { useSetupDeliveryZones } from '../api/setup-delivery-zones';
 import { OrderAreaFields } from './order-area-fields';
 import { OrderBuyerFields } from './order-buyer-fields';
+import { takaInputFromPoisha } from '@/lib/format-money';
 import { useSessionContext } from '@/lib/session-context';
-import { useStoreRequest } from '@/lib/store-request';
 
 export function OrderRecipientFields({ order }: { order?: OrderDetail }) {
   const { register } = useFormContext<OrderEditorValues>();
@@ -110,7 +110,7 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
             <Input
               {...props}
               inputMode="decimal"
-              placeholder={charge === undefined ? 'Choose an area' : String(charge / 100)}
+              placeholder={charge === undefined ? 'Choose an area' : takaInputFromPoisha(charge)}
               {...register('deliveryChargePoisha', {
                 setValueAs: (value: string) => value.trim() || undefined,
               })}
@@ -130,11 +130,7 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
 
 function SetupDeliveryZones({ retryQuote }: { retryQuote: () => void }) {
   const { data } = useSessionContext();
-  const { request } = useStoreRequest();
-  const setup = useMutation({
-    mutationFn: () => request('/delivery-zones/initialize-defaults', { method: 'POST' }),
-    onSettled: retryQuote,
-  });
+  const setup = useSetupDeliveryZones(retryQuote);
   if (!data?.currentStore?.canEditStoreSettings)
     return <p role="alert">Ask a shop owner to set up delivery zones before taking orders.</p>;
   return (

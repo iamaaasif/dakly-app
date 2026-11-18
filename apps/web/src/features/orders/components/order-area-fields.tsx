@@ -23,6 +23,7 @@ export function OrderAreaFields({
   return (
     <>
       <AreaSelect
+        name="division"
         label="Division"
         items={divisions.data?.items}
         value={division}
@@ -34,6 +35,7 @@ export function OrderAreaFields({
         }}
       />
       <AreaSelect
+        name="recipient.areaId"
         label="District"
         items={districts.data?.items}
         value={district}
@@ -46,6 +48,7 @@ export function OrderAreaFields({
       />
       {upazilas.data?.items.length ? (
         <AreaSelect
+          name="upazila"
           label="Upazila"
           items={upazilas.data.items}
           value={upazila}
@@ -65,12 +68,14 @@ export function OrderAreaFields({
 }
 
 function AreaSelect({
+  name,
   label,
   items,
   value,
   current,
   onChange,
 }: {
+  name: string;
   label: string;
   items?: AreaResponse[];
   value: number;
@@ -78,7 +83,7 @@ function AreaSelect({
   onChange: (id: number) => void;
 }) {
   return (
-    <FormField name={label === 'District' ? 'recipient.areaId' : label.toLowerCase()} label={label}>
+    <FormField name={name} label={label}>
       {(props) => (
         <select
           {...props}
