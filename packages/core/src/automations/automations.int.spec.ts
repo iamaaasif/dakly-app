@@ -106,7 +106,7 @@ describe('AutomationsService (Postgres)', () => {
         'update automations set published_version_id=null where store_id=any($1::uuid[])',
         stores,
       );
-      for (const table of ['automation_versions', 'automations', 'contacts'])
+      for (const table of ['automation_versions', 'automations', 'contacts', 'wallet_ledger'])
         await admin.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, stores);
       await admin.pool.query('delete from stores where id=any($1::uuid[])', stores);
       await admin.pool.query('delete from users where id=$1', [userId]);
@@ -355,7 +355,7 @@ describe('AutomationsService (Postgres)', () => {
     });
 
     await admin.pool.query(
-      "update automations set status='paused', pause_reason='balance', balance_paused_at=now() where id=$1",
+      "update automations set status='paused', pause_reason='balance', balance_pause_revision=1 where id=$1",
       [automation.id],
     );
     for (const move of [
@@ -371,13 +371,20 @@ describe('AutomationsService (Postgres)', () => {
       pauseReason: 'balance',
     });
 
+    const [earlierCredit, laterCredit] = [randomUUID(), randomUUID()];
+    await admin.pool.query(
+      `insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type)
+       values($1::uuid,$3,'sms_credits',1,'adjustment',1,1,$1::text,'system'),
+             ($2::uuid,$3,'sms_credits',2,'adjustment',1,2,$2::text,'system')`,
+      [earlierCredit, laterCredit, storeA],
+    );
     const system = { kind: 'system' } as const;
-    // A top-up recorded before the pause began does not end it.
-    await service.resumeAfterTopUp(storeA, new Date(Date.now() - 60 * 60 * 1000), system);
+    // A credit the gate already saw cannot end this pause, even when its event arrives late.
+    await service.resumeAfterTopUp(storeA, earlierCredit, system);
     expect((await service.get(storeA, automation.id)).status).toBe('paused');
-    await service.resumeAfterTopUp(storeB, new Date(), system);
+    await service.resumeAfterTopUp(storeB, laterCredit, system);
     expect((await service.get(storeA, automation.id)).status).toBe('paused');
-    await service.resumeAfterTopUp(storeA, new Date(), system);
+    await service.resumeAfterTopUp(storeA, laterCredit, system);
     expect(await service.get(storeA, automation.id)).toMatchObject({
       status: 'active',
       pauseReason: null,

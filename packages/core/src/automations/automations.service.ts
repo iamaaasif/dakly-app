@@ -31,6 +31,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { WalletService } from '../wallets/wallet.service';
 import { automationError } from './automations.errors';
 import { type Automation, AutomationsRepository } from './automations.repository';
 
@@ -74,6 +75,7 @@ export class AutomationsService {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
+    @Inject(WalletService) private readonly wallets: WalletService,
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
@@ -193,13 +195,14 @@ export class AutomationsService {
   // Inside the send step's transaction. Only the first run short of SMS credits pauses the
   // workflow; the owner gets a card now and an email from the automation.paused event.
   async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
-    const now = this.clock.now();
-    const paused = await this.repository.pauseForBalance(storeId, automationId, now);
+    const revision = await this.wallets.currentRevision(storeId, 'sms_credits');
+    const now = await this.transaction.databaseTime(storeId);
+    const paused = await this.repository.pauseForBalance(storeId, automationId, revision, now);
     if (!paused) return;
     await this.notifications.notify(storeId, {
       type: 'automation.paused_for_balance',
       category: 'fix_now',
-      dedupeKey: `automation-balance:${automationId}:${now.toISOString()}`,
+      dedupeKey: `automation-balance:${automationId}:${revision}`,
       recipientPermission: 'billing.edit',
       ...balancePauseNotice(paused.name),
       actionUrl: TOP_UP_PATH,
@@ -249,11 +252,16 @@ export class AutomationsService {
     if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
   }
 
-  // A top-up ends every pause for a short balance that began before it (feature 09); a repeated
-  // event finds none.
-  async resumeAfterTopUp(storeId: string, creditedAt: Date, _actor: Actor): Promise<void> {
-    const resumedAt = await this.transaction.databaseTime(storeId);
-    await this.repository.resumeBalancePaused(storeId, creditedAt, resumedAt);
+  // A delayed credit event cannot resume a pause whose gate already saw that ledger revision.
+  async resumeAfterTopUp(storeId: string, entryId: string, _actor: Actor): Promise<void> {
+    await this.transaction.run(storeId, async () => {
+      const revision = await this.wallets.topUpRevision(storeId, 'sms_credits', entryId);
+      if (revision === undefined) return;
+      const ids = await this.repository.lockBalancePaused(storeId, revision);
+      if (ids.length === 0) return;
+      const resumedAt = await this.transaction.databaseTime(storeId);
+      await this.repository.resumeBalancePaused(storeId, ids, resumedAt);
+    });
   }
 
   private async move(

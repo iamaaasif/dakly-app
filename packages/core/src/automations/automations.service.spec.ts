@@ -14,6 +14,7 @@ import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
 import type { TeamService } from '../team/team.service';
+import type { WalletService } from '../wallets/wallet.service';
 import type { Automation, AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
 
@@ -86,6 +87,7 @@ function serviceFor(graph: AutomationGraph) {
     { profiles: async () => [] } as unknown as UsersService,
     { send: async () => undefined } as unknown as EmailService,
     { connection: { set: async () => 'OK' } } as unknown as ValkeyClient,
+    {} as WalletService,
   );
 }
 

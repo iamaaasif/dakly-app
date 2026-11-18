@@ -56,6 +56,17 @@ export class WalletService {
     return (await this.ledger.latest(storeId, wallet))?.balanceQuantityAfter ?? 0;
   }
 
+  async currentRevision(storeId: string, wallet: MessagingWallet): Promise<number> {
+    return (await this.ledger.latest(storeId, wallet))?.revision ?? 0;
+  }
+
+  async topUpRevision(storeId: string, wallet: MessagingWallet, entryId: string) {
+    const entry = await this.ledger.findById(storeId, entryId);
+    if (entry?.wallet === wallet && entry.kind === 'adjustment' && entry.quantityDelta > 0)
+      return entry.revision;
+    return undefined;
+  }
+
   async balances(storeId: string): Promise<WalletBalancesResponse> {
     return {
       smsCredits: await this.balance(storeId, 'sms_credits'),
@@ -137,7 +148,7 @@ export class WalletService {
             referenceId: input.staffAuditId,
           },
         }),
-        // The entry's database time, so a resume compares it with a pause by the same clock.
+        // Record the entry's database time on the event.
         afterInsert: (entryId, createdAt) =>
           this.outbox.publish({
             type: 'wallet.credited',

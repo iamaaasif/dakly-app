@@ -651,7 +651,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     // Sets the store's SMS credits with one adjustment, outside the services.
     async function setCredits(
       target: number,
-    ): Promise<{ id: string; created_at: Date } | undefined> {
+      createdAt?: Date,
+    ): Promise<{ id: string; created_at: Date; revision: number } | undefined> {
       const latest = await admin.pool.query(
         "select revision,balance_quantity_after::int as balance from wallet_ledger where store_id=$1 and wallet='sms_credits' order by revision desc limit 1",
         [storeId],
@@ -659,8 +660,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const { revision, balance } = latest.rows[0];
       if (target === balance) return undefined;
       const entry = await admin.pool.query(
-        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',$2,'adjustment',$3,$4,$5,'system') returning id,created_at",
-        [storeId, revision + 1, target - balance, target, `adjust-${randomUUID()}`],
+        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type,created_at) values(gen_random_uuid(),$1,'sms_credits',$2,'adjustment',$3,$4,$5,'system',coalesce($6::timestamptz,now())) returning id,created_at,revision",
+        [storeId, revision + 1, target - balance, target, `adjust-${randomUUID()}`, createdAt],
       );
       return entry.rows[0];
     }
@@ -2003,6 +2004,44 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await mailTo(ownerEmail)).toHaveLength(earlier.length + 1);
     });
 
+    it('measures a balance resume after waiting for the workflow lock', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      await runDueStep(runner, runId!);
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        runId,
+        new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+      ]);
+
+      const blocker = await admin.pool.connect();
+      const {
+        rows: [{ pid }],
+      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await blocker.query('begin');
+      await blocker.query('select id from automations where id=$1 for update', [automationId]);
+      const pending = creditThrough(runner, 'sms_credits', automationId);
+      try {
+        await waitForBlocker(pid);
+        databaseNow = new Date(daytime.getTime() + 2 * MINUTE);
+        await blocker.query('commit');
+        await pending;
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([
+          expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_credits' }),
+        ]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await pending;
+      }
+    });
+
     it('keeps the workflow active when the old version stops at a short balance gate', async () => {
       await setCredits(0);
       const runner = await worker();
@@ -2068,11 +2107,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         runIds: [runId],
       } = await dueRuns(twoParts, 1, 'active', contact);
       // One credit, too few for two parts, commits after the gate's transaction began.
-      let credit: { id: string; created_at: Date } | undefined;
+      let credit: Awaited<ReturnType<typeof setCredits>>;
       const lockWallet = WalletService.prototype.lockForReservation;
       vi.spyOn(WalletService.prototype, 'lockForReservation').mockImplementationOnce(
         async function (this: WalletService, ...args) {
-          credit = await setCredits(1);
+          credit = await setCredits(1, clockNow);
           return lockWallet.apply(this, args);
         },
       );
@@ -2080,6 +2119,13 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const status = () =>
         admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
       expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
+      const pause = await admin.pool.query(
+        "select a.balance_pause_revision,e.occurred_at from automations a join outbox_events e on e.store_id=a.store_id and e.type='automation.paused' and e.payload->>'automationId'=a.id::text where a.id=$1",
+        [automationId],
+      );
+      expect(pause.rows).toEqual([
+        { balance_pause_revision: credit!.revision, occurred_at: credit!.created_at },
+      ]);
 
       await runner.resumeOnCredit({
         id: randomUUID(),

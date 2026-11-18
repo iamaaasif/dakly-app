@@ -8,6 +8,7 @@ import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
+import { WalletsModule } from '../wallets/wallets.module';
 import { AutomationsController } from './automations.controller';
 import { AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
@@ -22,6 +23,7 @@ import { AutomationsService } from './automations.service';
     StoresModule,
     TeamModule,
     UsersModule,
+    WalletsModule,
   ],
   controllers: [AutomationsController],
   providers: [AutomationsRepository, AutomationsService],

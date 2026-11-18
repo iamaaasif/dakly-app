@@ -80,15 +80,15 @@ describe('automation filters without RLS assistance', () => {
     await f.connection.pool.query("update automations set status='active' where id=$1", [
       a.automation.id,
     ]);
-    expect(await repository.pauseForBalance(f.b, a.automation.id, now)).toBeUndefined();
+    expect(await repository.pauseForBalance(f.b, a.automation.id, 1, now)).toBeUndefined();
     expect(await f.row('automations', a.automation.id)).toMatchObject({
       status: 'active',
-      balance_paused_at: null,
+      balance_pause_revision: null,
     });
     for (const { automation } of [a, b])
       await f.connection.pool.query(
-        "update automations set status='paused', pause_reason='balance', balance_paused_at=$2 where id=$1",
-        [automation.id, now],
+        "update automations set status='paused', pause_reason='balance', balance_pause_revision=1 where id=$1",
+        [automation.id],
       );
     const toActive = { status: 'active', pauseReason: null, updatedAt: now } as const;
 
@@ -101,7 +101,11 @@ describe('automation filters without RLS assistance', () => {
         unlessPausedFor: 'balance',
       }),
     ).toBeUndefined();
-    await repository.resumeBalancePaused(f.b, now, now);
+    await f.tenant.forStore(f.b, async () => {
+      const ids = await repository.lockBalancePaused(f.b, 2);
+      expect(ids).toEqual([b.automation.id]);
+      await repository.resumeBalancePaused(f.b, [...ids, a.automation.id], now);
+    });
 
     expect(await f.row('automations', a.automation.id)).toMatchObject({
       status: 'paused',

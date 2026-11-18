@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import type {
   AutomationListQuery,
@@ -153,11 +153,11 @@ export class AutomationsRepository {
     return row;
   }
 
-  // The pause time is the database's, as is a top-up's, so the resume compares one clock. It is
-  // read after reserve took the wallet lock, and cut to milliseconds like the top-up time.
+  // The sender still holds the SMS wallet lock from its failed reservation.
   async pauseForBalance(
     storeId: string,
     id: string,
+    observedRevision: number,
     updatedAt: Date,
   ): Promise<Automation | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
@@ -166,7 +166,7 @@ export class AutomationsRepository {
         .set({
           status: 'paused',
           pauseReason: 'balance',
-          balancePausedAt: sql`date_trunc('milliseconds', clock_timestamp())`,
+          balancePauseRevision: observedRevision,
           updatedAt,
         })
         .where(
@@ -181,24 +181,43 @@ export class AutomationsRepository {
     return row;
   }
 
-  // Every workflow of the store paused for a short balance before the top-up becomes active
-  // again, and records when.
-  async resumeBalancePaused(storeId: string, pausedBy: Date, resumedAt: Date): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
+  async lockBalancePaused(storeId: string, creditedRevision: number): Promise<string[]> {
+    const rows = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .select({ id: automations.id })
+        .from(automations)
+        .where(
+          and(
+            eq(automations.storeId, storeId),
+            eq(automations.status, 'paused'),
+            eq(automations.pauseReason, 'balance'),
+            lt(automations.balancePauseRevision, creditedRevision),
+          ),
+        )
+        .orderBy(asc(automations.id))
+        .for('update'),
+    );
+    return rows.map(({ id }) => id);
+  }
+
+  // The caller took these locks before reading the time that ends their pauses.
+  async resumeBalancePaused(storeId: string, ids: string[], resumedAt: Date): Promise<void> {
+    await this.database.inTransaction(storeId, (tx) =>
       tx
         .update(automations)
         .set({
           status: 'active',
           pauseReason: null,
+          balancePauseRevision: null,
           balanceResumedAt: resumedAt,
           updatedAt: resumedAt,
         })
         .where(
           and(
             eq(automations.storeId, storeId),
+            inArray(automations.id, ids),
             eq(automations.status, 'paused'),
             eq(automations.pauseReason, 'balance'),
-            lte(automations.balancePausedAt, pausedBy),
           ),
         ),
     );

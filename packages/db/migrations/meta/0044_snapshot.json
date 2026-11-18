@@ -1,5 +1,5 @@
 {
-  "id": "1e7c0fa3-573c-487a-958b-0aecdf0347d0",
+  "id": "5ef18752-47da-44e9-a320-ca5d56bae3e5",
   "prevId": "ed6ad400-81c4-42f1-bdcc-96f4768a3084",
   "version": "7",
   "dialect": "postgresql",
@@ -5218,9 +5218,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "balance_paused_at": {
-          "name": "balance_paused_at",
-          "type": "timestamp with time zone",
+        "balance_pause_revision": {
+          "name": "balance_pause_revision",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -5428,6 +5428,10 @@
         "automations_paused_has_reason": {
           "name": "automations_paused_has_reason",
           "value": "(\"automations\".\"status\" = 'paused') = (\"automations\".\"pause_reason\" is not null)"
+        },
+        "automations_balance_pause_revision": {
+          "name": "automations_balance_pause_revision",
+          "value": "\"automations\".\"pause_reason\" is distinct from 'balance'\n        or (\"automations\".\"balance_pause_revision\" is not null and \"automations\".\"balance_pause_revision\" >= 0)"
         }
       },
       "isRLSEnabled": false

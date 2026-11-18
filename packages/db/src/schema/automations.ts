@@ -43,9 +43,9 @@ export const automations = pgTable(
     triggerType: text('trigger_type').notNull(),
     status: text('status', { enum: automationStatuses }).notNull().default('draft'),
     pauseReason: text('pause_reason', { enum: automationPauseReasons }),
-    // When a short SMS balance last paused it and a top-up last ended that pause. A top-up resumes
-    // only pauses that began before it, and a send held through the pause is judged at the resume.
-    balancePausedAt: timestamptz('balance_paused_at'),
+    // The SMS wallet revision the gate saw under its lock. Only a newer top-up resumes this pause.
+    balancePauseRevision: integer('balance_pause_revision'),
+    // A send held through a balance pause is judged at the actual resume time.
     balanceResumedAt: timestamptz('balance_resumed_at'),
     // AUTO-R2: transactional first, then priority, when two automations hit one person on a day.
     isTransactional: boolean('is_transactional').notNull().default(false),
@@ -77,6 +77,11 @@ export const automations = pgTable(
     check(
       'automations_paused_has_reason',
       sql`(${table.status} = 'paused') = (${table.pauseReason} is not null)`,
+    ),
+    check(
+      'automations_balance_pause_revision',
+      sql`${table.pauseReason} is distinct from 'balance'
+        or (${table.balancePauseRevision} is not null and ${table.balancePauseRevision} >= 0)`,
     ),
   ],
 );
