@@ -37,7 +37,11 @@ export function orderStageActions(
   const canRecordCod =
     (stage === 'delivered' || stage === 'partially_delivered') &&
     (paymentStatus === 'cod_pending' || paymentStatus === 'advance_paid');
-  return canRecordCod ? [...actionsByStage[stage], 'cod'] : actionsByStage[stage];
+  const multipleUnits = order.items.length > 1 || order.items.some(({ quantity }) => quantity > 1);
+  const available = actionsByStage[stage].filter(
+    (action) => action !== 'partially_delivered' || multipleUnits,
+  );
+  return canRecordCod ? [...available, 'cod'] : available;
 }
 
 type StageActionsProps = {
@@ -58,6 +62,7 @@ export function OrderStageActions({
   return actions.map((action, index) => (
     <Button
       key={action}
+      data-order-action={action}
       variant={!hasPrimary && index === 0 ? 'primary' : 'secondary'}
       disabled={pending}
       onClick={(event) => {

@@ -28,34 +28,68 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
   const order = query.data;
   const blocked = useContext(SessionInteraction);
   const { data } = useSessionContext();
-  const transition = useOrderStage(id);
+  const transition = useOrderStage();
   const stage = useRef<HTMLSpanElement>(null);
-  const [action, setAction] = useState<StageFormAction>();
   const canEdit = data?.currentStore?.canEditOrders;
   const canConfirm = canConfirmOrder(order, canEdit);
   const actions = orderStageActions(order, canEdit);
-  const formAction = action && actions.includes(action) ? action : undefined;
+  const form = useStageForm(actions, stage);
 
   return (
     <>
       <Sheet
         {...orderHeading(order)}
-        open={!blocked && !formAction}
+        open={!blocked && !form.action}
         onClose={onClose}
+        onOpenAutoFocus={form.restoreFocus}
         fallbackFocus={fallbackFocus}
         footer={
           (canConfirm || actions.length > 0) && (
-            <OrderStageFooter {...{ transition, stage, canConfirm, actions }} onForm={setAction} />
+            <OrderStageFooter
+              {...{ id, transition, stage, canConfirm, actions }}
+              onForm={form.open}
+            />
           )
         }
       >
         <OrderDetailContent query={query} stage={stage} />
       </Sheet>
-      {formAction && order && (
-        <OrderStageDialog order={order} action={formAction} onClose={() => setAction(undefined)} />
+      {form.action && order && (
+        <OrderStageDialog order={order} action={form.action} onClose={form.close} />
       )}
     </>
   );
+}
+
+function useStageForm(actions: readonly StageAction[], stage: RefObject<HTMLSpanElement | null>) {
+  const [action, setAction] = useState<StageFormAction>();
+  const previous = useRef<StageFormAction | undefined>(undefined);
+
+  function open(next: StageFormAction) {
+    previous.current = next;
+    setAction(next);
+  }
+
+  function restoreFocus(event: Event) {
+    const previousAction = previous.current;
+    if (!previousAction) return;
+    previous.current = undefined;
+    const drawer = stage.current?.closest('[role="dialog"]');
+    const target =
+      drawer?.querySelector<HTMLButtonElement>(`[data-order-action="${previousAction}"]`) ??
+      stage.current;
+    if (target) {
+      event.preventDefault();
+      target.focus();
+    }
+  }
+
+  return {
+    action: action && actions.includes(action) ? action : undefined,
+    open,
+    close: () => setAction(undefined),
+    restoreFocus,
+  };
 }
 
 function OrderDetailContent({
@@ -96,6 +130,7 @@ function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'descript
 }
 
 type OrderStageFooterProps = {
+  id: string;
   transition: ReturnType<typeof useOrderStage>;
   stage: RefObject<HTMLSpanElement | null>;
   canConfirm: boolean;
@@ -104,6 +139,7 @@ type OrderStageFooterProps = {
 };
 
 function OrderStageFooter({
+  id,
   transition,
   stage,
   canConfirm,
@@ -112,13 +148,16 @@ function OrderStageFooter({
 }: OrderStageFooterProps) {
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
     const drawer = button.closest('[role="dialog"]');
-    transition.mutate(change, {
-      onSuccess: () => {
-        const focused = document.activeElement;
-        if (focused === button || focused === drawer || focused === document.body)
-          stage.current?.focus();
+    transition.mutate(
+      { id, body: change },
+      {
+        onSuccess: () => {
+          const focused = document.activeElement;
+          if (focused === button || focused === drawer || focused === document.body)
+            stage.current?.focus();
+        },
       },
-    });
+    );
   }
 
   return (

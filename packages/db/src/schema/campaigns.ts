@@ -160,6 +160,9 @@ export const campaigns = pgTable(
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
+    index('campaigns_start_due_by_store_idx')
+      .on(table.storeId, table.scheduledFor, table.id)
+      .where(sql`${table.status} = 'scheduled'`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),

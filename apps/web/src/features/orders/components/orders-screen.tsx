@@ -66,7 +66,12 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           <OrderDetailSheet
             key={selected}
             id={selected}
-            fallbackFocus={heading}
+            fallbackFocus={() =>
+              heading.current
+                ?.closest('main')
+                ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${selected}"]`) ??
+              heading.current
+            }
             onClose={() => router.replace(listHref)}
           />
         ) : null}
