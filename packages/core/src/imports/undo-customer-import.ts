@@ -25,7 +25,7 @@ export class UndoCustomerImport {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async request(storeId: string, importId: string, _actor: Actor): Promise<void> {
+  async request(storeId: string, importId: string): Promise<void> {
     await this.transaction.run(storeId, async () => {
       const found = await this.repository.findById(storeId, importId);
       if (!found) throw importError('IMPORT_NOT_FOUND');
@@ -99,7 +99,7 @@ export class UndoCustomerImport {
     return answered;
   }
 
-  async recover(storeId: string, before: Date, _actor: Actor): Promise<void> {
+  async recover(storeId: string, before: Date): Promise<void> {
     await this.transaction.run(storeId, async () => {
       const now = this.clock.now();
       const ids = await this.repository.requeuePendingUndos(storeId, before, now);

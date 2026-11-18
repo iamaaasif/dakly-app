@@ -130,8 +130,8 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
-  async undo(storeId: string, importId: string, actor: Actor): Promise<ImportResponse> {
-    await this.undoImport.request(storeId, importId, actor);
+  async undo(storeId: string, importId: string, _actor: Actor): Promise<ImportResponse> {
+    await this.undoImport.request(storeId, importId);
     return this.get(storeId, importId);
   }
 
@@ -190,7 +190,7 @@ export class ImportsService {
     const now = this.clock.now();
     const before = new Date(now.getTime() - STUCK_MS);
     for (const storeId of await this.repository.storesWithStuckImports(before)) {
-      await this.undoImport.recover(storeId, before, { kind: 'system' });
+      await this.undoImport.recover(storeId, before);
       for (const stuck of await this.repository.listStuck(storeId, before)) {
         const requeued = await this.transaction.run(storeId, async () => {
           const requeue = { before, now, limit: MAX_REQUEUES };
