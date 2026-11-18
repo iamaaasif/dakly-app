@@ -1,6 +1,6 @@
 {
-  "id": "deeacf4d-d2b9-4ef5-890f-e88c1dbb5729",
-  "prevId": "b4b6186f-dc51-4a46-b5bd-f7be23b02519",
+  "id": "ac26e640-f718-42be-ac2d-ceca4927c2ed",
+  "prevId": "7adf20d3-302b-48e8-8055-67fae9ed8ba6",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4349,8 +4349,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "destination": {
-          "name": "destination",
+        "destination_hash": {
+          "name": "destination_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": false
