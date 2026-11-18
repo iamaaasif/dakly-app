@@ -18,7 +18,6 @@ import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
@@ -615,7 +614,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         sms.send(message),
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
-      vi.spyOn(StoreTransaction.prototype, 'databaseTime').mockImplementation(
+      vi.spyOn(AutomationRunsRepository.prototype, 'schedulerTime').mockImplementation(
         async () => databaseNow ?? clockNow,
       );
     });

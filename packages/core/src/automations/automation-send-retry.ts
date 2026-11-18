@@ -1,11 +1,10 @@
 import type { MessagingService } from '../messaging/messaging.service';
-import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
 import { serializeError } from '../platform/logging/safe-error';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
-import type { RunClaim } from './automation-runs.repository';
+import type { AutomationRunsRepository, RunClaim } from './automation-runs.repository';
 import {
   type Delivery,
   endWithUnknownOutcome,
@@ -91,8 +90,12 @@ export async function deliverAutomationSms(
   {
     messaging,
     reporter,
-    transaction,
-  }: { messaging: MessagingService; reporter: ErrorReporter; transaction: StoreTransaction },
+    repository,
+  }: {
+    messaging: MessagingService;
+    reporter: ErrorReporter;
+    repository: Pick<AutomationRunsRepository, 'schedulerTime'>;
+  },
   { storeId, claim, contactId, step, body, destination, isFirstTry, preparedSender }: Delivery,
   firstTriedAt: Date,
   attemptedAt: Date,
@@ -108,7 +111,7 @@ export async function deliverAutomationSms(
     (receipt) => ({ receipt }),
     (error: unknown) => ({ error }),
   );
-  const now = await transaction.databaseTime(storeId);
+  const now = await repository.schedulerTime(storeId);
   if ('receipt' in attempt) {
     const { providerMessageId, credits } = attempt.receipt;
     return {

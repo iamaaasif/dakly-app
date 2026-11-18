@@ -4,12 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 import { campaignRecipients } from '@dakly/db/schema/campaigns';
 
 import { ConsentService } from '../consents/consent.service';
+import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -252,7 +253,7 @@ describe('SendPolicyService (Postgres)', () => {
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
   });
 
-  it('reads the Postgres dispatch time after waiting for the contact lock', async () => {
+  it('reads the dispatch clock after waiting for the contact lock', async () => {
     const contactId = await consentedContact(storeA);
     const connection = await admin.pool.connect();
     const startCheck = () =>
@@ -262,6 +263,7 @@ describe('SendPolicyService (Postgres)', () => {
           policy.checkForSend(storeA, { contactId, channel: 'sms', category: 'transactional' }),
         );
     let pending: ReturnType<typeof startCheck> | undefined;
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(noon);
     try {
       await connection.query('begin');
       await connection.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
@@ -269,16 +271,39 @@ describe('SendPolicyService (Postgres)', () => {
       ]);
       pending = startCheck();
       await waitForBlockedAdvisoryLock();
-      const { rows } = await connection.query<{ at: Date }>('select clock_timestamp() as at');
+      clock.mockReturnValue(evening);
       await connection.query('commit');
 
       const result = await pending;
       expect(result.decision).toEqual({ action: 'send' });
-      expect(result.at.getTime()).toBeGreaterThanOrEqual(rows[0]!.at.getTime());
+      expect(result.at).toEqual(evening);
     } finally {
       await connection.query('rollback');
       connection.release();
       await pending?.catch(() => undefined);
+      clock.mockRestore();
+    }
+  });
+
+  it('counts a committed workflow send even when the dispatch clock is behind', async () => {
+    const contactId = await consentedContact(storeA);
+    const sentAt = new Date(noon.getTime() + 1000);
+    await workflowSend(storeA, contactId, sentAt, { outcome: 'sending' });
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(noon);
+    const message = { channel: 'sms', category: 'marketing' } as const;
+    try {
+      const live = await app
+        .get(StoreTransaction)
+        .run(storeA, () => policy.checkForSend(storeA, { ...message, contactId }));
+      expect(live.decision).toEqual({ action: 'skip', reason: 'frequency_cap' });
+      const [preview] = await policy.checkAudience(storeA, {
+        ...message,
+        contactIds: [contactId],
+        at: noon,
+      });
+      expect(preview?.decision).toEqual({ action: 'send' });
+    } finally {
+      clock.mockRestore();
     }
   });
 

@@ -93,6 +93,18 @@ export class AutomationRunsRepository {
     return result.rows.map((row) => ({ ...row, claimedAt: new Date(row.claimedAt) }));
   }
 
+  // Lease and wake timestamps use the same clock as due_automation_runs.
+  async schedulerTime(storeId: string): Promise<Date> {
+    return this.database.forStore(storeId, async (tx) => {
+      const { rows } = await tx.execute<{ milliseconds: string }>(
+        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
+      );
+      const [time] = rows;
+      if (!time) throw new Error('Postgres did not return the workflow scheduler time');
+      return new Date(Number(time.milliseconds));
+    });
+  }
+
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
