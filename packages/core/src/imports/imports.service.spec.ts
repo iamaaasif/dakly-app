@@ -132,12 +132,13 @@ describe('ImportsService', () => {
           answer.status = 'not_answered';
       return { complete: true };
     },
-    currentForAudience: async (_storeId: string, ids: string[], channel: string) =>
+    currentForAudience: async (_storeId: string, ids: string[], channel?: string) =>
       ids.flatMap((contactId) => {
-        const answer = answers.find(
-          (item) => item.channel === channel && item.contactId === contactId,
+        const recorded = answers.filter(
+          (item) =>
+            (channel === undefined || item.channel === channel) && item.contactId === contactId,
         );
-        if (answer) return [answer];
+        if (recorded.length > 0) return recorded;
         const status = consent.get(`${contactId}:${channel}`);
         return status
           ? [{ contactId, status, source: 'manual', capturedAt: new Date('2026-11-17T04:30:00Z') }]

@@ -112,7 +112,7 @@ export class ConsentsRepository {
   listCurrent(
     storeId: string,
     contactIds: string[],
-    channel: ConsentChannel,
+    channel?: ConsentChannel,
   ): Promise<CurrentConsent[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
@@ -126,7 +126,7 @@ export class ConsentsRepository {
         .where(
           and(
             eq(contactConsentCurrent.storeId, storeId),
-            eq(contactConsentCurrent.channel, channel),
+            channel ? eq(contactConsentCurrent.channel, channel) : undefined,
             inArray(contactConsentCurrent.contactId, contactIds),
           ),
         ),

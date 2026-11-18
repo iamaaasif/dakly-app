@@ -223,8 +223,8 @@ undo the contacts it added and the consent grants it recorded.
   "Not answered"; staff cannot record this reset through the consent form.
 - The bulk undo job restores consent and removes contacts in batches of 500, each in a short
   transaction. It soft deletes, through `ContactsService`, only contacts this import created
-  whose `updated_at` still equals `created_at` and whose SMS and WhatsApp channels have no
-  answer after restoration. A later grant or withdrawal keeps the contact. Contacts that the
+  whose `updated_at` still equals `created_at` and who have no consent answer on any
+  channel after restoration. A later grant or withdrawal keeps the contact. Contacts that the
   import only updated stay. Chats and orders do not yet change `updated_at`, so a removed
   contact may have had them; ORD, CHAT, identity and merge work must update undo eligibility as those relations change.
 - `ImportResponse.undoFinishedAt` is null while undo is pending. The job sets it when all work

@@ -698,6 +698,35 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
       },
     );
 
+    it.each(['messenger', 'instagram'] as const)(
+      'keeps a contact with a later %s withdrawal',
+      async (channel) => {
+        const value = phone();
+        const { importId } = await runImport(lines(`রাবেয়া,${value},,`));
+        const contactId = (await contactByPhone(value)).id;
+        await app
+          .get(ConsentService)
+          .recordStaffAnswer(
+            storeId,
+            contactId,
+            { channel, status: 'withdrawn', note: 'আর পাঠাবেন না' },
+            owner,
+          );
+        await undo(importId);
+        expect(await deletedAt(contactId)).toBeNull();
+        const current = await admin.pool.query(
+          'select channel,status from contact_consent_current where contact_id=$1 order by channel',
+          [contactId],
+        );
+        expect(current.rows).toEqual([
+          { channel, status: 'withdrawn' },
+          { channel: 'sms', status: 'not_answered' },
+          { channel: 'whatsapp', status: 'not_answered' },
+        ]);
+        expect((await service.get(storeId, importId)).undoFinishedAt).not.toBeNull();
+      },
+    );
+
     it('recovers accepted undo after seven days once, and stops recovering completed work', async () => {
       const value = phone();
       const { importId } = await runImport(lines(`রাবেয়া,${value},,`));

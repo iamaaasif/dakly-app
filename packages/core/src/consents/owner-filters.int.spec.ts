@@ -87,6 +87,17 @@ describe('consent filters without RLS assistance', () => {
       expect.objectContaining({ status: 'not_answered', capturedAt: restored.capturedAt }),
     ]);
     expect(await repository.listUnchangedGrants(f.a, [grant.id])).toEqual([]);
+    await repository.insert(f.a, {
+      ...answer,
+      contactId: contactA,
+      channel: 'messenger',
+      status: 'withdrawn',
+      capturedAt: restored.capturedAt,
+    });
+    expect((await repository.listCurrent(f.a, [contactA])).map((row) => row.status).sort()).toEqual(
+      ['not_answered', 'withdrawn'],
+    );
+    expect(await repository.listCurrent(f.b, [contactA])).toEqual([]);
     await expect(
       repository.insert(f.b, { ...answer, contactId: contactB, importId }),
     ).rejects.toThrow();

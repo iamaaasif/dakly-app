@@ -157,7 +157,8 @@ export class ConsentService {
     });
   }
 
-  currentForAudience(storeId: string, contactIds: string[], channel: ConsentChannel) {
+  // Undo checks every channel together before deciding whether a contact can be removed.
+  currentForAudience(storeId: string, contactIds: string[], channel?: ConsentChannel) {
     if (contactIds.length > MAX_AUDIENCE_CONSENT_CONTACTS)
       throw consentError('CONSENT_AUDIENCE_TOO_MANY');
     return this.repository.listCurrent(storeId, contactIds, channel);

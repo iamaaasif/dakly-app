@@ -94,9 +94,8 @@ export class UndoCustomerImport {
 
   private async contactsWithOwnAnswer(storeId: string, ids: string[]): Promise<Set<string>> {
     const answered = new Set<string>();
-    for (const channel of ['sms', 'whatsapp'] as const)
-      for (const answer of await this.consents.currentForAudience(storeId, ids, channel))
-        if (answer.status !== 'not_answered') answered.add(answer.contactId);
+    for (const answer of await this.consents.currentForAudience(storeId, ids))
+      if (answer.status !== 'not_answered') answered.add(answer.contactId);
     return answered;
   }
 
