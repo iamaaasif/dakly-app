@@ -30,6 +30,7 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
+  orderStageTimes,
   orderStageTransitions,
   productArchiveStages,
   recordOrderStage,
@@ -234,20 +235,24 @@ export class OrdersService {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
     const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
-    const timeline = await orderStageHistory(storeId, orderId, this.audit);
+    const hasRecipientPhoneMatch =
+      order.isRecipientBuyer && access.seeFullPhone && order.buyerContactId
+        ? await this.contacts.hasOrderPhoneMatch(
+            storeId,
+            order.buyerContactId,
+            order.recipientPhone,
+          )
+        : false;
     return {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
-      createdAt: order.createdAt.toISOString(),
-      shippedAt: isoTime(order.shippedAt),
-      deliveredAt: isoTime(order.deliveredAt),
-      returnedAt: isoTime(order.returnedAt),
-      codCollectedAt: isoTime(order.codCollectedAt),
+      ...orderStageTimes(order),
+      hasRecipientPhoneMatch,
       totalPoisha: orderTotalPoisha(order),
       returnRisk: returnRisk(outcomes[0]),
       items: await this.repository.items(storeId, orderId),
-      timeline,
+      timeline: await orderStageHistory(storeId, orderId, this.audit),
     };
   }
 
@@ -402,9 +407,7 @@ export class OrdersService {
     previous: OrderItemWrite[] = [],
   ): Promise<OrderItemWrite[]> {
     const byId = new Map(previous.map((item) => [item.variantId, item]));
-    const newIds = items
-      .filter(({ variantId }) => !byId.has(variantId))
-      .map(({ variantId }) => variantId);
+    const newIds = items.flatMap(({ variantId }) => (byId.has(variantId) ? [] : [variantId]));
     const variants = await this.products.orderVariants(storeId, newIds, [...byId.keys()]);
     for (const variant of variants) {
       if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
@@ -412,8 +415,4 @@ export class OrdersService {
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
-}
-
-function isoTime(value: Date | null): string | null {
-  return value?.toISOString() ?? null;
 }

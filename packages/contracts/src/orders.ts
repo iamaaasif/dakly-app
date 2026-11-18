@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
+import {
+  productListQuerySchema,
+  type ProductResponse,
+  type ProductVariantResponse,
+} from './products';
 
 export const orderSources = [
   'messenger',
@@ -146,6 +151,20 @@ export type OrderListResponse = {
   nextCursor: number | null;
 };
 
+export const orderCatalogueQuerySchema = productListQuerySchema.pick({
+  cursor: true,
+  limit: true,
+  search: true,
+});
+export type OrderCatalogueQuery = z.infer<typeof orderCatalogueQuerySchema>;
+export type OrderCatalogueProduct = Pick<ProductResponse, 'id' | 'name' | 'isStockTracked'> & {
+  variants: Pick<
+    ProductVariantResponse,
+    'id' | 'title' | 'isDefault' | 'pricePoisha' | 'available'
+  >[];
+};
+export type OrderCataloguePage = { items: OrderCatalogueProduct[]; nextCursor: string | null };
+
 export type OrderItem = {
   id: string;
   variantId: string;
@@ -173,6 +192,7 @@ export type OrderStageHistoryEntry = {
 export type OrderDetail = OrderSummary & {
   buyerContactId: string | null;
   isRecipientBuyer: boolean;
+  hasRecipientPhoneMatch: boolean;
   recipientPhone: string;
   recipientAddress: string;
   recipientDistrict: string;
