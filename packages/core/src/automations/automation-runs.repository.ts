@@ -36,7 +36,7 @@ export type ClaimedRun = {
   isVersionStopped: boolean;
   automationStatus: AutomationStatus;
   balanceResumedAt: Date | null;
-  balanceResumeKeepsSend: boolean;
+  hasBalanceResumeSendAllowance: boolean;
 };
 
 export type RunChange = {
@@ -111,7 +111,7 @@ export class AutomationRunsRepository {
           isVersionStopped: automationVersions.isStopped,
           automationStatus: automations.status,
           balanceResumedAt: automations.balanceResumedAt,
-          balanceResumeKeepsSend: automations.balanceResumeKeepsSend,
+          hasBalanceResumeSendAllowance: automations.hasBalanceResumeSendAllowance,
         })
         .from(automationRuns)
         .innerJoin(

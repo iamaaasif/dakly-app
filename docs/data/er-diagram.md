@@ -1457,7 +1457,7 @@ erDiagram
         text pause_reason "NULL; text"
         integer balance_pause_revision "NULL; integer"
         timestamp_with_time_zone balance_resumed_at "NULL; timestamp with time zone"
-        boolean balance_resume_keeps_send "NOT NULL; boolean"
+        boolean has_balance_resume_send_allowance "NOT NULL; boolean"
         boolean is_transactional "NOT NULL; boolean"
         smallint priority "NOT NULL; smallint"
         jsonb draft_graph "NOT NULL; jsonb"

@@ -221,13 +221,13 @@ export function isLateSend(wakeAt: Date | null, now: Date): boolean {
 export function sendLateness(
   wakeAt: Date | null,
   now: Date,
-  run: Pick<ClaimedRun, 'balanceResumedAt' | 'balanceResumeKeepsSend'> | undefined,
+  run: Pick<ClaimedRun, 'balanceResumedAt' | 'hasBalanceResumeSendAllowance'> | undefined,
 ) {
   if (!isLateSend(wakeAt, now)) return undefined;
   const balanceResumedAt = run?.balanceResumedAt ?? null;
   // If a top-up made an already-due send eligible, the wait for the sweep cannot expire it.
   if (
-    run?.balanceResumeKeepsSend &&
+    run?.hasBalanceResumeSendAllowance &&
     balanceResumedAt &&
     wakeAt &&
     wakeAt <= balanceResumedAt &&

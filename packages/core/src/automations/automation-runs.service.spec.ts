@@ -160,7 +160,7 @@ describe('AutomationRunsService', () => {
       isVersionStopped: false,
       automationStatus: 'active',
       balanceResumedAt: null,
-      balanceResumeKeepsSend: false,
+      hasBalanceResumeSendAllowance: false,
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
@@ -992,7 +992,7 @@ describe('AutomationRunsService', () => {
       clockNow = new Date(claimedAt.getTime() + 24 * HOUR + 1000);
       await start(send, {
         balanceResumedAt: new Date(claimedAt.getTime() + 24 * HOUR - 1000),
-        balanceResumeKeepsSend: true,
+        hasBalanceResumeSendAllowance: true,
       });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(sent).toHaveLength(1);
@@ -1023,7 +1023,7 @@ describe('AutomationRunsService', () => {
 
       await start(send, {
         balanceResumedAt: new Date(claimedAt.getTime() + 2 * HOUR),
-        balanceResumeKeepsSend: false,
+        hasBalanceResumeSendAllowance: false,
       });
 
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);

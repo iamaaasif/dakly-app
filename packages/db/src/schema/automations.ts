@@ -48,7 +48,9 @@ export const automations = pgTable(
     // A send held through a balance pause is judged at the actual resume time.
     balanceResumedAt: timestamptz('balance_resumed_at'),
     // A manual pause removes the extra time after a balance resume.
-    balanceResumeKeepsSend: boolean('balance_resume_keeps_send').notNull().default(false),
+    hasBalanceResumeSendAllowance: boolean('has_balance_resume_send_allowance')
+      .notNull()
+      .default(false),
     // AUTO-R2: transactional first, then priority, when two automations hit one person on a day.
     isTransactional: boolean('is_transactional').notNull().default(false),
     priority: smallint('priority').notNull().default(0),

@@ -1,5 +1,5 @@
 {
-  "id": "93996c83-3635-4dce-819f-83b6d5892516",
+  "id": "14735e87-79fa-474c-abad-556b1e036b6c",
   "prevId": "ed6ad400-81c4-42f1-bdcc-96f4768a3084",
   "version": "7",
   "dialect": "postgresql",
@@ -5230,8 +5230,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "balance_resume_keeps_send": {
-          "name": "balance_resume_keeps_send",
+        "has_balance_resume_send_allowance": {
+          "name": "has_balance_resume_send_allowance",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

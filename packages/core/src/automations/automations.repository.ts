@@ -137,7 +137,7 @@ export class AutomationsRepository {
         .set({
           ...change,
           ...(graph && { draftGraph: graph }),
-          ...(change.pauseReason === 'manual' && { balanceResumeKeepsSend: false }),
+          ...(change.pauseReason === 'manual' && { hasBalanceResumeSendAllowance: false }),
         })
         .where(
           and(
@@ -171,7 +171,7 @@ export class AutomationsRepository {
           status: 'paused',
           pauseReason: 'balance',
           balancePauseRevision: observedRevision,
-          balanceResumeKeepsSend: false,
+          hasBalanceResumeSendAllowance: false,
           updatedAt,
         })
         .where(
@@ -215,7 +215,7 @@ export class AutomationsRepository {
           pauseReason: null,
           balancePauseRevision: null,
           balanceResumedAt: resumedAt,
-          balanceResumeKeepsSend: true,
+          hasBalanceResumeSendAllowance: true,
           updatedAt: resumedAt,
         })
         .where(
