@@ -121,7 +121,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     zoneIds = zones.items.map(({ id }) => id);
     zoneId = zones.items.find(({ name }) => name === 'Inside Dhaka')?.id;
     expect(zoneId).toBeDefined();
-    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
+    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60.00');
     const variant = create.getByLabel('Product and variant 1');
     await expect(variant.getByRole('option', { name: 'Cotton Panjabi · M' })).toHaveCount(0);
     await create.getByRole('button', { name: 'Load more products' }).click();
