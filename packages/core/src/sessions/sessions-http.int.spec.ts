@@ -270,6 +270,7 @@ describe('Session boundary over Fastify and Postgres', () => {
       name: 'Rina shop',
       canViewCustomers: true,
       canCreateCustomer: false,
+      canViewOrders: true,
       canViewProducts: true,
       canEditProducts: false,
       canViewSegments: true,

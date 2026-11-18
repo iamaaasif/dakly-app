@@ -1,4 +1,4 @@
-import type { OrderDetail, OrderItem } from '@dakly/contracts/orders';
+import type { OrderDetail, OrderItem, OrderSummary } from '@dakly/contracts/orders';
 
 import { orderError } from './orders.errors';
 import type { OrderItemWrite } from './orders.repository';
@@ -22,8 +22,9 @@ export function orderTotals(
     return sum + net;
   }, 0n);
   const discount = BigInt(orderDiscountPoisha);
-  const cod = subtotal - discount + BigInt(deliveryChargePoisha) - BigInt(advancePaidPoisha);
-  if (discount > subtotal || subtotal > Number.MAX_SAFE_INTEGER || cod > Number.MAX_SAFE_INTEGER)
+  const total = totalBeforeAdvance(subtotal, discount, deliveryChargePoisha);
+  const cod = total - BigInt(advancePaidPoisha);
+  if (discount > subtotal || subtotal > Number.MAX_SAFE_INTEGER || total > Number.MAX_SAFE_INTEGER)
     throw orderError('ORDER_TOTAL_INVALID');
   return {
     itemsSubtotalPoisha: Number(subtotal),
@@ -54,9 +55,7 @@ export function partialOrderTotals(
       ? 0n
       : (BigInt(ordered.orderDiscountPoisha) * subtotal) / BigInt(ordered.itemsSubtotalPoisha);
   const cod =
-    subtotal -
-    orderDiscount +
-    BigInt(ordered.deliveryChargePoisha) -
+    totalBeforeAdvance(subtotal, orderDiscount, ordered.deliveryChargePoisha) -
     BigInt(ordered.advancePaidPoisha);
   return {
     lines,
@@ -66,4 +65,27 @@ export function partialOrderTotals(
       codAmountPoisha: cod > 0n ? Number(cod) : 0,
     },
   };
+}
+
+export function orderTotalPoisha(
+  order: Pick<
+    OrderSummary,
+    | 'itemsSubtotalPoisha'
+    | 'orderDiscountPoisha'
+    | 'deliveryChargePoisha'
+    | 'deliveredItemsSubtotalPoisha'
+    | 'deliveredOrderDiscountPoisha'
+  >,
+): number {
+  return Number(
+    totalBeforeAdvance(
+      BigInt(order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha),
+      BigInt(order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha),
+      order.deliveryChargePoisha,
+    ),
+  );
+}
+
+function totalBeforeAdvance(subtotal: bigint, discount: bigint, deliveryChargePoisha: number) {
+  return subtotal - discount + BigInt(deliveryChargePoisha);
 }

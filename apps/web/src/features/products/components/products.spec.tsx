@@ -77,6 +77,7 @@ function show(
       name: 'Shop',
       canViewProducts: view,
       canEditProducts: edit,
+      canViewOrders: false,
       canViewCustomers: false,
       canCreateCustomer: false,
       canViewSegments: false,

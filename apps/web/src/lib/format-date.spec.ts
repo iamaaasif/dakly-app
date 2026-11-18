@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDate, formatDateTime, formatTime } from './format-date';
+import { formatDate, formatDateTime, formatRelativeTime, formatTime } from './format-date';
 
 describe('formatDate', () => {
   it.each([
@@ -114,5 +114,18 @@ describe('valid calendar dates', () => {
     ['2026-12-31T23:03:00-05:00', '1 Jan 2027, 10:03 (Asia/Dhaka)'],
   ])('accepts the calendar date before applying the UTC offset in %s', (value, expected) => {
     expect(formatDateTime(value)).toBe(expected);
+  });
+});
+
+describe('formatRelativeTime', () => {
+  const now = Date.parse('2026-11-18T12:00:00Z');
+  it.each([
+    ['2026-11-18T11:59:15Z', 'Just now'],
+    ['2026-11-18T11:55:00Z', '5 minutes ago'],
+    ['2026-11-18T09:00:00Z', '3 hours ago'],
+    ['2026-11-16T12:00:00Z', '2 days ago'],
+    ['2026-11-18T12:05:00Z', 'in 5 minutes'],
+  ])('formats %s as %s', (value, expected) => {
+    expect(formatRelativeTime(value, now)).toBe(expected);
   });
 });

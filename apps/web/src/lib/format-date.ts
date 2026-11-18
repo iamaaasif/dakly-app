@@ -9,6 +9,16 @@ export function formatDateTime(value: string): string {
   return `${formatted} (Asia/Dhaka)`;
 }
 
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+
+export function formatRelativeTime(value: string, now = Date.now()): string {
+  const minutes = Math.trunc((parseInstant(value) - now) / 60_000);
+  const hours = Math.trunc(minutes / 60);
+  if (Math.abs(hours) >= 24) return relativeTime.format(Math.trunc(hours / 24), 'day');
+  if (hours) return relativeTime.format(hours, 'hour');
+  return minutes ? relativeTime.format(minutes, 'minute') : 'Just now';
+}
+
 export function formatDate(value: string, reference: string, timeZone = 'Asia/Dhaka'): string {
   const instant = parseInstant(value);
   const date = calendarDate(instant, timeZone);
