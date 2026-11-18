@@ -160,4 +160,37 @@ describe('Campaign sweep (Postgres)', () => {
       await admin.pool.query('delete from stores where id=$1', [store]);
     }
   });
+
+  it('gives a second store a turn inside the due campaign limit', async () => {
+    const store = randomUUID();
+    await admin.pool.query("insert into stores(id,name) values($1,'আরেকটি দোকান')", [store]);
+    const backlog = Array.from({ length: 5 }, () => randomUUID());
+    const outsideBacklog = randomUUID();
+    try {
+      for (const [owner, ids] of [
+        [storeId, backlog],
+        [store, [outsideBacklog]],
+      ] as const) {
+        await admin.pool.query(
+          `insert into campaigns(id,store_id,name,channel,content,status,scheduled_for,approved_at)
+           select id,$1,'নতুন কালেকশন','sms','{"text":"নতুন"}','scheduled',$2,$2
+           from unnest($3::uuid[]) as id`,
+          [owner, sendAt, ids],
+        );
+      }
+      const repository = app.get(CampaignSendingRepository);
+      const selected = await repository.listDue(sendAt, 2);
+      expect(selected.map(({ storeId }) => storeId).sort()).toEqual([storeId, store].sort());
+      expect(selected).toContainEqual({ storeId: store, campaignId: outsideBacklog });
+      const nextTick = new Date(sendAt.getTime() + 60_000);
+      const [first] = await repository.listDue(sendAt, 1);
+      const [next] = await repository.listDue(nextTick, 1);
+      expect(next?.storeId).not.toBe(first?.storeId);
+    } finally {
+      await admin.pool.query('delete from campaigns where id=any($1::uuid[])', [
+        [...backlog, outsideBacklog],
+      ]);
+      await admin.pool.query('delete from stores where id=$1', [store]);
+    }
+  });
 });

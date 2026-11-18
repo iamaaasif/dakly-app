@@ -6,6 +6,9 @@ import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 
+// One worker tick has finite room; store turns share it when many campaigns are due.
+const CAMPAIGNS_PER_TICK = 200;
+
 @Injectable()
 export class CampaignSenderService {
   private readonly logger = new Logger(CampaignSenderService.name);
@@ -19,7 +22,7 @@ export class CampaignSenderService {
   // One store's failure must not hold up the others; its campaign is tried again next minute.
   async startDue(): Promise<void> {
     const now = this.clock.now();
-    for (const { storeId, campaignId } of await this.repository.listDue(now))
+    for (const { storeId, campaignId } of await this.repository.listDue(now, CAMPAIGNS_PER_TICK))
       await this.repository.start(storeId, campaignId, now).catch((error: unknown) => {
         this.logger.error({ storeId, campaignId }, 'Campaign start failed');
         const { jobId } = jobLogBindings();
