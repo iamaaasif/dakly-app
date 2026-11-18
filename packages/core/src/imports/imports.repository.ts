@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
+  ContactImportField,
   ContactImportMapping,
   ImportConsentEvidence,
   ImportDuplicateMode,
@@ -23,6 +24,19 @@ export type ImportCounts = {
   rowsFailed: number;
 };
 
+export type ImportReportLine = {
+  rowNumber?: number;
+  field?: ContactImportField | 'sms' | 'whatsapp';
+  message: string;
+};
+
+export type ImportCheckpoint = {
+  processedRows: number;
+  fileHash: string;
+  report: ImportReportLine[];
+  omittedRows: number;
+};
+
 export type NewImportFile = {
   id: string;
   objectKey: string;
@@ -39,6 +53,7 @@ const reports = alias(files, 'reports');
 
 const importColumns = {
   id: imports.id,
+  checkpoint: sql<ImportCheckpoint | null>`${imports.checkpoint}`,
   status: imports.status,
   columnMapping: sql<ContactImportMapping | null>`${imports.columnMapping}`,
   duplicateMode: imports.duplicateMode,
@@ -50,21 +65,29 @@ const importColumns = {
   rowsUpdated: imports.rowsUpdated,
   rowsSkipped: imports.rowsSkipped,
   rowsFailed: imports.rowsFailed,
+  uploadFileId: uploads.id,
   uploadKey: uploads.objectKey,
   reportKey: reports.objectKey,
 };
 
 export type Import = {
+  checkpoint: ImportCheckpoint | null;
   id: string;
   status: ImportStatus;
   columnMapping: ContactImportMapping | null;
   duplicateMode: ImportDuplicateMode;
   consentEvidence: ImportConsentEvidence | null;
   createdByUserId: string | null;
+  uploadFileId: string;
   startedByUserId: string | null;
   uploadKey: string;
   reportKey: string | null;
 } & { [Count in keyof ImportCounts]: number | null };
+
+export type StuckImport = Pick<
+  Import,
+  'id' | 'checkpoint' | 'columnMapping' | 'uploadKey' | 'uploadFileId'
+> & { claimedAt: Date | null };
 
 export type StartedImport = Pick<
   typeof imports.$inferInsert,
@@ -128,6 +151,63 @@ export class ImportsRepository {
     return rows.length > 0;
   }
 
+  // A run holds the import while its lease is fresh; a stale lease is taken over.
+  async claim(storeId: string, importId: string, lease: Date, staleBefore: Date): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ claimedAt: lease, lastProgressAt: lease })
+        .where(
+          and(
+            guard(storeId, importId, 'importing'),
+            or(isNull(imports.claimedAt), lt(imports.claimedAt, staleBefore)),
+          ),
+        )
+        .returning({ id: imports.id }),
+    );
+    return rows.length > 0;
+  }
+
+  async releaseClaim(storeId: string, importId: string, lease: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ claimedAt: null })
+        .where(and(guard(storeId, importId, 'importing'), eq(imports.claimedAt, lease))),
+    );
+  }
+
+  // Renews the lease with the counts so far; false when another run has taken the import over.
+  async saveProgress(
+    storeId: string,
+    importId: string,
+    counts: ImportCounts,
+    lease: { held: Date; renewed: Date; checkpoint: ImportCheckpoint },
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({
+          ...counts,
+          checkpoint: lease.checkpoint,
+          claimedAt: lease.renewed,
+          lastProgressAt: lease.renewed,
+        })
+        .where(and(guard(storeId, importId, 'importing'), eq(imports.claimedAt, lease.held)))
+        .returning({ id: imports.id }),
+    );
+    return rows.length > 0;
+  }
+
+  async markUploadReady(storeId: string, fileId: string): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(files)
+        .set({ status: 'ready' })
+        .where(and(eq(files.storeId, storeId), eq(files.id, fileId), eq(files.status, 'pending'))),
+    );
+  }
+
   // Finishes only while `lease` is still the import's lease; a null lease matches an import that
   // was never claimed. The report row is saved only when the import matched.
   finish(
@@ -186,11 +266,19 @@ export class ImportsRepository {
   }
 
   // The last time a run made progress, or the start for an import no run has claimed yet.
-  listStuck(storeId: string, before: Date): Promise<{ id: string; claimedAt: Date | null }[]> {
+  listStuck(storeId: string, before: Date): Promise<StuckImport[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: imports.id, claimedAt: imports.claimedAt })
+        .select({
+          id: imports.id,
+          claimedAt: imports.claimedAt,
+          checkpoint: importColumns.checkpoint,
+          columnMapping: importColumns.columnMapping,
+          uploadKey: uploads.objectKey,
+          uploadFileId: uploads.id,
+        })
         .from(imports)
+        .innerJoin(uploads, and(eq(uploads.storeId, storeId), eq(uploads.id, imports.fileId)))
         .where(stalled(storeId, before)),
     );
   }

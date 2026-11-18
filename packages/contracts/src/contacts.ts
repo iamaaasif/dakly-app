@@ -99,7 +99,8 @@ export const createContactSchema = z.object({
   phone: bdMobileSchema,
 });
 
-const contactTags = z.array(z.string().trim().min(1).max(50)).max(50);
+export const MAX_CONTACT_TAGS = 50;
+const contactTags = z.array(z.string().trim().min(1).max(50)).max(MAX_CONTACT_TAGS);
 
 export const updateContactSchema = z
   .strictObject({

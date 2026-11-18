@@ -16,6 +16,7 @@ import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
+import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -48,6 +49,7 @@ import { JobSchedulers } from './job-schedulers';
     SendSecurityNoticeJob,
     RelayOutboxJob,
     FailStuckImportsJob,
+    RunContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,

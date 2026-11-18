@@ -39,4 +39,10 @@ describe('consent filters without RLS assistance', () => {
       expect.objectContaining({ contactId: contactA }),
     ]);
   });
+
+  it('inserts a batch only into the selected store', async () => {
+    const [a] = await repository.insertAll(f.a, [{ ...answer, contactId: contactA }]);
+    expect((await f.row('consents', a!.id)).store_id).toBe(f.a);
+    await expect(repository.insertAll(f.b, [{ ...answer, contactId: contactA }])).rejects.toThrow();
+  });
 });

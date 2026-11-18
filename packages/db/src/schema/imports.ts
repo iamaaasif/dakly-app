@@ -45,6 +45,8 @@ export const imports = pgTable(
     rowsUpdated: integer('rows_updated'),
     rowsSkipped: integer('rows_skipped'),
     rowsFailed: integer('rows_failed'),
+    // A retry must not replay a committed batch over a later member edit.
+    checkpoint: jsonb('checkpoint'),
     reportFileId: uuid('report_file_id').references(() => files.id),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
     startedAt: timestamptz('started_at'),

@@ -104,8 +104,8 @@ The web app has two customer screens.
   export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
   tabs, and the current consent answer per channel.
 
-Customer import (CUS-8) takes a CSV file the shop uploads. The job that saves its rows as
-contacts, with the consent evidence, comes in the next part, then undo.
+Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts. Undo
+comes in the next part.
 
 - Upload: `POST /imports` takes the file size (at most 10 MB). It records an `imports` row
   and a pending `files` row and returns a presigned PUT URL that works for 15 minutes. The
@@ -120,7 +120,7 @@ contacts, with the consent evidence, comes in the next part, then undo.
   fails with `IMPORT_ALREADY_STARTED`. `GET /imports/:importId` returns the status, the counts
   and a 15-minute link to the error report. Upload and start need Edit Customers, the read
   View Customers. The member who starts it and confirms the consent evidence is stored
-  separately from the uploader.
+  separately from the uploader. Consent grants record the member who started the import.
 - The shop maps file columns to fields by position (`contactImportMappingSchema`): phone
   (required), name, WhatsApp number, email, address, district, tags and notes. One column
   fills one field at most, so two columns with the same header stay apart. Mapping uses
@@ -141,6 +141,20 @@ contacts, with the consent evidence, comes in the next part, then undo.
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
 - Only CSV is read. XLSX comes with CUS-16.
+- The job (`run-contact-import` on the bulk queue) reads the whole file through the storage
+  driver before any transaction opens; a file over 10 MB is refused before it is read in full
+  or parsed. It marks the upload's `files` row `ready`, then applies the rows in batches of 500. Each batch commits in its own short transaction and saves the counts so far. A file
+  that cannot be read, never arrived or is over 10 MB fails the import, with the reason in the
+  report. The reader drops blank lines as it goes, stops at 50,000 rows and keeps at most 200
+  cells a row.
+- One run at a time: the job takes a lease on the import (`imports.claimed_at`) and renews it
+  after each batch, saving `last_progress_at` with it. A second delivery of the job while the
+  lease is under 5 minutes old fails with `IMPORT_BEING_RUN` and is retried, so a crashed run
+  is never mistaken for a finished one. A run that fails lets go of its lease at once and keeps
+  its last progress time, so the retry carries on. After a worker crash, the 5-minute lease
+  outlasts the queue retries (about 90 seconds); recovery then waits for the sweep after
+  15 minutes without progress. A run counts as finished only after its
+  last write succeeds, so a report that failed to save is retried.
 - Files must be UTF-8. NUL and other C0 control bytes are refused with
   `IMPORT_FILE_UNREADABLE`; tab, CR and LF are allowed. UTF-16 files are refused
   even without a byte order mark, before any rows reach the database.
@@ -154,14 +168,51 @@ contacts, with the consent evidence, comes in the next part, then undo.
   event, up to 4 times, and failed only after that, with a line in its report. The report is a
   CSV in R2 whose `files` row expires after 7 days, like the upload. Failing rechecks the
   progress time, retry limit and observed lease in one update. A report from a sweep
-  that loses this check is deleted.
+  that loses this check is deleted. The final failed report recomputes parse errors from the same uploaded file and keeps
+  saved batch notes alongside the stopped-import message.
 - A file must be UTF-8. Another encoding, such as UTF-16 from Excel, or an invalid byte fails
   the import with `IMPORT_FILE_UNREADABLE`. Lines with nothing on them are skipped without
   being read as records, so 10 MB of line breaks costs no memory.
-- The start saves the consent evidence for SMS and WhatsApp: where the shop's customers
-  agreed. It applies to every row, for the channels it names.
-- Not built yet: the job that applies the rows, undo, the import screens, a preview before
-  start, and upload scanning (OPS-4).
+- Existing phone (D42): a row whose phone a contact already has changes it only this way.
+  Phone, kind, source, verification and consent never change. Name, email, address, district
+  and notes take a non-blank cell. A WhatsApp number is filled only when the contact has none
+  and no WhatsApp consent answer, because an empty number means "same as the phone" and
+  filling it would move that answer to a number nobody verified. Changing an existing number
+  stays a profile edit. A number left out for either reason is reported as "WhatsApp number
+  differs, not changed". Tags are added to the contact's own up to 50; the report
+  counts the ones left out. The duplicate mode `skip` leaves the contact as it is, consent
+  included. A new phone becomes a customer with source `import` and the import's id in
+  `contacts.import_id`.
+- Consent evidence (CUS-R4, D42): for SMS and WhatsApp the shop writes where its customers
+  agreed. The evidence applies to every row, for the channels it names; a channel without
+  evidence gets no consent. Consent is written only for a contact with no answer on that
+  channel. The batch locks matched contacts in id order, then reads WhatsApp answers through
+  `ConsentService` before changing their numbers. A withdrawal saved at the same moment is
+  never overridden. A contact created after matching causes a retry under its own lock. The import never grants a channel the customer withdrew: that channel is
+  skipped for that contact and its row in the report says so. Importing the same file again
+  records nothing new. If the saved WhatsApp destination differs from the file, the import
+  skips that grant and reports "WhatsApp consent skipped: number differs". Evidence for
+  other channels still applies to that row.
+- Each batch saves a checkpoint with its completed row position, file hash and batch notes
+  in the same transaction as contact writes and counts. The checkpoint keeps at most 5,000
+  notes and counts rows with notes omitted beyond that cap. The report ends with
+  "N more rows had notes that are not listed" when any were omitted. Parse errors are not
+  stored in the checkpoint: the reader recomputes them from the hash-checked file on resume.
+  A retry resumes after committed
+  batches, preserving their original results and any later member edits. A changed upload
+  fails with `IMPORT_FILE_CHANGED` before any remaining rows are written; the committed
+  counts and saved batch notes stay available.
+- The report is a CSV with the row, the field and the problem. Its `files` row has
+  `expires_at` 7 days ahead, like the upload, and the R2 lifecycle rule on `imports/` deletes
+  both objects after 7 days.
+- Imported contacts do not emit `contact.created`, so a large import does not start welcome
+  workflows for everyone in the file. This is the owner's decision, not missing work.
+- An import still publishes `consent.changed` with source `import`, so the consent history is
+  complete. The `consent_given` workflow trigger (CAMP-11) ignores source `import`, with no
+  setting to change that, for the same reason: one CSV import must not start a welcome
+  workflow for thousands of contacts. This is the owner's decision (17 Nov).
+- Not built yet: undo, the import screens, a preview before start, and upload scanning
+  (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

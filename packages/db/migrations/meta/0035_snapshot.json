@@ -1,5 +1,5 @@
 {
-  "id": "78d4168c-3039-4963-b882-da35bb4a4b51",
+  "id": "c43e2444-2f99-4b73-9685-659e036f26a5",
   "prevId": "f96ef8bf-72f3-479f-9c30-f49620b2a2ad",
   "version": "7",
   "dialect": "postgresql",
@@ -4560,7 +4560,7 @@
       "checkConstraints": {
         "automation_run_steps_kind": {
           "name": "automation_run_steps_kind",
-          "value": "\"automation_run_steps\".\"kind\" in ('trigger', 'wait', 'condition', 'random_split', 'send', 'action', 'goal', 'exit')"
+          "value": "\"automation_run_steps\".\"kind\" in ('trigger', 'wait', 'condition', 'random', 'send', 'action', 'goal', 'exit')"
         },
         "automation_run_steps_skip_reason": {
           "name": "automation_run_steps_skip_reason",
@@ -13482,6 +13482,12 @@
         "rows_failed": {
           "name": "rows_failed",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checkpoint": {
+          "name": "checkpoint",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
