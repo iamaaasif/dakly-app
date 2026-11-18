@@ -108,27 +108,63 @@ describe('MailpitSmsDriver', () => {
       port: 1,
       apiUrl: 'http://127.0.0.1:1',
     });
-    const lookup = vi
-      .fn()
-      .mockResolvedValueOnce(
+    const substringMatches = Array.from({ length: 100 }, (_, index) => ({
+      ID: `unrelated-${index}`,
+      MessageID: `other-${index}-campaign-1@sms.dakly.test`,
+    }));
+    const offsets: string[] = [];
+    const lookup = vi.fn((url: string) => {
+      const offset = new URL(url).searchParams.get('start') ?? '';
+      offsets.push(offset);
+      expect(offset).toBe(offsets.length === 1 ? '0' : '100');
+      return Promise.resolve(
         Response.json({
-          messages: [{ ID: 'unrelated', MessageID: 'other-campaign-1@sms.dakly.test' }],
-          messages_count: 2,
+          messages:
+            offset === '0'
+              ? substringMatches
+              : [{ ID: 'matching', MessageID: 'campaign-1@sms.dakly.test' }],
+          messages_count: 101,
           total: 500,
         }),
-      )
+      );
+    });
+    vi.stubGlobal('fetch', lookup);
+    try {
+      await expect(
+        driver.send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
+      ).resolves.toEqual({ providerMessageId: 'matching' });
+      expect(offsets).toEqual(['0', '100']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('recovers the first capture after a duplicate SMTP acknowledgment', async () => {
+    const driver = new MailpitSmsDriver({
+      host: '127.0.0.1',
+      port: 1,
+      apiUrl: 'http://127.0.0.1:1',
+    });
+    const submit = vi.spyOn(driver['transport'], 'sendMail').mockResolvedValue({
+      response: '250 2.0.0 Ok: queued',
+    });
+    const lookup = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0, total: 0 }))
       .mockResolvedValueOnce(
         Response.json({
-          messages: [{ ID: 'matching', MessageID: 'campaign-1@sms.dakly.test' }],
-          messages_count: 2,
-          total: 500,
+          messages: [{ ID: 'first-capture', MessageID: 'campaign-1@sms.dakly.test' }],
+          messages_count: 1,
+          total: 1,
         }),
       );
     vi.stubGlobal('fetch', lookup);
     try {
       await expect(
         driver.send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
-      ).resolves.toEqual({ providerMessageId: 'matching' });
+      ).resolves.toEqual({ providerMessageId: 'first-capture' });
+      expect(submit).toHaveBeenCalledTimes(1);
+      expect(lookup).toHaveBeenCalledTimes(2);
     } finally {
       vi.unstubAllGlobals();
     }
