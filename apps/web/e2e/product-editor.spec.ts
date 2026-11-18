@@ -1,4 +1,4 @@
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { expect, test } from '@playwright/test';
@@ -19,10 +19,12 @@ test('saves unfinished products, edits variants without losing stock and manages
   };
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4-editor');
+  const photoEvidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4-photos');
   const name = 'Silk scarf editor fixture';
   let productId: string | undefined;
   const fileIds: string[] = [];
   await mkdir(evidence, { recursive: true });
+  await mkdir(photoEvidence, { recursive: true });
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -34,13 +36,13 @@ test('saves unfinished products, edits variants without losing stock and manages
       headers: { Origin: baseURL!, 'X-Session-Context': session.contextTag },
     });
   }
-  async function capture(screen: string) {
+  async function capture(screen: string, directory = evidence, title?: string) {
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
-      const dialog = page.getByRole('dialog');
+      const dialog = page.getByRole('dialog', { name: title });
       await dialog.evaluate((element) => {
         element.scrollTop = 0;
       });
@@ -52,8 +54,21 @@ test('saves unfinished products, edits variants without losing stock and manages
       await expect
         .poll(() => dialog.evaluate((element) => element.scrollWidth <= element.clientWidth))
         .toBe(true);
-      await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
+      await page.screenshot({ path: resolve(directory, `${screen}-${width}.png`) });
     }
+  }
+  async function reopenWithCatalogPhoto(fileId: string) {
+    await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+    const productLink = page.getByRole('link', { name, exact: true });
+    const thumbnail = productLink.getByRole('img', { name, exact: true });
+    await expect(thumbnail).toHaveAttribute('src', new RegExp(`/${fileId}\\?`));
+    await expect
+      .poll(() => thumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBeGreaterThan(0);
+    await expect(
+      page.getByRole('button', { name: `Adjust stock for ${name}, Default` }),
+    ).toHaveText('Default: 3');
+    await productLink.click();
   }
   try {
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
@@ -97,37 +112,76 @@ test('saves unfinished products, edits variants without losing stock and manages
       ).status(),
     ).toBe(204);
 
-    const png = await readFile(resolve(process.cwd(), 'e2e/fixtures/silk-scarf.png'));
-    const metadata = { contentType: 'image/png', sizeBytes: png.length };
-    const issued = await (
-      await request(`/products/${productId}/photos/upload-url`, metadata)
-    ).json();
-    fileIds.push(issued.fileId);
-    expect(
-      (
-        await context.request.put(issued.uploadUrl, {
-          data: png,
-          headers: { 'Content-Type': 'image/png' },
-        })
-      ).status(),
-    ).toBe(200);
-    expect(
-      (
-        await request(`/products/${productId}/photos/confirm`, {
-          ...metadata,
-          fileId: issued.fileId,
-        })
-      ).status(),
-    ).toBe(201);
-    await page.goto('/products');
-    const productLink = page.getByRole('link', { name, exact: true });
-    await expect(productLink.getByRole('img', { name, exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: `Adjust stock for ${name}, Default` }),
-    ).toHaveText('Default: 3');
-    await productLink.click();
+    const png = resolve(process.cwd(), 'e2e/fixtures/silk-scarf.png');
+    for (const count of [1, 2]) {
+      const confirmed = page.waitForResponse(
+        (response) => response.url().endsWith('/photos/confirm') && response.status() === 201,
+      );
+      await expect(page.getByLabel('Add photo')).toBeEnabled();
+      const choosing = page.waitForEvent('filechooser');
+      await page.getByText('Add photo', { exact: true }).click();
+      await (await choosing).setFiles(png);
+      const saved = (await (await confirmed).json()) as ProductResponse;
+      fileIds.push(saved.photos[count - 1]!.id);
+      await expect(page.getByRole('heading', { name: `Photos (${count})` })).toBeVisible();
+    }
+    await reopenWithCatalogPhoto(fileIds[0]!);
+    await capture('gallery', photoEvidence);
+
+    const reordered = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/photos') &&
+        response.request().method() === 'PATCH' &&
+        response.status() === 200,
+    );
+    const move = page.getByRole('button', { name: 'Move photo 2 earlier' });
+    await move.focus();
+    await move.press('Enter');
+    expect(((await (await reordered).json()) as ProductResponse).imageFileIds).toEqual([
+      fileIds[1],
+      fileIds[0],
+    ]);
+    await expect(page.getByRole('button', { name: 'Remove photo 1' })).toBeFocused();
+    await reopenWithCatalogPhoto(fileIds[1]!);
+    await page.getByRole('button', { name: 'Remove photo 1' }).click();
+    const removalTitle = `Remove photo from ${name}?`;
+    const removal = page.getByRole('dialog', { name: removalTitle });
+    await expect(removal).toBeVisible();
+    await capture('remove', photoEvidence, removalTitle);
+    await page.keyboard.press('Escape');
+    await expect(removal).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Remove photo 1' }).click();
+
+    let releaseRemoval: () => void = () => undefined;
+    const removalGate = new Promise<void>((resolve) => {
+      releaseRemoval = resolve;
+    });
+    const removalPath = `**/api/products/${productId}/photos/${fileIds[1]}`;
+    await page.route(removalPath, async (route) => {
+      await removalGate;
+      await route.continue();
+    });
+    const removed = page.waitForResponse(
+      (response) => response.url().endsWith(`/photos/${fileIds[1]}`) && response.status() === 204,
+    );
+    try {
+      await removal.getByRole('button', { name: 'Remove photo', exact: true }).click();
+      await expect(removal.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+      await page.keyboard.press('Escape');
+      await expect(removal).toBeVisible();
+    } finally {
+      releaseRemoval();
+    }
+    await removed;
+    await page.unroute(removalPath);
+    await expect(page.getByRole('heading', { name: 'Photos (1)' })).toBeVisible();
+    const afterRemoval = (await (
+      await request(`/products/${productId}`, undefined, 'GET')
+    ).json()) as ProductResponse;
+    expect(afterRemoval.imageFileIds).toEqual([fileIds[0]]);
+    await reopenWithCatalogPhoto(fileIds[0]!);
     await expect(page.getByRole('img', { name: `${name} photo 1` })).toBeVisible();
-    await capture('detail');
 
     await page.getByRole('button', { name: 'Edit product', exact: true }).click();
     await page.getByLabel('Selling price (Taka)', { exact: true }).fill('2450.50');
@@ -145,7 +199,7 @@ test('saves unfinished products, edits variants without losing stock and manages
       .getByRole('combobox', { name: 'Size (U.S.) for variant 2', exact: true })
       .selectOption('L');
     await page.getByLabel('Price override for variant 2 (Taka)', { exact: true }).fill('2700.25');
-    await capture('edit');
+    await capture('edit', photoEvidence);
     await page.getByRole('button', { name: 'Save product', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
     const changed = (await (
