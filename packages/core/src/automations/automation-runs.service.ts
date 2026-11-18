@@ -46,6 +46,7 @@ import {
   type RunFacts,
   type SendStep,
   type StepResult,
+  workflowDestinationHash,
 } from './automation-step-rules';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
@@ -339,8 +340,8 @@ export class AutomationRunsService {
       outcome: 'sending',
       channel: 'sms',
       ...times,
+      destinationHash: workflowDestinationHash(storeId, destination),
       optOutUrl: optOut?.url,
-      destination,
     });
     return messageBody(step, optOut?.url);
   }

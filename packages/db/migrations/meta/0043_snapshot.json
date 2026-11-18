@@ -1,5 +1,5 @@
 {
-  "id": "b4b6186f-dc51-4a46-b5bd-f7be23b02519",
+  "id": "7adf20d3-302b-48e8-8055-67fae9ed8ba6",
   "prevId": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
   "version": "7",
   "dialect": "postgresql",
@@ -4349,8 +4349,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "destination": {
-          "name": "destination",
+        "destination_hash": {
+          "name": "destination_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": false

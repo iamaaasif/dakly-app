@@ -5,6 +5,8 @@ import type { AutomationStep, AutomationGraph } from '@dakly/contracts/automatio
 
 import type { TagChange } from '../contacts/contacts.service';
 import type { PreparedSmsSender } from '../messaging/messaging.service';
+import { loadEnv } from '../platform/config/env';
+import { hashCode } from '../platform/crypto/code-hash';
 import { DAY_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
@@ -98,6 +100,11 @@ export function scheduleWait(
 
 export function messageBody(step: SendStep, optOutUrl: string | undefined): string {
   return optOutUrl ? `${step.message.text}\n${optOutUrl}` : step.message.text;
+}
+
+export function workflowDestinationHash(storeId: string, phone: string | null): string | null {
+  const key = loadEnv().CODE_HASH_KEY;
+  return key && phone ? hashCode(key, JSON.stringify(['workflow-sms', storeId, phone])) : null;
 }
 
 export function ifNotReachable(step: SendStep, now: Date) {

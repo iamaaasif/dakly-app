@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
 import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
+import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
@@ -168,6 +169,9 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(env, 'loadEnv').mockReturnValue({
+      CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
+    } as env.Env);
     repository = new FakeRunsRepository(async () => {
       if (clockFailsAfterGate && gateCommitted && !sent.length)
         throw new Error('Scheduler clock unavailable before provider dispatch');
@@ -304,6 +308,8 @@ describe('AutomationRunsService', () => {
       ),
     );
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it.each([
     [{ until: 'duration', minutes: 90 }, '2026-11-16T06:30:00.000Z'],

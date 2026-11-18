@@ -80,7 +80,12 @@ async function workflowSend(
   sentAt: Date,
   { channel = 'sms', category = 'marketing', outcome = 'sent' } = {},
 ) {
-  const [automationId, versionId, runId] = [randomUUID(), randomUUID(), randomUUID()];
+  const [automationId, versionId, runId, stepId] = [
+    randomUUID(),
+    randomUUID(),
+    randomUUID(),
+    randomUUID(),
+  ];
   await admin.pool.query(
     "insert into automations(id,store_id,name,trigger_type,draft_graph) values($1,$2,'ফিরে আসুন','consent_given','{}')",
     [automationId, storeId],
@@ -95,8 +100,9 @@ async function workflowSend(
   );
   await admin.pool.query(
     "insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,channel,category,sent_at) values($1,$2,$3,$4,'send','send',$5,$6,$7,$8)",
-    [randomUUID(), storeId, runId, contactId, outcome, channel, category, sentAt],
+    [stepId, storeId, runId, contactId, outcome, channel, category, sentAt],
   );
+  return stepId;
 }
 
 // The sending job runs the gate inside its store transaction.
@@ -302,6 +308,24 @@ describe('SendPolicyService (Postgres)', () => {
         at: noon,
       });
       expect(preview?.decision).toEqual({ action: 'send' });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('excludes the retry from its own cap while counting other committed sends', async () => {
+    const contactId = await consentedContact(storeA);
+    const stepId = await workflowSend(storeA, contactId, hoursBefore(1), { outcome: 'sending' });
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(noon);
+    const message = { contactId, channel: 'sms', category: 'marketing' } as const;
+    const retry = () =>
+      app.get(StoreTransaction).run(storeA, () => policy.recheckForSend(storeA, message, stepId));
+    try {
+      expect(await retry()).toMatchObject({ decision: { action: 'send' } });
+      await workflowSend(storeA, contactId, hoursBefore(2), { outcome: 'unconfirmed' });
+      expect(await retry()).toMatchObject({
+        decision: { action: 'skip', reason: 'frequency_cap' },
+      });
     } finally {
       clock.mockRestore();
     }
