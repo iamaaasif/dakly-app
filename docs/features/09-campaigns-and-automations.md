@@ -394,13 +394,14 @@ Window first: a send step tries a free-form message on the channel where the cus
 
 ### Core send step
 
-Campaigns and workflows send through `MessagingService.send(storeId, { channel, contactId, body, operationKey })` in `messaging/` (D37). SMS is the only channel so far (D40); Messenger and Instagram join the same method later.
+Campaigns and workflows send through `MessagingService.send(storeId, { channel, contactId, body, operationKey, destination? })` in `messaging/` (D37). SMS is the only channel so far (D40); Messenger and Instagram join the same method later.
 
-- It reads the contact's phone through `ContactsService`. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone goes only to the SMS driver; it is never logged or returned.
+- It reads the contact's phone through `ContactsService`. When the caller supplies a frozen destination, a changed phone is refused with `MESSAGING_DESTINATION_CHANGED` before the provider call. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone goes only to the SMS driver; it is never logged or returned.
 - It counts parts with `countSmsParts` in `packages/contracts/src/sms.ts`, where the web app can use the same counter. One part holds 160 GSM-7 or 70 Unicode characters; a longer text splits into parts of 153 or 67, because each part carries a header. One Bangla character makes the whole text Unicode, and `^ { } \ [ ] ~ | €` take two GSM-7 characters each. One part costs one SMS credit.
 - It calls the driver with no store transaction open and refuses to run inside one (`MESSAGING_INSIDE_TRANSACTION`). It returns the provider message id, parts and credits. The caller, a campaign recipient or a workflow step, records status and cost and decides retries; `messaging/` writes no rows.
 - Every SMS goes from Dakly's shared sender until the store's own sender name is approved ([feature 02](02-channel-connections.md)); then it goes from that name. Delivery receipts come with the provider driver (ACC-14). Mailpit captures SMS in development, tests and staging. It has no delivery receipts, so an accepted capture counts as delivered there.
 - The operation key goes to the driver as its idempotency key. The fake driver remembers keys in memory. Mailpit uses the key as the Message-ID and returns the first capture id while the capture is retained. Concurrent calls from one Mailpit driver share the in-progress send. Two independent drivers can overlap before either stores a capture. The aggregator’s durable client reference comes with ACC-14.
+- `SmsService` converts a provider refusal to `SMS_SEND_REFUSED`. A timeout or another error with an unknown outcome keeps its existing delivery failure, so callers can reconcile it before releasing credits.
 - Staging Mailpit needs the same receipt settings as local Compose and CI: `MP_IGNORE_DUPLICATE_IDS=true`, `MP_MAX_MESSAGES=0` and `MP_MAX_AGE=7d`. These settings suppress later captures with the same Message-ID and keep seven days of captures without the default count limit. A restart can clear a mailbox without persistent storage.
 
 ### Workflow builder (D23)

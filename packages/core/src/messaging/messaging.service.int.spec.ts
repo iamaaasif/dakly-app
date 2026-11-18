@@ -246,7 +246,43 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await errorCode(send(storeA, contact!.id, 'Hello'))).toBe(
       'MESSAGING_CONTACT_HAS_NO_PHONE',
     );
+    // An approved number is checked first: the phone it was approved for is gone.
+    expect(
+      await errorCode(
+        messaging.send(storeA, {
+          channel: 'sms',
+          contactId: contact!.id,
+          body: 'Hello',
+          operationKey: `test-no-phone-${contact!.id}`,
+          destination: '01712345610',
+        }),
+      ),
+    ).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
+  });
+
+  it('refuses a phone that is no longer the approved number, and sends to the approved one', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'সাবিনা ইয়াসমিন', phone: '01712345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const approved = (destination: string | null) =>
+      messaging.send(storeA, {
+        channel: 'sms',
+        contactId: contact.id,
+        body: 'নতুন কালেকশন এসেছে',
+        operationKey: `test-destination-${destination}`,
+        destination,
+      });
+
+    expect(await errorCode(approved('01712345600'))).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(await errorCode(approved(null))).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+    await approved('01712345609');
+    expect(calls.map((call) => call.to)).toEqual(['01712345609']);
   });
 
   it('never sends to another store’s contact', async () => {
