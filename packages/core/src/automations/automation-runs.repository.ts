@@ -56,7 +56,7 @@ export type NewRunStep = {
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutUrl?: string | null;
-  destination?: string | null;
+  destinationHash?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
   firstTriedAt?: Date;
@@ -71,10 +71,10 @@ export type RunStepChange = {
 // A send handed to the provider whose outcome is not known yet.
 export type SendingStep = {
   id: string;
-  firstTriedAt: Date;
-  latestDispatchAt: Date;
+  firstTriedAt: Date | null;
+  latestDispatchAt: Date | null;
   optOutUrl: string | null;
-  destination: string | null;
+  destinationHash: string | null;
 };
 
 @Injectable()
@@ -163,7 +163,7 @@ export class AutomationRunsRepository {
           firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
           optOutUrl: automationRunSteps.optOutUrl,
-          destination: automationRunSteps.destination,
+          destinationHash: automationRunSteps.destinationHash,
         })
         .from(automationRunSteps)
         .where(
@@ -178,17 +178,23 @@ export class AutomationRunsRepository {
       return lock ? query.for('update') : query;
     });
     if (!row) return undefined;
-    const firstTriedAt = row.firstTriedAt ?? row.sentAt;
-    return firstTriedAt
-      ? { ...row, firstTriedAt, latestDispatchAt: row.sentAt ?? firstTriedAt }
-      : undefined;
+    return {
+      id: row.id,
+      firstTriedAt: row.firstTriedAt ?? row.sentAt,
+      latestDispatchAt: row.sentAt ?? row.firstTriedAt,
+      optOutUrl: row.optOutUrl,
+      destinationHash: row.destinationHash,
+    };
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRunSteps)
-        .set(change)
+        .set({
+          ...change,
+          ...(change.outcome !== 'sending' && { destinationHash: null, optOutUrl: null }),
+        })
         .where(
           and(
             eq(automationRunSteps.storeId, storeId),
@@ -218,13 +224,19 @@ export class AutomationRunsRepository {
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read
   // in the same statement so a pause or stop that committed first is seen.
-  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+  async moveRunIfLive(
+    storeId: string,
+    claim: RunClaim,
+    change: RunChange,
+    gate?: 'retry',
+  ): Promise<boolean> {
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
-        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped}
+      ${gate ? sql`for share of ${automations}, ${automationVersions}` : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

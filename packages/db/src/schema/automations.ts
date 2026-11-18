@@ -225,8 +225,8 @@ export const automationRunSteps = pgTable(
     category: text('category', { enum: sendCategories }),
     // The opt-out link a marketing SMS ends with, so a retry sends the same text.
     optOutUrl: text('opt_out_url'),
-    // The phone the send was decided for; a retry refuses a contact whose phone changed since.
-    destination: text('destination'),
+    // Used to match the original SMS destination without retaining a copy of the phone.
+    destinationHash: text('destination_hash'),
     // The retry deadline uses the first submission; the cap uses the latest dispatch.
     firstTriedAt: timestamptz('first_tried_at'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),

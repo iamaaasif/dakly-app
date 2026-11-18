@@ -5,5 +5,15 @@ export type SmsMessage = { to: string; text: string; idempotencyKey?: string; se
 export type SmsSendResult = { providerMessageId: string };
 
 export type SmsDriver = {
-  send(message: SmsMessage): Promise<SmsSendResult>;
+  send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult>;
 };
+
+// The provider might already have accepted the message when the caller cancels the request.
+export class SmsSendTimeout extends Error {
+  readonly code = 'SMS_SEND_TIMEOUT';
+
+  constructor() {
+    super('The SMS provider did not answer in time');
+    this.name = 'SmsSendTimeout';
+  }
+}
