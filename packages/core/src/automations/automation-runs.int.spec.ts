@@ -1727,45 +1727,56 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
-    it('holds a retry when a concurrent balance pause commits', async () => {
-      await setCredits(1);
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const {
-        automationId,
-        runIds: [runId],
-      } = await dueRuns(send('transactional'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, runId!);
-      await wakeNow(runId!);
-
-      const blocker = await admin.pool.connect();
-      let retry: Promise<void> | undefined;
-      try {
+    it.each(['balance pause', 'quiet hours'] as const)(
+      'holds a retry when %s starts during a workflow lock wait',
+      async (reason) => {
+        const before = await balance();
+        await setCredits(Math.max(before, 1));
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        clockNow = new Date(opensAt.getTime() + 11 * HOUR);
         const {
-          rows: [{ pid }],
-        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-        await blocker.query('begin');
-        await blocker.query(
-          "update automations set status='paused', pause_reason='balance', balance_pause_revision=0 where id=$1",
-          [automationId],
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(
+          new Error('socket hang up'),
         );
-        retry = runDueStep(runner, runId!);
-        void retry.catch(() => undefined);
-        await waitForBlocker(pid);
-        await blocker.query('commit');
-        await retry;
+        await runDueStep(runner, runId!);
+        await wakeNow(runId!);
 
-        expect(sentFor(runId!)).toEqual([]);
-        expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
-        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
-        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-      } finally {
-        await blocker.query('rollback');
-        blocker.release();
-        await retry?.catch(() => undefined);
-      }
-    });
+        const blocker = await admin.pool.connect();
+        let retry: Promise<void> | undefined;
+        try {
+          const {
+            rows: [{ pid }],
+          } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+          await blocker.query('begin');
+          await blocker.query(
+            reason === 'balance pause'
+              ? "update automations set status='paused', pause_reason='balance', balance_pause_revision=0 where id=$1"
+              : "update automations set name='Updated workflow' where id=$1",
+            [automationId],
+          );
+          retry = runDueStep(runner, runId!);
+          void retry.catch(() => undefined);
+          await waitForBlocker(pid);
+          if (reason === 'quiet hours') clockNow = new Date(clockNow.getTime() + HOUR);
+          await blocker.query('commit');
+          await retry;
+
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+          expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+        } finally {
+          await blocker.query('rollback');
+          blocker.release();
+          await retry?.catch(() => undefined);
+          await setCredits(before);
+        }
+      },
+    );
 
     it('does not submit a retry after waiting on its step row across the deadline', async () => {
       const runner = await worker();

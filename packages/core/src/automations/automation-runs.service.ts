@@ -374,7 +374,7 @@ export class AutomationRunsService {
       claim,
       step,
       facts,
-      recheck: (locked) => this.recheckResend(step, facts, locked),
+      recheck: (locked, lockWorkflow) => this.recheckResend(step, facts, locked, lockWorkflow),
     });
     if (!gated) {
       const run = await this.repository.findRun(storeId, claim.runId);
@@ -399,12 +399,20 @@ export class AutomationRunsService {
     );
   }
 
-  private async recheckResend(step: SendStep, facts: RunFacts, { id, firstTriedAt }: SendingStep) {
-    const { decision, at } = await this.sendPolicy.recheckForSend(
+  private async recheckResend(
+    step: SendStep,
+    facts: RunFacts,
+    { id, firstTriedAt }: SendingStep,
+    lockWorkflow: () => Promise<boolean>,
+  ) {
+    const gate = await this.sendPolicy.recheckForSend(
       facts.storeId,
       { contactId: facts.contactId, channel: 'sms', category: step.category },
       id,
+      lockWorkflow,
     );
+    if (!gate) return undefined;
+    const { decision, at } = gate;
     const exit = await this.refreshExitReason(facts, at);
     const now = await this.transaction.databaseTime(facts.storeId);
     const result = exit

@@ -56,7 +56,10 @@ export async function claimRetryDispatch({
   claim: RunClaim;
   step: SendStep;
   facts: Pick<RunFacts, 'storeId' | 'wakeAt'>;
-  recheck: (locked: SendingStep) => Promise<{ result: StepResult | undefined; at: Date }>;
+  recheck: (
+    locked: SendingStep,
+    lockWorkflow: () => Promise<boolean>,
+  ) => Promise<{ result: StepResult | undefined; at: Date } | undefined>;
 }) {
   return transaction.run(storeId, async () => {
     const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
@@ -66,15 +69,15 @@ export async function claimRetryDispatch({
     const checkedAt = await transaction.databaseTime(storeId);
     const { firstTriedAt } = locked;
     const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-    const { result, at } = early ? { result: early, at: checkedAt } : await recheck(locked);
     const claimedAt = await transaction.databaseTime(storeId);
-    if (
-      !(await repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt }, 'retry'))
-    )
-      return undefined;
-    const checkedDispatchAt = await transaction.databaseTime(storeId);
-    const stopped = result ?? endExpiredRetry(step, firstTriedAt, wakeAt, checkedDispatchAt);
-    if (stopped) return { result: stopped, claim: { ...claim, claimedAt }, at: checkedDispatchAt };
+    const lockWorkflow = () =>
+      repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt }, 'retry');
+    const checked = early
+      ? (await lockWorkflow()) && { result: early, at: checkedAt }
+      : await recheck(locked, lockWorkflow);
+    if (!checked) return undefined;
+    const { result, at } = checked;
+    if (result) return { result, claim: { ...claim, claimedAt }, at };
     const renewed = { ...claim, claimedAt };
     // A slower worker must not age out a previously submitted message early.
     const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;

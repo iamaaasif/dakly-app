@@ -254,7 +254,16 @@ describe('AutomationRunsService', () => {
         destination: contactPhone,
         at: databaseNow ?? clockNow,
       }),
-      recheckForSend: async () => ({ decision: recheck(), at: databaseNow ?? clockNow }),
+      recheckForSend: async (
+        _storeId: string,
+        _request: unknown,
+        _stepId: string,
+        lockWorkflow: () => Promise<boolean>,
+      ) => {
+        const decision = recheck();
+        if (!(await lockWorkflow())) return undefined;
+        return { decision, at: databaseNow ?? clockNow };
+      },
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
