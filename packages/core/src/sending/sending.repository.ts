@@ -20,6 +20,7 @@ type SendWindow = {
   after: Date;
   until: Date;
   excludeWorkflowStepId?: string;
+  includeCommittedFuture?: boolean;
 };
 
 // Read-only: the frequency cap counts campaign and workflow sends together from Postgres (A2).
@@ -56,7 +57,10 @@ export class SendingRepository {
   }
 }
 
-function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
+function campaignSends(
+  tx: Transaction,
+  { storeId, contactIds, after, until, includeCommittedFuture }: SendWindow,
+) {
   return tx
     .select({
       contactId: campaignRecipients.contactId,
@@ -80,7 +84,7 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
           and(
             inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
             gt(campaignRecipients.sentAt, after),
-            lte(campaignRecipients.sentAt, until),
+            includeCommittedFuture ? undefined : lte(campaignRecipients.sentAt, until),
           ),
         ),
         eq(campaigns.category, 'marketing'),
@@ -91,7 +95,7 @@ function campaignSends(tx: Transaction, { storeId, contactIds, after, until }: S
 // Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
 function workflowSends(
   tx: Transaction,
-  { storeId, contactIds, after, until, excludeWorkflowStepId }: SendWindow,
+  { storeId, contactIds, after, until, excludeWorkflowStepId, includeCommittedFuture }: SendWindow,
 ) {
   return tx
     .select({
@@ -105,7 +109,7 @@ function workflowSends(
         eq(automationRunSteps.storeId, storeId),
         inArray(automationRunSteps.contactId, contactIds),
         gt(automationRunSteps.sentAt, after),
-        lte(automationRunSteps.sentAt, until),
+        includeCommittedFuture ? undefined : lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
         excludeWorkflowStepId ? ne(automationRunSteps.id, excludeWorkflowStepId) : undefined,
         eq(automationRunSteps.category, 'marketing'),

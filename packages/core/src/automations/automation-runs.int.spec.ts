@@ -1549,6 +1549,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
       expect(timings.rows).toEqual([{ first_tried_at: firstTriedAt, sent_at: clockNow }]);
 
+      // The other worker has a slightly slower clock after it takes the same contact lock.
+      clockNow = new Date(clockNow.getTime() - 50);
       const {
         runIds: [newer],
       } = await dueRuns(send('marketing'), 1, 'active', contact);

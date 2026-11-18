@@ -69,10 +69,12 @@ describe('SendPolicyService', () => {
           after,
           until,
           excludeWorkflowStepId,
+          includeCommittedFuture,
         }: {
           after: Date;
           until: Date;
           excludeWorkflowStepId?: string;
+          includeCommittedFuture?: boolean;
         },
       ) =>
         ids.flatMap((contactId) =>
@@ -80,7 +82,7 @@ describe('SendPolicyService', () => {
             .filter(
               (send) =>
                 send.sentAt > after &&
-                send.sentAt <= until &&
+                (includeCommittedFuture || send.sentAt <= until) &&
                 (!excludeWorkflowStepId || send.workflowStepId !== excludeWorkflowStepId),
             )
             .map((send) => ({ ...send, contactId })),
