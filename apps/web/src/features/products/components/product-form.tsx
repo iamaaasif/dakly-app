@@ -112,7 +112,6 @@ function formValues(product?: ProductResponse): ProductFormValues {
     isStockTracked: product.isStockTracked,
     isVisibleInChats: product.isVisibleInChats,
     isVisibleInOrderLink: product.isVisibleInOrderLink,
-    status: product.status,
   };
 }
 

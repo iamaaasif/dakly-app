@@ -13,7 +13,8 @@ const flags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-export function ProductFields({ mode }: { mode: 'create' | 'edit' }) {
+type ProductFieldsProps = { mode: 'create' | 'edit' };
+export function ProductFields({ mode }: ProductFieldsProps) {
   const form = useFormContext<ProductFormValues>();
   const visibleFlags = flags.filter(([name]) => mode === 'edit' || name === 'isStockTracked');
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
