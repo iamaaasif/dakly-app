@@ -1,4 +1,6 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
+const FIRST_FILTER_INSTANT = Date.parse('0001-01-01T00:00:00Z');
+const LAST_FILTER_DAY = Date.parse('9999-12-31T00:00:00Z');
 
 export function formatDateTime(value: string): string {
   const formatted = new Intl.DateTimeFormat('en-GB', {
@@ -85,17 +87,16 @@ function calendarDate(instant: number, timeZone: string) {
 // Store dates use Dhaka until a store time-zone setting is available.
 export function dhakaDateField(value: string, exclusiveEnd = false): string {
   const instant = parseInstant(value) - (exclusiveEnd ? 1 : 0);
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Dhaka',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(instant);
+  const localDay = calendarDate(instant, 'Asia/Dhaka').day * DAY_MS;
+  // A UTC instant at the range edge can fall outside the date field's four-digit years.
+  const day = Math.min(Math.max(localDay, FIRST_FILTER_INSTANT), LAST_FILTER_DAY);
+  return new Date(day).toISOString().slice(0, 10);
 }
 
 export function dhakaDateBoundary(value: string, nextDay = false): string | undefined {
   if (!value) return undefined;
   const utcMidnight = parseInstant(`${value}T00:00:00Z`) + (nextDay ? DAY_MS : 0);
+  if (utcMidnight <= FIRST_FILTER_INSTANT) return new Date(FIRST_FILTER_INSTANT).toISOString();
   const targetDay = utcMidnight / DAY_MS;
   // Dhaka's positive UTC offset puts the day boundary before UTC midnight.
   let before = utcMidnight - DAY_MS;

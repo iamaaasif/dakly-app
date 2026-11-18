@@ -18,6 +18,15 @@ describe('Dhaka date filters', () => {
     expect(dhakaDateBoundary(day, exclusiveEnd)).toBe(instant);
     expect(dhakaDateField(instant, exclusiveEnd)).toBe(day);
   });
+
+  it('keeps the year padded for early dates', () => {
+    expect(dhakaDateField('0999-12-31T00:00:00Z')).toBe('0999-12-31');
+  });
+
+  it('keeps dates within the bounds of the date field and query', () => {
+    expect(dhakaDateBoundary('0001-01-01')).toBe('0001-01-01T00:00:00.000Z');
+    expect(dhakaDateField('9999-12-31T23:59:59Z')).toBe('9999-12-31');
+  });
 });
 
 describe('formatDate', () => {
