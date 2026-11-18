@@ -79,6 +79,7 @@ describe('ImportsService upload and start (Postgres and SeaweedFS)', () => {
     expect(started).toEqual({
       id: importId,
       status: 'importing',
+      undoFinishedAt: null,
       rowsTotal: null,
       rowsAdded: null,
       rowsUpdated: null,
