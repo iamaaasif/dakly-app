@@ -8,14 +8,14 @@ import type { JobHandler } from '../../../platform/queue/job-handler';
 import { QUEUES } from '../../../platform/queue/queues';
 import { KnowledgeIndexService } from '../knowledge-index.service';
 
-@HandlesEvent('knowledge.index_requested', { queue: QUEUES.bulk })
+@HandlesEvent('knowledge.index_requested', { queue: QUEUES.bulk, retryBackoffMs: 60_000 })
 export class IndexKnowledgeJob implements JobHandler {
   constructor(@Inject(KnowledgeIndexService) private readonly indexer: KnowledgeIndexService) {}
 
-  async handle(data: unknown): Promise<void> {
+  async handle(data: unknown, finalAttempt: boolean): Promise<void> {
     const { storeId, payload } = knowledgeIndexRequestedEventSchema
       .extend({ id: z.uuid() })
       .parse(data);
-    await this.indexer.index(storeId, payload.knowledgeItemId);
+    await this.indexer.index(storeId, payload.knowledgeItemId, finalAttempt);
   }
 }

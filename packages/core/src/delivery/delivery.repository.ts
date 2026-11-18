@@ -189,15 +189,18 @@ export class DeliveryRepository {
     );
   }
 
-  async findAreaPath(storeId: string, id: number): Promise<Pick<AreaResponse, 'id' | 'kind'>[]> {
+  async findAreaPath(
+    storeId: string,
+    id: number,
+  ): Promise<Pick<AreaResponse, 'id' | 'kind' | 'name'>[]> {
     const result = await this.database.forStore(storeId, (tx) =>
-      tx.execute<Pick<AreaResponse, 'id' | 'kind'>>(sql`
+      tx.execute<Pick<AreaResponse, 'id' | 'kind' | 'name'>>(sql`
       with recursive area_path as (
-        select id, parent_id, kind, 0 as depth from ${bdAreas} where id = ${id}
+        select id, parent_id, kind, name, 0 as depth from ${bdAreas} where id = ${id}
         union all
-        select parent.id, parent.parent_id, parent.kind, child.depth + 1
+        select parent.id, parent.parent_id, parent.kind, parent.name, child.depth + 1
         from ${bdAreas} parent join area_path child on child.parent_id = parent.id
-      ) select id, kind from area_path order by depth`),
+      ) select id, kind, name from area_path order by depth`),
     );
     return result.rows;
   }

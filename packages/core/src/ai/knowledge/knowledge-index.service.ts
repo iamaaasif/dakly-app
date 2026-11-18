@@ -5,7 +5,9 @@ import { getResolvedPDFJS } from 'unpdf';
 
 import { knowledgeFileBytes } from '@dakly/contracts/knowledge';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
+import { LlmError } from '@dakly/providers/llm/llm-driver';
 
+import { AppError } from '../../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
 import { AiService } from '../ai.service';
 import { KnowledgeRepository, type KnowledgeChunk } from './knowledge.repository';
@@ -22,7 +24,7 @@ export class KnowledgeIndexService {
     @Inject(AiService) private readonly ai: AiService,
   ) {}
 
-  async index(storeId: string, itemId: string): Promise<void> {
+  async index(storeId: string, itemId: string, finalAttempt = false): Promise<void> {
     const item = await this.repository.find(storeId, itemId);
     if (!item || item.status !== 'processing') return;
     const source: FileText = item.fileId
@@ -32,16 +34,31 @@ export class KnowledgeIndexService {
     const passages =
       'text' in source ? splitKnowledgeText(source.text.replaceAll('\u0000', '')) : [];
 
-    const chunks: KnowledgeChunk[] = [];
-    for (let start = 0; start < passages.length; start += 64)
-      chunks.push(...(await this.embedBatch(storeId, passages.slice(start, start + 64))));
-
+    const chunks = await this.embedPassages(storeId, passages, finalAttempt);
     await this.repository.finishIndex(
       storeId,
       item.id,
       item.updatedAt,
-      chunks.length ? { chunks, sha256: source.sha256 } : { rejection, sha256: source.sha256 },
+      chunks
+        ? { chunks, file: { rejection: chunks.length ? null : rejection, sha256: source.sha256 } }
+        : { chunks: [] },
     );
+  }
+
+  private async embedPassages(
+    storeId: string,
+    passages: string[],
+    finalAttempt: boolean,
+  ): Promise<KnowledgeChunk[] | null> {
+    const chunks: KnowledgeChunk[] = [];
+    try {
+      for (let start = 0; start < passages.length; start += 64)
+        chunks.push(...(await this.embedBatch(storeId, passages.slice(start, start + 64))));
+      return chunks;
+    } catch (error) {
+      if (!finalAttempt || !isIndexAiFailure(error)) throw error;
+      return null;
+    }
   }
 
   private async embedBatch(storeId: string, passages: string[]): Promise<KnowledgeChunk[]> {
@@ -81,6 +98,13 @@ export class KnowledgeIndexService {
       return { rejection: 'knowledge_file_invalid', sha256 };
     }
   }
+}
+
+function isIndexAiFailure(error: unknown): boolean {
+  if (error instanceof LlmError) return true;
+  return (
+    error instanceof AppError && (error.code === 'AI_PAUSED' || error.code === 'AI_STORE_BUSY')
+  );
 }
 
 async function readPdf(bytes: Uint8Array): Promise<FileText> {

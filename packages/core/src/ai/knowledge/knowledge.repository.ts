@@ -124,15 +124,19 @@ export class KnowledgeRepository {
     storeId: string,
     itemId: string,
     revision: Date,
-    index: ({ chunks: readonly KnowledgeChunk[] } | { rejection: string }) & { sha256?: Buffer },
+    {
+      chunks,
+      file,
+    }: {
+      chunks: readonly KnowledgeChunk[];
+      file?: { rejection: string | null; sha256?: Buffer };
+    },
   ): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {
-      const chunks = 'chunks' in index ? index.chunks : [];
-      const rejection = 'rejection' in index ? index.rejection : null;
       const [item] = await tx
         .update(knowledgeItems)
         .set({
-          status: rejection ? 'failed' : 'active',
+          status: chunks.length ? 'active' : 'failed',
           factsCount: chunks.length,
           updatedAt: knowledgeItems.updatedAt,
         })
@@ -155,13 +159,13 @@ export class KnowledgeRepository {
         await tx
           .insert(knowledgeChunks)
           .values(chunks.map((chunk) => ({ ...chunk, storeId, knowledgeItemId: itemId })));
-      if (item.fileId)
+      if (item.fileId && file)
         await tx
           .update(files)
           .set({
-            status: rejection ? 'rejected' : 'ready',
-            rejectReason: rejection,
-            sha256: index.sha256,
+            status: file.rejection ? 'rejected' : 'ready',
+            rejectReason: file.rejection,
+            sha256: file.sha256,
           })
           .where(
             and(

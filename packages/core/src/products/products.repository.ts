@@ -201,12 +201,21 @@ export class ProductsRepository {
   ): Promise<boolean> {
     try {
       await this.database.forStore(storeId, async (tx) => {
+        const forProduct = and(
+          eq(productVariants.storeId, storeId),
+          eq(productVariants.productId, productId),
+        );
+        // Order operations lock the same rows in ID order.
+        await tx
+          .select({ id: productVariants.id })
+          .from(productVariants)
+          .where(forProduct)
+          .orderBy(productVariants.id)
+          .for('no key update');
         await tx
           .update(productVariants)
           .set({ status: 'archived', isDefault: false, updatedAt: now })
-          .where(
-            and(eq(productVariants.storeId, storeId), eq(productVariants.productId, productId)),
-          );
+          .where(forProduct);
         await tx
           .insert(productVariants)
           .values(
@@ -243,6 +252,47 @@ export class ProductsRepository {
       if (isConstraintViolation(error, '23505', 'product_variants_store_id_sku_key')) return false;
       throw error;
     }
+  }
+
+  async lockVariants(storeId: string, variantIds: string[]): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: productVariants.id })
+        .from(productVariants)
+        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds)))
+        .orderBy(productVariants.id)
+        .for('no key update'),
+    );
+  }
+
+  orderVariants(storeId: string, variantIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          variantId: productVariants.id,
+          productName: products.name,
+          variantTitle: productVariants.title,
+          unitPricePoisha:
+            sql<number>`coalesce(${productVariants.priceOverridePoisha}, ${products.pricePoisha})`.mapWith(
+              Number,
+            ),
+          unitCostPoisha: productVariants.costPoisha,
+          isStockTracked: products.isStockTracked,
+        })
+        .from(productVariants)
+        .innerJoin(
+          products,
+          and(eq(products.id, productVariants.productId), eq(products.storeId, storeId)),
+        )
+        .where(
+          and(
+            eq(productVariants.storeId, storeId),
+            inArray(productVariants.id, variantIds),
+            ne(products.status, 'archived'),
+            ne(productVariants.status, 'archived'),
+          ),
+        ),
+    );
   }
 
   async findStockVariant(

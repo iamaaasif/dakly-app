@@ -269,6 +269,10 @@ Create order (`OrdersService.createOrder`, one transaction)
 4. Copy prices from the variants, compute COD = items − discount + delivery − advance (never below 0), reserve stock, warn on a likely duplicate (same phone and variant within 24 hours), emit `order.created`.
 5. If the store's payment rule asks for an advance (always, or when return risk is High), create a payment intent and set `advance_requested`.
 
+Staff without full-phone access do not see the linked duplicate order. The staff out-of-stock override waits for a rule for oversold stock at reservation, dispatch and cancellation.
+
+Staff orders use `POST /orders` with an `Idempotency-Key`. During order capture, Orders edit access allows staff to record a new buyer and fill an empty own-phone field under D27. Editing a profile separately requires Customers edit access. A retry returns the existing order. The order discount cannot exceed the item subtotal after line discounts. An advance above the total leaves zero COD. The order starts in To confirm. Order numbers come from the locked store counter. Creating an order updates the buyer's timestamp so import undo keeps that contact. Staff can record money already received by hand. Cancelling an advance-paid order sets `refund_due` in the same transaction as the cancellation audit and stock release. Payment links and `advance_requested` wait for PAY-6. Order creation from a chat waits for CHAT-1.
+
 Confirmation: a WhatsApp utility template, or an SMS with a confirm link (SMS cannot receive replies). A yes reply on WhatsApp ("হ্যাঁ", yes, ji, ok, confirm, "ঠিক আছে") moves the order to `to_pack` when it is the contact's only order in `to_confirm`; with two, the AI asks which.
 
 Sending with a courier (release 1): staff move the order to `with_courier` and may type the courier name (from a fixed list: Steadfast, Pathao, RedX, own delivery, other) and the tracking code. Staff mark the order delivered, partly delivered or returned by hand, and mark COD collected when the money arrives. The shipping update message to the customer includes the tracking code when there is one.

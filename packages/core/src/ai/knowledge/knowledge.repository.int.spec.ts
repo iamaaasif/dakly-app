@@ -6,11 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { knowledgeFileBytes } from '@dakly/contracts/knowledge';
 import { createDatabase } from '@dakly/db/client';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
+import { LlmError } from '@dakly/providers/llm/llm-driver';
 
 import { OwnerIsolationFixture } from '../../../test/owner-isolation-fixture';
 import { newId } from '../../platform/database/new-id';
 import { TenantDatabase } from '../../platform/database/tenant-database';
 import type { AiService } from '../ai.service';
+import { IndexKnowledgeJob } from './jobs/index-knowledge.job';
 import { KnowledgeIndexService } from './knowledge-index.service';
 import { KnowledgeRepository } from './knowledge.repository';
 
@@ -122,6 +124,43 @@ describe('KnowledgeRepository', () => {
     );
   });
 
+  it('keeps a file retryable when the last indexing attempt meets an AI error', async () => {
+    const bytes = Buffer.from('ঢাকায় ডেলিভারি ৬০ টাকা।');
+    const item = await createFile('text/plain', bytes);
+    const storage = {
+      async readBytes() {
+        return { kind: 'found', bytes };
+      },
+    } as FileStorageDriver;
+    const ai = {
+      async embed() {
+        throw new LlmError('LLM_UNAVAILABLE');
+      },
+    } as AiService;
+    const job = new IndexKnowledgeJob(new KnowledgeIndexService(repository, storage, ai));
+    const event = {
+      id: newId(),
+      storeId: fixture.a,
+      type: 'knowledge.index_requested',
+      occurredAt: now.toISOString(),
+      payload: { knowledgeItemId: item.id },
+    };
+
+    await expect(job.handle(event, false)).rejects.toMatchObject({ code: 'LLM_UNAVAILABLE' });
+    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
+      status: 'processing',
+    });
+    await expect(job.handle(event, true)).resolves.toBeUndefined();
+    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
+      status: 'failed',
+      factsCount: 0,
+    });
+    expect(await chunksFor(item.id)).toEqual([]);
+    await expect(repository.findFile(fixture.a, item.fileId!)).resolves.toMatchObject({
+      status: 'pending',
+    });
+  });
+
   it('rejects oversized file metadata before reading the object', async () => {
     const item = await createFile('text/plain', Buffer.alloc(0), knowledgeFileBytes + 1);
     const indexer = new KnowledgeIndexService(repository, {} as FileStorageDriver, {} as AiService);
@@ -196,7 +235,7 @@ describe('KnowledgeRepository', () => {
     );
     await expect(
       repository.finishIndex(fixture.a, item.id, revisedAt, {
-        rejection: 'knowledge_file_empty',
+        chunks: [],
       }),
     ).resolves.toBe(true);
     await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
