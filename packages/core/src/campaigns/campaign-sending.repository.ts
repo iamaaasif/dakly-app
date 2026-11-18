@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
 import { campaigns } from '@dakly/db/schema/campaigns';
@@ -25,6 +25,42 @@ export class CampaignSendingRepository {
         ${after}::uuid, ${limit}::integer)
     `);
     return result.rows.map(({ storeId }) => storeId);
+  }
+
+  async nextBackfillStore(after: string | null): Promise<string | undefined> {
+    const result = await this.global.execute<{ storeId: string }>(sql`
+      select store_id as "storeId" from maintenance_store_ids(${after}::uuid, 1)
+    `);
+    return result.rows[0]?.storeId;
+  }
+
+  // One transaction updates at most one batch. A locked row remains eligible on the next tick.
+  async backfillStarts(storeId: string, limit: number): Promise<boolean> {
+    const legacy = and(
+      eq(campaigns.storeId, storeId),
+      inArray(campaigns.status, ['sending', 'paused', 'sent']),
+      isNull(campaigns.startedAt),
+      isNotNull(campaigns.approvedAt),
+    );
+    return this.database.forStore(storeId, async (tx) => {
+      const batch = tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(legacy)
+        .orderBy(asc(campaigns.status), asc(campaigns.createdAt), asc(campaigns.id))
+        .limit(limit)
+        .for('update', { skipLocked: true });
+      await tx
+        .update(campaigns)
+        .set({ startedAt: sql`${campaigns.approvedAt}` })
+        .where(and(legacy, inArray(campaigns.id, batch)));
+      const [remaining] = await tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(legacy)
+        .limit(1);
+      return Boolean(remaining);
+    });
   }
 
   async listDueInStore(

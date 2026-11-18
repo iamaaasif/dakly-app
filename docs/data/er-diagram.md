@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0041_snapshot.json`: **95 tables, 1260 columns, 378 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0041_snapshot.json`: **95 tables, 1257 columns, 378 explicit indexes and 298 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1414,9 +1414,6 @@ erDiagram
         timestamp_with_time_zone read_at "NULL; timestamp with time zone"
         timestamp_with_time_zone tapped_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
-        integer sms_credits "NULL; integer"
-        integer send_attempts "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     tracked_links {

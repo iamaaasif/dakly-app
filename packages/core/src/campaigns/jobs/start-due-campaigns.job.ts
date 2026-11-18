@@ -16,5 +16,6 @@ export class StartDueCampaignsJob implements JobHandler {
   async handle(data: unknown) {
     payload.parse(data);
     await this.sender.startDue();
+    await this.sender.backfillStarts();
   }
 }

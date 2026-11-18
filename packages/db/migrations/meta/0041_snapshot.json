@@ -1,5 +1,5 @@
 {
-  "id": "6174fb9b-32b2-4487-88b4-a4e1ca178229",
+  "id": "a140bed6-afb5-42ea-812d-fe540f3149ae",
   "prevId": "b4433abc-6f4b-46b4-a8c6-3ca7b86f47fe",
   "version": "7",
   "dialect": "postgresql",
@@ -7036,25 +7036,6 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sms_credits": {
-          "name": "sms_credits",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_attempts": {
-          "name": "send_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "created_at": {
           "name": "created_at",

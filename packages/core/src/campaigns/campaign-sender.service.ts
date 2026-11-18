@@ -11,8 +11,11 @@ import { CampaignSendingRepository } from './campaign-sending.repository';
 // One worker tick has finite room; store turns share it when many campaigns are due.
 const STORES_PER_TICK = 100;
 const CAMPAIGNS_PER_STORE = 2;
+const START_BACKFILL_BATCH = 100;
 const CURSOR_LIFETIME_SECONDS = (7 * DAY_MS) / 1000;
 const STORE_CURSOR = 'campaign-start:store';
+const BACKFILL_CURSOR = 'campaign-start:backfill-store';
+const BACKFILL_COMPLETE = 'complete';
 
 @Injectable()
 export class CampaignSenderService {
@@ -39,6 +42,18 @@ export class CampaignSenderService {
     }
     const last = stores.at(-1);
     if (last) await this.saveCursor(STORE_CURSOR, last);
+  }
+
+  async backfillStarts(): Promise<void> {
+    const cursor = await this.valkey.connection.get(BACKFILL_CURSOR);
+    if (cursor === BACKFILL_COMPLETE) return;
+    const storeId = await this.repository.nextBackfillStore(cursor);
+    if (!storeId) {
+      await this.saveCursor(BACKFILL_CURSOR, BACKFILL_COMPLETE);
+      return;
+    }
+    const hasMore = await this.repository.backfillStarts(storeId, START_BACKFILL_BATCH);
+    if (!hasMore) await this.saveCursor(BACKFILL_CURSOR, storeId);
   }
 
   private async startStorePage(storeId: string, asOf: Date): Promise<void> {
