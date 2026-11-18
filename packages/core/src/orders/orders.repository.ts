@@ -203,7 +203,8 @@ export class OrdersRepository {
         })
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))
-        .for('update'),
+        // Allow foreign-key checks from other orders while serializing this order's writes.
+        .for('no key update'),
     );
     return row;
   }

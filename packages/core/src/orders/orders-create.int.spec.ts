@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -11,7 +12,10 @@ import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { OrdersModule } from './orders.module';
+import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
 
 class TestModule {}
@@ -204,6 +208,46 @@ describe('Staff order creation', () => {
     );
     expect(changed.items).toHaveLength(1);
     expect(changed.itemsSubtotalPoisha).toBe(125000);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
+  it('links a duplicate during an edit while cancellation holds the other order lock', async () => {
+    const variantId = await variant(2);
+    const request = editor();
+    const original = draft(variantId);
+    const duplicate = await orders.createOrder(f.a, original, request);
+    const edit = await orders.createOrder(
+      f.a,
+      draft(variantId, { recipient: { ...original.recipient, phone: '01712458910' } }),
+      editor(),
+    );
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const cancel = app.get(StoreTransaction).run(f.a, async () => {
+      await app.get(OrdersRepository).lock(f.a, duplicate.id);
+      entered.resolve();
+      await release.promise;
+      return orders.changeStage(f.a, duplicate.id, { to: 'cancelled', reason: 'other' }, request);
+    });
+    await entered.promise;
+    try {
+      const edited = await app.get(TenantDatabase).forStore(f.a, async (tx) => {
+        await tx.execute(sql`set local lock_timeout = '2500ms'`);
+        return orders.editOrder(
+          f.a,
+          edit.id,
+          editOrderSchema.parse({
+            items: original.items,
+            recipient: { phone: original.recipient.phone },
+          }),
+          request,
+        );
+      });
+      expect(edited.possibleDuplicateOfOrderId).toBe(duplicate.id);
+    } finally {
+      release.resolve();
+      await cancel;
+    }
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
