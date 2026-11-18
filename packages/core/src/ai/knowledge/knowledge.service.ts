@@ -20,7 +20,6 @@ import { knowledgeError } from './knowledge.errors';
 import { KnowledgeRepository, type KnowledgeItem } from './knowledge.repository';
 
 type UserActor = { kind: 'user'; userId: string };
-const knowledgeFileTypes = new Set(['application/pdf', 'text/plain']);
 
 @Injectable()
 export class KnowledgeService {
@@ -104,8 +103,6 @@ export class KnowledgeService {
   private async requireFile(storeId: string, fileId: string): Promise<void> {
     const file = await this.repository.findFile(storeId, fileId);
     if (!file || file.status === 'rejected') throw knowledgeError('KNOWLEDGE_FILE_NOT_FOUND');
-    if (!knowledgeFileTypes.has(file.contentType))
-      throw knowledgeError('KNOWLEDGE_FILE_TYPE_INVALID');
   }
 
   private requestIndex(storeId: string, itemId: string, now: Date): Promise<void> {
