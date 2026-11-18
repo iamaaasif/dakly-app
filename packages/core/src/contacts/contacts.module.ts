@@ -6,11 +6,17 @@ import { ContactsController } from './contacts.controller';
 import { ContactsRepository } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import { ImportContactsRepository } from './import-contacts.repository';
+import { OrderContactsRepository } from './order-contacts.repository';
 
 @Module({
   imports: [ClockModule, OutboxModule],
   controllers: [ContactsController],
-  providers: [ContactsService, ContactsRepository, ImportContactsRepository],
+  providers: [
+    ContactsService,
+    ContactsRepository,
+    ImportContactsRepository,
+    OrderContactsRepository,
+  ],
   exports: [ContactsService],
 })
 export class ContactsModule {}

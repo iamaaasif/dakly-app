@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Inject,
   Param,
@@ -11,8 +12,11 @@ import {
 } from '@nestjs/common';
 
 import {
+  createOrderSchema,
+  orderIdempotencyKeySchema,
   orderListQuerySchema,
   orderStageChangeSchema,
+  type CreateOrderInput,
   type OrderDetail,
   type OrderListQuery,
   type OrderListResponse,
@@ -27,9 +31,27 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { OrdersService } from './orders.service';
 
+const idempotencyKeyPipe = new ZodValidationPipe(orderIdempotencyKeySchema);
+
 @Controller('orders')
 export class OrdersController {
   constructor(@Inject(OrdersService) private readonly service: OrdersService) {}
+
+  @Post()
+  @RequirePermission('orders.edit')
+  createOrder(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(createOrderSchema)) input: CreateOrderInput,
+    @Headers('idempotency-key') key: string | undefined,
+  ): Promise<OrderDetail> {
+    return this.service.createOrder(storeId, input, {
+      actor: { kind: 'user', userId },
+      access,
+      idempotencyKey: idempotencyKeyPipe.transform(key),
+    });
+  }
 
   @Get()
   @RequirePermission('orders.view')

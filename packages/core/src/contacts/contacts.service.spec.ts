@@ -6,6 +6,7 @@ import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import type { ImportContactsRepository } from './import-contacts.repository';
+import type { OrderContactsRepository } from './order-contacts.repository';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const actor = { kind: 'user', userId: '0b8f3c1e-5d2a-4f6b-9c7e-1a2b3c4d5e6f' } as const;
@@ -45,6 +46,7 @@ describe('ContactsService', () => {
         insertImported: vi.fn(),
         updateImported: vi.fn(),
       } as unknown as ImportContactsRepository,
+      {} as OrderContactsRepository,
     );
   });
 

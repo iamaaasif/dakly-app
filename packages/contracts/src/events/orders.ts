@@ -19,3 +19,10 @@ export const orderConfirmedEventSchema = z.strictObject({
   occurredAt: z.iso.datetime(),
   payload: z.strictObject({ orderId: z.uuid() }),
 });
+
+export const orderCreatedEventSchema = z.strictObject({
+  type: z.literal('order.created'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ orderId: z.uuid() }),
+});

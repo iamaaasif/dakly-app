@@ -19,7 +19,11 @@ import {
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
-import { orderConfirmedEventSchema, orderStageChangedEventSchema } from './orders';
+import {
+  orderConfirmedEventSchema,
+  orderCreatedEventSchema,
+  orderStageChangedEventSchema,
+} from './orders';
 import {
   productUpdatedEventSchema,
   stockChangedEventSchema,
@@ -47,6 +51,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   notificationCreatedEventSchema,
   orderStageChangedEventSchema,
   orderConfirmedEventSchema,
+  orderCreatedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;
