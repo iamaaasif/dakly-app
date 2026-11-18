@@ -17,7 +17,11 @@ export type OutgoingMessage = {
   destination?: string | null;
 };
 
-export type PreparedSmsSender = { name: string | undefined };
+const PREPARED_SENDER_STORE = Symbol('prepared SMS sender store');
+export type PreparedSmsSender = Readonly<{
+  [PREPARED_SENDER_STORE]: string;
+  name: string | undefined;
+}>;
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
 
@@ -50,21 +54,27 @@ export class MessagingService {
 
   async prepareSender(storeId: string): Promise<PreparedSmsSender> {
     try {
-      return { name: await this.smsSenders.approvedSenderName(storeId) };
+      return Object.freeze({
+        [PREPARED_SENDER_STORE]: storeId,
+        name: await this.smsSenders.approvedSenderName(storeId),
+      });
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');
     }
   }
 
-  // A failed lookup proves no provider submission happened, so callers can release its credits.
+  // A failed lookup proves only that this attempt did not reach the provider.
   private async prepareSend(
     storeId: string,
     message: OutgoingMessage,
     preparedSender?: PreparedSmsSender,
   ) {
     try {
-      const sender = (preparedSender ?? (await this.prepareSender(storeId))).name;
+      const sender =
+        preparedSender?.[PREPARED_SENDER_STORE] === storeId
+          ? preparedSender.name
+          : (await this.prepareSender(storeId)).name;
       const phone = await this.contactsService.getPhoneForSend(storeId, message.contactId);
       if (message.destination !== undefined && phone !== message.destination)
         throw messagingError('MESSAGING_DESTINATION_CHANGED');
