@@ -8,7 +8,6 @@ import { countSmsParts } from '@dakly/contracts/sms';
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService, TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
 import { MessagingService } from '../messaging/messaging.service';
-import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -61,7 +60,6 @@ export class AutomationRunsService {
   constructor(
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(Clock) private readonly clock: Clock,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
@@ -89,7 +87,8 @@ export class AutomationRunsService {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
-    const started = await this.repository.startWork(storeId, queued, this.clock.now());
+    const now = await this.transaction.databaseTime(storeId);
+    const started = await this.repository.startWork(storeId, queued, now);
     if (!started) return undefined;
     const claim = { ...queued, claimedAt: started.claimedAt };
     const run = { ...found, ...started };
@@ -116,7 +115,7 @@ export class AutomationRunsService {
     claim: RunClaim,
     run: ClaimedRun,
   ): Promise<StepResult | undefined> {
-    const now = this.clock.now();
+    const now = await this.transaction.databaseTime(storeId);
     const step = run.graph.steps[claim.stepKey]!;
     const isSending =
       step.kind === 'send' &&
@@ -258,9 +257,10 @@ export class AutomationRunsService {
       const renewal = { status: 'running', claimedAt: now } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
-      if (isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId)))
-        return { outcome: 'late' };
-      const result = await this.gateSend(renewed, step, facts);
+      const checkedAt = await this.transaction.databaseTime(storeId);
+      const result = isLateSend(facts.wakeAt, checkedAt)
+        ? ({ outcome: 'late' } as const)
+        : await this.gateSend(renewed, step, facts);
       const claimedAt = await this.transaction.databaseTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
@@ -270,10 +270,11 @@ export class AutomationRunsService {
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      const held = run && holdsClaim(run, renewed) ? holdOrEnd(run, this.clock.now()) : undefined;
+      if (!run || !holdsClaim(run, renewed)) return undefined;
+      const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
       return held && { ...held, claim: renewed };
     }
-    const gatedAt = this.clock.now();
+    const gatedAt = await this.transaction.databaseTime(storeId);
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     if ('outcome' in started)
       return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
@@ -407,38 +408,36 @@ export class AutomationRunsService {
     { storeId, claim, contactId, step, body, destination, preparedSender }: Delivery,
     sentAt: Date,
   ): Promise<StepResult> {
-    try {
-      const message = {
-        channel: 'sms',
-        contactId,
-        body,
-        operationKey: operationKey(claim),
-        destination,
-      } as const;
-      const { providerMessageId, credits } = await this.messaging.send(
-        storeId,
-        message,
-        preparedSender,
-      );
-      const now = this.clock.now();
+    const message = {
+      channel: 'sms',
+      contactId,
+      body,
+      operationKey: operationKey(claim),
+      destination,
+    } as const;
+    const attempt = await this.messaging.send(storeId, message, preparedSender).then(
+      (receipt) => ({ receipt }),
+      (error: unknown) => ({ error }),
+    );
+    const now = await this.transaction.databaseTime(storeId);
+    if ('receipt' in attempt) {
+      const { providerMessageId, credits } = attempt.receipt;
       return {
         ...goOn(step.next, now),
         claim,
         stepChange: { outcome: 'sent', providerMessageId, sentAt },
         credits: { settle: 'charge', quantity: credits },
       };
-    } catch (error) {
-      const now = this.clock.now();
-      // MessagingService refuses before it calls the provider, so a refusal never reached it.
-      if (error instanceof AppError)
-        return {
-          ...failed(error.message, now),
-          claim,
-          stepChange: { outcome: 'failed' },
-          credits: { settle: 'release' },
-        };
-      // Any other error may come after the provider took the message.
-      return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim });
     }
+    // MessagingService refuses before it calls the provider, so a refusal never reached it.
+    if (attempt.error instanceof AppError)
+      return {
+        ...failed(attempt.error.message, now),
+        claim,
+        stepChange: { outcome: 'failed' },
+        credits: { settle: 'release' },
+      };
+    // Any other error may come after the provider took the message.
+    return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim });
   }
 }

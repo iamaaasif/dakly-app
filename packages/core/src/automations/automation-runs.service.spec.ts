@@ -5,7 +5,6 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
 import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
-import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { SegmentsService } from '../segments/segments.service';
@@ -120,6 +119,7 @@ describe('AutomationRunsService', () => {
   let databaseNow: Date | undefined;
   let decision: SendDecision;
   let sent: OutgoingMessage[];
+  let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
@@ -156,6 +156,7 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     sent = [];
     providerError = undefined;
+    senderLookupError = undefined;
     balance = 10;
     ledger = [];
     // Reservations by key, as the ledger keeps them; a repeated key changes nothing.
@@ -220,7 +221,10 @@ describe('AutomationRunsService', () => {
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
-      prepareSender: async () => ({ name: undefined }),
+      prepareSender: async () => {
+        if (senderLookupError) throw senderLookupError;
+        return { name: undefined };
+      },
       send: async (_storeId: string, message: OutgoingMessage) => {
         if (providerError) throw providerError;
         if (!sent.some((earlier) => earlier.operationKey === message.operationKey))
@@ -240,7 +244,6 @@ describe('AutomationRunsService', () => {
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
-      { now: () => clockNow } as Clock,
       contacts as unknown as ContactsService,
       segments as unknown as SegmentsService,
       sendPolicy as unknown as SendPolicyService,
@@ -495,6 +498,18 @@ describe('AutomationRunsService', () => {
 
       expect(sent).toHaveLength(1);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+    });
+
+    it('skips an expired send without a sender lookup when the worker clock is slow', async () => {
+      databaseNow = new Date(claimedAt.getTime() + 24 * HOUR + 60_000);
+      clockNow = new Date(claimedAt.getTime() + 24 * HOUR - 60_000);
+      senderLookupError = new Error('Sender lookup unavailable');
+
+      expect(await start(send)).toMatchObject({ stepKey: 'end' });
+
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
+      expect(sent).toEqual([]);
+      expect(ledger).toEqual([]);
     });
 
     it('skips a send that was due more than a day before it runs', async () => {
