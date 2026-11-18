@@ -56,7 +56,12 @@ const message = z.object({
 
 const embeddingEnvelope = z.object({
   model: z.string().min(1),
-  data: z.tuple([z.object({ embedding: z.array(z.number()).length(512) })]),
+  data: z.array(
+    z.object({
+      embedding: z.array(z.number()),
+      index: z.int().nonnegative(),
+    }),
+  ),
   usage: z.object({ prompt_tokens: z.int().nonnegative() }),
 });
 
@@ -84,21 +89,24 @@ export class OpenAiLlmDriver implements LlmDriver {
       ),
     );
     if (!result.success) throw new LlmError('LLM_INVALID_RESPONSE');
-    return {
-      model: result.data.model,
-      embedding: result.data.data[0].embedding,
-      usage: {
-        inputTokens: result.data.usage.prompt_tokens,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-      },
+    const usage = {
+      inputTokens: result.data.usage.prompt_tokens,
+      cachedInputTokens: 0,
+      outputTokens: 0,
     };
+    const rows = result.data.data.sort((a, b) => a.index - b.index);
+    if (
+      rows.length !== request.input.length ||
+      rows.some((row, index) => row.index !== index || row.embedding.length !== 512)
+    )
+      throw new LlmError('LLM_INVALID_RESPONSE', usage);
+    return { model: result.data.model, embeddings: rows.map(({ embedding }) => embedding), usage };
   }
 
   private async post(
     path: 'responses' | 'embeddings',
     body: string,
-    request: LlmEmbeddingRequest,
+    request: Pick<LlmRequest, 'timeoutMs' | 'signal'>,
   ): Promise<unknown> {
     const deadline = AbortSignal.timeout(request.timeoutMs);
     const signal = request.signal ? AbortSignal.any([request.signal, deadline]) : deadline;

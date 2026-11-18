@@ -63,7 +63,7 @@ export class AiService {
     );
   }
 
-  async embed(storeId: string, input: string, signal?: AbortSignal) {
+  async embed(storeId: string, input: readonly string[], signal?: AbortSignal) {
     if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
     const permit = await this.gate.acquire(storeId);
     if (permit.kind === 'paused') throw aiError('AI_PAUSED');

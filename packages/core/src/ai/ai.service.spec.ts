@@ -52,14 +52,14 @@ describe('AiService', () => {
   it('returns embeddings, records costs and leaves allowances untouched', async () => {
     const embedding = {
       model: 'test-embedding',
-      embedding: Array.from({ length: 512 }, (_, index) => index / 512),
+      embeddings: [Array.from({ length: 512 }, (_, index) => index / 512)],
       usage: { inputTokens: 150, cachedInputTokens: 0, outputTokens: 0 },
     };
     const { service, runs, used } = fixture([], {
       embeddings: [embedding, new LlmError('LLM_TIMEOUT')],
     });
-    await expect(service.embed(storeId, 'ঢাকায় ৬০ টাকা।')).resolves.toEqual(embedding);
-    await expect(service.embed(storeId, 'ঢাকায় ৬০ টাকা।')).rejects.toMatchObject({
+    await expect(service.embed(storeId, ['ঢাকায় ৬০ টাকা।'])).resolves.toEqual(embedding);
+    await expect(service.embed(storeId, ['ঢাকায় ৬০ টাকা।'])).rejects.toMatchObject({
       code: 'LLM_TIMEOUT',
     });
     expect(runs).toEqual([
@@ -78,9 +78,9 @@ describe('AiService', () => {
 
   it('can index in local development without a vendor key or a script', async () => {
     const { service, runs } = fixture([]);
-    await expect(service.embed(storeId, 'ঢাকায় ৬০ টাকা।')).resolves.toMatchObject({
+    await expect(service.embed(storeId, ['ঢাকায় ৬০ টাকা।'])).resolves.toMatchObject({
       model: 'test-embedding',
-      embedding: expect.arrayContaining([0.5]),
+      embeddings: [expect.arrayContaining([0.5])],
     });
     expect(runs).toMatchObject([{ outcome: 'completed', costMicroUsd: 0 }]);
   });

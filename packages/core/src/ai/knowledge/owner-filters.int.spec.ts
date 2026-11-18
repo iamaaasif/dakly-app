@@ -40,7 +40,7 @@ describe('KnowledgeRepository owner filters', () => {
       status: 'pending',
     });
   });
-  it('refuses cross-store index writes and excludes foreign passages before row security', async () => {
+  it('refuses cross-store index writes before row security', async () => {
     const item = await repository.create(
       fixture.a,
       fixture.userA,
@@ -56,17 +56,11 @@ describe('KnowledgeRepository owner filters', () => {
         tokenCount: 4,
       },
     ];
-    const query = { query: 'ঢাকা', embedding, model: 'test-model', limit: 10 };
-
     await expect(
       repository.finishIndex(fixture.b, item.id, item.updatedAt, { chunks }),
     ).resolves.toBe(false);
     await expect(
       repository.finishIndex(fixture.a, item.id, item.updatedAt, { chunks }),
     ).resolves.toBe(true);
-    await expect(repository.search(fixture.b, query)).resolves.toEqual([]);
-    await expect(repository.search(fixture.a, query)).resolves.toEqual([
-      { itemId: item.id, content: 'ঢাকা ডেলিভারি' },
-    ]);
   });
 });

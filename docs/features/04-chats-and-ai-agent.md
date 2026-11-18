@@ -390,18 +390,12 @@ of extracted text. A rejected file records the reason and produces no
 chunks. The worker saves the SHA-256 of the bytes it read. Typed and extracted
 text is untrusted data.
 
-Indexing uses 512-dimension embeddings. `AI_EMBEDDING_MODEL` defaults to
+Indexing uses 512-dimension embeddings in groups of up to 64 chunks. `AI_EMBEDDING_MODEL` defaults to
 `text-embedding-3-small`. An OpenAI model override needs a matching entry in
 `AI_MODEL_PRICES`. The worker needs the same AI settings as other AI callers. The local fake
-driver uses a fixed vector by default, which exercises indexing and text
-search without a vendor key.
+driver uses a fixed vector by default so local indexing needs no vendor key.
 A change marks the item processing and queues a new index. The job only
 replaces chunks if the item still has the revision the job read.
-
-Knowledge search embeds the query with the configured model, then combines the
-exact vector rank and Postgres full-text rank with reciprocal rank fusion.
-Search returns passages from active items in the same store and embedding model.
-It skips items whose file was rejected.
 
 ### Data
 

@@ -25,7 +25,7 @@ export class FakeLlmDriver implements LlmDriver {
     if (!this.embeddings)
       return {
         model: request.model,
-        embedding: Array.from({ length: 512 }, () => 0.5),
+        embeddings: request.input.map(() => Array.from({ length: 512 }, () => 0.5)),
         usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 },
       };
     const embedding = this.embeddings.shift();

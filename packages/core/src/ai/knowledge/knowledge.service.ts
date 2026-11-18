@@ -16,12 +16,10 @@ import { newId } from '../../platform/database/new-id';
 import { StoreTransaction } from '../../platform/database/store-transaction';
 import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../../platform/outbox/outbox.service';
-import { AiService } from '../ai.service';
 import { knowledgeError } from './knowledge.errors';
-import { KnowledgeRepository, type KnowledgeHit, type KnowledgeItem } from './knowledge.repository';
+import { KnowledgeRepository, type KnowledgeItem } from './knowledge.repository';
 
 type UserActor = { kind: 'user'; userId: string };
-const knowledgeFileTypes = new Set(['application/pdf', 'text/plain']);
 
 @Injectable()
 export class KnowledgeService {
@@ -31,7 +29,6 @@ export class KnowledgeService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
-    @Inject(AiService) private readonly ai: AiService,
   ) {}
 
   async requestUpload(
@@ -103,16 +100,9 @@ export class KnowledgeService {
     }
   }
 
-  async search(storeId: string, query: string, limit: number): Promise<KnowledgeHit[]> {
-    const { embedding, model } = await this.ai.embed(storeId, query);
-    return this.repository.search(storeId, { query, embedding, model, limit });
-  }
-
   private async requireFile(storeId: string, fileId: string): Promise<void> {
     const file = await this.repository.findFile(storeId, fileId);
     if (!file || file.status === 'rejected') throw knowledgeError('KNOWLEDGE_FILE_NOT_FOUND');
-    if (!knowledgeFileTypes.has(file.contentType))
-      throw knowledgeError('KNOWLEDGE_FILE_TYPE_INVALID');
   }
 
   private requestIndex(storeId: string, itemId: string, now: Date): Promise<void> {

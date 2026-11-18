@@ -93,6 +93,35 @@ describe('KnowledgeRepository', () => {
     },
   );
 
+  it('embeds at most 64 chunks per request and keeps all measured tokens', async () => {
+    const bytes = Buffer.from('a'.repeat(63 * 2000) + 'b'.repeat(2000) + 'ঢাকা');
+    const item = await createFile('text/plain', bytes);
+    await withFile(bytes, [71, 8]).index(fixture.a, item.id);
+    const chunks = await chunksFor(item.id);
+    expect(chunks).toHaveLength(65);
+    expect(
+      chunks.filter((chunk) => chunk.content.startsWith('a') && chunk.token_count === 1),
+    ).toHaveLength(63);
+    expect(chunks).toEqual(
+      expect.arrayContaining([
+        { content: 'b'.repeat(2000), token_count: 8 },
+        { content: 'ঢাকা', token_count: 8 },
+      ]),
+    );
+  });
+
+  it('apportions the measured total by UTF-8 bytes', async () => {
+    const bytes = Buffer.from('a'.repeat(2000) + 'ঢাকা'.repeat(25));
+    const item = await createFile('text/plain', bytes);
+    await withFile(bytes).index(fixture.a, item.id);
+    expect(await chunksFor(item.id)).toEqual(
+      expect.arrayContaining([
+        { content: 'a'.repeat(2000), token_count: 6 },
+        { content: 'ঢাকা'.repeat(25), token_count: 2 },
+      ]),
+    );
+  });
+
   it('rejects oversized file metadata before reading the object', async () => {
     const item = await createFile('text/plain', Buffer.alloc(0), knowledgeFileBytes + 1);
     const indexer = new KnowledgeIndexService(repository, {} as FileStorageDriver, {} as AiService);
@@ -126,15 +155,18 @@ describe('KnowledgeRepository', () => {
     return repository.create(fixture.a, fixture.userA, { kind: 'file', fileId: id }, now);
   }
 
-  function withFile(bytes: Uint8Array) {
-    let remainingEmbeddings = 1;
+  function withFile(bytes: Uint8Array, measuredTokens = [8]) {
     const ai = {
-      async embed() {
-        if (remainingEmbeddings-- <= 0) throw new Error('Unexpected embedding request');
+      async embed(_tenant: string, inputs: readonly string[]) {
+        const inputTokens = measuredTokens.shift();
+        if (inputTokens === undefined || inputs.length > 64)
+          throw new Error('Unexpected embedding request');
         return {
-          embedding: Array.from({ length: 512 }, (_, index) => (index === 0 ? 1 : 0)),
+          embeddings: inputs.map(() =>
+            Array.from({ length: 512 }, (_, index) => (index === 0 ? 1 : 0)),
+          ),
           model: 'test-embedding',
-          usage: { inputTokens: 8, cachedInputTokens: 0, outputTokens: 0 },
+          usage: { inputTokens, cachedInputTokens: 0, outputTokens: 0 },
         };
       },
     } as AiService;
@@ -147,7 +179,7 @@ describe('KnowledgeRepository', () => {
   }
 
   async function chunksFor(id: string) {
-    const { rows } = await fixture.connection.pool.query(
+    const { rows } = await fixture.connection.pool.query<{ content: string; token_count: number }>(
       'select content, token_count from knowledge_chunks where knowledge_item_id=$1',
       [id],
     );
@@ -180,52 +212,6 @@ describe('KnowledgeRepository', () => {
       factsCount: 0,
       status: 'processing',
     });
-  });
-
-  it('merges text and vector ranks without returning another store or embedding model', async () => {
-    const embedding = [1, 0, ...Array.from({ length: 510 }, () => 0)];
-    const closer = embedding;
-    const farther = [0, 1, ...Array.from({ length: 510 }, () => 0)];
-    const create = async (
-      storeId: string,
-      answer: string,
-      vector: number[],
-      embeddingModel: string,
-    ) => {
-      const item = await repository.create(storeId, fixture.userA, { kind: 'policy', answer }, now);
-      await repository.finishIndex(storeId, item.id, item.updatedAt, {
-        chunks: [
-          {
-            content: answer,
-            embedding: vector,
-            embeddingModel,
-            tokenCount: 5,
-          },
-        ],
-      });
-      return item.id;
-    };
-    const closest = await create(fixture.a, 'Warranty and returns', closer, 'current');
-    const matching = await create(fixture.a, 'ঢাকা delivery', farther, 'current');
-    await create(fixture.a, 'ঢাকা delivery', closer, 'old');
-    await create(fixture.b, 'ঢাকা delivery', closer, 'current');
-
-    const rejected = await createFile('text/plain', Buffer.from('ঢাকা'));
-    await repository.finishIndex(fixture.a, rejected.id, rejected.updatedAt, {
-      chunks: [{ content: 'ঢাকা', embedding: closer, embeddingModel: 'current', tokenCount: 5 }],
-    });
-    await fixture.connection.pool.query("update files set status='rejected' where id=$1", [
-      rejected.fileId,
-    ]);
-
-    const hits = await repository.search(fixture.a, {
-      query: 'ঢাকা',
-      embedding,
-      model: 'current',
-      limit: 10,
-    });
-    expect(hits.map((hit) => hit.itemId)).toEqual([matching, closest]);
-    expect(hits[0]?.content).toBe('ঢাকা delivery');
   });
 });
 

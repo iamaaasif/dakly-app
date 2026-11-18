@@ -28,8 +28,6 @@ export type KnowledgeChunk = Pick<
   'content' | 'embedding' | 'embeddingModel' | 'tokenCount'
 >;
 
-export type KnowledgeHit = { itemId: string; content: string };
-
 @Injectable()
 export class KnowledgeRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -183,46 +181,6 @@ export class KnowledgeRepository {
     await this.database.forStore(storeId, (tx) =>
       tx.insert(files).values({ ...file, storeId, purpose: 'knowledge_file' }),
     );
-  }
-
-  async search(
-    storeId: string,
-    input: { query: string; embedding: readonly number[]; model: string; limit: number },
-  ): Promise<KnowledgeHit[]> {
-    const { query, embedding, model, limit } = input;
-    const vector = JSON.stringify(embedding);
-    const result = await this.database.forStore(storeId, (tx) =>
-      tx.execute<KnowledgeHit>(sql`
-        WITH eligible AS (
-          SELECT chunk.id, chunk.knowledge_item_id, chunk.content,
-            chunk.embedding <=> ${vector}::vector AS distance,
-            to_tsvector('simple', chunk.content) AS document
-          FROM knowledge_chunks chunk
-          JOIN knowledge_items item
-            ON item.store_id = chunk.store_id AND item.id = chunk.knowledge_item_id
-          LEFT JOIN files file ON file.store_id = item.store_id AND file.id = item.file_id
-          WHERE file.status IS DISTINCT FROM 'rejected' AND chunk.store_id = ${storeId} AND item.status = 'active'
-            AND chunk.embedding_model = ${model}
-        ),
-        terms AS (
-          SELECT plainto_tsquery('simple', ${query}) AS text
-        ),
-        ranks AS (
-          SELECT id, row_number() OVER (ORDER BY distance, id) AS rank FROM eligible
-          UNION ALL
-          SELECT id, row_number() OVER (ORDER BY ts_rank_cd(document, terms.text) DESC, id)
-          FROM eligible CROSS JOIN terms WHERE document @@ terms.text
-        ),
-        scores AS (
-          SELECT id, sum(1.0 / (60 + rank)) AS score FROM ranks GROUP BY id
-        )
-        SELECT eligible.knowledge_item_id AS "itemId", eligible.content
-        FROM scores JOIN eligible USING (id)
-        ORDER BY scores.score DESC, eligible.id
-        LIMIT ${limit}
-      `),
-    );
-    return result.rows;
   }
 
   async findFile(storeId: string, fileId: string) {

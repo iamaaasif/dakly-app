@@ -33,10 +33,8 @@ export class KnowledgeIndexService {
       'text' in source ? splitKnowledgeText(source.text.replaceAll('\u0000', '')) : [];
 
     const chunks: KnowledgeChunk[] = [];
-    for (const content of passages) {
-      const { embedding, model, usage } = await this.ai.embed(storeId, content);
-      chunks.push({ content, embedding, embeddingModel: model, tokenCount: usage.inputTokens });
-    }
+    for (let start = 0; start < passages.length; start += 64)
+      chunks.push(...(await this.embedBatch(storeId, passages.slice(start, start + 64))));
 
     await this.repository.finishIndex(
       storeId,
@@ -44,6 +42,22 @@ export class KnowledgeIndexService {
       item.updatedAt,
       chunks.length ? { chunks, sha256: source.sha256 } : { rejection, sha256: source.sha256 },
     );
+  }
+
+  private async embedBatch(storeId: string, passages: string[]): Promise<KnowledgeChunk[]> {
+    const { embeddings, model, usage } = await this.ai.embed(storeId, passages);
+    const totalBytes = Buffer.byteLength(passages.join(''));
+    let remaining = usage.inputTokens;
+    return passages.map((content, index) => {
+      const embedding = embeddings[index];
+      if (!embedding) throw new Error('Embedding result is missing a vector');
+      const tokenCount =
+        index === passages.length - 1
+          ? remaining
+          : Math.floor((usage.inputTokens * Buffer.byteLength(content)) / totalBytes);
+      remaining -= tokenCount;
+      return { content, embedding, embeddingModel: model, tokenCount };
+    });
   }
 
   private async fileText(storeId: string, fileId: string): Promise<FileText> {

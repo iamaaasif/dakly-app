@@ -14,40 +14,51 @@ const request: LlmRequest = {
 };
 
 describe('OpenAiLlmDriver', () => {
-  it('returns a 512-dimension embedding and the measured input tokens', async () => {
-    const embedding = Array.from({ length: 512 }, (_, index) => index / 512);
+  it('returns all 512-dimension embeddings in input order and the measured tokens', async () => {
+    const input = ['দাম কত?', 'Returns within seven days'];
+    const embeddings = [
+      Array.from({ length: 512 }, (_, index) => index / 512),
+      Array.from({ length: 512 }, (_, index) => (index + 1) / 512),
+    ];
     const driver = new OpenAiLlmDriver('test-key', async (url, options) => {
       expect(url).toBe('https://api.openai.com/v1/embeddings');
       expect(JSON.parse(String(options?.body))).toEqual({
         model: 'text-embedding-3-small',
-        input: 'দাম কত?',
+        input,
         dimensions: 512,
         encoding_format: 'float',
       });
       return Response.json({
         object: 'list',
         model: 'text-embedding-3-small',
-        data: [{ index: 0, object: 'embedding', embedding }],
-        usage: { prompt_tokens: 4, total_tokens: 4 },
+        data: [
+          { index: 1, object: 'embedding', embedding: embeddings[1] },
+          { index: 0, object: 'embedding', embedding: embeddings[0] },
+        ],
+        usage: { prompt_tokens: 10, total_tokens: 10 },
       });
     });
-
-    await expect(driver.embed({ ...request, model: 'text-embedding-3-small' })).resolves.toEqual({
+    await expect(
+      driver.embed({ ...request, input, model: 'text-embedding-3-small' }),
+    ).resolves.toEqual({
       model: 'text-embedding-3-small',
-      embedding,
-      usage: { inputTokens: 4, cachedInputTokens: 0, outputTokens: 0 },
+      embeddings,
+      usage: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 0 },
     });
   });
 
-  it('rejects an embedding of the wrong size', async () => {
+  it('rejects a malformed batch and preserves its measured input tokens', async () => {
     const driver = new OpenAiLlmDriver('test-key', async () =>
       Response.json({
         model: 'text-embedding-3-small',
-        data: [{ embedding: [0.1, 0.2] }],
+        data: [{ index: 0, embedding: [0.1, 0.2] }],
         usage: { prompt_tokens: 4 },
       }),
     );
-    await expect(driver.embed(request)).rejects.toMatchObject({ code: 'LLM_INVALID_RESPONSE' });
+    await expect(driver.embed({ ...request, input: [request.input] })).rejects.toMatchObject({
+      code: 'LLM_INVALID_RESPONSE',
+      usage: { inputTokens: 4 },
+    });
   });
 
   it('requests strict structured output without storing the response', async () => {
