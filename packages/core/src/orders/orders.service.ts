@@ -255,8 +255,8 @@ export class OrdersService {
     );
     const byId = new Map(variants.map((variant) => [variant.variantId, variant]));
     return items.map((item) => {
-      const variant = byId.get(item.variantId);
-      if (!variant) throw orderError('ORDER_NOT_FOUND');
+      // ProductsService rejects the quote if any requested variant is missing.
+      const variant = byId.get(item.variantId)!;
       if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
       return { ...variant, ...item };
     });
