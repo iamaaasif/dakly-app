@@ -63,6 +63,7 @@ Release 1 is split into one migration per feature area, in dependency order. The
 | `0026_support_requests_next_page`     | Support request metadata returns one row past the page                                    |
 | `0030_move_customers_to_contacts`     | Copies the example `customers` rows into `contacts`, keeping their ids                    |
 | `0031_drop_customers`                 | Drops the example `customers` table                                                       |
+| `0039_bd_upazila_areas`               | Adds 495 upazilas and fills Bangla names for all areas                                    |
 
 `packages/db/migrations/meta` is written by drizzle-kit and never edited by hand: `_journal.json` lists the migrations in the order the migrator applies them, and each `NNNN_snapshot.json` is the whole schema after that migration, which `drizzle-kit generate` compares with the TypeScript schema to write the next one. G marks a global table.
 
@@ -90,6 +91,24 @@ Release 1 is split into one migration per feature area, in dependency order. The
 | `admin.ts`                                                      | `staff_users` G, `staff_sessions` G, `staff_audit_log` G, `staff_audit_log_days` G, `abuse_reports` G, `support_grants`, `platform_settings` G                                                                                                                      | admin                                |
 
 A feature reads another feature's tables only through that feature's service ([rules/module-boundaries.md](../rules/module-boundaries.md)). Foreign keys across features are fine; queries across features are not.
+
+## Bangladesh areas
+
+`bd_areas` uses the Bangladesh Bureau of Statistics list published by UN OCHA on
+HDX as [Bangladesh – Subnational Administrative Boundaries, COD-AB v03](https://data.humdata.org/dataset/cod-ab-bgd).
+The workbook is `bgd_admin_boundaries.xlsx`, last modified 26 January 2026. HDX
+records 1 June 2025 as the dataset review date. Source attribution is Bangladesh
+Bureau of Statistics (BBS), published by UN OCHA on the Humanitarian Data Exchange.
+HDX lists the licence as [Creative Commons Attribution for Intergovernmental Organisations (CC BY-IGO)](https://creativecommons.org/licenses/by/3.0/igo/).
+
+Bangla names come from the Bangladesh National Portal's [division and district
+directory](https://bangladesh.gov.bd/views/district-list) and [upazila directory](https://bangladesh.gov.bd/views/upazila-list).
+The portal's site-wide footer shows 17 October 2026 as its last update. We
+retrieved the directories on 18 November 2026 and matched upazilas within their
+own districts. The 8 divisions and 64 districts keep their existing ids.
+We keep the 495 workbook upazilas whose city code is `00`. Each id is the numeric
+part of the BBS code. Savar
+(`BD30260072`) has id `30260072` and parent district `301` (Dhaka).
 
 ## Changes from the schema review
 
