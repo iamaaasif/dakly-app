@@ -44,16 +44,21 @@ export class CampaignSendingRepository {
     );
     return this.database.forStore(storeId, async (tx) => {
       const batch = tx
-        .select({ id: campaigns.id })
-        .from(campaigns)
-        .where(legacy)
-        .orderBy(asc(campaigns.status), asc(campaigns.createdAt), asc(campaigns.id))
-        .limit(limit)
-        .for('update', { skipLocked: true });
+        .$with('campaign_starts_to_backfill')
+        .as(
+          tx
+            .select({ id: campaigns.id })
+            .from(campaigns)
+            .where(legacy)
+            .orderBy(asc(campaigns.status), asc(campaigns.createdAt), asc(campaigns.id))
+            .limit(limit)
+            .for('update', { skipLocked: true }),
+        );
       await tx
+        .with(batch)
         .update(campaigns)
         .set({ startedAt: sql`${campaigns.approvedAt}` })
-        .where(and(legacy, inArray(campaigns.id, batch)));
+        .where(and(legacy, inArray(campaigns.id, tx.select({ id: batch.id }).from(batch))));
       const [remaining] = await tx
         .select({ id: campaigns.id })
         .from(campaigns)

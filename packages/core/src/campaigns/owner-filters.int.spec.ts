@@ -74,7 +74,7 @@ describe('campaign filters without RLS assistance', () => {
       skippedCount: 1,
     } as const;
     expect(await repository.markApproved(f.b, b.id, approval)).toMatchObject({ status: 'sending' });
-    expect((await f.row('campaigns', b.id)).started_at).toEqual(now);
+    expect(new Date(String((await f.row('campaigns', b.id)).started_at))).toEqual(now);
     await repository.markApproved(f.b, a.id, approval);
 
     expect(await f.row('campaigns', a.id)).toEqual(before);
