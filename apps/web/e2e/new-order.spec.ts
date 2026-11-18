@@ -197,6 +197,9 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
     await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
     await expect(create.getByText('4 in stock')).toBeVisible();
+    await create.getByLabel('Discount (৳)').fill('1260');
+    await expect(create.getByText('Discount cannot exceed the item total.')).toBeVisible();
+    await expect(cod).toHaveCount(0);
     await create.getByLabel('Discount (৳)').fill('50');
     await expect(create.getByText(/^Total/).getByText('৳1,260', { exact: true })).toBeVisible();
     await create.getByLabel('Discount (৳)').clear();
@@ -210,10 +213,20 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       await route.abort();
       await page.unroute('**/api/orders');
     });
+    let confirmationRequests = 0;
+    await page.route('**/api/orders/*/stage', async (route) => {
+      confirmationRequests++;
+      const confirmed = await route.fetch();
+      expect(confirmed.status()).toBe(200);
+      await route.abort();
+    });
     await create.getByRole('button', { name: 'Save as confirmed' }).click();
     await expect(create.getByText('Could not confirm the save')).toBeVisible();
     await create.getByRole('button', { name: 'Retry save' }).click();
+    await expect(create.getByRole('alert')).toBeVisible();
+    await create.getByRole('button', { name: 'Confirm saved order' }).click();
     await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
+    expect(confirmationRequests).toBe(1);
     await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
       'href',
       `/customers/${buyerId}`,
