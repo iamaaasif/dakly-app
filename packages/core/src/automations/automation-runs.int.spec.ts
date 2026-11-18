@@ -2042,6 +2042,28 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       }
     });
 
+    it('sends a step that was still eligible when the balance resumed before the sweep', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      await runDueStep(runner, runId!);
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        runId,
+        new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+      ]);
+      await creditThrough(runner, 'sms_credits', automationId);
+
+      databaseNow = new Date(daytime.getTime() + 2 * MINUTE);
+      await runDueStep(runner, runId!);
+
+      expect(sentFor(runId!)).toHaveLength(1);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+    });
+
     it('keeps the workflow active when the old version stops at a short balance gate', async () => {
       await setCredits(0);
       const runner = await worker();

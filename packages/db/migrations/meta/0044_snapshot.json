@@ -1,5 +1,5 @@
 {
-  "id": "5ef18752-47da-44e9-a320-ca5d56bae3e5",
+  "id": "93996c83-3635-4dce-819f-83b6d5892516",
   "prevId": "ed6ad400-81c4-42f1-bdcc-96f4768a3084",
   "version": "7",
   "dialect": "postgresql",
@@ -5229,6 +5229,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "balance_resume_keeps_send": {
+          "name": "balance_resume_keeps_send",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "is_transactional": {
           "name": "is_transactional",

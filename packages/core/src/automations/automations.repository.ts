@@ -134,7 +134,11 @@ export class AutomationsRepository {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automations)
-        .set({ ...change, ...(graph && { draftGraph: graph }) })
+        .set({
+          ...change,
+          ...(graph && { draftGraph: graph }),
+          ...(change.pauseReason === 'manual' && { balanceResumeKeepsSend: false }),
+        })
         .where(
           and(
             eq(automations.storeId, storeId),
@@ -167,6 +171,7 @@ export class AutomationsRepository {
           status: 'paused',
           pauseReason: 'balance',
           balancePauseRevision: observedRevision,
+          balanceResumeKeepsSend: false,
           updatedAt,
         })
         .where(
@@ -210,6 +215,7 @@ export class AutomationsRepository {
           pauseReason: null,
           balancePauseRevision: null,
           balanceResumedAt: resumedAt,
+          balanceResumeKeepsSend: true,
           updatedAt: resumedAt,
         })
         .where(

@@ -160,6 +160,7 @@ describe('AutomationRunsService', () => {
       isVersionStopped: false,
       automationStatus: 'active',
       balanceResumedAt: null,
+      balanceResumeKeepsSend: false,
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
@@ -987,6 +988,16 @@ describe('AutomationRunsService', () => {
       expect(sent).toHaveLength(1);
     });
 
+    it('sends when balance resumed just before the cutoff and the sweep runs just after it', async () => {
+      clockNow = new Date(claimedAt.getTime() + 24 * HOUR + 1000);
+      await start(send, {
+        balanceResumedAt: new Date(claimedAt.getTime() + 24 * HOUR - 1000),
+        balanceResumeKeepsSend: true,
+      });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(sent).toHaveLength(1);
+    });
+
     it('uses a balance resume that commits after the run was first loaded', async () => {
       const read = repository.findRun.bind(repository);
       const resumedAt = new Date(claimedAt.getTime() + 25 * HOUR);
@@ -1010,7 +1021,10 @@ describe('AutomationRunsService', () => {
       // Two hours old at the resume, then held a day longer by a manual pause.
       clockNow = new Date(claimedAt.getTime() + 30 * HOUR);
 
-      await start(send, { balanceResumedAt: new Date(claimedAt.getTime() + 2 * HOUR) });
+      await start(send, {
+        balanceResumedAt: new Date(claimedAt.getTime() + 2 * HOUR),
+        balanceResumeKeepsSend: false,
+      });
 
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
     });

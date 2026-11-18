@@ -46,6 +46,7 @@ import {
   randomPath,
   runAction,
   scheduleWait,
+  sendLateness,
   shouldPrepareSender,
   type RunFacts,
   type SendStep,
@@ -148,7 +149,7 @@ export class AutomationRunsService {
     if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
     if (
       shouldPrepareSender(step) &&
-      !isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId))
+      !sendLateness(facts.wakeAt, await this.transaction.databaseTime(storeId), run)
     )
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
@@ -219,9 +220,8 @@ export class AutomationRunsService {
       if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
       renewed = { ...claim, claimedAt: now };
       const checkedAt = await this.transaction.databaseTime(storeId);
-      const result = isLateSend(facts.wakeAt, checkedAt)
-        ? await this.readLateGateResult(facts)
-        : await this.gateSend(renewed, step, facts);
+      const late = await this.readLateGateResult(facts, checkedAt);
+      const result = late ?? (await this.gateSend(renewed, step, facts));
       const claimedAt = await this.transaction.databaseTime(storeId);
       // The live move holds this run row; renew after the gate's other locks and writes.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
@@ -291,7 +291,8 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (isLateSend(facts.wakeAt, at)) return this.readLateGateResult(facts);
+    const late = await this.readLateGateResult(facts, at);
+    if (late) return late;
     if (decision.action !== 'send') return { decision };
     const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
     if (body === undefined) {
@@ -309,9 +310,9 @@ export class AutomationRunsService {
     return this.conditions.exitReason(storeId, graph, { ...facts, tags, tappedStepKeys }, at);
   }
 
-  private async readLateGateResult({ storeId, runId }: RunFacts) {
-    const run = await this.repository.findRun(storeId, runId);
-    return { outcome: 'late', balanceResumedAt: run?.balanceResumedAt ?? null } as const;
+  private async readLateGateResult({ storeId, runId, wakeAt }: RunFacts, now: Date) {
+    if (!isLateSend(wakeAt, now)) return undefined;
+    return sendLateness(wakeAt, now, await this.repository.findRun(storeId, runId));
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves

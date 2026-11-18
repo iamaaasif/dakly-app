@@ -218,6 +218,25 @@ export function isLateSend(wakeAt: Date | null, now: Date): boolean {
   return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
 }
 
+export function sendLateness(
+  wakeAt: Date | null,
+  now: Date,
+  run: Pick<ClaimedRun, 'balanceResumedAt' | 'balanceResumeKeepsSend'> | undefined,
+) {
+  if (!isLateSend(wakeAt, now)) return undefined;
+  const balanceResumedAt = run?.balanceResumedAt ?? null;
+  // If a top-up made an already-due send eligible, the wait for the sweep cannot expire it.
+  if (
+    run?.balanceResumeKeepsSend &&
+    balanceResumedAt &&
+    wakeAt &&
+    wakeAt <= balanceResumedAt &&
+    !isLateSend(wakeAt, balanceResumedAt)
+  )
+    return undefined;
+  return { outcome: 'late', balanceResumedAt } as const;
+}
+
 export function shouldPrepareSender(step: AutomationStep): boolean {
   return step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending;
 }
