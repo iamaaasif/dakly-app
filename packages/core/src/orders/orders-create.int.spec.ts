@@ -2,8 +2,8 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
 import { NestFactory } from '@nestjs/core';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createOrderSchema, editOrderSchema, type CreateOrderInput } from '@dakly/contracts/orders';
