@@ -11,7 +11,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadEnv } from '../config/env';
 import { ErrorReporter } from '../logging/error-reporter';
 import { jobLogBindings } from '../logging/job-context';
-import { BulkJobDispatcher, TransactionalJobDispatcher } from './job-dispatcher';
+import {
+  BulkJobDispatcher,
+  TransactionalJobDispatcher,
+  WorkflowJobDispatcher,
+} from './job-dispatcher';
 import { HandlesJob, type JobHandler } from './job-handler';
 import { scheduleJob } from './job-schedule';
 import { QUEUES, type QueueName } from './queues';
@@ -30,12 +34,16 @@ class TransactionalScheduledHandler implements JobHandler {
 
 class BulkScheduledHandler extends TransactionalScheduledHandler {}
 
+class WorkflowScheduledHandler extends TransactionalScheduledHandler {}
+
 HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalScheduledHandler);
 HandlesJob({ queue: QUEUES.bulk, name: SCHEDULED })(BulkScheduledHandler);
+HandlesJob({ queue: QUEUES.workflow, name: SCHEDULED })(WorkflowScheduledHandler);
 
 const setups = {
   transactional: [TransactionalScheduledHandler, TransactionalJobDispatcher],
   bulk: [BulkScheduledHandler, BulkJobDispatcher],
+  workflow: [WorkflowScheduledHandler, WorkflowJobDispatcher],
 } satisfies Record<QueueName, unknown[]>;
 
 const reporter = new ErrorReporter(undefined);
@@ -79,7 +87,7 @@ afterEach(async () => {
   await Promise.all(applications.splice(0).map((application) => application.close()));
 });
 
-describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queueName) => {
+describe.each(Object.values(QUEUES))('Scheduled job on %s', (queueName) => {
   it('runs one job per interval across two workers, each in its own job context', async () => {
     const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
     const first = await start(queueName, prefix);
@@ -105,8 +113,8 @@ describe.each([QUEUES.transactional, QUEUES.bulk])('Scheduled job on %s', (queue
     expect(jobLogBindings()).toEqual({});
   });
 
-  // Transactional runs five jobs at once, so its next tick starts beside the active run.
-  const overlapping = queueName === QUEUES.transactional ? 2 : 1;
+  // Transactional and workflow run five jobs at once, so the next tick starts beside the active run.
+  const overlapping = queueName === QUEUES.bulk ? 1 : 2;
   it(`runs ${overlapping} tick(s) at once on one worker and waits for them at shutdown`, async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => {

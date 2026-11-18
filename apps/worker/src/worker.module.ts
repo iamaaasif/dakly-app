@@ -11,6 +11,9 @@ import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
+import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
+import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
@@ -26,6 +29,7 @@ import { OutboxRelayModule } from '@dakly/core/platform/outbox/outbox-relay.modu
 import {
   BulkJobDispatcher,
   TransactionalJobDispatcher,
+  WorkflowJobDispatcher,
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
@@ -36,6 +40,7 @@ import { JobSchedulers } from './job-schedulers';
   providers: [
     BulkJobDispatcher,
     TransactionalJobDispatcher,
+    WorkflowJobDispatcher,
     StaffAuditExportJob,
     StaffAuditMaintenanceJob,
     StaffAlertDeliveryJob,
@@ -47,6 +52,8 @@ import { JobSchedulers } from './job-schedulers';
     RunContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
+    WakeDueRunsJob,
+    ContinueAutomationRunJob,
     JobSchedulers,
   ],
   imports: [
@@ -57,10 +64,12 @@ import { JobSchedulers } from './job-schedulers';
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
+    BullModule.registerQueue({ name: QUEUES.workflow }),
     DatabaseModule,
     SecurityNoticesModule,
     OutboxRelayModule,
     NotificationsModule,
+    AutomationRunsModule,
     ImportsModule,
     BullModule.forRootAsync({
       useFactory: () => {

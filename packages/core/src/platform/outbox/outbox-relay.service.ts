@@ -39,8 +39,9 @@ export class OutboxRelayService implements OnModuleInit {
     @Inject(Reflector) private readonly reflector: Reflector,
     @InjectQueue(QUEUES.transactional) transactional: Queue,
     @InjectQueue(QUEUES.bulk) bulk: Queue,
+    @InjectQueue(QUEUES.workflow) workflow: Queue,
   ) {
-    this.queues = { transactional, bulk };
+    this.queues = { transactional, bulk, workflow };
   }
 
   onModuleInit() {
@@ -57,7 +58,11 @@ export class OutboxRelayService implements OnModuleInit {
   async relay() {
     const events = await this.repository.claim(RELAY_BATCH_SIZE);
     if (events.length === 0) return;
-    const jobs: Record<QueueName, SubscriberJob[]> = { transactional: [], bulk: [] };
+    const jobs: Record<QueueName, SubscriberJob[]> = {
+      transactional: [],
+      bulk: [],
+      workflow: [],
+    };
     for (const { id, storeId, type, payload, occurredAt } of events)
       for (const { queue, name } of this.subscribers.get(type) ?? [])
         jobs[queue].push({

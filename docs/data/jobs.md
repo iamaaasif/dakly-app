@@ -2,7 +2,7 @@
 
 Planned release 1 background jobs: its queue, what starts it, its payload and what makes a second run harmless. The rules are in [jobs.md](../rules/jobs.md); the queues are the nine in [architecture.md](../architecture.md#queues). These contracts guide feature implementation; the schema PR does not implement the handlers. Every payload has `storeId` unless the row says "sweep", and is parsed with a zod schema in the job file.
 
-A job that loses its Valkey entry is found again by a sweep: each sweep calls a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments` and `campaign` where marked) and carry no `storeId` themselves.
+A job that loses its Valkey entry is found again by a sweep: each sweep calls a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
 
 ## inbound
 
@@ -59,11 +59,11 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                              | Payload                                              | Makes a rerun harmless                                                                      |
-| ------------------------- | --------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Outbox event matching an active trigger | `storeId`, `automationId`, `contactId`, `triggerKey` | Unique `automation_runs (automation_id, contact_id, trigger_key)`                           |
-| `continue-automation-run` | Delayed job at `wake_at`, or the sweep  | `storeId`, `automationRunId`, `claimedAt`            | Step identity plus claim-timestamp guard; see lease contract below                          |
-| sweep `wake-due-runs`     | Every minute                            | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED |
+| Job                       | Started by                              | Payload                                              | Makes a rerun harmless                                                                             |
+| ------------------------- | --------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `start-automation-run`    | Outbox event matching an active trigger | `storeId`, `automationId`, `contactId`, `triggerKey` | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
+| `continue-automation-run` | The sweep, or the step before it        | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`     | Every minute                            | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
 
 ## sync
 
@@ -104,9 +104,13 @@ No job holds a database transaction while it calls the AI model or a vendor: rea
 
 ## Workflow lease and provider handoff
 
-`due_automation_runs` claims waiting work whose wake time passed, or running work whose `claimed_at` is at least five minutes old. Each claim updates `claimed_at` and increments `attempts`. The function returns the new `claimed_at` timestamp, truncated to milliseconds for lossless JavaScript Date round-trips, and the queue job carries it as `claimedAt`; a stale worker may neither advance the run nor overwrite a later claim. Workers check the expected step and claim before committing, use a stable `(run_id, step_key)` identity, and refresh or release the lease around bounded local work. Heartbeats compare the expected `claimed_at` and return the replacement timestamp; the worker updates its local token before another write. No database lock is held during a vendor call.
+`due_automation_runs` claims waiting work whose wake time passed, or running work whose `claimed_at` is at least five minutes old, and skips runs of a paused workflow. Each claim updates `claimed_at`; it does not count an attempt. The function returns the step and the new `claimed_at`, truncated to milliseconds for lossless JavaScript Date round-trips, and the queue job carries both; a stale worker may neither advance the run nor overwrite a later claim. The sweep reads how many step jobs already wait in the `workflow` queue, outside any transaction, and claims no more than the room left under 1,000, and at most 100 runs of one store, taking stores in turn so one store's backlog cannot hold back the others. It queues one `continue-automation-run` job per claim, deduplicated on run, step and claim time, so a new claim of the same step is never dropped behind an old job.
 
-A crash between claiming and enqueueing is recovered by the next stale-lease sweep. This database behavior is tested; exactly-once external delivery is not established by a unique step row. The planned worker must durably record send intent, use provider idempotency when supported, and reconcile unknown outcomes before retrying. Pausing or stopping an old version is checked again before the next step; graph data remains immutable.
+The step job does nothing unless the run is still `running` on that step with that `claimed_at`. It writes the step row and the run's next state in one transaction whose update is guarded on both. A step that goes straight on sets a fresh `claimed_at` in that transaction, which renews the lease, and queues the next step's job with it; there is no separate heartbeat. The job adds one to `attempts` when it starts work on its claim, and each committed step sets it back to 0, so a lease that expired while the job waited in the queue does not count. `startWork` also writes a fresh `claimed_at`, so a job that starts late works under a full lease. A job that fails before `startWork`, or never runs, is not counted either; its run is claimed again at each lease expiry. The queue does not retry a failed step job, as a retry would no longer hold the claim `startWork` renewed; the lease and the next sweep are the retry. A run whose step job started more than 10 times without a committed step fails. No database lock is held during a vendor call.
+
+Runs of a paused workflow are left out by a `NOT EXISTS` on `automations` for each due row, so they are still read each tick. That is cheap while few workflows pause; an index or a join that drops paused workflows first can come once a store keeps many paused runs.
+
+A crash between claiming and enqueueing is recovered by the next stale-lease sweep. This database behavior is tested; exactly-once external delivery is not established by a unique step row. Send steps record their intent as a `sending` step row before the provider call and resend with the same provider idempotency key (feature 09). Pausing or stopping an old version is checked again before the next step; graph data remains immutable.
 
 ## Customer memory
 

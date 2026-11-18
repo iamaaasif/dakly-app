@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationsRepository } from './automations.repository';
 
 const graph = automationTemplates.welcome_new_subscriber.graph;
@@ -12,6 +15,7 @@ const now = new Date('2026-11-16T05:00:00Z');
 describe('automation filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new AutomationsRepository(f.tenant);
+  const runs = new AutomationRunsRepository(f.tenant, f.connection.db);
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
@@ -68,5 +72,41 @@ describe('automation filters without RLS assistance', () => {
       expect.objectContaining({ id: a.version.id, isStopped: false }),
     ]);
     expect(await repository.find(f.a, a.automation.id)).toMatchObject({ name: a.automation.name });
+  });
+
+  it('reads, moves and records runs only in the selected store', async () => {
+    const a = await published(f.a, f.userA);
+    const contactId = randomUUID();
+    await f.connection.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'সুমি','manual','customer')",
+      [contactId, f.a],
+    );
+    const runId = randomUUID();
+    const claimedAt = new Date('2026-11-16T05:00:00.000Z');
+    await f.connection.pool.query(
+      "insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,claimed_at) values($1,$2,$3,$4,$5,'k','welcome','running',$6)",
+      [runId, f.a, a.automation.id, a.version.id, contactId, claimedAt],
+    );
+    const claim = { runId, stepKey: 'welcome', claimedAt };
+    const step = { stepKey: 'welcome', kind: 'wait', outcome: 'scheduled' } as const;
+
+    expect(await runs.findRun(f.b, runId)).toBeUndefined();
+    const renewedAt = new Date('2026-11-16T05:01:00.000Z');
+    expect(await runs.startWork(f.b, claim, renewedAt)).toBeUndefined();
+    expect((await f.row('automation_runs', runId)).attempts).toBe(0);
+    // Renewing to the same time keeps the claim the rest of this test uses.
+    expect(await runs.startWork(f.a, claim, claimedAt)).toEqual({ attempts: 1, claimedAt });
+    expect(await runs.moveRun(f.b, claim, { status: 'done' })).toBe(false);
+    await expect(runs.insertStep(f.b, runId, contactId, step)).rejects.toThrow();
+    expect((await f.row('automation_runs', runId)).status).toBe('running');
+
+    await runs.insertStep(f.a, runId, contactId, step);
+    expect(await runs.findRun(f.a, runId)).toMatchObject({
+      contactId,
+      claimedAt,
+      attempts: 1,
+      graph,
+    });
+    expect(await runs.moveRun(f.a, claim, { status: 'done' })).toBe(true);
   });
 });
