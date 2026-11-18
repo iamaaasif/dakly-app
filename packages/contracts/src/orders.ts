@@ -329,6 +329,7 @@ const orderLines = z
   );
 
 export const createOrderSchema = z.strictObject({
+  confirm: z.boolean().default(false),
   buyer: buyerSchema,
   recipient: recipientSchema,
   items: orderLines,
