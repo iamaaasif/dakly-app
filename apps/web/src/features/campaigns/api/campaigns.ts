@@ -6,10 +6,11 @@ import { campaignKeys } from './campaigns-key';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
 
-export function campaignListHref(query: Partial<CampaignListQuery> = {}) {
+export function campaignListHref(query: Partial<CampaignListQuery> = {}, pageShop?: string) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query))
     if (value !== undefined) params.set(key, String(value));
+  if (query.cursor && pageShop) params.set('pageShop', pageShop);
   return params.size ? `/campaigns?${params}` : '/campaigns';
 }
 

@@ -11,12 +11,14 @@ export default async function CampaignsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireSession();
-  const query = campaignListQuerySchema.safeParse(await searchParams);
+  const session = await requireSession();
+  const { pageShop, ...filters } = await searchParams;
+  const query = campaignListQuerySchema.safeParse(filters);
+  const cursorShop = typeof pageShop === 'string' ? pageShop : session.currentStore?.storeId;
   return (
     <StorePage permission="canViewCampaigns">
       {query.success ? (
-        <CampaignsScreen query={query.data} />
+        <CampaignsScreen query={query.data} cursorShop={cursorShop} />
       ) : (
         <p role="alert" className="p-6">
           The campaign filters are invalid.{' '}

@@ -1,7 +1,6 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
@@ -48,6 +47,16 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const apply = form.handleSubmit((filters) =>
     router.push(campaignListHref({ ...filters, limit: query.limit })),
   );
+  function clear() {
+    form.reset({
+      search: '',
+      status: undefined,
+      channel: undefined,
+      createdFrom: undefined,
+      createdBefore: undefined,
+    });
+    router.push('/campaigns');
+  }
 
   return (
     <FormProvider {...form}>
@@ -61,12 +70,13 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
           <Button type="submit" variant="secondary">
             Apply filters
           </Button>
-          <Link
-            href="/campaigns"
+          <button
+            type="button"
+            onClick={clear}
             className="inline-flex min-h-10 items-center text-action underline"
           >
             Clear filters
-          </Link>
+          </button>
         </div>
       </form>
     </FormProvider>

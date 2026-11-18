@@ -12,9 +12,17 @@ import { CampaignFilters } from './campaign-filters';
 import { CampaignTable } from './campaign-table';
 import { useSessionContext } from '@/lib/session-context';
 
-export function CampaignsScreen({ query }: { query: CampaignListQuery }) {
-  const campaigns = useCampaigns(query);
+export function CampaignsScreen({
+  query: requested,
+  cursorShop,
+}: {
+  query: CampaignListQuery;
+  cursorShop?: string;
+}) {
   const { data: session } = useSessionContext();
+  const shopId = session?.currentStore?.storeId;
+  const query = cursorShop === shopId ? requested : { ...requested, cursor: undefined };
+  const campaigns = useCampaigns(query);
   const filters = campaignListHref({ ...query, cursor: undefined });
   return (
     <main className="space-y-6 p-6 md:p-8">
@@ -33,7 +41,7 @@ export function CampaignsScreen({ query }: { query: CampaignListQuery }) {
         )}
       </header>
       <CampaignFilters key={`${session?.contextTag ?? ''}/${filters}`} query={query} />
-      <CampaignListState query={query} campaigns={campaigns} />
+      <CampaignListState query={query} campaigns={campaigns} shopId={shopId} />
     </main>
   );
 }
@@ -41,9 +49,11 @@ export function CampaignsScreen({ query }: { query: CampaignListQuery }) {
 function CampaignListState({
   query,
   campaigns,
+  shopId,
 }: {
   query: CampaignListQuery;
   campaigns: ReturnType<typeof useCampaigns>;
+  shopId?: string;
 }) {
   if (campaigns.isPending)
     return (
@@ -71,7 +81,9 @@ function CampaignListState({
           No campaigns match these filters.
         </p>
       )}
-      {(query.cursor || nextCursor) && <CampaignPages query={query} nextCursor={nextCursor} />}
+      {(query.cursor || nextCursor) && (
+        <CampaignPages query={query} nextCursor={nextCursor} shopId={shopId} />
+      )}
     </section>
   );
 }
@@ -79,9 +91,11 @@ function CampaignListState({
 function CampaignPages({
   query,
   nextCursor,
+  shopId,
 }: {
   query: CampaignListQuery;
   nextCursor: string | null;
+  shopId?: string;
 }) {
   return (
     <nav aria-label="Campaign pages" className="flex justify-between gap-4">
@@ -96,7 +110,7 @@ function CampaignPages({
       {nextCursor && (
         <Link
           className="ml-auto min-h-10 text-action underline"
-          href={campaignListHref({ ...query, cursor: nextCursor })}
+          href={campaignListHref({ ...query, cursor: nextCursor }, shopId)}
         >
           Next page
         </Link>
