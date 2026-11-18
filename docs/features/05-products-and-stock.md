@@ -176,6 +176,7 @@ cache while form input stays in React Hook Form.
 Members with product edit access can adjust a variant with a signed quantity and
 reason. Product view access is checked by the page and after shop changes.
 The editor and photo controls remain for the second PROD-4 PR.
+A hidden product is how a shop keeps an unfinished product on the server.
 
 The list omits unsupported totals, sales, chat and waiting-list counts, category
 filters, best-selling order, import and promotion controls. The stock dialog

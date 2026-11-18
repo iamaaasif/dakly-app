@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { expect, test } from '@playwright/test';
@@ -83,10 +83,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
           })
         ).status(),
       ).toBe(204);
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=',
-      'base64',
-    );
+    const png = await readFile(resolve(process.cwd(), 'e2e/fixtures/silk-scarf.png'));
     const uploadInput = { contentType: 'image/png', sizeBytes: png.length };
     const issued = await (
       await request(`/products/${products[1]!.id}/photos/upload-url`, uploadInput)
@@ -122,7 +119,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
           .getByRole('img', { name: 'Silk scarf' })
           .evaluate((image: HTMLImageElement) => image.naturalWidth),
       )
-      .toBeGreaterThan(0);
+      .toBeGreaterThan(1);
     await capture('list');
 
     await page.getByRole('link', { name: 'Running low', exact: true }).click();
