@@ -379,6 +379,28 @@ describe('Staff order creation', () => {
     expect(suggestions.rows).toEqual([
       { contact_id: karimId, matched_contact_id: rahimId, reason: 'same_phone' },
     ]);
+    const newPhone = '01711110036';
+    await f.connection.pool.query('update contacts set phone=$1 where store_id=$2 and id=$3', [
+      newPhone,
+      f.a,
+      rahimId,
+    ]);
+    const repeated = await orders.createOrder(
+      f.a,
+      draft(variantId, {
+        buyer: { contactId: karimId },
+        recipient: {
+          name: 'Karim',
+          phone: newPhone,
+          address: 'Dhanmondi',
+          areaId: 301,
+          isBuyer: true,
+        },
+      }),
+      editor(),
+    );
+    expect(repeated).toMatchObject({ hasRecipientPhoneMatch: true, buyerContactId: karimId });
+    expect(await f.row('contacts', karimId)).toMatchObject({ phone: null });
     const consents = await f.connection.pool.query(
       'select id from consents where store_id=$1 and contact_id=any($2)',
       [f.a, [rahimId, karimId]],
