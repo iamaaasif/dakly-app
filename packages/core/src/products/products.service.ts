@@ -134,6 +134,13 @@ export class ProductsService {
     });
   }
 
+  async orderVariantProductIds(storeId: string, variantIds: string[]) {
+    const rows = variantIds.length
+      ? await this.orderVariantRepository.productIds(storeId, variantIds)
+      : [];
+    return new Map(rows.map(({ variantId, productId }) => [variantId, productId]));
+  }
+
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
     return this.transaction.run(storeId, async () => {
       const variant = await this.repository.findStockVariant(storeId, variantId);

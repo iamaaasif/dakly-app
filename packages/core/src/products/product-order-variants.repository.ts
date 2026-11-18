@@ -45,6 +45,15 @@ export class ProductOrderVariantsRepository {
     );
   }
 
+  productIds(storeId: string, variantIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ variantId: productVariants.id, productId: productVariants.productId })
+        .from(productVariants)
+        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds))),
+    );
+  }
+
   orderVariants(storeId: string, variantIds: string[]) {
     return this.database.forStore(storeId, (tx) =>
       tx

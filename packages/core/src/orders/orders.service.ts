@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -30,7 +31,7 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTransitions,
+  orderStageTimes,
   productArchiveStages,
   recordOrderStage,
   stageWrite,
@@ -40,7 +41,7 @@ import { orderTotalPoisha, orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
-type Access = Pick<StoreAccess, 'seeFullPhone'>;
+type Access = Pick<StoreAccess, 'seeFullPhone'> & Partial<Pick<StoreAccess, 'areas'>>;
 type StageEditor = { actor: AuditEntry['actor']; access: Access };
 type CreateEditor = {
   actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
@@ -233,21 +234,26 @@ export class OrdersService {
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
-    const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
-    const timeline = await orderStageHistory(storeId, orderId, this.audit);
+    const items = await this.repository.items(storeId, orderId);
+    const productArea = access.areas?.products;
+    const productIds =
+      productArea && productArea !== 'none' && canEditOrder(order)
+        ? await this.products.orderVariantProductIds(
+            storeId,
+            items.map(({ variantId }) => variantId),
+          )
+        : undefined;
     return {
       ...order,
       recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
-      createdAt: order.createdAt.toISOString(),
-      shippedAt: isoTime(order.shippedAt),
-      deliveredAt: isoTime(order.deliveredAt),
-      returnedAt: isoTime(order.returnedAt),
-      codCollectedAt: isoTime(order.codCollectedAt),
+      ...orderStageTimes(order),
       totalPoisha: orderTotalPoisha(order),
-      returnRisk: returnRisk(outcomes[0]),
-      items: await this.repository.items(storeId, orderId),
-      timeline,
+      returnRisk: returnRisk(
+        (await this.repository.parcelOutcomes(storeId, [order.recipientPhone]))[0],
+      ),
+      items: items.map((item) => ({ ...item, productId: productIds?.get(item.variantId) ?? null })),
+      timeline: await orderStageHistory(storeId, orderId, this.audit),
     };
   }
 
@@ -402,9 +408,7 @@ export class OrdersService {
     previous: OrderItemWrite[] = [],
   ): Promise<OrderItemWrite[]> {
     const byId = new Map(previous.map((item) => [item.variantId, item]));
-    const newIds = items
-      .filter(({ variantId }) => !byId.has(variantId))
-      .map(({ variantId }) => variantId);
+    const newIds = items.flatMap(({ variantId }) => (byId.has(variantId) ? [] : [variantId]));
     const variants = await this.products.orderVariants(storeId, newIds, [...byId.keys()]);
     for (const variant of variants) {
       if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
@@ -412,8 +416,4 @@ export class OrdersService {
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
-}
-
-function isoTime(value: Date | null): string | null {
-  return value?.toISOString() ?? null;
 }

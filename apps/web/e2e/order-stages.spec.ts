@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
-const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-stages');
+const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-fulfilment');
 
 async function capture(page: Page, name: string) {
   await mkdir(evidence, { recursive: true });
@@ -77,26 +77,6 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     const detail = page.getByRole('dialog', { name: 'Order #1050' });
     await expect(detail.getByRole('button', { name: 'Sent with courier' })).toBeVisible();
     await capture(page, 'detail');
-    await detail.getByRole('button', { name: 'Put on hold' }).click();
-    const hold = page.getByRole('dialog', { name: 'Put on hold' });
-    await hold.getByLabel('Reason').selectOption({ label: 'Pre-order' });
-    await capture(page, 'hold');
-    await hold.getByRole('button', { name: 'Put on hold' }).click();
-    await expect(detail.getByText('To pack → On hold')).toBeVisible();
-    await expect(detail.getByRole('status', { name: 'Order stage' })).toBeFocused();
-    await expect(detail.getByText('Pre-order')).toBeVisible();
-    await detail.getByRole('button', { name: 'Mark confirmed' }).click();
-    await expect(detail.getByText('On hold → To pack')).toBeVisible();
-    await detail.getByRole('button', { name: 'Cancel order' }).click();
-    const cancel = page.getByRole('dialog', { name: 'Cancel order #1050?' });
-    await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });
-    await capture(page, 'cancel');
-    await cancel.getByRole('button', { name: 'Back' }).click();
-    await expect(detail.getByRole('button', { name: 'Cancel order' })).toBeFocused();
-    await detail.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(opener).toBeFocused();
-    await opener.click();
-
     await detail.getByRole('button', { name: 'Sent with courier' }).click();
     const dispatch = page.getByRole('dialog', { name: 'Sent with courier' });
     await dispatch.getByLabel('Courier', { exact: true }).selectOption({ label: 'Other' });

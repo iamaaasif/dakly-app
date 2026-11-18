@@ -13,7 +13,7 @@ import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
-import { OrderEditorDialog } from './order-editor-dialog';
+import { NewOrderDialog } from './order-editor-dialog';
 import { OrderFilters } from './order-filters';
 import { OrderSearch } from './order-search';
 import { OrdersList } from './orders-list';
@@ -24,6 +24,7 @@ type OrdersScreenProps = { query: OrderListQuery; selected?: string };
 
 export function OrdersScreen({ query, selected }: OrdersScreenProps) {
   const orders = useOrders(query);
+  const pendingListRefresh = orders.fetchStatus !== 'idle';
   const router = useRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const listHref = `/orders?${ordersSearch(query)}`;
@@ -66,11 +67,8 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           <OrderDetailSheet
             key={selected}
             id={selected}
-            fallbackFocus={() =>
-              heading.current
-                ?.closest('main')
-                ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${selected}"]`) ??
-              heading.current
+            restoreFocusTo={() =>
+              orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
             }
             onClose={() => router.replace(listHref)}
           />
@@ -104,7 +102,7 @@ function OrdersHeader({
       </div>
       {canCreate && <Button onClick={() => setOpen(true)}>New order</Button>}
       {open && (
-        <OrderEditorDialog
+        <NewOrderDialog
           onClose={() => setOpen(false)}
           onSaved={(id) => {
             setOpen(false);
@@ -113,5 +111,14 @@ function OrdersHeader({
         />
       )}
     </header>
+  );
+}
+
+function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | undefined) {
+  if (!orderId) return heading;
+  return (
+    heading
+      ?.closest('main')
+      ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${orderId}"]`) ?? heading
   );
 }

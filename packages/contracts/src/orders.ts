@@ -69,6 +69,17 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
+export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
+  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
+  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
+  to_pack: ['with_courier', 'on_hold', 'cancelled'],
+  with_courier: ['delivered', 'partially_delivered', 'returned'],
+  delivered: ['returned'],
+  partially_delivered: ['returned'],
+  returned: [],
+  cancelled: [],
+};
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',
@@ -150,6 +161,7 @@ export type OrderListResponse = {
 export type OrderItem = {
   id: string;
   variantId: string;
+  productId: string | null;
   productName: string;
   variantTitle: string;
   quantity: number;
@@ -228,10 +240,10 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
   z.strictObject({ to: z.literal('to_pack') }),
   z.strictObject({
     to: z.literal('on_hold'),
-    reason: z.enum(onHoldReasons),
+    reason: z.enum(onHoldReasons, 'Choose a reason.'),
     followUpOn: calendarDate.optional(),
   }),
-  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons) }),
+  z.strictObject({ to: z.literal('cancelled'), reason: z.enum(cancelReasons, 'Choose a reason.') }),
   z.strictObject({ to: z.literal('delivered') }),
   z.strictObject({
     to: z.literal('partially_delivered'),
@@ -265,7 +277,7 @@ const recipientSchema = z.strictObject({
 const orderLines = z
   .array(
     z.strictObject({
-      variantId: z.uuid().toLowerCase(),
+      variantId: z.uuid('Choose a product and variant').toLowerCase(),
       quantity: z.int().positive().max(2147483647),
       lineDiscountPoisha: money.default(0),
     }),
@@ -307,15 +319,11 @@ export const editOrderSchema = z.strictObject({
   advancePaidPoisha: money.optional(),
 });
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
-const editOrderFormSchema = editOrderSchema.extend({
+export const editOrderFormSchema = editOrderSchema.extend({
   deliveryChargePoisha: takaInput.optional(),
   orderDiscountPoisha: takaInput.optional(),
   advancePaidPoisha: takaInput.optional(),
 });
 
-export const orderEditorSchema = z.discriminatedUnion('mode', [
-  createOrderFormSchema.extend({ mode: z.literal('new') }),
-  editOrderFormSchema.extend({ mode: z.literal('edit') }),
-]);
-export type OrderEditorValues = z.input<typeof orderEditorSchema>;
-export type OrderEditorInput = z.output<typeof orderEditorSchema>;
+export type EditOrderValues = z.input<typeof editOrderFormSchema>;
+export type OrderEditorValues = CreateOrderValues | EditOrderValues;

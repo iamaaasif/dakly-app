@@ -11,18 +11,7 @@ import {
 
 import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../platform/outbox/outbox.service';
-import type { StageWrite } from './orders.repository';
-
-export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
-  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
-  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
-  to_pack: ['with_courier', 'on_hold', 'cancelled'],
-  with_courier: ['delivered', 'partially_delivered', 'returned'],
-  delivered: ['returned'],
-  partially_delivered: ['returned'],
-  returned: [],
-  cancelled: [],
-};
+import type { OrdersRepository, StageWrite } from './orders.repository';
 
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 
@@ -79,6 +68,16 @@ export function canEditOrder(
 }
 
 const stageSnapshot = z.object({ state: z.enum(orderStages) });
+
+export function orderStageTimes(order: NonNullable<Awaited<ReturnType<OrdersRepository['find']>>>) {
+  return {
+    createdAt: order.createdAt.toISOString(),
+    shippedAt: order.shippedAt?.toISOString() ?? null,
+    deliveredAt: order.deliveredAt?.toISOString() ?? null,
+    returnedAt: order.returnedAt?.toISOString() ?? null,
+    codCollectedAt: order.codCollectedAt?.toISOString() ?? null,
+  };
+}
 
 export async function orderStageHistory(storeId: string, orderId: string, audit: AuditService) {
   const history = await audit.history(storeId, {

@@ -1,8 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import type { ContactListResponse, ContactResponse } from '@dakly/contracts/contacts';
+import type { ContactResponse } from '@dakly/contracts/contacts';
 import type { CreateOrderValues } from '@dakly/contracts/orders';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 import { Button } from '@dakly/ui/button';
@@ -10,26 +9,32 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { useOrderBuyers } from '../api/order-buyers';
 import { useSessionContext } from '@/lib/session-context';
-import { useStoreRequest } from '@/lib/store-request';
 
 export function OrderBuyerFields() {
-  const [selected, setSelected] = useState<ContactResponse | null>(null);
+  const [search, setSearch] = useState('');
   const form = useFormContext<CreateOrderValues>();
   const { data } = useSessionContext();
-  const isBuyer = useWatch({ control: form.control, name: 'recipient.isBuyer' });
+  const [isBuyer, buyer] = useWatch({
+    control: form.control,
+    name: ['recipient.isBuyer', 'buyer'],
+  });
+  const selectedId = buyer && 'contactId' in buyer ? buyer.contactId : undefined;
+  const customers = useOrderBuyers(search.trim());
+  const selected = customers.data?.items.find(({ id }) => id === selectedId);
 
   function populateRecipient(contact: ContactResponse | null) {
     const name = contact ? (contact.name ?? '') : form.getValues('buyer.name');
     const phone = contact
       ? bdMobileSchema.safeParse(contact.phone).data
       : form.getValues('buyer.phone');
-    form.setValue('recipient.name', name);
-    form.setValue('recipient.phone', phone ?? '');
+    const options = { shouldValidate: form.formState.isSubmitted };
+    form.setValue('recipient.name', name, options);
+    form.setValue('recipient.phone', phone ?? '', options);
   }
 
   function choose(contact: ContactResponse | null) {
-    setSelected(contact);
     form.unregister('buyer');
     form.setValue('buyer', contact ? { contactId: contact.id } : { name: '' });
     if (form.getValues('recipient.isBuyer')) populateRecipient(contact);
@@ -37,16 +42,18 @@ export function OrderBuyerFields() {
 
   return (
     <>
-      {selected ? (
+      {selectedId ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-muted p-2">
-          <span>Buyer {selected.name ?? 'Unnamed customer'}</span>
+          <span>Buyer {selected?.name ?? 'Unnamed customer'}</span>
           <Button variant="secondary" onClick={() => choose(null)}>
             Change buyer
           </Button>
         </div>
       ) : (
         <>
-          {data?.currentStore?.canViewCustomers && <BuyerSearch onChoose={choose} />}
+          {data?.currentStore?.canViewCustomers && (
+            <BuyerSearch {...{ search, setSearch, customers }} onChoose={choose} />
+          )}
           <BuyerEntry />
         </>
       )}
@@ -59,7 +66,7 @@ export function OrderBuyerFields() {
             if (different) {
               form.setValue('recipient.name', '');
               form.setValue('recipient.phone', '');
-            } else populateRecipient(selected);
+            } else populateRecipient(selected ?? null);
           }}
         />
         <label htmlFor="different-recipient">Deliver to someone else</label>
@@ -68,21 +75,14 @@ export function OrderBuyerFields() {
   );
 }
 
-function BuyerSearch({ onChoose }: { onChoose: (contact: ContactResponse) => void }) {
-  const [search, setSearch] = useState('');
-  const { contextTag, request } = useStoreRequest();
-  const term = search.trim();
-  const customers = useQuery({
-    queryKey: ['order-buyers', contextTag, term],
-    queryFn: ({ signal }) =>
-      request<ContactListResponse>(
-        `/contacts?${new URLSearchParams({ limit: '20', search: term })}`,
-        { signal },
-      ),
-    enabled: Boolean(contextTag && term.length >= 3),
-    retry: false,
-  });
+type BuyerSearchProps = {
+  search: string;
+  setSearch: (search: string) => void;
+  customers: ReturnType<typeof useOrderBuyers>;
+  onChoose: (contact: ContactResponse) => void;
+};
 
+function BuyerSearch({ search, setSearch, customers, onChoose }: BuyerSearchProps) {
   return (
     <>
       <label className="block">

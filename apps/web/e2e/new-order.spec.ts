@@ -19,17 +19,20 @@ async function capture(page: Page, name: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
-    if (name === 'new' || name === 'edit') {
+    if (name !== 'pipeline') {
+      const dialog = page.getByRole('dialog', {
+        name: name === 'edit' ? 'Edit order' : 'New order',
+      });
+      if (width === 1440)
+        await dialog
+          .locator('form > div.overflow-y-auto')
+          .evaluate((node) => node.scrollTo({ top: 0 }));
       if (width === 360) {
-        await page.getByText('Cash on delivery').scrollIntoViewIfNeeded();
-        await expect(page.getByRole('button', { name: 'Save order' })).toBeInViewport();
+        await dialog.getByText('Cash on delivery').scrollIntoViewIfNeeded();
+        await expect(dialog.getByRole('button', { name: 'Save order' })).toBeInViewport();
       }
       await expect
-        .poll(() =>
-          page
-            .locator('dialog[open]')
-            .evaluate((dialog) => dialog.scrollWidth - dialog.clientWidth),
-        )
+        .poll(() => dialog.evaluate((element) => element.scrollWidth - element.clientWidth))
         .toBe(0);
     }
     await page.screenshot({
@@ -48,10 +51,12 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string; storeIds: string[] };
   const storeId = fixture.storeIds[0]!;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const productId = randomUUID();
+  const productId = `0${randomUUID().slice(1)}`;
+  const otherProducts = Array.from({ length: 50 }, () => `f${randomUUID().slice(1)}`);
   const variantId = randomUUID();
   const zoneId = randomUUID();
   let insertedCounter = false;
+  let existingBuyerId: string | undefined;
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -71,6 +76,12 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await database.pool.query(
       "insert into products (id,store_id,name,price_poisha) values ($1,$2,'Cotton Panjabi',125000)",
       [productId, storeId],
+    );
+    await database.pool.query(
+      `insert into products (id,store_id,name,price_poisha)
+       select id,$1,'Catalogue product ' || number,1000
+       from unnest($2::uuid[]) with ordinality as catalogue(id, number)`,
+      [storeId, otherProducts],
     );
     await database.pool.query(
       "insert into product_variants (id,store_id,product_id,title,on_hand) values ($1,$2,$3,'M',5)",
@@ -100,19 +111,53 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
     await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60');
-    await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
+    const variant = create.getByLabel('Product and variant 1');
+    await expect(variant.getByRole('option', { name: 'Cotton Panjabi · M' })).toHaveCount(0);
+    await create.getByRole('button', { name: 'Load more products' }).click();
+    await variant.selectOption({ label: 'Cotton Panjabi · M' });
+    await expect(variant).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
     const cod = create.getByText(/^Cash on delivery/);
     await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
+    await create.getByRole('button', { name: 'Add product' }).click();
+    await expect(create.getByText('Cash on delivery')).toHaveCount(0);
+    await create.getByRole('button', { name: 'Remove' }).last().click();
+    const search = create.getByLabel('Search products');
+    await search.fill('Missing product');
+    await expect(create.getByText('5 in stock')).toBeVisible();
+    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
+    await search.clear();
     await create.getByLabel('Delivery charge (৳)').fill('90.25');
     await expect(cod.getByText('৳1,340.25', { exact: true })).toBeVisible();
     await capture(page, 'new');
+    let firstKey: string | undefined;
+    let firstBody: string | null;
+    await page.route('**/api/orders', async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') return route.continue();
+      const key = request.headers()['idempotency-key'];
+      if (firstKey) {
+        expect(key).toBe(firstKey);
+        expect(request.postData()).toBe(firstBody);
+        return route.continue();
+      }
+      firstKey = key;
+      firstBody = request.postData();
+      expect(firstKey).toBeTruthy();
+      const saved = await route.fetch();
+      expect(saved.status()).toBe(201);
+      await route.abort();
+    });
     await create.getByRole('button', { name: 'Save order' }).click();
+    await expect(create.getByText('Could not confirm the save')).toBeVisible();
+    await expect(recipientPhone).toBeDisabled();
+    await create.getByRole('button', { name: 'Retry save' }).click();
     const detail = page.getByRole('dialog', { name: /^Order #/ });
     await expect(detail.getByText('Karim Ahmed', { exact: true })).toBeVisible();
     await expect(detail.getByText('Buyer Rahim Ahmed')).toBeVisible();
     await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
     await expect(detail.getByText('৳1,340.25').first()).toBeVisible();
+    await page.unroute('**/api/orders');
 
     await detail.getByRole('button', { name: 'Close', exact: true }).click();
     const storeContext = await context.request.get('/api/me/context');
@@ -123,6 +168,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     });
     expect(buyer.status()).toBe(201);
     const { id: buyerId } = await buyer.json();
+    existingBuyerId = buyerId;
     await page.getByRole('button', { name: 'New order' }).click();
     await create.getByLabel('Find a customer').fill('Sonia Akter');
     await create.getByRole('button', { name: /Sonia Akter/ }).click();
@@ -142,8 +188,17 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Discount (৳)').clear();
     await create.getByLabel('Advance paid (৳)').fill('200');
     await expect(cod.getByText('৳1,110', { exact: true })).toBeVisible();
-    await capture(page, 'new');
+    await capture(page, 'buyer-and-advance');
+    await page.route('**/api/orders', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const saved = await route.fetch();
+      expect(saved.status()).toBe(201);
+      await route.abort();
+      await page.unroute('**/api/orders');
+    });
     await create.getByRole('button', { name: 'Save as confirmed' }).click();
+    await expect(create.getByText('Could not confirm the save')).toBeVisible();
+    await create.getByRole('button', { name: 'Retry save' }).click();
     await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
     await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
       'href',
@@ -152,31 +207,41 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
     await expect(detail.getByText('৳1,110')).toBeVisible();
 
-    await detail.getByRole('button', { name: 'Edit order' }).click();
+    const editButton = detail.getByRole('button', { name: 'Edit order' });
+    await editButton.click();
     const edit = page.getByRole('dialog', { name: 'Edit order' });
-    await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
+    await expect(edit.getByText('Sonia Akter')).toBeVisible();
     await expect(edit.getByText('3 in stock')).toBeVisible();
+    await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
     await edit.getByLabel('Quantity 1').fill('2');
     await expect(
       edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),
     ).toBeVisible();
     await capture(page, 'edit');
-    await edit.getByRole('button', { name: 'Save order', exact: true }).click();
+    await edit.getByRole('button', { name: 'Save order' }).click();
+    await expect(edit).toBeHidden();
+    await expect(editButton).toBeFocused();
     await expect(detail.getByText('৳2,360')).toBeVisible();
-    await expect(detail.getByRole('button', { name: 'Edit order' })).toBeFocused();
   } finally {
-    const orders = await database.pool.query<{ id: string }>(
-      'select id from orders where store_id=$1 and delivery_zone_id=$2',
+    const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(
+      'select id,buyer_contact_id from orders where store_id=$1 and delivery_zone_id=$2',
       [storeId, zoneId],
     );
     const ids = orders.rows.map((order) => order.id);
+    const buyerIds = orders.rows.flatMap(({ buyer_contact_id }) => buyer_contact_id ?? []);
+    if (existingBuyerId) buyerIds.push(existingBuyerId);
     await database.pool.query(
-      "delete from outbox_events where store_id=$1 and (payload->>'orderId' = any($2::text[]) or payload->>'variantId'=$3)",
-      [storeId, ids, variantId],
+      `delete from outbox_events where store_id=$1 and
+       (payload->>'orderId' = any($2::text[]) or payload->>'variantId'=$3 or payload->>'contactId' = any($4::text[]))`,
+      [storeId, ids, variantId, buyerIds],
     );
     await database.pool.query('delete from orders where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       ids,
+    ]);
+    await database.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
+      storeId,
+      buyerIds,
     ]);
     await database.pool.query('delete from stock_movements where store_id=$1 and variant_id=$2', [
       storeId,
@@ -186,9 +251,9 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       storeId,
       variantId,
     ]);
-    await database.pool.query('delete from products where store_id=$1 and id=$2', [
+    await database.pool.query('delete from products where store_id=$1 and id=any($2::uuid[])', [
       storeId,
-      productId,
+      [productId, ...otherProducts],
     ]);
     await database.pool.query('delete from delivery_zones where store_id=$1 and id=$2', [
       storeId,

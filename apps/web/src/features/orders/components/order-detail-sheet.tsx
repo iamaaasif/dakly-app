@@ -1,4 +1,4 @@
-import { useContext, useRef, useState, type RefObject } from 'react';
+import { useContext, useRef, type RefObject } from 'react';
 
 import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
@@ -9,24 +9,17 @@ import { useOrderStage } from '../api/change-order-stage';
 import { useOrder } from '../api/get-order';
 import { canConfirmOrder, canEditOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
+import { EditOrderDialog } from './edit-order-dialog';
 import { OrderDetails } from './order-details';
-import { OrderEditorDialog } from './order-editor-dialog';
-import {
-  OrderStageActions,
-  orderStageActions,
-  type StageAction,
-  type StageFormAction,
-} from './order-stage-actions';
+import { orderStageActions, stageActionLabels, type StageAction } from './order-stage-actions';
 import { OrderStageDialog } from './order-stage-dialog';
 import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
-type OrderDrawerAction = StageFormAction | 'edit';
+type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'restoreFocusTo'>;
 
-type OrderDetailSheetProps = { id: string } & Pick<SheetProps, 'onClose' | 'fallbackFocus'>;
-
-export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailSheetProps) {
+export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailSheetProps) {
   const query = useOrder(id);
   const order = query.data;
   const blocked = useContext(SessionInteraction);
@@ -35,90 +28,25 @@ export function OrderDetailSheet({ id, onClose, fallbackFocus }: OrderDetailShee
   const stage = useRef<HTMLSpanElement>(null);
   const canEdit = data?.currentStore?.canEditOrders;
   const canConfirm = canConfirmOrder(order, canEdit);
-  const actions = orderStageActions(order, canEdit);
   const editable = canEditOrder(order, canEdit);
-  const form = useStageForm(actions, stage, editable);
+  const actions = orderStageActions(order, canEdit);
 
   return (
-    <>
-      <Sheet
-        {...orderHeading(order)}
-        open={!blocked && !form.action}
-        onClose={onClose}
-        onOpenAutoFocus={form.restoreFocus}
-        fallbackFocus={fallbackFocus}
-        footer={
-          canConfirm || actions.length || editable ? (
-            <OrderStageFooter
-              {...{ id, transition, stage, canConfirm, actions }}
-              onForm={form.open}
-              onEdit={editable ? () => form.open('edit') : undefined}
-            />
-          ) : undefined
-        }
-      >
-        <OrderDetailContent query={query} stage={stage} />
-      </Sheet>
-      <OrderDrawerForm order={order} action={form.action} onClose={form.close} />
-    </>
+    <Sheet
+      {...orderHeading(order)}
+      open={!blocked}
+      onClose={onClose}
+      restoreFocusTo={restoreFocusTo}
+      footer={
+        order &&
+        (canConfirm || actions.length > 0 || editable) && (
+          <OrderStageFooter {...{ order, transition, stage, canConfirm, actions, editable }} />
+        )
+      }
+    >
+      <OrderDetailContent query={query} stage={stage} />
+    </Sheet>
   );
-}
-
-function useStageForm(
-  actions: readonly StageAction[],
-  stage: RefObject<HTMLSpanElement | null>,
-  editable: boolean,
-) {
-  const [action, setAction] = useState<OrderDrawerAction>();
-  const previous = useRef<OrderDrawerAction | undefined>(undefined);
-
-  function open(next: OrderDrawerAction) {
-    previous.current = next;
-    setAction(next);
-  }
-
-  function restoreFocus(event: Event) {
-    const previousAction = previous.current;
-    if (!previousAction) return;
-    previous.current = undefined;
-    const drawer = stage.current?.closest('[role="dialog"]');
-    const target =
-      drawer?.querySelector<HTMLButtonElement>(`[data-order-action="${previousAction}"]`) ??
-      stage.current;
-    if (target) {
-      event.preventDefault();
-      target.focus();
-    }
-  }
-
-  return {
-    action: availableOrderAction(action, actions, editable),
-    open,
-    close: () => setAction(undefined),
-    restoreFocus,
-  };
-}
-
-function availableOrderAction(
-  action: OrderDrawerAction | undefined,
-  allowed: readonly StageAction[],
-  editable: boolean,
-) {
-  if (action === 'edit') return editable ? action : undefined;
-  return action && allowed.includes(action) ? action : undefined;
-}
-
-type OrderDrawerFormProps = {
-  order?: OrderDetail;
-  action?: OrderDrawerAction;
-  onClose: () => void;
-};
-
-function OrderDrawerForm({ order, action, onClose }: OrderDrawerFormProps) {
-  if (!order || !action) return null;
-  if (action === 'edit')
-    return <OrderEditorDialog order={order} onClose={onClose} onSaved={onClose} />;
-  return <OrderStageDialog order={order} action={action} onClose={onClose} />;
 }
 
 function OrderDetailContent({
@@ -159,28 +87,20 @@ function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'descript
 }
 
 type OrderStageFooterProps = {
-  id: string;
+  order: OrderDetail;
   transition: ReturnType<typeof useOrderStage>;
   stage: RefObject<HTMLSpanElement | null>;
   canConfirm: boolean;
   actions: readonly StageAction[];
-  onForm: (action: StageFormAction) => void;
-  onEdit?: () => void;
+  editable: boolean;
 };
 
-function OrderStageFooter({
-  id,
-  transition,
-  stage,
-  canConfirm,
-  actions,
-  onForm,
-  onEdit,
-}: OrderStageFooterProps) {
+function OrderStageFooter(props: OrderStageFooterProps) {
+  const { order, transition, stage, canConfirm, actions, editable } = props;
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
     const drawer = button.closest('[role="dialog"]');
     transition.mutate(
-      { id, body: change },
+      { id: order.id, body: change },
       {
         onSuccess: () => {
           const focused = document.activeElement;
@@ -192,40 +112,43 @@ function OrderStageFooter({
   }
 
   return (
-    <>
+    <div className="flex flex-wrap gap-2">
       {transition.error && (
-        <p role="alert" className="mb-2 text-danger">
+        <p role="alert" className="w-full text-danger">
           {transition.error.message}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
-        {canConfirm && (
+      {canConfirm && (
+        <Button
+          className="w-full"
+          disabled={transition.isPending}
+          onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+        >
+          Mark confirmed
+        </Button>
+      )}
+      {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
+      {actions.map((action, index) =>
+        action === 'to_confirm' || action === 'delivered' ? (
           <Button
-            className="w-full"
+            key={action}
+            variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
             disabled={transition.isPending}
-            onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
+            onClick={(event) => changeStage({ to: action }, event.currentTarget)}
           >
-            Mark confirmed
+            {stageActionLabels[action]}
           </Button>
-        )}
-        {onEdit && (
-          <Button
-            data-order-action="edit"
-            variant="secondary"
-            onClick={onEdit}
+        ) : (
+          <OrderStageDialog
+            key={action}
+            order={order}
+            action={action}
+            stage={stage}
+            primary={!canConfirm && index === 0}
             disabled={transition.isPending}
-          >
-            Edit order
-          </Button>
-        )}
-        <OrderStageActions
-          actions={actions}
-          pending={transition.isPending}
-          hasPrimary={canConfirm}
-          onChange={changeStage}
-          onForm={onForm}
-        />
-      </div>
-    </>
+          />
+        ),
+      )}
+    </div>
   );
 }
