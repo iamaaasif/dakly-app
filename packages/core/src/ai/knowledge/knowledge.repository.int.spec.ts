@@ -213,6 +213,52 @@ describe('KnowledgeRepository', () => {
       status: 'processing',
     });
   });
+
+  it('merges text and vector ranks without returning another store or embedding model', async () => {
+    const embedding = [1, 0, ...Array.from({ length: 510 }, () => 0)];
+    const closer = embedding;
+    const farther = [0, 1, ...Array.from({ length: 510 }, () => 0)];
+    const create = async (
+      storeId: string,
+      answer: string,
+      vector: number[],
+      embeddingModel: string,
+    ) => {
+      const item = await repository.create(storeId, fixture.userA, { kind: 'policy', answer }, now);
+      await repository.finishIndex(storeId, item.id, item.updatedAt, {
+        chunks: [
+          {
+            content: answer,
+            embedding: vector,
+            embeddingModel,
+            tokenCount: 5,
+          },
+        ],
+      });
+      return item.id;
+    };
+    const closest = await create(fixture.a, 'Warranty and returns', closer, 'current');
+    const matching = await create(fixture.a, 'ঢাকা delivery', farther, 'current');
+    await create(fixture.a, 'ঢাকা delivery', closer, 'old');
+    await create(fixture.b, 'ঢাকা delivery', closer, 'current');
+
+    const rejected = await createFile('text/plain', Buffer.from('ঢাকা'));
+    await repository.finishIndex(fixture.a, rejected.id, rejected.updatedAt, {
+      chunks: [{ content: 'ঢাকা', embedding: closer, embeddingModel: 'current', tokenCount: 5 }],
+    });
+    await fixture.connection.pool.query("update files set status='rejected' where id=$1", [
+      rejected.fileId,
+    ]);
+
+    const hits = await repository.search(fixture.a, {
+      query: 'ঢাকা',
+      embedding,
+      model: 'current',
+      limit: 10,
+    });
+    expect(hits.map((hit) => hit.itemId)).toEqual([matching, closest]);
+    expect(hits[0]?.content).toBe('ঢাকা delivery');
+  });
 });
 
 function pdfWithText(pages: number, text: string): Buffer {

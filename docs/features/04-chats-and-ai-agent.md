@@ -397,6 +397,11 @@ driver uses a fixed vector by default so local indexing needs no vendor key.
 A change marks the item processing and queues a new index. The job only
 replaces chunks if the item still has the revision the job read.
 
+Knowledge search embeds the query with the configured model, then combines the
+exact vector rank and Postgres full-text rank with reciprocal rank fusion.
+Search returns passages from active items in the same store and embedding model.
+It skips items whose file was rejected.
+
 ### Data
 
 `conversations` (with `version` for the AI write check), `messages`, `social_comments`, `saved_replies`, `ai_agent_settings` (go-live test questions included), `ai_rule_changes` (before and after of every taught rule or settings save, for undo), `knowledge_items`, `knowledge_chunks` (pgvector, 512 dimensions, exact scan per store, with the embedding model), `ai_runs` (partitioned by month, kept 13 months), `assistant_messages`; customer memory is `contact_memories` in Customers. Its progress belongs to each conversation: `memory_built_through_message_id`, its paired `memory_built_through_message_at`, and `memory_version`. `contact_memories.version` guards concurrent changes across conversations and staff edits; `cleared_at` prevents old evidence from repopulating cleared memory. Photo questions compare a vision-tier description of the customer's photo, embedded, against `products.image_embedding`. Usage goes to `usage_events`. Full design: [docs/data](../data/README.md).
