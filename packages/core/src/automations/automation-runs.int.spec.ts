@@ -20,6 +20,8 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { SendingRepository } from '../sending/sending.repository';
+import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
 import { WakeDueRunsJob } from './jobs/wake-due-runs.job';
@@ -135,7 +137,7 @@ async function dueRuns(
 
 async function run(runId: string) {
   const result = await admin.pool.query(
-    'select status,current_step_key,wake_at,claimed_at,attempts from automation_runs where id=$1',
+    'select status,exit_reason,current_step_key,wake_at,claimed_at,attempts from automation_runs where id=$1',
     [runId],
   );
   return result.rows[0];
@@ -751,6 +753,78 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       });
       expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+    });
+
+    it('releases credits and leaves the cap free when sender preparation fails', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const first = await dueRuns(send('marketing'), 1, 'active', contact);
+      const hook = vi
+        .spyOn(SmsSendersService.prototype, 'approvedSenderName')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+      try {
+        await runDueStep(runner, first.runIds[0]!);
+        expect(sentFor(first.runIds[0]!)).toEqual([]);
+        expect(await sendStep(first.runIds[0]!)).toEqual([
+          expect.objectContaining({ outcome: 'failed' }),
+        ]);
+        expect(await ledgerFor(first.runIds[0]!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+        ]);
+        const second = await dueRuns(send('marketing'), 1, 'active', contact);
+        await runDueStep(runner, second.runIds[0]!);
+        expect(sentFor(second.runIds[0]!)).toHaveLength(1);
+      } finally {
+        hook.mockRestore();
+      }
+    });
+
+    it('exits without reserving when the goal is reached during the send-lock wait', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const automationId = await workflow('active');
+      const graph = {
+        ...graphWith(send('marketing')),
+        goal: { kind: 'got_tag', tag: 'ordered' },
+      } as const;
+      const versionId = await publish(automationId, 1, graph);
+      const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
+      await runner.sweep();
+      const jobs = await runner.queue.getJobs(['waiting']);
+      const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
+      let reached!: () => void;
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const continueSend = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const originalLock = SendingRepository.prototype.lockContact;
+      const hook = vi
+        .spyOn(SendingRepository.prototype, 'lockContact')
+        .mockImplementationOnce(async function (store, id) {
+          reached();
+          await continueSend;
+          return originalLock.call(this, store, id);
+        });
+      const pending = runner.runStep(job.data as StepJobData);
+      try {
+        await blocked;
+        await admin.pool.query("update contacts set tags=array['ordered'] where id=$1", [contact]);
+        release();
+        await pending;
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({ status: 'exited', exit_reason: 'goal' });
+      } finally {
+        release();
+        await pending;
+        hook.mockRestore();
+        await job.remove();
+      }
     });
 
     it('counts an accepted send with a lost answer toward the marketing cap', async () => {

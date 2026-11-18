@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
@@ -38,6 +36,7 @@ import {
   messageBody,
   noCredits,
   operationKey,
+  randomPath,
   type RunFacts,
   type SendStep,
   type StepResult,
@@ -126,6 +125,7 @@ export class AutomationRunsService {
     if (held) return held;
     const facts: RunFacts = {
       storeId,
+      graph: run.graph,
       runId: claim.runId,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
@@ -267,6 +267,8 @@ export class AutomationRunsService {
         channel: 'sms',
         category: step.category,
       });
+      const exitReason = await this.refreshExitReason(facts, at);
+      if (exitReason) return { exitReason, at };
       if (decision.action !== 'send') return { decision };
       const body = await this.writeSend({ storeId, claim, contactId, step }, at);
       if (body === undefined) return { decision: noCredits };
@@ -274,6 +276,8 @@ export class AutomationRunsService {
     });
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') return this.heldOrStale(storeId, claim, now);
+    if ('exitReason' in started)
+      return { ...exited(started.exitReason, started.at), claim: renewed };
     const { decision } = started;
     if ('body' in started)
       return this.deliver(
@@ -296,6 +300,18 @@ export class AutomationRunsService {
         step: { ...row, outcome: 'skipped', skipReason: decision.reason },
       };
     return undefined;
+  }
+
+  private async refreshExitReason(facts: RunFacts, at: Date) {
+    return this.exitReason(
+      facts.graph,
+      {
+        ...facts,
+        tags: await this.contacts.findTags(facts.storeId, facts.contactId),
+        tappedStepKeys: await this.repository.listTappedStepKeys(facts.storeId, facts.runId),
+      },
+      at,
+    );
   }
 
   private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
@@ -431,15 +447,6 @@ function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   if (exit.kind === 'got_tag') return facts.tags.includes(exit.tag);
   if (exit.kind === 'tapped_link') return facts.tappedStepKeys.length > 0;
   return false;
-}
-
-// A hash of the run and the step, so a retry takes the same path and two splits are independent.
-// The graph schema makes the percents add up to 100, so the last path takes the rest.
-function randomPath(runId: string, stepKey: string, paths: { percent: number; next: string }[]) {
-  const bucket = createHash('sha256').update(`${runId}:${stepKey}`).digest().readUInt32BE(0) % 100;
-  let upTo = 0;
-  const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
-  return { outcome: `path_${index + 1}`, next: paths[index]!.next };
 }
 
 function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {

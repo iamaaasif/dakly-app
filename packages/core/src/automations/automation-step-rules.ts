@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
+
 import type { AutomationExitReason } from '@dakly/contracts/automations';
-import type { AutomationStep } from '@dakly/contracts/automations/graph';
+import type { AutomationStep, AutomationGraph } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { SendDecision } from '../sending/send-policy.service';
@@ -17,6 +19,7 @@ const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
 export type RunFacts = {
+  graph: AutomationGraph;
   storeId: string;
   runId: string;
   contactId: string;
@@ -36,6 +39,7 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
+  | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }
   | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
@@ -113,4 +117,17 @@ export function exited(exitReason: AutomationExitReason, now: Date) {
 
 export function failed(reason: string, now: Date) {
   return { run: { status: 'failed', lastError: reason, finishedAt: now } } as const;
+}
+
+// A hash of the run and the step, so a retry takes the same path and two splits are independent.
+// The graph schema makes the percents add up to 100, so the last path takes the rest.
+export function randomPath(
+  runId: string,
+  stepKey: string,
+  paths: { percent: number; next: string }[],
+) {
+  const bucket = createHash('sha256').update(`${runId}:${stepKey}`).digest().readUInt32BE(0) % 100;
+  let upTo = 0;
+  const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
+  return { outcome: `path_${index + 1}`, next: paths[index]!.next };
 }
