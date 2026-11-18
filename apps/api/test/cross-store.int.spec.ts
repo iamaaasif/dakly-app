@@ -279,6 +279,13 @@ fixture('POST /delivery-zones/initialize-defaults', async () => {
     before = await f.row('delivery_zones', id);
   const result = await success(b, 'POST', '/delivery-zones/initialize-defaults', 201);
   expect(result.json().items).toHaveLength(3);
+  expect(result.json().items).toContainEqual(
+    expect.objectContaining({
+      name: 'Dhaka suburbs',
+      chargePoisha: 10000,
+      bdAreaIds: [303, 309, 30260072],
+    }),
+  );
   for (const zone of result.json().items)
     expect((await f.row('delivery_zones', zone.id)).store_id).toBe(b.id);
   expect(await f.row('delivery_zones', id)).toEqual(before);
@@ -323,9 +330,19 @@ for (const method of ['PATCH', 'DELETE'] as const)
 fixture('GET /areas', async () => {
   const { a, b } = await pair();
   const own = (await success(a, 'GET', '/areas?parentId=3', 200)).json();
-  expect(own.items.map((area: { id: number }) => area.id)).toContain(301);
+  expect(own.items).toContainEqual(
+    expect.objectContaining({ id: 301, nameBn: 'ঢাকা', kind: 'district' }),
+  );
   expect((await success(b, 'GET', '/areas?parentId=3', 200)).json()).toEqual(own);
   expect((await f.request(b.member, 'GET', '/areas?parentId=3')).statusCode).toBe(200);
+  const upazilas = (await success(a, 'GET', '/areas?parentId=301', 200)).json();
+  expect(upazilas.items).toContainEqual({
+    id: 30260072,
+    kind: 'upazila',
+    parentId: 301,
+    name: 'Savar',
+    nameBn: 'সাভার',
+  });
 });
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
