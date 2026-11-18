@@ -60,13 +60,16 @@ describe('MailpitSmsDriver (SMTP and API)', () => {
       expect((await captures()).map(({ ID }) => ID)).toEqual([receipts[0]?.providerMessageId]);
       expect(await driver.send(message)).toEqual(receipts[0]);
     } finally {
-      const response = await fetch(`${apiUrl}/api/v1/messages`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ IDs: (await captures()).map(({ ID }) => ID) }),
-        signal: AbortSignal.timeout(5000),
-      });
-      expect(response.ok).toBe(true);
+      const ids = (await captures()).map(({ ID }) => ID);
+      if (ids.length) {
+        const response = await fetch(`${apiUrl}/api/v1/messages`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ IDs: ids }),
+          signal: AbortSignal.timeout(5000),
+        });
+        expect(response.ok).toBe(true);
+      }
     }
   });
 });

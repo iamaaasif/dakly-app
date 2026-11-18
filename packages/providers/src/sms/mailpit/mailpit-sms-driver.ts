@@ -7,6 +7,7 @@ const SHARED_FROM = 'dakly@sms.dakly.test';
 export class MailpitSmsDriver implements SmsDriver {
   private readonly transport;
   private readonly apiUrl: string;
+  private readonly pending = new Map<string, Promise<SmsSendResult>>();
 
   constructor({ apiUrl, ...options }: { host: string; port: number; apiUrl: string }) {
     this.apiUrl = apiUrl;
@@ -23,7 +24,17 @@ export class MailpitSmsDriver implements SmsDriver {
     });
   }
 
-  async send(message: SmsMessage): Promise<SmsSendResult> {
+  send(message: SmsMessage): Promise<SmsSendResult> {
+    const { idempotencyKey } = message;
+    if (!idempotencyKey) return this.sendOnce(message);
+    const pending = this.pending.get(idempotencyKey);
+    if (pending) return pending;
+    const sending = this.sendOnce(message).finally(() => this.pending.delete(idempotencyKey));
+    this.pending.set(idempotencyKey, sending);
+    return sending;
+  }
+
+  private async sendOnce(message: SmsMessage): Promise<SmsSendResult> {
     const messageId = message.idempotencyKey && `${message.idempotencyKey}@sms.dakly.test`;
     const earlier =
       messageId &&
