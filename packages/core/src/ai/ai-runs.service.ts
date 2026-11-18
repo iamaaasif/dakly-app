@@ -128,11 +128,11 @@ export class AiRunsService {
     try {
       model = await this.driver.respond(request);
     } catch (error) {
-      const failure = error instanceof LlmError ? error : new LlmError('LLM_REQUEST_FAILED');
-      if (providerFailures.has(failure.code)) await this.gate.recordFailure();
+      if (!(error instanceof LlmError)) throw error;
+      if (providerFailures.has(error.code)) await this.gate.recordFailure();
       return {
-        result: { kind: 'failure', code: failure.code },
-        usage: failure.usage ?? emptyUsage,
+        result: { kind: 'failure', code: error.code },
+        usage: error.usage ?? emptyUsage,
         model: request.model,
       };
     }
@@ -143,8 +143,8 @@ export class AiRunsService {
         model: model.model,
       };
     }
-    const parsed = await request.output.safeParseAsync(model.output).catch(() => undefined);
-    const result: AttemptResult<T> = parsed?.success
+    const parsed = await request.output.safeParseAsync(model.output);
+    const result: AttemptResult<T> = parsed.success
       ? { kind: 'output', output: parsed.data }
       : { kind: 'failure', code: 'AI_OUTPUT_MISMATCH' };
     return { result, usage: model.usage, model: model.model };

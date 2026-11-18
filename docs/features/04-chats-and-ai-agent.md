@@ -342,7 +342,7 @@ outcome in `ai_runs`. A schema mismatch gets one retry within the 20-second
 model budget. The service returns the parsed output, tool calls or a typed
 failure.
 
-Content Studio and Ask Dakly can supply a usage reference. The service consumes
+Content Studio and Ask Dakly supply a usage reference. The service consumes
 one unit after a schema-valid result, and the same reference makes a retry
 free. Chats checks its allowance before any model work and consumes the
 conversation unit when it saves the outgoing AI reply, using the contact and
@@ -350,7 +350,9 @@ window as the reference.
 
 Valkey allows up to three calls at a time per store. Three provider errors
 within one minute pause new calls for two minutes across stores. Customer
-refusals and caller cancellations do not count as provider errors.
+refusals and caller cancellations do not count as provider errors. BullMQ delays
+and retries jobs that receive `AI_STORE_BUSY` or `AI_PAUSED` so they never spin
+in-process.
 
 ### Rules
 
