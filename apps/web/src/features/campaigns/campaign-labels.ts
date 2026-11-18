@@ -1,4 +1,4 @@
-import type { CampaignChannel, CampaignStatus } from '@dakly/contracts/campaigns';
+import type { CampaignChannel, CampaignGoal, CampaignStatus } from '@dakly/contracts/campaigns';
 import type { BadgeProps } from '@dakly/ui/badge';
 
 export const campaignChannelLabels: Record<CampaignChannel, string> = {
@@ -27,4 +27,17 @@ export const campaignStatusColors: Record<CampaignStatus, BadgeProps['variant']>
   sent: 'success',
   cancelled: 'neutral',
   failed: 'danger',
+};
+
+export const campaignGoalLabels: Record<CampaignGoal, string> = {
+  win_back: 'Win back customers',
+  repeat_purchase: 'Increase repeat purchases',
+  new_collection: 'Promote a new collection',
+  vip_offer: 'Offer for VIP customers',
+  discount: 'Announce a discount',
+  clearance: 'Clearance',
+  best_sellers: 'Promote best sellers',
+  welcome: 'Welcome new customers',
+  seasonal: 'Seasonal campaign',
+  from_scratch: 'Start from scratch',
 };

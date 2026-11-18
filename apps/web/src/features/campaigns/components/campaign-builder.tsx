@@ -3,14 +3,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useRef } from 'react';
-import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
 
 import {
   campaignGoals,
   createCampaignSchema,
-  type CampaignGoal,
   type CampaignResponse,
 } from '@dakly/contracts/campaigns';
 import { Badge } from '@dakly/ui/badge';
@@ -21,6 +19,7 @@ import { Input } from '@dakly/ui/input';
 import { useSaveCampaign } from '../api/save-campaign';
 import {
   campaignChannelLabels,
+  campaignGoalLabels,
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
@@ -30,19 +29,6 @@ import { useSessionContext } from '@/lib/session-context';
 const detailsSchema = createCampaignSchema.pick({ name: true, goal: true });
 type DetailsInput = z.input<typeof detailsSchema>;
 type Details = z.output<typeof detailsSchema>;
-
-const goals: Record<CampaignGoal, string> = {
-  win_back: 'Win back customers',
-  repeat_purchase: 'Increase repeat purchases',
-  new_collection: 'Promote a new collection',
-  vip_offer: 'Offer for VIP customers',
-  discount: 'Announce a discount',
-  clearance: 'Clearance',
-  best_sellers: 'Promote best sellers',
-  welcome: 'Welcome new customers',
-  seasonal: 'Seasonal campaign',
-  from_scratch: 'Start from scratch',
-};
 
 export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
   const { data } = useSessionContext();
@@ -62,32 +48,18 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
 
 function BuilderHeader({ title, editable }: { title: string; editable: boolean }) {
   return (
-    <header className="flex items-start gap-3">
-      <div className="min-w-0">
-        <h1 className="text-xl font-bold break-words">{title}</h1>
-        <p className="mt-1 text-text-muted">
-          {editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
-        </p>
-      </div>
+    <header className="min-w-0">
+      <h1 className="text-xl font-bold break-words">{title}</h1>
+      <p className="mt-1 text-text-muted">
+        {editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
+      </p>
     </header>
   );
-}
-
-function detailChanges(
-  input: Details,
-  defaults: Details,
-  dirty: Partial<Record<keyof DetailsInput, boolean>>,
-): Partial<Details> {
-  return {
-    ...(dirty.name && input.name !== defaults.name && { name: input.name }),
-    ...(dirty.goal && input.goal !== defaults.goal && { goal: input.goal }),
-  };
 }
 
 function useCampaignDetailsForm(campaign?: CampaignResponse) {
   const save = useSaveCampaign();
   const router = useRouter();
-  const requestInFlight = useRef(false);
   const values = { name: campaign?.name ?? '', goal: campaign?.goal ?? null };
   const form = useForm<DetailsInput, unknown, Details>({
     resolver: zodResolver(detailsSchema, {
@@ -100,39 +72,31 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
     values,
     resetOptions: { keepDirtyValues: true, keepErrors: true },
   });
-  const { dirtyFields } = form.formState;
-  const [name, goal] = useWatch({ control: form.control, name: ['name', 'goal'] });
-  const hasEdits = name !== values.name || (goal ?? null) !== values.goal;
+  const { dirtyFields, isDirty } = form.formState;
+  const opening = !campaign && save.isSuccess;
   const submit = form.handleSubmit((input) => {
-    if (requestInFlight.current) return;
-    const change = detailChanges(input, values, dirtyFields);
-    if (campaign && !Object.keys(change).length) {
-      form.reset(input);
-      return;
-    }
+    if (save.isPending || opening) return;
+    const change = {
+      ...(dirtyFields.name && { name: input.name }),
+      ...(dirtyFields.goal && { goal: input.goal }),
+    };
+    if (campaign && !Object.keys(change).length) return;
     const request = campaign
       ? { id: campaign.id, input: change }
       : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) };
-    requestInFlight.current = true;
     save.mutate(request, {
       onSuccess: (saved) => {
-        if (campaign) {
-          form.reset({ name: saved.name, goal: saved.goal });
-          requestInFlight.current = false;
-        } else router.replace(`/campaigns/${saved.id}`);
-      },
-      onError: () => {
-        requestInFlight.current = false;
+        if (campaign) form.reset({ name: saved.name, goal: saved.goal });
+        else router.replace(`/campaigns/${saved.id}`);
       },
     });
   });
-  return { form, submit, save, hasEdits };
+  return { form, submit, save, isDirty, opening };
 }
 
 function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
-  const { form, submit, save, hasEdits } = useCampaignDetailsForm(campaign);
-  const opening = !campaign && save.isSuccess;
-  const saved = save.isSuccess && !hasEdits;
+  const { form, submit, save, isDirty, opening } = useCampaignDetailsForm(campaign);
+  const saved = save.isSuccess && !isDirty;
   return (
     <FormProvider {...form}>
       <form
@@ -151,7 +115,7 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
         <Button
           type="submit"
           loading={save.isPending}
-          disabled={opening || Boolean(campaign && !hasEdits)}
+          disabled={opening || Boolean(campaign && !isDirty)}
         >
           {campaign ? 'Save draft' : 'Create SMS draft'}
         </Button>
@@ -184,7 +148,7 @@ function CampaignFields() {
             <option value="">Choose a goal</option>
             {campaignGoals.map((goal) => (
               <option key={goal} value={goal}>
-                {goals[goal]}
+                {campaignGoalLabels[goal]}
               </option>
             ))}
           </select>
@@ -211,7 +175,7 @@ function CampaignSummary({ campaign }: { campaign: CampaignResponse }) {
         {campaign.goal && (
           <div>
             <dt className="text-sm text-text-muted">Goal</dt>
-            <dd>{goals[campaign.goal]}</dd>
+            <dd>{campaignGoalLabels[campaign.goal]}</dd>
           </div>
         )}
         {campaign.scheduledFor && (
