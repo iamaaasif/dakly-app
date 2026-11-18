@@ -5,7 +5,6 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { KnowledgeService } from '@dakly/core/ai/knowledge/knowledge.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -1517,7 +1516,6 @@ describe('every production shop route isolates its data', () => {
   let logs: ReturnType<typeof captureRequestLogs>;
   beforeEach(() => logs.beginTest());
   beforeAll(async () => {
-    vi.stubEnv('LLM_DRIVER', 'fake');
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
     const adapter = new FastifyAdapter(createHttpServer(loadEnv().API_TRUSTED_PROXIES));
     adapter.getInstance().addHook('onRoute', (route) => {
@@ -1569,11 +1567,6 @@ describe('every production shop route isolates its data', () => {
         district,
       });
     }
-  });
-  it('can start knowledge search from the API with the fake model', async () => {
-    const { a } = await pair();
-    const service = app.get(KnowledgeService);
-    await expect(service.search(a.id, 'ঢাকা', 3)).resolves.toEqual([]);
   });
   it('uses the non-owner app role without bypassing row security', async () => {
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);

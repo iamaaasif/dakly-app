@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { LazyModuleLoader, type ModuleRef } from '@nestjs/core';
 
 import type {
   ChangeKnowledgeItemInput,
@@ -17,24 +16,19 @@ import { newId } from '../../platform/database/new-id';
 import { StoreTransaction } from '../../platform/database/store-transaction';
 import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../../platform/outbox/outbox.service';
-import { AiModule } from '../ai.module';
-import { AiService } from '../ai.service';
 import { knowledgeError } from './knowledge.errors';
-import { KnowledgeRepository, type KnowledgeHit, type KnowledgeItem } from './knowledge.repository';
+import { KnowledgeRepository, type KnowledgeItem } from './knowledge.repository';
 
 type UserActor = { kind: 'user'; userId: string };
 
 @Injectable()
 export class KnowledgeService {
-  private aiModule?: Promise<ModuleRef>;
-
   constructor(
     @Inject(KnowledgeRepository) private readonly repository: KnowledgeRepository,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
-    @Inject(LazyModuleLoader) private readonly modules: LazyModuleLoader,
   ) {}
 
   async requestUpload(
@@ -104,18 +98,6 @@ export class KnowledgeService {
     if (!(await this.repository.remove(storeId, itemId))) {
       throw knowledgeError('KNOWLEDGE_ITEM_NOT_FOUND');
     }
-  }
-
-  async search(storeId: string, query: string, limit: number): Promise<KnowledgeHit[]> {
-    // Item routes can boot on an API process that does not run AI.
-    this.aiModule ??= this.modules.load(() => AiModule);
-    const ai = (await this.aiModule).get(AiService);
-    const {
-      embeddings: [embedding],
-      model,
-    } = await ai.embed(storeId, [query]);
-    if (!embedding) throw new Error('Embedding result is missing a vector');
-    return this.repository.search(storeId, { query, embedding, model, limit });
   }
 
   private async requireFile(storeId: string, fileId: string): Promise<void> {
