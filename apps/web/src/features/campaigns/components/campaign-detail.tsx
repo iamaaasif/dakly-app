@@ -29,7 +29,11 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           Campaign not found
         </p>
       )}
-      {campaign.data && <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />}
+      {campaign.data && (
+        <div hidden={campaign.isError}>
+          <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />
+        </div>
+      )}
     </StorePage>
   );
 }

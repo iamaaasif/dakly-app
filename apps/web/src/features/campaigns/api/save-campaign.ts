@@ -45,7 +45,7 @@ export function useSaveCampaign() {
       if (current?.status === 'draft' && current !== snapshot?.before) {
         // The overlapping read could precede or follow the commit. Load the current draft
         // before showing a saved state. A failed refresh leaves the detail available to retry.
-        await client.resetQueries({ queryKey: detail, exact: true, type: 'active' });
+        await client.invalidateQueries({ queryKey: detail, exact: true });
       } else if (
         current === snapshot?.before &&
         (current === undefined || current?.status === 'draft')
@@ -59,6 +59,9 @@ export function useSaveCampaign() {
   return {
     ...save,
     isSaving: () => client.isMutating({ mutationKey, exact: true }) > 0,
-    getCachedCampaign,
+    getCachedCampaign: (id: string) =>
+      client.getQueryState(campaignKeys.detail(contextTag, id))?.status === 'success'
+        ? getCachedCampaign(id)
+        : undefined,
   };
 }

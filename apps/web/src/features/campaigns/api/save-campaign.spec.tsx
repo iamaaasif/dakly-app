@@ -117,16 +117,22 @@ it.each([true, false])(
     vi.stubGlobal('fetch', fetch);
     try {
       await act(async () => {
-        const pending = result.current.mutateAsync({ id, input: { name: saved.name } });
+        let settled = false;
+        const pending = result.current.mutateAsync({ id, input: { name: saved.name } }).then(() => {
+          settled = true;
+        });
         await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
         client.setQueryData(queryKey, { ...original, goal: 'win_back' });
         releaseSave(Response.json(saved, { headers: { 'x-session-context': contextTag } }));
         await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
-        expect(client.getQueryData(queryKey)).toBeUndefined();
+        expect(settled).toBe(false);
+        expect(client.getQueryData(queryKey)).toEqual({ ...original, goal: 'win_back' });
         finishRead();
         await pending;
       });
-      expect(client.getQueryData(queryKey)).toEqual(readSucceeds ? authoritative : undefined);
+      expect(result.current.getCachedCampaign(id)).toEqual(
+        readSucceeds ? authoritative : undefined,
+      );
       expect(observer.getCurrentResult().status).toBe(readSucceeds ? 'success' : 'error');
     } finally {
       unsubscribe();
