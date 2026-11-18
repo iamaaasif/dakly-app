@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
+import { ApiError } from '@dakly/ui/api-client';
 
 import { campaignKeys } from './campaigns-key';
 import { useSessionContext } from '@/lib/session-context';
@@ -13,5 +14,7 @@ export function useCampaign(campaignId: string) {
     queryKey: campaignKeys.detail(contextTag, campaignId),
     queryFn: ({ signal }) => request<CampaignResponse>(`/campaigns/${campaignId}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewCampaigns),
+    retry: (failureCount, error) =>
+      failureCount < 3 && !(error instanceof ApiError && error.code === 'CAMPAIGN_NOT_FOUND'),
   });
 }
