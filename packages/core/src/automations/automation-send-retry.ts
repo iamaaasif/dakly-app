@@ -5,8 +5,10 @@ import type { ErrorReporter } from '../platform/logging/error-reporter';
 import { serializeError } from '../platform/logging/safe-error';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
+import type { WalletService } from '../wallets/wallet.service';
 import type { RunClaim } from './automation-runs.repository';
 import {
+  type CreditSettlement,
   type Delivery,
   endWithUnknownOutcome,
   failed,
@@ -124,4 +126,28 @@ export async function deliverAutomationSms(
   if (result.run.status === 'waiting')
     reporter.reportJob(serializeError(error), operationKey(claim));
   return result;
+}
+
+export async function settleAutomationCredits(
+  wallets: WalletService,
+  storeId: string,
+  claim: RunClaim,
+  credits: CreditSettlement,
+) {
+  const key = operationKey(claim);
+  // Every send row was written with its reservation, in the same transaction.
+  const reservationId = (await wallets.findByIdempotencyKey(storeId, key))!.entryId;
+  if (credits.settle === 'charge')
+    await wallets.charge(storeId, {
+      reservationId,
+      quantity: credits.quantity,
+      idempotencyKey: `${key}:charge`,
+      actor: { kind: 'system' },
+    });
+  else
+    await wallets.release(storeId, {
+      reservationId,
+      idempotencyKey: `${key}:release`,
+      actor: { kind: 'system' },
+    });
 }

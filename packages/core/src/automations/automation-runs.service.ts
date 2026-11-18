@@ -22,9 +22,13 @@ import {
   type RunClaim,
   type SendingStep,
 } from './automation-runs.repository';
-import { deliverAutomationSms, endExpiredRetry, retryDecision } from './automation-send-retry';
 import {
-  type CreditSettlement,
+  deliverAutomationSms,
+  endExpiredRetry,
+  retryDecision,
+  settleAutomationCredits,
+} from './automation-send-retry';
+import {
   type Delivery,
   endWithUnknownOutcome,
   exited,
@@ -106,7 +110,8 @@ export class AutomationRunsService {
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
         await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
-      if (result.credits) await this.settleCredits(storeId, claim, result.credits);
+      if (result.credits)
+        await settleAutomationCredits(this.wallets, storeId, claim, result.credits);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
@@ -226,8 +231,7 @@ export class AutomationRunsService {
     // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      if (!run || !holdsClaim(run, renewed)) return undefined;
-      const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
+      const held = holdOwnedClaim(run, renewed, await this.transaction.databaseTime(storeId));
       return held && { ...held, claim: renewed };
     }
     const gatedAt = renewed.claimedAt;
@@ -351,25 +355,6 @@ export class AutomationRunsService {
       destination,
     });
     return messageBody(step, optOut?.url);
-  }
-
-  private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
-    const key = operationKey(claim);
-    // Every send row was written with its reservation, in the same transaction.
-    const reservationId = (await this.wallets.findByIdempotencyKey(storeId, key))!.entryId;
-    if (credits.settle === 'charge')
-      await this.wallets.charge(storeId, {
-        reservationId,
-        quantity: credits.quantity,
-        idempotencyKey: `${key}:charge`,
-        actor: system,
-      });
-    else
-      await this.wallets.release(storeId, {
-        reservationId,
-        idempotencyKey: `${key}:release`,
-        actor: system,
-      });
   }
 
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
