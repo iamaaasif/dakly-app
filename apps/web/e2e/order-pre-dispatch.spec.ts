@@ -106,9 +106,12 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await expect(cancel.getByLabel('Reason')).toHaveValue('');
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });
     const listApi = '**/api/orders?*';
-    const refresh = Promise.withResolvers<void>();
+    let releaseRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
     await page.route(listApi, async (route) => {
-      await refresh.promise;
+      await refresh;
       await route.continue();
     });
     try {
@@ -122,11 +125,11 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
       await detail.getByRole('button', { name: 'Close', exact: true }).click();
       const heading = page.getByRole('heading', { name: 'Orders', exact: true });
       await expect(heading).toBeFocused();
-      refresh.resolve();
+      releaseRefresh();
       await expect(rowAction).toHaveCount(0);
       await expect(heading).toBeFocused();
     } finally {
-      refresh.resolve();
+      releaseRefresh();
       await page.unroute(listApi);
     }
   } finally {
