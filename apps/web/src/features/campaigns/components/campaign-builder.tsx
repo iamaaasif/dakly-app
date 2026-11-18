@@ -92,7 +92,7 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
   return (
     <form
       onSubmit={submit}
-      className="max-w-form space-y-4 rounded-lg border border-border bg-surface p-5"
+      className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
     >
       <CampaignFields campaign={campaign} />
       {(error || save.error) && (
@@ -112,7 +112,9 @@ function CampaignFields({ campaign }: { campaign?: CampaignResponse }) {
   return (
     <>
       <div className="space-y-2">
-        <MessageSquare className="text-action" aria-hidden="true" size={20} strokeWidth={1.75} />
+        <span className="inline-flex size-10 items-center justify-center rounded-md bg-primary-soft text-action">
+          <MessageSquare aria-hidden="true" size={20} strokeWidth={1.75} />
+        </span>
         <h2 className="text-md font-semibold">SMS</h2>
         <p className="text-text-muted">Send a short text to customers who agreed to receive SMS.</p>
       </div>
@@ -143,7 +145,7 @@ function CampaignSummary({ campaign }: { campaign: CampaignResponse }) {
   return (
     <section
       aria-label="Saved campaign"
-      className="max-w-form space-y-4 rounded-lg border border-border bg-surface p-5"
+      className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
     >
       <Badge variant={campaignStatusColors[campaign.status]}>
         {campaignStatusLabels[campaign.status]}
