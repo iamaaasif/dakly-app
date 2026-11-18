@@ -1,0 +1,158 @@
+import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+import { expect, test, type Page } from '@playwright/test';
+
+import { createDatabase } from '@dakly/db/client';
+
+const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-fulfilment');
+
+async function capture(page: Page, name: string) {
+  await mkdir(evidence, { recursive: true });
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.mouse.move(width - 1, height - 1);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(width);
+    await expect
+      .poll(() =>
+        page.getByRole('dialog').evaluate((dialog) => dialog.scrollWidth - dialog.clientWidth),
+      )
+      .toBe(0);
+    await page.screenshot({
+      path: resolve(evidence, `${name}-${width}.png`),
+      animations: 'disabled',
+    });
+  }
+}
+
+test('records manual dispatch, a partly delivered parcel and the COD actually collected', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string; storeIds: string[] };
+  const storeId = fixture.storeIds[0]!;
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const orderId = randomUUID();
+  const productId = randomUUID();
+  const variantId = `0${randomUUID().slice(1)}`;
+  const largerVariant = `f${randomUUID().slice(1)}`;
+  const panjabi = 'CottonPanjabi'.repeat(9);
+  await context.addCookies([
+    { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
+  ]);
+  try {
+    const current = await context.request.get('/api/me/context');
+    const { contextTag } = await current.json();
+    const selected = await context.request.post('/api/me/active-store', {
+      data: { storeId },
+      headers: { Origin: baseURL!, 'X-Session-Context': contextTag },
+    });
+    expect(selected.status()).toBe(204);
+    await database.pool.query(
+      'insert into products (id,store_id,name,price_poisha,is_stock_tracked) values ($1,$2,$3,125000,true)',
+      [productId, storeId, panjabi],
+    );
+    await database.pool.query(
+      `insert into product_variants (id,store_id,product_id,title,on_hand,reserved)
+       values ($1,$2,$3,'M',5,1), ($4,$2,$3,'L',5,1)`,
+      [variantId, storeId, productId, largerVariant],
+    );
+    await database.pool.query(
+      `insert into orders (id,store_id,number,source,created_by_type,stage,buyer_name,recipient_name,
+        recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+        delivery_charge_poisha,cod_amount_poisha,created_at)
+        values ($1,$2,1050,'manual','user','to_pack','Karim Ahmed','Karim Ahmed',
+          '01701000015','House 14, Mirpur','Dhaka',250000,6000,256000,now() - interval '3 hours')`,
+      [orderId, storeId],
+    );
+    await database.pool.query(
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,
+        unit_price_poisha,is_stock_tracked)
+        values ($1,$2,$3,$4,$5,'M',1,125000,true), ($6,$2,$3,$7,$5,'L',1,125000,true)`,
+      [randomUUID(), storeId, orderId, variantId, panjabi, randomUUID(), largerVariant],
+    );
+
+    await page.goto('/orders?stage=to_pack');
+    const opener = page.getByRole('link', { name: 'Details for order #1050' });
+    await opener.click();
+    const detail = page.getByRole('dialog', { name: 'Order #1050' });
+    await expect(detail.getByRole('button', { name: 'Sent with courier' })).toBeVisible();
+    await capture(page, 'detail');
+    await detail.getByRole('button', { name: 'Sent with courier' }).click();
+    const dispatch = page.getByRole('dialog', { name: 'Sent with courier' });
+    await dispatch.getByLabel('Courier', { exact: true }).selectOption({ label: 'Other' });
+    await dispatch.getByLabel('Courier name').fill('Neighbourhood delivery');
+    await dispatch.getByLabel('Courier', { exact: true }).selectOption({ label: 'Pathao' });
+    await expect(dispatch.getByLabel('Courier name')).toHaveCount(0);
+    await dispatch.getByLabel('Tracking code (optional)').fill('PATH-1050');
+    await capture(page, 'courier');
+    await dispatch.getByRole('button', { name: 'Sent with courier' }).click();
+    await expect(detail.getByText('Tracking code PATH-1050')).toBeVisible();
+    await expect(detail.getByText('To pack → With courier')).toBeVisible();
+
+    await detail.getByRole('button', { name: 'Partly delivered' }).click();
+    const partial = page.getByRole('dialog', { name: 'Partly delivered' });
+    const medium = partial.getByLabel(`${panjabi} · M · delivered out of 1`);
+    const large = partial.getByLabel(`${panjabi} · L · delivered out of 1`);
+    const savePartial = partial.getByRole('button', { name: 'Partly delivered' });
+    await expect(medium).toHaveValue('0');
+    await expect(large).toHaveValue('0');
+    await savePartial.click();
+    await expect(partial.getByText('Enter at least one delivered unit.')).toBeVisible();
+    await expect(partial.getByText('Enter a delivery note.')).toBeVisible();
+    await medium.fill('1');
+    await large.fill('1');
+    await savePartial.click();
+    const allDelivered = partial.getByText('Use Mark delivered if all units arrived.');
+    await expect(allDelivered).toBeVisible();
+    await expect(medium).toHaveAttribute('aria-invalid', 'true');
+    await large.fill('0');
+    await expect(allDelivered).toHaveCount(0);
+    await partial.getByLabel('Delivery note').fill('One item was sent back');
+    await capture(page, 'partial');
+    await partial.getByRole('button', { name: 'Partly delivered' }).click();
+    await expect(detail.getByText('With courier → Partly delivered')).toBeVisible();
+    await expect(detail.getByText('One item was sent back')).toBeVisible();
+
+    await detail.getByRole('button', { name: 'Record COD collected' }).click();
+    const cod = page.getByRole('dialog', { name: 'Record COD collected' });
+    await expect(cod.getByLabel('Amount collected (৳)')).toHaveValue('1310.00');
+    await cod.getByLabel('Amount collected (৳)').fill('1200.50');
+    await capture(page, 'cod');
+    await cod.getByRole('button', { name: 'Record COD collected' }).click();
+    await expect(detail.getByText('৳1,200.50')).toBeVisible();
+
+    await detail.getByRole('button', { name: 'Mark returned' }).click();
+    const returned = page.getByRole('dialog', { name: 'Mark returned' });
+    await returned.getByLabel('Return reason').fill('Customer returned the parcel');
+    await capture(page, 'return');
+    await returned.getByRole('button', { name: 'Mark returned' }).click();
+    await expect(detail.getByText('Partly delivered → Returned')).toBeVisible();
+  } finally {
+    await database.pool.query(
+      "delete from outbox_events where store_id=$1 and (payload->>'orderId'=$2 or payload->>'variantId'=any($3::text[]))",
+      [storeId, orderId, [variantId, largerVariant]],
+    );
+    await database.pool.query('delete from orders where store_id=$1 and id=$2', [storeId, orderId]);
+    await database.pool.query(
+      'delete from stock_movements where store_id=$1 and variant_id=any($2::uuid[])',
+      [storeId, [variantId, largerVariant]],
+    );
+    await database.pool.query(
+      'delete from product_variants where store_id=$1 and id=any($2::uuid[])',
+      [storeId, [variantId, largerVariant]],
+    );
+    await database.pool.query('delete from products where store_id=$1 and id=$2', [
+      storeId,
+      productId,
+    ]);
+    await database.pool.end();
+  }
+});

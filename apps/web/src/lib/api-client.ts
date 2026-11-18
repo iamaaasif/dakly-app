@@ -4,6 +4,7 @@ type ApiOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   signal?: AbortSignal;
   contextTag?: string;
+  idempotencyKey?: string;
 };
 
 export async function apiRequest<TResponse>(
