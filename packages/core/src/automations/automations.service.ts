@@ -226,6 +226,7 @@ export class AutomationsService {
       await this.team.userIdsWithPermission(storeId, 'billing.edit'),
     );
     let stillSending = false;
+    let firstFailure: { error: unknown } | undefined;
     for (const { id, email } of owners) {
       if (!email) continue;
       const key = `automation-pause-email:${eventId}:${id}`;
@@ -243,12 +244,14 @@ export class AutomationsService {
       try {
         await this.email.send({ to: email, subject: title, text });
       } catch (error) {
-        // Free the claim so the job's retry sends this owner's email.
+        // Retry the failed recipient without preventing delivery to the other owners.
         await this.valkey.connection.del(key);
-        throw error;
+        firstFailure ??= { error };
+        continue;
       }
       await this.valkey.connection.set(key, 'sent', 'EX', SENT_CLAIM_SECONDS);
     }
+    if (firstFailure) throw firstFailure.error;
     if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
   }
 

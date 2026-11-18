@@ -14,6 +14,7 @@ import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-drive
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { UsersService } from '../auth/users.service';
 import { EmailService } from '../email/email.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
@@ -1974,6 +1975,22 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       });
       expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
       expect(await mailTo(ownerEmail)).toHaveLength(2);
+
+      const profiles = vi.spyOn(UsersService.prototype, 'profiles');
+      const owners = [
+        { id: ownerId, email: ownerEmail, name: 'Owner', phone: null },
+        { id: coOwnerId, email: coOwnerEmail, name: 'Billing admin', phone: null },
+      ];
+      const rejectedOwner = { ...pausedEvent, id: randomUUID() };
+      profiles.mockResolvedValueOnce(owners).mockResolvedValueOnce(owners);
+      const mail = vi.spyOn(EmailService.prototype, 'send');
+      mail.mockRejectedValueOnce(new Error('mailbox refused'));
+      await expect(runner.emailOwner(rejectedOwner)).rejects.toThrow('mailbox refused');
+      expect(await mailTo(ownerEmail)).toHaveLength(2);
+      expect(await mailTo(coOwnerEmail)).toHaveLength(2);
+      await runner.emailOwner(rejectedOwner);
+      expect(await mailTo(ownerEmail)).toHaveLength(3);
+      expect(await mailTo(coOwnerEmail)).toHaveLength(2);
       // A paused workflow's runs are not swept.
       await runner.sweep();
       expect((await run(old!)).status).toBe('waiting');
