@@ -268,19 +268,33 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       { status: 'approved', reason: 'Operator approved the masking name' },
       { kind: 'system' },
     );
-    const own = await messaging.send(storeB, {
-      channel: 'sms',
-      contactId: contact.id,
-      body: 'Your order is out for delivery',
-      operationKey: `approved-${contact.id}`,
-    });
+    const prepared = await messaging.prepareSender(storeB);
+    const own = await messaging.send(
+      storeB,
+      {
+        channel: 'sms',
+        contactId: contact.id,
+        body: 'Your order is out for delivery',
+        operationKey: `approved-${contact.id}`,
+      },
+      prepared,
+    );
     const otherContact = await contacts.create(
       storeA,
       { name: 'Karim Hossain', phone: '01912345609' },
       fullPhone,
       { kind: 'system' },
     );
-    const prepared = await messaging.prepareSender(storeB);
+    const [otherRequest] = await admin.db
+      .insert(smsSenderIds)
+      .values({ storeId: storeA, senderName: 'Karim Mart' })
+      .returning({ id: smsSenderIds.id });
+    await senders.decideRequest(
+      storeA,
+      otherRequest!.id,
+      { status: 'approved', reason: 'Operator approved the masking name' },
+      { kind: 'system' },
+    );
     const other = await messaging.send(
       storeA,
       {
@@ -294,7 +308,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
 
     expect(await capturedSenderName(shared.providerMessageId)).toBe('');
     expect(await capturedSenderName(own.providerMessageId)).toBe('Nusrat Fab');
-    expect(await capturedSenderName(other.providerMessageId)).toBe('');
+    expect(await capturedSenderName(other.providerMessageId)).toBe('Karim Mart');
   });
 
   it('calls the driver with no store transaction open', async () => {
