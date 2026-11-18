@@ -39,6 +39,7 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
+  | { outcome: 'late' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }
   | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };

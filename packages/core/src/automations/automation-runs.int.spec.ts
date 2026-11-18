@@ -833,7 +833,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       }
     });
 
-    it.each(['consent withdrawal', 'goal', 'quiet hours'] as const)(
+    it.each(['consent withdrawal', 'goal', 'quiet hours', 'late cutoff'] as const)(
       'checks %s after a wallet-lock wait without reserving or sending',
       async (change) => {
         const runner = await worker();
@@ -845,6 +845,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         } as const;
         const versionId = await publish(automationId, 1, graph);
         const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
+        if (change === 'late cutoff')
+          await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+            runId,
+            new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+          ]);
         await runner.sweep();
         const jobs = await runner.queue.getJobs(['waiting']);
         const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
@@ -876,6 +881,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             await admin.pool.query("update contacts set tags=array['ordered'] where id=$1", [
               contact,
             ]);
+          else if (change === 'late cutoff') clockNow = new Date(daytime.getTime() + 2 * MINUTE);
           else
             clockNow = new Date(
               Date.UTC(daytime.getUTCFullYear(), daytime.getUTCMonth(), daytime.getUTCDate(), 16),
@@ -889,7 +895,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             expect(await sendStep(runId!)).toEqual([
               expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_consent' }),
             ]);
-          else {
+          else if (change === 'late cutoff') {
+            expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'late' })]);
+            expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'end' });
+          } else {
             expect(await sendStep(runId!)).toEqual([]);
             expect(await run(runId!)).toMatchObject(
               change === 'goal' ? { status: 'exited', exit_reason: 'goal' } : { status: 'waiting' },

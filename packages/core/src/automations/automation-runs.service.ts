@@ -176,6 +176,9 @@ export class AutomationRunsService {
         };
       }
       case 'send':
+        // Versions published before the guard still fail instead of sending without review.
+        if (step.reviewBeforeSending)
+          return failed('Review before sending is not available yet', now);
         return this.startSend(claim, step, facts, now);
       case 'action':
         return runAction(stepKey, step, now);
@@ -251,8 +254,6 @@ export class AutomationRunsService {
     now: Date,
   ): Promise<StepResult | undefined> {
     const { storeId, contactId } = facts;
-    // Publish refuses it; a version published before that refusal still fails here.
-    if (step.reviewBeforeSending) return failed('Review before sending is not available yet', now);
     const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
     // A send due more than a day before it runs, as after a pause, is skipped (feature 09).
     if (facts.wakeAt && now.getTime() - facts.wakeAt.getTime() > DAY_MS)
@@ -276,6 +277,8 @@ export class AutomationRunsService {
     }
     const gatedAt = this.clock.now();
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
+    if ('outcome' in started)
+      return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
     const { decision } = started;
     if ('body' in started)
       return this.deliver(
@@ -320,6 +323,7 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
+    if (facts.wakeAt && at.getTime() - facts.wakeAt.getTime() > DAY_MS) return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
     const body = await this.writeSend({ storeId, claim, contactId, step }, at);
     if (body === undefined) return { decision: noCredits };
@@ -327,15 +331,9 @@ export class AutomationRunsService {
   }
 
   private async refreshExitReason(facts: RunFacts, at: Date) {
-    return this.exitReason(
-      facts.graph,
-      {
-        ...facts,
-        tags: await this.contacts.findTags(facts.storeId, facts.contactId),
-        tappedStepKeys: await this.repository.listTappedStepKeys(facts.storeId, facts.runId),
-      },
-      at,
-    );
+    const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
+    const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
+    return this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
   }
 
   private async heldOrStale(storeId: string, claim: RunClaim, now: Date) {
