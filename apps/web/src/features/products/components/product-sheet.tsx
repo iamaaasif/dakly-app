@@ -1,5 +1,4 @@
 'use client';
-import Image from 'next/image';
 import { useState } from 'react';
 
 import type { ProductResponse } from '@dakly/contracts/products';
@@ -9,6 +8,7 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
 import { ProductForm } from './product-form';
+import { ProductPhotos } from './product-photos';
 import { ProductsLoading } from './products-loading';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
@@ -44,7 +44,7 @@ function ProductDetails({ product }: ProductDetailsProps) {
       {product.category ? (
         <p className="text-sm wrap-anywhere text-text-muted">{product.category}</p>
       ) : null}
-      <ProductPictures product={product} />
+      <ProductPhotos product={product} />
       {editing && canEdit ? (
         <>
           <ProductForm product={product} onSaved={() => setEditing(false)} />
@@ -77,31 +77,6 @@ function ProductDetails({ product }: ProductDetailsProps) {
         </p>
       ) : null}
     </div>
-  );
-}
-
-function ProductPictures({ product }: ProductDetailsProps) {
-  return (
-    <section className="space-y-4" aria-label="Product photos">
-      <h2 className="font-semibold">Photos ({product.photos.length})</h2>
-      {product.photos.length ? (
-        <div className="flex flex-wrap gap-4">
-          {product.photos.map((photo, index) => (
-            <Image
-              key={photo.id}
-              src={photo.url}
-              alt={`${product.name} photo ${index + 1}`}
-              width={80}
-              height={80}
-              unoptimized
-              className="size-20 rounded-md object-cover"
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="text-text-muted">No photos yet.</p>
-      )}
-    </section>
   );
 }
 

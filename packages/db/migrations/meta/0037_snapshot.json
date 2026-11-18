@@ -1,5 +1,5 @@
 {
-  "id": "aa8069eb-9936-47cd-9cc1-d0f4e9dab96e",
+  "id": "891c09e1-11bb-4d15-bebf-e5b5f0d57bfd",
   "prevId": "e06b544c-6888-4241-85f8-159d8fd4386a",
   "version": "7",
   "dialect": "postgresql",
@@ -4337,12 +4337,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "category": {
-          "name": "category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "skip_reason": {
           "name": "skip_reason",
           "type": "text",
@@ -4567,10 +4561,6 @@
         "automation_run_steps_kind": {
           "name": "automation_run_steps_kind",
           "value": "\"automation_run_steps\".\"kind\" in ('trigger', 'wait', 'condition', 'random_split', 'send', 'action', 'goal', 'exit')"
-        },
-        "automation_run_steps_category": {
-          "name": "automation_run_steps_category",
-          "value": "\"automation_run_steps\".\"category\" in ('transactional', 'marketing')"
         },
         "automation_run_steps_skip_reason": {
           "name": "automation_run_steps_skip_reason",
@@ -4953,7 +4943,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
@@ -11058,6 +11048,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "import_id": {
+          "name": "import_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "evidence": {
           "name": "evidence",
           "type": "text",
@@ -11079,6 +11075,33 @@
         }
       },
       "indexes": {
+        "consents_store_id_import_id_idx": {
+          "name": "consents_store_id_import_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "import_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "consents_contact_channel_idx": {
           "name": "consents_contact_channel_idx",
           "columns": [
@@ -11183,6 +11206,21 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "consents_import_id_store_fk": {
+          "name": "consents_import_id_store_fk",
+          "tableFrom": "consents",
+          "tableTo": "imports",
+          "columnsFrom": [
+            "store_id",
+            "import_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "consents_contact_id_store_fk": {
           "name": "consents_contact_id_store_fk",
           "tableFrom": "consents",
@@ -11209,7 +11247,7 @@
         },
         "consents_status": {
           "name": "consents_status",
-          "value": "\"consents\".\"status\" in ('granted', 'withdrawn')"
+          "value": "\"consents\".\"status\" in ('granted', 'withdrawn', 'not_answered')"
         },
         "consents_source": {
           "name": "consents_source",
@@ -13547,6 +13585,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "undo_finished_at": {
+          "name": "undo_finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "requeue_count": {
           "name": "requeue_count",
           "type": "integer",
@@ -13684,6 +13728,34 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "imports_pending_undo_idx": {
+          "name": "imports_pending_undo_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "last_progress_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"imports\".\"status\" = 'undone' and \"imports\".\"undo_finished_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}

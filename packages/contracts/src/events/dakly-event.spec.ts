@@ -61,6 +61,12 @@ const examples: DaklyEvent[] = [
     payload: { importId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
   },
   {
+    type: 'import.undo_requested',
+    storeId,
+    occurredAt,
+    payload: { importId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
+  },
+  {
     type: 'campaign.approved',
     storeId,
     occurredAt,

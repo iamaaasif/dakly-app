@@ -264,6 +264,43 @@ export class ContactsRepository {
     return rows.length > 0;
   }
 
+  // Both timestamps start from the database clock; a later edit makes them differ.
+  // Locks hold later edits and consent changes until the caller has checked eligibility.
+  async lockUneditedByImport(
+    storeId: string,
+    importId: string,
+    page: { after?: string; limit: number },
+  ): Promise<string[]> {
+    const result = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.importId, importId),
+            isNull(contacts.deletedAt),
+            eq(contacts.updatedAt, contacts.createdAt),
+            page.after ? gt(contacts.id, page.after) : undefined,
+          ),
+        )
+        .orderBy(contacts.id)
+        .limit(page.limit)
+        .for('no key update'),
+    );
+    return result.map((row) => row.id);
+  }
+
+  // For ids that lockUneditedByImport returned in the same transaction, so all are still live.
+  async softDeleteAll(storeId: string, ids: string[], deletedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contacts)
+        .set({ deletedAt })
+        .where(and(eq(contacts.storeId, storeId), inArray(contacts.id, ids))),
+    );
+  }
+
   async countMatching(storeId: string, rules: SegmentRules): Promise<number> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx.select({ count: count() }).from(contacts).where(matching(storeId, rules)),

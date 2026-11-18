@@ -27,6 +27,7 @@ import {
   decodeCustomerImportFile,
   readCustomerImportRows,
 } from './customer-import-rows';
+import { resumedCounts } from './import-checkpoint';
 import { importError } from './imports.errors';
 import {
   type Import,
@@ -36,6 +37,7 @@ import {
   type NewImportFile,
   type StuckImport,
 } from './imports.repository';
+import { UndoCustomerImport } from './undo-customer-import';
 
 type Actor = AuditEntry['actor'];
 type Run = { storeId: string; found: Import; actor: Actor; lease: Date; finished: boolean };
@@ -77,6 +79,7 @@ export class ImportsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
+    @Inject(UndoCustomerImport) private readonly undoImport: UndoCustomerImport,
   ) {}
 
   async createCustomerImport(
@@ -127,6 +130,15 @@ export class ImportsService {
     return this.get(storeId, importId);
   }
 
+  async undo(storeId: string, importId: string, _actor: Actor): Promise<ImportResponse> {
+    await this.undoImport.request(storeId, importId);
+    return this.get(storeId, importId);
+  }
+
+  finishUndo(storeId: string, importId: string, actor: Actor): Promise<void> {
+    return this.undoImport.run(storeId, importId, actor);
+  }
+
   async get(storeId: string, importId: string): Promise<ImportResponse> {
     const found = await this.findImport(storeId, importId);
     return {
@@ -137,6 +149,7 @@ export class ImportsService {
       rowsUpdated: found.rowsUpdated,
       rowsSkipped: found.rowsSkipped,
       rowsFailed: found.rowsFailed,
+      undoFinishedAt: found.undoFinishedAt?.toISOString() ?? null,
       reportUrl: found.reportKey && this.storage.createDownloadUrl(found.reportKey, LINK_SECONDS),
     };
   }
@@ -176,7 +189,8 @@ export class ImportsService {
   async sweepStuckImports(): Promise<void> {
     const now = this.clock.now();
     const before = new Date(now.getTime() - STUCK_MS);
-    for (const storeId of await this.repository.storesWithStuckImports(before))
+    for (const storeId of await this.repository.storesWithStuckImports(before)) {
+      await this.undoImport.recover(storeId, before);
       for (const stuck of await this.repository.listStuck(storeId, before)) {
         const requeued = await this.transaction.run(storeId, async () => {
           const requeue = { before, now, limit: MAX_REQUEUES };
@@ -197,6 +211,7 @@ export class ImportsService {
             exhausted: { before, limit: MAX_REQUEUES },
           });
       }
+    }
   }
 
   private async stoppedImportReport(storeId: string, stuck: StuckImport): Promise<ReportLine[]> {
@@ -289,7 +304,11 @@ export class ImportsService {
       {
         rows,
         duplicateMode: found.duplicateMode,
-        whatsappAnswered: new Set(answers.map((answer) => answer.contactId)),
+        whatsappAnswered: new Set(
+          answers
+            .filter((answer) => answer.status !== 'not_answered')
+            .map((answer) => answer.contactId),
+        ),
         matchedContactIds: new Set(ids),
       },
       actor,
@@ -333,7 +352,7 @@ export class ImportsService {
         .map((contact) => contact.contactId);
       const { withdrawnContactIds } = await this.consents.grantFromImport(
         storeId,
-        { contactIds, channel, evidence },
+        { contactIds, channel, evidence, importId: found.id },
         actor,
       );
       const withdrawn = new Set(withdrawnContactIds);
@@ -411,15 +430,4 @@ export class ImportsService {
     await this.storage.writeText(report.objectKey, body, CSV);
     return report;
   }
-}
-
-function resumedCounts(found: Import, file: CustomerImportRows): ImportCounts {
-  const failedRows = new Set(file.errors.map((error) => error.rowNumber)).size;
-  return {
-    rowsTotal: found.rowsTotal ?? file.rows.length + failedRows,
-    rowsAdded: found.rowsAdded ?? 0,
-    rowsUpdated: found.rowsUpdated ?? 0,
-    rowsSkipped: found.rowsSkipped ?? 0,
-    rowsFailed: found.rowsFailed ?? failedRows,
-  };
 }

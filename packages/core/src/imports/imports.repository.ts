@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
@@ -59,6 +59,8 @@ const importColumns = {
   duplicateMode: imports.duplicateMode,
   consentEvidence: sql<ImportConsentEvidence | null>`${imports.consentEvidence}`,
   createdByUserId: imports.createdByUserId,
+  finishedAt: imports.finishedAt,
+  undoFinishedAt: imports.undoFinishedAt,
   startedByUserId: imports.startedByUserId,
   rowsTotal: imports.rowsTotal,
   rowsAdded: imports.rowsAdded,
@@ -78,6 +80,8 @@ export type Import = {
   duplicateMode: ImportDuplicateMode;
   consentEvidence: ImportConsentEvidence | null;
   createdByUserId: string | null;
+  finishedAt: Date | null;
+  undoFinishedAt: Date | null;
   uploadFileId: string;
   startedByUserId: string | null;
   uploadKey: string;
@@ -299,6 +303,67 @@ export class ImportsRepository {
         .returning({ id: imports.id }),
     );
     return rows.length > 0;
+  }
+
+  // A finished or failed import moves to undone once, so a second undo changes nothing.
+  async markUndone(storeId: string, importId: string, at: Date): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ status: 'undone', lastProgressAt: at })
+        .where(
+          and(
+            eq(imports.storeId, storeId),
+            eq(imports.id, importId),
+            inArray(imports.status, ['done', 'failed']),
+          ),
+        )
+        .returning({ id: imports.id }),
+    );
+    return rows.length > 0;
+  }
+
+  async renewUndoProgress(storeId: string, importId: string, at: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ lastProgressAt: at })
+        .where(and(guard(storeId, importId, 'undone'), isNull(imports.undoFinishedAt))),
+    );
+  }
+
+  requeuePendingUndos(storeId: string, before: Date, now: Date): Promise<string[]> {
+    return this.database.forStore(storeId, async (tx) => {
+      const pending = tx
+        .select({ id: imports.id })
+        .from(imports)
+        .where(
+          and(
+            eq(imports.storeId, storeId),
+            eq(imports.status, 'undone'),
+            isNull(imports.undoFinishedAt),
+            lt(sql`coalesce(${imports.lastProgressAt}, ${imports.finishedAt})`, before),
+          ),
+        )
+        .orderBy(imports.id)
+        .limit(100)
+        .for('update', { skipLocked: true });
+      const rows = await tx
+        .update(imports)
+        .set({ lastProgressAt: now })
+        .where(and(eq(imports.storeId, storeId), inArray(imports.id, pending)))
+        .returning({ id: imports.id });
+      return rows.map((row) => row.id);
+    });
+  }
+
+  async markUndoFinished(storeId: string, importId: string, at: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(imports)
+        .set({ undoFinishedAt: at })
+        .where(and(guard(storeId, importId, 'undone'), isNull(imports.undoFinishedAt))),
+    );
   }
 }
 

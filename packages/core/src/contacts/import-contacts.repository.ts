@@ -28,6 +28,19 @@ export type ImportedChange = Omit<ContactImportRow, 'phone'> & { id: string };
 export class ImportContactsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
+  // Undo also restores the history of contacts removed since the import.
+  async lockConsentHistory(storeId: string, ids: string[]): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(and(eq(contacts.storeId, storeId), inArray(contacts.id, ids)))
+        .orderBy(contacts.id)
+        .for('no key update'),
+    );
+    return rows.map((row) => row.id);
+  }
+
   async findByPhones(storeId: string, phones: string[]): Promise<ImportMatch[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx

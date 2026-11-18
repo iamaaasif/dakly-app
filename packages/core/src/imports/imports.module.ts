@@ -9,6 +9,7 @@ import { OutboxModule } from '../platform/outbox/outbox.module';
 import { ImportsController } from './imports.controller';
 import { ImportsRepository } from './imports.repository';
 import { ImportsService } from './imports.service';
+import { UndoCustomerImport } from './undo-customer-import';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { ImportsService } from './imports.service';
     FileStorageModule,
   ],
   controllers: [ImportsController],
-  providers: [ImportsRepository, ImportsService],
+  providers: [ImportsRepository, ImportsService, UndoCustomerImport],
   exports: [ImportsService],
 })
 export class ImportsModule {}
