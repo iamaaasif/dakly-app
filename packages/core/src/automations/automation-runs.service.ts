@@ -281,10 +281,12 @@ export class AutomationRunsService {
       category: step.category,
     });
     if (
-      !(await this.repository.moveRunIfLive(storeId, claim, {
-        status: 'running',
-        claimedAt: claim.claimedAt,
-      }))
+      !(await this.repository.moveRunIfLive(
+        storeId,
+        claim,
+        { status: 'running', claimedAt: claim.claimedAt },
+        true,
+      ))
     )
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);

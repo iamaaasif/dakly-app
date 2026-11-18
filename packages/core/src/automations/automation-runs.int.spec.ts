@@ -1985,6 +1985,58 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it('keeps the workflow active when the old version stops at a short balance gate', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      const id = runId!;
+      const {
+        rows: [newVersion],
+      } = await admin.pool.query(
+        `insert into automation_versions(id,store_id,automation_id,version,graph,published_at)
+         select gen_random_uuid(), v.store_id, v.automation_id, v.version+1, v.graph, now()
+         from automation_versions v join automation_runs r on r.version_id=v.id where r.id=$1
+         returning id`,
+        [id],
+      );
+      await admin.pool.query('update automations set published_version_id=$2 where id=$1', [
+        automationId,
+        newVersion.id,
+      ]);
+
+      const blocker = await admin.pool.connect();
+      const {
+        rows: [{ pid }],
+      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await blocker.query('begin');
+      await blocker.query(
+        'update automation_versions set is_stopped=true where id=(select version_id from automation_runs where id=$1)',
+        [id],
+      );
+      const pending = runDueStep(runner, id);
+      try {
+        await waitForBlocker(pid);
+        await blocker.query('commit');
+        await pending;
+        expect(sentFor(id)).toEqual([]);
+        expect(await sendStep(id)).toEqual([]);
+        expect(await run(id)).toMatchObject({ status: 'exited', exit_reason: 'version_stopped' });
+        const state = await admin.pool.query(
+          'select status,pause_reason from automations where id=$1',
+          [automationId],
+        );
+        expect(state.rows).toEqual([{ status: 'active', pause_reason: null }]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await pending;
+      }
+    });
+
     it('keeps a pause whose gate already saw a credit that committed while it waited for the lock', async () => {
       await setCredits(0);
       const runner = await worker();
