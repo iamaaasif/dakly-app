@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { createOrderSchema, orderListQuerySchema, orderStageChangeSchema } from './orders';
+import {
+  codCollectedSchema,
+  createOrderSchema,
+  dispatchOrderSchema,
+  orderListQuerySchema,
+  orderStageChangeSchema,
+} from './orders';
 
 describe('order list query', () => {
   it('takes a stage and an exclusive numeric cursor', () => {
@@ -72,4 +78,32 @@ it('rejects a hold follow-up date in year zero', () => {
       followUpOn: '0000-01-01',
     }).success,
   ).toBe(false);
+});
+
+describe('manual delivery inputs', () => {
+  it('accepts no courier and requires the name only for Other', () => {
+    expect(dispatchOrderSchema.parse({})).toEqual({});
+    expect(
+      dispatchOrderSchema.parse({ courier: 'other', courierOtherName: ' Local rider ' }),
+    ).toEqual({ courier: 'other', courierOtherName: 'Local rider' });
+    expect(dispatchOrderSchema.safeParse({ courier: 'other' }).success).toBe(false);
+    expect(
+      dispatchOrderSchema.safeParse({ courier: 'pathao', courierOtherName: 'Other' }).success,
+    ).toBe(false);
+    expect(dispatchOrderSchema.safeParse({ courier: 'invalid' }).success).toBe(false);
+  });
+
+  it.each([-1, 10.75])('rejects an invalid collected amount %s', (amountPoisha) => {
+    expect(codCollectedSchema.safeParse({ amountPoisha }).success).toBe(false);
+  });
+
+  it('allows zero COD and refuses a negative delivered quantity', () => {
+    expect(codCollectedSchema.parse({ amountPoisha: 0 })).toEqual({ amountPoisha: 0 });
+    expect(
+      orderStageChangeSchema.safeParse({
+        to: 'partially_delivered',
+        items: [{ itemId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2', quantity: -1 }],
+      }).success,
+    ).toBe(false);
+  });
 });

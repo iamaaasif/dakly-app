@@ -13,12 +13,16 @@ import {
 } from '@nestjs/common';
 
 import {
+  codCollectedSchema,
   createOrderSchema,
+  dispatchOrderSchema,
   editOrderSchema,
   orderIdempotencyKeySchema,
   orderListQuerySchema,
   orderStageChangeSchema,
+  type CodCollectedInput,
   type CreateOrderInput,
+  type DispatchOrderInput,
   type EditOrderInput,
   type OrderDetail,
   type OrderListQuery,
@@ -88,6 +92,43 @@ export class OrdersController {
     @CurrentAccess() access: StoreAccess,
   ): Promise<OrderDetail> {
     return this.service.getById(storeId, orderId, access);
+  }
+
+  @Post(':orderId/courier')
+  @RequirePermission('orders.edit')
+  @HttpCode(200)
+  dispatch(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body(new ZodValidationPipe(dispatchOrderSchema)) input: DispatchOrderInput,
+    @CurrentAccess() access: StoreAccess,
+  ): Promise<OrderDetail> {
+    return this.service.changeStage(
+      storeId,
+      orderId,
+      { ...input, to: 'with_courier' },
+      {
+        actor: { kind: 'user', userId },
+        access,
+      },
+    );
+  }
+
+  @Post(':orderId/cod-collected')
+  @RequirePermission('orders.edit')
+  @HttpCode(200)
+  recordCodCollected(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body(new ZodValidationPipe(codCollectedSchema)) input: CodCollectedInput,
+    @CurrentAccess() access: StoreAccess,
+  ): Promise<OrderDetail> {
+    return this.service.recordCodCollected(storeId, orderId, input, {
+      actor: { kind: 'user', userId },
+      access,
+    });
   }
 
   @Post(':orderId/stage')

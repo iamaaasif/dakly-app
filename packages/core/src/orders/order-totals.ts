@@ -1,3 +1,5 @@
+import type { OrderDetail, OrderItem } from '@dakly/contracts/orders';
+
 import { orderError } from './orders.errors';
 import type { OrderItemWrite } from './orders.repository';
 
@@ -31,5 +33,37 @@ export function orderTotals(
     orderDiscountPoisha,
     advancePaidPoisha,
     codAmountPoisha: cod > 0n ? Number(cod) : 0,
+  };
+}
+
+export function partialOrderTotals(
+  ordered: Pick<
+    OrderDetail,
+    'itemsSubtotalPoisha' | 'orderDiscountPoisha' | 'deliveryChargePoisha' | 'advancePaidPoisha'
+  >,
+  delivered: { item: OrderItem; quantity: number }[],
+) {
+  let subtotal = 0n;
+  const lines = delivered.map(({ item, quantity }) => {
+    const discount = (BigInt(item.lineDiscountPoisha) * BigInt(quantity)) / BigInt(item.quantity);
+    subtotal += BigInt(item.unitPricePoisha) * BigInt(quantity) - discount;
+    return { itemId: item.id, quantity, discountPoisha: Number(discount) };
+  });
+  const orderDiscount =
+    ordered.itemsSubtotalPoisha === 0
+      ? 0n
+      : (BigInt(ordered.orderDiscountPoisha) * subtotal) / BigInt(ordered.itemsSubtotalPoisha);
+  const cod =
+    subtotal -
+    orderDiscount +
+    BigInt(ordered.deliveryChargePoisha) -
+    BigInt(ordered.advancePaidPoisha);
+  return {
+    lines,
+    amounts: {
+      deliveredItemsSubtotalPoisha: Number(subtotal),
+      deliveredOrderDiscountPoisha: Number(orderDiscount),
+      codAmountPoisha: cod > 0n ? Number(cod) : 0,
+    },
   };
 }
