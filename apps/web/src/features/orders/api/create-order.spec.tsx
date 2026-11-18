@@ -23,16 +23,16 @@ it('lets staff change a draft after a replay proves the order was refused', asyn
     },
     items: [{ variantId: 'e67183e9-ab27-4cf5-a671-7ee21a509efe', quantity: 1 }],
   });
-  const outOfStock = new ApiError(
-    'STOCK_NOT_AVAILABLE',
-    'Not enough available stock',
-    undefined,
-    409,
-  );
-  request
-    .mockRejectedValueOnce(new TypeError('Connection lost'))
-    .mockRejectedValueOnce(outOfStock)
-    .mockResolvedValueOnce({ id: 'saved-order' });
+  const unanswered = [
+    new TypeError('Connection lost'),
+    new ApiError('REQUEST_TIMEOUT', 'The request timed out', undefined, 408),
+    new ApiError('RATE_LIMITED', 'Try again later', undefined, 429),
+    new ApiError('SERVICE_UNAVAILABLE', 'Try again later', undefined, 503),
+    new ApiError('REQUEST_FAILED', 'Could not complete the request', undefined, 403),
+  ];
+  const refused = new ApiError('ORDER_REFUSED', 'Check the order details', undefined, 422);
+  for (const error of [...unanswered, refused]) request.mockRejectedValueOnce(error);
+  request.mockResolvedValueOnce({ id: 'saved-order' });
   const client = new QueryClient();
   const { result, unmount } = renderHook(useCreateOrder, {
     wrapper: ({ children }: PropsWithChildren) => (
@@ -40,21 +40,26 @@ it('lets staff change a draft after a replay proves the order was refused', asyn
     ),
   });
 
+  for (const error of unanswered) {
+    await act(async () => {
+      await expect(result.current.mutateAsync(input)).rejects.toBe(error);
+    });
+    expect(result.current.mustRetry).toBe(true);
+  }
   await act(async () => {
-    await expect(result.current.mutateAsync(input)).rejects.toThrow('Connection lost');
-  });
-  expect(result.current.mustRetry).toBe(true);
-  await act(async () => {
-    await expect(result.current.mutateAsync(input)).rejects.toBe(outOfStock);
+    await expect(result.current.mutateAsync(input)).rejects.toBe(refused);
   });
   expect(result.current.mustRetry).toBe(false);
-  expect(result.current.error?.message).toBe('Not enough available stock');
-  expect(request.mock.calls[1]).toEqual(request.mock.calls[0]);
+  expect(result.current.error?.message).toBe('Check the order details');
+  const attempts = unanswered.length + 1;
+  expect(request.mock.calls.slice(0, attempts)).toEqual(
+    Array.from({ length: attempts }, () => request.mock.calls[0]),
+  );
 
   await act(async () => {
     await result.current.mutateAsync({ ...input, items: [{ ...input.items[0]!, quantity: 2 }] });
   });
-  expect(request.mock.calls[2]?.[1].idempotencyKey).not.toBe(
+  expect(request.mock.calls[attempts]?.[1].idempotencyKey).not.toBe(
     request.mock.calls[0]?.[1].idempotencyKey,
   );
   unmount();
