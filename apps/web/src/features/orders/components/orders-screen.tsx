@@ -12,6 +12,7 @@ import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
+import { OrderFilters } from './order-filters';
 import { OrderSearch } from './order-search';
 import { OrdersList } from './orders-list';
 import { StorePage } from '@/components/store-page';
@@ -54,6 +55,7 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           ))}
         </nav>
         <OrderSearch query={query} />
+        <OrderFilters query={query} />
         {orders.isPending ? <p role="status">Loading orders…</p> : null}
         {orders.error ? (
           <QueryError

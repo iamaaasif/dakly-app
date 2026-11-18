@@ -18,6 +18,15 @@ describe('order list query', () => {
     });
   });
 
+  it('rejects a reversed date range or unknown source and courier', () => {
+    for (const query of [
+      { createdFrom: '2026-11-18', createdThrough: '2026-11-17' },
+      { source: 'marketplace' },
+      { courier: 'unknown' },
+    ])
+      expect(orderListQuerySchema.safeParse(query).success).toBe(false);
+  });
+
   it.each([
     { stage: 'inquiry' },
     { cursor: '-1' },
