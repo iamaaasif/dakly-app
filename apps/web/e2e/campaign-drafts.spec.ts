@@ -84,6 +84,9 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await expect(page.getByRole('button', { name: 'Save draft' })).toBeVisible();
     await capture(page, 'draft');
 
+    const otherEditor = await context.newPage();
+    await otherEditor.goto(`/campaigns/${draft.id}`);
+    await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('New Kurti collection');
     await page.getByLabel('Campaign name').fill('Winter Kurti collection');
     await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
@@ -92,10 +95,19 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
     await expect(page.getByLabel('Goal')).toHaveValue('new_collection');
+    await otherEditor.getByLabel('Goal').selectOption('from_scratch');
+    await otherEditor.getByRole('button', { name: 'Save draft' }).click();
+    await expect(otherEditor.getByText('Draft saved.', { exact: true })).toBeVisible();
+    await expect(
+      otherEditor.getByRole('heading', { name: 'Winter Kurti collection' }),
+    ).toBeVisible();
+    await expect(otherEditor.getByLabel('Campaign name')).toHaveValue('Winter Kurti collection');
+    await otherEditor.close();
     const longName = 'W'.repeat(100);
     await name.fill(longName);
     await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(page.getByRole('heading', { name: longName })).toBeVisible();
+    await expect(page.getByLabel('Goal')).toHaveValue('from_scratch');
     await page.setViewportSize({ width: 360, height: 800 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))

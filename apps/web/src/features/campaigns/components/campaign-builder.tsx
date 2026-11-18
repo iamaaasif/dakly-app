@@ -84,20 +84,27 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
     }),
     defaultValues: { name: campaign?.name ?? '', goal: campaign?.goal ?? null },
   });
-  const submit = form.handleSubmit((input) =>
-    save.mutate(
-      campaign
-        ? { id: campaign.id, input }
-        : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) },
-      {
-        onSuccess: (saved) => {
-          if (campaign) form.reset({ name: saved.name, goal: saved.goal });
-          else router.replace(`/campaigns/${saved.id}`);
-        },
+  const { isDirty, defaultValues } = form.formState;
+  const submit = form.handleSubmit((input) => {
+    const change = {
+      ...(input.name !== defaultValues?.name && { name: input.name }),
+      ...(input.goal !== defaultValues?.goal && { goal: input.goal }),
+    };
+    if (campaign && !Object.keys(change).length) {
+      form.reset(input);
+      return;
+    }
+    const request = campaign
+      ? { id: campaign.id, input: change }
+      : { input: createCampaignSchema.parse({ ...input, channel: 'sms' }) };
+    save.mutate(request, {
+      onSuccess: (saved) => {
+        if (campaign) form.reset({ name: saved.name, goal: saved.goal });
+        else router.replace(`/campaigns/${saved.id}`);
       },
-    ),
-  );
-  const saved = save.isSuccess && !form.formState.isDirty;
+    });
+  });
+  const saved = save.isSuccess && !isDirty;
   return (
     <FormProvider {...form}>
       <form
@@ -113,7 +120,7 @@ function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
           </p>
         )}
         {saved && <p role="status">Draft saved.</p>}
-        <Button type="submit" loading={save.isPending}>
+        <Button type="submit" loading={save.isPending} disabled={Boolean(campaign && !isDirty)}>
           {campaign ? 'Save draft' : 'Create SMS draft'}
         </Button>
       </form>
