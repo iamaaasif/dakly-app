@@ -19,12 +19,9 @@ export function orderTotals(
     if (net < 0n) throw orderError('ORDER_TOTAL_INVALID');
     return sum + net;
   }, 0n);
-  const cod =
-    subtotal -
-    BigInt(orderDiscountPoisha) +
-    BigInt(deliveryChargePoisha) -
-    BigInt(advancePaidPoisha);
-  if (subtotal > Number.MAX_SAFE_INTEGER || cod > Number.MAX_SAFE_INTEGER)
+  const discount = BigInt(orderDiscountPoisha);
+  const cod = subtotal - discount + BigInt(deliveryChargePoisha) - BigInt(advancePaidPoisha);
+  if (discount > subtotal || subtotal > Number.MAX_SAFE_INTEGER || cod > Number.MAX_SAFE_INTEGER)
     throw orderError('ORDER_TOTAL_INVALID');
   return {
     itemsSubtotalPoisha: Number(subtotal),

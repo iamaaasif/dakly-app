@@ -331,11 +331,7 @@ export class OrdersService {
       if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
       byId.set(variant.variantId, { ...variant, quantity: 0 });
     }
-    return items.map((item) => {
-      const variant = byId.get(item.variantId);
-      if (!variant) throw orderError('ORDER_NOT_EDITABLE');
-      return { ...variant, ...item };
-    });
+    return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
 
   private async moveReservations(

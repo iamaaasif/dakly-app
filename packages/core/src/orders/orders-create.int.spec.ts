@@ -103,6 +103,32 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('caps an overpayment at zero COD and rejects a discount above the items subtotal', async () => {
+    const variantId = await variant(1);
+    const items = [{ variantId, quantity: 1, lineDiscountPoisha: 500 }];
+    const buyer = { name: 'Discount boundary buyer' };
+    const request = editor();
+    await expect(
+      orders.createOrder(
+        f.a,
+        draft(variantId, { buyer, items, orderDiscountPoisha: 124501 }),
+        request,
+      ),
+    ).rejects.toMatchObject({ code: 'ORDER_TOTAL_INVALID' });
+    const contacts = await f.connection.pool.query(
+      'select id from contacts where store_id=$1 and name=$2',
+      [f.a, buyer.name],
+    );
+    expect(contacts.rows).toEqual([]);
+    await expect(
+      orders.createOrder(
+        f.a,
+        draft(variantId, { buyer, items, orderDiscountPoisha: 124500, advancePaidPoisha: 7000 }),
+        request,
+      ),
+    ).resolves.toMatchObject({ itemsSubtotalPoisha: 124500, codAmountPoisha: 0 });
+  });
+
   it('sets refund due when staff cancel after recording an advance', async () => {
     const variantId = await variant(2);
     const request = editor();
