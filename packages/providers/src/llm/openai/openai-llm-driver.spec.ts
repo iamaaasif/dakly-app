@@ -135,11 +135,32 @@ describe('OpenAiLlmDriver', () => {
     });
   });
 
+  it('converts a nested discriminated union to supported anyOf branches', async () => {
+    const output = z.object({
+      reply: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('text'), text: z.string() }),
+        z.object({ kind: z.literal('handover'), reason: z.string() }),
+      ]),
+    });
+    const driver = new OpenAiLlmDriver('test-key', async (_url, options) => {
+      expect(JSON.parse(String(options?.body)).text.format.schema.properties.reply).toMatchObject({
+        anyOf: [
+          { properties: { kind: { const: 'text' } }, additionalProperties: false },
+          { properties: { kind: { const: 'handover' } }, additionalProperties: false },
+        ],
+      });
+      return Response.json(fixtures.reply);
+    });
+
+    await expect(driver.respond({ ...request, output })).resolves.toMatchObject({ kind: 'output' });
+  });
+
   it('cancels a rejected HTTP response body without reading it', async () => {
     let cancelled = false;
     const body = new ReadableStream({
       cancel() {
         cancelled = true;
+        return new Promise<void>(() => undefined);
       },
     });
     const driver = new OpenAiLlmDriver('test-key', async () => new Response(body, { status: 429 }));
