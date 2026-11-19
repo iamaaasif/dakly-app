@@ -3,6 +3,10 @@ ALTER TABLE "campaign_recipients" ADD COLUMN "sms_credits" integer;--> statement
 ALTER TABLE "campaign_recipients" ADD COLUMN "send_attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "campaigns" ADD COLUMN "short_link_base" text;--> statement-breakpoint
 CREATE INDEX "campaigns_sending_idx" ON "campaigns" USING btree ("store_id","started_at","id") WHERE "campaigns"."status" = 'sending';--> statement-breakpoint
+-- Campaigns that started before this column was filled get their approval time, so the sweep
+-- orders every store's campaigns by when they started.
+UPDATE campaigns SET started_at = approved_at
+  WHERE status IN ('sending', 'paused', 'sent') AND started_at IS NULL;--> statement-breakpoint
 -- The batch scheduler sees one sending campaign per store. Work is done under store RLS.
 CREATE FUNCTION sending_campaigns(after_store uuid, store_limit integer)
   RETURNS TABLE(store_id uuid, campaign_id uuid)
