@@ -1,5 +1,5 @@
 {
-  "id": "3d0651dc-6abb-44d7-b9d8-e2743c3fd12c",
+  "id": "ec0e09f8-16ed-435d-89cc-2aa741c8c50f",
   "prevId": "576afb87-c1bc-4529-ab30-51f2e797e07d",
   "version": "7",
   "dialect": "postgresql",
@@ -9768,6 +9768,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sender_identity_id": {
+          "name": "sender_identity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "recipient_identity_id": {
           "name": "recipient_identity_id",
           "type": "uuid",
@@ -10013,6 +10019,28 @@
           "method": "btree",
           "with": {}
         },
+        "messages_sender_identity_idx": {
+          "name": "messages_sender_identity_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sender_identity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"messages\".\"sender_identity_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "messages_recipient_identity_idx": {
           "name": "messages_recipient_identity_idx",
           "columns": [
@@ -10119,6 +10147,21 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "messages_sender_identity_store_fk": {
+          "name": "messages_sender_identity_store_fk",
+          "tableFrom": "messages",
+          "tableTo": "contact_identities",
+          "columnsFrom": [
+            "store_id",
+            "sender_identity_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "messages_recipient_identity_store_fk": {
           "name": "messages_recipient_identity_store_fk",
           "tableFrom": "messages",
@@ -10142,6 +10185,10 @@
         "messages_direction": {
           "name": "messages_direction",
           "value": "\"messages\".\"direction\" in ('in', 'out')"
+        },
+        "messages_inbound_sender": {
+          "name": "messages_inbound_sender",
+          "value": "\"messages\".\"direction\" <> 'in' or \"messages\".\"sender_identity_id\" is not null"
         },
         "messages_author_type": {
           "name": "messages_author_type",
@@ -20207,18 +20254,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "create_key": {
-          "name": "create_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "create_fingerprint": {
-          "name": "create_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "approved_by_user_id": {
           "name": "approved_by_user_id",
           "type": "uuid",
@@ -20274,34 +20309,6 @@
           "method": "btree",
           "with": {}
         },
-        "posts_store_creator_create_key": {
-          "name": "posts_store_creator_create_key",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "create_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"posts\".\"create_key\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "posts_store_id_created_at_idx": {
           "name": "posts_store_id_created_at_idx",
           "columns": [
@@ -20313,12 +20320,6 @@
             },
             {
               "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

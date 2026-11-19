@@ -14,6 +14,7 @@ type MessageInput = {
   conversationId: string;
   externalMessageId: string;
   idempotencyKey: string;
+  senderIdentityId: string;
   text: string;
   sentAt: Date;
 };
@@ -76,6 +77,7 @@ export class InboundMessagingRepository {
           storeId,
           conversationId: input.conversationId,
           idempotencyKey: input.idempotencyKey,
+          senderIdentityId: input.senderIdentityId,
           externalId: input.externalMessageId,
           sentAt: input.sentAt,
           body: input.text,
