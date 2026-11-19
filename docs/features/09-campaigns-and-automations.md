@@ -246,6 +246,8 @@ The campaign builder and the visual workflow editor are the strongest screens in
 
 Owner decision (18 Nov 2026): build the campaign list and builder from `campaigns.webp` and `campaigns-and-automations/` first. Draft rows open the builder; sent rows open a read-only summary in the builder until results exist. Build results after ORD-3 from the screen table above and this section, with no separate design. CAMP-4 stays In progress after the list and builder merge.
 
+New campaigns start with the channel choices. SMS opens the name and goal step, where staff save a draft. WhatsApp, Facebook Messenger and Instagram DM show Connect first until those channels support campaigns. The picker has no recipient count before a draft exists. The SMS estimate reads a saved campaign. Voice calls stay hidden in release 1.
+
 The first builder slice opens an SMS draft, saves its name and goal, and shows a read-only summary for a sent campaign. It sends only changed fields, resets the form to the saved values on success, and shows a server error if a save is refused. After creating a draft, the form stays locked while the builder opens. Content, audience, scheduling and approval controls follow separately.
 
 Each campaign row, or card on phones, opens the builder for a draft and the read-only summary for a sent campaign. The list filters by name, status, channel and creation date in the shop time zone, and shows campaigns newest first. Each row or card shows the saved channel and goal. The First page link recovers an unavailable cursor, including a cursor saved for another shop. Create campaign is available to members who can edit campaigns in that shop.
