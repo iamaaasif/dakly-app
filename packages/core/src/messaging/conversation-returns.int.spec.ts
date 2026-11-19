@@ -149,13 +149,14 @@ it('keeps a deadline when Chats is disabled after a return was queued', async ()
   await sweep.handle({});
   const queued = (await queue.getWaiting()).find(({ data }) => data.conversationId === due);
   expect(queued?.data).toEqual({ storeId: f.a, conversationId: due });
+  const before = await f.row('conversations', due);
   const { pool } = f.connection;
   await pool.query('update stores set extensions = array[]::text[] where id = $1', [f.a]);
   try {
     await app.get(ReturnConversationToAiJob).handle(queued!.data);
     expect(await f.row('conversations', due)).toMatchObject({
       responder: 'human',
-      ai_resumes_at: past,
+      ai_resumes_at: before.ai_resumes_at,
     });
     await queued!.remove();
     await sweep.handle({});
