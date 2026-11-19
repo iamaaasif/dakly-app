@@ -71,7 +71,6 @@ const examples: DaklyEvent[] = [
     payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
-  { type: 'contact.lifecycle_changed', storeId, occurredAt, payload: { contactId } },
   {
     type: 'consent.changed',
     storeId,

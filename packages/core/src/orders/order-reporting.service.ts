@@ -16,24 +16,24 @@ export class OrderReportingService {
     return this.orders.buyerContactId(storeId, orderId);
   }
 
-  reportingAnchor(storeId: string, orderId: string, timeZone: string, now: Date) {
-    return this.orders.reportingAnchor(storeId, orderId, timeZone, now);
+  reportingAnchor(storeId: string, orderId: string, timeZone: string) {
+    return this.orders.reportingAnchor(storeId, orderId, timeZone);
   }
 
   reportBuyerIds(
     storeId: string,
     after: string | null,
-    range: { timeZone: string; now: Date; limit: number },
+    range: { timeZone: string; since: string; limit: number },
   ) {
     return this.orders.reportBuyerIds(storeId, after, range);
   }
 
-  buyerActivityDays(storeId: string, contactId: string, timeZone: string, now: Date) {
-    return this.orders.buyerActivityDays(storeId, contactId, timeZone, now);
+  oldestRetainedOrderDay(storeId: string, timeZone: string, since: string) {
+    return this.orders.oldestRetainedOrderDay(storeId, timeZone, since);
   }
 
-  oldestRetainedOrderDay(storeId: string, timeZone: string, now: Date) {
-    return this.orders.oldestRetainedOrderDay(storeId, timeZone, now);
+  buyerActivityDays(storeId: string, contactId: string, timeZone: string, since: string) {
+    return this.orders.buyerActivityDays(storeId, contactId, timeZone, since);
   }
 
   dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {

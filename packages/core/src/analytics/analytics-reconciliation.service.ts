@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { Clock } from '../platform/clock';
 import { QUEUES } from '../platform/queue/queues';
-import { DAY_MS, JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../platform/time';
+import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { shiftReportDay } from './report-period';
@@ -20,7 +20,6 @@ export const analyticsReconciliationPayload = z.strictObject({
       period: z.strictObject({ from: z.iso.date(), through: z.iso.date() }).nullable(),
     }),
     z.strictObject({ kind: z.literal('buyers'), after: z.uuid().nullable() }),
-    z.strictObject({ kind: z.literal('lifecycle') }),
     z.strictObject({ kind: z.literal('retention'), batch: z.int().nonnegative() }),
   ]),
 });
@@ -50,22 +49,8 @@ export class AnalyticsReconciliationService {
     }
   }
 
-  async scheduleLifecycle(storeId: string) {
-    const now = this.clock.now().getTime();
-    const minute = Math.floor(now / MINUTE_MS) + 1;
-    const dueAt = minute * MINUTE_MS;
-    const day = new Date(dueAt).toISOString().slice(0, 10);
-    const job = reconciliationJob({ storeId, day, page: { kind: 'lifecycle' } });
-    // Read at the end of the minute so one snapshot includes the store's recent changes.
-    await this.queue.add(job.name, job.data, { ...job.opts, delay: dueAt - now });
-  }
-
   async reconcile(repair: Repair) {
     const { day, storeId, page } = repair;
-    if (page.kind === 'lifecycle') {
-      await this.summaries.refreshLifecycle(storeId);
-      return;
-    }
     if (day !== this.clock.now().toISOString().slice(0, 10)) return;
     if (page.kind === 'retention') {
       if (await this.summaries.pruneExpiredRows(storeId))
@@ -111,16 +96,6 @@ function reconciliationJob(data: Repair) {
     removeOnComplete: { age: DAY_MS / 1000 },
     removeOnFail: 100,
   };
-  if (page.kind === 'lifecycle') {
-    return {
-      name: RECONCILE_ANALYTICS,
-      data,
-      opts: {
-        ...opts,
-        deduplication: { id: `analytics-lifecycle-${storeId}`, keepLastIfActive: true },
-      },
-    };
-  }
   let cursor: string | number | undefined | null;
   if (page.kind === 'orders') cursor = page.period?.from;
   else if (page.kind === 'buyers') cursor = page.after;
