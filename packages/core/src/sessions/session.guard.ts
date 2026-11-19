@@ -12,7 +12,11 @@ import { PinoLogger } from 'nestjs-pino';
 
 import { SESSION_COOKIE, setSessionCookie } from '../platform/http/session-cookie';
 import { bindVerifiedStore } from '../platform/logging/request-logging';
-import { ACCESS_RULE, type AccessRule } from '../platform/tenancy/access.decorators';
+import {
+  ACCESS_RULE,
+  type AccessRule,
+  PROVIDER_CALLBACK,
+} from '../platform/tenancy/access.decorators';
 import type { StoreRequest } from '../platform/tenancy/store-request';
 import { TeamService } from '../team/team.service';
 import { sessionContextTag } from './session-context';
@@ -39,7 +43,7 @@ export class SessionGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (['support', 'support-handoff', 'staff'].includes(rule?.kind ?? '')) return true;
+    if (this.skipsShopSession(context, rule)) return true;
     const token = request.cookies[SESSION_COOKIE];
     if (!token) return true;
     const session = await this.sessions.resolve(token);
@@ -60,6 +64,14 @@ export class SessionGuard implements CanActivate {
     if (session.isRemembered)
       setSessionCookie(context.switchToHttp().getResponse<FastifyReply>(), token, true);
     return true;
+  }
+
+  private skipsShopSession(context: ExecutionContext, rule?: AccessRule): boolean {
+    return (
+      ['support', 'support-handoff', 'staff'].includes(rule?.kind ?? '') ||
+      (rule?.kind === 'public' &&
+        this.reflector.get<boolean>(PROVIDER_CALLBACK, context.getHandler()) === true)
+    );
   }
 
   private checksContext(

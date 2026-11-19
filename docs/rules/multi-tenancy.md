@@ -7,7 +7,7 @@ Every shop's data is isolated twice: in code by `storeId`, and in Postgres by ro
 3. Every repository method takes `storeId` as its first argument, filters by it, and runs inside `TenantDatabase.forStore(storeId, ...)`, which sets `app.store_id` for the transaction.
 4. The app connects as `dakly_app`, which does not own the tables, so RLS applies. Migrations run as the owner.
 5. `storeId` comes only from the verified session (`@CurrentStore()`). Never from the body, query string or a header.
-6. Every job payload carries `storeId`.
+6. Every store job payload carries `storeId`. The [jobs rule](jobs.md) lists the global exceptions.
 7. Every new repository gets an integration test proving store B cannot read store A's rows (see `contacts.repository.int.spec.ts`).
 
 **Why both:** the WHERE clause is the normal path; RLS catches the one query someone forgets to filter. A leak between shops would end the business.

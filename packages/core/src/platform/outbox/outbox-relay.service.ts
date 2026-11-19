@@ -5,7 +5,7 @@ import type { JobsOptions, Queue } from 'bullmq';
 
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { HandlesJob } from '../queue/job-handler';
-import { QUEUES, type QueueName } from '../queue/queues';
+import { QUEUES, type QueueName, WORKER_QUEUES } from '../queue/queues';
 import { JOB_POLL_INTERVAL_MS } from '../time';
 import { SubscribedEvent } from './handles-event';
 import { OutboxRepository } from './outbox.repository';
@@ -80,9 +80,9 @@ export class OutboxRelayService implements OnModuleInit {
         });
     try {
       await Promise.all(
-        Object.values(QUEUES)
-          .filter((queue) => jobs[queue].length > 0)
-          .map((queue) => this.queues[queue].addBulk(jobs[queue])),
+        WORKER_QUEUES.filter((queue) => jobs[queue].length > 0).map((queue) =>
+          this.queues[queue].addBulk(jobs[queue]),
+        ),
       );
       await this.repository.markPublished(events.map((event) => event.id));
     } catch (error) {

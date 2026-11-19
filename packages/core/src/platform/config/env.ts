@@ -15,6 +15,8 @@ const envSchema = z.object({
   SENDGRID_API_KEY: z.string().min(1).optional(),
   GOOGLE_IDENTITY_DRIVER: z.enum(['fake', 'google']).optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  META_APP_SECRET: z.string().min(1).optional(),
+  META_WEBHOOK_VERIFY_TOKEN: z.string().min(1).optional(),
   LLM_DRIVER: z.enum(['openai', 'fake']).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   AI_REPLY_MODEL: z.string().min(1).default('gpt-6.1-terra'),
