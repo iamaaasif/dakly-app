@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { calendarDate } from './calendar-date';
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 import {
@@ -8,6 +9,7 @@ import {
   type ProductResponse,
   type ProductVariantResponse,
 } from './products';
+import { searchText } from './search-text';
 
 export const orderSources = [
   'messenger',
@@ -101,9 +103,6 @@ export const orderTabs = [
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 
-const searchText = z.string().trim().min(1).max(120);
-const calendarDate = z.iso.date().refine((date) => !date.startsWith('0000-'), 'Enter a valid date');
-
 export const orderListQuerySchema = z
   .strictObject({
     stage: z.enum(orderStages).optional(),
@@ -112,7 +111,7 @@ export const orderListQuerySchema = z
     createdFrom: calendarDate.optional(),
     createdThrough: calendarDate.optional(),
     alert: z.enum(['waiting', 'risk', 'cod']).optional(),
-    search: searchText.refine((text) => !text.includes('\0')).optional(),
+    search: searchText.max(120).optional(),
     cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
     limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })

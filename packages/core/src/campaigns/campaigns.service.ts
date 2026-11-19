@@ -72,7 +72,9 @@ export class CampaignsService {
   ) {}
 
   async list(storeId: string, query: CampaignListQuery): Promise<CampaignListResponse> {
-    const rows = await this.repository.list(storeId, query);
+    const timeZone =
+      query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
+    const rows = await this.repository.list(storeId, { ...query, timeZone });
     const items = rows.slice(0, query.limit).map(toCampaignResponse);
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }

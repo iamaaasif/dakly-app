@@ -3,9 +3,11 @@ import {
   House,
   Layers,
   LogOut,
+  Package,
   Puzzle,
   Settings,
   Store,
+  Truck,
   Users,
   UsersRound,
   type LucideIcon,
@@ -103,8 +105,8 @@ function NavigationItem({
   );
 }
 
-// Groups follow the design order. Sales, Marketing and Social auto post join when their screens exist.
-function navigationGroups(session: SessionContext): NavigationGroup[] {
+// Groups follow the design order. Marketing and Social auto post join when their screens exist.
+export function navigationGroups(session: SessionContext): NavigationGroup[] {
   const store = session.currentStore;
   return [
     {
@@ -123,6 +125,19 @@ function navigationGroups(session: SessionContext): NavigationGroup[] {
         { href: '/segments', label: 'Segments', icon: Layers, visible: store?.canViewSegments },
       ],
     },
+    {
+      heading: 'Sales',
+      links: [
+        { href: '/orders', label: 'Orders', icon: Truck, visible: store?.canViewOrders },
+        { href: '/products', label: 'Products', icon: Package, visible: store?.canViewProducts },
+      ],
+    },
+    ...settingsGroups(store),
+  ];
+}
+
+function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[] {
+  return [
     {
       heading: 'Store information',
       links: [
@@ -164,7 +179,9 @@ function NavigationLogo({ collapsed }: Pick<ShellNavigationProps, 'collapsed'>) 
         D
       </span>
       <div className={cn('min-w-0', collapsed && 'sr-only')}>
-        <p className="text-md leading-5 font-bold">Dakly</p>
+        <p className="text-md leading-5 font-bold">
+          Dakly <span className="text-primary">AI</span>
+        </p>
         <p className="truncate text-xs text-text-muted">Call customers. Grow sales.</p>
       </div>
     </div>

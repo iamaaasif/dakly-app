@@ -147,7 +147,7 @@ Webhook intake
 
 A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
 
-Enable live intake after the worker can clear processed payloads and recover acknowledged deliveries if their Valkey jobs are lost. Run the seven-day webhook purge before enabling live intake.
+CHN-9 adds recovery for acknowledged deliveries whose Valkey jobs are lost and the seven-day webhook payload purge. Complete CHN-9 before enabling live intake.
 
 Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
 

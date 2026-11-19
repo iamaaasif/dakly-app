@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
+import { calendarDate } from './calendar-date';
 import { bdMobileSchema } from './phone';
+import { searchText } from './search-text';
 
 export const campaignChannels = ['whatsapp', 'sms', 'messenger'] as const;
 export const messageCategories = ['marketing', 'utility', 'authentication'] as const;
@@ -131,10 +133,21 @@ export const changeCampaignSchema = z
     (input) => Object.values(input).some((value) => value !== undefined),
     'Nothing to change',
   );
-export const campaignListQuerySchema = z.strictObject({
-  cursor: z.uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-});
+export const campaignListQuerySchema = z
+  .strictObject({
+    cursor: z.uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    search: searchText.max(100).optional(),
+    status: z.enum(campaignStatuses).optional(),
+    channel: z.enum(campaignChannels).optional(),
+    createdFrom: calendarDate.optional(),
+    createdThrough: calendarDate.optional(),
+  })
+  .refine(
+    ({ createdFrom, createdThrough }) =>
+      !createdFrom || !createdThrough || createdFrom <= createdThrough,
+    { path: ['createdThrough'], message: 'End date must be on or after the start date' },
+  );
 
 export type CampaignChannel = (typeof campaignChannels)[number];
 export type CampaignGoal = (typeof campaignGoals)[number];
