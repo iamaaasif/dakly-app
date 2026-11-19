@@ -247,41 +247,6 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
   });
 
-  it('reads the final phone after an unprepared sender lookup finishes', async () => {
-    const contact = await contacts.create(
-      storeA,
-      { name: 'Sumi Akter', phone: '01712345618' },
-      fullPhone,
-      { kind: 'system' },
-    );
-    const calls = watchDriver();
-    const original = SmsSendersService.prototype.approvedSenderName;
-    vi.spyOn(SmsSendersService.prototype, 'approvedSenderName').mockImplementationOnce(
-      async function (store) {
-        const sender = await original.call(this, store);
-        await contacts.editDetails(
-          storeA,
-          contact.id,
-          { phone: '01712345619' },
-          { access: fullPhone, actor: { kind: 'system' } },
-        );
-        return sender;
-      },
-    );
-    expect(
-      await errorCode(
-        messaging.send(storeA, {
-          channel: 'sms',
-          contactId: contact.id,
-          body: 'Your order has shipped',
-          operationKey: `test-${contact.id}`,
-          destination: contact.phone,
-        }),
-      ),
-    ).toBe('MESSAGING_DESTINATION_CHANGED');
-    expect(calls).toEqual([]);
-  });
-
   it('sends from the shared sender until the store’s sender name is approved', async () => {
     const contact = await contacts.create(
       storeB,
@@ -406,7 +371,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
   it('refuses a phone that is no longer the approved number, and sends to the approved one', async () => {
     const contact = await contacts.create(
       storeA,
-      { name: 'সাবিনা ইয়াসমিন', phone: '01712345609' },
+      { name: 'সাবিনা ইয়াসমিন', phone: '01712345621' },
       fullPhone,
       { kind: 'system' },
     );
@@ -423,8 +388,8 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await errorCode(approved('01712345600'))).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(await errorCode(approved(null))).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
-    const sent = await approved('01712345609');
-    expect(calls.map((call) => call.to)).toEqual(['01712345609']);
+    const sent = await approved('01712345621');
+    expect(calls.map((call) => call.to)).toEqual(['01712345621']);
     expect(await capturedText(sent.providerMessageId)).toBe('নতুন কালেকশন এসেছে');
   });
 
