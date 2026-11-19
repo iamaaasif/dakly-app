@@ -2,6 +2,11 @@
 // Keep the owning integration proof beside each group; a newly registered route is never ignored.
 const groups = [
   {
+    evidence: 'channels/meta-webhooks.int.spec.ts',
+    boundary: 'public Meta verification and signed intake before store routing',
+    routes: ['GET /webhooks/meta', 'POST /webhooks/meta'],
+  },
+  {
     evidence:
       'sessions/sessions-http.int.spec.ts; stores/stores.int.spec.ts; team/members.int.spec.ts; admin/staff-recovery.int.spec.ts',
     boundary: 'account membership, token recipient, or new-store creation',

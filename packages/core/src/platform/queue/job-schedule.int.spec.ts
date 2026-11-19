@@ -19,7 +19,7 @@ import {
 } from './job-dispatcher';
 import { HandlesJob, type JobHandler } from './job-handler';
 import { scheduleJob } from './job-schedule';
-import { QUEUES, type QueueName } from './queues';
+import { QUEUES, type QueueName, WORKER_QUEUES } from './queues';
 import { toRedisConnection } from './redis-connection';
 
 const SCHEDULED = 'scheduled-test-job';
@@ -92,7 +92,7 @@ afterEach(async () => {
   await Promise.all(applications.splice(0).map((application) => application.close()));
 });
 
-describe.each(Object.values(QUEUES))('Scheduled job on %s', (queueName) => {
+describe.each(WORKER_QUEUES)('Scheduled job on %s', (queueName) => {
   it('runs one job per interval across two workers, each in its own job context', async () => {
     const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
     const first = await start(queueName, prefix);
