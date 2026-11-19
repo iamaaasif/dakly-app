@@ -26,17 +26,23 @@ const groups = [
   {
     key: 'type',
     name: 'Type',
-    options: templateCategories.map((value) => ({ value, label: templateTypeLabels[value] })),
+    options: templateCategories
+      .filter((value) => workflowTemplates.some((template) => template.category === value))
+      .map((value) => ({ value, label: templateTypeLabels[value] })),
   },
   {
     key: 'goal',
     name: 'Goal',
-    options: templateGoals.map((value) => ({ value, label: templateGoalLabels[value] })),
+    options: templateGoals
+      .filter((value) => workflowTemplates.some((template) => template.libraryGoal === value))
+      .map((value) => ({ value, label: templateGoalLabels[value] })),
   },
   {
     key: 'channel',
     name: 'Channel',
-    options: campaignChannels.map((value) => ({ value, label: channelLabels[value] })),
+    options: campaignChannels
+      .filter((value) => workflowTemplates.some((template) => template.channels.includes(value)))
+      .map((value) => ({ value, label: channelLabels[value] })),
   },
 ] as const;
 
@@ -134,7 +140,7 @@ function LibraryFilters({
             <h2 className="px-2 text-xs font-semibold tracking-wide text-text-muted uppercase">
               {name}
             </h2>
-            <div className="flex gap-1 overflow-x-auto md:grid">
+            <div className="flex gap-1 overflow-x-auto md:grid md:gap-0">
               {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => {
                 const count = candidates.filter((item) => matches(item, key, value)).length;
                 const pressed = selected(key) === value;
@@ -145,8 +151,8 @@ function LibraryFilters({
                     aria-pressed={pressed}
                     aria-label={`${label} ${count}`}
                     className={cn(
-                      'shrink-0 justify-between border-0 px-2 md:w-full',
-                      pressed ? 'bg-primary-soft text-action' : 'bg-transparent',
+                      'shrink-0 justify-between border-0 px-2 py-1 text-sm font-normal md:w-full',
+                      pressed ? 'bg-primary-soft text-action-hover' : 'bg-transparent',
                     )}
                     onClick={() => choose(key, value)}
                   >
@@ -203,9 +209,7 @@ function LibraryResults({
             template={template}
             inUse={activeTemplates.has(template.key)}
             pending={pending}
-            onUse={() =>
-              create({ name: template.name, graph: template.graph, templateKey: template.key })
-            }
+            onUse={() => create({ name: template.name, templateKey: template.key })}
           />
         ))}
       </div>

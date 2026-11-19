@@ -1,8 +1,8 @@
 import type { z } from 'zod';
 
-import { createAutomationSchema } from '@dakly/contracts/automations';
+import { automationDraftSchema } from '@dakly/contracts/automations';
 
-export const settingsSchema = createAutomationSchema.pick({ name: true, graph: true });
+export const settingsSchema = automationDraftSchema;
 export type SettingsInput = z.input<typeof settingsSchema>;
 export type SettingsValues = z.output<typeof settingsSchema>;
 

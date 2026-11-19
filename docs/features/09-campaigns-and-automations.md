@@ -420,7 +420,7 @@ Build in two stages so templates can ship if the canvas slips: (1) engine, versi
 
 Template library: complete graphs shipped in code, copied into the store as a draft on Use template. The templates are in [Workflow catalogue](#workflow-catalogue). Templates whose prerequisites the store lacks show what they need instead of Use.
 
-The template library filters by type, goal and channel in the URL. Use workflow copies the template into a draft and saves which template it came from. The library marks templates that have an active workflow in the shop.
+The template library filters by type, goal and channel in the URL. Use workflow creates a draft from a template key. A draft created from scratch supplies a graph instead. The shop saves which template it came from. The library marks templates that have an active workflow in the shop.
 
 Workflow settings change the saved draft graph, including wait times, message text, channel order, re-entry and exits. The settings form can add tag exits. Order, reply and link exits wait for their sources. An every-time workflow that removes its own trigger tag shows a warning. Before publish, the workflow detail reports the number of running and waiting entries so the shop can see how many people will continue on the version they entered.
 

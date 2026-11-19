@@ -27,6 +27,7 @@ test('filters the template library and copies a ready workflow into a draft', as
     await page.goto('/automations');
     await page.getByRole('link', { name: 'Create workflow' }).click();
     await expect(page.getByRole('heading', { name: 'Pick a ready-made workflow' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Transactional/ })).toHaveCount(0);
     const followUp = page.getByRole('article').filter({ hasText: 'Chat follow-up' });
     await expect(followUp.getByText(/Needs a connected channel/)).toBeVisible();
     await expect(followUp.getByRole('button', { name: /Use workflow/ })).toHaveCount(0);
@@ -48,6 +49,11 @@ test('filters the template library and copies a ready workflow into a draft', as
       .getByRole('button', { name: 'Welcome 1' })
       .click();
     await expect(page).toHaveURL(/type=welcome/);
+    await expect(
+      page
+        .getByRole('region', { name: 'Goal' })
+        .getByRole('button', { name: 'Recover lost sales 0' }),
+    ).toBeVisible();
     await page
       .getByRole('region', { name: 'Goal' })
       .getByRole('button', { name: 'Convert subscribers 1' })
