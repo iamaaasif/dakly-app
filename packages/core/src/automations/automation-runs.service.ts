@@ -1,8 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type { AutomationExitReason } from '@dakly/contracts/automations';
-import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
+import type { AutomationStep } from '@dakly/contracts/automations/graph';
 import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
@@ -11,10 +10,10 @@ import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
+import { AutomationConditionsService } from './automation-conditions.service';
 import {
   AutomationRunsRepository,
   type ClaimedRun,
@@ -29,7 +28,6 @@ import {
   type GateResult,
   failed,
   goOn,
-  hasHappened,
   holdOrEnd,
   holdsClaim,
   ifNotReachable,
@@ -52,8 +50,6 @@ const MAX_QUEUED_STEPS = 1000;
 const CLAIMS_PER_STORE = 100;
 const system = { kind: 'system' } as const;
 
-type Condition = AutomationGraph['workflowFilters'][number];
-type PathChoice = { outcome: string; next: string };
 const NO_ANSWER = 'The SMS provider did not answer';
 
 @Injectable()
@@ -62,12 +58,12 @@ export class AutomationRunsService {
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(ContactsService) private readonly contacts: ContactsService,
-    @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(WalletService) private readonly wallets: WalletService,
+    @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
   ) {}
 
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
@@ -134,7 +130,7 @@ export class AutomationRunsService {
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
     };
-    const exitReason = await this.exitReason(run.graph, facts, now);
+    const exitReason = await this.conditions.exitReason(storeId, run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
     if (
       shouldPrepareSender(step) &&
@@ -157,7 +153,12 @@ export class AutomationRunsService {
         return scheduleWait(stepKey, step, now, timeZone);
       }
       case 'condition': {
-        const choice = (await this.firstHoldingPath(step.paths, facts, now)) ?? {
+        const choice = (await this.conditions.firstHoldingPath(
+          facts.storeId,
+          step.paths,
+          facts,
+          now,
+        )) ?? {
           outcome: 'else',
           next: step.elseNext,
         };
@@ -185,60 +186,6 @@ export class AutomationRunsService {
           run: { status: 'done', finishedAt: now },
           step: { stepKey, kind: 'exit', outcome: 'done' },
         };
-    }
-  }
-
-  // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
-  // filters.
-  private async exitReason(
-    graph: AutomationGraph,
-    facts: RunFacts,
-    at: Date,
-  ): Promise<AutomationExitReason | undefined> {
-    const { goal, exitConditions, workflowFilters } = graph;
-    if (goal && hasHappened(goal, facts)) return 'goal';
-    if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';
-    for (const filter of workflowFilters)
-      if (!(await this.holds(filter, facts, at))) return 'workflow_filter';
-    return undefined;
-  }
-
-  private async firstHoldingPath(
-    paths: { condition: Condition; next: string }[],
-    facts: RunFacts,
-    at: Date,
-  ): Promise<PathChoice | undefined> {
-    for (const [index, path] of paths.entries())
-      if (await this.holds(path.condition, facts, at))
-        return { outcome: `path_${index + 1}`, next: path.next };
-    return undefined;
-  }
-
-  private async holds(condition: Condition, facts: RunFacts, at: Date): Promise<boolean> {
-    const { storeId, contactId } = facts;
-    switch (condition.kind) {
-      // Publish refuses tap conditions until taps on workflow messages are recorded.
-      case 'tapped':
-        return facts.tappedStepKeys.includes(condition.stepKey);
-      case 'has_tag':
-        return facts.tags.includes(condition.tag);
-      case 'in_segment':
-        return this.segments.hasContact(storeId, condition.segmentId, contactId);
-      // Reachable means the contact has an address and an open window on the channel; consent is
-      // the send step's own check.
-      case 'reachable': {
-        const request = {
-          contactId,
-          channel: condition.channel,
-          category: 'transactional',
-          at,
-        } as const;
-        return (await this.sendPolicy.check(storeId, request)).action === 'send';
-      }
-      // Replies arrive with CHAT-2 (SMS cannot receive them), and orders with ORD-1.
-      case 'replied':
-      case 'placed_order':
-        return false;
     }
   }
 
@@ -333,7 +280,12 @@ export class AutomationRunsService {
   private async refreshExitReason(facts: RunFacts, at: Date) {
     const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
-    return this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
+    return this.conditions.exitReason(
+      facts.storeId,
+      facts.graph,
+      { ...facts, tags, tappedStepKeys },
+      at,
+    );
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
