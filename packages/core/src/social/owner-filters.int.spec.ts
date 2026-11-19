@@ -42,12 +42,14 @@ describe('SocialRepository', () => {
     const ownId = own!.id;
     expect(await repository.findPost(b, ownId)).toBeUndefined();
     expect(await repository.listPosts(b, { limit: 50, drafts: 'team' }, userB)).toMatchObject([
-      { id: other!.id },
+      { post: { id: other!.id } },
     ]);
     expect(await repository.findCreateKey(b, userA, fields.createKey)).toBeUndefined();
     expect(
       await repository.updatePost(b, ownId, { caption: 'ঈদ', updatedAt: now }),
     ).toBeUndefined();
-    expect(await repository.findPost(a, ownId)).toMatchObject({ caption: fields.caption });
+    expect(await repository.findPost(a, ownId)).toMatchObject({
+      post: { caption: fields.caption },
+    });
   });
 });
