@@ -12,7 +12,7 @@ A store job that loses its Valkey entry is found again by a sweep. Store sweeps 
 | `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                             |
 | `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)` |
 
-`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`. Meta delivery receipts use `process-webhook-event` to apply status within each resolved store. The job retries a receipt while the recipient has an unconfirmed send.
+`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`. Meta delivery receipts use `process-webhook-event` to apply status within each resolved store. The job retries a receipt while the recipient has an unconfirmed send. If the final attempt throws, the worker marks the webhook row `failed` for the seven-day purge and reports the job failure.
 
 ## ai-reply
 

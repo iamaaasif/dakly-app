@@ -91,13 +91,16 @@ export class MetaWebhooksRepository {
 
   async finish(
     id: string,
-    status: 'processed' | 'ignored',
-    error: string | null,
-    processedAt: Date,
+    result: {
+      status: 'processed' | 'ignored' | 'failed';
+      error: string | null;
+      processedAt: Date;
+      payload?: null;
+    },
   ) {
     await this.database
       .update(webhookEvents)
-      .set({ status, error, payload: null, processedAt })
+      .set(result)
       .where(
         and(
           eq(webhookEvents.id, id),
