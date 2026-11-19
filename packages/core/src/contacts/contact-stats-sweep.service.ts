@@ -21,7 +21,6 @@ export const reconcileContactStatsPayload = z.strictObject({
     z.strictObject({ kind: z.literal('measure') }),
     z.strictObject({
       kind: z.literal('cutoff'),
-      asOf: z.iso.datetime(),
       cutoff: z
         .strictObject({
           contactId: z.uuid(),
@@ -60,11 +59,8 @@ export class ContactStatsSweepService {
   async reconcile(repair: Repair) {
     const { storeId, after, ranking } = repair;
     if (ranking.kind === 'measure') {
-      const asOf = this.clock.now().toISOString();
       const cutoff = await this.stats.bestSpendCutoff(storeId);
-      await this.bulk.addBulk([
-        repairJob({ ...repair, ranking: { kind: 'cutoff', cutoff, asOf } }),
-      ]);
+      await this.bulk.addBulk([repairJob({ ...repair, ranking: { kind: 'cutoff', cutoff } })]);
       return;
     }
     const next = await this.stats.reconcilePage(storeId, after, ranking);

@@ -262,12 +262,20 @@ describe('Contact stats', () => {
     const otherBuyerId = rows[0].id;
     await fixture.connection.pool.query(
       `update orders set stage='delivered', payment_status='paid', order_discount_poisha=0,
-        items_subtotal_poisha=case number when 1001 then 2500000 else 2400000 end,
+        items_subtotal_poisha=case number when 1001 then 2300000 else 2400000 end,
         buyer_contact_id=case number when 1001 then $2::uuid else $3::uuid end
         where store_id=$1 and stage <> 'cancelled'`,
       [fixture.a, contactId, otherBuyerId],
     );
     await stats.reconcilePage(fixture.a, null, { kind: 'keep' });
+    await stats.refresh(fixture.a, otherBuyerId);
+    const before = await stored(otherBuyerId);
+    expect(before).toMatchObject({ lifecycle_stage: 'best' });
+    await fixture.connection.pool.query(
+      'update orders set items_subtotal_poisha=2500000 where id=$1',
+      [firstOrderId],
+    );
+    await stats.refresh(fixture.a, contactId);
     const handler = app.get(ReconcileContactStatsJob);
     const bulk = app.get<Queue>(getQueueToken(QUEUES.bulk));
     const day = '2026-11-20';
@@ -284,9 +292,9 @@ describe('Contact stats', () => {
     await stats.refresh(fixture.a, contactId);
     vi.mocked(app.get(Clock).now).mockReturnValueOnce(new Date('2026-11-19T06:01:00Z'));
     await stats.refresh(fixture.a, otherBuyerId);
-    expect(await stored(otherBuyerId)).toMatchObject({ lifecycle_stage: 'best' });
+    expect(await stored(otherBuyerId)).toEqual(before);
     await handler.handle(rank?.data);
-    expect(await stored(otherBuyerId)).toMatchObject({ lifecycle_stage: 'best' });
+    expect(await stored(otherBuyerId)).toEqual(before);
   });
 
   it('ignores foreign order and contact ids', async () => {

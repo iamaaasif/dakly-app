@@ -86,7 +86,7 @@ Per-store cap: one running campaign batch per store.
 `sweep-contact-stats` runs daily and pages through `maintenance_store_ids`. It queues
 `reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contact rows
 and queues the next cursor. A separate job finds the Best customers cutoff after the last totals page. Rank pages visit
-contacts whose stage differs from that cutoff and keep newer event updates. Page IDs deduplicate retries.
+contacts whose stage differs from that cutoff and check the current ranking before a write. Page IDs deduplicate retries.
 
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

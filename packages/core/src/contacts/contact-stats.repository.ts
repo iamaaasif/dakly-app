@@ -94,14 +94,14 @@ export class ContactStatsRepository {
     return contact;
   }
 
-  async rankingState(storeId: string, contactId: string) {
+  async lifecycleStage(storeId: string, contactId: string) {
     const [stats] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ stage: contactStats.lifecycleStage, updatedAt: contactStats.updatedAt })
+        .select({ stage: contactStats.lifecycleStage })
         .from(contactStats)
         .where(and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contactId))),
     );
-    return stats;
+    return stats?.stage;
   }
 
   async bestBySpend(
