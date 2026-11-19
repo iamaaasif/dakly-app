@@ -239,7 +239,7 @@ function referencedSendKeys(step: AutomationStep): string[] {
 function checkReferences({ steps }: GraphShape, context: Context) {
   for (const [key, step] of Object.entries(steps)) {
     for (const next of nextStepKeys(step)) {
-      if (!steps[next]) {
+      if (!Object.hasOwn(steps, next)) {
         addIssue(context, ['steps', key], `Step ${key} leads to ${next}, which does not exist`);
       }
     }
@@ -270,8 +270,8 @@ function walkPaths(
 ): number | null {
   const known = waits.get(key);
   if (known !== undefined) return known;
-  const step = steps[key];
-  if (!step) return 0;
+  if (!Object.hasOwn(steps, key)) return 0;
+  const step = steps[key]!;
   if (onPath.has(key)) return null;
   onPath.add(key);
   let longestAfter = 0;
@@ -287,7 +287,7 @@ function walkPaths(
 }
 
 function checkPaths({ firstStepKey, steps }: GraphShape, context: Context) {
-  if (!steps[firstStepKey]) {
+  if (!Object.hasOwn(steps, firstStepKey)) {
     addIssue(context, ['firstStepKey'], 'The first step does not exist');
     return;
   }

@@ -1,11 +1,12 @@
 'use client';
 
 import { EllipsisVertical, Zap } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import type { AutomationListItem } from '@dakly/contracts/automations';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 import { Dialog } from '@dakly/ui/dialog';
 import {
   DropdownMenu,
@@ -88,9 +89,12 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
             {active ? 'Disable' : 'Enable'}
           </Button>
         )}
-        <Button variant="secondary" disabled>
+        <Link
+          href={`/automations/${workflow.id}`}
+          className={buttonVariants({ variant: 'secondary' })}
+        >
           Edit
-        </Button>
+        </Link>
 
         <WorkflowMenu
           workflow={workflow}
