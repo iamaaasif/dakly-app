@@ -28,6 +28,34 @@ export function ProductList({ products, query, onAdjust }: ProductListProps) {
   );
 }
 
+function lowestStockVariant(variants: ProductResponse['variants']) {
+  const first = variants[0];
+  if (!first) return undefined;
+  return variants.reduce((lowest, v) => (v.available < lowest.available ? v : lowest), first);
+}
+
+type ProductRestockButtonProps = {
+  product: ProductResponse;
+  onAdjust?: (variantId: string) => void;
+  className?: string;
+};
+
+function ProductRestockButton({ product, onAdjust, className }: ProductRestockButtonProps) {
+  if (!onAdjust || !product.isStockTracked) return null;
+  const variant = lowestStockVariant(product.variants);
+  if (!variant) return null;
+  return (
+    <Button
+      variant="secondary"
+      className={className}
+      aria-label={`Restock ${product.name}`}
+      onClick={() => onAdjust(variant.id)}
+    >
+      + Restock
+    </Button>
+  );
+}
+
 function ProductTable({ products, query, onAdjust }: ProductListProps) {
   return (
     <Table aria-label="Products">
@@ -61,16 +89,11 @@ function ProductTable({ products, query, onAdjust }: ProductListProps) {
             </TableCell>
             {onAdjust ? (
               <TableCell className="text-right">
-                {product.isStockTracked && product.variants.length > 0 ? (
-                  <Button
-                    variant="secondary"
-                    className="h-8 min-h-8 rounded-md px-3 text-xs font-medium"
-                    aria-label={`Restock ${product.name}`}
-                    onClick={() => onAdjust(product.variants[0]!.id)}
-                  >
-                    + Restock
-                  </Button>
-                ) : null}
+                <ProductRestockButton
+                  product={product}
+                  onAdjust={onAdjust}
+                  className="h-8 min-h-8 rounded-md px-3 text-xs font-medium"
+                />
               </TableCell>
             ) : null}
           </TableRow>
@@ -94,16 +117,11 @@ function ProductCards({ products, query, onAdjust }: ProductListProps) {
           <ProductStock product={product} onAdjust={onAdjust} />
           <div className="flex items-center justify-between gap-2 pt-1">
             <ProductReadiness product={product} />
-            {onAdjust && product.isStockTracked && product.variants.length > 0 ? (
-              <Button
-                variant="secondary"
-                className="min-h-10 rounded-md px-3 text-xs font-medium"
-                aria-label={`Restock ${product.name}`}
-                onClick={() => onAdjust(product.variants[0]!.id)}
-              >
-                + Restock
-              </Button>
-            ) : null}
+            <ProductRestockButton
+              product={product}
+              onAdjust={onAdjust}
+              className="min-h-11 rounded-md px-4 text-sm font-medium"
+            />
           </div>
         </li>
       ))}
@@ -118,7 +136,7 @@ function ProductIdentity({ product, query }: ProductPartProps & { query: Product
   const code = product.variants.find((v) => v.sku)?.sku;
   const subtitle = [product.category, code].filter(Boolean).join(' · ');
   return (
-    <Link href={href} className="flex min-w-0 items-center gap-3">
+    <Link href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
       <ProductThumbnail product={product} />
       <div className="min-w-0">
         <p className="font-semibold break-words text-text hover:text-action">{product.name}</p>
@@ -149,15 +167,13 @@ function ProductPrice({ product }: ProductPartProps) {
   );
 }
 
-function stockBadgeVariant(available: number): 'danger' | 'warning' | 'neutral' {
+function stockBadgeVariant(available: number): 'danger' | 'neutral' {
   if (available <= 0) return 'danger';
-  if (available <= 3) return 'warning';
   return 'neutral';
 }
 
 function variantStockColorClass(available: number) {
   if (available <= 0) return 'bg-danger-soft text-danger border-border hover:bg-danger-soft/80';
-  if (available <= 3) return 'bg-warning-soft text-warning border-border hover:bg-warning-soft/80';
   return 'bg-surface-muted text-text border-border hover:bg-surface-muted/80';
 }
 
@@ -174,7 +190,7 @@ function ProductStock({ product, onAdjust }: ProductStockProps) {
             key={variant.id}
             variant="secondary"
             className={cn(
-              'h-7 min-h-7 max-w-full rounded-md border px-2 py-0.5 text-xs font-medium wrap-anywhere tabular-nums',
+              'min-h-11 max-w-full rounded-md border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs',
               colorClass,
             )}
             aria-label={`Adjust stock for ${product.name}, ${variant.title}`}
@@ -186,7 +202,7 @@ function ProductStock({ product, onAdjust }: ProductStockProps) {
           <Badge
             key={variant.id}
             variant={stockBadgeVariant(variant.available)}
-            className="h-7 min-h-7 max-w-full rounded-md border border-border px-2 py-0.5 text-xs font-medium wrap-anywhere tabular-nums"
+            className="min-h-11 max-w-full rounded-md border border-border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs"
           >
             {variant.title}: {variant.available}
           </Badge>

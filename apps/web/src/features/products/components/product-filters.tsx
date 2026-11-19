@@ -43,7 +43,7 @@ export function ProductFilters({ query }: ProductFiltersProps) {
                 <Input
                   {...control}
                   type="search"
-                  placeholder="Search name or code"
+                  placeholder="Search by name"
                   className="pl-9"
                   {...form.register('search', {
                     setValueAs: (value: string) => value.trim() || undefined,

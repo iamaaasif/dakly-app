@@ -35,7 +35,7 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
             <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
             <p className="mt-1 text-sm text-text-muted">
               What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take
-              orders, sell in the shop and fill your order link.
+              orders and fill your order link.
             </p>
           </div>
           {canEdit ? (

@@ -7,7 +7,7 @@ type ProductReadinessProps = {
   product: Pick<ProductResponse, 'readiness'>;
 };
 
-function readinessBadgeVariant(label: string) {
+function readinessBadgeVariant(label: ProductResponse['readiness'][number]) {
   if (label === 'needs_price') return 'danger';
   if (label === 'hidden') return 'neutral';
   return 'warning';

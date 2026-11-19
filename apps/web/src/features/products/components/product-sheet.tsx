@@ -149,10 +149,6 @@ function ProductOverview({ product }: ProductDetailsProps) {
             {product.isStockTracked ? `${totalAvailable} available` : 'Not tracked'}
           </dd>
         </div>
-        <div className="space-y-0.5">
-          <dt className="text-xs text-text-muted">Low stock alert</dt>
-          <dd className="text-sm font-medium text-text">At 3 or fewer</dd>
-        </div>
       </dl>
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-text">Stock</h2>
