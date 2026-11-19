@@ -9,34 +9,30 @@ import { Textarea } from '@dakly/ui/textarea';
 import { channelLabels } from '../automation-labels';
 import type { SettingsInput } from '../workflow-settings-form';
 
-function DelayFields({
-  stepKey,
-  wait,
-}: {
-  stepKey: string;
-  wait: Extract<AutomationStep, { kind: 'wait' }>['wait'];
-}) {
+const delayField = {
+  duration: 'minutes',
+  event: 'timeoutMinutes',
+  window_closing: 'minutesBefore',
+  weekday: 'time',
+  time_of_day: 'time',
+} as const;
+
+type Wait = Extract<AutomationStep, { kind: 'wait' }>['wait'];
+
+function DelayFields({ stepKey, wait }: { stepKey: string; wait: Wait }) {
   const { register } = useFormContext<SettingsInput>();
-  const prefix = `graph.steps.${stepKey}.wait` as const;
-  if (wait.until === 'duration' || wait.until === 'event' || wait.until === 'window_closing') {
-    const field = {
-      duration: 'minutes',
-      event: 'timeoutMinutes',
-      window_closing: 'minutesBefore',
-    } as const;
-    const name = `${prefix}.${field[wait.until]}` as const;
-    return (
-      <FormField name={name} label="Delay in minutes">
-        {(control) => (
-          <Input {...control} type="number" min={1} {...register(name, { valueAsNumber: true })} />
-        )}
-      </FormField>
-    );
-  }
-  const name = `${prefix}.time` as const;
+  const field = delayField[wait.until];
+  const name = `graph.steps.${stepKey}.wait.${field}` as const;
+  const isTime = field === 'time';
   return (
-    <FormField name={name} label="Time of day">
-      {(control) => <Input {...control} type="time" {...register(name)} />}
+    <FormField name={name} label={isTime ? 'Time of day' : 'Delay in minutes'}>
+      {(control) => (
+        <Input
+          {...control}
+          type={isTime ? 'time' : 'number'}
+          {...register(name, { valueAsNumber: !isTime })}
+        />
+      )}
     </FormField>
   );
 }

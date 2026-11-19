@@ -25,7 +25,7 @@ function RuleSelect<Value extends string>({
 }: {
   name: FieldPath<SettingsInput>;
   label: string;
-  value: Value;
+  value: Value | '';
   labels: Record<Value, string>;
   onChange: (value: Value) => void;
 }) {
@@ -34,7 +34,7 @@ function RuleSelect<Value extends string>({
       {(field) => (
         <Select value={value} onValueChange={onChange}>
           <SelectTrigger {...field}>
-            <SelectValue />
+            <SelectValue placeholder="Choose a rule" />
           </SelectTrigger>
           <SelectContent>
             {Object.entries<string>(labels).map(([key, label]) => (
@@ -95,41 +95,34 @@ export function WorkflowEntrySettings() {
 
 function ExitRules() {
   const { control, register } = useFormContext<SettingsInput>();
-  const { fields, append, remove, update } = useFieldArray({
-    control,
-    name: 'graph.exitConditions',
-  });
+  const { fields, append, remove } = useFieldArray({ control, name: 'graph.exitConditions' });
   return (
-    <fieldset className="space-y-3">
-      <legend className="mb-3 font-semibold">Exit rules</legend>
+    <div className="space-y-3">
+      <h2 className="font-semibold">Exit rules</h2>
       {fields.map((exit, index) => (
         <div key={exit.id} className="space-y-2">
-          <RuleSelect
-            name={`graph.exitConditions.${index}.kind`}
-            label={`Exit rule ${index + 1}`}
-            value={exit.kind}
-            labels={exitLabels}
-            onChange={(kind: ExitKind) =>
-              update(index, kind === 'got_tag' ? { kind, tag: '' } : { kind })
-            }
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>{exitLabels[exit.kind]}</span>
+            <Button variant="secondary" onClick={() => remove(index)}>
+              Remove exit rule {index + 1}
+            </Button>
+          </div>
           {exit.kind === 'got_tag' && (
             <FormField name={`graph.exitConditions.${index}.tag`} label="Exit tag">
               {(field) => <Input {...field} {...register(`graph.exitConditions.${index}.tag`)} />}
             </FormField>
           )}
-          <Button variant="secondary" onClick={() => remove(index)}>
-            Remove exit rule {index + 1}
-          </Button>
         </div>
       ))}
-      <Button
-        variant="secondary"
-        disabled={fields.length >= MAX_EXIT_CONDITIONS}
-        onClick={() => append({ kind: 'placed_order' })}
-      >
-        Add exit rule
-      </Button>
-    </fieldset>
+      {fields.length < MAX_EXIT_CONDITIONS && (
+        <RuleSelect
+          name="graph.exitConditions"
+          label="Add an exit rule"
+          value=""
+          labels={exitLabels}
+          onChange={(kind: ExitKind) => append(kind === 'got_tag' ? { kind, tag: '' } : { kind })}
+        />
+      )}
+    </div>
   );
 }

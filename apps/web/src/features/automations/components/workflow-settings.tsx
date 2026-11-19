@@ -44,7 +44,6 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
   const router = useRouter();
   const save = useSaveAutomation(workflow.id);
   const [confirmation, setConfirmation] = useState<{ draft: SettingsValues; count: number }>();
-  const [previewError, setPreviewError] = useState(false);
   const form = useForm<SettingsInput, undefined, SettingsValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: { name: workflow.name, graph: workflow.graph },
@@ -52,8 +51,10 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
 
   async function confirm(draft: SettingsValues) {
     const current = await refresh();
-    if (current.isError || !current.data) return setPreviewError(true);
-    setPreviewError(false);
+    if (current.isError || !current.data) {
+      form.setError('root', { message: 'Could not check who is in this workflow. Try again.' });
+      return;
+    }
     setConfirmation({ draft, count: current.data.activeRuns });
   }
 
@@ -77,9 +78,8 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
           onPublish={form.handleSubmit(confirm)}
         />
         <SettingsFields
-          previewError={previewError}
-          error={confirmation ? undefined : save.error?.message}
           pending={save.isPending}
+          error={confirmation ? undefined : save.error?.message}
         />
       </form>
       {confirmation && (
@@ -98,29 +98,16 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
   );
 }
 
-function SettingsFields({
-  previewError,
-  error,
-  pending,
-}: {
-  previewError: boolean;
-  error?: string;
-  pending: boolean;
-}) {
+function SettingsFields({ error, pending }: { error?: string; pending: boolean }) {
   const { register, formState } = useFormContext<SettingsInput>();
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-8">
       <FormField name="name" label="Workflow name">
         {(field) => <Input {...field} {...register('name')} maxLength={80} />}
       </FormField>
-      {previewError && (
+      {(error || formState.errors.root?.message) && (
         <p role="alert" className="text-danger">
-          Could not check who is in this workflow. Try again.
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-danger">
-          {error}
+          {error ?? formState.errors.root?.message}
         </p>
       )}
       {formState.errors.graph && (
@@ -166,7 +153,7 @@ function SettingsHeader({
         <Button variant="secondary" type="submit" disabled={pending}>
           Save draft
         </Button>
-        <Button type="button" disabled={pending} onClick={onPublish}>
+        <Button loading={pending} onClick={onPublish}>
           Publish
         </Button>
       </div>
@@ -198,14 +185,9 @@ function PublishDialog({
           {error}
         </p>
       )}
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="secondary" onClick={onClose} disabled={pending}>
-          Cancel
-        </Button>
-        <Button onClick={onPublish} loading={pending}>
-          Publish workflow
-        </Button>
-      </div>
+      <Button className="mt-4" onClick={onPublish} loading={pending}>
+        Publish workflow
+      </Button>
     </SessionDialog>
   );
 }
