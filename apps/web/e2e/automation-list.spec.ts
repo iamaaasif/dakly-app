@@ -81,7 +81,8 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     await welcome.getByRole('button', { name: 'Disable' }).click();
     await expect(page.getByRole('tab', { name: 'Active 1' })).toBeVisible();
     await page.getByRole('tab', { name: 'Disabled 2' }).click();
-    await expect(welcome.getByRole('button', { name: 'Enable' })).toBeVisible();
+    await welcome.getByRole('button', { name: 'Enable' }).click();
+    await expect(page.getByRole('tab', { name: 'Disabled 1' })).toBeVisible();
   } finally {
     await db.pool.query('delete from automation_runs where automation_id=any($1::uuid[])', [ids]);
     await db.pool.query(

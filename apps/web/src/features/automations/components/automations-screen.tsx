@@ -45,20 +45,20 @@ export function AutomationsScreen() {
             aria-label="Workflow status"
             className="max-w-full rounded-md border-0 bg-surface-muted p-0.5"
           >
-            {tabs.map(({ key, label }) => (
-              <TabsTrigger
-                key={key}
-                value={key}
-                className="m-0 rounded-md border-0 px-2 text-sm data-[state=active]:bg-surface"
-              >
-                {label}
-                {workflows.data && (
-                  <span className="ml-1 tabular-nums">
-                    {items.filter(({ status }) => key === 'all' || status === key).length}
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
+            {tabs.map(({ key, label }) => {
+              const count = items.filter(({ status }) => key === 'all' || status === key).length;
+              return (
+                <TabsTrigger
+                  key={key}
+                  value={key}
+                  aria-label={workflows.data ? `${label} ${count}` : label}
+                  className="m-0 rounded-md border-0 px-2 text-sm data-[state=active]:bg-surface"
+                >
+                  {label}
+                  {workflows.data && <span className="ml-1 tabular-nums">{count}</span>}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
         </header>
         <TabsContent value={selected} className="pt-0">
