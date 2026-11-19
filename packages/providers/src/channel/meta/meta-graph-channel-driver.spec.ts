@@ -103,6 +103,7 @@ describe('MetaGraphChannelDriver', () => {
   it.each([
     [10, 2534077],
     [200, 2534041],
+    [100, 2534013],
   ])('requires reconnect for Graph link or access error %s/%s', async (code, error_subcode) => {
     vi.stubGlobal('fetch', async () =>
       Response.json({ error: { code, error_subcode } }, { status: 400 }),

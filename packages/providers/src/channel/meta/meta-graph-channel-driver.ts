@@ -62,7 +62,12 @@ function responseError(status: number, payload: unknown, sending: boolean): Meta
 }
 
 function sendResponseError(code: number, subcode?: number): MetaRequestError {
-  if (subcode === 2534077 || subcode === 2534041) return new MetaRequestError('auth_error');
+  if (
+    (code === 10 && subcode === 2534077) ||
+    (code === 200 && subcode === 2534041) ||
+    (code === 100 && subcode === 2534013)
+  )
+    return new MetaRequestError('auth_error');
   if (permissionDenied(code) || [100, 551, 10903, 10904].includes(code))
     return new MetaRequestError('rejected');
   return new MetaRequestError('unavailable');
