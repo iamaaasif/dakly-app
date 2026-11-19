@@ -59,10 +59,7 @@ test('picks an AI description without saving the product', async ({ page, contex
       }
       const result: ContentWriteResult = {
         options,
-        aiDraft: {
-          aiRunId: 'dda05039-d3bc-4699-a31a-bb83c66487fc',
-          proof: 'a'.repeat(64),
-        },
+        aiRunId: 'dda05039-d3bc-4699-a31a-bb83c66487fc',
       };
       await route.fulfill({ json: result, headers: { 'x-session-context': contextTag } });
     });
