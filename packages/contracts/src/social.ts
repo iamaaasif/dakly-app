@@ -139,10 +139,3 @@ export const savePostingSlotsSchema = postingSlotsQuerySchema.extend({ slots: po
 export type PostingSlotsQuery = z.infer<typeof postingSlotsQuerySchema>;
 export type SavePostingSlotsInput = z.infer<typeof savePostingSlotsSchema>;
 export type PostingSlotsResponse = SavePostingSlotsInput & { timeZone: string };
-
-export const scheduledPostTargetSchema = z.strictObject({
-  storeId: z.uuid(),
-  postTargetId: z.uuid(),
-  scheduledFor: z.iso.datetime(),
-});
-export type ScheduledPostTarget = z.infer<typeof scheduledPostTargetSchema>;

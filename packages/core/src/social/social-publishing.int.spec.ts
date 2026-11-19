@@ -303,6 +303,28 @@ describe('SocialPublishingService', () => {
     expect(comment).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a comment audit failure without sending another post or first comment', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishInstagram');
+    const comment = vi.spyOn(driver, 'comment');
+    const { service, accounts, clock, record } = publishing(driver);
+    const target = await setupTarget(accounts, 'instagram', await post('ইনস্টাগ্রাম'));
+    record.mockImplementation(async (_storeId, entry) => {
+      if (entry.action === 'post.comment_attempted') throw new Error('Audit unavailable');
+    });
+    await expect(service.publishTarget(fixture.a, target, true)).rejects.toThrow(
+      'Audit unavailable',
+    );
+    clock.now.mockReturnValue(new Date(now.getTime() + 5 * MINUTE_MS));
+    await service.publishTarget(fixture.a, target, true);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      error_code: 'POST_COMMENT_UNCONFIRMED',
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(comment).not.toHaveBeenCalled();
+  });
+
   it('keeps the first comment result when a duplicate job arrives while it is sending', async () => {
     const driver = new FakeMetaPublishingDriver();
     const entered = Promise.withResolvers<void>();

@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
-import type { ScheduledPostTarget } from '@dakly/contracts/social';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 import {
   MetaPublishingError,
@@ -26,21 +25,14 @@ import { SocialRepository } from './social.repository';
 
 export const META_PUBLISHING_DRIVER = Symbol('META_PUBLISHING_DRIVER');
 
-type JobTarget = Omit<ScheduledPostTarget, 'storeId'>;
+type JobTarget = Parameters<SocialRepository['findPublishTarget']>[1];
 type PendingPost = NonNullable<Awaited<ReturnType<SocialRepository['findPublishTarget']>>>;
 type PublishingTarget = PendingPost['target'];
 type Changes = Parameters<SocialRepository['updatePublishTarget']>[2];
 type AccountKind = 'facebook_page' | 'instagram';
-type PublishReceipt = {
-  externalId: string | null;
-  firstComment?: { verifyToken: () => Promise<void>; send: (postId: string) => Promise<void> };
-};
-type MetaDelivery = PublishContext & { post: PendingPost['post']; kind: AccountKind };
-type PublishContext = {
-  storeId: string;
-  target: PublishingTarget;
-  driver: MetaPublishingDriver;
+type PostingAuthorization = {
   account: MetaPostingAccount;
+  kind: AccountKind;
   verifyToken: () => Promise<void>;
 };
 
@@ -53,7 +45,7 @@ export class SocialPublishingService {
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(FILE_STORAGE_DRIVER)
     private readonly storage: Pick<FileStorageDriver, 'getObjectMetadata' | 'createDownloadUrl'>,
-    @Inject(META_PUBLISHING_DRIVER) private readonly driver: MetaPublishingDriver | null,
+    @Inject(META_PUBLISHING_DRIVER) private readonly driver: MetaPublishingDriver,
     @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -63,9 +55,8 @@ export class SocialPublishingService {
   ) {}
 
   async publishTarget(storeId: string, input: JobTarget, finalAttempt: boolean) {
-    const driver = this.driver;
     const match = await this.repository.findPublishTarget(storeId, input);
-    if (!driver || !match) return;
+    if (!match) return;
     const { target } = match;
     if (target.publishedAt) {
       if (target.errorCode === 'POST_COMMENT_UNCONFIRMED') this.checkDue(target);
@@ -73,44 +64,18 @@ export class SocialPublishingService {
       return;
     }
     this.checkDue(target);
-    const attempted = await this.recordTarget(storeId, target, {
-      action: 'post.publish_attempted',
-      attempts: target.attempts + 1,
-    }).catch(async (failure: unknown) => {
+    const attempted = await this.recordTarget(
+      storeId,
+      target,
+      { action: 'post.publish_attempted', attempts: target.attempts + 1 },
+      { requireActiveStore: true },
+    ).catch(async (failure: unknown) => {
       if (!finalAttempt || !(failure instanceof AppError) || failure.code !== 'POST_STORE_INACTIVE')
         throw failure;
       await this.finish(storeId, target, failure);
       return false;
     });
-    if (!attempted) return;
-    let receipt: PublishReceipt | undefined;
-    try {
-      receipt = await this.publishApproved(storeId, match, driver);
-    } catch (failure) {
-      if (!finalAttempt) throw failure;
-      await this.finish(storeId, target, publishError(failure, target.status));
-      return;
-    }
-    if (receipt) await this.completeTarget(storeId, target, receipt);
-  }
-
-  private async completeTarget(storeId: string, target: PublishingTarget, receipt: PublishReceipt) {
-    const { externalId, firstComment } = receipt;
-    // Record Meta's receipt before notifying consumers so a rolled-back event can be retried.
-    const errorCode = firstComment ? 'POST_COMMENT_UNCONFIRMED' : null;
-    const confirmed = await this.recordTarget(storeId, target, {
-      action: 'post.publish_confirmed',
-      externalPostId: externalId,
-      publishedAt: this.clock.now(),
-      errorCode,
-      errorMessage: errorCode ? socialError(errorCode).message : null,
-    });
-    if (!confirmed) return;
-    if (firstComment && externalId)
-      await this.comment(storeId, target, firstComment.verifyToken, () =>
-        firstComment.send(externalId),
-      );
-    await this.finish(storeId, target);
+    if (attempted) await this.publishApproved(storeId, match, finalAttempt);
   }
 
   private checkDue(target: PublishingTarget) {
@@ -121,60 +86,73 @@ export class SocialPublishingService {
       throw socialError('POST_PUBLISH_UNCONFIRMED');
   }
 
-  private async publishApproved(
-    storeId: string,
-    { post, target }: PendingPost,
-    driver: MetaPublishingDriver,
-  ) {
-    if (post.isAiWritten && [post.approvedAt, post.approvedByUserId].includes(null))
+  private async publishApproved(storeId: string, match: PendingPost, finalAttempt: boolean) {
+    const { target } = match;
+    let published = false;
+    try {
+      const { authorization, request, firstComment } = await this.authorizePost(storeId, match);
+      const externalId = await request(() => this.sendPost(storeId, match, authorization));
+      if (externalId === undefined) return;
+      published = true;
+
+      const errorCode = firstComment ? 'POST_COMMENT_UNCONFIRMED' : null;
+      // Keep Meta's receipt before writing the result event, which can roll back and be retried.
+      const saved = await this.recordTarget(storeId, target, {
+        action: 'post.publish_confirmed',
+        externalPostId: externalId,
+        publishedAt: this.clock.now(),
+        errorCode,
+        errorMessage: errorCode ? socialError(errorCode).message : null,
+      });
+      if (!saved) return;
+      if (firstComment && externalId)
+        await this.comment(storeId, target, authorization.verifyToken, () =>
+          request(() =>
+            this.meta('post_first_comment', () =>
+              this.driver.comment(authorization.account, externalId, firstComment),
+            ),
+          ),
+        );
+      await this.finish(storeId, target);
+    } catch (failure) {
+      if (published || !finalAttempt) throw failure;
+      await this.finish(storeId, target, publishError(failure, target.status));
+    }
+  }
+
+  private async authorizePost(storeId: string, { post, target }: PendingPost) {
+    if (post.isAiWritten && (!post.approvedAt || !post.approvedByUserId))
       throw socialError('POST_APPROVAL_REQUIRED');
     const { channelConnectionId } = target;
     const credential = await this.credential(storeId, channelConnectionId, this.clock.now());
-    const token = this.encryption.decrypt(
-      { owner: 'store', storeId, purpose: 'channel-access-token' },
-      credential,
-    );
-    try {
-      const account = {
-        accountId: credential.externalAccountId,
-        accessToken: token.toString('utf8'),
-      };
-      const verifyToken = async () => {
-        const current = await this.credential(storeId, channelConnectionId, this.clock.now());
-        if (
-          current.keyVersion !== credential.keyVersion ||
-          !current.ciphertext.equals(credential.ciphertext)
-        )
-          throw socialError('POST_TOKEN_EXPIRED');
-      };
-      const request = <Result>(send: () => Promise<Result>) =>
-        send().catch(async (failure: unknown) => {
-          if (failure instanceof MetaPublishingError && failure.code === 'auth_error')
-            await this.channels
-              .recordRejectedToken(storeId, channelConnectionId, credential.ciphertext)
-              .catch(() => this.logger.error('Could not record the rejected Meta credential'));
-          throw failure;
-        });
-      const context = { storeId, target, driver, account, verifyToken };
-      const externalId = await request(() =>
-        this.sendPost({ ...context, post, kind: credential.kind }),
-      );
-      if (externalId === undefined) return;
-      const text = post.firstComment;
-      const firstComment =
-        credential.kind === 'instagram' && post.kind === 'post' && text
-          ? {
-              verifyToken,
-              send: (id: string) =>
-                request(() =>
-                  this.meta('post_first_comment', () => driver.comment(account, id, text)),
-                ),
-            }
-          : undefined;
-      return { externalId, firstComment };
-    } finally {
-      token.fill(0);
-    }
+    const account = {
+      accountId: credential.externalAccountId,
+      accessToken: this.encryption
+        .decrypt({ owner: 'store', storeId, purpose: 'channel-access-token' }, credential)
+        .toString('utf8'),
+    };
+    const verifyToken = async () => {
+      const current = await this.credential(storeId, channelConnectionId, this.clock.now());
+      if (
+        current.keyVersion !== credential.keyVersion ||
+        !current.ciphertext.equals(credential.ciphertext)
+      )
+        throw socialError('POST_TOKEN_EXPIRED');
+    };
+    const request = <Result>(send: () => Promise<Result>) =>
+      send().catch(async (failure: unknown) => {
+        if (failure instanceof MetaPublishingError && failure.code === 'auth_error')
+          await this.channels
+            .recordRejectedToken(storeId, channelConnectionId, credential.ciphertext)
+            .catch(() => this.logger.error('Could not record the rejected Meta credential'));
+        throw failure;
+      });
+    const { kind } = credential;
+    return {
+      authorization: { account, kind, verifyToken },
+      request,
+      firstComment: kind === 'instagram' && post.kind === 'post' ? post.firstComment : null,
+    };
   }
 
   private async credential(storeId: string, connectionId: string, asOf: Date) {
@@ -205,8 +183,10 @@ export class SocialPublishingService {
     );
   }
 
-  private async sendPost({ post, kind, ...context }: MetaDelivery) {
-    const { storeId, target, driver, account } = context;
+  private async sendPost(storeId: string, match: PendingPost, authorization: PostingAuthorization) {
+    const { target } = match;
+    const { kind, account, verifyToken } = authorization;
+    const { driver } = this;
     if (target.status === 'publishing') {
       const containerId = target.containerId;
       // A timed-out publish may have succeeded. Reconcile the Instagram container without a second write to Meta.
@@ -218,15 +198,15 @@ export class SocialPublishingService {
       }
       throw socialError('POST_PUBLISH_UNCONFIRMED');
     }
-    const content = await this.contentFor(storeId, { post, target }, kind);
+    const content = await this.contentFor(storeId, match, kind);
     if (!(await this.stores.isActive(storeId))) throw socialError('POST_STORE_INACTIVE');
-    if (kind === 'instagram') return this.sendInstagram(context, content);
+    if (kind === 'instagram') return this.sendInstagram(storeId, target, authorization, content);
     const photos = content.photoUrls.length
       ? await this.meta('facebook_upload_photos', () =>
           driver.uploadFacebookPhotos(account, content.photoUrls),
         )
       : [];
-    return this.sendClaimed(context, () =>
+    return this.sendClaimed(storeId, target, verifyToken, () =>
       this.meta('facebook_publish_post', () => driver.publishFacebook(account, content, photos)),
     );
   }
@@ -251,8 +231,13 @@ export class SocialPublishingService {
     };
   }
 
-  private async sendInstagram(context: PublishContext, content: MetaPost) {
-    const { storeId, target, driver, account } = context;
+  private async sendInstagram(
+    storeId: string,
+    target: PublishingTarget,
+    { account, verifyToken }: PostingAuthorization,
+    content: MetaPost,
+  ) {
+    const { driver } = this;
     let containerId = target.containerId;
     if (!containerId) {
       containerId = await this.meta('instagram_create_container', () =>
@@ -273,17 +258,22 @@ export class SocialPublishingService {
       throw socialError('POST_PROVIDER_REJECTED');
     }
     if (state !== 'ready') throw socialError('POST_CONTAINER_PROCESSING');
-    return this.sendClaimed(context, () =>
+    return this.sendClaimed(storeId, target, verifyToken, () =>
       this.meta('instagram_publish_post', () => driver.publishInstagram(account, containerId)),
     );
   }
 
   private async sendClaimed(
-    { storeId, target, verifyToken }: PublishContext,
+    storeId: string,
+    target: PublishingTarget,
+    verifyToken: () => Promise<void>,
     send: () => Promise<string>,
   ) {
     const change = { action: 'post.publishing', status: 'publishing' } as const;
-    const claimed = await this.recordTarget(storeId, target, change, verifyToken);
+    const claimed = await this.recordTarget(storeId, target, change, {
+      requireActiveStore: true,
+      afterUpdate: verifyToken,
+    });
     if (!claimed) return;
     try {
       return await send();
@@ -305,10 +295,20 @@ export class SocialPublishingService {
   ) {
     try {
       const change = { action: 'post.comment_attempted' };
-      if (!(await this.recordTarget(storeId, target, change, verifyToken))) return;
+      const claimed = await this.recordTarget(storeId, target, change, {
+        requireActiveStore: true,
+        afterUpdate: verifyToken,
+      });
+      if (!claimed) return;
       await send();
-    } catch {
-      return;
+    } catch (failure) {
+      if (failure instanceof MetaPublishingError) return;
+      if (
+        failure instanceof AppError &&
+        (failure.code === 'POST_TOKEN_EXPIRED' || failure.code === 'POST_STORE_INACTIVE')
+      )
+        return;
+      throw failure;
     }
     await this.recordTarget(storeId, target, {
       action: 'post.comment_published',
@@ -330,18 +330,20 @@ export class SocialPublishingService {
         errorCode: error?.code ?? target.errorCode,
         errorMessage: error?.message ?? target.errorMessage,
       },
-      async () => {
-        if (!error)
+      {
+        afterUpdate: async () => {
+          if (!error)
+            return this.outbox.publish({
+              ...common,
+              type: 'post.published',
+              payload: { ...payload, externalPostId: target.externalPostId },
+            });
           return this.outbox.publish({
             ...common,
-            type: 'post.published',
-            payload: { ...payload, externalPostId: target.externalPostId },
+            type: 'post.failed',
+            payload: { ...payload, errorCode: error.code },
           });
-        return this.outbox.publish({
-          ...common,
-          type: 'post.failed',
-          payload: { ...payload, errorCode: error.code },
-        });
+        },
       },
     );
   }
@@ -350,15 +352,10 @@ export class SocialPublishingService {
     storeId: string,
     target: PublishingTarget,
     { action, ...changes }: Changes & { action: string },
-    afterUpdate?: () => Promise<void>,
+    options?: { requireActiveStore?: true; afterUpdate?: () => Promise<void> },
   ) {
     const updated = await this.transaction.run(storeId, async () => {
-      if (
-        (changes.attempts !== undefined ||
-          changes.status === 'publishing' ||
-          action === 'post.comment_attempted') &&
-        !(await this.stores.isActive(storeId))
-      )
+      if (options?.requireActiveStore && !(await this.stores.isActive(storeId)))
         throw socialError('POST_STORE_INACTIVE');
       if (
         !(await this.repository.updatePublishTarget(storeId, target, {
@@ -373,7 +370,7 @@ export class SocialPublishingService {
         entityType: 'post_target',
         entityId: target.id,
       });
-      await afterUpdate?.();
+      await options?.afterUpdate?.();
       return true;
     });
     if (updated) Object.assign(target, changes);

@@ -15,7 +15,7 @@ import {
   sql,
 } from 'drizzle-orm';
 
-import type { CreatePostInput, PostListQuery, ScheduledPostTarget } from '@dakly/contracts/social';
+import type { CreatePostInput, PostListQuery } from '@dakly/contracts/social';
 import { files } from '@dakly/db/schema/platform';
 import { posts, postTargets } from '@dakly/db/schema/social';
 
@@ -173,7 +173,7 @@ export class SocialRepository {
     );
   }
 
-  async findPublishTarget(storeId: string, input: Omit<ScheduledPostTarget, 'storeId'>) {
+  async findPublishTarget(storeId: string, input: { postTargetId: string; scheduledFor: string }) {
     const scheduledFor = new Date(input.scheduledFor);
     const [match] = await this.database.forStore(storeId, (tx) =>
       tx
