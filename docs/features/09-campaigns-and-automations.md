@@ -248,6 +248,8 @@ Owner decision (18 Nov 2026): build the campaign list and builder from `campaign
 
 The campaign list keeps Search and Status above the rows. Filters opens Channel and the created-date range. Draft and sent rows keep their existing destinations. The result columns show a dash until data is available. Sent needs the campaign recipient count in the list response. Clicked needs reported link taps. Orders and Revenue wait for ANA-2 attribution.
 
+New campaigns start with the channel choices. SMS opens the name and goal step, where staff save a draft. WhatsApp, Facebook Messenger and Instagram DM show Connect first until those channels support campaigns. The picker has no recipient count before a draft exists. The SMS estimate reads a saved campaign. Voice calls stay hidden in release 1.
+
 The first builder slice opens an SMS draft, saves its name and goal, and shows a read-only summary for a sent campaign. It sends only changed fields, resets the form to the saved values on success, and shows a server error if a save is refused. After creating a draft, the form stays locked while the builder opens. Content, audience, scheduling and approval controls follow separately.
 
 Each campaign row, or card on phones, opens the builder for a draft and the read-only summary for a sent campaign. The list filters by name, status, channel and creation date in the shop time zone, and shows campaigns newest first. Each row or card shows the saved channel. The First page link recovers an unavailable cursor, including a cursor saved for another shop. Create campaign is available to members who can edit campaigns in that shop.
