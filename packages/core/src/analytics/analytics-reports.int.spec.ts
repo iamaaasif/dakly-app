@@ -38,6 +38,8 @@ describe('Analytics reports', () => {
 
   it('chooses store-local calendar days and the preceding period', async () => {
     expect(await reports.periods(fixture.a, 7)).toEqual({
+      asOf: '2026-11-07T18:00:00.000Z',
+      timeZone: 'Asia/Dhaka',
       current: { from: '2026-11-02', through: '2026-11-08' },
       previous: { from: '2026-10-26', through: '2026-11-01' },
     });
