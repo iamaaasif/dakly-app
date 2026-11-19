@@ -31,7 +31,7 @@ export class AutomationBirthdaySweepService {
         const jobId = `${RECORD_AUTOMATION_BIRTHDAYS}-${storeId}-${day}`;
         const previous = await this.bulk.getJob(jobId);
         // A failed job still owns the date's id, so the next sweep must retry it.
-        if (await previous?.isFailed()) {
+        if (previous && (await previous.isFailed())) {
           await previous.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
         }
         if (previous) continue;
