@@ -103,6 +103,81 @@ describe('MailpitSmsDriver', () => {
     expect(connect).not.toHaveBeenCalled();
   });
 
+  const matchingCapture = { ID: 'private-capture', MessageID: 'campaign-1@sms.dakly.test' };
+
+  it.each([
+    { name: 'non-array messages', page: { messages: {}, messages_count: 0 } },
+    {
+      name: 'missing capture ID',
+      page: { messages: [{ MessageID: matchingCapture.MessageID }], messages_count: 1 },
+    },
+    {
+      name: 'non-string capture ID',
+      page: { messages: [{ ...matchingCapture, ID: 7 }], messages_count: 1 },
+    },
+    {
+      name: 'blank Message-ID',
+      page: { messages: [{ ...matchingCapture, MessageID: ' ' }], messages_count: 1 },
+    },
+    {
+      name: 'non-string Message-ID',
+      page: { messages: [{ ...matchingCapture, MessageID: 7 }], messages_count: 1 },
+    },
+    { name: 'missing count', page: { messages: [matchingCapture] } },
+    { name: 'nonnumeric count', page: { messages: [matchingCapture], messages_count: '1' } },
+    { name: 'negative count', page: { messages: [matchingCapture], messages_count: -1 } },
+    { name: 'fractional count', page: { messages: [matchingCapture], messages_count: 1.5 } },
+    { name: 'count below page size', page: { messages: [matchingCapture], messages_count: 0 } },
+  ])('refuses before SMTP on a successful lookup with $name', async ({ page }) => {
+    const connect = connectSmtpPeer((socket) => socket.push('554 refused\r\n'));
+    vi.stubGlobal('fetch', async () => Response.json(page));
+    const error = await testDriver()
+      .send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' })
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(SmsSendRefused);
+    expect(error).not.toHaveProperty('cause');
+    expect(JSON.stringify(error)).not.toContain(matchingCapture.ID);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('rejects a subsequent page whose count falls below its offset and rows', async () => {
+    const connect = connectSmtpPeer((socket) => socket.push('554 refused\r\n'));
+    const lookups = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          messages: [{ ID: 'unrelated', MessageID: 'other-campaign-1@sms.dakly.test' }],
+          messages_count: 2,
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ messages: [matchingCapture], messages_count: 1 }));
+    vi.stubGlobal('fetch', lookups);
+
+    await expect(
+      testDriver().send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
+    ).rejects.toBeInstanceOf(SmsSendRefused);
+    expect(lookups).toHaveBeenCalledTimes(2);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('keeps the outcome unknown when the lookup after DATA returns a malformed page', async () => {
+    smtpPeer((socket) => socket.push(null));
+    const lookups = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }))
+      .mockResolvedValueOnce(Response.json({ messages: [matchingCapture], messages_count: 0 }));
+    vi.stubGlobal('fetch', lookups);
+
+    const error = await testDriver()
+      .send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' })
+      .catch((error: unknown) => error);
+    expect(error).not.toBeInstanceOf(SmsSendRefused);
+    expect(error).toMatchObject({ code: 'SMS_SEND_FAILED', message: 'SMS delivery failed' });
+    expect(error).not.toHaveProperty('cause');
+    expect(JSON.stringify(error)).not.toContain(matchingCapture.ID);
+    expect(lookups).toHaveBeenCalledTimes(2);
+  });
+
   it.each([true, false])(
     'reconciles a post-DATA 451 when a capture is found (%s)',
     async (found) => {
@@ -120,11 +195,12 @@ describe('MailpitSmsDriver', () => {
       );
       const lookup = vi
         .fn()
-        .mockResolvedValueOnce(Response.json({ messages: [] }))
+        .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }))
         .mockResolvedValueOnce(
           found
             ? Response.json({
                 messages: [{ ID: 'first-capture', MessageID: 'campaign-451@sms.dakly.test' }],
+                messages_count: 1,
               })
             : new Response(null, { status: 503 }),
         );
@@ -285,13 +361,14 @@ describe('MailpitSmsDriver', () => {
     smtpPeer(finish);
     const lookup = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ messages: [] }))
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }))
       .mockResolvedValueOnce(
         Response.json({
           messages: [
             { ID: 'other-capture', MessageID: 'other-campaign-1@sms.dakly.test' },
             { ID: 'first-capture', MessageID: 'campaign-1@sms.dakly.test' },
           ],
+          messages_count: 2,
         }),
       );
     vi.stubGlobal('fetch', lookup);
@@ -314,7 +391,7 @@ describe('MailpitSmsDriver', () => {
     });
     const lookup = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ messages: [] }))
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }))
       .mockResolvedValueOnce(
         available
           ? Response.json({
@@ -362,7 +439,9 @@ describe('MailpitSmsDriver', () => {
       setImmediate(() => socket.destroy(error));
       return socket;
     });
-    const lookup = vi.fn().mockResolvedValueOnce(Response.json({ messages: [] }));
+    const lookup = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }));
     vi.stubGlobal('fetch', lookup);
     await expect(
       testDriver().send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
@@ -372,7 +451,9 @@ describe('MailpitSmsDriver', () => {
 
   it('refuses a complete post-DATA 550 without a second lookup', async () => {
     smtpPeer((socket) => socket.push('550 message rejected\r\n'));
-    const lookup = vi.fn().mockResolvedValueOnce(Response.json({ messages: [] }));
+    const lookup = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }));
     vi.stubGlobal('fetch', lookup);
     await expect(
       testDriver().send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
@@ -384,7 +465,7 @@ describe('MailpitSmsDriver', () => {
     smtpPeer((socket) => socket.push('250 2.0.0 Ok: queued\r\n'));
     const lookup = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ messages: [] }))
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }))
       .mockResolvedValueOnce(new Response(null, { status: 503 }));
     vi.stubGlobal('fetch', lookup);
     await expect(
