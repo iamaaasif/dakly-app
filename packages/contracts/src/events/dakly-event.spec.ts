@@ -72,6 +72,7 @@ const examples: DaklyEvent[] = [
     payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
+  { type: 'contact.birthday', storeId, occurredAt, payload: { contactId, day: '2026-11-16' } },
   {
     type: 'consent.changed',
     storeId,

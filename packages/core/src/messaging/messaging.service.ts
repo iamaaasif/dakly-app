@@ -1,12 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { channelConnectionKinds, chatChannels } from '@dakly/contracts/channels';
-import type { messageAuthorTypes } from '@dakly/contracts/chats';
 import { countSmsParts } from '@dakly/contracts/sms';
-import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ConsentService } from '../consents/consent.service';
+import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { hashToken } from '../platform/crypto/token-hash';
@@ -14,7 +13,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
-import { type SendCategory, SendPolicyService } from '../sending/send-policy.service';
+import type { SendCategory } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
@@ -47,7 +46,7 @@ export type OutgoingChannelMessage = {
   contactId: string;
   connectionId: string;
   identityId: string;
-  category: SendCategory;
+  category: Extract<SendCategory, 'staff_reply' | 'transactional'>;
   content: string;
   operationKey: string;
   actor: { kind: 'user'; userId: string } | { kind: 'ai'; aiRunId: string } | { kind: 'system' };
@@ -63,17 +62,11 @@ export type PreparedSms = {
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
 
-type ChannelMessage = {
-  id: string;
-  conversationId: string;
-  contactId: string;
-  channel: OutgoingChannelMessage['channel'];
-};
-
 @Injectable()
 export class MessagingService {
   constructor(
     @Inject(ContactsService) private readonly contactsService: ContactsService,
+    @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
     @Inject(SmsService) private readonly smsService: SmsService,
     @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -83,7 +76,6 @@ export class MessagingService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
-    @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
   ) {}
 
   receiveInboundMessage(storeId: string, input: InboundMessageInput): Promise<ReceiveOutcome> {
@@ -201,136 +193,11 @@ export class MessagingService {
     return { providerMessageId, parts, credits: parts };
   }
 
-  async sendQueuedMessage(storeId: string, messageId: string): Promise<void> {
-    if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
-    const pending = await this.prepareChannelDispatch(storeId, messageId);
-    if (!pending) return;
-    let sent;
-    try {
-      sent = await this.connections.sendMetaMessage(storeId, pending.connectionId, {
-        channel: pending.channel,
-        externalConversationId: pending.externalId,
-        text: pending.body,
-        operationKey: messageId,
-        humanAgent: pending.humanAgent,
-      });
-    } catch (error) {
-      if (!(error instanceof MetaRequestError)) throw error;
-      if (error.code === 'auth_error' || error.code === 'rejected')
-        await this.recordChannelOutcome(storeId, pending, { errorCode: error.code }, 'attempted');
-      // Without acceptance or rejection, the stored attempt stays pending for reconciliation.
-      return;
-    }
-    await this.recordChannelOutcome(
-      storeId,
-      pending,
-      sent
-        ? { ...sent, preview: pending.body.slice(0, 160) }
-        : { errorCode: 'connection_unavailable' },
-      'attempted',
-    );
-  }
-
-  private prepareChannelDispatch(storeId: string, messageId: string) {
-    return this.transaction.run(storeId, async () => {
-      const row = await this.outbound.findForDispatch(storeId, messageId);
-      if (!row || row.channel === 'whatsapp') return;
-      const message = { ...row, channel: row.channel };
-      const { identityId, category, body } = message;
-      if (!identityId || !category || body === null)
-        return this.refuseChannelDispatch(storeId, message, 'send_intent_missing');
-      const { decision, humanAgent } = await this.checkChannelDispatch(storeId, message, category);
-      if (decision.action !== 'send')
-        return this.refuseChannelDispatch(
-          storeId,
-          message,
-          decision.action === 'skip' ? decision.reason : 'quiet_hours',
-        );
-      const identity = await this.contactsService.findOutboundIdentity(storeId, {
-        ...message,
-        identityId,
-      });
-      if (!identity) return this.refuseChannelDispatch(storeId, message, 'no_address');
-      if (!(await this.outbound.markAttempt(storeId, messageId))) return;
-      return {
-        ...message,
-        body,
-        externalId: identity.externalId,
-        humanAgent,
-      };
-    });
-  }
-
-  private async checkChannelDispatch(
-    storeId: string,
-    message: Pick<ChannelMessage, 'contactId' | 'channel'> & {
-      authorType: (typeof messageAuthorTypes)[number];
-      lastInboundAt: Date | null;
-      windowExpiresAt: Date | null;
-    },
-    category: SendCategory,
-  ) {
-    const { authorType, channel, contactId, lastInboundAt, windowExpiresAt } = message;
-    const humanWindow =
-      authorType === 'user' && category === 'staff_reply' && lastInboundAt
-        ? new Date(lastInboundAt.getTime() + 7 * DAY_MS)
-        : null;
-    const { decision, at } = await this.sendPolicy.checkForSend(storeId, {
-      contactId,
-      channel,
-      category,
-      windowClosesAt: humanWindow ?? windowExpiresAt,
-    });
-    const humanAgent = humanWindow !== null && (!windowExpiresAt || at >= windowExpiresAt);
-    return { decision, humanAgent };
-  }
-
-  private async refuseChannelDispatch(storeId: string, message: ChannelMessage, errorCode: string) {
-    await this.recordChannelOutcome(storeId, message, { errorCode }, 'unclaimed');
-  }
-
-  private async recordChannelOutcome(
-    storeId: string,
-    message: ChannelMessage,
-    outcome: { externalMessageId: string; preview: string } | { errorCode: string },
-    stage: 'unclaimed' | 'attempted',
-  ) {
-    await this.transaction.run(storeId, async () => {
-      const now = this.clock.now();
-      const sent = 'externalMessageId' in outcome;
-      const updated = await this.outbound.finish(
-        storeId,
-        message.id,
-        sent
-          ? { status: 'sent', externalId: outcome.externalMessageId, sentAt: now, errorCode: null }
-          : { status: 'failed', errorCode: outcome.errorCode },
-        stage,
-      );
-      if (!updated) return;
-      if (sent)
-        await this.outbound.advanceConversation(storeId, message.conversationId, {
-          at: now,
-          preview: outcome.preview,
-        });
-      await this.outbox.publish({
-        type: sent ? 'message.sent' : 'message.failed',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: {
-          messageId: message.id,
-          conversationId: message.conversationId,
-          contactId: message.contactId,
-          channel: message.channel,
-        },
-      });
-    });
-  }
-
   private queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
     return this.transaction.run(storeId, async () => {
       const conversation = await this.outbound.findConversation(storeId, input);
-      const identity = await this.contactsService.findOutboundIdentity(storeId, input);
-      if (!conversation || !identity) throw messagingError('CONVERSATION_NOT_FOUND');
+      if (!conversation || !(await this.identities.findOutboundIdentity(storeId, input)))
+        throw messagingError('CONVERSATION_NOT_FOUND');
       const idempotencyKey = `outbound:${hashToken(input.operationKey).toString('hex')}`;
       const now = this.clock.now();
       const { message, created } = await this.outbound.queue(
@@ -338,14 +205,7 @@ export class MessagingService {
         { ...input, conversationId: conversation.id, idempotencyKey },
         now,
       );
-      if (!message) throw messagingError('MESSAGING_PREPARATION_FAILED');
-      if (
-        message.conversationId !== conversation.id ||
-        message.body !== input.content ||
-        message.identityId !== input.identityId ||
-        message.category !== input.category
-      )
-        throw messagingError('MESSAGE_OPERATION_CONFLICT');
+      if (!message) throw messagingError('MESSAGE_OPERATION_CONFLICT');
       if (created)
         await this.outbox.publish({
           type: 'message.send_requested',

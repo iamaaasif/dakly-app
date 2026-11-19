@@ -19,6 +19,7 @@ import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { runWithJobContext } from '../platform/logging/job-context';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SendPolicyService } from '../sending/send-policy.service';
@@ -61,7 +62,8 @@ async function worker() {
   applications.push(application);
   return {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
-    runStep: (data: StepJobData) => application.get(ContinueAutomationRunJob).handle(data),
+    runStep: (data: StepJobData) =>
+      runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data)),
     consents: application.get(ConsentService),
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };

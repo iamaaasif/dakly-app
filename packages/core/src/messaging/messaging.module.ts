@@ -8,6 +8,8 @@ import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SendingModule } from '../sending/sending.module';
 import { SmsModule } from '../sms/sms.module';
 import { SmsSendersModule } from '../sms-senders/sms-senders.module';
+import { StoresModule } from '../stores/stores.module';
+import { ChannelDispatchService } from './channel-dispatch.service';
 import { ChannelReceiptsRepository } from './channel-receipts.repository';
 import { ChannelReceiptsService } from './channel-receipts.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
@@ -21,17 +23,19 @@ import { OutboundMessagingRepository } from './outbound-messaging.repository';
     ClockModule,
     OutboxModule,
     SendingModule,
+    StoresModule,
     MetaAuthorizationModule,
     SmsModule,
     SmsSendersModule,
   ],
   providers: [
     MessagingService,
+    ChannelDispatchService,
     InboundMessagingRepository,
     OutboundMessagingRepository,
     ChannelReceiptsRepository,
     ChannelReceiptsService,
   ],
-  exports: [MessagingService, ChannelReceiptsService],
+  exports: [MessagingService, ChannelDispatchService, ChannelReceiptsService],
 })
 export class MessagingModule {}

@@ -5,6 +5,7 @@ import { messages } from '@dakly/db/schema/chats';
 import type { ChannelReceipt } from '@dakly/providers/channel/channel-driver';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { SEND_UNCONFIRMED } from './outbound-messaging.repository';
 
 type Thread = { conversationId: string; identityId: string };
 type Receipt = Extract<ChannelReceipt, { kind: 'delivered' | 'read' }>;
@@ -47,7 +48,7 @@ export class ChannelReceiptsRepository {
           and(
             addressedTo(storeId, thread),
             eq(messages.status, 'queued'),
-            eq(messages.errorCode, 'send_unconfirmed'),
+            eq(messages.errorCode, SEND_UNCONFIRMED),
             lte(messages.createdAt, through),
           ),
         )
@@ -107,7 +108,7 @@ export class ChannelReceiptsRepository {
             addressedTo(storeId, thread),
             eq(messages.id, echo.operationKey),
             eq(messages.status, 'queued'),
-            eq(messages.errorCode, 'send_unconfirmed'),
+            eq(messages.errorCode, SEND_UNCONFIRMED),
           ),
         )
         .returning({ id: messages.id, body: messages.body }),

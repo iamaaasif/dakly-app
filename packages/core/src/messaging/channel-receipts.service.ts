@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ChannelReceipt } from '@dakly/providers/channel/channel-driver';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
-import { ContactsService } from '../contacts/contacts.service';
+import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -18,7 +18,7 @@ type ReceiptOutcome =
 export class ChannelReceiptsService {
   constructor(
     @Inject(ChannelConnectionsService) private readonly connections: ChannelConnectionsService,
-    @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
     @Inject(ChannelReceiptsRepository) private readonly repository: ChannelReceiptsRepository,
     @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -55,7 +55,7 @@ export class ChannelReceiptsService {
     receipt: ChannelReceipt,
     finalAttempt: boolean,
   ): Promise<ReceiptOutcome> {
-    const identity = await this.contacts.findActiveChannelIdentity(storeId, {
+    const identity = await this.identities.findActiveChannelIdentity(storeId, {
       connectionId,
       channel: receipt.channel,
       externalId: receipt.recipientExternalId,

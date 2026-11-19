@@ -1,5 +1,5 @@
 {
-  "id": "a4b0b449-2714-4ddb-aac3-8fdc73f54ef7",
+  "id": "f6d021a3-10ea-4331-ba95-93b97fa8e794",
   "prevId": "2c3055d5-bd65-4cde-bcef-8526e02a25e6",
   "version": "7",
   "dialect": "postgresql",
@@ -9704,18 +9704,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "recipient_identity_id": {
-          "name": "recipient_identity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_category": {
-          "name": "send_category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "text",
@@ -9949,28 +9937,6 @@
           "method": "btree",
           "with": {}
         },
-        "messages_recipient_identity_idx": {
-          "name": "messages_recipient_identity_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recipient_identity_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"messages\".\"recipient_identity_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "messages_rated_by_user_id_idx": {
           "name": "messages_rated_by_user_id_idx",
           "columns": [
@@ -10054,21 +10020,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "messages_recipient_identity_store_fk": {
-          "name": "messages_recipient_identity_store_fk",
-          "tableFrom": "messages",
-          "tableTo": "contact_identities",
-          "columnsFrom": [
-            "store_id",
-            "recipient_identity_id"
-          ],
-          "columnsTo": [
-            "store_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -10094,10 +10045,6 @@
         "messages_source_type": {
           "name": "messages_source_type",
           "value": "\"messages\".\"source_type\" in ('chat', 'campaign', 'automation', 'transactional')"
-        },
-        "messages_send_category": {
-          "name": "messages_send_category",
-          "value": "\"messages\".\"send_category\" in ('staff_reply', 'transactional', 'marketing')"
         },
         "messages_ai_rating": {
           "name": "messages_ai_rating",
@@ -12670,6 +12617,40 @@
         }
       },
       "indexes": {
+        "contacts_birthday_idx": {
+          "name": "contacts_birthday_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "birthday_month",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "birthday_day",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"contacts\".\"deleted_at\" is null and \"contacts\".\"birthday_month\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "contacts_store_id_id_key": {
           "name": "contacts_store_id_id_key",
           "columns": [
@@ -18010,6 +17991,68 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "outbox_events_automation_preview_idx": {
+          "name": "outbox_events_automation_preview_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "type in ('consent.changed', 'contact.tag_added', 'contact.birthday')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "outbox_events_birthday_contact_day_key": {
+          "name": "outbox_events_birthday_contact_day_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "(payload->>'contactId')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "(payload->>'day')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "type = 'contact.birthday'",
           "concurrently": false,
           "method": "btree",
           "with": {}

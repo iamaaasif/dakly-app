@@ -16,6 +16,7 @@ import {
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
@@ -313,9 +314,20 @@ it('queues stores beyond the first bounded lookup page', async () => {
   }
 });
 
+it('reports a missing or mismatched Meta connection', async () => {
+  const connectionId = await connection('wrong-kind-fixture', null);
+  const connections = app.get(ChannelConnectionsService);
+  for (const id of [randomUUID(), connectionId]) {
+    await expect(connections.prepareMetaSend(storeId, id, 'instagram')).rejects.toMatchObject({
+      code: 'CHANNEL_NOT_CONNECTED',
+    });
+  }
+});
+
 it('marks a rejected send credential and tells the owner', async () => {
   const connectionId = await connection('revoked-send-token', null);
   const connections = app.get(ChannelConnectionsService);
+  const prepared = await connections.prepareMetaSend(storeId, connectionId, 'messenger');
   const message = {
     channel: 'messenger',
     externalConversationId: 'recipient-test',
@@ -325,21 +337,26 @@ it('marks a rejected send credential and tells the owner', async () => {
   await expect(
     app
       .get(StoreTransaction)
-      .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message)),
+      .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message, prepared)),
+  ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
+  await expect(
+    app
+      .get(AccountTransaction)
+      .run(userId, () => connections.sendMetaMessage(storeId, connectionId, message, prepared)),
   ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
   const failedRecord = vi
     .spyOn(connections, 'recordRejectedToken')
     .mockRejectedValueOnce(new Error('Database connection lost'));
   try {
-    await expect(connections.sendMetaMessage(storeId, connectionId, message)).rejects.toMatchObject(
-      {
-        code: 'auth_error',
-      },
-    );
+    await expect(
+      connections.sendMetaMessage(storeId, connectionId, message, prepared),
+    ).rejects.toMatchObject({
+      code: 'auth_error',
+    });
   } finally {
     failedRecord.mockRestore();
   }
-  const rejectedSend = connections.sendMetaMessage(storeId, connectionId, message);
+  const rejectedSend = connections.sendMetaMessage(storeId, connectionId, message, prepared);
   await expect(rejectedSend).rejects.toMatchObject({ code: 'auth_error' });
   await expect(rejectedSend).rejects.toBeInstanceOf(MetaRequestError);
   const status = await admin.pool.query('select status from channel_connections where id = $1', [

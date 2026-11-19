@@ -20,11 +20,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import {
-  ContactIdentitiesRepository,
-  type InboundIdentity,
-  type OutboundIdentity,
-} from './contact-identities.repository';
+import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -118,15 +114,6 @@ export class ContactsService {
         return identity.contactId;
       }
     });
-  }
-
-  async findActiveChannelIdentity(storeId: string, input: InboundIdentity) {
-    const identity = await this.identities.findInboundIdentity(storeId, input);
-    return identity?.deletedAt === null ? identity : undefined;
-  }
-
-  findOutboundIdentity(storeId: string, input: OutboundIdentity) {
-    return this.identities.findOutboundIdentity(storeId, input);
   }
 
   async list(
@@ -272,6 +259,15 @@ export class ContactsService {
     });
   }
 
+  birthdayContactIds(
+    storeId: string,
+    birthday: { month: number; days: number[] },
+    after: string | null,
+    limit: number,
+  ) {
+    return this.contactsRepository.birthdayContactIds(storeId, birthday, after, limit);
+  }
+
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the
   // store already has. A filled cell replaces that field and tags are added; `skip` leaves it as it
   // is. A contact this import already added is not written again, so a rerun changes nothing.
@@ -375,7 +371,7 @@ export class ContactsService {
   listIdsMatching(
     storeId: string,
     rules: SegmentRules,
-    page: { cursor?: string; limit: number },
+    page: { cursor?: string; limit: number; contactIds?: string[] },
   ): Promise<string[]> {
     return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }
