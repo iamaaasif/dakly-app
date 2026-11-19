@@ -28,19 +28,51 @@ export class ContactStatsRepository {
     );
   }
 
+  contactsWithChangedRank(
+    storeId: string,
+    after: string | null,
+    { cutoff, minimum, limit }: { cutoff: BestSpendCutoff | null; minimum: bigint; limit: number },
+  ) {
+    const qualifies = cutoff
+      ? sql`${contactStats.lifecycleStage} not in ('none', 'stopped_buying')
+            and ${contactStats.netSpendPoisha} > ${minimum.toString()}::bigint
+            and (${contactStats.netSpendPoisha}, ${contactStats.contactId}) >=
+                (${cutoff.netSpendPoisha}::bigint, ${cutoff.contactId}::uuid)`
+      : sql`false`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .innerJoin(
+          contactStats,
+          and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contacts.id)),
+        )
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            after ? gt(contacts.id, after) : undefined,
+            sql`(${contactStats.lifecycleStage} = 'best') <> (${qualifies})`,
+          ),
+        )
+        .orderBy(asc(contacts.id))
+        .limit(limit),
+    );
+  }
+
   async bestSpendCutoff(storeId: string) {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<BestSpendCutoff>(sql`
-        with ranked as (
-          select s.contact_id, s.net_spend_poisha,
-            row_number() over (order by s.net_spend_poisha desc, s.contact_id desc) as rank,
-            count(*) over () as customers
+        with customers as not materialized (
+          select s.contact_id, s.net_spend_poisha
           from contact_stats s join contacts c on c.store_id = s.store_id and c.id = s.contact_id
           where s.store_id = ${storeId} and s.lifecycle_stage <> 'none'
             and c.deleted_at is null and not c.is_blocked and c.kind <> 'not_customer'
-        )
+        ), quota as (select count(*) / 10 as best from customers)
         select contact_id as "contactId", net_spend_poisha::text as "netSpendPoisha"
-        from ranked where rank = customers / 10`),
+        from customers
+        where (select best from quota) > 0
+        order by net_spend_poisha desc, contact_id desc
+        offset (select greatest(best - 1, 0) from quota) limit 1`),
     );
     return rows[0] ?? null;
   }
@@ -62,14 +94,14 @@ export class ContactStatsRepository {
     return contact;
   }
 
-  async lifecycleStage(storeId: string, contactId: string) {
+  async rankingState(storeId: string, contactId: string) {
     const [stats] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ stage: contactStats.lifecycleStage })
+        .select({ stage: contactStats.lifecycleStage, updatedAt: contactStats.updatedAt })
         .from(contactStats)
         .where(and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contactId))),
     );
-    return stats?.stage;
+    return stats;
   }
 
   async bestBySpend(

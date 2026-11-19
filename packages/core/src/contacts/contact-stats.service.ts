@@ -14,7 +14,9 @@ import {
 } from './contact-stats.repository';
 
 type SpendRanking =
-  { kind: 'live' } | { kind: 'keep' } | { kind: 'cutoff'; cutoff: BestSpendCutoff | null };
+  | { kind: 'live' }
+  | { kind: 'keep' }
+  | { kind: 'cutoff'; asOf: string; cutoff: BestSpendCutoff | null };
 
 const BATCH_SIZE = 100;
 const BEST_SPEND_POISHA = 2_000_000n;
@@ -45,7 +47,7 @@ export class ContactStatsService {
   async refresh(storeId: string, contactId: string, ranking: SpendRanking = { kind: 'live' }) {
     await this.transaction.run(storeId, async () => {
       const contact = await this.repository.lockContact(storeId, contactId);
-      if (!contact) return;
+      if (!contact || (await this.rankIsOutdated(storeId, contactId, ranking))) return;
       const timeZone = await this.stores.timeZone(storeId);
       const totals = await this.orders.contactOrderTotals(storeId, contactId, timeZone);
       const now = this.clock.now();
@@ -70,13 +72,26 @@ export class ContactStatsService {
     after: string | null,
     ranking: Exclude<SpendRanking, { kind: 'live' }>,
   ) {
-    const batch = await this.repository.contactIds(storeId, after, BATCH_SIZE);
+    const batch =
+      ranking.kind === 'keep'
+        ? await this.repository.contactIds(storeId, after, BATCH_SIZE)
+        : await this.repository.contactsWithChangedRank(storeId, after, {
+            cutoff: ranking.cutoff,
+            minimum: BEST_SPEND_POISHA,
+            limit: BATCH_SIZE,
+          });
     for (const { id } of batch) await this.refresh(storeId, id, ranking);
     return batch.length === BATCH_SIZE ? (batch.at(-1)?.id ?? null) : null;
   }
 
   bestSpendCutoff(storeId: string) {
     return this.repository.bestSpendCutoff(storeId);
+  }
+
+  private async rankIsOutdated(storeId: string, contactId: string, ranking: SpendRanking) {
+    if (ranking.kind !== 'cutoff') return false;
+    const state = await this.repository.rankingState(storeId, contactId);
+    return !state || state.updatedAt.toISOString() > ranking.asOf;
   }
 
   private async lifecycleStage(
@@ -112,7 +127,7 @@ export class ContactStatsService {
 
   private async isBest(storeId: string, contactId: string, spend: bigint, ranking: SpendRanking) {
     if (ranking.kind === 'keep')
-      return (await this.repository.lifecycleStage(storeId, contactId)) === 'best';
+      return (await this.repository.rankingState(storeId, contactId))?.stage === 'best';
     if (ranking.kind === 'live')
       return this.repository.bestBySpend(storeId, contactId, spend, INTENTIONAL_SOURCES);
     const { cutoff } = ranking;

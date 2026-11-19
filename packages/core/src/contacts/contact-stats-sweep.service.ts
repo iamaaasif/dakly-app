@@ -18,8 +18,10 @@ export const reconcileContactStatsPayload = z.strictObject({
   after: z.uuid().nullable(),
   ranking: z.discriminatedUnion('kind', [
     z.strictObject({ kind: z.literal('keep') }),
+    z.strictObject({ kind: z.literal('measure') }),
     z.strictObject({
       kind: z.literal('cutoff'),
+      asOf: z.iso.datetime(),
       cutoff: z
         .strictObject({
           contactId: z.uuid(),
@@ -57,14 +59,21 @@ export class ContactStatsSweepService {
 
   async reconcile(repair: Repair) {
     const { storeId, after, ranking } = repair;
+    if (ranking.kind === 'measure') {
+      const asOf = this.clock.now().toISOString();
+      const cutoff = await this.stats.bestSpendCutoff(storeId);
+      await this.bulk.addBulk([
+        repairJob({ ...repair, ranking: { kind: 'cutoff', cutoff, asOf } }),
+      ]);
+      return;
+    }
     const next = await this.stats.reconcilePage(storeId, after, ranking);
     if (next) {
       await this.bulk.addBulk([repairJob({ ...repair, after: next })]);
     } else if (ranking.kind === 'keep') {
       // Wait until all spend totals are repaired before taking a store-wide ranking.
-      const cutoff = await this.stats.bestSpendCutoff(storeId);
       await this.bulk.addBulk([
-        repairJob({ ...repair, after: null, ranking: { kind: 'cutoff', cutoff } }),
+        repairJob({ ...repair, after: null, ranking: { kind: 'measure' } }),
       ]);
     }
   }

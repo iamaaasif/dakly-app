@@ -16,7 +16,10 @@ import { toRedisConnection } from '../platform/queue/redis-connection';
 import { ContactStatsModule } from './contact-stats.module';
 import { ContactStatsRepository } from './contact-stats.repository';
 import { ContactStatsService } from './contact-stats.service';
-import { ReconcileContactStatsJob } from './jobs/reconcile-contact-stats.job';
+import {
+  ReconcileContactStatsJob,
+  RECONCILE_CONTACT_STATS,
+} from './jobs/reconcile-contact-stats.job';
 import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-stats-on-order-stage-changed.job';
 
 class TestModule {}
@@ -237,12 +240,53 @@ describe('Contact stats', () => {
     const after = rows[0].id;
     const repair = { storeId: fixture.a, day, after: null, ranking: { kind: 'keep' } };
     await handler.handle(repair);
-    const next = await bulk.getJob(`reconcile-contact-stats-${fixture.a}-${day}-keep-${after}`);
+    const next = await bulk.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-keep-${after}`);
     expect(next?.data).toEqual({ ...repair, after });
     await handler.handle(next?.data);
-    const rank = await bulk.getJob(`reconcile-contact-stats-${fixture.a}-${day}-cutoff-start`);
+    const measure = await bulk.getJob(
+      `${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-measure-start`,
+    );
+    await handler.handle(measure?.data);
+    const rank = await bulk.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-cutoff-start`);
     expect(rank?.data).toMatchObject({ ...repair, ranking: { kind: 'cutoff' } });
+    await handler.handle(rank?.data);
     expect(await stored(contactId)).toMatchObject({ lifecycle_stage: 'none' });
+  });
+
+  it('keeps a newer live rank when a pending page has an older cutoff', async () => {
+    await seedRank();
+    const { rows } = await fixture.connection.pool.query(
+      "select id from contacts where store_id=$1 and source='import' order by id limit 1",
+      [fixture.a],
+    );
+    const otherBuyerId = rows[0].id;
+    await fixture.connection.pool.query(
+      `update orders set stage='delivered', payment_status='paid', order_discount_poisha=0,
+        items_subtotal_poisha=case number when 1001 then 2500000 else 2400000 end,
+        buyer_contact_id=case number when 1001 then $2::uuid else $3::uuid end
+        where store_id=$1 and stage <> 'cancelled'`,
+      [fixture.a, contactId, otherBuyerId],
+    );
+    await stats.reconcilePage(fixture.a, null, { kind: 'keep' });
+    const handler = app.get(ReconcileContactStatsJob);
+    const bulk = app.get<Queue>(getQueueToken(QUEUES.bulk));
+    const day = '2026-11-20';
+    await handler.handle({ storeId: fixture.a, day, after: null, ranking: { kind: 'measure' } });
+    const rank = await bulk.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-cutoff-start`);
+    expect(rank?.data.ranking.cutoff).toEqual({
+      contactId,
+      netSpendPoisha: '2500000',
+    });
+    await fixture.connection.pool.query(
+      "update orders set stage='returned', return_reason='Did not accept' where id=$1",
+      [firstOrderId],
+    );
+    await stats.refresh(fixture.a, contactId);
+    vi.mocked(app.get(Clock).now).mockReturnValueOnce(new Date('2026-11-19T06:01:00Z'));
+    await stats.refresh(fixture.a, otherBuyerId);
+    expect(await stored(otherBuyerId)).toMatchObject({ lifecycle_stage: 'best' });
+    await handler.handle(rank?.data);
+    expect(await stored(otherBuyerId)).toMatchObject({ lifecycle_stage: 'best' });
   });
 
   it('ignores foreign order and contact ids', async () => {

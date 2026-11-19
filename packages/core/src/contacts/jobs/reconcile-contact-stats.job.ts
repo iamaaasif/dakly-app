@@ -8,6 +8,8 @@ import {
   reconcileContactStatsPayload,
 } from '../contact-stats-sweep.service';
 
+export { RECONCILE_CONTACT_STATS };
+
 @HandlesJob({ queue: QUEUES.bulk, name: RECONCILE_CONTACT_STATS })
 export class ReconcileContactStatsJob implements JobHandler {
   constructor(@Inject(ContactStatsSweepService) private readonly stats: ContactStatsSweepService) {}
