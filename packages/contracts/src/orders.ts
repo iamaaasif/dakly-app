@@ -85,6 +85,12 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
   cancelled: [],
 };
 
+export const editableOrderStages: readonly OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
+export const editablePaymentStatuses: readonly (typeof orderPaymentStatuses)[number][] = [
+  'cod_pending',
+  'advance_paid',
+];
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',
@@ -376,3 +382,12 @@ export const editOrderSchema = z
     'Change at least one order field',
   );
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
+export const editOrderFormSchema = z.strictObject({
+  ...editOrderSchema.shape,
+  deliveryChargePoisha: takaInput.optional(),
+  orderDiscountPoisha: takaInput.default(0),
+  advancePaidPoisha: takaInput.optional(),
+});
+
+export type EditOrderValues = z.input<typeof editOrderFormSchema>;
+export type OrderEditorValues = CreateOrderValues | EditOrderValues;

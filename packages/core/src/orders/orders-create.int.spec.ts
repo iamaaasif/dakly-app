@@ -123,14 +123,15 @@ describe('Staff order creation', () => {
     expect(Date.parse(String(stored.confirmed_at))).toBe(Date.parse(first.createdAt));
     expect(await orders.createOrder(f.a, input, request)).toEqual(first);
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+    // Event IDs have random tie-breakers within the same millisecond.
     const events = await f.connection.pool.query<{ type: string }>(
-      "select type from outbox_events where store_id=$1 and payload->>'orderId'=$2 order by id",
+      "select type from outbox_events where store_id=$1 and payload->>'orderId'=$2 order by type",
       [f.a, first.id],
     );
     expect(events.rows.map(({ type }) => type)).toEqual([
+      'order.confirmed',
       'order.created',
       'order.stage_changed',
-      'order.confirmed',
     ]);
   });
 

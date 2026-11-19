@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  editableOrderStages,
+  editablePaymentStatuses,
   orderStages,
   orderTabs,
   type OrderDetail,
@@ -66,8 +68,8 @@ export function requireEditableOrder(
 ): void {
   if (
     isSyncedOrder(order.source) ||
-    !['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) ||
-    !['cod_pending', 'advance_paid'].includes(order.paymentStatus)
+    !editableOrderStages.includes(order.stage) ||
+    !editablePaymentStatuses.includes(order.paymentStatus)
   )
     throw orderError('ORDER_NOT_EDITABLE');
   if (expectedUpdatedAt && expectedUpdatedAt !== order.updatedAt.toISOString())

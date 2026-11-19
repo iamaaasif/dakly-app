@@ -7,7 +7,7 @@ import type {
   AutomationStatus,
   AutomationStepKind,
 } from '@dakly/contracts/automations';
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import type { Database } from '@dakly/db/client';
 import {
   automationRunSteps,
@@ -18,6 +18,7 @@ import {
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import type { SkipReason } from '../sending/send-policy.service';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
@@ -46,7 +47,17 @@ export type RunChange = {
   finishedAt?: Date;
 };
 
-export type NewRunStep = { stepKey: string; kind: AutomationStepKind; outcome: string };
+export type NewRunStep = {
+  id?: string;
+  stepKey: string;
+  kind: AutomationStepKind;
+  outcome: string;
+  channel?: 'sms';
+  category?: Extract<AutomationStep, { kind: 'send' }>['category'];
+  skipReason?: SkipReason;
+  sentAt?: Date;
+};
+export type RunStepChange = { outcome: string; providerMessageId?: string; sentAt?: Date };
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -63,6 +74,18 @@ export class AutomationRunsRepository {
         claimed_at as "claimedAt" from due_automation_runs(${limit}, ${perStore})`,
     );
     return result.rows.map((row) => ({ ...row, claimedAt: new Date(row.claimedAt) }));
+  }
+
+  // Lease and wake timestamps use the same clock as due_automation_runs.
+  async schedulerTime(storeId: string): Promise<Date> {
+    return this.database.forStore(storeId, async (tx) => {
+      const { rows } = await tx.execute<{ milliseconds: string }>(
+        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
+      );
+      const [time] = rows;
+      if (!time) throw new Error('Postgres did not return the workflow scheduler time');
+      return new Date(Number(time.milliseconds));
+    });
   }
 
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
@@ -116,6 +139,40 @@ export class AutomationRunsRepository {
     return rows.map((row) => row.stepKey);
   }
 
+  // A send handed to the provider whose outcome is not known yet.
+  async hasSendingStep(storeId: string, runId: string, stepKey: string): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: automationRunSteps.id })
+        .from(automationRunSteps)
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.runId, runId),
+            eq(automationRunSteps.stepKey, stepKey),
+            eq(automationRunSteps.outcome, 'sending'),
+          ),
+        )
+        .limit(1),
+    );
+    return rows.length > 0;
+  }
+
+  async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automationRunSteps)
+        .set(change)
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.runId, runId),
+            eq(automationRunSteps.stepKey, stepKey),
+          ),
+        ),
+    );
+  }
+
   // A step job counts its attempt once it holds the claim and starts, not when the sweep claims,
   // and renews the lease.
   async startWork(
@@ -131,6 +188,25 @@ export class AutomationRunsRepository {
         .returning({ attempts: automationRuns.attempts }),
     );
     return row && { attempts: row.attempts, claimedAt };
+  }
+
+  // As moveRun, and only while the workflow is active and the run's version is not stopped, read
+  // in the same statement so a pause or stop that committed first is seen.
+  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+    const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
+      on ${automationVersions.storeId} = ${automations.storeId}
+      where ${automations.storeId} = ${automationRuns.storeId}
+        and ${automations.id} = ${automationRuns.automationId}
+        and ${automationVersions.id} = ${automationRuns.versionId}
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(automationRuns)
+        .set(change)
+        .where(and(heldBy(storeId, claim), isLive))
+        .returning({ id: automationRuns.id }),
+    );
+    return rows.length > 0;
   }
 
   // Moves nothing when another worker has claimed the run since, or it left this step.
