@@ -1220,9 +1220,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           .mockImplementationOnce(async function (shop, person) {
             const value = await read.call(this, shop, person);
             if (change === 'the workflow pauses')
-              await admin.pool.query("update automations set status='paused' where id=$1", [
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status='paused', pause_reason='manual' where id=$1",
+                [automationId],
+              );
             else clockNow = new Date(opensAt.getTime() + 12 * HOUR);
             return value;
           });
@@ -1319,9 +1320,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           .spyOn(ContactsService.prototype, 'getPhoneForSend')
           .mockImplementationOnce(async () => {
             if (pause)
-              await admin.pool.query("update automations set status='paused' where id=$1", [
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status='paused', pause_reason='manual' where id=$1",
+                [automationId],
+              );
             throw new Error('database unavailable');
           });
         try {
@@ -1336,9 +1338,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(await ledgerFor(runId!)).toEqual([]);
         expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'first' });
         if (pause)
-          await admin.pool.query("update automations set status='active' where id=$1", [
-            automationId,
-          ]);
+          await admin.pool.query(
+            "update automations set status='active', pause_reason=null where id=$1",
+            [automationId],
+          );
         await admin.pool.query(
           "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
           [runId],
@@ -1386,9 +1389,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           .spyOn(ContactsService.prototype, 'findTags')
           .mockImplementationOnce(async function (shop, person) {
             const value = await read.call(this, shop, person);
-            await admin.pool.query("update automations set status='paused' where id=$1", [
-              automationId,
-            ]);
+            await admin.pool.query(
+              "update automations set status='paused', pause_reason='manual' where id=$1",
+              [automationId],
+            );
             return condition === 'goal reached' ? [...value, 'paid'] : value;
           });
         try {
@@ -1401,9 +1405,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(sentFor(runId!)).toEqual([]);
         expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
 
-        await admin.pool.query("update automations set status='active' where id=$1", [
-          automationId,
-        ]);
+        await admin.pool.query(
+          "update automations set status='active', pause_reason=null where id=$1",
+          [automationId],
+        );
         await runDueStep(runner, runId!);
         if (condition === 'goal reached') {
           expect(sentFor(runId!)).toHaveLength(1);
