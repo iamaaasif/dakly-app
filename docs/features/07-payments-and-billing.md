@@ -367,7 +367,8 @@ intent needs a connected credential for its gateway in that store. Billing
 intents use Dakly's own merchant account. When checkout starts, the intent
 records the gateway payment id and becomes `pending`.
 
-The API limits signed callback bodies to 64 KB and limits requests by IP.
+The API limits signed callback bodies to 64 KB, limits requests by IP and stores
+at most 32 pending signature attempts for one body.
 It saves the original bytes and the gateway's signature headers in
 `webhook_events`, queues a job, and returns 204. The worker looks up the
 merchant reference and verifies the bytes with that merchant's credentials.

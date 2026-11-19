@@ -321,6 +321,39 @@ describe('Payment intents (Postgres)', () => {
     expect(await repository.find(storeA, intent.id)).toMatchObject({ nextCheckAt: now });
   });
 
+  it('limits queued signatures for one body and preserves the earlier attempts', async () => {
+    const intent = await pendingIntent();
+    const payload = JSON.stringify(intent.merchantReference);
+    expect((await deliver(payload)).statusCode).toBe(204);
+    const valid = jobs.at(-1)!;
+    const filled = await Promise.all(
+      Array.from({ length: 31 }, (_, index) => deliver(payload, `wrong-key-${index}`)),
+    );
+    expect(filled.every((response) => response.statusCode === 204)).toBe(true);
+    expect((await deliver(payload, 'overflow-key')).statusCode).toBe(429);
+    expect((await deliver(payload)).statusCode).toBe(204);
+    await verifier.process(valid.webhookEventId, valid.attemptId, false);
+    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
+  });
+
+  it('starts a fresh retention window when a delivery reopens an ignored receipt', async () => {
+    const intent = await pendingIntent();
+    const payload = JSON.stringify(intent.merchantReference);
+    await deliver(payload, 'other-key');
+    await processReceipt(payload);
+    expect(await receipt(payload)).toMatchObject({ status: 'ignored', receivedAt: now });
+    const later = new Date('2026-11-27T03:00:00.000Z');
+    const originalClock = clock.now;
+    clock.now = () => later;
+    try {
+      expect((await deliver(payload)).statusCode).toBe(204);
+      expect(await receipt(payload)).toMatchObject({ status: 'received', receivedAt: later });
+      await processReceipt(payload);
+    } finally {
+      clock.now = originalClock;
+    }
+  });
+
   it('refuses a verified payment with a different amount', async () => {
     const intent = await pendingIntent();
     await payments.applyStatus(storeA, intent.id, paid(intent.merchantReference, 13000));

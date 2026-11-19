@@ -18,6 +18,8 @@ import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PAYMENT_DRIVERS } from './payment-drivers';
 import { PAYMENT_ERRORS } from './payments.errors';
 
+const rateLimited = 'PAYMENT_CALLBACK_RATE_LIMITED';
+
 @Injectable()
 export class PaymentCallbacksService {
   constructor(
@@ -41,10 +43,7 @@ export class PaymentCallbacksService {
       throw new AppError('PAYMENT_CALLBACK_TOO_LARGE', PAYMENT_ERRORS.PAYMENT_CALLBACK_TOO_LARGE);
     const key = `payment-callback:ip:${hashToken(ip).toString('hex')}`;
     if (!(await this.limiter.consume(key, 120, 60)).allowed)
-      throw new AppError(
-        'PAYMENT_CALLBACK_RATE_LIMITED',
-        PAYMENT_ERRORS.PAYMENT_CALLBACK_RATE_LIMITED,
-      );
+      throw new AppError(rateLimited, PAYMENT_ERRORS[rateLimited]);
 
     const signatureHeaders =
       this.drivers.find((driver) => driver.gateway === gateway)?.callbackHeaders ?? [];
@@ -58,10 +57,12 @@ export class PaymentCallbacksService {
       externalId,
       {
         body: rawBody.toString('base64'),
-        attempts: { [attemptId]: allowedHeaders },
+        headers: allowedHeaders,
+        attemptId,
       },
       this.clock.now(),
     );
+    if (receipt && !receipt.accepted) throw new AppError(rateLimited, PAYMENT_ERRORS[rateLimited]);
     if (receipt) await this.enqueue(receipt.id, attemptId);
   }
 

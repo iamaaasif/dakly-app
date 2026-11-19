@@ -32,9 +32,10 @@ export class PaymentCallbacksRepository {
   async save(
     gateway: PaymentGateway,
     externalId: string,
-    payload: { body: string; attempts: Record<string, Headers> },
+    { body, headers, attemptId }: { body: string; headers: Headers; attemptId: string },
     now: Date,
   ) {
+    const payload = { body, attempts: { [attemptId]: headers } };
     const [receipt] = await this.database
       .insert(webhookEvents)
       .values({ provider: gateway, externalId, payload, receivedAt: now })
@@ -42,13 +43,16 @@ export class PaymentCallbacksRepository {
         target: [webhookEvents.provider, webhookEvents.externalId],
         set: {
           // Keep queued signatures independent when deliveries share a body.
-          payload: sql`jsonb_set(excluded.payload, '{attempts}', ${attempts} || (excluded.payload->'attempts'))`,
+          payload: sql`case when (select count(*) from jsonb_object_keys(${attempts})) < 32
+            then jsonb_set(excluded.payload, '{attempts}', ${attempts} || (excluded.payload->'attempts'))
+            else ${webhookEvents.payload} end`,
           status: 'received',
           processedAt: null,
+          receivedAt: sql`case when ${webhookEvents.status} = 'received' then ${webhookEvents.receivedAt} else excluded.received_at end`,
         },
         setWhere: ne(webhookEvents.status, 'processed'),
       })
-      .returning({ id: webhookEvents.id });
+      .returning({ id: webhookEvents.id, accepted: sql<boolean>`${attempts} ? ${attemptId}` });
     return receipt;
   }
 
