@@ -42,12 +42,7 @@ export function EditOrderDialog({ order, disabled }: EditOrderDialogProps) {
     <SheetDialog
       title="Edit order"
       trigger={
-        <Button
-          variant="secondary"
-          disabled={disabled}
-          aria-label="Edit order"
-          className="min-h-11 px-2.5 text-xs sm:min-h-10 sm:px-3 sm:text-sm"
-        >
+        <Button variant="secondary" disabled={disabled} className="min-h-11 sm:min-h-10">
           <Pencil size={13} aria-hidden="true" />
           Edit
         </Button>

@@ -1,5 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState, type FormEvent, type RefObject } from 'react';
+import {
+  useState,
+  type ComponentProps,
+  type FormEvent,
+  type ReactElement,
+  type RefObject,
+} from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -52,12 +58,48 @@ function defaultFields(action: StageFormAction, order: OrderDetail): Partial<Act
   }
 }
 
+type TriggerButtonProps = ComponentProps<typeof Button> & {
+  primary: boolean;
+  isCancel: boolean;
+  label: string;
+};
+
+function TriggerButton({ primary, isCancel, label, ...props }: TriggerButtonProps) {
+  return (
+    <Button
+      {...props}
+      variant={primary ? 'primary' : 'secondary'}
+      className={
+        isCancel
+          ? 'min-h-11 border-transparent bg-transparent px-1.5 text-xs text-danger shadow-none hover:border-transparent hover:bg-danger-soft hover:text-danger sm:min-h-10 sm:px-2 sm:text-sm'
+          : 'min-h-11 sm:min-h-10'
+      }
+    >
+      {label}
+    </Button>
+  );
+}
+
+function useDialogState(controlled?: boolean, onOpenChange?: (open: boolean) => void) {
+  const [uncontrolled, setUncontrolled] = useState(false);
+  const isControlled = controlled !== undefined;
+  const open = isControlled ? controlled : uncontrolled;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setUncontrolled(next);
+    onOpenChange?.(next);
+  };
+  return [open, setOpen] as const;
+}
+
 type OrderStageDialogProps = {
   order: OrderDetail;
   action: StageFormAction;
   stage: RefObject<HTMLSpanElement | null>;
   primary: boolean;
   disabled: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: ReactElement | null;
 };
 
 export function OrderStageDialog({
@@ -66,8 +108,11 @@ export function OrderStageDialog({
   stage,
   primary,
   disabled,
+  open: controlledOpen,
+  onOpenChange,
+  trigger,
 }: OrderStageDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useDialogState(controlledOpen, onOpenChange);
   const form = useForm<ActionValues, undefined, ActionInput>({
     resolver: zodResolver(actionSchema(order.items)),
     defaultValues: defaultFields(action, order),
@@ -77,23 +122,19 @@ export function OrderStageDialog({
     requestAnimationFrame(() => stage.current?.focus());
   });
   const label = stageActionLabels[action];
-  const title = action === 'cancelled' ? `Cancel order #${order.number}?` : label;
+  const isCancel = action === 'cancelled';
+  const title = isCancel ? `Cancel order #${order.number}?` : label;
+  const sheetTrigger =
+    trigger !== undefined ? (
+      (trigger ?? <span className="hidden" aria-hidden="true" />)
+    ) : (
+      <TriggerButton primary={primary} disabled={disabled} isCancel={isCancel} label={label} />
+    );
+
   return (
     <SheetDialog
       title={title}
-      trigger={
-        <Button
-          variant={primary ? 'primary' : 'secondary'}
-          disabled={disabled}
-          className={
-            action === 'cancelled'
-              ? 'min-h-11 border-transparent bg-transparent px-1.5 text-xs text-danger shadow-none hover:border-transparent hover:bg-danger-soft hover:text-danger sm:min-h-10 sm:px-2 sm:text-sm'
-              : 'min-h-11 px-2 text-xs sm:min-h-10 sm:px-3 sm:text-sm'
-          }
-        >
-          {label}
-        </Button>
-      }
+      trigger={sheetTrigger}
       open={open}
       onOpenChange={(next) => {
         if (!next) {

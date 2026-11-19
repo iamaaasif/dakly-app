@@ -1,7 +1,14 @@
-import { useContext, useRef, type RefObject } from 'react';
+import { MoreHorizontal } from 'lucide-react';
+import { useContext, useRef, useState, type RefObject } from 'react';
 
 import type { OrderDetail, OrderStageChange } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@dakly/ui/dropdown-menu';
 import { QueryError } from '@dakly/ui/query-error';
 import { Sheet, type SheetProps } from '@dakly/ui/sheet';
 
@@ -11,7 +18,12 @@ import { canConfirmOrder, canEditOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
 import { EditOrderDialog } from './edit-order-dialog';
 import { OrderDetails } from './order-details';
-import { orderStageActions, stageActionLabels, type StageAction } from './order-stage-actions';
+import {
+  orderStageActions,
+  stageActionLabels,
+  type StageAction,
+  type StageFormAction,
+} from './order-stage-actions';
 import { OrderStageDialog } from './order-stage-dialog';
 import { SessionInteraction } from '@/components/session-interaction';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
@@ -85,6 +97,143 @@ function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'descript
   };
 }
 
+type SecondaryActionsMenuProps = {
+  actions: readonly StageAction[];
+  disabled: boolean;
+  onDirectAction: (action: 'to_confirm' | 'delivered', button: HTMLElement) => void;
+  onDialogAction: (action: StageFormAction) => void;
+};
+
+function SecondaryActionsMenu({
+  actions,
+  disabled,
+  onDirectAction,
+  onDialogAction,
+}: SecondaryActionsMenuProps) {
+  if (actions.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" className="min-h-11 sm:min-h-10" disabled={disabled}>
+          <MoreHorizontal size={16} aria-hidden="true" />
+          More
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action}
+            onSelect={(e) =>
+              action === 'to_confirm' || action === 'delivered'
+                ? onDirectAction(action, e.target as HTMLElement)
+                : onDialogAction(action)
+            }
+          >
+            {stageActionLabels[action]}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+type PrimaryStageButtonProps = {
+  order: OrderDetail;
+  action: StageAction;
+  stage: RefObject<HTMLSpanElement | null>;
+  disabled: boolean;
+  onDirectAction: (action: 'to_confirm' | 'delivered', el: HTMLElement) => void;
+};
+
+function PrimaryStageButton({
+  order,
+  action,
+  stage,
+  disabled,
+  onDirectAction,
+}: PrimaryStageButtonProps) {
+  if (action === 'to_confirm' || action === 'delivered') {
+    return (
+      <Button
+        variant="primary"
+        disabled={disabled}
+        className="min-h-11 sm:min-h-10"
+        onClick={(e) => onDirectAction(action, e.currentTarget)}
+      >
+        {stageActionLabels[action]}
+      </Button>
+    );
+  }
+  return (
+    <OrderStageDialog order={order} action={action} stage={stage} primary disabled={disabled} />
+  );
+}
+
+function useChangeStage(
+  transition: ReturnType<typeof useOrderStage>,
+  orderId: string,
+  stageRef: RefObject<HTMLSpanElement | null>,
+) {
+  return (change: OrderStageChange, button: HTMLElement) => {
+    const drawer = button.closest('[role="dialog"]');
+    transition.mutate(
+      { id: orderId, body: change },
+      {
+        onSuccess: () => {
+          const focused = document.activeElement;
+          if (focused === button || focused === drawer || focused === document.body)
+            stageRef.current?.focus();
+        },
+      },
+    );
+  };
+}
+
+type FooterConfirmButtonProps = {
+  show: boolean;
+  disabled: boolean;
+  onConfirm: (button: HTMLElement) => void;
+};
+
+function FooterConfirmButton({ show, disabled, onConfirm }: FooterConfirmButtonProps) {
+  if (!show) return null;
+  return (
+    <Button
+      className="min-h-11 sm:min-h-10"
+      disabled={disabled}
+      onClick={(e) => onConfirm(e.currentTarget)}
+    >
+      Confirm
+    </Button>
+  );
+}
+
+type ActiveStageDialogProps = {
+  order: OrderDetail;
+  action: StageFormAction | null;
+  stage: RefObject<HTMLSpanElement | null>;
+  disabled: boolean;
+  onClose: () => void;
+};
+
+function ActiveStageDialog({ order, action, stage, disabled, onClose }: ActiveStageDialogProps) {
+  if (!action) return null;
+  return (
+    <OrderStageDialog
+      order={order}
+      action={action}
+      stage={stage}
+      primary
+      disabled={disabled}
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      trigger={null}
+    />
+  );
+}
+
 type OrderStageFooterProps = {
   order: OrderDetail;
   transition: ReturnType<typeof useOrderStage>;
@@ -96,22 +245,12 @@ type OrderStageFooterProps = {
 
 function OrderStageFooter(props: OrderStageFooterProps) {
   const { order, transition, stage, canConfirm, actions, editable } = props;
+  const [activeDialog, setActiveDialog] = useState<StageFormAction | null>(null);
   const cancelAction = actions.find((a): a is 'cancelled' => a === 'cancelled');
   const otherActions = actions.filter((a) => a !== 'cancelled');
-
-  function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
-    const drawer = button.closest('[role="dialog"]');
-    transition.mutate(
-      { id: order.id, body: change },
-      {
-        onSuccess: () => {
-          const focused = document.activeElement;
-          if (focused === button || focused === drawer || focused === document.body)
-            stage.current?.focus();
-        },
-      },
-    );
-  }
+  const primaryAction = canConfirm ? null : otherActions[0];
+  const secondaryActions = canConfirm ? otherActions : otherActions.slice(1);
+  const changeStage = useChangeStage(transition, order.id, stage);
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -120,123 +259,47 @@ function OrderStageFooter(props: OrderStageFooterProps) {
           {transition.error.message}
         </p>
       )}
-      <FooterActionsLayout
-        order={order}
-        canConfirm={canConfirm}
-        cancelAction={cancelAction}
-        otherActions={otherActions}
-        isPending={transition.isPending}
-        stage={stage}
-        editable={editable}
-        onChangeStage={changeStage}
-      />
-    </div>
-  );
-}
-
-type FooterActionsLayoutProps = {
-  order: OrderDetail;
-  canConfirm: boolean;
-  cancelAction?: 'cancelled';
-  otherActions: readonly StageAction[];
-  isPending: boolean;
-  stage: RefObject<HTMLSpanElement | null>;
-  editable: boolean;
-  onChangeStage: (change: OrderStageChange, button: HTMLButtonElement) => void;
-};
-
-function FooterActionsLayout(props: FooterActionsLayoutProps) {
-  const {
-    order,
-    canConfirm,
-    cancelAction,
-    otherActions,
-    isPending,
-    stage,
-    editable,
-    onChangeStage,
-  } = props;
-  return (
-    <div className="flex items-center justify-between gap-1.5 sm:gap-2">
-      <div className="order-2 flex items-center gap-1.5 sm:gap-2">
-        {canConfirm && (
-          <Button
-            className="order-3 min-h-11 px-3 text-xs font-semibold sm:min-h-10 sm:px-3 sm:text-sm"
-            disabled={isPending}
-            aria-label="Mark confirmed"
-            onClick={(event) => onChangeStage({ to: 'to_pack' }, event.currentTarget)}
-          >
-            Confirm
-          </Button>
-        )}
-        <div className="order-1 flex items-center gap-1.5 sm:gap-2">
-          <StageActionButtons
-            actions={otherActions}
-            canConfirm={canConfirm}
-            isPending={isPending}
-            stage={stage}
-            order={order}
-            onChangeStage={onChangeStage}
-          />
-          {editable && <EditOrderDialog order={order} disabled={isPending} />}
-        </div>
-      </div>
-      <div className="order-1">
+      <div className="flex items-center justify-between gap-2">
         {cancelAction && (
           <OrderStageDialog
             order={order}
             action={cancelAction}
             stage={stage}
             primary={false}
-            disabled={isPending}
+            disabled={transition.isPending}
           />
         )}
-      </div>
-    </div>
-  );
-}
-
-type StageActionButtonsProps = {
-  actions: readonly StageAction[];
-  canConfirm: boolean;
-  isPending: boolean;
-  stage: RefObject<HTMLSpanElement | null>;
-  order: OrderDetail;
-  onChangeStage: (change: OrderStageChange, button: HTMLButtonElement) => void;
-};
-
-function StageActionButtons({
-  actions,
-  canConfirm,
-  isPending,
-  stage,
-  order,
-  onChangeStage,
-}: StageActionButtonsProps) {
-  return (
-    <>
-      {actions.map((action, index) =>
-        action === 'to_confirm' || action === 'delivered' ? (
-          <Button
-            key={action}
-            variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
-            disabled={isPending}
-            className="min-h-11 px-2.5 text-xs sm:min-h-10 sm:px-3 sm:text-sm"
-            onClick={(event) => onChangeStage({ to: action }, event.currentTarget)}
-          >
-            {stageActionLabels[action]}
-          </Button>
-        ) : (
-          <OrderStageDialog
-            key={action}
-            order={order}
-            action={action}
-            stage={stage}
-            primary={!canConfirm && index === 0}
-            disabled={isPending}
+        <div className="flex items-center gap-2">
+          <SecondaryActionsMenu
+            actions={secondaryActions}
+            disabled={transition.isPending}
+            onDirectAction={(action, el) => changeStage({ to: action }, el)}
+            onDialogAction={setActiveDialog}
           />
-        ),
-      )}
-    </>
+          {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
+          <FooterConfirmButton
+            show={canConfirm}
+            disabled={transition.isPending}
+            onConfirm={(el) => changeStage({ to: 'to_pack' }, el)}
+          />
+          {primaryAction && (
+            <PrimaryStageButton
+              order={order}
+              action={primaryAction}
+              stage={stage}
+              disabled={transition.isPending}
+              onDirectAction={(action, el) => changeStage({ to: action }, el)}
+            />
+          )}
+        </div>
+      </div>
+      <ActiveStageDialog
+        order={order}
+        action={activeDialog}
+        stage={stage}
+        disabled={transition.isPending}
+        onClose={() => setActiveDialog(null)}
+      />
+    </div>
   );
 }
