@@ -1,9 +1,11 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
@@ -13,6 +15,7 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { ImportsModule } from './imports.module';
@@ -22,7 +25,12 @@ import { ImportsService } from './imports.service';
 class TestModule {}
 Module({ imports: [DatabaseModule, ImportsModule] })(TestModule);
 
-const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
+const adminUrl = new URL(process.env.DATABASE_ADMIN_URL!);
+const appUrl = new URL(process.env.DATABASE_URL!);
+const bootstrap = createDatabase(adminUrl.href);
+const database = `dakly_import_spec_${randomUUID().replaceAll('-', '')}`;
+let databaseCreated = false;
+let admin: ReturnType<typeof createDatabase>;
 const storeId = randomUUID();
 const userId = randomUUID();
 const owner = { kind: 'user', userId } as const;
@@ -100,37 +108,33 @@ async function report(url: string | null) {
   return (await fetch(url!)).text();
 }
 
-async function deleteFixtureContacts() {
-  const { rows } = await admin.pool.query<{ id: string }>(
-    'select id from contacts where store_id=$1 order by id',
-    [storeId],
-  );
-  // Split the fixture's foreign-key work across a few disjoint contact batches.
-  const batchSize = Math.max(1, Math.ceil(rows.length / 4));
-  const deletes = [];
-  for (let start = 0; start < rows.length; start += batchSize) {
-    const ids = rows.slice(start, start + batchSize).map(({ id }) => id);
-    deletes.push(
-      admin.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
-        storeId,
-        ids,
-      ]),
-    );
-  }
-  const failure = (await Promise.allSettled(deletes)).find(
-    (result) => result.status === 'rejected',
-  );
-  if (failure) throw failure.reason;
-}
-
 describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
   beforeAll(async () => {
+    // The large batches commit across connections. A separate database lets teardown release
+    // the fixture without deleting each contact or locking tables used by the next test file.
+    await bootstrap.pool.query(`create database "${database}"`);
+    databaseCreated = true;
+    await bootstrap.pool.query(`grant connect on database "${database}" to dakly_app`);
+    adminUrl.pathname = `/${database}`;
+    appUrl.pathname = `/${database}`;
+    admin = createDatabase(adminUrl.href);
+    await admin.pool.query('grant usage on schema public to dakly_app');
+    await migrate(admin.db, {
+      migrationsFolder: fileURLToPath(new URL('../../../db/migrations', import.meta.url)),
+    });
+    vi.stubEnv('DATABASE_ADMIN_URL', adminUrl.href);
+    vi.stubEnv('DATABASE_URL', appUrl.href);
+    resetEnvForTests();
+
     await admin.pool.query("insert into stores(id,name) values($1,'শাহনাজের দোকান')", [storeId]);
     await admin.pool.query(
       "insert into users(id,name,email) values($1::uuid,'শাহনাজ',$1::text || '@example.test')",
       [userId],
     );
-    app = await NestFactory.createApplicationContext(TestModule, { logger: false });
+    app = await NestFactory.createApplicationContext(TestModule, {
+      logger: false,
+      abortOnError: false,
+    });
     service = app.get(ImportsService);
   });
 
@@ -145,15 +149,14 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
 
   afterAll(async () => {
     try {
-      await app?.close();
-      await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
-      await deleteFixtureContacts();
-      for (const table of ['imports', 'files'])
-        await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
-      await admin.pool.query('delete from stores where id=$1', [storeId]);
-      await admin.pool.query('delete from users where id=$1', [userId]);
+      const closed = await Promise.allSettled([app?.close(), admin?.pool.end()]);
+      if (databaseCreated) await bootstrap.pool.query(`drop database "${database}"`);
+      const failure = closed.find((result) => result.status === 'rejected');
+      if (failure) throw failure.reason;
     } finally {
-      await admin.pool.end();
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+      await bootstrap.pool.end();
     }
   });
 
