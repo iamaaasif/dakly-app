@@ -21,5 +21,6 @@ import { createMetaChannelDriver } from './meta-channel-driver';
     ChannelConnectionsService,
     ChannelConnectionsRepository,
   ],
+  exports: [ChannelConnectionsService],
 })
 export class MetaAuthorizationModule {}

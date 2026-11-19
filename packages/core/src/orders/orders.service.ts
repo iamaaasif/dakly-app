@@ -31,7 +31,6 @@ import {
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
-  orderStageTimes,
   productArchiveStages,
   recordOrderCreation,
   recordOrderEdit,
@@ -47,9 +46,8 @@ import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 type StageEditor = { actor: AuditEntry['actor']; access: Access };
-type CreateEditor = {
+type CreateEditor = StageEditor & {
   actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
-  access: Access;
   idempotencyKey: string;
 };
 
@@ -208,12 +206,11 @@ export class OrdersService {
     const parsedPhone = bdMobileSchema.safeParse(query.search);
     const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
     const { stage, ...filters } = query;
-    const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
     const timeZone =
       query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
     const rows = await this.repository.list(
       storeId,
-      { ...filters, stages, timeZone },
+      { ...filters, stages: stage === undefined ? undefined : stagesForOrderTab(stage), timeZone },
       overdueBefore,
       phone,
     );
@@ -249,7 +246,10 @@ export class OrdersService {
       hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
-      ...orderStageTimes(order),
+      shippedAt: isoTime(order.shippedAt),
+      deliveredAt: isoTime(order.deliveredAt),
+      returnedAt: isoTime(order.returnedAt),
+      codCollectedAt: isoTime(order.codCollectedAt),
       totalPoisha: orderTotalPoisha(order),
       returnRisk: returnRisk(outcomes[0]),
       items: await this.repository.items(storeId, orderId),
@@ -413,4 +413,8 @@ export class OrdersService {
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
+}
+
+function isoTime(value: Date | null): string | null {
+  return value?.toISOString() ?? null;
 }

@@ -221,7 +221,9 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 `store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The order subscriber writes `orders` by the original creation day. It also writes `buyer_activity`
 with one row per buyer and day, using the buyer's first non-cancelled order day as the value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
 
-The outbox event ID is recorded in the same transaction as its summary rows. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
+Each store’s lifecycle snapshot holds a count for each of the six stages. Contact stats publish an event when a stage changes.
+
+The order event ID is recorded in the same transaction as its summary rows. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
 
 Reports use the current and previous ranges of store-local calendar days. A returning buyer is counted once across the full period. The daily points count that same group on each day it ordered. Lifecycle counts read the latest snapshot inside the period.
 

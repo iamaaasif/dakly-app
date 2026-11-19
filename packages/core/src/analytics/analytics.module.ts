@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { ContactStatsModule } from '../contacts/contact-stats.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
@@ -12,7 +13,7 @@ import { SummarizeOrderEdited } from './jobs/summarize-order-edited.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
 
 @Module({
-  imports: [ClockModule, ContactsModule, OrdersModule, StoresModule],
+  imports: [ClockModule, ContactStatsModule, ContactsModule, OrdersModule, StoresModule],
   providers: [
     AnalyticsRepository,
     AnalyticsService,

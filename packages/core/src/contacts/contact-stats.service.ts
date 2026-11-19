@@ -5,6 +5,7 @@ import type { ContactSource } from '@dakly/contracts/contacts';
 import { OrdersService } from '../orders/orders.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import {
@@ -13,7 +14,7 @@ import {
   type ContactStatsWrite,
 } from './contact-stats.repository';
 
-type RepairRanking = { kind: 'keep' } | { kind: 'cutoff'; cutoff: BestSpendCutoff | null };
+type RepairPhase = { kind: 'totals' } | { kind: 'rank'; cutoff: BestSpendCutoff | null };
 
 const BATCH_SIZE = 100;
 const BEST_SPEND_POISHA = 2_000_000n;
@@ -34,6 +35,7 @@ export class ContactStatsService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   async refreshOrder(storeId: string, orderId: string) {
@@ -41,19 +43,56 @@ export class ContactStatsService {
     if (contactId) await this.refresh(storeId, contactId);
   }
 
-  async refresh(storeId: string, contactId: string, ranking: 'live' | 'keep' = 'live') {
+  refresh(storeId: string, contactId: string) {
+    return this.refreshFromOrders(storeId, contactId);
+  }
+
+  async reconcilePage(storeId: string, after: string | null, phase: RepairPhase, day: string) {
+    const batch =
+      phase.kind === 'totals'
+        ? await this.repository.contactIds(storeId, after, BATCH_SIZE)
+        : await this.repository.contactsWithChangedRank(storeId, after, {
+            cutoff: phase.cutoff,
+            minimum: BEST_SPEND_POISHA,
+            limit: BATCH_SIZE,
+          });
+    for (const { id } of batch) {
+      await this.refreshFromOrders(
+        storeId,
+        id,
+        phase.kind === 'rank' ? { cutoff: phase.cutoff, day } : undefined,
+      );
+    }
+    return batch.length === BATCH_SIZE ? (batch.at(-1)?.id ?? null) : null;
+  }
+
+  lifecycleCounts(storeId: string) {
+    return this.repository.countLifecycleStages(storeId);
+  }
+
+  bestSpendCutoff(storeId: string) {
+    return this.repository.bestSpendCutoff(storeId);
+  }
+
+  private async refreshFromOrders(
+    storeId: string,
+    contactId: string,
+    rank?: { cutoff: BestSpendCutoff | null; day: string },
+  ) {
     await this.transaction.run(storeId, async () => {
       const contact = await this.repository.lockContact(storeId, contactId);
-      if (!contact) return;
+      const now = this.clock.now();
+      if (!contact || (rank && rank.day !== now.toISOString().slice(0, 10))) return;
       const timeZone = await this.stores.timeZone(storeId);
       const totals = await this.orders.contactOrderTotals(storeId, contactId, timeZone);
-      const now = this.clock.now();
+      const previous = (await this.repository.lifecycleStage(storeId, contactId)) ?? 'none';
       const lifecycleStage = await this.lifecycleStage(storeId, contactId, {
         contact,
         totals,
         now,
         timeZone,
-        ranking,
+        cutoff: rank?.cutoff,
+        previous,
       });
       await this.repository.save(storeId, contactId, {
         ...totals,
@@ -61,26 +100,15 @@ export class ContactStatsService {
         lifecycleStage,
         updatedAt: now,
       });
+      if (previous !== lifecycleStage) {
+        await this.outbox.publish({
+          type: 'contact.lifecycle_changed',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { contactId },
+        });
+      }
     });
-  }
-
-  async reconcilePage(storeId: string, after: string | null, ranking: RepairRanking) {
-    const batch =
-      ranking.kind === 'keep'
-        ? await this.repository.contactIds(storeId, after, BATCH_SIZE)
-        : await this.repository.contactsWithChangedRank(storeId, after, {
-            cutoff: ranking.cutoff,
-            minimum: BEST_SPEND_POISHA,
-            limit: BATCH_SIZE,
-          });
-    // The cutoff finds candidates. A live check covers orders committed since it was measured.
-    for (const { id } of batch)
-      await this.refresh(storeId, id, ranking.kind === 'keep' ? 'keep' : 'live');
-    return batch.length === BATCH_SIZE ? (batch.at(-1)?.id ?? null) : null;
-  }
-
-  bestSpendCutoff(storeId: string) {
-    return this.repository.bestSpendCutoff(storeId);
   }
 
   private async lifecycleStage(
@@ -91,15 +119,17 @@ export class ContactStatsService {
       totals,
       now,
       timeZone,
-      ranking,
+      cutoff,
+      previous,
     }: {
       contact: NonNullable<Awaited<ReturnType<ContactStatsRepository['lockContact']>>>;
       totals: Awaited<ReturnType<OrdersService['contactOrderTotals']>>;
       now: Date;
       timeZone: string;
-      ranking: 'live' | 'keep';
+      cutoff?: BestSpendCutoff | null;
+      previous: NonNullable<ContactStatsWrite['lifecycleStage']>;
     },
-  ): Promise<ContactStatsWrite['lifecycleStage']> {
+  ): Promise<NonNullable<ContactStatsWrite['lifecycleStage']>> {
     if (!isCustomer(contact, totals.ordersCount)) return 'none';
     const day = new Intl.DateTimeFormat('en-CA', { timeZone });
     const daysSince = (date: Date) =>
@@ -108,22 +138,28 @@ export class ContactStatsService {
     if (sinceLast > (await this.stores.customerInactivityDays(storeId))) return 'stopped_buying';
     if (
       totals.netSpendPoisha > BEST_SPEND_POISHA &&
-      (await this.isBest(storeId, contactId, totals.netSpendPoisha, ranking))
+      (await bestStageApplies(contactId, totals.netSpendPoisha, { cutoff, previous }))
     )
       return 'best';
     return purchaseStage(totals, sinceLast, daysSince);
   }
+}
 
-  private async isBest(
-    storeId: string,
-    contactId: string,
-    spend: bigint,
-    ranking: 'live' | 'keep',
-  ) {
-    if (ranking === 'keep')
-      return (await this.repository.lifecycleStage(storeId, contactId)) === 'best';
-    return this.repository.bestBySpend(storeId, contactId, spend, INTENTIONAL_SOURCES);
-  }
+function bestStageApplies(
+  contactId: string,
+  spend: bigint,
+  {
+    cutoff,
+    previous,
+  }: {
+    cutoff?: BestSpendCutoff | null;
+    previous: NonNullable<ContactStatsWrite['lifecycleStage']>;
+  },
+) {
+  if (cutoff === undefined) return previous === 'best';
+  if (cutoff === null) return false;
+  const amount = BigInt(cutoff.netSpendPoisha);
+  return spend > amount || (spend === amount && contactId >= cutoff.contactId);
 }
 
 function isCustomer(
@@ -140,7 +176,7 @@ function purchaseStage(
   totals: Awaited<ReturnType<OrdersService['contactOrderTotals']>>,
   sinceLast: number,
   daysSince: (date: Date) => number,
-): ContactStatsWrite['lifecycleStage'] {
+): NonNullable<ContactStatsWrite['lifecycleStage']> {
   if (totals.usualGapDays !== null && sinceLast > 1.5 * totals.usualGapDays) return 'slipping_away';
   if (totals.firstOrderAt && daysSince(totals.firstOrderAt) < 30) return 'new';
   return totals.ordersCount >= 2 ? 'regulars' : 'bought_once';

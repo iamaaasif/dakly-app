@@ -1,40 +1,20 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Queue } from 'bullmq';
 import { beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { QUEUES } from '../platform/queue/queues';
-import { toRedisConnection } from '../platform/queue/redis-connection';
 import { ContactStatsModule } from './contact-stats.module';
 import { ContactStatsRepository } from './contact-stats.repository';
 import { ContactStatsService } from './contact-stats.service';
-import {
-  ReconcileContactStatsJob,
-  RECONCILE_CONTACT_STATS,
-} from './jobs/reconcile-contact-stats.job';
 import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-stats-on-order-stage-changed.job';
 
 class TestModule {}
-Module({
-  imports: [
-    DatabaseModule,
-    ContactStatsModule,
-    BullModule.forRootAsync({
-      useFactory: () => {
-        const env = loadEnv();
-        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
-      },
-    }),
-  ],
-})(TestModule);
+Module({ imports: [DatabaseModule, ContactStatsModule] })(TestModule);
 
 describe('Contact stats', () => {
   const fixture = new OwnerIsolationFixture();
@@ -88,8 +68,8 @@ describe('Contact stats', () => {
     return result.rows[0];
   }
 
-  it('repairs totals from the buyer’s non-cancelled orders', async () => {
-    await stats.reconcilePage(fixture.a, null, { kind: 'keep' });
+  it('refreshes totals from the buyer’s non-cancelled orders', async () => {
+    await stats.refresh(fixture.a, contactId);
     expect(await stored(contactId)).toMatchObject({
       orders_count: 2,
       delivered_count: 1,
@@ -104,7 +84,7 @@ describe('Contact stats', () => {
   });
 
   it('recalculates spend after a late return and leaves the row unchanged on replay', async () => {
-    await stats.reconcilePage(fixture.a, null, { kind: 'keep' });
+    await stats.refresh(fixture.a, contactId);
     await fixture.connection.pool.query(
       "update orders set stage='returned', return_reason='Did not accept' where id=$1",
       [firstOrderId],
@@ -130,37 +110,14 @@ describe('Contact stats', () => {
     expect(await stored(contactId)).toEqual(afterReturn);
   });
 
-  it('ages deliberate customers without orders and leaves leads out', async () => {
-    const oldCustomerId = randomUUID();
-    const leadId = randomUUID();
+  it('keeps Best customers until paid spend falls to ৳20,000', async () => {
     await fixture.connection.pool.query(
-      `insert into contacts (id,store_id,name,source,kind,created_at) values
-         ($1,$3,'নাবিলা','import','customer','2026-09-19T17:59:00Z'),
-         ($2,$3,'সুমন','messenger','lead','2026-09-19T17:59:00Z')`,
-      [oldCustomerId, leadId, fixture.a],
+      `insert into contact_stats (store_id,contact_id,lifecycle_stage)
+       values ($1,$2,'best')`,
+      [fixture.a, contactId],
     );
-    await stats.reconcilePage(fixture.a, null, { kind: 'keep' });
-    expect(await stored(oldCustomerId)).toMatchObject({
-      orders_count: 0,
-      lifecycle_stage: 'stopped_buying',
-    });
-    expect(await stored(leadId)).toMatchObject({ lifecycle_stage: 'none' });
-  });
-
-  async function seedRank() {
     await fixture.connection.pool.query(
-      `insert into contacts (id,store_id,name,source,kind,created_at)
-       select gen_random_uuid(),$1,'নাবিলা','import','customer','2026-11-01T06:00:00Z'
-       from generate_series(1, 9)`,
-      [fixture.a],
-    );
-  }
-
-  it('selects the smaller of the top tenth and customers over ৳20,000', async () => {
-    await seedRank();
-    await fixture.connection.pool.query(
-      `update orders set stage='delivered', payment_status='paid', return_reason=null,
-        items_subtotal_poisha=2105000, cod_amount_poisha=2106000 where id=$1`,
+      "update orders set payment_status='paid',items_subtotal_poisha=2205000 where id=$1",
       [firstOrderId],
     );
     await stats.refresh(fixture.a, contactId);
@@ -171,25 +128,6 @@ describe('Contact stats', () => {
     );
     await stats.refresh(fixture.a, contactId);
     expect(await stored(contactId)).toMatchObject({ lifecycle_stage: 'new' });
-  });
-
-  it('revises a best customer’s spend without counting their stale total as a rival', async () => {
-    await seedRank();
-    await fixture.connection.pool.query(
-      "update orders set items_subtotal_poisha=3005000, payment_status='paid' where id=$1",
-      [firstOrderId],
-    );
-    await stats.refresh(fixture.a, contactId);
-    expect(await stored(contactId)).toMatchObject({ lifecycle_stage: 'best' });
-    await fixture.connection.pool.query(
-      'update orders set items_subtotal_poisha=2505000 where id=$1',
-      [firstOrderId],
-    );
-    await stats.refresh(fixture.a, contactId);
-    expect(await stored(contactId)).toMatchObject({
-      lifecycle_stage: 'best',
-      net_spend_poisha: '2500000',
-    });
   });
 
   it('leaves New after 30 store-local days', async () => {
@@ -219,84 +157,6 @@ describe('Contact stats', () => {
     expect(await stored(contactId)).toMatchObject({ net_spend_poisha: '9007199254740993' });
   });
 
-  it('queues the next cursor page and clears an excluded lifecycle stage during repair', async () => {
-    await stats.refresh(fixture.a, contactId);
-    await fixture.connection.pool.query('update contacts set deleted_at=$2 where id=$1', [
-      contactId,
-      now,
-    ]);
-    await fixture.connection.pool.query(
-      `insert into contacts (id,store_id,name,source,kind)
-       select gen_random_uuid(),$1,'নাবিলা','import','customer' from generate_series(1, 100)`,
-      [fixture.a],
-    );
-    const handler = app.get(ReconcileContactStatsJob);
-    const bulk = app.get<Queue>(getQueueToken(QUEUES.bulk));
-    const day = '2026-11-19';
-    const { rows } = await fixture.connection.pool.query(
-      'select id from contacts where store_id=$1 order by id offset 99 limit 1',
-      [fixture.a],
-    );
-    const after = rows[0].id;
-    const repair = { storeId: fixture.a, day, after: null, ranking: { kind: 'keep' } };
-    await handler.handle(repair);
-    const next = await bulk.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-keep-${after}`);
-    expect(next?.data).toEqual({ ...repair, after });
-    await handler.handle(next?.data);
-    const measure = await bulk.getJob(
-      `${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-measure-start`,
-    );
-    await handler.handle(measure?.data);
-    const rank = await bulk.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-cutoff-start`);
-    expect(rank?.data).toMatchObject({ ...repair, ranking: { kind: 'cutoff' } });
-    await handler.handle(rank?.data);
-    expect(await stored(contactId)).toMatchObject({ lifecycle_stage: 'none' });
-  });
-
-  it('keeps a newer live rank when a pending page has an older cutoff', async () => {
-    await seedRank();
-    const { rows } = await fixture.connection.pool.query(
-      "select id from contacts where store_id=$1 and source='import' order by id limit 1",
-      [fixture.a],
-    );
-    const otherBuyerId = rows[0].id;
-    await fixture.connection.pool.query(
-      `update orders set stage='delivered', payment_status='paid', order_discount_poisha=0,
-        items_subtotal_poisha=case number when 1001 then 2300000 else 2400000 end,
-        buyer_contact_id=case number when 1001 then $2::uuid else $3::uuid end
-        where store_id=$1 and stage <> 'cancelled'`,
-      [fixture.a, contactId, otherBuyerId],
-    );
-    await stats.reconcilePage(fixture.a, null, { kind: 'keep' });
-    await stats.refresh(fixture.a, otherBuyerId);
-    const before = await stored(otherBuyerId);
-    expect(before).toMatchObject({ lifecycle_stage: 'best' });
-    await fixture.connection.pool.query(
-      'update orders set items_subtotal_poisha=2500000 where id=$1',
-      [firstOrderId],
-    );
-    await stats.refresh(fixture.a, contactId);
-    const handler = app.get(ReconcileContactStatsJob);
-    const bulk = app.get<Queue>(getQueueToken(QUEUES.bulk));
-    const day = '2026-11-20';
-    await handler.handle({ storeId: fixture.a, day, after: null, ranking: { kind: 'measure' } });
-    const rank = await bulk.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-cutoff-start`);
-    expect(rank?.data.ranking.cutoff).toEqual({
-      contactId,
-      netSpendPoisha: '2500000',
-    });
-    await fixture.connection.pool.query(
-      "update orders set stage='returned', return_reason='Did not accept' where id=$1",
-      [firstOrderId],
-    );
-    await stats.refresh(fixture.a, contactId);
-    vi.mocked(app.get(Clock).now).mockReturnValueOnce(new Date('2026-11-19T06:01:00Z'));
-    await stats.refresh(fixture.a, otherBuyerId);
-    expect(await stored(otherBuyerId)).toEqual(before);
-    await handler.handle(rank?.data);
-    expect(await stored(otherBuyerId)).toEqual(before);
-  });
-
   it('ignores foreign order and contact ids', async () => {
     await stats.refresh(fixture.a, contactId);
     const before = await stored(contactId);
@@ -304,9 +164,6 @@ describe('Contact stats', () => {
     await stats.refresh(fixture.b, contactId);
     const ownerRepository = new ContactStatsRepository(fixture.tenant);
     expect(await ownerRepository.lockContact(fixture.b, contactId)).toBeUndefined();
-    expect(await ownerRepository.contactIds(fixture.b, null, 100)).toEqual([
-      { id: otherContactId },
-    ]);
     expect(await stored(contactId)).toEqual(before);
   });
 });

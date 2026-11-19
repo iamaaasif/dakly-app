@@ -42,6 +42,16 @@ export class ChannelConnectionsService {
     };
   }
 
+  async findInbound(
+    storeId: string,
+    lookup: Parameters<ChannelConnectionsRepository['findInbound']>[1],
+  ) {
+    const connection = await this.repository.findInbound(storeId, lookup);
+    if (!connection) return null;
+    const channel = connection.kind === 'facebook_page' ? 'messenger' : connection.kind;
+    return { id: connection.id, channel, connectedAt: connection.connectedAt } as const;
+  }
+
   async disconnect(
     storeId: string,
     channelConnectionId: string,

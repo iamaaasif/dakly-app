@@ -74,6 +74,32 @@ export class ChannelConnectionsRepository {
     return result.rows[0]?.conflict ?? false;
   }
 
+  async findInbound(
+    storeId: string,
+    { kind, externalAccountId }: Pick<MetaConnection, 'kind' | 'externalAccountId'>,
+  ) {
+    const [connection] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: channelConnections.id,
+          kind: channelConnections.kind,
+          connectedAt: channelConnections.connectedAt,
+        })
+        .from(channelConnections)
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            ne(channelConnections.status, 'disconnected'),
+            eq(channelConnections.kind, kind),
+            eq(channelConnections.externalAccountId, externalAccountId),
+          ),
+        )
+        // Let disconnect wait for accepted deliveries without blocking other readers.
+        .for('share'),
+    );
+    return connection;
+  }
+
   saveMeta(storeId: string, account: MetaConnection, now: Date) {
     return this.database.forStore(storeId, async (tx) => {
       const [inserted] = await tx
@@ -81,7 +107,7 @@ export class ChannelConnectionsRepository {
         .values({ ...account, storeId, connectedAt: now, createdAt: now, updatedAt: now })
         .onConflictDoNothing()
         .returning({ id: channelConnections.id });
-      if (inserted) return { ...inserted, connected: true };
+      if (inserted) return { ...inserted, connected: true, created: true };
 
       const [existing] = await tx
         .select({ id: channelConnections.id, status: channelConnections.status })
@@ -103,8 +129,17 @@ export class ChannelConnectionsRepository {
         .where(
           and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, existing.id)),
         );
-      return { id: existing.id, connected: existing.status !== 'active' };
+      return { id: existing.id, connected: existing.status !== 'active', created: false };
     });
+  }
+
+  async stampConnectionStart(storeId: string, id: string, connectedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(channelConnections)
+        .set({ connectedAt })
+        .where(and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, id))),
+    );
   }
 
   async storesDueForTokenChecks(before: Date, after: string | null) {

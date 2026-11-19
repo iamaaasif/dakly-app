@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { lifecycleStages } from '@dakly/contracts/contacts';
+
+import { ContactStatsService } from '../contacts/contact-stats.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
@@ -14,6 +17,7 @@ const BUYER_PAGE_SIZE = 100;
 export class AnalyticsSummariesService {
   constructor(
     @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(ContactStatsService) private readonly contactStats: ContactStatsService,
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(AnalyticsRepository) private readonly summaries: AnalyticsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -93,6 +97,26 @@ export class AnalyticsSummariesService {
     for (const { day, count } of orders) counts.set(day, BigInt(count));
     const metrics = Array.from(counts, ([day, value]) => ({ day, metric: 'orders', value }));
     if (metrics.length) await this.summaries.save(storeId, metrics, now);
+  }
+
+  async refreshLifecycle(storeId: string) {
+    await this.transaction.run(storeId, async () => {
+      await this.summaries.lockSummaries(storeId);
+      const now = this.clock.now();
+      const timeZone = await this.stores.timeZone(storeId);
+      const day = reportDay(now, timeZone);
+      const rows = await this.contactStats.lifecycleCounts(storeId);
+      const counts = new Map(rows.map(({ stage, count }) => [stage, count]));
+      const metrics = lifecycleStages
+        .filter((stage) => stage !== 'none')
+        .map((stage) => ({
+          day,
+          metric: 'lifecycle',
+          dimension: stage,
+          value: BigInt(counts.get(stage) ?? 0),
+        }));
+      await this.summaries.save(storeId, metrics, now);
+    });
   }
 
   private async refreshBuyer(storeId: string, contactId: string, timeZone: string, now: Date) {
