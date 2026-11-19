@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, lt, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
 import { webhookEvents } from '@dakly/db/schema/platform';
@@ -7,6 +7,8 @@ import { webhookEvents } from '@dakly/db/schema/platform';
 import { DATABASE } from '../platform/database/database.tokens';
 
 const eventColumns = { id: webhookEvents.id, status: webhookEvents.status };
+
+type RecoveryCursor = { id: string; receivedAt: string };
 
 @Injectable()
 export class MetaWebhooksRepository {
@@ -28,6 +30,35 @@ export class MetaWebhooksRepository {
       .where(and(eq(webhookEvents.provider, 'meta'), eq(webhookEvents.externalId, externalId)))
       .limit(1);
     return existing;
+  }
+
+  listReceivedBefore(before: Date, after?: RecoveryCursor) {
+    return this.database
+      .select({
+        id: webhookEvents.id,
+        // Keep Postgres timestamp precision when using the last row as a cursor.
+        receivedAt: sql<string>`${webhookEvents.receivedAt}::text`,
+      })
+      .from(webhookEvents)
+      .where(
+        and(
+          eq(webhookEvents.provider, 'meta'),
+          eq(webhookEvents.status, 'received'),
+          lt(webhookEvents.receivedAt, before),
+          after &&
+            sql`(${webhookEvents.receivedAt}, ${webhookEvents.id}) >
+            (${after.receivedAt}::timestamptz, ${after.id}::uuid)`,
+        ),
+      )
+      .orderBy(asc(webhookEvents.receivedAt), asc(webhookEvents.id))
+      .limit(100);
+  }
+
+  async purgeFinishedBefore(before: Date) {
+    const result = await this.database.execute<{ deleted: number }>(
+      sql`select public.purge_webhook_events(${before.toISOString()}::timestamptz) as deleted`,
+    );
+    return result.rows.some(({ deleted }) => deleted > 0);
   }
 
   async findReceived(id: string) {
@@ -60,13 +91,13 @@ export class MetaWebhooksRepository {
 
   async finish(
     id: string,
-    status: 'processed' | 'ignored',
-    error: string | null,
-    processedAt: Date,
+    result: { error: string | null; processedAt: Date } & (
+      { status: 'processed' | 'ignored'; payload: null } | { status: 'failed'; payload?: never }
+    ),
   ) {
     await this.database
       .update(webhookEvents)
-      .set({ status, error, payload: null, processedAt })
+      .set(result)
       .where(
         and(
           eq(webhookEvents.id, id),

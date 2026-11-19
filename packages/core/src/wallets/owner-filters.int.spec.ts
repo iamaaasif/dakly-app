@@ -4,13 +4,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OutboxRepository } from '../platform/outbox/outbox.repository';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { WalletLedgerRepository } from './wallet-ledger.repository';
 import { WalletService } from './wallet.service';
 
 describe('wallet ledger filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new WalletLedgerRepository(f.tenant);
-  const wallets = new WalletService(repository, new StoreTransaction(f.tenant));
+  const wallets = new WalletService(
+    repository,
+    new StoreTransaction(f.tenant),
+    new OutboxService(
+      new OutboxRepository(f.connection.db, f.tenant),
+      new StoreTransaction(f.tenant),
+    ),
+  );
   const system = { kind: 'system' } as const;
   beforeAll(() => f.setup());
   afterAll(async () => {

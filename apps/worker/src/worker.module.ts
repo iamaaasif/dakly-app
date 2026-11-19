@@ -14,8 +14,10 @@ import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-securi
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
+import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
 import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/record-automation-birthdays.job';
+import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
@@ -24,6 +26,7 @@ import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
+import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
@@ -87,6 +90,7 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
+    ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
   ],
   imports: [
@@ -107,10 +111,12 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    MetaWebhookMaintenanceModule,
     MessagingModule,
     ChannelTokenHealthModule,
     ConversationReturnsModule,
     AutomationRunsModule,
+    AutomationsModule,
     CampaignsModule,
     ClockModule,
     ImportsModule,

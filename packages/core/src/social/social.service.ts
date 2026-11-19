@@ -31,7 +31,7 @@ const recommendedSlots = Array.from({ length: 7 }, (_, weekday) =>
 
 type UserActor = { kind: 'user'; userId: string };
 type Editor = { actor: UserActor; access: StoreAccess };
-type Post = NonNullable<Awaited<ReturnType<SocialRepository['findPost']>>>;
+type Post = NonNullable<Awaited<ReturnType<SocialRepository['findPost']>>>['post'];
 type Target = Awaited<ReturnType<SocialRepository['listTargets']>>[number];
 
 function response(post: Post, targets: Target[]): PostResponse {
@@ -73,10 +73,8 @@ export class SocialService {
       if (existing) {
         if (existing.fingerprint !== fingerprint) throw socialError('POST_CREATE_KEY_USED');
         if (existing.deletedAt) throw socialError('POST_NOT_FOUND');
-        return response(
-          await this.findPost(storeId, existing.id),
-          await this.repository.listTargets(storeId, [existing.id]),
-        );
+        const { post, targets } = await this.findPost(storeId, existing.id);
+        return response(post, targets);
       }
       const now = this.clock.now();
       await this.validatePostMedia(storeId, input.mediaFileIds, now);
@@ -116,18 +114,9 @@ export class SocialService {
       throw new AppError('PERMISSION_DENIED', PLATFORM_ERRORS.PERMISSION_DENIED);
     const rows = await this.repository.listPosts(storeId, query, actor.userId);
     const page = rows.slice(0, query.limit);
-    const targets = await this.repository.listTargets(
-      storeId,
-      page.map(({ id }) => id),
-    );
     return {
-      items: page.map((post) =>
-        response(
-          post,
-          targets.filter(({ postId }) => postId === post.id),
-        ),
-      ),
-      nextCursor: rows.length > query.limit ? (page.at(-1)?.id ?? null) : null,
+      items: page.map(({ post, targets }) => response(post, targets)),
+      nextCursor: rows.length > query.limit ? (page.at(-1)?.post.id ?? null) : null,
     };
   }
 
@@ -137,8 +126,7 @@ export class SocialService {
     actor: UserActor,
     access: StoreAccess,
   ): Promise<PostResponse> {
-    const post = await this.findPost(storeId, postId);
-    const targets = await this.repository.listTargets(storeId, [postId]);
+    const { post, targets } = await this.findPost(storeId, postId);
     if (
       post.createdByUserId !== actor.userId &&
       !targets.some(({ scheduledFor }) => scheduledFor) &&
@@ -288,10 +276,9 @@ export class SocialService {
   }
 
   private async draftForScheduling(storeId: string, postId: string, { actor, access }: Editor) {
-    const post = await this.findPost(storeId, postId);
+    const { post, targets } = await this.findPost(storeId, postId);
     if (post.createdByUserId !== actor.userId && !this.team.canReviewSocialPosts(access, 'view'))
       throw socialError('POST_NOT_FOUND');
-    const targets = await this.repository.listTargets(storeId, [postId]);
     this.requireDraft(targets);
     if (!targets.length) throw socialError('POST_TARGET_REQUIRED');
     const now = this.clock.now();
@@ -331,9 +318,8 @@ export class SocialService {
   }
 
   private async ownDraft(storeId: string, postId: string, actor: UserActor) {
-    const post = await this.findPost(storeId, postId);
+    const { post, targets } = await this.findPost(storeId, postId);
     if (post.createdByUserId !== actor.userId) throw socialError('POST_NOT_FOUND');
-    const targets = await this.repository.listTargets(storeId, [postId]);
     this.requireDraft(targets);
     return { post, targets };
   }

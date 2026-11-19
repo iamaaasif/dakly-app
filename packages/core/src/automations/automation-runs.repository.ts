@@ -20,12 +20,14 @@ import { DATABASE } from '../platform/database/database.tokens';
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
+import { workflowSchedulerTime } from './workflow-scheduler-time.repository';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
 export type DueRun = RunClaim & { storeId: string };
 
 export type ClaimedRun = {
+  automationId: string;
   contactId: string;
   status: AutomationRunStatus;
   currentStepKey: string;
@@ -35,6 +37,8 @@ export type ClaimedRun = {
   graph: AutomationGraph;
   isVersionStopped: boolean;
   automationStatus: AutomationStatus;
+  balanceResumedAt: Date | null;
+  hasBalanceResumeSendAllowance: boolean;
 };
 
 export type RunChange = {
@@ -97,20 +101,14 @@ export class AutomationRunsRepository {
 
   // Lease and wake timestamps use the same clock as due_automation_runs.
   async schedulerTime(storeId: string): Promise<Date> {
-    return this.database.forStore(storeId, async (tx) => {
-      const { rows } = await tx.execute<{ milliseconds: string }>(
-        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
-      );
-      const [time] = rows;
-      if (!time) throw new Error('Postgres did not return the workflow scheduler time');
-      return new Date(Number(time.milliseconds));
-    });
+    return this.database.forStore(storeId, workflowSchedulerTime);
   }
 
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
+          automationId: automationRuns.automationId,
           contactId: automationRuns.contactId,
           status: automationRuns.status,
           currentStepKey: automationRuns.currentStepKey,
@@ -120,6 +118,8 @@ export class AutomationRunsRepository {
           graph: automationVersions.graph,
           isVersionStopped: automationVersions.isStopped,
           automationStatus: automations.status,
+          balanceResumedAt: automations.balanceResumedAt,
+          hasBalanceResumeSendAllowance: automations.hasBalanceResumeSendAllowance,
         })
         .from(automationRuns)
         .innerJoin(
@@ -233,15 +233,21 @@ export class AutomationRunsRepository {
     storeId: string,
     claim: RunClaim,
     change: RunChange,
-    gate?: 'dispatch',
+    gate?: 'first_send' | 'retry',
   ): Promise<boolean> {
+    // A first send may write the pause itself. Both gates hold the workflow until their
+    // dispatch commits so a pause and a new dispatch cannot pass each other.
+    const lock = {
+      first_send: sql`for no key update of ${automations} for share of ${automationVersions}`,
+      retry: sql`for share of ${automations}, ${automationVersions}`,
+    };
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
         and ${automations.status} = 'active' and not ${automationVersions.isStopped}
-      ${gate ? sql`for share of ${automations}, ${automationVersions}` : sql.empty()})`;
+      ${gate ? lock[gate] : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

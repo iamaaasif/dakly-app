@@ -19,6 +19,7 @@ import type { CreatePostInput, PostListQuery } from '@dakly/contracts/social';
 import { files } from '@dakly/db/schema/platform';
 import { posts, postTargets } from '@dakly/db/schema/social';
 
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const postFields = {
@@ -51,22 +52,43 @@ const targetFields = {
 
 type PostWrite = Omit<CreatePostInput, 'targets'> & { updatedAt: Date };
 
+function selectPostsWithTargets(storeId: string, tx: Transaction) {
+  return tx
+    .select({ post: postFields, target: targetFields })
+    .from(posts)
+    .leftJoin(postTargets, and(eq(postTargets.storeId, storeId), eq(postTargets.postId, posts.id)));
+}
+
+type PostWithTargets = {
+  post: Awaited<ReturnType<typeof selectPostsWithTargets>>[number]['post'];
+  targets: NonNullable<Awaited<ReturnType<typeof selectPostsWithTargets>>[number]['target']>[];
+};
+
+function groupTargets(rows: Awaited<ReturnType<typeof selectPostsWithTargets>>): PostWithTargets[] {
+  const grouped = new Map<string, PostWithTargets>();
+  for (const { post, target } of rows) {
+    const detail = grouped.get(post.id) ?? { post, targets: [] };
+    if (target) detail.targets.push(target);
+    grouped.set(post.id, detail);
+  }
+  return [...grouped.values()];
+}
+
 @Injectable()
 export class SocialRepository {
   constructor(private readonly database: TenantDatabase) {}
 
   async findPost(storeId: string, postId: string) {
-    const [post] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select(postFields)
-        .from(posts)
-        .where(and(eq(posts.storeId, storeId), eq(posts.id, postId), isNull(posts.deletedAt))),
+    const rows = await this.database.forStore(storeId, (tx) =>
+      selectPostsWithTargets(storeId, tx)
+        .where(and(eq(posts.storeId, storeId), eq(posts.id, postId), isNull(posts.deletedAt)))
+        .orderBy(postTargets.id),
     );
-    return post;
+    return groupTargets(rows)[0];
   }
 
-  listPosts(storeId: string, query: PostListQuery, userId: string) {
-    return this.database.forStore(storeId, (tx) => {
+  async listPosts(storeId: string, query: PostListQuery, userId: string) {
+    const rows = await this.database.forStore(storeId, (tx) => {
       const scheduled = tx
         .select({ id: postTargets.id })
         .from(postTargets)
@@ -90,8 +112,8 @@ export class SocialRepository {
             .from(posts)
             .where(and(visible, eq(posts.id, query.cursor)))
         : undefined;
-      return tx
-        .select(postFields)
+      const page = tx
+        .select({ id: posts.id })
         .from(posts)
         .where(
           and(
@@ -102,7 +124,11 @@ export class SocialRepository {
         )
         .orderBy(desc(posts.createdAt), desc(posts.id))
         .limit(query.limit + 1);
+      return selectPostsWithTargets(storeId, tx)
+        .where(and(eq(posts.storeId, storeId), inArray(posts.id, page)))
+        .orderBy(desc(posts.createdAt), desc(posts.id), postTargets.id);
     });
+    return groupTargets(rows);
   }
 
   listTargets(storeId: string, postIds: string[]) {
