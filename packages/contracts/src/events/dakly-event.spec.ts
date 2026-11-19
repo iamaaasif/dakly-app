@@ -118,6 +118,8 @@ const examples: DaklyEvent[] = [
     payload: { conversationId, contactId, connectionId, channel: 'instagram' },
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
+  { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
+  { type: 'message.sent', storeId, occurredAt, payload: message },
   { type: 'message.delivered', storeId, occurredAt, payload: message },
   { type: 'message.read', storeId, occurredAt, payload: message },
   { type: 'message.failed', storeId, occurredAt, payload: message },

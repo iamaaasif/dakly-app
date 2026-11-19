@@ -400,7 +400,7 @@ Window first: a send step tries a free-form message on the channel where the cus
 
 ### Core send step
 
-Campaigns and workflows send through `MessagingService.send(storeId, { channel, contactId, body, operationKey, destination? })` in `messaging/` (D37). SMS is the only channel so far (D40); Messenger and Instagram join the same method later.
+SMS campaigns and workflows use `MessagingService.send(storeId, { channel, contactId, body, operationKey, destination? })` in `messaging/` (D37 and D40). Messenger and Instagram use `queueChannelMessage` for replies and transactional messages. [Chats send flow](04-chats-and-ai-agent.md#how-it-works)
 
 - It reads the contact's phone through `ContactsService`. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone stays in the internal preparation and provider call and is never logged or returned to the client.
 - Messaging can check a frozen destination before calling the provider. A changed phone returns `MESSAGING_DESTINATION_CHANGED`. A prepared sender name is bound to its store, and messaging looks up the current store's approved sender when the prepared value belongs to another store.
