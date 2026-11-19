@@ -1,8 +1,14 @@
 import { createTransport } from 'nodemailer';
+import { z } from 'zod';
 
 import { type SmsDriver, type SmsMessage, type SmsSendResult, SmsSendRefused } from '../sms-driver';
 
 const SHARED_FROM = 'dakly@sms.dakly.test';
+const captureId = z.string().refine((value) => value.trim().length > 0);
+const capturePage = z.object({
+  messages: z.array(z.object({ ID: captureId, MessageID: captureId })),
+  messages_count: z.int().nonnegative(),
+});
 
 export class MailpitSmsDriver implements SmsDriver {
   private readonly transport;
@@ -86,10 +92,10 @@ export class MailpitSmsDriver implements SmsDriver {
       query.set('start', String(start));
       const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, { signal });
       if (!response.ok) throw new Error('Mailpit search failed');
-      const { messages, messages_count } = (await response.json()) as {
-        messages: { ID: string; MessageID: string }[];
-        messages_count: number;
-      };
+      const page = capturePage.safeParse(await response.json());
+      if (!page.success || page.data.messages_count < start + page.data.messages.length)
+        throw new Error('Invalid Mailpit search response');
+      const { messages, messages_count } = page.data;
       const match = messages.find(({ MessageID }) => MessageID === messageId);
       if (match) return match.ID;
       start += messages.length;
