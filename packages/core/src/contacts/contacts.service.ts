@@ -94,25 +94,25 @@ export class ContactsService {
     return toContactResponse(contact, access.seeFullPhone);
   }
 
-  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string | null> {
+  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string> {
     return this.transaction.run(storeId, async () => {
-      const existing = await this.identities.findInboundIdentity(storeId, input);
-      if (existing) return existing.deletedAt ? null : existing.contactId;
-
-      const now = this.clock.now();
-      const name = input.profile?.name?.trim().slice(0, 120) || null;
-      const identity = await this.identities.createInboundIdentity(storeId, input, name, now);
-      if (!identity) {
-        const winner = await this.identities.findInboundIdentity(storeId, input);
-        return winner && !winner.deletedAt ? winner.contactId : null;
+      for (;;) {
+        const existing = await this.identities.findInboundIdentity(storeId, input);
+        if (existing) {
+          if (!existing.deletedAt) return existing.contactId;
+          await this.identities.retireInboundIdentity(storeId, existing.id);
+        }
+        const now = this.clock.now();
+        const identity = await this.identities.createInboundIdentity(storeId, input, now);
+        if (!identity) continue;
+        await this.outbox.publish({
+          type: 'contact.created',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { contactId: identity.contactId },
+        });
+        return identity.contactId;
       }
-      await this.outbox.publish({
-        type: 'contact.created',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { contactId: identity.contactId },
-      });
-      return identity.contactId;
     });
   }
 

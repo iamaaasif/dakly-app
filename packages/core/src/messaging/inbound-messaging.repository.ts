@@ -22,34 +22,43 @@ type MessageInput = {
 export class InboundMessagingRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async hasMessage(storeId: string, idempotencyKey: string): Promise<boolean> {
-    const [message] = await this.database.forStore(storeId, (tx) =>
-      tx
+  claimMessageKey(storeId: string, idempotencyKey: string): Promise<boolean> {
+    return this.database.forStore(storeId, async (tx) => {
+      // A replay must wait before it can change the sender's identity.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`${storeId}:${idempotencyKey}`}, 0))`,
+      );
+      const [message] = await tx
         .select({ id: messages.id })
         .from(messages)
-        .where(and(eq(messages.storeId, storeId), eq(messages.idempotencyKey, idempotencyKey))),
-    );
-    return Boolean(message);
+        .where(and(eq(messages.storeId, storeId), eq(messages.idempotencyKey, idempotencyKey)));
+      return !message;
+    });
   }
 
   getConversation(storeId: string, input: ConversationInput, now: Date) {
     return this.database.forStore(storeId, async (tx) => {
-      const [existing] = await tx
-        .select({ id: conversations.id })
-        .from(conversations)
-        .where(
-          and(
-            eq(conversations.storeId, storeId),
-            eq(conversations.channelConnectionId, input.channelConnectionId),
-            eq(conversations.contactId, input.contactId),
-          ),
-        );
-      if (existing) return { ...existing, started: false };
-      const id = newId();
-      await tx
-        .insert(conversations)
-        .values({ id, storeId, ...input, createdAt: now, updatedAt: now });
-      return { id, started: true };
+      for (;;) {
+        const [existing] = await tx
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(
+            and(
+              eq(conversations.storeId, storeId),
+              eq(conversations.channelConnectionId, input.channelConnectionId),
+              eq(conversations.contactId, input.contactId),
+            ),
+          );
+        if (existing) return { ...existing, started: false };
+        const [inserted] = await tx
+          .insert(conversations)
+          .values({ id: newId(), storeId, ...input, createdAt: now, updatedAt: now })
+          .onConflictDoNothing({
+            target: [conversations.channelConnectionId, conversations.contactId],
+          })
+          .returning({ id: conversations.id });
+        if (inserted) return { ...inserted, started: true };
+      }
     });
   }
 
