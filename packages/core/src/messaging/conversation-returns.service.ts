@@ -6,8 +6,7 @@ import { Clock } from '../platform/clock';
 import { QUEUES } from '../platform/queue/queues';
 import { MINUTE_MS } from '../platform/time';
 import { InboxRepository } from './inbox.repository';
-
-export const RETURN_CONVERSATION_TO_AI = 'return-conversation-to-ai';
+import { RETURN_CONVERSATION_TO_AI } from './jobs/return-conversation-to-ai.job';
 
 @Injectable()
 export class ConversationReturnsService {

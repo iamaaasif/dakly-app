@@ -3,9 +3,9 @@ import { z } from 'zod';
 
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
-import { RETURN_CONVERSATION_TO_AI } from '../conversation-returns.service';
 import { InboxService } from '../inbox.service';
 
+export const RETURN_CONVERSATION_TO_AI = 'return-conversation-to-ai';
 const payload = z.strictObject({ storeId: z.uuid(), conversationId: z.uuid() });
 
 @HandlesJob({ queue: QUEUES.sync, name: RETURN_CONVERSATION_TO_AI })

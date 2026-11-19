@@ -6,6 +6,7 @@ import { QUEUES } from '../../platform/queue/queues';
 import { ConversationReturnsService } from '../conversation-returns.service';
 
 export const QUEUE_CONVERSATION_RETURNS = 'queue-conversation-returns';
+// The sweep finds due conversations across stores.
 const payload = z.strictObject({});
 
 @HandlesJob({ queue: QUEUES.sync, name: QUEUE_CONVERSATION_RETURNS })
