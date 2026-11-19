@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Inject,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -15,7 +16,7 @@ import {
 import {
   createPostSchema,
   editPostSchema,
-  postCreateKeySchema,
+  postIdempotencyKeySchema,
   postListQuerySchema,
   schedulePostSchema,
   type CreatePostInput,
@@ -34,11 +35,11 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { SocialService } from './social.service';
 
-const createKeyPipe = new ZodValidationPipe(postCreateKeySchema);
+const idempotencyKeyPipe = new ZodValidationPipe(postIdempotencyKeySchema);
 
 @Controller('posts')
 export class SocialController {
-  constructor(private readonly social: SocialService) {}
+  constructor(@Inject(SocialService) private readonly social: SocialService) {}
 
   @Post()
   @RequirePermission('social.edit')
@@ -48,7 +49,7 @@ export class SocialController {
     @Headers('idempotency-key') key: string | undefined,
     @Body(new ZodValidationPipe(createPostSchema)) input: CreatePostInput,
   ): Promise<PostResponse> {
-    return this.social.createDraft(storeId, input, createKeyPipe.transform(key), {
+    return this.social.createDraft(storeId, input, idempotencyKeyPipe.transform(key), {
       kind: 'user',
       userId,
     });

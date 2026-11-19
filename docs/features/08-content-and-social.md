@@ -174,7 +174,7 @@ The post composer and scheduling are well thought out. But the design can't deci
 The posts API saves, reads, edits and deletes drafts. Each target names a connected
 Facebook Page or Instagram account in the store. Drafts belong to their creator.
 Owners and Admins can read team drafts. Editing an AI-written draft keeps its
-approval requirement.
+approval requirement. Reusing a create key returns the creator's saved draft.
 
 Owners, Admins and Marketers can approve an AI-written draft. Scheduling it can
 also record their approval. Editing the draft clears an earlier approval.

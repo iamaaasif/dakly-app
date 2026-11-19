@@ -14,7 +14,6 @@ const errors = {
   POST_SLOT_TAKEN: { status: 409, message: 'An account already has a post at this time' },
   POST_MEDIA_NOT_FOUND: { status: 404, message: 'Photo not found' },
   POST_DRAFT_REQUIRED: { status: 409, message: 'Only drafts can be changed' },
-  POST_CREATE_KEY_USED: { status: 409, message: 'This key was already used to create a post' },
   POST_PHOTOS_REQUIRED: { status: 400, message: 'Choose photos for this post' },
   POST_CAPTION_TOO_LONG: { status: 400, message: 'Use at most 2,200 characters on Instagram' },
   POST_TOO_MANY_HASHTAGS: { status: 400, message: 'Use at most 30 hashtags on Instagram' },

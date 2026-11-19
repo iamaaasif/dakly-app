@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Put, Query } from '@nestjs/common';
 
 import {
   postingSlotsQuerySchema,
@@ -16,7 +16,7 @@ import { PostingSlotsService } from './posting-slots.service';
 
 @Controller('posts/queue-slots')
 export class PostingSlotsController {
-  constructor(private readonly slots: PostingSlotsService) {}
+  constructor(@Inject(PostingSlotsService) private readonly slots: PostingSlotsService) {}
 
   @Get()
   @RequirePermission('social.view')

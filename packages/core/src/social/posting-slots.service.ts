@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import type { PostingSlotsResponse, SavePostingSlotsInput } from '@dakly/contracts/social';
 
@@ -16,16 +16,14 @@ type PostingConnection = Awaited<
 @Injectable()
 export class PostingSlotsService {
   constructor(
-    private readonly channels: ChannelConnectionsService,
-    private readonly stores: StoresService,
-    private readonly transaction: StoreTransaction,
-    private readonly audit: AuditService,
+    @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
+    @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async postingSlots(storeId: string, channelConnectionId: string): Promise<PostingSlotsResponse> {
-    const [connection] = await this.channels.postingConnections(storeId, {
-      ids: [channelConnectionId],
-    });
+    const [connection] = await this.channels.postingConnections(storeId, [channelConnectionId]);
     return this.response(storeId, connection);
   }
 
@@ -35,7 +33,7 @@ export class PostingSlotsService {
     actor: { kind: 'user'; userId: string },
   ): Promise<PostingSlotsResponse> {
     return this.transaction.runLocked(storeId, async () => {
-      const [connection] = await this.channels.postingConnections(storeId, input);
+      const connection = await this.channels.savePostingSlots(storeId, input);
       const saved = await this.response(storeId, connection);
       await this.audit.record(storeId, {
         actor,

@@ -67,18 +67,25 @@ export class ChannelConnectionsService {
     };
   }
 
-  async postingConnections(
-    storeId: string,
-    input: { ids: string[] } | { channelConnectionId: string; slots: PostingSlot[] },
-  ) {
-    const rows =
-      'ids' in input
-        ? await this.repository.findPostingConnections(storeId, input.ids)
-        : await this.repository.savePostingSlots(storeId, { ...input, now: this.clock.now() });
+  async postingConnections(storeId: string, ids: string[]) {
+    if (!ids.length) return [];
+    const rows = await this.repository.findPostingConnections(storeId, ids);
     return rows.map(({ postingSlots, ...connection }) => ({
       ...connection,
       postingSlots: postingSlotsSchema.safeParse(postingSlots).data ?? null,
     }));
+  }
+
+  async savePostingSlots(
+    storeId: string,
+    input: { channelConnectionId: string; slots: PostingSlot[] },
+  ) {
+    const [saved] = await this.repository.savePostingSlots(storeId, {
+      ...input,
+      now: this.clock.now(),
+    });
+    if (!saved) return undefined;
+    return { ...saved, postingSlots: input.slots };
   }
 
   async findInbound(

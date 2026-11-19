@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
   desc,
@@ -76,7 +76,7 @@ function groupTargets(rows: Awaited<ReturnType<typeof selectPostsWithTargets>>):
 
 @Injectable()
 export class SocialRepository {
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async findPost(storeId: string, postId: string) {
     const rows = await this.database.forStore(storeId, (tx) =>
@@ -159,20 +159,16 @@ export class SocialRepository {
     );
   }
 
-  async findCreateKey(storeId: string, userId: string, key: string) {
+  async findByIdempotencyKey(storeId: string, userId: string, idempotencyKey: string) {
     const [match] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({
-          id: posts.id,
-          fingerprint: posts.createFingerprint,
-          deletedAt: posts.deletedAt,
-        })
+        .select({ id: posts.id })
         .from(posts)
         .where(
           and(
             eq(posts.storeId, storeId),
             eq(posts.createdByUserId, userId),
-            eq(posts.createKey, key),
+            eq(posts.idempotencyKey, idempotencyKey),
           ),
         ),
     );
@@ -184,8 +180,7 @@ export class SocialRepository {
     values: PostWrite & {
       createdByUserId: string;
       createdAt: Date;
-      createKey: string;
-      createFingerprint: string;
+      idempotencyKey: string;
     },
   ) {
     const [post] = await this.database.forStore(storeId, (tx) =>

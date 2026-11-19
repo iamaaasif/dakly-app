@@ -1,6 +1,4 @@
-import { createHash } from 'node:crypto';
-
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import type {
   CreatePostInput,
@@ -49,28 +47,29 @@ function response(post: Post, targets: Target[]): PostResponse {
 @Injectable()
 export class SocialService {
   constructor(
-    private readonly repository: SocialRepository,
-    private readonly channels: ChannelConnectionsService,
-    private readonly team: TeamService,
-    private readonly transaction: StoreTransaction,
-    private readonly audit: AuditService,
-    private readonly clock: Clock,
-    private readonly outbox: OutboxService,
-    private readonly stores: StoresService,
+    @Inject(SocialRepository) private readonly repository: SocialRepository,
+    @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
+    @Inject(TeamService) private readonly team: TeamService,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(Clock) private readonly clock: Clock,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
   createDraft(
     storeId: string,
     input: CreatePostInput,
-    key: string,
+    idempotencyKey: string,
     actor: UserActor,
   ): Promise<PostResponse> {
     return this.transaction.runLocked(storeId, async () => {
-      const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-      const existing = await this.repository.findCreateKey(storeId, actor.userId, key);
+      const existing = await this.repository.findByIdempotencyKey(
+        storeId,
+        actor.userId,
+        idempotencyKey,
+      );
       if (existing) {
-        if (existing.fingerprint !== fingerprint) throw socialError('POST_CREATE_KEY_USED');
-        if (existing.deletedAt) throw socialError('POST_NOT_FOUND');
         const { post, targets } = await this.findPost(storeId, existing.id);
         return response(post, targets);
       }
@@ -81,8 +80,7 @@ export class SocialService {
       const post = await this.repository.insertPost(storeId, {
         ...content,
         createdByUserId: actor.userId,
-        createKey: key,
-        createFingerprint: fingerprint,
+        idempotencyKey,
         createdAt: now,
         updatedAt: now,
       });
@@ -360,16 +358,16 @@ export class SocialService {
     input: Pick<CreatePostInput, 'kind' | 'caption' | 'mediaFileIds' | 'targets'>,
     previous: Target[],
   ) {
+    if (input.kind === 'story' && input.mediaFileIds.length !== 1)
+      throw socialError('POST_PHOTOS_REQUIRED');
     const retained = new Set(previous.map(({ channelConnectionId }) => channelConnectionId));
     const ids = input.targets.map(({ channelConnectionId }) => channelConnectionId);
-    const selected = await this.channels.postingConnections(storeId, { ids });
+    const selected = await this.channels.postingConnections(storeId, ids);
     const connections = new Map(selected.map((connection) => [connection.id, connection]));
     for (const target of input.targets) {
       const connection = connections.get(target.channelConnectionId);
       if (!connection || (connection.status !== 'active' && !retained.has(connection.id)))
         throw socialError('POST_CONNECTION_NOT_FOUND');
-      if (input.kind === 'story' && input.mediaFileIds.length !== 1)
-        throw socialError('POST_PHOTOS_REQUIRED');
       if (connection.kind === 'instagram')
         this.validateInstagram(
           target.captionOverride ?? input.caption ?? '',
