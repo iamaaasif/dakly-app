@@ -30,6 +30,8 @@ import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { AutomationEntryRepository } from './automation-entry.repository';
+import { AutomationEntryService } from './automation-entry.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationsModule } from './automations.module';
@@ -84,6 +86,7 @@ async function worker() {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
     runStep: (data: StepJobData) =>
       runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data)),
+    entries: application.get(AutomationEntryService),
     consents: application.get(ConsentService),
     emailOwner: (data: unknown) => application.get(EmailOwnerOnAutomationPaused).handle(data),
     resumeOnCredit: (data: unknown) =>
@@ -743,6 +746,79 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     afterAll(() => {
       vi.restoreAllMocks();
+    });
+
+    it('does not deadlock a first send with an entry for the same workflow and contact', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      const entryHasContact = Promise.withResolvers<void>();
+      const allowEntry = Promise.withResolvers<void>();
+      const sendNeedsContact = Promise.withResolvers<void>();
+      const lockVersion = AutomationEntryRepository.prototype.lockPublishedVersion;
+      const entryLock = vi
+        .spyOn(AutomationEntryRepository.prototype, 'lockPublishedVersion')
+        .mockImplementationOnce(async function (shop, workflowId) {
+          entryHasContact.resolve();
+          await allowEntry.promise;
+          return lockVersion.call(this, shop, workflowId);
+        });
+      const eventId = randomUUID();
+      const entry = runner.entries.start(storeId, automationId, {
+        id: eventId,
+        type: 'consent.changed',
+        occurredAt: new Date().toISOString(),
+        payload: {
+          consentId: eventId,
+          contactId: contact,
+          channel: 'sms',
+          status: 'granted',
+          source: 'manual',
+        },
+      });
+      try {
+        await Promise.race([
+          entryHasContact.promise,
+          entry.then(() => {
+            throw new Error('Entry did not acquire the contact lock');
+          }),
+        ]);
+        const lockContact = ContactsService.prototype.lockForConsent;
+        const sendLock = vi
+          .spyOn(ContactsService.prototype, 'lockForConsent')
+          .mockImplementationOnce(function (shop, contacts) {
+            sendNeedsContact.resolve();
+            return lockContact.call(this, shop, contacts);
+          });
+        const dispatched = runDueStep(runner, runId!);
+        try {
+          await Promise.race([
+            sendNeedsContact.promise,
+            dispatched.then(() => {
+              throw new Error('Send did not acquire the contact lock');
+            }),
+          ]);
+          allowEntry.resolve();
+          await Promise.all([entry, dispatched]);
+        } finally {
+          allowEntry.resolve();
+          await Promise.allSettled([entry, dispatched]);
+          sendLock.mockRestore();
+        }
+      } finally {
+        allowEntry.resolve();
+        await Promise.allSettled([entry]);
+        entryLock.mockRestore();
+      }
+
+      const runs = await admin.pool.query('select id from automation_runs where automation_id=$1', [
+        automationId,
+      ]);
+      expect(runs.rows).toEqual([{ id: runId }]);
+      expect(sentFor(runId!)).toHaveLength(1);
     });
 
     it('sends through the gate with the opt-out link and the step key, and a retry sends once', async () => {

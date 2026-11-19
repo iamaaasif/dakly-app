@@ -264,6 +264,8 @@ export class AutomationRunsService {
     if (!step.channels.includes('sms'))
       return { decision: { action: 'skip', reason: 'window_closed' } };
     await this.wallets.lockForReservation(storeId, 'sms_credits');
+    // Entry locks the contact before the workflow, so use the same order for dispatch.
+    const lockedContactExists = await this.sendPolicy.lockForDispatch(storeId, contactId);
     if (
       !(await this.repository.moveRunIfLive(
         storeId,
@@ -273,11 +275,11 @@ export class AutomationRunsService {
       ))
     )
       return 'not_live';
-    const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
-      contactId,
-      channel: 'sms',
-      category: step.category,
-    });
+    const { decision, destination, at } = await this.sendPolicy.checkForSend(
+      storeId,
+      { contactId, channel: 'sms', category: step.category },
+      lockedContactExists,
+    );
     const exitReason = await this.conditions.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);
@@ -286,23 +288,41 @@ export class AutomationRunsService {
     if (firstTriedAt.getTime() - claim.claimedAt.getTime() >= WORKFLOW_LEASE_MS)
       return { decision: { action: 'defer', until: facts.wakeAt ?? firstTriedAt } };
     if (decision.action !== 'send') return { decision };
-    if (destination !== preparedPhone) return { outcome: 'destination_changed' };
-    const body = await this.writeSend(
+    return this.reserveFirstSend(
       { storeId, claim, contactId, step, destination },
+      facts,
       { sentAt: at, firstTriedAt },
+      preparedPhone,
     );
+  }
+
+  private async reserveFirstSend(
+    delivery: Omit<Delivery, 'body'>,
+    { automationId, wakeAt }: RunFacts,
+    times: { sentAt: Date; firstTriedAt: Date },
+    preparedPhone: string | null,
+  ): Promise<GateResult> {
+    const { storeId, claim, destination } = delivery;
+    if (destination !== preparedPhone) return { outcome: 'destination_changed' };
+    const body = await this.writeSend(delivery, times);
     if (body === undefined) {
-      await this.automations.pauseForBalance(storeId, facts.automationId, system);
+      await this.automations.pauseForBalance(storeId, automationId, system);
       // The sweep ignores the waiting run while its workflow is paused.
       await this.repository.moveRun(storeId, claim, {
         status: 'waiting',
-        wakeAt: facts.wakeAt ?? firstTriedAt,
+        wakeAt: wakeAt ?? times.firstTriedAt,
         attempts: 0,
         lastError: null,
       });
       return 'balance_paused';
     }
-    return { decision, body, destination, at, firstTriedAt };
+    return {
+      decision: { action: 'send' },
+      body,
+      destination,
+      at: times.sentAt,
+      firstTriedAt: times.firstTriedAt,
+    };
   }
 
   private async readLateGateResult({ storeId, runId, wakeAt }: RunFacts, now: Date) {

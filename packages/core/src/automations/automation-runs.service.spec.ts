@@ -293,6 +293,7 @@ describe('AutomationRunsService', () => {
       return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
     };
     const sendPolicy = {
+      lockForDispatch: async () => true,
       check: async () => decision,
       checkForSend: async () => {
         submissionChecked = true;
@@ -814,7 +815,7 @@ describe('AutomationRunsService', () => {
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
       const afterWait = new Date(now.getTime() + 6 * 60_000);
       finalQuietUntil = new Date(afterWait.getTime() + HOUR);
-      duringRecheck = () => {
+      repository.beforeDispatchLock = () => {
         databaseNow = afterWait;
       };
 
