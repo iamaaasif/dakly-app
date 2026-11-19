@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { type AutomationGraph, automationGraphSchema } from './automations/graph';
 import type { CampaignChannel } from './campaigns';
 
-
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
 export const automationExitReasons = [
