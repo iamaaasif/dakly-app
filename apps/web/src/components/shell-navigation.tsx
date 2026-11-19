@@ -3,16 +3,17 @@ import {
   House,
   Layers,
   LogOut,
+  Package,
   Puzzle,
   Settings,
   Store,
+  Truck,
   Users,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useId } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
@@ -103,8 +104,8 @@ function NavigationItem({
   );
 }
 
-// Groups follow the design order. Sales, Marketing and Social auto post join when their screens exist.
-function navigationGroups(session: SessionContext): NavigationGroup[] {
+// Groups follow the design order. Marketing and Social auto post join when their screens exist.
+export function navigationGroups(session: SessionContext): NavigationGroup[] {
   const store = session.currentStore;
   return [
     {
@@ -123,6 +124,19 @@ function navigationGroups(session: SessionContext): NavigationGroup[] {
         { href: '/segments', label: 'Segments', icon: Layers, visible: store?.canViewSegments },
       ],
     },
+    {
+      heading: 'Sales',
+      links: [
+        { href: '/orders', label: 'Orders', icon: Truck, visible: store?.canViewOrders },
+        { href: '/products', label: 'Products', icon: Package, visible: store?.canViewProducts },
+      ],
+    },
+    ...settingsGroups(store),
+  ];
+}
+
+function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[] {
+  return [
     {
       heading: 'Store information',
       links: [
@@ -164,7 +178,9 @@ function NavigationLogo({ collapsed }: Pick<ShellNavigationProps, 'collapsed'>) 
         D
       </span>
       <div className={cn('min-w-0', collapsed && 'sr-only')}>
-        <p className="text-md leading-5 font-bold">Dakly</p>
+        <p className="text-md leading-5 font-bold">
+          Dakly <span className="text-primary">AI</span>
+        </p>
         <p className="truncate text-xs text-text-muted">Call customers. Grow sales.</p>
       </div>
     </div>
@@ -176,18 +192,11 @@ function NavigationGroups({
   collapsed,
   onNavigate,
 }: { groups: NavigationGroup[] } & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
-  const groupId = useId();
   return (
     <div className="flex-1 space-y-4 overflow-y-auto p-3">
-      {groups.map((group, index) => (
-        <div
-          key={group.heading}
-          role="group"
-          aria-labelledby={`${groupId}-${index}`}
-          className="space-y-1"
-        >
+      {groups.map((group) => (
+        <div key={group.heading} className="space-y-1">
           <p
-            id={`${groupId}-${index}`}
             className={cn(
               'px-2 pt-2 text-xs font-semibold tracking-wide text-text-muted uppercase',
               collapsed && 'sr-only',
