@@ -2,13 +2,17 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import type { MetaTokenHealthDriver } from '@dakly/providers/channel/channel-driver';
+import {
+  MetaRequestError,
+  type MetaTokenHealthDriver,
+} from '@dakly/providers/channel/channel-driver';
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError } from '../platform/errors/app-error';
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
@@ -38,24 +42,50 @@ export class ChannelTokenHealthService {
     if (!this.driver) return;
     const now = this.clock.now();
     const day = now.toISOString().slice(0, 10);
-    const due = await this.repository.expiringBefore(new Date(now.getTime() + warningWindow));
-    await this.queue.addBulk(
-      due.map((data) => ({
-        name: CHECK_CHANNEL_TOKEN,
-        data,
-        opts: {
-          jobId: `${CHECK_CHANNEL_TOKEN}-${data.channelConnectionId}-${day}`,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: { age: DAY_MS / 1000 },
-          removeOnFail: 100,
-        },
-      })),
-    );
+    const before = new Date(now.getTime() + warningWindow);
+    let after: string | null = null;
+    for (;;) {
+      const due = await this.repository.storesDueForTokenChecks(before, after);
+      const last = due.at(-1);
+      if (!last) return;
+      await this.queue.addBulk(
+        due.map((data) => ({
+          name: CHECK_CHANNEL_TOKEN,
+          data,
+          opts: {
+            jobId: `${CHECK_CHANNEL_TOKEN}-${data.storeId}-${day}`,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 1000 },
+            removeOnComplete: { age: DAY_MS / 1000 },
+            removeOnFail: 100,
+          },
+        })),
+      );
+      after = last.storeId;
+    }
   }
 
-  async check(storeId: string, channelConnectionId: string): Promise<void> {
+  async checkStore(storeId: string): Promise<void> {
     if (!this.driver) return;
+    const before = new Date(this.clock.now().getTime() + warningWindow);
+    const due = await this.repository.dueMetaTokenIds(storeId, before);
+    let failure: MetaRequestError | AppError | undefined;
+    for (const { id } of due) {
+      try {
+        await this.check(storeId, id, this.driver);
+      } catch (error) {
+        if (
+          !(error instanceof MetaRequestError) &&
+          !(error instanceof AppError && error.code === 'DECRYPTION_FAILED')
+        )
+          throw error;
+        failure ??= error;
+      }
+    }
+    if (failure) throw failure;
+  }
+
+  private async check(storeId: string, channelConnectionId: string, driver: MetaTokenHealthDriver) {
     const token = await this.repository.activeMetaToken(storeId, channelConnectionId);
     if (!token?.ciphertext || token.keyVersion === null) return;
     const ciphertext = token.ciphertext;
@@ -68,7 +98,6 @@ export class ChannelTokenHealthService {
     );
     let valid: boolean;
     try {
-      const driver = this.driver;
       valid = await measureVendorCall(
         this.logger,
         'meta_token_health',

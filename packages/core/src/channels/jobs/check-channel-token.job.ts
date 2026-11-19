@@ -7,7 +7,7 @@ import { QUEUES } from '../../platform/queue/queues';
 import { CHECK_CHANNEL_TOKEN, ChannelTokenHealthService } from '../channel-token-health.service';
 
 export { CHECK_CHANNEL_TOKEN };
-const payload = z.strictObject({ storeId: z.uuid(), channelConnectionId: z.uuid() });
+const payload = z.strictObject({ storeId: z.uuid() });
 
 @HandlesJob({ queue: QUEUES.sync, name: CHECK_CHANNEL_TOKEN })
 export class CheckChannelTokenJob implements JobHandler {
@@ -16,8 +16,8 @@ export class CheckChannelTokenJob implements JobHandler {
   ) {}
 
   async handle(data: unknown) {
-    const { storeId, channelConnectionId } = payload.parse(data);
+    const { storeId } = payload.parse(data);
     bindVerifiedJobStore(storeId);
-    await this.tokens.check(storeId, channelConnectionId);
+    await this.tokens.checkStore(storeId);
   }
 }

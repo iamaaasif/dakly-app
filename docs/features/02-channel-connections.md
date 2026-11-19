@@ -149,7 +149,7 @@ A crash or later failure during selection can leave a Page subscribed at Meta wi
 
 CHN-9 adds recovery for acknowledged deliveries whose Valkey jobs are lost and the seven-day webhook payload purge. Complete CHN-9 before enabling live intake.
 
-The daily token sweep queues one check per active connection due to expire within seven days. The worker checks Meta outside the database transaction. A valid credential gets one expiry warning per expiry date. An invalid credential moves to `needs_reconnect` and notifies members with permission to edit store settings.
+The daily token sweep queues one job per store with an active Meta connection that has no fixed expiry or expires within seven days. The worker checks Meta outside the database transaction. A valid credential with a known expiry gets one warning for that expiry date. An invalid credential moves to `needs_reconnect` and notifies members with permission to edit store settings.
 
 SMS sender name (CHN-6)
 

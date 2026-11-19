@@ -8,12 +8,16 @@ import type { Queue } from 'bullmq';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
-import type { MetaTokenHealthDriver } from '@dakly/providers/channel/channel-driver';
+import {
+  MetaRequestError,
+  type MetaTokenHealthDriver,
+} from '@dakly/providers/channel/channel-driver';
 
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { jobLogBindings, runWithJobContext } from '../platform/logging/job-context';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
@@ -79,18 +83,21 @@ afterAll(async () => {
   }
 });
 
-async function connection(token: string, days: number | null) {
+async function connection(token: string, days: number | null, ownerStoreId = storeId) {
   const id = randomUUID();
   const secret = app
     .get(EnvelopeEncryption)
-    .encrypt({ owner: 'store', storeId, purpose: 'channel-access-token' }, Buffer.from(token));
+    .encrypt(
+      { owner: 'store', storeId: ownerStoreId, purpose: 'channel-access-token' },
+      Buffer.from(token),
+    );
   await admin.pool.query(
     `insert into channel_connections
     (id, store_id, kind, external_account_id, display_name, access_token_ciphertext, key_version, token_expires_at)
     values ($1, $2, 'facebook_page', $3, 'Channel health test', $4, $5, $6)`,
     [
       id,
-      storeId,
+      ownerStoreId,
       id,
       secret.ciphertext,
       secret.keyVersion,
@@ -103,29 +110,31 @@ async function connection(token: string, days: number | null) {
 it('queues only due tokens once a day and warns or reconnects once', async () => {
   const expiring = await connection('fake-rina-page-credential', 6);
   const revoked = await connection('revoked-test-token', 6);
-  await connection('fake-karim-page-credential', 10);
-  await connection('fake-karim-page-credential', null);
+  const expiresLater = await connection('invalid-but-not-due', 10);
+  const noExpiry = await connection('fake-karim-page-credential', null);
+  const revokedWithoutExpiry = await connection('revoked-without-expiry', null);
   const sweep = app.get(QueueChannelTokenChecksJob);
   await sweep.handle({});
   await sweep.handle({});
   const checks = (await queue.getWaiting()).filter((job) => job.data.storeId === storeId);
-  expect(checks.map((job) => job.data.channelConnectionId).sort()).toEqual(
-    [expiring, revoked].sort(),
-  );
+  expect(checks.map((job) => job.data)).toEqual([{ storeId }]);
   const check = app.get(CheckChannelTokenJob);
-  await check.handle({ storeId: randomUUID(), channelConnectionId: revoked });
+  await check.handle({ storeId: randomUUID() });
   for (const job of checks) {
     await check.handle(job.data);
     await check.handle(job.data);
   }
   const states = await admin.pool.query(
     'select id, status from channel_connections where id = any($1::uuid[])',
-    [[expiring, revoked]],
+    [[expiring, revoked, noExpiry, revokedWithoutExpiry, expiresLater]],
   );
   expect(states.rows).toEqual(
     expect.arrayContaining([
       { id: expiring, status: 'active' },
       { id: revoked, status: 'needs_reconnect' },
+      { id: noExpiry, status: 'active' },
+      { id: revokedWithoutExpiry, status: 'needs_reconnect' },
+      { id: expiresLater, status: 'active' },
     ]),
   );
   const notices = await admin.pool.query(
@@ -134,20 +143,28 @@ it('queues only due tokens once a day and warns or reconnects once', async () =>
   );
   expect(notices.rows).toEqual([
     { type: 'channel.needs_reconnect', user_id: userId },
+    { type: 'channel.needs_reconnect', user_id: userId },
     { type: 'channel.token_expiring', user_id: userId },
   ]);
   const lifecycle = await admin.pool.query(
-    "select payload from outbox_events where store_id = $1 and type = 'channel.needs_reconnect'",
+    "select payload from outbox_events where store_id = $1 and type = 'channel.needs_reconnect' order by payload->>'channelConnectionId'",
     [storeId],
   );
-  expect(lifecycle.rows).toEqual([{ payload: { channelConnectionId: revoked } }]);
+  expect(lifecycle.rows).toEqual(
+    [revoked, revokedWithoutExpiry]
+      .sort()
+      .map((channelConnectionId) => ({ payload: { channelConnectionId } })),
+  );
 });
 
 it('discards an invalid-token result after the store rotates that credential', async () => {
-  const id = await connection('revoked-test-token', 6);
+  const id = await connection('revoked-during-rotation', 6);
   const driver = app.get<MetaTokenHealthDriver>(META_TOKEN_HEALTH_DRIVER);
-  const observed = vi.spyOn(driver, 'isTokenValid').mockImplementationOnce(async () => {
+  const isTokenValid = driver.isTokenValid.bind(driver);
+  const observed = vi.spyOn(driver, 'isTokenValid').mockImplementation(async (token) => {
+    if (token !== 'revoked-during-rotation') return isTokenValid(token);
     expect(jobLogBindings()).toMatchObject({ storeId, jobId: 'rotation-check' });
+    expect(app.get(StoreTransaction).isOpen()).toBe(false);
     const secret = app
       .get(EnvelopeEncryption)
       .encrypt(
@@ -162,7 +179,7 @@ it('discards an invalid-token result after the store rotates that credential', a
   });
   try {
     await runWithJobContext(
-      () => app.get(CheckChannelTokenJob).handle({ storeId, channelConnectionId: id }),
+      () => app.get(CheckChannelTokenJob).handle({ storeId }),
       'rotation-check',
     );
     const { rows } = await admin.pool.query(
@@ -183,7 +200,7 @@ it('discards an invalid-token result after the store rotates that credential', a
 it('notifies again when a reconnected credential later becomes invalid', async () => {
   const channelConnectionId = await connection('revoked-test-token', 6);
   const check = app.get(CheckChannelTokenJob);
-  await check.handle({ storeId, channelConnectionId });
+  await check.handle({ storeId });
   const secret = app
     .get(EnvelopeEncryption)
     .encrypt(
@@ -194,11 +211,76 @@ it('notifies again when a reconnected credential later becomes invalid', async (
     "update channel_connections set status = 'active', access_token_ciphertext = $1, key_version = $2 where id = $3",
     [secret.ciphertext, secret.keyVersion, channelConnectionId],
   );
-  await check.handle({ storeId, channelConnectionId });
-  await check.handle({ storeId, channelConnectionId });
+  await check.handle({ storeId });
+  await check.handle({ storeId });
   const { rows } = await admin.pool.query(
     'select id from notifications where store_id = $1 and dedupe_key like $2',
     [storeId, `channel.needs_reconnect:${channelConnectionId}:%`],
   );
   expect(rows).toHaveLength(2);
+});
+
+it('continues with other credentials when Meta is temporarily unavailable', async () => {
+  const unavailable = await connection('temporarily-unavailable', null);
+  const revoked = await connection('another-revoked-token', null);
+  const driver = app.get<MetaTokenHealthDriver>(META_TOKEN_HEALTH_DRIVER);
+  const isTokenValid = driver.isTokenValid.bind(driver);
+  const observed = vi.spyOn(driver, 'isTokenValid').mockImplementation(async (token) => {
+    if (token === 'temporarily-unavailable') throw new MetaRequestError('unavailable');
+    return isTokenValid(token);
+  });
+  try {
+    await expect(app.get(CheckChannelTokenJob).handle({ storeId })).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    const { rows } = await admin.pool.query(
+      'select id, status from channel_connections where id = any($1::uuid[])',
+      [[unavailable, revoked]],
+    );
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { id: unavailable, status: 'active' },
+        { id: revoked, status: 'needs_reconnect' },
+      ]),
+    );
+  } finally {
+    observed.mockRestore();
+  }
+});
+
+it('queues stores beyond the first bounded lookup page', async () => {
+  const original = await connection('fake-rina-page-credential', null);
+  const { rows } = await admin.pool.query<{ id: string }>(
+    `insert into stores (id, name)
+     select gen_random_uuid(), 'Sweep fixture' from generate_series(1, 101) returning id`,
+  );
+  const ids = rows.map(({ id }) => id).sort();
+  const notDue = randomUUID();
+  const fixtureStores = [...ids, notDue];
+  try {
+    await admin.pool.query('insert into stores (id, name) values ($1, $2)', [
+      notDue,
+      'Later expiry',
+    ]);
+    await connection('invalid-but-not-due', 10, notDue);
+    await admin.pool.query(
+      `insert into channel_connections
+        (id, store_id, kind, external_account_id, display_name, access_token_ciphertext, key_version)
+       select gen_random_uuid(), stores.id, kind, gen_random_uuid()::text, 'Sweep fixture', access_token_ciphertext, key_version
+       from channel_connections cross join unnest($1::uuid[]) as stores(id) where channel_connections.id = $2`,
+      [ids, original],
+    );
+    const sweep = app.get(QueueChannelTokenChecksJob);
+    await sweep.handle({});
+    await sweep.handle({});
+    const queued = (await queue.getWaiting())
+      .map(({ data }) => data.storeId as string)
+      .filter((id) => fixtureStores.includes(id));
+    expect(queued.sort()).toEqual(ids);
+  } finally {
+    await admin.pool.query('delete from channel_connections where store_id = any($1::uuid[])', [
+      fixtureStores,
+    ]);
+    await admin.pool.query('delete from stores where id = any($1::uuid[])', [fixtureStores]);
+  }
 });

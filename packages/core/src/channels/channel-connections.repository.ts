@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { ChannelConnectionListQuery } from '@dakly/contracts/channels';
 import type { Database } from '@dakly/db/client';
@@ -107,15 +107,34 @@ export class ChannelConnectionsRepository {
     });
   }
 
-  async expiringBefore(before: Date) {
-    const result = await this.globalDatabase.execute<{
-      storeId: string;
-      channelConnectionId: string;
-    }>(sql`
-      select store_id as "storeId", channel_connection_id as "channelConnectionId"
-      from channel_connections_expiring_before(${before.toISOString()}::timestamptz)
+  async storesDueForTokenChecks(before: Date, after: string | null) {
+    const result = await this.globalDatabase.execute<{ storeId: string }>(sql`
+      select store_id as "storeId"
+      from meta_channel_connections_due(${before.toISOString()}::timestamptz, ${after}::uuid)
+      order by store_id
     `);
     return result.rows;
+  }
+
+  dueMetaTokenIds(storeId: string, before: Date) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: channelConnections.id })
+        .from(channelConnections)
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            eq(channelConnections.status, 'active'),
+            inArray(channelConnections.kind, ['facebook_page', 'instagram']),
+            isNotNull(channelConnections.accessTokenCiphertext),
+            isNotNull(channelConnections.keyVersion),
+            or(
+              isNull(channelConnections.tokenExpiresAt),
+              lte(channelConnections.tokenExpiresAt, before),
+            ),
+          ),
+        ),
+    );
   }
 
   async activeMetaToken(storeId: string, id: string) {
