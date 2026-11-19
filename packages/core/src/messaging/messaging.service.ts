@@ -39,6 +39,12 @@ export type OutgoingMessage = {
 };
 
 export type PreparedSmsSender = { storeId: string; name: string | undefined };
+export type PreparedSms = {
+  storeId: string;
+  contactId: string;
+  to: string | null;
+  sender: string | undefined;
+};
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
 
@@ -68,26 +74,26 @@ export class MessagingService {
         return 'stale_delivery';
       if (input.sentAt.getTime() > input.receivedAt.getTime() + MINUTE_MS)
         return 'invalid_timestamp';
-      return this.storeInbound(storeId, input, connection, this.clock.now());
+      const externalIdentity = [connection.id, input.externalMessageId];
+      const idempotencyKey = `inbound:${hashToken(JSON.stringify(externalIdentity)).toString('hex')}`;
+      if (!(await this.inbound.claimMessageKey(storeId, idempotencyKey))) return 'duplicate';
+      return this.storeInbound(storeId, input, { ...connection, idempotencyKey }, this.clock.now());
     });
   }
 
   private async storeInbound(
     storeId: string,
     input: InboundMessageInput,
-    { id: connectionId, channel }: { id: string; channel: (typeof chatChannels)[number] },
+    delivery: { id: string; channel: (typeof chatChannels)[number]; idempotencyKey: string },
     now: Date,
   ): Promise<ReceiveOutcome> {
-    const externalIdentity = [connectionId, input.externalMessageId];
-    const idempotencyKey = `inbound:${hashToken(JSON.stringify(externalIdentity)).toString('hex')}`;
-    if (!(await this.inbound.claimMessageKey(storeId, idempotencyKey))) return 'duplicate';
-
+    const { id: connectionId, channel, idempotencyKey } = delivery;
     const contactId = await this.contactsService.findOrCreateByIdentity(storeId, {
       channel,
       connectionId,
       externalId: input.externalSenderId,
     });
-    const { id: conversationId, started } = await this.inbound.getConversation(
+    const conversation = await this.inbound.getConversation(
       storeId,
       { channel, channelConnectionId: connectionId, contactId },
       now,
@@ -95,7 +101,7 @@ export class MessagingService {
     const message = await this.inbound.insertMessage(
       storeId,
       {
-        conversationId,
+        conversationId: conversation.id,
         idempotencyKey,
         externalMessageId: input.externalMessageId,
         text: input.content,
@@ -104,30 +110,34 @@ export class MessagingService {
       now,
     );
     if (!message) return 'duplicate';
+    const reopen =
+      (conversation.status === 'done' || conversation.status === 'later') &&
+      (!conversation.lastInboundAt || input.sentAt > conversation.lastInboundAt);
     await this.inbound.advanceConversation(
       storeId,
       {
-        conversationId,
+        conversationId: conversation.id,
         at: input.sentAt,
         expiry: new Date(input.sentAt.getTime() + DAY_MS),
         preview: input.content.slice(0, 160),
+        reopenVersion: reopen ? conversation.version : undefined,
       },
       now,
     );
     await this.recordStop(storeId, contactId, channel, input.content);
     const occurredAt = now.toISOString();
-    if (started)
+    if (conversation.started)
       await this.outbox.publish({
         type: 'conversation.started',
         storeId,
         occurredAt,
-        payload: { conversationId, contactId, connectionId, channel },
+        payload: { conversationId: conversation.id, contactId, connectionId, channel },
       });
     await this.outbox.publish({
       type: 'message.received',
       storeId,
       occurredAt,
-      payload: { messageId: message.id, conversationId, contactId, channel },
+      payload: { messageId: message.id, conversationId: conversation.id, contactId, channel },
     });
     return 'stored';
   }
@@ -136,10 +146,20 @@ export class MessagingService {
   async send(
     storeId: string,
     message: OutgoingMessage,
-    preparedSender?: PreparedSmsSender,
+    prepared?: PreparedSmsSender | PreparedSms,
   ): Promise<SentMessage> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
-    const { to, parts, sender } = await this.prepareSend(storeId, message, preparedSender);
+    const sms =
+      prepared && 'contactId' in prepared
+        ? prepared
+        : await this.prepareSms(storeId, message.contactId, prepared);
+    if (sms.storeId !== storeId || sms.contactId !== message.contactId)
+      throw messagingError('MESSAGING_PREPARATION_FAILED');
+    const { to, sender } = sms;
+    if (message.destination !== undefined && to !== message.destination)
+      throw messagingError('MESSAGING_DESTINATION_CHANGED');
+    if (!to) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
+    const parts = countSmsParts(message.body);
     const { providerMessageId } = await this.smsService.send({
       to,
       text: message.body,
@@ -182,21 +202,18 @@ export class MessagingService {
   }
 
   // A failed lookup proves only that this attempt did not reach the provider.
-  private async prepareSend(
+  async prepareSms(
     storeId: string,
-    message: OutgoingMessage,
+    contactId: string,
     preparedSender?: PreparedSmsSender,
-  ) {
+  ): Promise<PreparedSms> {
     try {
       const sender =
         preparedSender?.storeId === storeId
           ? preparedSender.name
           : (await this.prepareSender(storeId)).name;
-      const phone = await this.contactsService.getPhoneForSend(storeId, message.contactId);
-      if (message.destination !== undefined && phone !== message.destination)
-        throw messagingError('MESSAGING_DESTINATION_CHANGED');
-      if (!phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
-      return { to: phone, parts: countSmsParts(message.body), sender };
+      const to = await this.contactsService.getPhoneForSend(storeId, contactId);
+      return { storeId, contactId, to, sender };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');

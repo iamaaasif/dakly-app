@@ -312,6 +312,8 @@ Agent tools take no store id, contact id or price; those come from the job. Tool
 
 Outbound: every message (AI or staff) is saved as `queued` with an idempotency key; a `send-message` job calls the driver and moves it to `sent` or `failed`. Receipts move it to `delivered` and `read`.
 
+The outbound message schema keeps the chosen recipient identity and the category used by the send gate. The identity belongs to the same store as the message. The Meta transport uses the selected connection's encrypted credentials and checks that the credential is still current before marking a rejected connection for reconnection.
+
 Hand-over: sets `needs_you` and `human`, records the reason (asked for a person, complaint, refund, discount, angry, out of scope, ready to buy, other), sends the holding reply once, notifies the assignee or Owner. Unclaimed after 10 minutes in working hours, the chat goes back to the AI. After a person's last message the AI returns after the return timer (default 30 minutes).
 
 Practice mode: each new channel starts with AI not live. The AI answers only the Test tab and the tester list. Go live runs the store's test questions (at least 3) and switches on only if all pass.
@@ -372,6 +374,14 @@ in-process.
 
 `chats.view`, `chats.edit` (reply, take over, assign). AI agent settings: Owner and Admin.
 
+The inbox routes require the Chats extension. Staff with view access can list conversations by newest activity and read messages by newest creation time. Both lists use cursors. The conversation list can filter by status, responder, channel and assignee. Deleting a contact hides their conversations and messages from the inbox.
+
+Staff with edit access can set status, assign an active member or clear the assignment, take over and hand back to AI. Each change bumps the conversation version and records the names of the changed fields in the audit log. Changing the responder leaves status and assignment alone. An inbound message newer than the previous one reopens a Done or Later conversation and keeps its responder and assignee. If staff change the conversation while the message is being saved, their change wins.
+
+Staff can add internal notes to the inbox thread. A note records its author and time, stays inside Dakly, and leaves the customer preview, reply window and unread count as they were.
+
+Staff can take over until they hand back, or choose a return after 30 minutes, one hour or six hours. The worker checks for due returns every minute in stores with Chats enabled. It checks the extension and reads the current deadline again when it handles the job. Turning off Chats keeps the deadline, and an extended takeover keeps its new deadline even if a job has already been queued.
+
 ### Events
 
 Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_sent`. Listens to `order.created` to link the order to the chat.
@@ -412,9 +422,13 @@ Unicode spellings before matching.
 
 `conversations` (with `version` for the AI write check), `messages`, `social_comments`, `saved_replies`, `ai_agent_settings` (go-live test questions included), `ai_rule_changes` (before and after of every taught rule or settings save, for undo), `knowledge_items`, `knowledge_chunks` (pgvector, 512 dimensions, exact scan per store, with the embedding model), `ai_runs` (partitioned by month, kept 13 months), `assistant_messages`; customer memory is `contact_memories` in Customers. Its progress belongs to each conversation: `memory_built_through_message_id`, its paired `memory_built_through_message_at`, and `memory_version`. `contact_memories.version` guards concurrent changes across conversations and staff edits; `cleared_at` prevents old evidence from repopulating cleared memory. Photo questions compare a vision-tier description of the customer's photo, embedded, against `products.image_embedding`. Usage goes to `usage_events`. Full design: [docs/data](../data/README.md).
 
+### Saved replies
+
+Staff with `chats.view` can list saved replies and read their text for the composer. Staff with `chats.edit` can create, change and delete replies. These routes require the Chats extension. Shortcuts are optional and unique within a store. Each write records the staff member in the audit log. Create and update also record the submitted field names.
+
 ### Customer memory processing
 
-These are implementation requirements for CHAT-4; the schema and contracts do not implement the worker.
+These are implementation requirements for CHAT-8. The schema and contracts define the stored memory and its validation.
 
 - Both staff edits and model output use `contactMemorySchema` from `packages/contracts/src/contact-memory.ts`. Facts have an allowed kind, a value of at most 160 characters, a source (`customer_message`, `own_order` or `staff`), a UUID source id and an ISO timestamp. Unknown fields are rejected. A source id must belong to this customer and store; a model cannot label its own output as `staff`.
 - Read the contact memory version, this conversation's memory version and checkpoint, and a fixed final message id. Only process messages after that conversation's checkpoint and the retained clear cutoff. Use `(created_at, id)` ordering; retain both checkpoint values so message retention does not erase the covered timestamp. A delayed insert earlier than the checkpoint invalidates that conversation's checkpoint and queues a guarded rebuild respecting the clear cutoff. Never compare checkpoints from different conversations. Skip repeated completed checkpoints. Do not advance to a later message that arrived during the model call.

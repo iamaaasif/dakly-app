@@ -9,6 +9,7 @@ import type {
 } from '@dakly/contracts/stores';
 import { stores, storeCounters } from '@dakly/db/schema/stores';
 
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const storeColumns = {
@@ -40,6 +41,14 @@ export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock'> 
 @Injectable()
 export class StoresRepository {
   constructor(@Inject(TenantDatabase) private readonly tenant: TenantDatabase) {}
+
+  async customerInactivityDays(storeId: string) {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select({ days: stores.customerInactivityDays }).from(stores).where(eq(stores.id, storeId)),
+    );
+    return row?.days;
+  }
+
   async insert(storeId: string, input: CreateStoreInput, extensions: string[]): Promise<void> {
     await this.tenant.forStore(storeId, async (tx) => {
       await tx.insert(stores).values({
@@ -90,14 +99,19 @@ export class StoresRepository {
 
   async sendingSettings(
     storeId: string,
+    lock?: 'share',
   ): Promise<{ timeZone: string; sending: unknown } | undefined> {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx
+    const read = (tx: Transaction) => {
+      const query = tx
         .select({ timeZone: stores.timeZone, sending: sql<unknown>`${stores.settings}->'sending'` })
         .from(stores)
         .where(eq(stores.id, storeId))
-        .limit(1),
-    );
+        .limit(1);
+      return lock ? query.for(lock) : query;
+    };
+    const [row] = lock
+      ? await this.tenant.inTransaction(storeId, read)
+      : await this.tenant.forStore(storeId, read);
     return row;
   }
 

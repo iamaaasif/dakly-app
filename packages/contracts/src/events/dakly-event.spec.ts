@@ -18,6 +18,7 @@ const trackedLink = {
 } as const;
 
 const examples: DaklyEvent[] = [
+  { type: 'contact.tag_added', storeId, occurredAt, payload: { contactId, tag: 'ভিআইপি' } },
   {
     type: 'channel.needs_reconnect',
     storeId,
@@ -49,6 +50,7 @@ const examples: DaklyEvent[] = [
     payload: { orderId, from: 'to_confirm', to: 'to_pack' },
   },
   { type: 'order.confirmed', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.edited', storeId, occurredAt, payload: { orderId } },
   { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
@@ -70,6 +72,7 @@ const examples: DaklyEvent[] = [
     payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
+  { type: 'contact.birthday', storeId, occurredAt, payload: { contactId, day: '2026-11-16' } },
   {
     type: 'consent.changed',
     storeId,

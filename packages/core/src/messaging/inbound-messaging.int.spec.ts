@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { AsyncResource } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
@@ -12,11 +13,14 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { InboundMessagingRepository } from './inbound-messaging.repository';
+import { InboxModule } from './inbox.module';
+import { InboxService } from './inbox.service';
 import { MessagingModule } from './messaging.module';
 import { MessagingService } from './messaging.service';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, MessagingModule] })(TestModule);
+Module({ imports: [DatabaseModule, InboxModule, MessagingModule] })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const fixtures: string[] = [];
@@ -33,6 +37,7 @@ afterAll(async () => {
     for (const table of [
       'outbox_events',
       'consents',
+      'audit_log',
       'messages',
       'conversations',
       'contact_identities',
@@ -116,6 +121,80 @@ it('stores a duplicate only once and makes one contact and conversation for conc
     'message.received',
     'message.received',
   ]);
+});
+
+it.each(['done', 'later'])('reopens a %s conversation only for a new message', async (status) => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  const first = {
+    ...inbound(connectionId, 'before-close'),
+    sentAt: new Date(sentAt.getTime() + 10_000),
+  };
+  await expect(service.receiveInboundMessage(storeId, first)).resolves.toBe('stored');
+  await admin.pool.query(
+    'update conversations set status = $1, responder = $2, version = 3 where store_id = $3',
+    [status, 'human', storeId],
+  );
+  await expect(service.receiveInboundMessage(storeId, first)).resolves.toBe('duplicate');
+  const state = () =>
+    admin.pool.query('select status, responder, version from conversations where store_id = $1', [
+      storeId,
+    ]);
+  expect((await state()).rows).toEqual([{ status, responder: 'human', version: 3 }]);
+  await expect(
+    service.receiveInboundMessage(storeId, inbound(connectionId, 'delayed-before-close')),
+  ).resolves.toBe('stored');
+  expect((await state()).rows).toEqual([{ status, responder: 'human', version: 3 }]);
+  await expect(
+    service.receiveInboundMessage(storeId, {
+      ...inbound(connectionId, 'after-close'),
+      sentAt: new Date(sentAt.getTime() + 20_000),
+    }),
+  ).resolves.toBe('stored');
+  expect((await state()).rows).toEqual([{ status: 'open', responder: 'human', version: 4 }]);
+});
+
+it('reopens a conversation when its timer fires while the inbound message is being saved', async () => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  await service.receiveInboundMessage(storeId, inbound(connectionId, 'before-takeover'));
+  await admin.pool.query("update stores set extensions = array['chats'] where id = $1", [storeId]);
+  const {
+    rows: [conversation],
+  } = await admin.pool.query<{ id: string }>(
+    `update conversations set status = 'done', responder = 'human', ai_resumes_at = $2
+     where store_id = $1 returning id`,
+    [storeId, sentAt],
+  );
+  const inbox = app.get(InboxService);
+  const repository = app.get(InboundMessagingRepository);
+  const insert = repository.insertMessage.bind(repository);
+  const returnInSeparateTransaction = AsyncResource.bind(() =>
+    inbox.returnDue(storeId, conversation!.id, { kind: 'system' }),
+  );
+  const intercept = vi
+    .spyOn(repository, 'insertMessage')
+    .mockImplementationOnce(async (...args) => {
+      await returnInSeparateTransaction();
+      return insert(...args);
+    });
+  try {
+    await expect(
+      service.receiveInboundMessage(storeId, {
+        ...inbound(connectionId, 'after-takeover'),
+        sentAt: new Date(sentAt.getTime() + MINUTE_MS),
+      }),
+    ).resolves.toBe('stored');
+  } finally {
+    intercept.mockRestore();
+  }
+  const { rows } = await admin.pool.query(
+    'select status, responder, ai_resumes_at from conversations where store_id = $1',
+    [storeId],
+  );
+  expect(rows).toEqual([{ status: 'open', responder: 'ai', ai_resumes_at: null }]);
 });
 
 it('preserves two Page identities for one contact and keeps the newest inbound window', async () => {

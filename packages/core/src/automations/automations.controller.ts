@@ -17,6 +17,7 @@ import {
   automationListQuerySchema,
   type AutomationListResponse,
   type AutomationResponse,
+  type AutomationTriggerPreview,
   type ChangeAutomationInput,
   changeAutomationSchema,
   type CreateAutomationInput,
@@ -29,11 +30,15 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { AutomationPreviewService } from './automation-preview.service';
 import { AutomationsService } from './automations.service';
 
 @Controller('automations')
 export class AutomationsController {
-  constructor(@Inject(AutomationsService) private readonly automations: AutomationsService) {}
+  constructor(
+    @Inject(AutomationsService) private readonly automations: AutomationsService,
+    @Inject(AutomationPreviewService) private readonly previews: AutomationPreviewService,
+  ) {}
 
   @Get()
   @RequirePermission('automations.view')
@@ -51,6 +56,15 @@ export class AutomationsController {
     @Param('automationId', ParseUUIDPipe) automationId: string,
   ): Promise<AutomationDetailResponse> {
     return this.automations.get(storeId, automationId);
+  }
+
+  @Get(':automationId/trigger-preview')
+  @RequirePermission('automations.view')
+  triggerPreview(
+    @CurrentStore() storeId: string,
+    @Param('automationId', ParseUUIDPipe) automationId: string,
+  ): Promise<AutomationTriggerPreview> {
+    return this.previews.preview(storeId, automationId);
   }
 
   @Post()

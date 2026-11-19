@@ -85,6 +85,9 @@ export const contacts = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    index('contacts_birthday_idx')
+      .on(table.storeId, table.birthdayMonth, table.birthdayDay, table.id)
+      .where(sql`${table.deletedAt} is null and ${table.birthdayMonth} is not null`),
     uniqueIndex('contacts_store_id_id_key').on(table.storeId, table.id),
     foreignKey({
       name: 'contacts_import_id_store_fk',
@@ -353,6 +356,7 @@ export const contactStats = pgTable(
       .references(() => stores.id),
     ordersCount: integer('orders_count').notNull().default(0),
     deliveredCount: integer('delivered_count').notNull().default(0),
+    returnedCount: integer('returned_count').notNull().default(0),
     netSpendPoisha: poisha('net_spend_poisha').notNull().default(0),
     firstOrderAt: timestamptz('first_order_at'),
     lastOrderAt: timestamptz('last_order_at'),
@@ -373,6 +377,7 @@ export const contactStats = pgTable(
     index('contact_stats_store_id_net_spend_idx').on(table.storeId, table.netSpendPoisha),
     check('contact_stats_lifecycle_stage', isOneOf(table.lifecycleStage, lifecycleStages)),
     check('contact_stats_counts', sql`${table.ordersCount} >= 0 and ${table.deliveredCount} >= 0`),
+    check('contact_stats_returned_count', sql`${table.returnedCount} >= 0`),
   ],
 );
 

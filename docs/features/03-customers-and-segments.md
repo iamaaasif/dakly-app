@@ -530,7 +530,11 @@ Consent
 2. Sending reads only the current-consent view.
 3. "STOP" or "বন্ধ" on WhatsApp or Messenger, or the SMS opt-out link, writes a withdrawal at once.
 
-Stats: one `contact_stats` row per contact holds order count, delivered count, net spend, first and last order, usual gap and lifecycle stage. Return risk is read from orders by delivery phone (D26), and lead temperature lives on the conversation. It is recomputed for one contact on each order event and for all contacts nightly. Lists and segments read only this table.
+Stats: one `contact_stats` row per contact holds the non-cancelled order count, delivered count, returned count, net spend, first and last order, usual gap and lifecycle stage. Net spend uses the kept items after discount on paid deliveries. A late return removes that order's spend. Return risk is read from orders by delivery phone (D26), and lead temperature lives on the conversation.
+
+Contact and order creation events, stage changes and COD collection refresh one contact from current orders in a store transaction. Replaying an event does not double-count orders. A refresh keeps an existing Best customers stage while the contact still qualifies above ৳20,000 and has not stopped buying.
+
+The nightly repair also covers imported contacts that have no creation event. It refreshes up to 100 contacts per job. The last totals page measures the store-wide cutoff for Best customers and starts the ranking pages. Each candidate's current order totals and eligibility are checked before changing their stage. The top tenth is rounded down and ties use contact ID.
 
 Segments
 
