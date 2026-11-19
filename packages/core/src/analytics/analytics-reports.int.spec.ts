@@ -72,6 +72,7 @@ describe('Analytics reports', () => {
     );
     expect(await reports.sales(fixture.a, period)).toEqual({
       total: 185000n,
+      bySource: { manual: 135000n, order_link: 50000n },
       points: [
         { day: '2026-11-05', value: 175000n },
         { day: '2026-11-06', value: 0n },
