@@ -1,6 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { X } from 'lucide-react';
 import { useRef, type FormEvent } from 'react';
-import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
+import {
+  FormProvider,
+  useFieldArray,
+  useForm,
+  useFormContext,
+  useWatch,
+  type Resolver,
+} from 'react-hook-form';
 
 import {
   createOrderFormSchema,
@@ -35,13 +43,26 @@ const newOrderDefaults: CreateOrderValues = {
   recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
   items: [newLine],
 };
+const parseNewOrder = zodResolver(createOrderFormSchema);
+const resolveNewOrder: Resolver<CreateOrderValues, undefined, CreateOrderInput> = (
+  values,
+  context,
+  options,
+) =>
+  parseNewOrder(
+    values.recipient.isBuyer && 'name' in values.buyer
+      ? { ...values, buyer: { name: values.recipient.name } }
+      : values,
+    context,
+    options,
+  );
 
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
 export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   const create = useCreateOrder();
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
-    resolver: zodResolver(createOrderFormSchema),
+    resolver: resolveNewOrder,
     defaultValues: newOrderDefaults,
   });
   const busy = create.isPending || create.mustRetry;
@@ -60,8 +81,17 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       open
       onClose={onClose}
       closeDisabled={busy}
-      className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
+      className="max-h-[calc(100dvh-1rem)] max-w-160 p-4 open:flex open:flex-col sm:p-6 [&>div:first-child>button]:hidden"
     >
+      <Button
+        aria-label="Close dialog"
+        className="absolute top-3 right-3 px-2"
+        variant="secondary"
+        disabled={busy}
+        onClick={onClose}
+      >
+        <X aria-hidden="true" size={16} strokeWidth={1.75} />
+      </Button>
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
@@ -76,24 +106,39 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
                 : create.error.message}
             </p>
           )}
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={create.isPending}>
-              {create.mustRetry ? 'Retry save' : 'Save order'}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={form.handleSubmit((input) => save({ ...input, confirm: true }))}
-            >
-              Save as confirmed
-            </Button>
-          </div>
+          <NewOrderActions
+            create={create}
+            onClose={onClose}
+            onConfirm={form.handleSubmit((input) => save({ ...input, confirm: true }))}
+          />
         </form>
       </FormProvider>
     </SessionDialog>
+  );
+}
+
+function NewOrderActions({
+  create,
+  onClose,
+  onConfirm,
+}: {
+  create: ReturnType<typeof useCreateOrder>;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const busy = create.isPending || create.mustRetry;
+  return (
+    <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-3">
+      <Button variant="secondary" disabled={busy} onClick={onConfirm}>
+        Save as confirmed
+      </Button>
+      <Button variant="secondary" onClick={onClose} disabled={busy}>
+        Cancel
+      </Button>
+      <Button type="submit" loading={create.isPending}>
+        {create.mustRetry ? 'Retry save' : 'Save order'}
+      </Button>
+    </div>
   );
 }
 
@@ -126,6 +171,7 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
         fields={fields}
         ids={items.map(({ variantId }) => variantId)}
         variants={variants}
+        isNew={!order}
         register={register}
         onAdd={() => append(newLine)}
         onRemove={remove}
@@ -153,7 +199,7 @@ function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
           Choose a different variant for each line and enter a positive quantity.
         </p>
       )}
-      <OrderAmountFields hasAdvance={Boolean(order?.advancePaidPoisha)} />
+      <OrderAmountFields hasAdvance={Boolean(order?.advancePaidPoisha)} isNew={!order} />
       <OrderPreview variants={variants} order={order} />
     </>
   );
@@ -176,7 +222,7 @@ function draftVariantChoices(
   return variants;
 }
 
-function OrderAmountFields({ hasAdvance }: { hasAdvance: boolean }) {
+function OrderAmountFields({ hasAdvance, isNew }: { hasAdvance: boolean; isNew: boolean }) {
   const { register } = useFormContext<OrderEditorValues>();
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -191,6 +237,7 @@ function OrderAmountFields({ hasAdvance }: { hasAdvance: boolean }) {
             <Input
               {...props}
               inputMode="decimal"
+              placeholder={isNew ? '0' : undefined}
               readOnly={name === 'advancePaidPoisha' && hasAdvance}
               {...register(name, { setValueAs: (value: string) => value.trim() || undefined })}
             />
@@ -247,6 +294,7 @@ function OrderPreview({
       <span>
         Total <strong>{formatMoney(total)}</strong>
       </span>
+      {!order && <span aria-hidden="true">·</span>}
       <span>
         Cash on delivery <strong>{formatMoney(Math.max(0, total - paid))}</strong>
       </span>

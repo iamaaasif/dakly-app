@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   OrderCataloguePage,
@@ -16,15 +16,33 @@ export function useOrderCatalogue(search?: string) {
   return useInfiniteQuery({
     queryKey: [...productsKeys.all, contextTag, 'order-catalogue', search],
     initialPageParam: '',
-    queryFn: ({ pageParam, signal }) => {
+    queryFn: async ({ pageParam, signal }) => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (pageParam) params.set('cursor', pageParam);
-      return request<OrderCataloguePage>(`/orders/catalogue?${params}`, { signal });
+      const page = await request<OrderCataloguePage>(`/orders/catalogue?${params}`, { signal });
+      return { ...page, receivedAt: Date.now() };
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
   });
+}
+
+const catalogueProductKey = (contextTag: string | undefined, id: string) => [
+  ...productsKeys.all,
+  contextTag,
+  'order-catalogue-product',
+  id,
+];
+
+export function useRememberCatalogueProduct() {
+  const { contextTag } = useStoreRequest();
+  const cache = useQueryClient();
+  return (product: OrderCatalogueProduct, receivedAt: number) => {
+    const key = catalogueProductKey(contextTag, product.id);
+    if (receivedAt > (cache.getQueryState(key)?.dataUpdatedAt ?? 0))
+      cache.setQueryData(key, product, { updatedAt: receivedAt });
+  };
 }
 
 export function useOrderCatalogueProducts(ids: readonly string[]) {
@@ -32,7 +50,7 @@ export function useOrderCatalogueProducts(ids: readonly string[]) {
   const { data } = useSessionContext();
   return useQueries({
     queries: ids.map((id) => ({
-      queryKey: [...productsKeys.all, contextTag, 'order-catalogue-product', id],
+      queryKey: catalogueProductKey(contextTag, id),
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         request<OrderCatalogueProduct>(`/orders/catalogue/${id}`, { signal }),
       enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
