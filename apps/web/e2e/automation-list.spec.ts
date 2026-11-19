@@ -1,5 +1,5 @@
-import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { expect, test } from '@playwright/test';
@@ -63,9 +63,7 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     await page.goto('/automations');
     await expect(page.getByRole('tab', { name: 'All 4' })).toHaveAttribute('aria-selected', 'true');
     const welcome = page.getByRole('listitem').filter({ hasText: active.name });
-    await expect(
-      welcome.getByRole('term', { name: 'Entered, 30 days' }).locator('..'),
-    ).toContainText('1');
+    await expect(welcome.locator('dd').first()).toHaveText('1');
     const evidence = process.env.CAMP12_LIST_EVIDENCE;
     if (evidence) await mkdir(evidence, { recursive: true });
     for (const [width, height] of [

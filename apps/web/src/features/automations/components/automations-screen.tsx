@@ -31,23 +31,7 @@ export function AutomationsScreen() {
   const selectedItems = items.filter(({ status }) => selected === 'all' || status === selected);
   return (
     <main className="space-y-6 p-4 md:p-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0 flex-1 basis-2/3">
-          <h1 className="text-xl font-bold">Automations</h1>
-          <p className="mt-1 text-sm text-text-muted">
-            Workflows send messages on their own when customers do something, like placing an order.
-            Messages only go to customers who agreed to hear from you.
-          </p>
-        </div>
-        {canEdit && (
-          <Link
-            href="/automations/new"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            <Plus size={16} aria-hidden="true" /> Create workflow
-          </Link>
-        )}
-      </header>
+      <WorkflowHeader canEdit={canEdit} />
       <Tabs
         value={selected}
         activationMode="manual"
@@ -79,32 +63,66 @@ export function AutomationsScreen() {
           </TabsList>
         </header>
         <TabsContent value={selected} className="pt-0">
-          {workflows.isPending && (
-            <div role="status" className="p-4">
-              <span className="sr-only">Loading workflows</span>
-              <Skeleton className="h-28 w-full" />
-            </div>
-          )}
-          {workflows.isError && (
-            <div role="alert" className="space-y-2 p-4">
-              <p>{workflows.error.message}</p>
-              <Button variant="secondary" onClick={() => void workflows.refetch()}>
-                Try again
-              </Button>
-            </div>
-          )}
-          {workflows.isSuccess &&
-            (selectedItems.length ? (
-              <ul className="divide-y divide-border">
-                {selectedItems.map((workflow) => (
-                  <AutomationRow key={workflow.id} workflow={workflow} canEdit={canEdit} />
-                ))}
-              </ul>
-            ) : (
-              <p className="p-4 text-text-muted">No workflows in this tab.</p>
-            ))}
+          <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
         </TabsContent>
       </Tabs>
     </main>
+  );
+}
+
+function WorkflowHeader({ canEdit }: { canEdit: boolean }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0 flex-1 basis-2/3">
+        <h1 className="text-xl font-bold">Automations</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          Workflows send messages on their own when customers do something, like placing an order.
+          Messages only go to customers who agreed to hear from you.
+        </p>
+      </div>
+      {canEdit && (
+        <Link
+          href="/automations/new"
+          className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          <Plus size={16} aria-hidden="true" /> Create workflow
+        </Link>
+      )}
+    </header>
+  );
+}
+
+function WorkflowList({
+  workflows,
+  items,
+  canEdit,
+}: {
+  workflows: ReturnType<typeof useAutomations>;
+  items: NonNullable<ReturnType<typeof useAutomations>['data']>['items'];
+  canEdit: boolean;
+}) {
+  if (workflows.isPending)
+    return (
+      <div role="status" className="p-4">
+        <span className="sr-only">Loading workflows</span>
+        <Skeleton className="h-28 w-full" />
+      </div>
+    );
+  if (workflows.isError)
+    return (
+      <div role="alert" className="space-y-2 p-4">
+        <p>{workflows.error.message}</p>
+        <Button variant="secondary" onClick={() => void workflows.refetch()}>
+          Try again
+        </Button>
+      </div>
+    );
+  if (!items.length) return <p className="p-4 text-text-muted">No workflows in this tab.</p>;
+  return (
+    <ul className="divide-y divide-border">
+      {items.map((workflow) => (
+        <AutomationRow key={workflow.id} workflow={workflow} canEdit={canEdit} />
+      ))}
+    </ul>
   );
 }
