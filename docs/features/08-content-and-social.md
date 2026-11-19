@@ -184,8 +184,8 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
-Publishing (SOC-2), insights (SOC-3), AI captions (SOC-4) and the web screens
-(SOC-5) are separate tasks.
+Publishing (SOC-2), insights (SOC-3), and the web screens (SOC-5) are separate
+tasks. SOC-4 adds AI caption generation and checks generated text before scheduling.
 
 ### Screens in release 1
 
