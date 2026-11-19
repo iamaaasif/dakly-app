@@ -101,7 +101,7 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
 function SettingsFields({ error, pending }: { error?: string; pending: boolean }) {
   const { register, formState } = useFormContext<SettingsInput>();
   return (
-    <fieldset disabled={pending} className="mx-auto max-w-3xl space-y-4 p-4 md:p-8">
+    <fieldset disabled={pending} className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
       <FormField name="name" label="Workflow name">
         {(field) => <Input {...field} {...register('name')} maxLength={80} />}
       </FormField>
@@ -115,8 +115,10 @@ function SettingsFields({ error, pending }: { error?: string; pending: boolean }
           Check the workflow settings before saving.
         </p>
       )}
-      <WorkflowEntrySettings />
-      <WorkflowStepSettings />
+      <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <WorkflowEntrySettings />
+        <WorkflowStepSettings />
+      </div>
     </fieldset>
   );
 }

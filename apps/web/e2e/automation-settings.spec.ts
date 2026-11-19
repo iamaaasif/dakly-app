@@ -41,6 +41,14 @@ test('changes a ready template delay and publishes the workflow', async ({
         await page.screenshot({ path: resolve(evidence, `workflow-settings-${width}.png`) });
     }
     await delay.fill('90');
+    await page.getByRole('combobox', { name: 'Re-entry' }).click();
+    await page.getByRole('option', { name: 'Once every few days' }).click();
+    await page.getByLabel('Days between entries').fill('15');
+    await page.getByRole('combobox', { name: 'Add an exit rule' }).click();
+    await page.getByRole('option', { name: 'Customer receives a tag' }).click();
+    await page.getByLabel('Exit tag').fill('vip');
+    await page.getByRole('button', { name: 'Move SMS up' }).click();
+    await page.getByRole('button', { name: 'Move SMS up' }).click();
     await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
     await expect(
       page.getByRole('dialog').getByText('0 people are in this workflow now.'),
@@ -52,7 +60,14 @@ test('changes a ready template delay and publishes the workflow', async ({
     const response = await context.request.get(`/api/automations/${id}`, { headers });
     expect(response.ok()).toBe(true);
     const workflow: AutomationDetailResponse = await response.json();
-    expect(workflow.graph.steps.wait).toMatchObject({ wait: { minutes: 90 } });
+    expect(workflow.graph).toMatchObject({
+      reEntry: { rule: 'every_days', days: 15 },
+      exitConditions: [{ kind: 'got_tag', tag: 'vip' }],
+      steps: {
+        wait: { wait: { minutes: 90 } },
+        welcome: { channels: ['sms', 'whatsapp', 'messenger'] },
+      },
+    });
   } finally {
     if (id) {
       await db.pool.query('update automations set published_version_id=null where id=$1', [id]);
