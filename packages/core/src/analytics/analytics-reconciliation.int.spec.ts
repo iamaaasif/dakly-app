@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Queue } from 'bullmq';
+import { Worker, type Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
@@ -17,6 +17,7 @@ import { RECONCILE_ANALYTICS } from './analytics-reconciliation.service';
 import { AnalyticsModule } from './analytics.module';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
+import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
 
 class TestModule {}
 Module({
@@ -26,7 +27,10 @@ Module({
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
-        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+        return {
+          connection: toRedisConnection(env.REDIS_URL),
+          prefix: `${env.QUEUE_PREFIX}:analytics-${randomUUID()}`,
+        };
       },
     }),
   ],
@@ -98,25 +102,34 @@ describe('Analytics reconciliation', () => {
       await listener.handle({ ...event, id: randomUUID() });
       await listener.handle({ ...event, id: randomUUID() });
       const queue = app.get<Queue>(getQueueToken(QUEUES.bulk));
-      const queued = await queue.getJob(
-        `${RECONCILE_ANALYTICS}-${fixture.a}-2026-11-18-lifecycle-start`,
-      );
       expect(
         (await queue.getWaiting()).filter((job) => {
           return job.data.storeId === fixture.a && job.data.page.kind === 'lifecycle';
         }),
       ).toHaveLength(1);
       clock.mockReturnValue(new Date('2026-11-19T01:15:00Z'));
-      await app.get(ReconcileAnalyticsJob).handle(queued?.data);
-      const expected = [{ dimension: 'regulars', value: '1' }];
-      expect((await snapshot()).rows).toEqual(expected);
-      await fixture.connection.pool.query(
-        "update contact_stats set lifecycle_stage='best' where store_id=$1 and contact_id=$2",
-        [fixture.a, eligible],
-      );
-      await app.get(ReconcileAnalyticsJob).handle(queued?.data);
-      expect((await snapshot()).rows).toEqual([{ dimension: 'best', value: '1' }]);
-      await queued?.remove();
+      const handler = app.get(ReconcileAnalyticsJob);
+      const worker = new Worker(QUEUES.bulk, ({ data }) => handler.handle(data), {
+        connection: toRedisConnection(loadEnv().REDIS_URL),
+        prefix: queue.opts.prefix,
+      });
+      const jobId = `${RECONCILE_ANALYTICS}-${fixture.a}-2026-11-18-lifecycle-start`;
+      try {
+        await vi.waitFor(async () => {
+          expect((await snapshot()).rows).toEqual([{ dimension: 'regulars', value: '1' }]);
+          expect(Boolean(await queue.getJob(jobId))).toBe(false);
+        });
+        await fixture.connection.pool.query(
+          "update contact_stats set lifecycle_stage='best' where store_id=$1 and contact_id=$2",
+          [fixture.a, eligible],
+        );
+        await listener.handle({ ...event, id: randomUUID() });
+        await vi.waitFor(async () => {
+          expect((await snapshot()).rows).toEqual([{ dimension: 'best', value: '1' }]);
+        });
+      } finally {
+        await worker.close();
+      }
     } finally {
       clock.mockReturnValue(now);
       await fixture.connection.pool.query(
@@ -207,5 +220,89 @@ describe('Analytics reconciliation', () => {
       { metric: 'net_spend', value: '0' },
       { metric: 'orders', value: '1' },
     ]);
+  });
+
+  it('schedules a repair for each maintenance store', async () => {
+    await app.get(SweepAnalyticsJob).handle({});
+    const queue = app.get<Queue>(getQueueToken(QUEUES.bulk));
+    for (const storeId of [fixture.a, fixture.b]) {
+      const job = await queue.getJob(`${RECONCILE_ANALYTICS}-${storeId}-2026-11-19-orders-start`);
+      expect(job?.data).toEqual({
+        storeId,
+        day: '2026-11-19',
+        page: { kind: 'orders', period: null },
+      });
+    }
+  });
+
+  it('continues past a full order day or buyer page', async () => {
+    const storeId = fixture.b;
+    const day = '2026-11-19';
+    const repair = app.get(ReconcileAnalyticsJob);
+    const queue = app.get<Queue>(getQueueToken(QUEUES.bulk));
+    const countOrderDays = async () => {
+      const { rowCount } = await fixture.connection.pool.query(
+        "select 1 from store_daily_metrics where store_id=$1 and metric='orders' and day between '2026-07-01' and '2026-08-05'",
+        [storeId],
+      );
+      return rowCount;
+    };
+    await repair.handle({
+      storeId,
+      day,
+      page: { kind: 'orders', period: { from: '2026-07-01', through: '2026-08-05' } },
+    });
+    expect(await countOrderDays()).toBe(31);
+    const orders = await queue.getJob(`${RECONCILE_ANALYTICS}-${storeId}-${day}-orders-2026-08-01`);
+    await repair.handle(orders?.data);
+    expect(await countOrderDays()).toBe(36);
+
+    await fixture.connection.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value)
+       select $1,'2026-10-11','buyer_activity',gen_random_uuid()::text,20737
+       from generate_series(1,101)`,
+      [storeId],
+    );
+    const buyers = await queue.getJob(`${RECONCILE_ANALYTICS}-${storeId}-${day}-buyers-start`);
+    await repair.handle(buyers?.data);
+    const { rows } = await fixture.connection.pool.query(
+      "select dimension from store_daily_metrics where store_id=$1 and metric='buyer_activity'",
+      [storeId],
+    );
+    expect(rows).toHaveLength(1);
+    const next = (await queue.getWaiting()).find(({ data }) => {
+      return data.storeId === storeId && data.page.kind === 'buyers' && data.page.after !== null;
+    });
+    await repair.handle(next?.data);
+    const { rowCount } = await fixture.connection.pool.query(
+      "select 1 from store_daily_metrics where store_id=$1 and metric='buyer_activity'",
+      [storeId],
+    );
+    expect(rowCount).toBe(0);
+  });
+
+  it('continues past a full retention page', async () => {
+    const storeId = fixture.b;
+    const day = '2026-11-19';
+    await fixture.connection.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value)
+       select $1,'2024-06-19','buyer_activity',gen_random_uuid()::text,19893
+       from generate_series(1,5001)`,
+      [storeId],
+    );
+    const countExpired = async () => {
+      const { rowCount } = await fixture.connection.pool.query(
+        "select 1 from store_daily_metrics where store_id=$1 and metric='buyer_activity' and day='2024-06-19'",
+        [storeId],
+      );
+      return rowCount;
+    };
+    const repair = app.get(ReconcileAnalyticsJob);
+    await repair.handle({ storeId, day, page: { kind: 'retention', batch: 0 } });
+    expect(await countExpired()).toBe(1);
+    const queue = app.get<Queue>(getQueueToken(QUEUES.bulk));
+    const next = await queue.getJob(`${RECONCILE_ANALYTICS}-${storeId}-${day}-retention-1`);
+    await repair.handle(next?.data);
+    expect(await countExpired()).toBe(0);
   });
 });

@@ -99,7 +99,7 @@ function reconciliationJob(data: Repair) {
     opts: {
       attempts: 3,
       backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
-      removeOnComplete: { age: DAY_MS / 1000 },
+      removeOnComplete: page.kind === 'lifecycle' || { age: DAY_MS / 1000 },
       removeOnFail: 100,
       jobId: `${RECONCILE_ANALYTICS}-${storeId}-${day}-${page.kind}-${cursor ?? 'start'}`,
     },

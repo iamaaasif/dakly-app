@@ -53,14 +53,14 @@ export class AnalyticsRepository {
     const limit = 5000;
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ count: number }>(sql`
-        with removed as (
-          delete from store_daily_metrics
-          where store_id = ${storeId} and (day, metric, dimension) in (
-            select day, metric, dimension from store_daily_metrics
-            where store_id = ${storeId} and day < ${reportBefore}::date
-              and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
-            order by day, metric, dimension limit ${limit}
-          )
+        with expired as (
+          select ctid from store_daily_metrics
+          where store_id = ${storeId} and day < ${reportBefore}::date
+            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
+          order by day, metric, dimension limit ${limit} for update
+        ), removed as (
+          delete from store_daily_metrics as metrics using expired
+          where metrics.store_id = ${storeId} and metrics.ctid = expired.ctid
           returning 1
         )
         select count(*)::int from removed
