@@ -114,6 +114,10 @@ describe('MailpitSmsDriver', () => {
     const error: unknown = await driver.send({ to, text }).catch((reason: unknown) => reason);
 
     expect(error).toBeInstanceOf(SmsSendRefused);
+    expect(error).toMatchObject({
+      code: 'SMS_SEND_REFUSED',
+      message: 'SMS refused by the provider',
+    });
     expect(error).not.toHaveProperty('cause');
     expect(JSON.stringify(error)).not.toContain(to);
     expect(JSON.stringify(error)).not.toContain(text);
@@ -132,7 +136,10 @@ describe('MailpitSmsDriver', () => {
 
   it.each([
     { label: 'drops the connection', finish: (socket: Socket) => socket.destroy() },
-    { label: 'returns a final 550', finish: (socket: Socket) => socket.end('550 rejected\r\n') },
+    {
+      label: 'returns a final 550',
+      finish: (socket: Socket) => socket.end(`550 rejected ${message.to} ${message.text}\r\n`),
+    },
   ])(
     'keeps the outcome unknown when SMTP $label after DATA without a capture',
     async ({ finish }) => {
