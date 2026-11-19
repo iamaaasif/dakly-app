@@ -34,20 +34,6 @@ export const savedContentSchema = z
     'A model run requires AI provenance',
   );
 
-export const postingSlotsSchema = z
-  .array(
-    z.strictObject({
-      weekday: z.number().int().min(0).max(6),
-      time: z.iso.time({ precision: -1 }),
-    }),
-  )
-  .refine(
-    (slots) =>
-      new Set(slots.map(({ weekday, time }) => `${weekday}-${time}`)).size === slots.length,
-    'Use each time once on a day',
-  );
-export type PostingSlot = z.infer<typeof postingSlotsSchema>[number];
-
 const postIdSchema = z.uuid().transform((id) => id.toLowerCase());
 const postText = z.string().refine((value) => !value.includes('\0'), 'Remove null characters');
 

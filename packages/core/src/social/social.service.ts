@@ -216,7 +216,7 @@ export class SocialService {
   ) {
     const retained = new Set(previous.map(({ channelConnectionId }) => channelConnectionId));
     const ids = input.targets.map(({ channelConnectionId }) => channelConnectionId);
-    const selected = await this.channels.postingConnections(storeId, { ids });
+    const selected = await this.channels.postingConnections(storeId, ids);
     const connections = new Map(selected.map((connection) => [connection.id, connection]));
     for (const target of input.targets) {
       const connection = connections.get(target.channelConnectionId);
