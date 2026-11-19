@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0055_snapshot.json`: **95 tables, 1269 columns, 387 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0056_snapshot.json`: **95 tables, 1271 columns, 388 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1075,6 +1075,8 @@ erDiagram
         text from_status "NULL; text"
         text to_status "NULL; text"
         text gateway_reference "NULL; text"
+        text gateway "NULL; text"
+        text gateway_event_id "NULL; text"
         jsonb event_payload "NULL; jsonb"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
