@@ -198,7 +198,7 @@ describe.each(WORKER_QUEUES)('Scheduled job on %s', (queueName) => {
 });
 
 describe('Calendar schedules', () => {
-  it('starts the daily job at UTC midnight', async () => {
+  it('schedules UTC midnight and keeps a pending job on restart', async () => {
     const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
     const { queue } = await start(QUEUES.bulk, prefix);
     await scheduleJob(queue, SCHEDULED, { pattern: '0 0 * * *', tz: 'UTC' });
@@ -206,5 +206,12 @@ describe('Calendar schedules', () => {
     expect(scheduled).toMatchObject({ name: SCHEDULED, pattern: '0 0 * * *', tz: 'UTC' });
     expect(new Date(scheduled?.next ?? 1).toISOString()).toMatch(/T00:00:00\.000Z$/);
     expect(scheduled?.next).toBeGreaterThan(Date.now());
+
+    await queue.pause();
+    const [pending] = await queue.getDelayed();
+    await pending!.promote();
+    await scheduleJob(queue, SCHEDULED, { pattern: '0 0 * * *', tz: 'UTC' });
+    expect(await queue.getDelayedCount()).toBe(0);
+    expect((await queue.getJobs(['paused'])).map(({ id }) => id)).toEqual([pending?.id]);
   });
 });
