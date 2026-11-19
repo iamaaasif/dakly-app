@@ -1,7 +1,6 @@
 import type { z } from 'zod';
 
 import { createAutomationSchema } from '@dakly/contracts/automations';
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 
 export const settingsSchema = createAutomationSchema.pick({ name: true, graph: true });
 export type SettingsInput = z.input<typeof settingsSchema>;

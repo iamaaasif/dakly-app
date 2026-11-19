@@ -1160,10 +1160,10 @@ fixture('GET /automations/:automationId', async () => {
     [contactId, a.id],
   );
   await f.admin.pool.query(
-    `insert into automation_runs(store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
-     values($1,$2,$3,$4,'waiting','welcome','waiting',now()+interval '1 day'),
-           ($1,$2,$3,$4,'finished','end','done',null)`,
-    [a.id, id, versionId, contactId],
+    `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
+     values($5,$1,$2,$3,$4,'waiting','welcome','waiting',now()+interval '1 day'),
+           ($6,$1,$2,$3,$4,'finished','end','done',null)`,
+    [a.id, id, versionId, contactId, randomUUID(), randomUUID()],
   );
   const own = (await success(a, 'GET', `/automations/${id}`, 200)).json();
   expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
