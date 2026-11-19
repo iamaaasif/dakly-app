@@ -93,13 +93,17 @@ export class MailpitSmsDriver implements SmsDriver {
       const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, { signal });
       if (!response.ok) throw new Error('Mailpit search failed');
       const page = capturePage.safeParse(await response.json());
-      if (!page.success || page.data.messages_count < start + page.data.messages.length)
+      if (
+        !page.success ||
+        page.data.messages_count < start + page.data.messages.length ||
+        (page.data.messages.length === 0 && start < page.data.messages_count)
+      )
         throw new Error('Invalid Mailpit search response');
       const { messages, messages_count } = page.data;
       const match = messages.find(({ MessageID }) => MessageID === messageId);
       if (match) return match.ID;
       start += messages.length;
-      if (messages.length === 0 || start >= messages_count) return undefined;
+      if (start >= messages_count) return undefined;
     }
   }
 }
@@ -115,6 +119,7 @@ type SmtpFailure = {
 
 function isSmtpRefusal(error: unknown): boolean {
   const failure = (error ?? {}) as SmtpFailure;
+  if (error instanceof AggregateError) return failedAllConnectAttempts(error, failure);
   if (failedDuringSetup(failure)) return true;
   const { responseCode, command, code } = failure;
   // ECONNECTION on CONN can include an incomplete reply left in the receive buffer.
@@ -122,6 +127,20 @@ function isSmtpRefusal(error: unknown): boolean {
   // Mailpit can return 451 after storing DATA if tagging the capture fails.
   if (responseCode === 451 && code === 'EMESSAGE' && command === 'DATA') return false;
   return isSmtpRejection(responseCode);
+}
+
+function failedAllConnectAttempts(error: AggregateError, { code, command }: SmtpFailure): boolean {
+  const attempts: unknown = error.errors;
+  return (
+    code === 'ESOCKET' &&
+    command === 'CONN' &&
+    Array.isArray(attempts) &&
+    attempts.length > 0 &&
+    attempts.every(
+      (attempt: unknown) =>
+        attempt instanceof Error && 'syscall' in attempt && attempt.syscall === 'connect',
+    )
+  );
 }
 
 function failedDuringSetup({ code, originalCode, timeoutType, syscall }: SmtpFailure): boolean {
