@@ -8,7 +8,7 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
-import { useOrderCatalogue, useOrderCatalogueProducts } from '../api/order-catalogue';
+import { useOrderCatalogue } from '../api/order-catalogue';
 import { formatMoney } from '@/lib/format-money';
 
 export type VariantChoice = {
@@ -167,9 +167,6 @@ function NewOrderProductLine({
   catalogue: OrderCatalogueProduct[];
 }) {
   const [chosen, setChosen] = useState<OrderCatalogueProduct>();
-  const inCatalogue = catalogue.some(({ id }) => id === chosen?.id);
-  const [detail] = useOrderCatalogueProducts(chosen && !inCatalogue ? [chosen.id] : []);
-  const product = detail?.data ?? chosen;
   const id = ids[index] ?? '';
   const productChoices = chosen ? orderVariantChoices([chosen]) : {};
   const selected = variants[id] ?? productChoices[id];
@@ -181,7 +178,11 @@ function NewOrderProductLine({
   return (
     <div className="space-y-2 rounded-md border border-border p-3">
       <div className="grid grid-cols-2 items-start gap-2 sm:grid-cols-[2fr_1.5fr_4rem_1fr]">
-        <ProductChoiceField {...{ catalogue, product, index, isTaken }} onChange={chooseProduct} />
+        <ProductChoiceField
+          {...{ catalogue, index, isTaken }}
+          product={chosen}
+          onChange={chooseProduct}
+        />
         <OrderSizeField
           {...{ id, index, isTaken }}
           product={chosen}
