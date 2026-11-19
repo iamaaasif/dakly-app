@@ -15,7 +15,7 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { StoresService } from '../stores/stores.service';
-import { type SendRequest, SendPolicyService } from './send-policy.service';
+import { SendPolicyService } from './send-policy.service';
 import { SendingModule } from './sending.module';
 
 class TestModule {}
@@ -115,7 +115,11 @@ async function workflowSend(
 }
 
 // The sending job runs the gate inside its store transaction.
-function check(storeId: string, contactId: string, change: Partial<SendRequest> = {}) {
+function check(
+  storeId: string,
+  contactId: string,
+  change: Partial<Parameters<SendPolicyService['check']>[1]> = {},
+) {
   return app.get(StoreTransaction).run(storeId, () =>
     policy.check(storeId, {
       contactId,
@@ -204,6 +208,20 @@ describe('SendPolicyService (Postgres)', () => {
     await campaignSend(storeA, contactId, hoursBefore(8 * 24));
     await workflowSend(storeA, contactId, hoursBefore(-1));
 
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
+  });
+
+  it.each([
+    ['campaign', campaignSend],
+    ['workflow', workflowSend],
+  ])('counts a committed %s send when the campaign worker clock is behind', async (_type, send) => {
+    const contactId = await consentedContact(storeA);
+    await send(storeA, contactId, new Date(noon.getTime() + 1000));
+
+    expect(await check(storeA, contactId, { at: () => noon })).toEqual({
+      action: 'skip',
+      reason: 'frequency_cap',
+    });
     expect(await check(storeA, contactId)).toEqual({ action: 'send' });
   });
 

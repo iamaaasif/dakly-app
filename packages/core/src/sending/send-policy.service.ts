@@ -102,7 +102,9 @@ export class SendPolicyService {
     )
       return skip('no_address');
     // A campaign samples its clock after waiting on the contact locks.
-    const at = typeof request.at === 'function' ? request.at() : request.at;
+    const readAt = request.at;
+    const live = typeof readAt === 'function';
+    const at = live ? readAt() : readAt;
     const reason = await this.recipientReason(storeId, { ...request, at });
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
@@ -110,7 +112,10 @@ export class SendPolicyService {
     const settings = await this.stores.sendingSettings(storeId);
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], at, { dispatch: true });
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], at, {
+      dispatch: true,
+      includeCommittedFuture: live,
+    });
     return capReached(sends, { ...request, at }, settings.frequencyCap)
       ? skip('frequency_cap')
       : SEND;
