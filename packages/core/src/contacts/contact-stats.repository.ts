@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, isNull, ne, sql } from 'drizzle-orm';
 
 import { contacts, contactStats } from '@dakly/db/schema/contacts';
 
@@ -56,20 +56,26 @@ export class ContactStatsRepository {
     return rows;
   }
 
-  async countLifecycleStages(storeId: string) {
-    const { rows } = await this.database.forStore(storeId, (tx) =>
-      tx.execute<{
-        stage: (typeof contactStats.$inferSelect)['lifecycleStage'];
-        count: number;
-      }>(sql`
-        select s.lifecycle_stage as stage, count(*)::int as count
-        from contact_stats s join contacts c on c.store_id = s.store_id and c.id = s.contact_id
-        where s.store_id = ${storeId} and s.lifecycle_stage <> 'none'
-          and c.deleted_at is null and not c.is_blocked and c.kind <> 'not_customer'
-        group by s.lifecycle_stage
-      `),
+  countLifecycleStages(storeId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ stage: contactStats.lifecycleStage, count: count() })
+        .from(contactStats)
+        .innerJoin(
+          contacts,
+          and(eq(contacts.storeId, storeId), eq(contacts.id, contactStats.contactId)),
+        )
+        .where(
+          and(
+            eq(contactStats.storeId, storeId),
+            ne(contactStats.lifecycleStage, 'none'),
+            isNull(contacts.deletedAt),
+            eq(contacts.isBlocked, false),
+            ne(contacts.kind, 'not_customer'),
+          ),
+        )
+        .groupBy(contactStats.lifecycleStage),
     );
-    return rows;
   }
 
   async bestSpendCutoff(storeId: string) {

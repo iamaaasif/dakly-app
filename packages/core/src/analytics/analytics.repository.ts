@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, notInArray, sql } from 'drizzle-orm';
 
 import { storeDailyMetrics } from '@dakly/db/schema/analytics';
 
@@ -14,27 +14,39 @@ export class AnalyticsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async reportedBuyerIds(storeId: string, after: string | null, limit: number) {
-    const cursor = after ? sql`and dimension > ${after}` : sql``;
-    const { rows } = await this.database.forStore(storeId, (tx) =>
-      tx.execute<{ id: string }>(sql`
-        select distinct dimension as id from store_daily_metrics
-        where store_id = ${storeId} and metric = ${BUYER_ACTIVITY} ${cursor}
-        order by dimension limit ${limit}
-      `),
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({ id: storeDailyMetrics.dimension })
+        .from(storeDailyMetrics)
+        .where(
+          and(
+            eq(storeDailyMetrics.storeId, storeId),
+            eq(storeDailyMetrics.metric, BUYER_ACTIVITY),
+            after ? gt(storeDailyMetrics.dimension, after) : undefined,
+          ),
+        )
+        .orderBy(asc(storeDailyMetrics.dimension))
+        .limit(limit),
     );
     return rows.map(({ id }) => id);
   }
 
   async oldestOrderSummaryDay(storeId: string, since: string) {
-    const { rows } = await this.database.forStore(storeId, (tx) =>
-      tx.execute<{ day: string }>(sql`
-        select day::text from store_daily_metrics
-        where store_id = ${storeId} and day >= ${since}::date
-          and metric in ('orders', 'delivered_orders', 'net_spend', 'sales')
-        order by day limit 1
-      `),
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ day: storeDailyMetrics.day })
+        .from(storeDailyMetrics)
+        .where(
+          and(
+            eq(storeDailyMetrics.storeId, storeId),
+            inArray(storeDailyMetrics.metric, ['orders', 'delivered_orders', 'net_spend', 'sales']),
+            gte(storeDailyMetrics.day, since),
+          ),
+        )
+        .orderBy(asc(storeDailyMetrics.day))
+        .limit(1),
     );
-    return rows[0]?.day;
+    return row?.day;
   }
 
   async pruneExpiredRows(storeId: string, reportBefore: string) {
