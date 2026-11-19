@@ -56,6 +56,7 @@ describe('Worker job schedulers', () => {
       ...bulkIntervals,
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('sweep-automation-birthdays', { pattern: '0 * * * *', tz: 'UTC' }),
+      scheduler('sweep-analytics', { pattern: '0 0 * * *', tz: 'UTC' }),
       ...bulkIntervals,
     ]);
     expect(sync.schedulers).toEqual([
