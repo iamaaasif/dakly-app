@@ -1,8 +1,6 @@
 import { z } from 'zod';
 
 import { calendarDate } from './calendar-date';
-import { searchText } from './search-text';
-
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 import {
@@ -11,6 +9,7 @@ import {
   type ProductResponse,
   type ProductVariantResponse,
 } from './products';
+import { searchText } from './search-text';
 
 export const orderSources = [
   'messenger',
