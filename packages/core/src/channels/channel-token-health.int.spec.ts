@@ -327,6 +327,18 @@ it('marks a rejected send credential and tells the owner', async () => {
       .get(StoreTransaction)
       .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message)),
   ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
+  const failedRecord = vi
+    .spyOn(connections, 'recordRejectedToken')
+    .mockRejectedValueOnce(new Error('Database connection lost'));
+  try {
+    await expect(connections.sendMetaMessage(storeId, connectionId, message)).rejects.toMatchObject(
+      {
+        code: 'auth_error',
+      },
+    );
+  } finally {
+    failedRecord.mockRestore();
+  }
   const rejectedSend = connections.sendMetaMessage(storeId, connectionId, message);
   await expect(rejectedSend).rejects.toMatchObject({ code: 'auth_error' });
   await expect(rejectedSend).rejects.toBeInstanceOf(MetaRequestError);

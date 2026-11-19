@@ -16,7 +16,9 @@ const requestTimeoutMs = 5000;
 const pageManagementTasks = ['MANAGE', 'PROFILE_PLUS_MANAGE', 'PROFILE_PLUS_FULL_CONTROL'];
 
 const accessTokenSchema = z.object({ access_token: z.string().min(1) });
-const graphErrorSchema = z.object({ error: z.object({ code: z.number() }) });
+const graphErrorSchema = z.object({
+  error: z.object({ code: z.number(), error_subcode: z.number().optional() }),
+});
 const accountsSchema = z.object({
   data: z.array(
     z.object({
@@ -52,12 +54,27 @@ function selectablePage(
 }
 
 function responseError(status: number, payload: unknown, sending: boolean): MetaRequestError {
-  const code = graphErrorSchema.safeParse(payload).data?.error.code;
-  const permissionDenied = code === 10 || (code !== undefined && code >= 200 && code <= 299);
-  const authError = status === 401 || code === 190 || code === 459 || permissionDenied;
-  if (authError) return new MetaRequestError('auth_error');
-  if (sending && code === 551) return new MetaRequestError('rejected');
+  const error = graphErrorSchema.safeParse(payload).data?.error;
+  const code = error?.code ?? 0;
+  if (status === 401 || [190, 459].includes(code)) return new MetaRequestError('auth_error');
+  if (sending) return sendResponseError(code, error?.error_subcode);
+  return new MetaRequestError(permissionDenied(code) ? 'auth_error' : 'unavailable');
+}
+
+function sendResponseError(code: number, subcode?: number): MetaRequestError {
+  if (
+    (code === 10 && subcode === 2534077) ||
+    (code === 200 && subcode === 2534041) ||
+    (code === 100 && subcode === 2534013)
+  )
+    return new MetaRequestError('auth_error');
+  if (permissionDenied(code) || [100, 551, 10903, 10904].includes(code))
+    return new MetaRequestError('rejected');
   return new MetaRequestError('unavailable');
+}
+
+function permissionDenied(code: number): boolean {
+  return code === 10 || (code >= 200 && code <= 299);
 }
 
 type MetaApp = {
@@ -159,8 +176,9 @@ export class MetaGraphChannelDriver
       message: { text: message.text, ...(messenger && { metadata: message.operationKey }) },
       ...delivery,
     });
+    const endpoint = messenger ? encodeURIComponent(accountExternalId) : 'me';
     const response = await this.request(
-      `${encodeURIComponent(accountExternalId)}/messages`,
+      `${endpoint}/messages`,
       {},
       z.object({ message_id: z.string().min(1) }),
       { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },

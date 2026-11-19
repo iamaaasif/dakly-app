@@ -87,11 +87,25 @@ export class ChannelConnectionsService {
         ),
       );
     } catch (error) {
-      if (error instanceof MetaRequestError && error.code === 'auth_error')
-        await this.recordRejectedToken(storeId, connectionId, ciphertext);
+      await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);
       throw error;
     } finally {
       token.fill(0);
+    }
+  }
+
+  private async recordSendCredentialRejection(
+    storeId: string,
+    connectionId: string,
+    ciphertext: Buffer,
+    error: unknown,
+  ) {
+    if (!(error instanceof MetaRequestError) || error.code !== 'auth_error') return;
+    try {
+      await this.recordRejectedToken(storeId, connectionId, ciphertext);
+    } catch {
+      // A bookkeeping failure must not turn a confirmed provider rejection into a pending send.
+      this.logger.error('Could not record the rejected Meta credential');
     }
   }
 
