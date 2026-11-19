@@ -186,13 +186,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M10. Content and social
 
-| ID    | Task                                              | Status | Depends     | PR  | Notes |
-| ----- | ------------------------------------------------- | ------ | ----------- | --- | ----- |
-| SOC-1 | Posts, targets, posting slots, approval           | Todo   | CHN-2       |     |       |
-| SOC-2 | Publish jobs for Facebook and Instagram, retries  | Todo   | SOC-1       |     |       |
-| SOC-3 | Post insights job                                 | Todo   | SOC-2       |     |       |
-| SOC-4 | Content Studio: brand profile, caption generation | Todo   | AI-2, SOC-1 |     |       |
-| SOC-5 | Web: Social hub, My posts, Content Studio         | Todo   | SOC-4       |     |       |
+| ID    | Task                                              | Status      | Depends     | PR  | Notes |
+| ----- | ------------------------------------------------- | ----------- | ----------- | --- | ----- |
+| SOC-1 | Posts, targets, posting slots, approval           | In progress | CHN-2       |     |       |
+| SOC-2 | Publish jobs for Facebook and Instagram, retries  | Todo        | SOC-1       |     |       |
+| SOC-3 | Post insights job                                 | Todo        | SOC-2       |     |       |
+| SOC-4 | Content Studio: brand profile, caption generation | Todo        | AI-2, SOC-1 |     |       |
+| SOC-5 | Web: Social hub, My posts, Content Studio         | Todo        | SOC-4       |     |       |
 
 ## M11. Analytics and insights
 
