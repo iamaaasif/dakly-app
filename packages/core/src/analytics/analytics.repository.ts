@@ -8,6 +8,9 @@ import type { ReportPeriod } from './report-period';
 
 type Metric = { day: string; metric: string; dimension?: string; value: bigint };
 
+type PendingOrderDay = { day: string; generation: string };
+
+const ORDER_PENDING = 'order_refresh_pending';
 const BUYER_ACTIVITY = 'buyer_activity';
 
 @Injectable()
@@ -70,7 +73,7 @@ export class AnalyticsRepository {
     return rows.map(({ id }) => id);
   }
 
-  async oldestOrderSummaryDay(storeId: string, through: string) {
+  async oldestOrderSummaryDay(storeId: string, since: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ day: storeDailyMetrics.day })
@@ -78,8 +81,13 @@ export class AnalyticsRepository {
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            inArray(storeDailyMetrics.metric, ['orders', 'delivered_orders', 'net_spend']),
-            sql`${storeDailyMetrics.day} >= (${through}::date - interval '24 months')::date`,
+            inArray(storeDailyMetrics.metric, [
+              'orders',
+              'delivered_orders',
+              'net_spend',
+              ORDER_PENDING,
+            ]),
+            gte(storeDailyMetrics.day, since),
           ),
         )
         .orderBy(asc(storeDailyMetrics.day))
@@ -90,7 +98,7 @@ export class AnalyticsRepository {
 
   async pruneExpiredRows(
     storeId: string,
-    { eventBefore, storeDay }: { eventBefore: string; storeDay: string },
+    { eventBefore, reportBefore }: { eventBefore: string; reportBefore: string },
   ) {
     const limit = 5000;
     const { rows } = await this.database.forStore(storeId, (tx) =>
@@ -101,8 +109,8 @@ export class AnalyticsRepository {
               select day, metric, dimension from store_daily_metrics
               where store_id = ${storeId} and (
                 (metric = 'order_event' and day < ${eventBefore}::date)
-                or (metric in ('orders', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
-                  and day < (${storeDay}::date - interval '24 months')::date)
+                or (metric in ('orders', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', ${ORDER_PENDING})
+                  and day < ${reportBefore}::date)
               )
               order by day, metric, dimension limit ${limit}
             )
@@ -139,21 +147,51 @@ export class AnalyticsRepository {
     );
   }
 
-  async hasOrderEvent(storeId: string, event: { id: string; occurredAt: string }) {
-    const [row] = await this.database.forStore(storeId, (tx) =>
+  markOrderDayPending(storeId: string, day: string, updatedAt: Date) {
+    return this.database.inTransaction(storeId, (tx) =>
       tx
-        .select({ dimension: storeDailyMetrics.dimension })
+        .insert(storeDailyMetrics)
+        .values({ storeId, day, metric: ORDER_PENDING, value: 1, updatedAt })
+        .onConflictDoUpdate({
+          target: [
+            storeDailyMetrics.storeId,
+            storeDailyMetrics.day,
+            storeDailyMetrics.metric,
+            storeDailyMetrics.dimension,
+          ],
+          set: { value: sql`${storeDailyMetrics.value} + 1`, updatedAt },
+        }),
+    );
+  }
+
+  pendingOrderDays(storeId: string, period: ReportPeriod) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          day: storeDailyMetrics.day,
+          generation: sql<string>`${storeDailyMetrics.value}::text`,
+        })
         .from(storeDailyMetrics)
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            eq(storeDailyMetrics.day, event.occurredAt.slice(0, 10)),
-            eq(storeDailyMetrics.metric, 'order_event'),
-            eq(storeDailyMetrics.dimension, event.id),
+            gte(storeDailyMetrics.day, period.from),
+            lte(storeDailyMetrics.day, period.through),
+            eq(storeDailyMetrics.metric, ORDER_PENDING),
           ),
         ),
     );
-    return row !== undefined;
+  }
+
+  clearOrderDays(storeId: string, pending: PendingOrderDay[]) {
+    const versions = sql.join(
+      pending.map(({ day, generation }) => sql`(${day}::date, ${generation}::bigint)`),
+      sql`, `,
+    );
+    return this.database.inTransaction(storeId, (tx) =>
+      tx.execute(sql`delete from store_daily_metrics
+        where store_id = ${storeId} and metric = ${ORDER_PENDING} and (day, value) in (${versions})`),
+    );
   }
 
   async recordEvent(storeId: string, event: { id: string; occurredAt: string }, now: Date) {

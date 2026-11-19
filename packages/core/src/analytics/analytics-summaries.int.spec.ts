@@ -211,6 +211,19 @@ describe('Daily order summaries', () => {
     }
   });
 
+  it('reschedules a missing refresh when the source event already has a marker', async () => {
+    const day = '2026-11-05';
+    const orderId = await order(fixture.a, `${day}T05:00:00Z`);
+    const data = { ...event(fixture.a, orderId), type: 'order.created' };
+    const handler = app.get(SummarizeOrderCreated);
+    await handler.handle(data);
+    const [evicted] = await queue.getDelayed();
+    await evicted?.remove();
+    await handler.handle(data);
+    await finishOrderDay(fixture.a, day);
+    expect(await ordersFor(fixture.a)).toContainEqual(expect.objectContaining({ day, value: '1' }));
+  });
+
   it('restates the original day after cancellation and leaves replay unchanged', async () => {
     const orderId = await order(fixture.a, '2026-11-01T05:00:00Z');
     await app.get(SummarizeOrderCreated).handle({

@@ -224,7 +224,7 @@ Each `buyer_activity` row records one buyer and day, with the first non-cancelle
 
 Each store lifecycle snapshot holds a count for each of the six stages. Contact stats publish `contact.lifecycle_changed` when a stage changes.
 
-Pending order changes for the same store and original day share a refresh at the end of the current minute. A change received while a refresh runs schedules another refresh. The subscriber queues that refresh before recording the event ID with its buyer activity writes, so a queue failure can be retried. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
+Pending order changes for the same store and original day share a refresh at the end of the current minute. A change received while a refresh runs schedules another refresh. The subscriber records the event ID and a pending day marker with its buyer activity writes before enqueueing. Replaying an event reschedules a pending day without applying the buyer changes twice. A refresh clears only the marker version it read. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
 
 Reports use the current and previous ranges of store-local calendar days. A returning buyer is counted once across the full period. The daily points count that same group on each day it ordered. Lifecycle counts read the latest snapshot inside the period.
 
