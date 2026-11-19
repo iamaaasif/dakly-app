@@ -130,7 +130,7 @@ export class AutomationRunsService {
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
     };
-    const exitReason = await this.conditions.exitReason(storeId, run.graph, facts, now);
+    const exitReason = await this.conditions.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
     if (
       shouldPrepareSender(step) &&
@@ -153,12 +153,7 @@ export class AutomationRunsService {
         return scheduleWait(stepKey, step, now, timeZone);
       }
       case 'condition': {
-        const choice = (await this.conditions.firstHoldingPath(
-          facts.storeId,
-          step.paths,
-          facts,
-          now,
-        )) ?? {
+        const choice = (await this.conditions.firstHoldingPath(step.paths, facts, now)) ?? {
           outcome: 'else',
           next: step.elseNext,
         };
@@ -280,12 +275,7 @@ export class AutomationRunsService {
   private async refreshExitReason(facts: RunFacts, at: Date) {
     const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
-    return this.conditions.exitReason(
-      facts.storeId,
-      facts.graph,
-      { ...facts, tags, tappedStepKeys },
-      at,
-    );
+    return this.conditions.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves

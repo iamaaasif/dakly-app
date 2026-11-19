@@ -23,7 +23,6 @@ export class AutomationConditionsService {
   // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
   // filters.
   async exitReason(
-    storeId: string,
     graph: AutomationGraph,
     facts: RunFacts,
     at: Date,
@@ -32,29 +31,23 @@ export class AutomationConditionsService {
     if (goal && hasHappened(goal, facts)) return 'goal';
     if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';
     for (const filter of workflowFilters)
-      if (!(await this.holds(storeId, filter, facts, at))) return 'workflow_filter';
+      if (!(await this.holds(filter, facts, at))) return 'workflow_filter';
     return undefined;
   }
 
   async firstHoldingPath(
-    storeId: string,
     paths: { condition: Condition; next: string }[],
     facts: RunFacts,
     at: Date,
   ): Promise<PathChoice | undefined> {
     for (const [index, path] of paths.entries())
-      if (await this.holds(storeId, path.condition, facts, at))
+      if (await this.holds(path.condition, facts, at))
         return { outcome: `path_${index + 1}`, next: path.next };
     return undefined;
   }
 
-  private async holds(
-    storeId: string,
-    condition: Condition,
-    facts: RunFacts,
-    at: Date,
-  ): Promise<boolean> {
-    const { contactId } = facts;
+  private async holds(condition: Condition, facts: RunFacts, at: Date): Promise<boolean> {
+    const { storeId, contactId } = facts;
     switch (condition.kind) {
       // Publish refuses tap conditions until taps on workflow messages are recorded.
       case 'tapped':
