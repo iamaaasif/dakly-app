@@ -45,8 +45,8 @@ type StockReference = { actor: Actor } & (
 );
 
 type StockMovement = { kind: StockMovementKind; quantity: number; reference: StockReference };
-type StockMovementInput =
-  StockMovement | { kind: 'import'; onHand: number; reference: StockReference };
+type ImportedStock = { kind: 'import'; onHand: number; reference: StockReference };
+type StockMovementInput = StockMovement | ImportedStock;
 type UpdatedStock = {
   onHand: number;
   reserved: number;
@@ -165,15 +165,12 @@ export class ProductsService {
 
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
     return this.transaction.run(storeId, async () => {
-      // The current count must stay fixed while an absolute count becomes a signed movement.
-      if ('onHand' in input) await this.orderVariantRepository.lockVariants(storeId, [variantId]);
       const variant = await this.repository.findStockVariant(storeId, variantId);
       if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
-      const { kind, reference } = input;
       // Order movements follow the tracking flag saved on the order item.
-      if (!variant.isStockTracked && !reference.orderId) return;
-      const quantity = 'onHand' in input ? input.onHand - variant.onHand : input.quantity;
-      if ('onHand' in input && quantity === 0) return;
+      if (!variant.isStockTracked && !input.reference.orderId) return;
+      if ('onHand' in input) return this.reconcileImportedStock(storeId, variantId, input);
+      const { kind, quantity } = input;
       if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
         throw productError('STOCK_QUANTITY_INVALID');
       const change = {
@@ -189,11 +186,24 @@ export class ProductsService {
       if (!updated) throw productError('STOCK_NOT_AVAILABLE');
       await this.recordStockMovement(
         storeId,
-        { kind, quantity, reference, variantId },
+        { ...input, variantId },
         { ...change, ...updated },
         now,
       );
     });
+  }
+
+  private async reconcileImportedStock(storeId: string, variantId: string, input: ImportedStock) {
+    const now = this.clock.now();
+    const stock = await this.repository.reconcileStock(storeId, variantId, input.onHand, now);
+    if (!stock) throw productError('STOCK_NOT_AVAILABLE');
+    if (stock.onHandDelta === 0) return;
+    await this.recordStockMovement(
+      storeId,
+      { kind: 'import', quantity: stock.onHandDelta, reference: input.reference, variantId },
+      { ...stock, reservedDelta: 0 },
+      now,
+    );
   }
 
   private async recordStockMovement(

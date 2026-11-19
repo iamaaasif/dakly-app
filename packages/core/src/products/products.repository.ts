@@ -257,10 +257,10 @@ export class ProductsRepository {
   async findStockVariant(
     storeId: string,
     variantId: string,
-  ): Promise<{ isStockTracked: boolean; onHand: number } | undefined> {
+  ): Promise<{ isStockTracked: boolean } | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ isStockTracked: products.isStockTracked, onHand: productVariants.onHand })
+        .select({ isStockTracked: products.isStockTracked })
         .from(productVariants)
         .innerJoin(products, eq(products.id, productVariants.productId))
         .where(
@@ -294,6 +294,32 @@ export class ProductsRepository {
           ),
         )
         .returning({ onHand: productVariants.onHand, reserved: productVariants.reserved }),
+    );
+    return rows[0];
+  }
+
+  async reconcileStock(storeId: string, variantId: string, onHand: number, now: Date) {
+    // Calls can share a transaction, so the delta and update need one statement
+    // even when the transaction already owns the row lock.
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ onHand: number; reserved: number; onHandDelta: number }>(sql`
+        with previous as (
+          select on_hand, reserved from ${productVariants}
+          where store_id = ${storeId} and id = ${variantId}
+            and ${onHand}::bigint between reserved and ${MAX_STOCK_QUANTITY}
+          for no key update
+        ), changed as (
+          update ${productVariants}
+          set on_hand = ${onHand}, updated_at = ${now.toISOString()}::timestamptz
+          from previous
+          where ${productVariants.storeId} = ${storeId} and ${productVariants.id} = ${variantId}
+            and previous.on_hand <> ${onHand}
+          returning ${productVariants.onHand}
+        )
+        select coalesce(changed.on_hand, previous.on_hand) as "onHand", previous.reserved,
+          coalesce(changed.on_hand - previous.on_hand, 0) as "onHandDelta"
+        from previous left join changed on true
+      `),
     );
     return rows[0];
   }

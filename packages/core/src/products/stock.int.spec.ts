@@ -141,8 +141,24 @@ describe('ProductsService stock ledger', () => {
     ).rejects.toMatchObject({
       code: 'PRODUCT_VARIANT_NOT_FOUND',
     });
+    const owner = new ProductsRepository(f.tenant);
+    expect(await owner.reconcileStock(f.b, id, 4, now)).toBeUndefined();
     expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 10, reserved: 2 });
     expect(await movements(id)).toEqual([]);
+  });
+
+  it('reconciles a repeated count once within the same store transaction', async () => {
+    const id = await variant(10);
+    await transaction.run(f.a, () =>
+      Promise.all([
+        service.moveStock(f.a, id, { kind: 'import', onHand: 8, reference }),
+        service.moveStock(f.a, id, { kind: 'import', onHand: 8, reference }),
+      ]),
+    );
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 8, reserved: 0 });
+    expect(await movements(id)).toEqual([
+      { kind: 'import', quantity: -2, on_hand_after: 8, reserved_after: 0 },
+    ]);
   });
 
   it('skips imported stock when tracking is off', async () => {
