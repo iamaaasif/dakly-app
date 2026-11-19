@@ -39,6 +39,12 @@ export type OutgoingMessage = {
 };
 
 export type PreparedSmsSender = { storeId: string; name: string | undefined };
+export type PreparedSms = {
+  storeId: string;
+  contactId: string;
+  to: string | null;
+  sender: string | undefined;
+};
 
 export type SentMessage = { providerMessageId: string; parts: number; credits: number };
 
@@ -140,10 +146,20 @@ export class MessagingService {
   async send(
     storeId: string,
     message: OutgoingMessage,
-    preparedSender?: PreparedSmsSender,
+    prepared?: PreparedSmsSender | PreparedSms,
   ): Promise<SentMessage> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
-    const { to, parts, sender } = await this.prepareSend(storeId, message, preparedSender);
+    const sms =
+      prepared && 'contactId' in prepared
+        ? prepared
+        : await this.prepareSms(storeId, message.contactId, prepared);
+    if (sms.storeId !== storeId || sms.contactId !== message.contactId)
+      throw messagingError('MESSAGING_PREPARATION_FAILED');
+    const { to, sender } = sms;
+    if (message.destination !== undefined && to !== message.destination)
+      throw messagingError('MESSAGING_DESTINATION_CHANGED');
+    if (!to) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
+    const parts = countSmsParts(message.body);
     const { providerMessageId } = await this.smsService.send({
       to,
       text: message.body,
@@ -186,21 +202,18 @@ export class MessagingService {
   }
 
   // A failed lookup proves only that this attempt did not reach the provider.
-  private async prepareSend(
+  async prepareSms(
     storeId: string,
-    message: OutgoingMessage,
+    contactId: string,
     preparedSender?: PreparedSmsSender,
-  ) {
+  ): Promise<PreparedSms> {
     try {
       const sender =
         preparedSender?.storeId === storeId
           ? preparedSender.name
           : (await this.prepareSender(storeId)).name;
-      const phone = await this.contactsService.getPhoneForSend(storeId, message.contactId);
-      if (message.destination !== undefined && phone !== message.destination)
-        throw messagingError('MESSAGING_DESTINATION_CHANGED');
-      if (!phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
-      return { to: phone, parts: countSmsParts(message.body), sender };
+      const to = await this.contactsService.getPhoneForSend(storeId, contactId);
+      return { storeId, contactId, to, sender };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');

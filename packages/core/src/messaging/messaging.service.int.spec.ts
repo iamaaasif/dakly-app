@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { randomUUID } from 'node:crypto';
+
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { sql } from 'drizzle-orm';
@@ -36,9 +38,9 @@ let storeB: string;
 function watchDriver() {
   const calls: { to: string; isTransactionOpen: boolean }[] = [];
   const send = MailpitSmsDriver.prototype.send;
-  vi.spyOn(MailpitSmsDriver.prototype, 'send').mockImplementation(async function (message) {
+  vi.spyOn(MailpitSmsDriver.prototype, 'send').mockImplementation(async function (message, signal) {
     calls.push({ to: message.to, isTransactionOpen: transaction.isOpen() });
-    const result = await send.call(this, message);
+    const result = await send.call(this, message, signal);
     sentIds.push(result.providerMessageId);
     return result;
   });
@@ -245,6 +247,36 @@ describe('MessagingService (Postgres and Mailpit)', () => {
 
     expect(second).toEqual(first);
     expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
+  });
+
+  it('submits a prepared SMS without reading the phone again and binds it to the shop and contact', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Nasima Akter', phone: '01812345619' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const phone = vi.spyOn(contacts, 'getPhoneForSend');
+    const prepared = await messaging.prepareSms(storeA, contact.id);
+    const message = {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `prepared-${contact.id}`,
+    } as const;
+
+    expect(await errorCode(messaging.send(storeB, message, prepared))).toBe(
+      'MESSAGING_PREPARATION_FAILED',
+    );
+    expect(
+      await errorCode(messaging.send(storeA, { ...message, contactId: randomUUID() }, prepared)),
+    ).toBe('MESSAGING_PREPARATION_FAILED');
+    expect(calls).toEqual([]);
+
+    await messaging.send(storeA, message, prepared);
+    expect(phone).toHaveBeenCalledExactlyOnceWith(storeA, contact.id);
+    expect(calls.map((call) => call.to)).toEqual(['01812345619']);
   });
 
   it('sends from the shared sender until the store’s sender name is approved', async () => {
