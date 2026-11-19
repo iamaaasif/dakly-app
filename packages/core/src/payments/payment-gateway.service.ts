@@ -6,7 +6,7 @@ import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
 import { AppError } from '../platform/errors/app-error';
-import { PAYMENT_DRIVERS } from './payment-callbacks.service';
+import { PAYMENT_DRIVERS } from './payment-drivers';
 import { PAYMENT_ERRORS } from './payments.errors';
 import { PaymentsRepository } from './payments.repository';
 import { PaymentsService } from './payments.service';

@@ -41,6 +41,7 @@ import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stre
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { PaymentJobsModule } from '@dakly/core/payments/payment-jobs.module';
+import { PaymentCallbackWorkerModule } from '@dakly/core/payments/payments.module';
 import { ClockModule } from '@dakly/core/platform/clock.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -119,6 +120,7 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    PaymentCallbackWorkerModule,
     MetaWebhookMaintenanceModule,
     MessagingModule,
     ChannelTokenHealthModule,

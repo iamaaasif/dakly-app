@@ -27,9 +27,9 @@ type Intent = NonNullable<Awaited<ReturnType<PaymentsRepository['find']>>>;
 @Injectable()
 export class PaymentsService {
   constructor(
-    private readonly repository: PaymentsRepository,
-    private readonly transaction: StoreTransaction,
-    private readonly clock: Clock,
+    @Inject(PaymentsRepository) private readonly repository: PaymentsRepository,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(Clock) private readonly clock: Clock,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
@@ -74,19 +74,16 @@ export class PaymentsService {
       if (intent.status !== 'created') return false;
       const now = this.clock.now();
       if (intent.expiresAt <= now || intent.voidedAt) return false;
-      await this.repository.update(storeId, intent.id, intent.status, {
-        status: 'pending',
-        gatewayPaymentId,
-        nextCheckAt: new Date(Math.min(now.getTime() + MINUTE_MS, intent.expiresAt.getTime())),
-        updatedAt: now,
-      });
-      await this.repository.appendEvent(storeId, {
-        paymentIntentId: intent.id,
-        kind: 'redirected',
-        fromStatus: intent.status,
-        toStatus: 'pending',
-        createdAt: now,
-      });
+      await this.transition(
+        storeId,
+        intent,
+        {
+          status: 'pending',
+          gatewayPaymentId,
+          nextCheckAt: new Date(Math.min(now.getTime() + MINUTE_MS, intent.expiresAt.getTime())),
+        },
+        { now, kind: 'redirected' },
+      );
       return true;
     });
   }
@@ -236,26 +233,28 @@ export class PaymentsService {
     storeId: string,
     intent: Intent,
     change: Parameters<PaymentsRepository['update']>[3] & { status: Intent['status'] },
-    { now, verified }: { now: Date; verified?: PaidStatus },
-  ) {
+    {
+      now,
+      verified,
+      kind = 'status_changed',
+    }: { now: Date; verified?: PaidStatus; kind?: 'redirected' | 'status_changed' },
+  ): Promise<void> {
     const result = await this.repository.update(storeId, intent.id, intent.status, {
       nextCheckAt: null,
       ...change,
       updatedAt: now,
     });
     if (result === 'unchanged') return;
-    if (result === 'duplicate') {
-      await this.transition(
+    if (result === 'duplicate')
+      return this.transition(
         storeId,
         intent,
         { status: 'needs_review', reviewReason: 'duplicate' },
         { now, verified },
       );
-      return;
-    }
     await this.repository.appendEvent(storeId, {
       paymentIntentId: intent.id,
-      kind: 'status_changed',
+      kind,
       fromStatus: intent.status,
       toStatus: change.status,
       gatewayReference: verified?.transactionId,

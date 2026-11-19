@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const gateways = ['bkash', 'nagad', 'city_bank'] as const;
 export const paymentGatewaySchema = z.enum(gateways);
+export const MAX_PAYMENT_CALLBACK_BYTES = 64 * 1024;
 export const paymentGateways = [...gateways, 'manual'] as const;
 export const gatewayModes = ['live', 'sandbox'] as const;
 export const gatewayCredentialStatuses = ['connected', 'needs_attention', 'disconnected'] as const;

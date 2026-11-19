@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { createHmac, createSecretKey, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, createSecretKey, timingSafeEqual } from 'node:crypto';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -15,11 +15,12 @@ import {
   paymentGatewayCredentials,
   paymentIntents,
 } from '@dakly/db/schema/payments';
-import { outboxEvents } from '@dakly/db/schema/platform';
+import { outboxEvents, webhookEvents } from '@dakly/db/schema/platform';
 import { stores } from '@dakly/db/schema/stores';
 import type { PaymentDriver } from '@dakly/providers/payment/payment-driver';
 
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -29,6 +30,7 @@ import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
 import { VerifyPaymentJob } from './jobs/verify-payment.job';
+import { PaymentCallbackVerificationService } from './payment-callback-verification.service';
 import { PaymentCallbacksController } from './payment-callbacks.controller';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PaymentCallbacksService } from './payment-callbacks.service';
@@ -53,14 +55,19 @@ const payments = new PaymentsService(repository, transaction, clock, outbox, {
 const signingKey = 'test-payment-callback-signing-key';
 const driver: PaymentDriver = {
   gateway: 'bkash',
+  callbackHeaders: ['x-test-signature'],
+  callbackReference(rawBody) {
+    return JSON.parse(rawBody.toString()) as string;
+  },
   async createPayment(input) {
     return { gatewayPaymentId: input.orderReference, redirectUrl: 'https://checkout.example' };
   },
   async getStatus(gatewayPaymentId) {
     return paid(gatewayPaymentId);
   },
-  verifyCallback(rawBody, headers) {
-    const digest = createHmac('sha256', signingKey).update(rawBody).digest();
+  verifyCallback(rawBody, headers, merchant) {
+    const key = merchant.flow === 'shop' ? merchant.credentials : signingKey;
+    const digest = createHmac('sha256', key).update(rawBody).digest();
     const header = headers['x-test-signature'];
     if (typeof header !== 'string') return;
     const signature = Buffer.from(header, 'hex');
@@ -70,13 +77,29 @@ const driver: PaymentDriver = {
   },
 };
 const callbackRepository = new PaymentCallbacksRepository(app.db);
-const callbacks = new PaymentCallbacksService(callbackRepository, payments, [driver]);
+const jobs: { webhookEventId: string; attemptId: string }[] = [];
 const encryption = new EnvelopeEncryption({
   currentKeyVersion: 1,
   masterKeys: new Map([[1, createSecretKey(Buffer.alloc(32, 1))]]),
 });
+const callbacks = new PaymentCallbacksService(
+  callbackRepository,
+  clock,
+  [driver],
+  { consume: async () => ({ allowed: true, retryAfter: 0 }) } as RateLimiter,
+  { add: async (_name: string, job: (typeof jobs)[number]) => jobs.push(job) } as Queue,
+);
+const verifier = new PaymentCallbackVerificationService(
+  callbackRepository,
+  repository,
+  payments,
+  clock,
+  encryption,
+  [driver],
+);
 const gateway = new PaymentGatewayService(payments, repository, clock, encryption, [driver]);
 const verify = new VerifyPaymentJob(gateway);
+const externalIds = new Set<string>();
 class PaymentTestModule {}
 Module({
   controllers: [PaymentCallbacksController],
@@ -104,6 +127,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await http?.close();
+  await admin.db.delete(webhookEvents).where(inArray(webhookEvents.externalId, [...externalIds]));
   if (storeA && storeB) {
     await admin.db.delete(gatewaySettlementLines).where(
       inArray(
@@ -151,26 +175,67 @@ function paid(merchantReference: string, amountPoisha = 12000) {
   } as const;
 }
 
+async function deliver(payload: string, key = signingKey, signed = payload) {
+  externalIds.add(createHash('sha256').update(payload).digest('hex'));
+  return http.inject({
+    method: 'POST',
+    url: '/webhooks/payments/bkash',
+    headers: {
+      'content-type': 'application/json',
+      'x-test-signature': createHmac('sha256', key).update(signed).digest('hex'),
+    },
+    payload,
+  });
+}
+
+async function receipt(payload: string) {
+  const [row] = await admin.db
+    .select()
+    .from(webhookEvents)
+    .where(
+      and(
+        eq(webhookEvents.provider, 'bkash'),
+        eq(webhookEvents.externalId, createHash('sha256').update(payload).digest('hex')),
+      ),
+    );
+  return row;
+}
+
+async function processReceipt(payload: string) {
+  const id = (await receipt(payload))!.id;
+  const job = jobs.findLast((candidate) => candidate.webhookEventId === id)!;
+  await verifier.process(job.webhookEventId, job.attemptId, false);
+}
+
+async function shopCredential(storeId: string, key: string) {
+  const protectedKey = encryption.encrypt(
+    { owner: 'store', storeId, purpose: 'payment-gateway-credentials' },
+    Buffer.from(key),
+  );
+  const [row] = await admin.db
+    .insert(paymentGatewayCredentials)
+    .values({
+      ...protectedKey,
+      storeId,
+      gateway: 'bkash',
+      mode: 'live',
+      accountLabel: 'Shop merchant',
+    })
+    .returning({ id: paymentGatewayCredentials.id });
+  return row!.id;
+}
+
 describe('Payment intents (Postgres)', () => {
   it('writes one callback event when the same delivery races itself', async () => {
     const intent = await pendingIntent();
     const original = JSON.stringify(intent.merchantReference);
-    const request = {
-      method: 'POST',
-      url: '/webhooks/payments/bkash',
-      headers: {
-        'content-type': 'application/json',
-        'x-test-signature': createHmac('sha256', signingKey).update(original).digest('hex'),
-      },
-    } as const;
-    const invalid = await http.inject({ ...request, payload: original + ' ' });
-    expect(invalid.statusCode).toBe(403);
-    expect(invalid.json()).toMatchObject({ error: { code: 'PAYMENT_SIGNATURE_INVALID' } });
-    const deliveries = await Promise.all([
-      http.inject({ ...request, payload: original }),
-      http.inject({ ...request, payload: original }),
-    ]);
+    const tampered = original + ' ';
+    expect((await deliver(tampered, signingKey, original)).statusCode).toBe(204);
+    await processReceipt(tampered);
+    expect(await receipt(tampered)).toMatchObject({ status: 'ignored', payload: null });
+    const deliveries = await Promise.all([deliver(original), deliver(original)]);
     expect(deliveries.map(({ statusCode }) => statusCode)).toEqual([204, 204]);
+    await Promise.all([processReceipt(original), processReceipt(original)]);
     const rows = await admin.db
       .select()
       .from(paymentEvents)
@@ -195,6 +260,63 @@ describe('Payment intents (Postgres)', () => {
       'payment.succeeded',
       'payment.verification_requested',
     ]);
+  });
+
+  it('ignores another shop signature and accepts the correct signature for the same bytes', async () => {
+    const ownKey = 'shop-a-callback-key';
+    const otherKey = 'shop-b-callback-key';
+    const credentialId = await shopCredential(storeA, ownKey);
+    await shopCredential(storeB, otherKey);
+    const intent = await payments.create(storeA, {
+      flow: 'shop',
+      gateway: 'bkash',
+      purpose: 'order_advance',
+      credentialId,
+      amountPoisha: 12000,
+      expiresAt: new Date('2026-11-19T04:00:00.000Z'),
+    });
+    await payments.redirected(storeA, intent.id, intent.merchantReference);
+    const payload = JSON.stringify(intent.merchantReference);
+    const callbackRows = () =>
+      admin.db
+        .select()
+        .from(paymentEvents)
+        .where(
+          and(eq(paymentEvents.paymentIntentId, intent.id), eq(paymentEvents.kind, 'callback')),
+        );
+    expect((await deliver(payload, otherKey)).statusCode).toBe(204);
+    await processReceipt(payload);
+    expect(await receipt(payload)).toMatchObject({ status: 'ignored', payload: null });
+    expect(await callbackRows()).toEqual([]);
+
+    expect((await deliver(payload, ownKey)).statusCode).toBe(204);
+    await processReceipt(payload);
+    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
+    expect(await callbackRows()).toHaveLength(1);
+    expect(await repository.find(storeA, intent.id)).toMatchObject({
+      status: 'pending',
+      nextCheckAt: now,
+    });
+  });
+
+  it('rejects an oversized callback before storing it', async () => {
+    const payload = JSON.stringify('x'.repeat(64 * 1024));
+    expect((await deliver(payload)).statusCode).toBe(413);
+    expect(await receipt(payload)).toBeUndefined();
+  });
+
+  it('keeps a queued valid delivery when an invalid signature arrives for the same body', async () => {
+    const intent = await pendingIntent();
+    const payload = JSON.stringify(intent.merchantReference);
+    expect((await deliver(payload)).statusCode).toBe(204);
+    const valid = jobs.at(-1)!;
+    expect((await deliver(payload, 'other-key')).statusCode).toBe(204);
+    const invalid = jobs.at(-1)!;
+    expect(invalid.webhookEventId).toBe(valid.webhookEventId);
+    await verifier.process(invalid.webhookEventId, invalid.attemptId, false);
+    await verifier.process(valid.webhookEventId, valid.attemptId, false);
+    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
+    expect(await repository.find(storeA, intent.id)).toMatchObject({ nextCheckAt: now });
   });
 
   it('refuses a verified payment with a different amount', async () => {

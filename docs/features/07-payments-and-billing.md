@@ -367,9 +367,14 @@ intent needs a connected credential for its gateway in that store. Billing
 intents use Dakly's own merchant account. When checkout starts, the intent
 records the gateway payment id and becomes `pending`.
 
-The callback verifies the original request body through the gateway driver.
-The signed webhook records a callback event once per gateway event id and makes a pending
-intent due for verification. A callback alone never marks an intent paid.
+The API limits signed callback bodies to 64 KB and limits requests by IP.
+It saves the original bytes and the gateway's signature headers in
+`webhook_events`, queues a job, and returns 204. The worker looks up the
+merchant reference and verifies the bytes with that merchant's credentials.
+An unknown reference or invalid signature is marked ignored and its payload
+is cleared. A verified callback records one payment event per gateway event
+id and makes the intent due for a check. Completed intake rows use the
+seven-day webhook purge.
 A server-to-server result must match the reference, currency and amount.
 An amount or currency mismatch, duplicate transaction or late success goes
 to `needs_review` and leaves the intent unpaid. The event retains the gateway
