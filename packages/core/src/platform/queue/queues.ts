@@ -1,5 +1,6 @@
 export const QUEUES = {
   inbound: 'inbound',
+  sync: 'sync',
   bulk: 'bulk',
   campaign: 'campaign',
   transactional: 'transactional',
