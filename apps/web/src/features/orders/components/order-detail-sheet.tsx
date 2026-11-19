@@ -100,16 +100,10 @@ function orderHeading(order?: OrderDetail): Pick<SheetProps, 'title' | 'descript
 type SecondaryActionsMenuProps = {
   actions: readonly StageAction[];
   disabled: boolean;
-  onDirectAction: (action: 'to_confirm' | 'delivered', button: HTMLElement) => void;
-  onDialogAction: (action: StageFormAction) => void;
+  onSelectAction: (action: StageAction) => void;
 };
 
-function SecondaryActionsMenu({
-  actions,
-  disabled,
-  onDirectAction,
-  onDialogAction,
-}: SecondaryActionsMenuProps) {
+function SecondaryActionsMenu({ actions, disabled, onSelectAction }: SecondaryActionsMenuProps) {
   if (actions.length === 0) return null;
   return (
     <DropdownMenu>
@@ -121,14 +115,7 @@ function SecondaryActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {actions.map((action) => (
-          <DropdownMenuItem
-            key={action}
-            onSelect={(e) =>
-              action === 'to_confirm' || action === 'delivered'
-                ? onDirectAction(action, e.target as HTMLElement)
-                : onDialogAction(action)
-            }
-          >
+          <DropdownMenuItem key={action} onSelect={() => onSelectAction(action)}>
             {stageActionLabels[action]}
           </DropdownMenuItem>
         ))}
@@ -137,100 +124,58 @@ function SecondaryActionsMenu({
   );
 }
 
-type PrimaryStageButtonProps = {
-  order: OrderDetail;
-  action: StageAction;
-  stage: RefObject<HTMLSpanElement | null>;
-  disabled: boolean;
-  onDirectAction: (action: 'to_confirm' | 'delivered', el: HTMLElement) => void;
-};
-
-function PrimaryStageButton({
-  order,
-  action,
-  stage,
-  disabled,
-  onDirectAction,
-}: PrimaryStageButtonProps) {
-  if (action === 'to_confirm' || action === 'delivered') {
-    return (
-      <Button
-        variant="primary"
-        disabled={disabled}
-        className="min-h-11 sm:min-h-10"
-        onClick={(e) => onDirectAction(action, e.currentTarget)}
-      >
-        {stageActionLabels[action]}
-      </Button>
-    );
+function refocusStageBadge(badge: RefObject<HTMLSpanElement | null>) {
+  const focused = document.activeElement;
+  if (!focused || focused === document.body || !focused.isConnected) {
+    badge.current?.focus();
   }
-  return (
-    <OrderStageDialog order={order} action={action} stage={stage} primary disabled={disabled} />
-  );
 }
 
-function useChangeStage(
+function changeStage(
   transition: ReturnType<typeof useOrderStage>,
   orderId: string,
-  stageRef: RefObject<HTMLSpanElement | null>,
+  stage: RefObject<HTMLSpanElement | null>,
 ) {
-  return (change: OrderStageChange, button: HTMLElement) => {
-    const drawer = button.closest('[role="dialog"]');
-    transition.mutate(
-      { id: orderId, body: change },
-      {
-        onSuccess: () => {
-          const focused = document.activeElement;
-          if (focused === button || focused === drawer || focused === document.body)
-            stageRef.current?.focus();
-        },
-      },
-    );
+  return (change: OrderStageChange) => {
+    transition.mutate({ id: orderId, body: change }, { onSuccess: () => refocusStageBadge(stage) });
   };
 }
 
-type FooterConfirmButtonProps = {
-  show: boolean;
+type CancelOrderButtonProps = {
   disabled: boolean;
-  onConfirm: (button: HTMLElement) => void;
+  onClick: () => void;
 };
 
-function FooterConfirmButton({ show, disabled, onConfirm }: FooterConfirmButtonProps) {
-  if (!show) return null;
+function CancelOrderButton({ disabled, onClick }: CancelOrderButtonProps) {
   return (
     <Button
-      className="min-h-11 sm:min-h-10"
+      variant="secondary"
       disabled={disabled}
-      onClick={(e) => onConfirm(e.currentTarget)}
+      className="min-h-11 border-transparent bg-transparent px-1.5 text-xs text-danger shadow-none hover:border-transparent hover:bg-danger-soft hover:text-danger sm:min-h-10 sm:px-2 sm:text-sm"
+      onClick={onClick}
     >
-      Confirm
+      Cancel order
     </Button>
   );
 }
 
-type ActiveStageDialogProps = {
-  order: OrderDetail;
-  action: StageFormAction | null;
-  stage: RefObject<HTMLSpanElement | null>;
+type PrimaryStageButtonProps = {
+  action?: StageAction | null;
   disabled: boolean;
-  onClose: () => void;
+  onAction: (action: StageAction) => void;
 };
 
-function ActiveStageDialog({ order, action, stage, disabled, onClose }: ActiveStageDialogProps) {
+function PrimaryStageButton({ action, disabled, onAction }: PrimaryStageButtonProps) {
   if (!action) return null;
   return (
-    <OrderStageDialog
-      order={order}
-      action={action}
-      stage={stage}
-      primary
+    <Button
+      variant="primary"
       disabled={disabled}
-      open
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      trigger={null}
-    />
+      className="min-h-11 sm:min-h-10"
+      onClick={() => onAction(action)}
+    >
+      {stageActionLabels[action]}
+    </Button>
   );
 }
 
@@ -246,11 +191,14 @@ type OrderStageFooterProps = {
 function OrderStageFooter(props: OrderStageFooterProps) {
   const { order, transition, stage, canConfirm, actions, editable } = props;
   const [activeDialog, setActiveDialog] = useState<StageFormAction | null>(null);
+
   const cancelAction = actions.find((a): a is 'cancelled' => a === 'cancelled');
   const otherActions = actions.filter((a) => a !== 'cancelled');
-  const primaryAction = canConfirm ? null : otherActions[0];
   const secondaryActions = canConfirm ? otherActions : otherActions.slice(1);
-  const changeStage = useChangeStage(transition, order.id, stage);
+  const mutate = changeStage(transition, order.id, stage);
+
+  const handleAction = (a: StageAction) =>
+    a === 'to_confirm' || a === 'delivered' ? mutate({ to: a }) : setActiveDialog(a);
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -261,45 +209,44 @@ function OrderStageFooter(props: OrderStageFooterProps) {
       )}
       <div className="flex items-center justify-between gap-2">
         {cancelAction && (
-          <OrderStageDialog
-            order={order}
-            action={cancelAction}
-            stage={stage}
-            primary={false}
+          <CancelOrderButton
             disabled={transition.isPending}
+            onClick={() => setActiveDialog(cancelAction)}
           />
         )}
         <div className="flex items-center gap-2">
           <SecondaryActionsMenu
             actions={secondaryActions}
             disabled={transition.isPending}
-            onDirectAction={(action, el) => changeStage({ to: action }, el)}
-            onDialogAction={setActiveDialog}
+            onSelectAction={handleAction}
           />
           {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
-          <FooterConfirmButton
-            show={canConfirm}
-            disabled={transition.isPending}
-            onConfirm={(el) => changeStage({ to: 'to_pack' }, el)}
-          />
-          {primaryAction && (
-            <PrimaryStageButton
-              order={order}
-              action={primaryAction}
-              stage={stage}
+          {canConfirm && (
+            <Button
+              className="min-h-11 sm:min-h-10"
               disabled={transition.isPending}
-              onDirectAction={(action, el) => changeStage({ to: action }, el)}
-            />
+              onClick={() => mutate({ to: 'to_pack' })}
+            >
+              Confirm
+            </Button>
           )}
+          <PrimaryStageButton
+            action={canConfirm ? null : otherActions[0]}
+            disabled={transition.isPending}
+            onAction={handleAction}
+          />
         </div>
       </div>
-      <ActiveStageDialog
-        order={order}
-        action={activeDialog}
-        stage={stage}
-        disabled={transition.isPending}
-        onClose={() => setActiveDialog(null)}
-      />
+      {activeDialog && (
+        <OrderStageDialog
+          key={activeDialog}
+          order={order}
+          action={activeDialog}
+          stage={stage}
+          open
+          onOpenChange={(open) => !open && setActiveDialog(null)}
+        />
+      )}
     </div>
   );
 }
