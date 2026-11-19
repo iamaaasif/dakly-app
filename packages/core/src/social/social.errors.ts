@@ -22,6 +22,7 @@ const errors = {
   POST_NOT_DUE: { status: 409, message: 'This post is not due yet' },
   POST_TOKEN_EXPIRED: { status: 409, message: 'Reconnect the account before posting' },
   POST_PROVIDER_REJECTED: { status: 502, message: 'Meta rejected the post' },
+  POST_PUBLISH_WINDOW_ENDED: { status: 409, message: 'This post could not be published in time' },
   POST_PROVIDER_UNAVAILABLE: { status: 503, message: 'Meta is unavailable' },
   POST_PUBLISH_UNCONFIRMED: { status: 503, message: 'Check the account before posting again' },
   POST_CONTAINER_PROCESSING: { status: 503, message: 'Instagram is preparing the photo' },
