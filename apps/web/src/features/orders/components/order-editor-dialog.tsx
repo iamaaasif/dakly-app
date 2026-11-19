@@ -9,6 +9,8 @@ import {
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
+import { FormField } from '@dakly/ui/form-field';
+import { Input } from '@dakly/ui/input';
 
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
@@ -23,6 +25,11 @@ import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
+const newOrderDefaults: CreateOrderValues = {
+  buyer: { name: '' },
+  recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
+  items: [newLine],
+};
 
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
@@ -30,12 +37,9 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   const create = useCreateOrder();
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
     resolver: zodResolver(createOrderFormSchema),
-    defaultValues: {
-      buyer: { name: '' },
-      recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
-      items: [newLine],
-    },
+    defaultValues: newOrderDefaults,
   });
+  const busy = create.isPending || create.mustRetry;
   function save(input: CreateOrderInput) {
     create.mutate(input, { onSuccess: (order) => onSaved(order.id) });
   }
@@ -50,13 +54,13 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       title="New order"
       open
       onClose={onClose}
-      closeDisabled={create.isPending || create.mustRetry}
+      closeDisabled={busy}
       className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
     >
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={create.isPending || create.mustRetry} className="space-y-3">
+            <fieldset disabled={busy} className="space-y-3">
               <OrderRecipientFields />
               <ItemsAndAmounts />
             </fieldset>
@@ -69,15 +73,18 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
             </p>
           )}
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              disabled={create.isPending || create.mustRetry}
-            >
+            <Button variant="secondary" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" loading={create.isPending}>
               {create.mustRetry ? 'Retry save' : 'Save order'}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={form.handleSubmit((input) => save({ ...input, confirm: true }))}
+            >
+              Save as confirmed
             </Button>
           </div>
         </form>
@@ -115,29 +122,89 @@ function ItemsAndAmounts() {
           Choose a different variant for each line and enter a positive quantity.
         </p>
       )}
+      <OrderAmountFields />
       <OrderPreview variants={variants} />
     </>
   );
 }
 
+function OrderAmountFields() {
+  const { register } = useFormContext<CreateOrderValues>();
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {(
+        [
+          ['orderDiscountPoisha', 'Discount (৳)'],
+          ['advancePaidPoisha', 'Advance paid (৳)'],
+        ] as const
+      ).map(([name, label]) => (
+        <FormField key={name} name={name} label={label}>
+          {(props) => (
+            <Input
+              {...props}
+              inputMode="decimal"
+              {...register(name, { setValueAs: (value: string) => value.trim() || undefined })}
+            />
+          )}
+        </FormField>
+      ))}
+    </div>
+  );
+}
+
 function OrderPreview({ variants }: { variants: Record<string, VariantChoice> }) {
-  const [areaId, items, override] = useWatch<
+  const [areaId, items, override, discount, advance] = useWatch<
     CreateOrderValues,
-    ['recipient.areaId', 'items', 'deliveryChargePoisha']
-  >({ name: ['recipient.areaId', 'items', 'deliveryChargePoisha'] });
+    [
+      'recipient.areaId',
+      'items',
+      'deliveryChargePoisha',
+      'orderDiscountPoisha',
+      'advancePaidPoisha',
+    ]
+  >({
+    name: [
+      'recipient.areaId',
+      'items',
+      'deliveryChargePoisha',
+      'orderDiscountPoisha',
+      'advancePaidPoisha',
+    ],
+  });
   const quote = useOrderDelivery(areaId);
-  const delivery = override ? takaInput.safeParse(override).data : quote.data?.chargePoisha;
-  if (delivery === undefined) return null;
-  const total = items.reduce((sum, item) => {
+  const charge = moneyInputOr(override, quote.data?.chargePoisha);
+  const orderDiscount = moneyInputOr(discount, 0);
+  const paid = moneyInputOr(advance, 0);
+  if (orderDiscount === undefined) return null;
+  const subtotal = items.reduce((sum, item) => {
     const variant = variants[item.variantId];
     return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
       ? sum + variant.price * item.quantity
       : NaN;
-  }, delivery);
-  if (!Number.isSafeInteger(total) || total < 0) return null;
+  }, 0);
+  if (!Number.isSafeInteger(subtotal)) return null;
+  if (orderDiscount > subtotal) {
+    return (
+      <p role="alert" className="text-danger">
+        Discount cannot exceed the item total.
+      </p>
+    );
+  }
+  if (charge === undefined || paid === undefined) return null;
+  const total = subtotal - orderDiscount + charge;
+  if (!Number.isSafeInteger(total)) return null;
   return (
-    <p className="rounded-md bg-surface-muted p-3">
-      Cash on delivery <strong>{formatMoney(total)}</strong>
+    <p className="flex flex-wrap gap-x-4 rounded-md bg-surface-muted p-3">
+      <span>
+        Total <strong>{formatMoney(total)}</strong>
+      </span>
+      <span>
+        Cash on delivery <strong>{formatMoney(Math.max(0, total - paid))}</strong>
+      </span>
     </p>
   );
+}
+
+function moneyInputOr(value: string | undefined, fallback?: number) {
+  return value ? takaInput.safeParse(value).data : fallback;
 }
