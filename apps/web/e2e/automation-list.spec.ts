@@ -20,6 +20,7 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
   const [storeId] = fixture.storeIds;
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const ids: string[] = [];
+  const contactId = randomUUID();
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -49,7 +50,6 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     await workflow('Birthday gift', 'active');
     await workflow('Win back inactive customers', 'paused');
     await workflow('New collection reminder', 'draft');
-    const contactId = randomUUID();
     await db.pool.query(
       "insert into contacts(id,store_id,name,source,kind) values($1,$2,'নুসরাত জাহান','manual','customer')",
       [contactId, storeId],
@@ -93,6 +93,7 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
       ids,
     ]);
     await db.pool.query('delete from automations where id=any($1::uuid[])', [ids]);
+    await db.pool.query('delete from contacts where id=$1 and store_id=$2', [contactId, storeId]);
     await db.pool.end();
   }
 });
