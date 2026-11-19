@@ -17,6 +17,8 @@ type MetaConnection = Pick<
   | 'connectedByUserId'
 >;
 
+type InboundConnectionLookup = { id: string } | Pick<MetaConnection, 'kind' | 'externalAccountId'>;
+
 const connectionFields = {
   id: channelConnections.id,
   kind: channelConnections.kind,
@@ -67,6 +69,33 @@ export class ChannelConnectionsRepository {
       `),
     );
     return result.rows[0]?.conflict ?? false;
+  }
+
+  async findInbound(storeId: string, lookup: InboundConnectionLookup) {
+    const match =
+      'id' in lookup
+        ? eq(channelConnections.id, lookup.id)
+        : and(
+            eq(channelConnections.kind, lookup.kind),
+            eq(channelConnections.externalAccountId, lookup.externalAccountId),
+          );
+    const [connection] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: channelConnections.id,
+          kind: channelConnections.kind,
+          connectedAt: channelConnections.connectedAt,
+        })
+        .from(channelConnections)
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            ne(channelConnections.status, 'disconnected'),
+            match,
+          ),
+        ),
+    );
+    return connection;
   }
 
   saveMeta(storeId: string, account: MetaConnection, now: Date) {

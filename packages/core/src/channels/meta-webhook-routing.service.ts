@@ -1,8 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { ChannelDriver, ChannelKind } from '@dakly/providers/channel/channel-driver';
+import type {
+  ChannelDriver,
+  ChannelKind,
+  InboundMessage,
+} from '@dakly/providers/channel/channel-driver';
 
+import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
+import { ChannelConnectionsService } from './channel-connections.service';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
 
 export const META_WEBHOOK_DRIVER = Symbol('META_WEBHOOK_DRIVER');
@@ -11,7 +17,7 @@ const connectionKind = {
   messenger: 'facebook_page',
   instagram: 'instagram',
   whatsapp: 'whatsapp',
-} satisfies Record<ChannelKind, string>;
+} as const satisfies Record<ChannelKind, string>;
 
 @Injectable()
 export class MetaWebhookRoutingService {
@@ -19,6 +25,8 @@ export class MetaWebhookRoutingService {
     @Inject(MetaWebhooksRepository) private readonly repository: MetaWebhooksRepository,
     @Inject(META_WEBHOOK_DRIVER) private readonly driver: Pick<ChannelDriver, 'parseWebhook'>,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(ChannelConnectionsService) private readonly connections: ChannelConnectionsService,
+    @Inject(MessagingService) private readonly messaging: MessagingService,
   ) {}
 
   async process(webhookEventId: string) {
@@ -31,13 +39,49 @@ export class MetaWebhookRoutingService {
         connectionKind[channel],
       ]),
     );
-    const stores = accounts.size ? await this.repository.findStoresForAccounts(accounts) : [];
-    // CHAT-1 will pass messages for the resolved stores to MessagingService.
-    const reason = !accounts.size ? 'unsupported_delivery' : 'unknown_account';
-    await this.repository.markIgnored(
+    if (!accounts.size)
+      return this.repository.finish(
+        webhookEventId,
+        'ignored',
+        'unsupported_delivery',
+        this.clock.now(),
+      );
+    const stores = new Map(
+      (await this.repository.findStoresForAccounts(accounts)).map(
+        ({ externalAccountId, storeId }) => [externalAccountId, storeId],
+      ),
+    );
+    let processed = false;
+    let reason = 'unknown_account';
+    for (const message of messages) {
+      const externalAccountId = message.accountExternalId;
+      const storeId = stores.get(externalAccountId);
+      if (!storeId) continue;
+      const outcome = await this.receive(storeId, message);
+      if (outcome === 'stored' || outcome === 'duplicate') processed = true;
+      else reason = outcome;
+    }
+    await this.repository.finish(
       webhookEventId,
-      stores.some(({ storeId }) => storeId) ? 'messaging_inbound_pending' : reason,
+      processed ? 'processed' : 'ignored',
+      processed ? null : reason,
       this.clock.now(),
     );
+  }
+
+  private async receive(storeId: string, message: InboundMessage) {
+    if (!message.text) return 'unsupported_attachment';
+    const connection = await this.connections.findInbound(storeId, {
+      kind: connectionKind[message.channel],
+      externalAccountId: message.accountExternalId,
+    });
+    if (!connection) return 'unknown_account';
+    return this.messaging.receiveInboundMessage(storeId, {
+      connectionId: connection.id,
+      externalSenderId: message.senderExternalId,
+      externalMessageId: message.externalMessageId,
+      content: message.text,
+      sentAt: message.sentAt,
+    });
   }
 }

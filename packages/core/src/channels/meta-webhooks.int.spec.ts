@@ -168,6 +168,12 @@ describe('Meta webhook intake', () => {
                 timestamp: 1795053600000,
                 message: { mid: 'mid.001', text: 'দাম কত?' },
               },
+              {
+                sender: { id: '987' },
+                recipient: { id: accountId },
+                timestamp: 8.64e15,
+                message: { mid: 'mid.invalid', text: 'Invalid timestamp' },
+              },
             ],
           },
         ],
@@ -179,9 +185,9 @@ describe('Meta webhook intake', () => {
       try {
         if (status !== 'unknown')
           await admin.pool.query(
-            `insert into channel_connections (id, store_id, kind, external_account_id, display_name, status)
-           values ($1, $2, 'facebook_page', $3, 'Routing test', $4)`,
-            [randomUUID(), storeId, accountId, status],
+            `insert into channel_connections (id, store_id, kind, external_account_id, display_name, status, connected_at)
+           values ($1, $2, 'facebook_page', $3, 'Routing test', $4, $5)`,
+            [randomUUID(), storeId, accountId, status, new Date(1795053599000)],
           );
         expect((await post(payload)).statusCode).toBe(200);
         const [received] = await stored(payload);
@@ -190,19 +196,98 @@ describe('Meta webhook intake', () => {
         await handler.handle({ webhookEventId: received?.id });
         const [ignored] = await stored(payload);
         expect(ignored).toMatchObject({
-          status: 'ignored',
+          status: status === 'active' ? 'processed' : 'ignored',
           payload: null,
           processedAt: expect.any(Date),
-          error: status === 'active' ? 'messaging_inbound_pending' : 'unknown_account',
+          error: status === 'active' ? null : 'unknown_account',
         });
+        const messages = await admin.pool.query('select body from messages where store_id = $1', [
+          storeId,
+        ]);
+        expect(messages.rows).toEqual(status === 'active' ? [{ body: 'দাম কত?' }] : []);
         await handler.handle({ webhookEventId: received?.id });
         expect(await stored(payload)).toEqual([ignored]);
       } finally {
-        await admin.pool.query('delete from channel_connections where store_id = $1', [storeId]);
+        for (const table of [
+          'outbox_events',
+          'messages',
+          'conversations',
+          'contact_identities',
+          'contacts',
+          'channel_connections',
+        ])
+          await admin.pool.query(`delete from ${table} where store_id = $1`, [storeId]);
         await admin.pool.query('delete from stores where id = $1', [storeId]);
       }
     },
   );
+
+  it('keeps a delayed delivery from reaching the next owner of a Page', async () => {
+    const firstStore = randomUUID();
+    const secondStore = randomUUID();
+    const accountId = randomUUID();
+    const beforeTransfer = 1795053600000;
+    const payload = JSON.stringify({
+      object: 'page',
+      entry: [
+        {
+          id: accountId,
+          messaging: [
+            {
+              sender: { id: '987' },
+              recipient: { id: accountId },
+              timestamp: beforeTransfer,
+              message: { mid: 'mid.001', text: 'আগের দোকানের বার্তা' },
+            },
+          ],
+        },
+      ],
+    });
+    await admin.pool.query(
+      "insert into stores (id, name) values ($1, 'Old shop'), ($2, 'New shop')",
+      [firstStore, secondStore],
+    );
+    try {
+      await admin.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+        values ($1, $2, 'facebook_page', $3, 'Old Page', $4)`,
+        [randomUUID(), firstStore, accountId, new Date(beforeTransfer - 1000)],
+      );
+      expect((await post(payload)).statusCode).toBe(200);
+      const [received] = await stored(payload);
+      await admin.pool.query(
+        "update channel_connections set status = 'disconnected' where store_id = $1",
+        [firstStore],
+      );
+      await admin.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+        values ($1, $2, 'facebook_page', $3, 'Transferred Page', $4)`,
+        [randomUUID(), secondStore, accountId, new Date(beforeTransfer + 1000)],
+      );
+      await app.get(ProcessWebhookEventJob).handle({ webhookEventId: received?.id });
+      expect(await stored(payload)).toEqual([
+        expect.objectContaining({ status: 'ignored', error: 'stale_delivery', payload: null }),
+      ]);
+      for (const table of ['contacts', 'messages']) {
+        const result = await admin.pool.query(`select id from ${table} where store_id = $1`, [
+          secondStore,
+        ]);
+        expect(result.rows).toEqual([]);
+      }
+    } finally {
+      const stores = [firstStore, secondStore];
+      for (const table of [
+        'outbox_events',
+        'messages',
+        'conversations',
+        'contact_identities',
+        'contacts',
+        'channel_connections',
+      ])
+        await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [stores]);
+      await admin.pool.query('delete from stores where id = any($1::uuid[])', [stores]);
+    }
+  });
 
   it('rejects a signature for different bytes and logs the rejection without the payload', async () => {
     const payload = delivery('instagram');

@@ -33,5 +33,6 @@ function createMetaAuthorizationDriver(): MetaAuthorizationDriver | null {
     ChannelConnectionsService,
     ChannelConnectionsRepository,
   ],
+  exports: [ChannelConnectionsService],
 })
 export class MetaAuthorizationModule {}

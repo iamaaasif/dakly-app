@@ -77,8 +77,7 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
   Messenger or Instagram opt-in has to come from the customer, so `granted` there fails with
   `400 CONSENT_OPT_IN_NEEDS_CUSTOMER`. A withdrawal is accepted on every channel except email. Email is not accepted (D20). A contact that is
   missing or in another store returns `404 CONTACT_NOT_FOUND`.
-- STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
-  `ConsentService.record` when it receives them.
+- An inbound `STOP` or `বন্ধ` on WhatsApp or Messenger writes a withdrawal through `ConsentService.record` in the same transaction as the message. A repeated delivery leaves the consent history unchanged.
 
 The web app has two customer screens.
 

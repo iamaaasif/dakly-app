@@ -56,10 +56,15 @@ export class MetaWebhooksRepository {
     return result.rows;
   }
 
-  async markIgnored(id: string, reason: string, processedAt: Date) {
+  async finish(
+    id: string,
+    status: 'processed' | 'ignored',
+    error: string | null,
+    processedAt: Date,
+  ) {
     await this.database
       .update(webhookEvents)
-      .set({ status: 'ignored', error: reason, payload: null, processedAt })
+      .set({ status, error, payload: null, processedAt })
       .where(
         and(
           eq(webhookEvents.id, id),
