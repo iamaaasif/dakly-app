@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
 import { STAFF_AUDIT_MAINTENANCE } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
+import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job';
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { WAKE_DUE_RUNS } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
@@ -38,6 +39,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),
       scheduleJob(this.bulk, SWEEP_CONTACT_STATS, DAY_MS),
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
+      scheduleJob(this.sync, SWEEP_ANALYTICS, DAY_MS),
     ]);
   }
 }

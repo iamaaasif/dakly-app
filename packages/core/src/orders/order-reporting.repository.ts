@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
 
 import { orders } from '@dakly/db/schema/orders';
 
@@ -24,6 +24,30 @@ export class OrderReportingRepository {
     return order;
   }
 
+  async reportBuyerIds(
+    storeId: string,
+    after: string | null,
+    { timeZone, now, limit }: { timeZone: string; now: Date; limit: number },
+  ) {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({ id: sql<string>`${orders.buyerContactId}` })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            isNotNull(orders.buyerContactId),
+            after ? gt(orders.buyerContactId, after) : undefined,
+            ne(orders.stage, 'cancelled'),
+            sql`${orders.createdAt} >= (${retainedDay(now, timeZone)})::timestamp at time zone ${timeZone}`,
+          ),
+        )
+        .orderBy(asc(orders.buyerContactId))
+        .limit(limit),
+    );
+    return rows.map(({ id }) => id);
+  }
+
   async buyerActivityDays(storeId: string, contactId: string, timeZone: string, now: Date) {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ day: string; firstDay: number }>(sql`
@@ -44,21 +68,42 @@ export class OrderReportingRepository {
     return rows;
   }
 
-  async countCreatedOrders(storeId: string, day: string, timeZone: string) {
-    const [total] = await this.database.forStore(storeId, (tx) =>
+  async oldestRetainedOrderDay(storeId: string, timeZone: string, now: Date) {
+    const [order] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ count: count() })
+        .select({ day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text` })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            sql`${orders.createdAt} >= (${retainedDay(now, timeZone)})::timestamp at time zone ${timeZone}`,
+          ),
+        )
+        .orderBy(asc(orders.createdAt))
+        .limit(1),
+    );
+    return order?.day;
+  }
+
+  orderCountsForRange(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    const { from, through, timeZone } = range;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
+          count: count(),
+        })
         .from(orders)
         .where(
           and(
             eq(orders.storeId, storeId),
             ne(orders.stage, 'cancelled'),
-            sql`${orders.createdAt} >= ${day}::date::timestamp at time zone ${timeZone}`,
-            sql`${orders.createdAt} < (${day}::date + 1)::timestamp at time zone ${timeZone}`,
+            sql`${orders.createdAt} >= ${from}::date::timestamp at time zone ${timeZone}`,
+            sql`${orders.createdAt} < (${through}::date + 1)::timestamp at time zone ${timeZone}`,
           ),
-        ),
+        )
+        .groupBy(sql`1`),
     );
-    return total!.count;
   }
 
   async buyerContactId(storeId: string, orderId: string) {

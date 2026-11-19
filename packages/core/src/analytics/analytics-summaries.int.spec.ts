@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
+import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
@@ -156,5 +157,49 @@ describe('Daily order summaries', () => {
       payload: { orderId: first, from: 'to_confirm', to: 'cancelled' },
     });
     expect(await activities()).toEqual([{ day: '2026-11-10', first_day: '2026-11-10' }]);
+  });
+
+  it('rebuilds a date range from orders, including an old missing cancellation', async () => {
+    await order(fixture.a, '2026-11-13T06:00:00Z');
+    const cancelled = await order(fixture.a, '2026-11-14T06:00:00Z');
+    const worker = app.get(SummarizeOrderCreated);
+    await worker.handle({ ...event(fixture.a, cancelled), type: 'order.created' });
+    await fixture.connection.pool.query(
+      "update orders set stage='cancelled', cancel_reason='other' where id=$1",
+      [cancelled],
+    );
+    const summaries = app.get(AnalyticsSummariesService);
+    await summaries.reconcileOrderRange(fixture.a, { from: '2026-11-13', through: '2026-11-14' });
+    const rows = (await ordersFor(fixture.a)).filter(({ day }) =>
+      ['2026-11-13', '2026-11-14'].includes(day),
+    );
+    expect(rows).toMatchObject([
+      { day: '2026-11-13', value: '1' },
+      { day: '2026-11-14', value: '0' },
+    ]);
+  });
+
+  it('repairs a missing buyer day and removes activity for an excluded buyer', async () => {
+    const contactId = randomUUID();
+    await fixture.connection.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'সুমন','manual','customer')",
+      [contactId, fixture.a],
+    );
+    await order(fixture.a, '2026-11-15T12:00:00Z', contactId);
+    const repairs = app.get(AnalyticsSummariesService);
+    const activity = async () =>
+      (
+        await fixture.connection.pool.query(
+          "select day::text from store_daily_metrics where store_id=$1 and metric='buyer_activity' and dimension=$2",
+          [fixture.a, contactId],
+        )
+      ).rows;
+    await repairs.reconcileBuyerPage(fixture.a, null);
+    expect(await activity()).toEqual([{ day: '2026-11-15' }]);
+    await fixture.connection.pool.query('update contacts set is_blocked=true where id=$1', [
+      contactId,
+    ]);
+    await repairs.reconcileBuyerPage(fixture.a, null);
+    expect(await activity()).toEqual([]);
   });
 });
