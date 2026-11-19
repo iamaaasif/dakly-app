@@ -140,9 +140,12 @@ function throwFirstRejection(results: PromiseSettledResult<unknown>[]) {
 function removeJobsBeforeClose(...jobs: Job[]) {
   const fixture = fixtures.getStore()!;
   checkFixture(fixture);
+  for (const job of jobs) expect(job).toBeDefined();
   let removal: Promise<void> | undefined;
   const remove = () =>
-    (removal ??= Promise.allSettled(jobs.map((job) => job.remove())).then(throwFirstRejection));
+    (removal ??= Promise.allSettled(jobs.map(async (job) => job.remove())).then(
+      throwFirstRejection,
+    ));
   fixture.cleanups.push(remove);
   return remove;
 }
@@ -292,7 +295,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await fixtures.run(fixture, runTest);
     } finally {
       await drainFixture(fixture);
-      const cleaned = await Promise.allSettled(fixture.cleanups.map((cleanup) => cleanup()));
+      const cleaned = await Promise.allSettled(fixture.cleanups.map(async (cleanup) => cleanup()));
       const closed = await Promise.allSettled(
         fixture.applications.map(async (started) => (await started).close()),
       );
