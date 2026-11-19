@@ -125,8 +125,10 @@ The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embe
 
 Messenger and Instagram
 
-1. Facebook Login for Business returns a user token. Dakly lists the user's Pages and linked Instagram accounts.
-2. The owner picks which to connect. Dakly stores the long-lived Page token (encrypted) and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
+1. `POST /channel-connections/meta/start` returns the Facebook Login for Business URL. An Owner or Admin can start this flow. The login state can be used once in the same store and session, within 10 minutes.
+2. The Integrations screen passes the returned code and state to `POST /channel-connections/meta/accounts`. The API exchanges them and lists Pages the member can manage and their linked Instagram accounts. The response includes an opaque selection id. The credential stays encrypted in Valkey for up to 10 minutes, bound to the same store, member and session.
+3. Graph login uses a User access token configuration with `pages_show_list`, `pages_manage_metadata`, `instagram_basic` and `pages_read_engagement`. Add `business_management` for Pages linked to a Meta business account. The member must have a role on that business. Meta lists `ads_read` or `ads_management` for Instagram user fields when the Page role was granted through Business Manager. Credentials for Graph login alone leave webhook intake disabled. [Page discovery requirements](https://developers.facebook.com/docs/graph-api/changelog/non-versioned-changes/nvc-2023#september-15-2023) · [Instagram user requirements](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/v21.0/)
+4. The second CHN-2 PR adds selection. The owner picks which accounts to connect. Dakly stores the encrypted long-lived Page token and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
 
 WhatsApp
 

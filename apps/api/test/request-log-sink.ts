@@ -17,6 +17,9 @@ export function captureRequestLogs(app: INestApplicationContext) {
         process.stderr.write(messages.join(''));
       });
     },
+    contents() {
+      return messages.join('');
+    },
     restore() {
       params.pinoHttp = original;
     },

@@ -34,3 +34,23 @@ export type ChannelCredentials = {
   accessToken: string;
   accountExternalId: string;
 };
+
+export type MetaPage = {
+  id: string;
+  name: string;
+  accessToken: string;
+  instagram: { id: string; name: string } | null;
+};
+
+export type MetaAuthorizationDriver = {
+  authorizationUrl(state: string): string;
+  exchangeAuthorizationCode(code: string): Promise<string>;
+  listAccounts(userToken: string): Promise<MetaPage[]>;
+};
+
+export class MetaRequestError extends Error {
+  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
+    super('Meta request failed');
+    this.name = 'MetaRequestError';
+  }
+}
