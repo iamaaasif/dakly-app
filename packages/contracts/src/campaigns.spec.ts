@@ -58,7 +58,7 @@ describe('campaign list query', () => {
     expect(campaignListQuerySchema.safeParse(query).success).toBe(false);
   });
 
-  it('accepts second- and millisecond-precision date boundaries', () => {
+  it('accepts a same-day creation date range', () => {
     expect(
       campaignListQuerySchema.safeParse({
         createdFrom: '2026-11-20',
