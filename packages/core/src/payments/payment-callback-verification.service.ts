@@ -23,19 +23,19 @@ export class PaymentCallbackVerificationService {
     @Inject(PAYMENT_DRIVERS) private readonly drivers: readonly PaymentDriver[],
   ) {}
 
-  async process(id: string, attemptId: string, finalAttempt: boolean) {
-    const receipt = await this.receipts.findReceived(id, attemptId);
+  async process(id: string, finalAttempt: boolean) {
+    const receipt = await this.receipts.findReceived(id);
     if (!receipt) return;
-    const { body, headers } = receipt;
+    const { body, headers } = receipt.payload;
     const driver = this.drivers.find((candidate) => candidate.gateway === receipt.provider);
     try {
       const verified = driver && (await this.verify(driver, Buffer.from(body, 'base64'), headers));
       if (!verified)
         this.logger.warn({ event: 'security', webhookEventId: id }, 'Payment callback rejected');
       const status = verified ? 'processed' : 'ignored';
-      await this.receipts.finish(id, attemptId, status, this.clock.now());
+      await this.receipts.finish(id, status, this.clock.now());
     } catch (error) {
-      if (finalAttempt) await this.receipts.finish(id, attemptId, 'failed', this.clock.now());
+      if (finalAttempt) await this.receipts.finish(id, 'failed', this.clock.now());
       throw error;
     }
   }

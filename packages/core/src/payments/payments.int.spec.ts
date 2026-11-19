@@ -24,7 +24,6 @@ import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
-import { createHttpServer } from '../platform/http/http-server';
 import { PaymentCallbackVerificationService } from './payment-callback-verification.service';
 import { PaymentCallbacksController } from './payment-callbacks.controller';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
@@ -65,7 +64,7 @@ const driver: PaymentDriver = {
   },
 };
 const callbackRepository = new PaymentCallbacksRepository(app.db);
-const jobs: { webhookEventId: string; attemptId: string }[] = [];
+const jobs: { webhookEventId: string }[] = [];
 const encryption = new EnvelopeEncryption({
   currentKeyVersion: 1,
   masterKeys: new Map([[1, createSecretKey(Buffer.alloc(32, 1))]]),
@@ -97,11 +96,10 @@ let storeA: string;
 let storeB: string;
 
 beforeAll(async () => {
-  http = await NestFactory.create<NestFastifyApplication>(
-    PaymentTestModule,
-    new FastifyAdapter(createHttpServer([])),
-    { rawBody: true, logger: false },
-  );
+  http = await NestFactory.create<NestFastifyApplication>(PaymentTestModule, new FastifyAdapter(), {
+    rawBody: true,
+    logger: false,
+  });
   http.useGlobalFilters(new AppErrorFilter());
   await http.init();
   const created = await admin.db
@@ -153,35 +151,44 @@ function paid(merchantReference: string, amountPoisha = 12000) {
 }
 
 async function deliver(payload: string, key = signingKey, signed = payload) {
-  externalIds.add(createHash('sha256').update(payload).digest('hex'));
+  const headers = signatureHeaders(key, signed);
+  externalIds.add(receiptId(payload, headers));
   return http.inject({
     method: 'POST',
     url: '/webhooks/payments/bkash',
     headers: {
       'content-type': 'application/json',
-      'x-test-signature': createHmac('sha256', key).update(signed).digest('hex'),
+      ...headers,
     },
     payload,
   });
 }
 
-async function receipt(payload: string) {
+function signatureHeaders(key: string, signed: string) {
+  return { 'x-test-signature': createHmac('sha256', key).update(signed).digest('hex') };
+}
+
+function receiptId(payload: string, headers: ReturnType<typeof signatureHeaders>) {
+  return createHash('sha256').update(payload).update(JSON.stringify(headers)).digest('hex');
+}
+
+async function receipt(payload: string, key = signingKey, signed = payload) {
   const [row] = await admin.db
     .select()
     .from(webhookEvents)
     .where(
       and(
         eq(webhookEvents.provider, 'bkash'),
-        eq(webhookEvents.externalId, createHash('sha256').update(payload).digest('hex')),
+        eq(webhookEvents.externalId, receiptId(payload, signatureHeaders(key, signed))),
       ),
     );
   return row;
 }
 
-async function processReceipt(payload: string) {
-  const id = (await receipt(payload))!.id;
-  const job = jobs.findLast((candidate) => candidate.webhookEventId === id)!;
-  await verifier.process(job.webhookEventId, job.attemptId, false);
+async function processReceipt(payload: string, key = signingKey, signed = payload) {
+  const id = (await receipt(payload, key, signed))!.id;
+  const job = jobs.find((candidate) => candidate.webhookEventId === id)!;
+  await verifier.process(job.webhookEventId, false);
 }
 
 async function shopCredential(storeId: string, key: string) {
@@ -208,10 +215,15 @@ describe('Payment intents (Postgres)', () => {
     const original = JSON.stringify(intent.merchantReference);
     const tampered = original + ' ';
     expect((await deliver(tampered, signingKey, original)).statusCode).toBe(204);
-    await processReceipt(tampered);
-    expect(await receipt(tampered)).toMatchObject({ status: 'ignored', payload: null });
+    await processReceipt(tampered, signingKey, original);
+    expect(await receipt(tampered, signingKey, original)).toMatchObject({
+      status: 'ignored',
+      payload: null,
+    });
     const deliveries = await Promise.all([deliver(original), deliver(original)]);
     expect(deliveries.map(({ statusCode }) => statusCode)).toEqual([204, 204]);
+    const valid = (await receipt(original))!.id;
+    expect(jobs.filter((job) => job.webhookEventId === valid)).toHaveLength(1);
     await Promise.all([processReceipt(original), processReceipt(original)]);
     const rows = await admin.db
       .select()
@@ -231,7 +243,7 @@ describe('Payment intents (Postgres)', () => {
     expect(changes).toHaveLength(1);
   });
 
-  it('ignores another shop signature and accepts the correct signature for the same bytes', async () => {
+  it('keeps a valid shop delivery when a forged callback has the same body', async () => {
     const ownKey = 'shop-a-callback-key';
     const otherKey = 'shop-b-callback-key';
     const credentialId = await shopCredential(storeA, ownKey);
@@ -253,14 +265,14 @@ describe('Payment intents (Postgres)', () => {
         .where(
           and(eq(paymentEvents.paymentIntentId, intent.id), eq(paymentEvents.kind, 'callback')),
         );
-    expect((await deliver(payload, otherKey)).statusCode).toBe(204);
-    await processReceipt(payload);
-    expect(await receipt(payload)).toMatchObject({ status: 'ignored', payload: null });
-    expect(await callbackRows()).toEqual([]);
-
     expect((await deliver(payload, ownKey)).statusCode).toBe(204);
-    await processReceipt(payload);
-    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
+    expect((await deliver(payload, otherKey)).statusCode).toBe(204);
+    expect((await receipt(payload, ownKey))!.id).not.toBe((await receipt(payload, otherKey))!.id);
+    await processReceipt(payload, otherKey);
+    expect(await receipt(payload, otherKey)).toMatchObject({ status: 'ignored', payload: null });
+    expect(await callbackRows()).toEqual([]);
+    await processReceipt(payload, ownKey);
+    expect(await receipt(payload, ownKey)).toMatchObject({ status: 'processed', payload: null });
     expect(await callbackRows()).toHaveLength(1);
     expect(await repository.find(storeA, intent.id)).toMatchObject({
       status: 'pending',
@@ -272,53 +284,6 @@ describe('Payment intents (Postgres)', () => {
     const payload = JSON.stringify('x'.repeat(64 * 1024));
     expect((await deliver(payload)).statusCode).toBe(413);
     expect(await receipt(payload)).toBeUndefined();
-  });
-
-  it('keeps a queued valid delivery when an invalid signature arrives for the same body', async () => {
-    const intent = await pendingIntent();
-    const payload = JSON.stringify(intent.merchantReference);
-    expect((await deliver(payload)).statusCode).toBe(204);
-    const valid = jobs.at(-1)!;
-    expect((await deliver(payload, 'other-key')).statusCode).toBe(204);
-    const invalid = jobs.at(-1)!;
-    expect(invalid.webhookEventId).toBe(valid.webhookEventId);
-    await verifier.process(invalid.webhookEventId, invalid.attemptId, false);
-    await verifier.process(valid.webhookEventId, valid.attemptId, false);
-    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
-    expect(await repository.find(storeA, intent.id)).toMatchObject({ nextCheckAt: now });
-  });
-
-  it('limits queued signatures for one body and preserves the earlier attempts', async () => {
-    const intent = await pendingIntent();
-    const payload = JSON.stringify(intent.merchantReference);
-    expect((await deliver(payload)).statusCode).toBe(204);
-    const valid = jobs.at(-1)!;
-    const filled = await Promise.all(
-      Array.from({ length: 31 }, (_, index) => deliver(payload, `wrong-key-${index}`)),
-    );
-    expect(filled.every((response) => response.statusCode === 204)).toBe(true);
-    expect((await deliver(payload, 'overflow-key')).statusCode).toBe(429);
-    expect((await deliver(payload)).statusCode).toBe(204);
-    await verifier.process(valid.webhookEventId, valid.attemptId, false);
-    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
-  });
-
-  it('starts a fresh retention window when a delivery reopens an ignored receipt', async () => {
-    const intent = await pendingIntent();
-    const payload = JSON.stringify(intent.merchantReference);
-    await deliver(payload, 'other-key');
-    await processReceipt(payload);
-    expect(await receipt(payload)).toMatchObject({ status: 'ignored', receivedAt: now });
-    const later = new Date('2026-11-27T03:00:00.000Z');
-    const originalClock = clock.now;
-    clock.now = () => later;
-    try {
-      expect((await deliver(payload)).statusCode).toBe(204);
-      expect(await receipt(payload)).toMatchObject({ status: 'received', receivedAt: later });
-      await processReceipt(payload);
-    } finally {
-      clock.now = originalClock;
-    }
   });
 
   it('refuses a verified payment with a different amount', async () => {

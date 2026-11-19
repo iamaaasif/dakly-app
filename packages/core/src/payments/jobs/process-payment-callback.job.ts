@@ -8,7 +8,7 @@ import { PaymentCallbackVerificationService } from '../payment-callback-verifica
 export const PROCESS_PAYMENT_CALLBACK = 'process-payment-callback';
 
 // Store routing starts only after the worker loads the global receipt.
-const payload = z.strictObject({ webhookEventId: z.uuid(), attemptId: z.hash('sha256') });
+const payload = z.strictObject({ webhookEventId: z.uuid() });
 
 @HandlesJob({ queue: QUEUES.inbound, name: PROCESS_PAYMENT_CALLBACK })
 export class ProcessPaymentCallbackJob implements JobHandler {
@@ -18,7 +18,6 @@ export class ProcessPaymentCallbackJob implements JobHandler {
   ) {}
 
   async handle(data: unknown, finalAttempt: boolean) {
-    const { webhookEventId, attemptId } = payload.parse(data);
-    await this.verification.process(webhookEventId, attemptId, finalAttempt);
+    await this.verification.process(payload.parse(data).webhookEventId, finalAttempt);
   }
 }
