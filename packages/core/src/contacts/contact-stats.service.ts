@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { ContactSource } from '@dakly/contracts/contacts';
 
-import { OrdersService } from '../orders/orders.service';
+import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS } from '../platform/time';
@@ -23,7 +23,7 @@ const INTENTIONAL_SOURCES: readonly ContactSource[] = [
 export class ContactStatsService {
   constructor(
     @Inject(ContactStatsRepository) private readonly repository: ContactStatsRepository,
-    @Inject(OrdersService) private readonly orders: OrdersService,
+    @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
@@ -66,7 +66,7 @@ export class ContactStatsService {
       timeZone,
     }: {
       contact: NonNullable<Awaited<ReturnType<ContactStatsRepository['lockContact']>>>;
-      totals: Awaited<ReturnType<OrdersService['contactOrderTotals']>>;
+      totals: Awaited<ReturnType<OrderReportingService['contactOrderTotals']>>;
       now: Date;
       timeZone: string;
     },
@@ -97,7 +97,7 @@ function isCustomer(
 }
 
 function purchaseStage(
-  totals: Awaited<ReturnType<OrdersService['contactOrderTotals']>>,
+  totals: Awaited<ReturnType<OrderReportingService['contactOrderTotals']>>,
   sinceLast: number,
   daysSince: (date: Date) => number,
 ): ContactStatsWrite['lifecycleStage'] {

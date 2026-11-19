@@ -24,7 +24,6 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { applyOrderFulfilment } from './order-fulfilment';
-import { OrderReportingRepository } from './order-reporting.repository';
 import { moveOrderReservations } from './order-reservations';
 import { returnRisk } from './order-risk';
 import {
@@ -55,7 +54,6 @@ type CreateEditor = {
 export class OrdersService {
   constructor(
     @Inject(OrdersRepository) private readonly repository: OrdersRepository,
-    @Inject(OrderReportingRepository) private readonly reporting: OrderReportingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProductsService) private readonly products: ProductsService,
@@ -65,14 +63,6 @@ export class OrdersService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
-
-  contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
-    return this.reporting.contactOrderTotals(storeId, contactId, timeZone);
-  }
-
-  buyerContactId(storeId: string, orderId: string) {
-    return this.reporting.buyerContactId(storeId, orderId);
-  }
 
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
     return this.transaction.run(storeId, async () => {
