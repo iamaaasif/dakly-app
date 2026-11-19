@@ -16,6 +16,7 @@ import {
   canApproveSupport,
   canChangeExtensions,
   canDo,
+  canReviewSocialPosts,
   hasStoreAdminRole,
 } from './permissions';
 import { TeamRepository } from './team.repository';
@@ -46,6 +47,10 @@ export class TeamService {
 
   canManageChannelConnections(access: StoreAccess): boolean {
     return hasStoreAdminRole(access);
+  }
+
+  canReviewSocialPosts(access: StoreAccess, action: 'view' | 'approve'): boolean {
+    return canReviewSocialPosts(access, action);
   }
 
   async accessFor(storeId: string, userId: string): Promise<StoreAccess | undefined> {
