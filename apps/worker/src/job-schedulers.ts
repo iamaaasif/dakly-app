@@ -8,7 +8,9 @@ import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job'
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SWEEP_AUTOMATION_BIRTHDAYS } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WAKE_DUE_RUNS } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { PURGE_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/purge-webhook-events.job';
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
+import { RECOVER_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/recover-webhook-events.job';
 import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-stats.job';
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { QUEUE_CONVERSATION_RETURNS } from '@dakly/core/messaging/jobs/queue-conversation-returns.job';
@@ -36,6 +38,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.transactional, STAFF_ALERT_RELAY),
       scheduleJob(this.transactional, RELAY_OUTBOX, RELAY_OUTBOX_INTERVAL_MS),
       scheduleJob(this.transactional, WAKE_SNOOZED_NOTIFICATIONS),
+      scheduleJob(this.transactional, RECOVER_WEBHOOK_EVENTS, MINUTE_MS),
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
       scheduleJob(this.workflow, WAKE_DUE_RUNS, MINUTE_MS),
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),
@@ -44,6 +47,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
       scheduleJob(this.sync, QUEUE_CONVERSATION_RETURNS, MINUTE_MS),
       scheduleJob(this.bulk, SWEEP_ANALYTICS, { pattern: '0 0 * * *', tz: 'UTC' }),
+      scheduleJob(this.bulk, PURGE_WEBHOOK_EVENTS, { pattern: '0 0 * * *', tz: 'UTC' }),
     ]);
   }
 }
