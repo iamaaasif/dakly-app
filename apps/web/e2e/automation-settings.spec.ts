@@ -41,7 +41,7 @@ test('changes a ready template delay and publishes the workflow', async ({
         await page.screenshot({ path: resolve(evidence, `workflow-settings-${width}.png`) });
     }
     await delay.fill('90');
-    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
     await expect(
       page.getByRole('dialog').getByText('0 people are in this workflow now.'),
     ).toBeVisible();

@@ -1,8 +1,6 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
@@ -17,6 +15,7 @@ import { useAutomation, useSaveAutomation } from '../api/automation-settings';
 import { statusLabels, triggerLabels } from '../automation-labels';
 import { settingsSchema, type SettingsInput, type SettingsValues } from '../workflow-settings-form';
 import { WorkflowEntrySettings } from './workflow-entry-settings';
+import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowStepSettings } from './workflow-step-settings';
 import { SessionDialog } from '@/components/session-dialog';
 
@@ -132,32 +131,16 @@ function SettingsHeader({
   pending: boolean;
   onPublish: () => void;
 }) {
+  const subtitle = `${statusLabels[workflow.status]} · When ${triggerLabels[workflow.graph.trigger.key]}`;
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <Link
-          href="/automations"
-          aria-label="Back to Automations"
-          className="grid size-10 shrink-0 place-items-center rounded-md border border-input-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-        </Link>
-        <div className="min-w-0">
-          <h1 className="font-bold break-words">{workflow.name}</h1>
-          <p className="text-sm text-text-muted">
-            {statusLabels[workflow.status]} · When {triggerLabels[workflow.graph.trigger.key]}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" type="submit" disabled={pending}>
-          Save draft
-        </Button>
-        <Button loading={pending} onClick={onPublish}>
-          Publish
-        </Button>
-      </div>
-    </header>
+    <WorkflowPageHeader title={workflow.name} subtitle={subtitle}>
+      <Button variant="secondary" type="submit" disabled={pending}>
+        Save draft
+      </Button>
+      <Button loading={pending} onClick={onPublish}>
+        {workflow.status === 'draft' ? 'Start workflow' : 'Publish changes'}
+      </Button>
+    </WorkflowPageHeader>
   );
 }
 
