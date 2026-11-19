@@ -12,7 +12,10 @@ const graph = 'https://graph.facebook.com/v27.0/';
 const requestTimeoutMs = 5_000;
 const idResult = z.object({ id: z.string().min(1) });
 const storyResult = z.object({ post_id: z.string().min(1) });
-const errorResult = z.object({ error: z.object({ code: z.number() }) });
+const errorResult = z.object({
+  error: z.object({ code: z.number(), is_transient: z.boolean().optional() }),
+});
+const retryableCodes = [1, 2, 4, 17, 32, 613];
 const containerStates = {
   IN_PROGRESS: 'processing',
   FINISHED: 'ready',
@@ -23,6 +26,14 @@ const containerStates = {
 const containerResult = z.object({
   status_code: z.enum(['IN_PROGRESS', 'FINISHED', 'PUBLISHED', 'ERROR', 'EXPIRED']),
 });
+
+function responseError(status: number, payload: unknown) {
+  const error = errorResult.safeParse(payload).data?.error;
+  if (!error || status < 400 || status === 408 || status >= 500)
+    return new MetaPublishingError('unavailable');
+  const retryable = status === 429 || error.is_transient || retryableCodes.includes(error.code);
+  return new MetaPublishingError(retryable ? 'retryable' : 'rejected');
+}
 
 export class MetaGraphPublishingDriver implements MetaPublishingDriver {
   async uploadFacebookPhotos(account: MetaPostingAccount, photoUrls: string[]) {
@@ -119,15 +130,21 @@ export class MetaGraphPublishingDriver implements MetaPublishingDriver {
         'Content-Type': 'application/json',
       },
       body: body && JSON.stringify(body),
+      redirect: 'error',
       signal: AbortSignal.timeout(requestTimeoutMs),
     }).catch(() => {
       throw new MetaPublishingError('unavailable');
     });
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const rejected = response.status < 500 && errorResult.safeParse(payload).success;
-      throw new MetaPublishingError(rejected ? 'rejected' : 'unavailable');
-    }
+    const payload: unknown = await response
+      .text()
+      .then((text): unknown =>
+        JSON.parse(text, (key, value: unknown, context?: { source: string }) =>
+          // Meta returns a numeric story ID. Its original digits may exceed JavaScript's safe integer range.
+          key === 'post_id' && typeof value === 'number' ? context?.source : value,
+        ),
+      )
+      .catch(() => null);
+    if (!response.ok) throw responseError(response.status, payload);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new MetaPublishingError('unavailable');
     return parsed.data;

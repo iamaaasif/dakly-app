@@ -59,15 +59,39 @@ describe('MetaGraphPublishingDriver', () => {
     expect(JSON.parse(publish![1].body)).toEqual({ creation_id: 'carousel' });
   });
 
+  it('publishes a Facebook story and preserves a numeric ID above the safe integer limit', async () => {
+    const body = '{"success":true,"post_id":9007199254740993}';
+    const fetch = vi.fn().mockResolvedValue(new Response(body));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      driver.publishFacebook(account, { ...content, kind: 'story' }, ['photo']),
+    ).resolves.toBe('9007199254740993');
+    const [[url, options]] = fetch.mock.calls;
+    expect(new URL(url).pathname).toMatch(/\/123\/photo_stories$/);
+    expect(options).toMatchObject({ redirect: 'error' });
+    expect(JSON.parse(options.body)).toEqual({ photo_id: 'photo' });
+  });
+
   it('distinguishes a confirmed rejection from an unknown publishing result', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ error: { code: 190 } }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ error: { code: 32 } }, { status: 400 }))
+      .mockResolvedValueOnce(
+        Response.json({ error: { code: 2, is_transient: true } }, { status: 408 }),
+      )
       .mockRejectedValueOnce(new Error('disconnected'));
     vi.stubGlobal('fetch', fetch);
 
     await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
       code: 'rejected',
+    });
+    await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+      code: 'retryable',
+    });
+    await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+      code: 'unavailable',
     });
     await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
       code: 'unavailable',

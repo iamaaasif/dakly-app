@@ -21,8 +21,14 @@ export type MetaPublishingDriver = {
   comment(account: MetaPostingAccount, postId: string, message: string): Promise<void>;
 };
 
+const messages = {
+  rejected: 'Meta rejected the request',
+  retryable: 'Meta asked to retry the request',
+  unavailable: 'Meta did not confirm the result',
+};
+
 export class MetaPublishingError extends Error {
-  constructor(readonly code: 'rejected' | 'unavailable') {
-    super(code === 'rejected' ? 'Meta rejected the request' : 'Meta did not confirm the result');
+  constructor(readonly code: keyof typeof messages) {
+    super(messages[code]);
   }
 }

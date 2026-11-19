@@ -188,11 +188,16 @@ The worker queues a publish job for each target. Instagram waits for its media
 container to finish. A successful target stays published when another target
 fails. Each target gets three retries over 30 minutes and a Fix now notification
 if it fails. A check 24 hours before publishing flags an account that needs
-reconnecting or a photo that is missing. If Meta receives a publish request
-without returning a result, Dakly checks the Instagram container for confirmation.
-For a Facebook result it cannot confirm, Dakly asks the shop to check the Page
-before posting again. Live publishing requires Meta's review of the app's
-publishing permissions.
+reconnecting or a photo that is missing. Instagram requires JPEG photos.
+
+If Meta receives a publish request without returning a result, Dakly checks the
+Instagram container for confirmation. For a Facebook result it cannot confirm,
+Dakly asks the shop to check the Page before posting again.
+
+Facebook and Instagram use the connected Page token. Live publishing requires
+Meta app review for `pages_manage_posts` and `instagram_content_publish`. Stores
+may need to reconnect to grant them. First comments also need the network's comment
+permission.
 
 Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
 caption generation and checks generated text before scheduling.
