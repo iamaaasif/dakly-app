@@ -5,7 +5,6 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { automationTemplates } from '@dakly/contracts/automations/templates';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
@@ -1147,7 +1146,7 @@ fixture('POST /automations', async () => {
   });
   expect(response.json()).toMatchObject({
     templateKey: 'birthday',
-    graph: automationTemplates.birthday.graph,
+    graph: { trigger: { key: 'birthday' }, firstStepKey: 'morning' },
   });
   expect((await f.row('automations', response.json().id)).store_id).toBe(b.id);
   expect(await f.row('automations', id)).toEqual(before);
