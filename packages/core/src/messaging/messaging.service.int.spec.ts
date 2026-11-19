@@ -353,6 +353,18 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await errorCode(send(storeA, contact!.id, 'Hello'))).toBe(
       'MESSAGING_CONTACT_HAS_NO_PHONE',
     );
+    // An approved number is checked first: the phone it was approved for is gone.
+    expect(
+      await errorCode(
+        messaging.send(storeA, {
+          channel: 'sms',
+          contactId: contact!.id,
+          body: 'Hello',
+          operationKey: `test-no-phone-${contact!.id}`,
+          destination: '01712345610',
+        }),
+      ),
+    ).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
   });
 
