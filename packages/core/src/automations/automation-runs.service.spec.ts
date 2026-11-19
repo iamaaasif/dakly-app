@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
 import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
+import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
@@ -55,7 +56,7 @@ function graphWith(first: AutomationStep): AutomationGraph {
 // One claimed run in memory. A move applies only under the claim it was given, as in Postgres.
 class FakeRunsRepository {
   run!: ClaimedRun & { id: string; lastError?: string | null };
-  steps: NewRunStep[] = [];
+  steps: (NewRunStep & Pick<RunStepChange, 'providerMessageId'>)[] = [];
 
   constructor(readonly schedulerTime: () => Promise<Date>) {}
 
@@ -102,16 +103,21 @@ class FakeRunsRepository {
     return (
       step && {
         id: step.id!,
-        firstTriedAt: step.firstTriedAt ?? step.sentAt!,
-        latestDispatchAt: step.sentAt!,
+        firstTriedAt: step.firstTriedAt ?? null,
+        latestDispatchAt: step.sentAt ?? null,
         optOutUrl: step.optOutUrl ?? null,
-        destination: step.destination ?? null,
+        destinationHash: step.destinationHash ?? null,
+        providerMessageId: step.providerMessageId ?? null,
       }
     );
   }
 
   async changeStep(_storeId: string, _runId: string, stepKey: string, change: RunStepChange) {
-    this.steps = this.steps.map((row) => (row.stepKey === stepKey ? { ...row, ...change } : row));
+    const retryDetails =
+      change.outcome === 'sending' ? {} : { destinationHash: null, optOutUrl: null };
+    this.steps = this.steps.map((row) =>
+      row.stepKey === stepKey ? { ...row, ...change, ...retryDetails } : row,
+    );
   }
 }
 
@@ -136,6 +142,7 @@ describe('AutomationRunsService', () => {
   let recheckReason: SkipReason | undefined;
   let recheckDefer: Date | undefined;
   let duringRecheck: () => void;
+  let duringPhoneRead: () => void;
   let contactPhone: string;
   let reported: string[];
   let sent: OutgoingMessage[];
@@ -175,6 +182,9 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(env, 'loadEnv').mockReturnValue({
+      CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
+    } as env.Env);
     repository = new FakeRunsRepository(async () => {
       if (clockFailsAfterGate && gateCommitted && !sent.length)
         throw new Error('Scheduler clock unavailable before provider dispatch');
@@ -188,6 +198,7 @@ describe('AutomationRunsService', () => {
     recheckReason = undefined;
     recheckDefer = undefined;
     duringRecheck = () => undefined;
+    duringPhoneRead = () => undefined;
     contactPhone = '01712345678';
     reported = [];
     sent = [];
@@ -238,6 +249,10 @@ describe('AutomationRunsService', () => {
     const contacts = {
       findTags: async () => tags,
       findRecipients: async () => [{ phone: contactPhone }],
+      getPhoneForSend: async () => {
+        duringPhoneRead();
+        return contactPhone;
+      },
       changeTag: async (
         _storeId: string,
         _contactId: string,
@@ -334,6 +349,8 @@ describe('AutomationRunsService', () => {
       automations as unknown as AutomationsService,
     );
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it.each([
     [{ until: 'duration', minutes: 90 }, '2026-11-16T06:30:00.000Z'],
@@ -523,7 +540,8 @@ describe('AutomationRunsService', () => {
           kind: 'send',
           category: 'marketing',
           channel: 'sms',
-          optOutUrl,
+          optOutUrl: null,
+          destinationHash: null,
           outcome: 'sent',
           providerMessageId: 'sms-1',
           sentAt: now,
@@ -796,10 +814,12 @@ describe('AutomationRunsService', () => {
       expect(sent).toHaveLength(1);
     });
 
-    it('freezes the phone and ends a resend to a contact whose phone changed as unconfirmed', async () => {
+    it('ends a resend to a contact whose phone no longer matches the saved hash as unconfirmed', async () => {
       providerError = new Error('connection reset');
       await start(send);
-      expect(repository.steps).toEqual([expect.objectContaining({ destination: '01712345678' })]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ destinationHash: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
+      ]);
       providerError = undefined;
       contactPhone = '01812345678';
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
@@ -813,7 +833,86 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
       expect(repository.run.lastError).toContain("The contact's phone changed");
       expect(repository.run.lastError).toContain('credits stay reserved');
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'unconfirmed', destinationHash: null, optOutUrl: null }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+    });
+
+    it('leaves a legacy send with incomplete retry details unconfirmed', async () => {
+      repository.steps = [{ id: 'legacy', stepKey: 'first', kind: 'send', outcome: 'sending' }];
+
+      await start(send);
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
+      expect(repository.run.lastError).toContain('credits stay reserved');
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ id: 'legacy', outcome: 'unconfirmed' }),
+      ]);
+      expect(ledger).toEqual([]);
+    });
+
+    it.each([
+      'empty URL',
+      'invalid URL',
+      'transactional URL',
+      'no first attempt time',
+      'known provider ID',
+    ] as const)('does not submit an uncertain send again with %s', async (badData) => {
+      providerError = new Error('connection reset');
+      await start(badData === 'transactional URL' ? { ...send, category: 'transactional' } : send);
+      const previous = repository.steps[0]!;
+      if (badData === 'empty URL') previous.optOutUrl = '';
+      if (badData === 'invalid URL') previous.optOutUrl = 'https://links.dakly.test/other';
+      if (badData === 'transactional URL') previous.optOutUrl = optOutUrl;
+      if (badData === 'no first attempt time') delete previous.firstTriedAt;
+      if (badData === 'known provider ID') previous.providerMessageId = 'accepted-before-crash';
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({
+          outcome: 'unconfirmed',
+          destinationHash: null,
+          optOutUrl: null,
+        }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+      if (badData === 'known provider ID')
+        expect(repository.steps[0]?.providerMessageId).toBe('accepted-before-crash');
+    });
+
+    it('does not send when the final phone lookup crosses the retry deadline', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      const firstTriedAt = new Date(now.getTime() - 36 * HOUR + 1000);
+      repository.steps[0]!.firstTriedAt = firstTriedAt;
+      providerError = undefined;
+      duringPhoneRead = () => {
+        databaseNow = new Date(now.getTime() + 2000);
+      };
+      repository.run = { ...repository.run, status: 'running', claimedAt: now, wakeAt: now };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run.lastError).toContain('The SMS provider did not answer for 36 hours');
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'unconfirmed', firstTriedAt }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
 
     it('does not resend a message whose run was due more than a day ago', async () => {

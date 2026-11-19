@@ -1,3 +1,4 @@
+import { TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
 import type { MessagingService } from '../messaging/messaging.service';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -24,6 +25,49 @@ import {
 
 const RETRY_LIMIT_MS = 36 * HOUR_MS;
 const MAX_DELAY_MS = 6 * HOUR_MS;
+const optOutPath = new RegExp(`/s/[a-zA-Z0-9]{${TRACKED_LINK_CODE_LENGTH}}$`, 'u');
+const system = { kind: 'system' } as const;
+
+export type RetryableSend = SendingStep & {
+  firstTriedAt: Date;
+  latestDispatchAt: Date;
+  destinationHash: string;
+};
+
+export type RetryCheck =
+  { result: StepResult; at: Date } | { result: undefined; at: Date; destination: string };
+
+export function hasRetryDetails(step: SendStep, row: SendingStep): row is RetryableSend {
+  return (
+    row.providerMessageId === null &&
+    validTime(row.firstTriedAt) &&
+    validTime(row.latestDispatchAt) &&
+    /^[a-f0-9]{64}$/u.test(row.destinationHash ?? '') &&
+    (step.category === 'marketing' ? validOptOutUrl(row.optOutUrl) : row.optOutUrl === null)
+  );
+}
+
+function validTime(time: Date | null): time is Date {
+  return time instanceof Date && Number.isFinite(time.getTime());
+}
+
+function validOptOutUrl(value: string | null): boolean {
+  if (!value || /\s/u.test(value)) return false;
+  const url = URL.parse(value);
+  return (
+    url !== null &&
+    /^https?:$/u.test(url.protocol) &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    optOutPath.test(url.pathname)
+  );
+}
+
+export function endIncompleteRetry(now: Date): StepResult {
+  return endWithUnknownOutcome(failed('The SMS is missing its original delivery details', now));
+}
 
 function exhausted(firstTriedAt: Date, now: Date): StepResult | undefined {
   if (now.getTime() - firstTriedAt.getTime() < RETRY_LIMIT_MS) return undefined;
@@ -42,7 +86,7 @@ export function endExpiredRetry(
   );
 }
 
-// Lock the contact through the resend checks before taking the workflow lock for dispatch.
+// Recheck the destination under the contact lock and renew after waiting for the workflow lock.
 export async function claimRetryDispatch({
   repository,
   transaction,
@@ -57,9 +101,9 @@ export async function claimRetryDispatch({
   step: SendStep;
   facts: Pick<RunFacts, 'storeId' | 'wakeAt'>;
   recheck: (
-    locked: SendingStep,
+    locked: RetryableSend,
     lockWorkflow: () => Promise<boolean>,
-  ) => Promise<{ result: StepResult | undefined; at: Date } | undefined>;
+  ) => Promise<RetryCheck | undefined>;
 }) {
   return transaction.run(storeId, async () => {
     const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
@@ -67,21 +111,29 @@ export async function claimRetryDispatch({
     const locked = await repository.findSendingStep(storeId, claim.runId, claim.stepKey, true);
     if (!locked) return undefined;
     const checkedAt = await repository.schedulerTime(storeId);
-    const { firstTriedAt } = locked;
-    const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
     const lockWorkflow = () => repository.moveRunIfLive(storeId, claim, unchanged, 'retry');
-    const checked = early
-      ? (await lockWorkflow()) && { result: early, at: checkedAt }
-      : await recheck(locked, lockWorkflow);
+    const finishIfLive = async (resultAt: (at: Date) => StepResult) => {
+      if (!(await lockWorkflow())) return undefined;
+      const claimedAt = await repository.schedulerTime(storeId);
+      await repository.moveRun(storeId, claim, { status: 'running', claimedAt });
+      return { result: resultAt(claimedAt), claim: { ...claim, claimedAt }, at: claimedAt };
+    };
+    if (!hasRetryDetails(step, locked)) return finishIfLive(endIncompleteRetry);
+    const { firstTriedAt, latestDispatchAt, optOutUrl } = locked;
+    const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
+    if (early) return finishIfLive(() => early);
+    const checked = await recheck(locked, lockWorkflow);
     if (!checked) return undefined;
-    const { result, at } = checked;
+    const claimedAt = await repository.schedulerTime(storeId);
+    const result = checked.result ?? endExpiredRetry(step, firstTriedAt, wakeAt, claimedAt);
     // A slower worker must not age out a previously submitted message early.
-    const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
+    const sentAt = checked.at > latestDispatchAt ? checked.at : latestDispatchAt;
     const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
     if (!result) await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-    const claimedAt = await repository.schedulerTime(storeId);
     await repository.moveRun(storeId, claim, { status: 'running', claimedAt });
-    return { result, claim: { ...claim, claimedAt }, at: sentAt };
+    const renewed = { ...claim, claimedAt };
+    if (result) return { result, claim: renewed, at: checked.at };
+    return { ...checked, claim: renewed, at: sentAt, optOutUrl, firstTriedAt };
   });
 }
 
@@ -190,12 +242,12 @@ export async function settleAutomationCredits(
       reservationId,
       quantity: credits.quantity,
       idempotencyKey: `${key}:charge`,
-      actor: { kind: 'system' },
+      actor: system,
     });
   else
     await wallets.release(storeId, {
       reservationId,
       idempotencyKey: `${key}:release`,
-      actor: { kind: 'system' },
+      actor: system,
     });
 }

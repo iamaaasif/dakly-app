@@ -26,8 +26,12 @@ import {
   claimRetryDispatch,
   deliverAutomationSms,
   endExpiredRetry,
+  endIncompleteRetry,
+  hasRetryDetails,
   retryDecision,
   settleAutomationCredits,
+  type RetryableSend,
+  type RetryCheck,
 } from './automation-send-retry';
 import {
   type Delivery,
@@ -52,6 +56,7 @@ import {
   type RunFacts,
   type SendStep,
   type StepResult,
+  workflowDestinationHash,
 } from './automation-step-rules';
 import { AutomationsService } from './automations.service';
 
@@ -364,17 +369,17 @@ export class AutomationRunsService {
       outcome: 'sending',
       channel: 'sms',
       ...times,
+      destinationHash: workflowDestinationHash(storeId, destination),
       optOutUrl: optOut?.url,
-      destination,
     });
     return messageBody(step, optOut?.url);
   }
 
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
     const { storeId, contactId, wakeAt } = facts;
-    const { firstTriedAt, optOutUrl, destination } = started;
     const preflight = await this.repository.schedulerTime(storeId);
-    const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
+    if (!hasRetryDetails(step, started)) return endIncompleteRetry(preflight);
+    const preparedSender = endExpiredRetry(step, started.firstTriedAt, wakeAt, preflight)
       ? undefined
       : await this.messaging.prepareSender(storeId);
     const gated = await claimRetryDispatch({
@@ -398,12 +403,12 @@ export class AutomationRunsService {
         claim: gated.claim,
         contactId,
         step,
-        body: messageBody(step, optOutUrl ?? undefined),
-        destination,
+        body: messageBody(step, gated.optOutUrl ?? undefined),
+        destination: gated.destination,
         preparedSender,
         isFirstTry: false,
       },
-      firstTriedAt,
+      gated.firstTriedAt,
       gated.at,
     );
   }
@@ -411,23 +416,33 @@ export class AutomationRunsService {
   private async recheckResend(
     step: SendStep,
     facts: RunFacts,
-    { id, firstTriedAt }: SendingStep,
+    { id, firstTriedAt, destinationHash }: RetryableSend,
     lockWorkflow: () => Promise<boolean>,
-  ) {
+  ): Promise<RetryCheck | undefined> {
+    const { storeId, contactId, wakeAt } = facts;
     const gate = await this.sendPolicy.recheckForSend(
-      facts.storeId,
-      { contactId: facts.contactId, channel: 'sms', category: step.category },
+      storeId,
+      { contactId, channel: 'sms', category: step.category },
       id,
       lockWorkflow,
     );
     if (!gate) return undefined;
     const { decision, at } = gate;
     const exit = await this.refreshExitReason(facts, at);
-    const now = await this.repository.schedulerTime(facts.storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const result = exit
       ? endWithUnknownOutcome(exited(exit, now))
-      : (endExpiredRetry(step, firstTriedAt, facts.wakeAt, now) ??
+      : (endExpiredRetry(step, firstTriedAt, wakeAt, now) ??
         retryDecision(step, firstTriedAt, decision, now));
-    return { result, at };
+    if (result) return { result, at };
+    const destination = await this.contacts.getPhoneForSend(storeId, contactId);
+    if (destination && workflowDestinationHash(storeId, destination) === destinationHash)
+      return { result: undefined, at, destination };
+    return {
+      result: endWithUnknownOutcome(
+        failed("The contact's phone changed after this message was decided", now),
+      ),
+      at,
+    };
   }
 }
