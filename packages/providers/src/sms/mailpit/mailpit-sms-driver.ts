@@ -21,12 +21,14 @@ const capturePage = z.object({
 
 export class MailpitSmsDriver implements SmsDriver {
   private readonly smtp: { host: string; port: number };
+  private readonly transport;
   private readonly apiUrl: string;
   private readonly pending = new Map<string, Promise<SmsSendResult>>();
 
   constructor({ apiUrl, ...options }: { host: string; port: number; apiUrl: string }) {
     this.apiUrl = apiUrl;
     this.smtp = options;
+    this.transport = this.transportForSignal();
   }
 
   send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult> {
@@ -84,7 +86,8 @@ export class MailpitSmsDriver implements SmsDriver {
   private async smtpResponse(message: SmsMessage, messageId?: string, signal?: AbortSignal) {
     if (signal?.aborted) throw new SmsSendTimeout();
     try {
-      const { response } = await this.transport(signal).sendMail({
+      const transport = signal ? this.transportForSignal(signal) : this.transport;
+      const { response } = await transport.sendMail({
         // The store's sender shows as the From name; the shared sender has none.
         from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
         to: `${message.to}@sms.test`,
@@ -100,7 +103,7 @@ export class MailpitSmsDriver implements SmsDriver {
     }
   }
 
-  private transport(signal?: AbortSignal) {
+  private transportForSignal(signal?: AbortSignal) {
     return createTransport({
       ...this.smtp,
       secure: false,
