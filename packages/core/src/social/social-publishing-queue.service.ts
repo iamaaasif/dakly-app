@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 
 import type { ScheduledPostTarget } from '@dakly/contracts/social';
@@ -8,34 +8,34 @@ import type { MetaPublishingDriver } from '@dakly/providers/social/meta-publishi
 import { Clock } from '../platform/clock';
 import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
-import { StoresService } from '../stores/stores.service';
+import { CHECK_POST_TARGET } from './jobs/check-post-target.job';
+import { PUBLISH_POST_TARGET } from './jobs/publish-post-target.job';
+import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
 import { META_PUBLISHING_DRIVER } from './social-publishing.service';
 import { SocialRepository } from './social.repository';
 
-export const PUBLISH_POST_TARGET = 'publish-post-target';
-export const CHECK_POST_TARGET = 'check-post-target';
 const BATCH_SIZE = 100;
 const retryDelay = Math.floor((30 * MINUTE_MS) / 7);
 
 @Injectable()
-export class SocialPublishingQueueService implements OnApplicationBootstrap {
+export class SocialPublishingQueueService {
   constructor(
     @Inject(SocialRepository) private readonly repository: SocialRepository,
+    @Inject(SocialPublishRecoveryRepository)
+    private readonly recovery: SocialPublishRecoveryRepository,
     @Inject(META_PUBLISHING_DRIVER) private readonly driver: MetaPublishingDriver | null,
     @Inject(Clock) private readonly clock: Clock,
-    @Inject(StoresService) private readonly stores: StoresService,
     @InjectQueue(QUEUES.outbound) private readonly queue: Queue<ScheduledPostTarget>,
   ) {}
 
-  async onApplicationBootstrap() {
+  async recoverDueTargets() {
     if (!this.driver) return;
+    const before = new Date(this.clock.now().getTime() + DAY_MS);
+    const failedIds = new Set((await this.queue.getFailed()).map(({ id }) => id));
     let after: string | null = null;
-    // The relay may have already marked events from before publishing was deployed as sent.
     for (;;) {
-      const stores = await this.stores.maintenanceStoreIds(after, BATCH_SIZE);
-      for (const storeId of stores) {
-        if (await this.stores.isActive(storeId)) await this.restoreJobs(storeId);
-      }
+      const stores = await this.recovery.dueStoreIds(before, after, BATCH_SIZE);
+      for (const storeId of stores) await this.restoreJobs(storeId, before, failedIds);
       if (stores.length < BATCH_SIZE) return;
       after = stores.at(-1) ?? null;
     }
@@ -43,11 +43,14 @@ export class SocialPublishingQueueService implements OnApplicationBootstrap {
 
   async enqueueTarget(storeId: string, input: Omit<ScheduledPostTarget, 'storeId'>) {
     if (!this.driver) return;
-    const data = { storeId, ...input };
-    const scheduled = Date.parse(input.scheduledFor);
+    await this.queue.addBulk(this.jobsFor({ storeId, ...input }));
+  }
+
+  private jobsFor(data: ScheduledPostTarget) {
+    const scheduled = Date.parse(data.scheduledFor);
     const remaining = scheduled - this.clock.now().getTime();
-    const jobId = `${input.postTargetId}-${scheduled}`;
-    return this.queue.addBulk([
+    const jobId = `${data.postTargetId}-${scheduled}`;
+    return [
       {
         name: CHECK_POST_TARGET,
         data,
@@ -71,20 +74,21 @@ export class SocialPublishingQueueService implements OnApplicationBootstrap {
           removeOnFail: 100,
         },
       },
-    ]);
+    ];
   }
 
-  private async restoreJobs(storeId: string) {
+  private async restoreJobs(storeId: string, before: Date, failedIds: Set<string | undefined>) {
     let after: string | undefined;
     for (;;) {
-      const rows = await this.repository.pendingPublishTargets(storeId, after, BATCH_SIZE);
-      for (const row of rows) {
-        if (!row.scheduledFor) continue;
-        const jobs = await this.enqueueTarget(storeId, {
-          postTargetId: row.id,
-          scheduledFor: row.scheduledFor.toISOString(),
-        });
-        for (const job of jobs ?? []) await this.retryFailed(job);
+      const rows = await this.repository.pendingPublishTargets(storeId, before, after, BATCH_SIZE);
+      const planned = rows.flatMap(({ id, scheduledFor }) =>
+        scheduledFor
+          ? this.jobsFor({ storeId, postTargetId: id, scheduledFor: scheduledFor.toISOString() })
+          : [],
+      );
+      const jobs = planned.length ? await this.queue.addBulk(planned) : [];
+      for (const failed of jobs.filter(({ id }) => failedIds.has(id))) {
+        await this.retryFailed(failed);
       }
       if (rows.length < BATCH_SIZE) return;
       after = rows.at(-1)?.id;
@@ -96,7 +100,7 @@ export class SocialPublishingQueueService implements OnApplicationBootstrap {
     try {
       await job.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
     } catch (failure) {
-      // A second worker can restore the same job during startup.
+      // Overlapping sweeps can restore the same job.
       if (await job.isFailed()) throw failure;
     }
   }

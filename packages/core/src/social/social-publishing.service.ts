@@ -92,6 +92,7 @@ export class SocialPublishingService {
     if (!driver || !match) return;
     const { target } = match;
     if (target.publishedAt) {
+      if (target.errorCode === 'POST_COMMENT_UNCONFIRMED') this.checkDue(target);
       await this.finish(storeId, target);
       return;
     }
@@ -99,6 +100,11 @@ export class SocialPublishingService {
     const attempted = await this.recordTarget(storeId, target, {
       action: 'post.publish_attempted',
       attempts: target.attempts + 1,
+    }).catch(async (failure: unknown) => {
+      if (!finalAttempt || !(failure instanceof AppError) || failure.code !== 'POST_STORE_INACTIVE')
+        throw failure;
+      await this.finish(storeId, target, failure);
+      return false;
     });
     if (!attempted) return;
     let receipt: PublishReceipt | undefined;
@@ -123,11 +129,12 @@ export class SocialPublishingService {
       errorCode,
       errorMessage: errorCode ? socialError(errorCode).message : null,
     });
-    if (!confirmed || !(await this.finish(storeId, target))) return;
+    if (!confirmed) return;
     if (firstComment && externalId)
       await this.comment(storeId, target, firstComment.verifyToken, () =>
         firstComment.send(externalId),
       );
+    await this.finish(storeId, target);
   }
 
   private checkDue(target: PublishingTarget) {
@@ -236,6 +243,7 @@ export class SocialPublishingService {
       throw socialError('POST_PUBLISH_UNCONFIRMED');
     }
     const content = await this.contentFor(storeId, { post, target }, kind);
+    if (!(await this.stores.isActive(storeId))) throw socialError('POST_STORE_INACTIVE');
     if (kind === 'instagram') return this.sendInstagram(context, content);
     const photos = content.photoUrls.length
       ? await this.meta('facebook_upload_photos', () =>
@@ -383,7 +391,7 @@ export class SocialPublishingService {
           action === 'post.comment_attempted') &&
         !(await this.stores.isActive(storeId))
       )
-        return false;
+        throw socialError('POST_STORE_INACTIVE');
       if (
         !(await this.repository.updatePublishTarget(storeId, target, {
           ...changes,

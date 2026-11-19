@@ -17,6 +17,8 @@ import { StoresModule } from '../stores/stores.module';
 import { CheckPostTargetJob } from './jobs/check-post-target.job';
 import { PublishPostTargetJob } from './jobs/publish-post-target.job';
 import { QueuePostOnScheduledJob } from './jobs/queue-post-on-scheduled.job';
+import { RecoverPostTargetsJob } from './jobs/recover-post-targets.job';
+import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
 import { SocialPublishingQueueService } from './social-publishing-queue.service';
 import { META_PUBLISHING_DRIVER, SocialPublishingService } from './social-publishing.service';
 import { SocialRepository } from './social.repository';
@@ -35,11 +37,13 @@ import { SocialRepository } from './social.repository';
   ],
   providers: [
     SocialRepository,
+    SocialPublishRecoveryRepository,
     SocialPublishingService,
     SocialPublishingQueueService,
     CheckPostTargetJob,
     PublishPostTargetJob,
     QueuePostOnScheduledJob,
+    RecoverPostTargetsJob,
     {
       provide: META_PUBLISHING_DRIVER,
       useFactory: () => {

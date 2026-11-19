@@ -4,8 +4,9 @@ import { scheduledPostTargetSchema } from '@dakly/contracts/social';
 
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
-import { PUBLISH_POST_TARGET } from '../social-publishing-queue.service';
 import { SocialPublishingService } from '../social-publishing.service';
+
+export const PUBLISH_POST_TARGET = 'publish-post-target';
 
 @HandlesJob({ queue: QUEUES.outbound, name: PUBLISH_POST_TARGET })
 export class PublishPostTargetJob implements JobHandler {

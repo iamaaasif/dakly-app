@@ -201,7 +201,7 @@ export class SocialRepository {
     return match && { post: match.post, target: { ...match.target, scheduledFor } };
   }
 
-  pendingPublishTargets(storeId: string, after: string | undefined, limit: number) {
+  pendingPublishTargets(storeId: string, before: Date, after: string | undefined, limit: number) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: postTargets.id, scheduledFor: postTargets.scheduledFor })
@@ -210,6 +210,7 @@ export class SocialRepository {
           and(
             eq(postTargets.storeId, storeId),
             inArray(postTargets.status, ['scheduled', 'publishing']),
+            lte(postTargets.scheduledFor, before),
             after ? gt(postTargets.id, after) : undefined,
           ),
         )
