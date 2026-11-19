@@ -13,12 +13,10 @@ export type ClaimableRecipient = {
   contactId: string;
   destinationAddress: string | null;
   providerMessageId: string | null;
-  claimedAt: Date | null;
   dispatchStartedAt: Date | null;
   optOutLinkCode: string | null;
-  status: 'queued' | 'sending';
   sendAttempts: number;
-};
+} & ({ status: 'queued'; claimedAt: Date | null } | { status: 'sending'; claimedAt: Date });
 type RecipientRow = typeof campaignRecipients.$inferSelect;
 type RecipientStatus = RecipientRow['status'];
 type RecipientChange = Pick<RecipientRow, 'status'> &
@@ -113,7 +111,8 @@ export class CampaignSendingRepository {
         .limit(1)
         .for('update', { skipLocked: true }),
     );
-    return row;
+    // The expiry predicate excludes null claim times from sending rows.
+    return row as ClaimableRecipient | undefined;
   }
 
   async isCurrentClaim(storeId: string, id: string, claimedAt: Date) {
@@ -151,6 +150,7 @@ export class CampaignSendingRepository {
     const { status: currentStatus, errorCode, providerMessageId } = campaignRecipients;
     const sameStatus = eq(currentStatus, status);
     const unknown = and(eq(currentStatus, 'failed'), eq(errorCode, 'outcome_unknown'));
+    // A late provider acceptance can replace an unknown outcome for the same receipt.
     const guardedStatus =
       uncertainReceipt !== undefined
         ? and(

@@ -113,8 +113,9 @@ export class CampaignSenderService {
       );
       if (!recipient) return { kind: 'stop' };
       if (recipient.status === 'sending') {
-        if (recipient.providerMessageId)
-          return this.claimReceipt(storeId, recipient, now, this.estimateCredits(campaign));
+        const { providerMessageId } = recipient;
+        if (providerMessageId)
+          return this.claimReceipt(storeId, { ...recipient, providerMessageId }, now, campaign);
         if (campaign.status === 'cancelled' || recipient.sendAttempts >= SEND_ATTEMPTS)
           return this.skipSubmission(storeId, campaign, { recipient });
       }
@@ -229,11 +230,10 @@ export class CampaignSenderService {
 
   private async claimReceipt(
     storeId: string,
-    recipient: ClaimableRecipient,
+    recipient: ClaimableRecipient & { providerMessageId: string; claimedAt: Date },
     claimedAt: Date,
-    credits: number,
+    campaign: LockedCampaign,
   ): Promise<Claim> {
-    if (!recipient.providerMessageId || !recipient.claimedAt) return { kind: 'next' };
     const dispatchStartedAt = recipient.dispatchStartedAt ?? recipient.claimedAt;
     const claimed = await this.repository.changeRecipient(
       storeId,
@@ -248,7 +248,7 @@ export class CampaignSenderService {
       providerMessageId: recipient.providerMessageId,
       claimedAt,
       dispatchStartedAt,
-      credits,
+      credits: this.estimateCredits(campaign),
     };
   }
 
