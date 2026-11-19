@@ -228,6 +228,8 @@ Nightly reconciliation repairs up to 31 order days or 100 buyers per job and pru
 
 Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
 
+The attribution record is kept on the order. It stores the winning evidence ID and eligibility time, source, channel, item amount after discount in poisha, and the window used. Recording credit leaves the staff order editor revision unchanged. Clearing a cancelled order removes the record. The same order and evidence can be recorded again without adding another attribution event.
+
 The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 
 ### Acceptance

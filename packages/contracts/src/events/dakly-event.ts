@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { attributionCreatedEventSchema, attributionRemovedEventSchema } from './analytics';
 import { campaignApprovedEventSchema } from './campaigns';
 import {
   channelConnectedEventSchema,
@@ -78,6 +79,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
   orderEditedEventSchema,
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;
