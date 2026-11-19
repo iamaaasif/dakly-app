@@ -120,6 +120,11 @@ export class ContactsService {
     });
   }
 
+  async findActiveChannelIdentity(storeId: string, input: InboundIdentity) {
+    const identity = await this.identities.findInboundIdentity(storeId, input);
+    return identity?.deletedAt === null ? identity : undefined;
+  }
+
   findOutboundIdentity(storeId: string, input: OutboundIdentity) {
     return this.identities.findOutboundIdentity(storeId, input);
   }

@@ -70,21 +70,22 @@ export class MetaWebhookRoutingService {
         ({ kind, externalAccountId, storeId }) => [accountKey(kind, externalAccountId), storeId],
       ),
     );
-    let processed = false;
-    let reason = 'unknown_account';
+    const outcomes = [];
     for (const event of events) {
       const storeId = stores.get(
         accountKey(connectionKind[event.channel], event.accountExternalId),
       );
       if (!storeId) continue;
-      const outcome =
+      outcomes.push(
         'kind' in event
           ? await this.receipts.record(storeId, event, delivery.receivedAt, finalAttempt)
-          : await this.routeMessage(storeId, event, delivery.receivedAt);
-      if (outcome === 'receipt_pending') throw new Error('Meta receipt is awaiting a send result');
-      if (['stored', 'duplicate'].includes(outcome)) processed = true;
-      else reason = outcome;
+          : await this.routeMessage(storeId, event, delivery.receivedAt),
+      );
     }
+    if (outcomes.includes('receipt_pending'))
+      throw new Error('Meta receipt is awaiting a send result');
+    const processed = outcomes.some((outcome) => ['stored', 'duplicate'].includes(outcome));
+    const reason = outcomes.at(-1) ?? 'unknown_account';
     await this.repository.finish(
       webhookEventId,
       processed ? 'processed' : 'ignored',

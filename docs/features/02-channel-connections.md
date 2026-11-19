@@ -145,6 +145,8 @@ Webhook intake
 3. The handler saves one payload per signed delivery in `webhook_events`. Its external id is the SHA-256 hex digest of the verified bytes. The handler queues one `process-webhook-event` job by row id and returns 200. An identical retry restores a missing job for an unprocessed row.
 4. The worker parses Messenger and Instagram messages with the driver and looks up each connected store through `store_id_for_channel_account(kind, externalId)`. It passes text messages for known accounts to `MessagingService.receiveInboundMessage`. Messaging checks when Dakly received the delivery and when Meta sent the message against the current connection’s start time. It ignores messages in the first minute of a connection to cover clock skew and keep a previous shop’s messages private after a transfer. The worker records a result and clears the payload. CHAT-2 adds receipt handling. CHAT-7 adds stored media and attachment-only messages before live intake.
 
+Messenger Pages subscribe to delivery, read and echo webhooks on connect. For staging, reconnect any Page linked before those fields were added and enable Instagram's `messaging_seen` field in the Meta app's Webhooks settings.
+
 A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
 
 CHN-9 adds recovery for acknowledged deliveries whose Valkey jobs are lost and the seven-day webhook payload purge. Complete CHN-9 before enabling live intake.

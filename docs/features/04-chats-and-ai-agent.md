@@ -314,7 +314,7 @@ Outbound: `MessagingService.send` saves a Messenger or Instagram reply as `queue
 
 The worker saves a pending attempt before calling Meta outside the transaction. Acceptance records the provider ID and emits `message.sent`. A known rejection records a failure and emits `message.failed`. An uncertain attempt stays queued with `send_unconfirmed` for reconciliation. A signed Messenger echo from the configured Meta app can confirm an attempt when it matches the stored message ID and recipient. The worker never resends an unconfirmed attempt.
 
-Signed Messenger delivery and read receipts and Instagram seen receipts apply to the matching recipient in the connected shop. A late delivery cannot move a read message backward. If a receipt reaches an attempt before the send result is saved, the webhook job retries within its existing attempt limit.
+Signed Messenger delivery and read receipts and Instagram seen receipts apply to the matching recipient in the connected shop. A late delivery records its first delivery timestamp and leaves a read message in the read state. If a receipt reaches an attempt before the send result is saved, the webhook job retries within its existing attempt limit.
 
 The outbound message schema keeps the chosen recipient identity and the category used by the send gate. The identity belongs to the same store as the message. The Meta transport uses the selected connection's encrypted credentials and checks that the credential is still current before marking a rejected connection for reconnection.
 

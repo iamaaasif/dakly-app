@@ -150,6 +150,10 @@ describe('Meta webhook intake', () => {
     const job = await queue.getJob(rows[0]!.id);
     expect(job?.name).toBe('process-webhook-event');
     expect(job?.data).toEqual({ webhookEventId: rows[0]!.id });
+    expect(job?.opts).toMatchObject({
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+    });
     expect(await job?.getState()).toBe('waiting');
   });
 
@@ -310,8 +314,8 @@ describe('Meta webhook intake', () => {
     const sender = { id: 'customer-receipt-fixture' };
     const recipient = { id: account };
     const handler = app.get(ProcessWebhookEventJob);
-    async function enqueueEvent(data: Record<string, unknown>) {
-      const body = JSON.stringify({ object: 'page', entry: [{ id: account, messaging: [data] }] });
+    async function enqueueEvent(...data: Record<string, unknown>[]) {
+      const body = JSON.stringify({ object: 'page', entry: [{ id: account, messaging: data }] });
       expect((await post(body)).statusCode).toBe(200);
       const [received] = await stored(body);
       return received!.id;
@@ -361,12 +365,12 @@ describe('Meta webhook intake', () => {
       await processEvent({ ...read, sender: { id: 'different-customer' } });
       await processEvent(read);
       await processEvent(read);
-      await processEvent({
+      const lateDelivery = {
         sender,
         recipient,
         timestamp: eventTime + 500,
         delivery: { mids: ['mid.sent'], watermark: eventTime + 100 },
-      });
+      };
       const echo = {
         sender: recipient,
         recipient: sender,
@@ -382,12 +386,17 @@ describe('Meta webhook intake', () => {
         timestamp: eventTime + 800,
         delivery: { mids: ['mid.reconciled'] },
       };
-      const earlyReceiptId = await enqueueEvent(earlyReceipt);
+      const earlyReceiptId = await enqueueEvent(earlyReceipt, lateDelivery);
       await expect(handler.handle({ webhookEventId: earlyReceiptId }, false)).rejects.toThrow(
         'Meta receipt is awaiting a send result',
       );
+      const delivered = await admin.pool.query('select delivered_at from messages where id = $1', [
+        sent,
+      ]);
+      expect(delivered.rows).toEqual([{ delivered_at: new Date(lateDelivery.timestamp) }]);
       await processEvent({ ...echo, message: { ...echo.message, app_id: appId } });
       await handler.handle({ webhookEventId: earlyReceiptId }, false);
+      await processEvent(lateDelivery);
 
       const results = await admin.pool.query(
         'select id, status, external_id, error_code from messages where store_id = $1 and direction = $2',
@@ -404,11 +413,14 @@ describe('Meta webhook intake', () => {
         "select type, payload->>'messageId' as message_id from outbox_events where store_id = $1 and type in ('message.read','message.sent','message.delivered') order by type",
         [storeId],
       );
-      expect(events.rows).toEqual([
+      const recorded = [
+        { type: 'message.delivered', message_id: sent },
         { type: 'message.delivered', message_id: pending },
         { type: 'message.read', message_id: sent },
         { type: 'message.sent', message_id: pending },
-      ]);
+      ];
+      expect(events.rows).toHaveLength(recorded.length);
+      expect(events.rows).toEqual(expect.arrayContaining(recorded));
     } finally {
       for (const table of [
         'outbox_events',

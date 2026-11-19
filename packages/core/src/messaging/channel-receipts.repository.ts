@@ -1,8 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, lte } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 
-import { conversations, messages } from '@dakly/db/schema/chats';
-import { contactIdentities } from '@dakly/db/schema/contacts';
+import { messages } from '@dakly/db/schema/chats';
 import type { ChannelReceipt } from '@dakly/providers/channel/channel-driver';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -20,46 +19,20 @@ function addressedTo(storeId: string, thread: Thread) {
   );
 }
 
+function receiptMatch(receipt: ChannelReceipt) {
+  if (receipt.kind === 'echo')
+    return and(
+      eq(messages.id, receipt.operationKey),
+      eq(messages.externalId, receipt.externalMessageId),
+    );
+  return 'through' in receipt
+    ? and(lte(messages.sentAt, receipt.through), lte(messages.sentAt, receipt.occurredAt))
+    : inArray(messages.externalId, receipt.externalMessageIds);
+}
+
 @Injectable()
 export class ChannelReceiptsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
-
-  async findThread(
-    storeId: string,
-    input: {
-      connectionId: string;
-      recipientExternalId: string;
-      channel: ChannelReceipt['channel'];
-    },
-  ) {
-    const [thread] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          conversationId: conversations.id,
-          contactId: conversations.contactId,
-          identityId: contactIdentities.id,
-        })
-        .from(contactIdentities)
-        .innerJoin(
-          conversations,
-          and(
-            eq(conversations.storeId, contactIdentities.storeId),
-            eq(conversations.contactId, contactIdentities.contactId),
-            eq(conversations.channelConnectionId, contactIdentities.channelConnectionId),
-            eq(conversations.channel, contactIdentities.channel),
-          ),
-        )
-        .where(
-          and(
-            eq(contactIdentities.storeId, storeId),
-            eq(contactIdentities.channelConnectionId, input.connectionId),
-            eq(contactIdentities.externalId, input.recipientExternalId),
-            eq(contactIdentities.channel, input.channel),
-          ),
-        ),
-    );
-    return thread;
-  }
 
   async hasPendingDispatch(storeId: string, thread: Thread, receipt: Receipt) {
     const through =
@@ -85,26 +58,38 @@ export class ChannelReceiptsRepository {
 
   applyReceipt(storeId: string, thread: Thread, receipt: Receipt) {
     const read = receipt.kind === 'read';
-    const match =
-      'through' in receipt
-        ? and(lte(messages.sentAt, receipt.through), lte(messages.sentAt, receipt.occurredAt))
-        : inArray(messages.externalId, receipt.externalMessageIds);
     return this.database.forStore(storeId, (tx) =>
       tx
         .update(messages)
         .set({
-          status: receipt.kind,
-          ...(read ? { readAt: receipt.occurredAt } : { deliveredAt: receipt.occurredAt }),
+          ...(read
+            ? { status: 'read', readAt: receipt.occurredAt }
+            : {
+                status: sql`case when ${messages.status} = 'read' then 'read' else 'delivered' end`,
+                deliveredAt: receipt.occurredAt,
+              }),
         })
         .where(
           and(
             addressedTo(storeId, thread),
-            match,
-            inArray(messages.status, read ? ['sent', 'delivered'] : ['sent']),
+            receiptMatch(receipt),
+            read
+              ? inArray(messages.status, ['sent', 'delivered'])
+              : and(inArray(messages.status, ['sent', 'read']), isNull(messages.deliveredAt)),
           ),
         )
         .returning({ id: messages.id }),
     );
+  }
+
+  async countMatches(storeId: string, thread: Thread, receipt: ChannelReceipt) {
+    const [match] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ count: count() })
+        .from(messages)
+        .where(and(addressedTo(storeId, thread), receiptMatch(receipt))),
+    );
+    return match?.count ?? 0;
   }
 
   async acceptEcho(storeId: string, thread: Thread, echo: Echo) {

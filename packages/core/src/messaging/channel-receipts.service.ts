@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ChannelReceipt } from '@dakly/providers/channel/channel-driver';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -17,6 +18,7 @@ type ReceiptOutcome =
 export class ChannelReceiptsService {
   constructor(
     @Inject(ChannelConnectionsService) private readonly connections: ChannelConnectionsService,
+    @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ChannelReceiptsRepository) private readonly repository: ChannelReceiptsRepository,
     @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -43,28 +45,62 @@ export class ChannelReceiptsService {
         at > receivedAt.getTime() + MINUTE_MS
       )
         return 'stale_delivery';
-      const thread = await this.repository.findThread(storeId, {
-        ...receipt,
-        connectionId: connection.id,
-      });
-      if (!thread) return 'unmatched_receipt';
-      if (
-        !finalAttempt &&
-        receipt.kind !== 'echo' &&
-        (await this.repository.hasPendingDispatch(storeId, thread, receipt))
-      )
-        return 'receipt_pending';
-      return this.applyAndPublish(storeId, thread, receipt);
+      return this.recordForRecipient(storeId, connection.id, receipt, finalAttempt);
     });
   }
 
-  private async applyAndPublish(
+  private async recordForRecipient(
+    storeId: string,
+    connectionId: string,
+    receipt: ChannelReceipt,
+    finalAttempt: boolean,
+  ): Promise<ReceiptOutcome> {
+    const identity = await this.contacts.findActiveChannelIdentity(storeId, {
+      connectionId,
+      channel: receipt.channel,
+      externalId: receipt.recipientExternalId,
+    });
+    if (!identity) return 'unmatched_receipt';
+    const { id: identityId, contactId } = identity;
+    const conversation = await this.outbound.findConversation(storeId, {
+      contactId,
+      connectionId,
+      channel: receipt.channel,
+    });
+    if (!conversation) return 'unmatched_receipt';
+    return this.applyReceipt(
+      storeId,
+      { conversationId: conversation.id, contactId, identityId },
+      receipt,
+      finalAttempt,
+    );
+  }
+
+  private async applyReceipt(
     storeId: string,
     thread: { conversationId: string; contactId: string; identityId: string },
     receipt: ChannelReceipt,
+    finalAttempt: boolean,
   ): Promise<ReceiptOutcome> {
     const messages = await this.apply(storeId, thread, receipt);
-    if (!messages.length) return 'unmatched_receipt';
+    if (messages.length) await this.publishReceipts(storeId, thread, receipt, messages);
+    const pending =
+      receipt.kind !== 'echo' &&
+      !finalAttempt &&
+      (await this.repository.hasPendingDispatch(storeId, thread, receipt));
+    if (!pending && messages.length) return 'stored';
+    const matched = await this.repository.countMatches(storeId, thread, receipt);
+    if (pending && ('through' in receipt || matched < receipt.externalMessageIds.length))
+      return 'receipt_pending';
+    return matched ? 'stored' : 'unmatched_receipt';
+  }
+
+  private async publishReceipts(
+    storeId: string,
+    thread: { conversationId: string; contactId: string },
+    receipt: ChannelReceipt,
+    messages: { id: string }[],
+  ) {
     const type = {
       echo: 'message.sent',
       delivered: 'message.delivered',
@@ -84,7 +120,6 @@ export class ChannelReceiptsService {
         },
       })),
     );
-    return 'stored';
   }
 
   private async apply(
