@@ -83,41 +83,7 @@ Per-store cap: one running campaign batch per store.
 | `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run |
 | `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                     |
 
-Use the job ID from a failed `build-order-summary` error report to retry while the job is still in the sync queue. If the queue no longer has the job, read the pending dates for the affected store in a store-scoped psql session with `store_id` set.
-
-```sql
-select day from store_daily_metrics
-where store_id = :'store_id'::uuid and metric = 'order_refresh_pending'
-order by day;
-```
-
-Set `STORE_ID` and `ORDER_DAY` to the affected store and one of those dates. Run this with the built worker and its usual environment.
-
-```sh
-pnpm --filter @dakly/worker exec node --input-type=module - "$STORE_ID" "$ORDER_DAY" <<'JS'
-import { Queue } from 'bullmq';
-import { BUILD_ORDER_SUMMARY } from '@dakly/core/analytics/analytics-summaries.service';
-import { loadEnv } from '@dakly/core/platform/config/env';
-import { QUEUES } from '@dakly/core/platform/queue/queues';
-import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
-
-const [storeId, day] = process.argv.slice(2);
-const env = loadEnv();
-const queue = new Queue(QUEUES.sync, {
-  connection: toRedisConnection(env.REDIS_URL),
-  prefix: env.QUEUE_PREFIX,
-});
-try {
-  await queue.add(BUILD_ORDER_SUMMARY, { storeId, day }, {
-    deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
-  });
-} finally {
-  await queue.close();
-}
-JS
-```
-
-The retry reads current orders for the original day and skips dates outside retention. The ANA-1 reconciliation follow-up repairs pending days nightly.
+The ANA-1 reconciliation follow-up repairs missed day refreshes nightly.
 
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
@@ -193,28 +159,27 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 
 The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
-| Event                       | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
-| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `contact.created`           | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
-| `contact.lifecycle_changed` | ANA-1, `ContactStatsService`                                     | `contactId`                                                             | Lifecycle snapshots in the ANA-1 reports follow-up           |
-| `order.created`             | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
-| `order.edited`              | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
-| `order.stage_changed`       | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
-| `order.cod_collected`       | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
-| `consent.changed`           | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
-| `segment.saved`             | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
-| `campaign.approved`         | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
-| `conversation.started`      | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
-| `message.received`          | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
-| `message.delivered`         | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.read`              | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.failed`            | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.tapped`            | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
-| `message.opted_out`         | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
-| `channel.connected`         | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
-| `channel.disconnected`      | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
-| `channel.needs_reconnect`   | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
-| `notification.created`      | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
+| ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `order.created`           | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.edited`            | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
+| `order.stage_changed`     | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.cod_collected`     | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
+| `segment.saved`           | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
+| `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
+| `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
+| `message.received`        | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
+| `message.delivered`       | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.read`            | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.failed`          | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.tapped`          | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
+| `message.opted_out`       | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
+| `channel.connected`       | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.disconnected`    | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.needs_reconnect` | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
+| `notification.created`    | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 

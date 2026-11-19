@@ -8,14 +8,11 @@ import { Worker, type Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
-import { ContactStatsService } from '../contacts/contact-stats.service';
-import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
-import { AnalyticsSummariesService, BUILD_ORDER_SUMMARY } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
@@ -212,83 +209,6 @@ describe('Daily order summaries', () => {
     }
   });
 
-  it('reschedules a missing refresh when the source event already has a marker', async () => {
-    const day = '2026-11-05';
-    const orderId = await order(fixture.a, `${day}T05:00:00Z`);
-    const data = { ...event(fixture.a, orderId), type: 'order.created' };
-    const handler = app.get(SummarizeOrderCreated);
-    await handler.handle(data);
-    const [evicted] = await queue.getDelayed();
-    await evicted?.remove();
-    await handler.handle(data);
-    await finishOrderDay(fixture.a, day);
-    expect(await ordersFor(fixture.a)).toContainEqual(expect.objectContaining({ day, value: '1' }));
-  });
-
-  it('can recover a pending day using its store and date alone', async () => {
-    const day = '2026-11-06';
-    const storeId = fixture.a;
-    const orderId = await order(storeId, `${day}T05:00:00Z`);
-    await app
-      .get(SummarizeOrderCreated)
-      .handle({ ...event(storeId, orderId), type: 'order.created' });
-    const [evicted] = await queue.getDelayed();
-    await evicted?.remove();
-    const pendingDays = () =>
-      fixture.connection.pool.query(
-        "select day::text from store_daily_metrics where store_id=$1 and metric='order_refresh_pending'",
-        [storeId],
-      );
-    expect((await pendingDays()).rows).toContainEqual({ day });
-    const job = await queue.add(
-      BUILD_ORDER_SUMMARY,
-      { storeId, day },
-      {
-        deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
-      },
-    );
-    await app.get(BuildOrderSummaryJob).handle(job.data);
-    await job.remove();
-    expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '1' }));
-    expect((await pendingDays()).rows).not.toContainEqual({ day });
-  });
-
-  it('leaves a newer invalidation pending when an older read finishes', async () => {
-    const day = '2026-10-28';
-    const storeId = fixture.a;
-    const first = await order(storeId, `${day}T05:00:00Z`);
-    const handler = app.get(SummarizeOrderCreated);
-    await handler.handle({ ...event(storeId, first), type: 'order.created' });
-    const [queued] = await queue.getDelayed();
-    const reports = app.get(OrderReportingService);
-    const read = reports.dailyOrderMetrics.bind(reports);
-    const sampled = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    const probe = vi.spyOn(reports, 'dailyOrderMetrics').mockImplementationOnce(async (...args) => {
-      const rows = await read(...args);
-      sampled.resolve();
-      await release.promise;
-      return rows;
-    });
-    const refreshing = app.get(BuildOrderSummaryJob).handle(queued?.data);
-    try {
-      await sampled.promise;
-      const second = await order(storeId, `${day}T06:00:00Z`);
-      const invalidated = { ...event(storeId, second), type: 'order.created' };
-      await handler.handle(invalidated);
-      release.resolve();
-      await refreshing;
-      await queued?.remove();
-      expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '1' }));
-      await handler.handle(invalidated);
-      await finishOrderDay(storeId, day);
-      expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '2' }));
-    } finally {
-      release.resolve();
-      probe.mockRestore();
-    }
-  });
-
   it('restates the original day after cancellation and leaves replay unchanged', async () => {
     const orderId = await order(fixture.a, '2026-11-01T05:00:00Z');
     await app.get(SummarizeOrderCreated).handle({
@@ -312,6 +232,7 @@ describe('Daily order summaries', () => {
     expect(restated).toContainEqual(expect.objectContaining({ day: '2026-11-01', value: '0' }));
     expect(restated.some(({ day }) => day === '2026-11-19')).toBe(false);
     await handler.handle(change);
+    await finishOrderDay(fixture.a, '2026-11-01');
     expect(await ordersFor(fixture.a)).toEqual(restated);
   });
 
@@ -369,20 +290,68 @@ describe('Daily order summaries', () => {
       { day: '2026-10-21', metric: 'orders', value: '1' },
     ]);
     await handler.handle(returned);
+    await finishOrderDay(fixture.a, '2026-10-21');
     expect(await metrics()).toEqual(restated);
   });
 
-  it('deduplicates a source event after it has already been applied', async () => {
-    const orderId = await order(fixture.a, '2026-11-02T12:00:00Z');
+  it('replays a source event without rewriting unchanged results', async () => {
+    const day = '2026-11-02';
+    const orderId = await order(fixture.a, `${day}T12:00:00Z`);
     const created = { ...event(fixture.a, orderId), type: 'order.created' };
     const handler = app.get(SummarizeOrderCreated);
     await handler.handle(created);
-    await finishOrderDay(fixture.a, '2026-11-02');
+    await finishOrderDay(fixture.a, day);
     const before = await ordersFor(fixture.a);
-    await order(fixture.a, '2026-11-02T12:30:00Z');
-    await handler.handle(created);
-    expect(await queue.getDelayed()).toEqual([]);
-    expect(await ordersFor(fixture.a)).toEqual(before);
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValue(new Date('2026-11-19T06:01:00Z'));
+    try {
+      await handler.handle(created);
+      await finishOrderDay(fixture.a, day);
+      expect(await ordersFor(fixture.a)).toEqual(before);
+    } finally {
+      clock.mockReturnValue(now);
+    }
+  });
+
+  it('records discounted item sales by source and restates a cancellation', async () => {
+    const day = '2026-11-05';
+    const manual = await order(fixture.a, `${day}T05:00:00Z`);
+    const returned = await order(fixture.a, `${day}T06:00:00Z`);
+    await fixture.connection.pool.query(
+      'update orders set order_discount_poisha=500, delivery_charge_poisha=4500 where id=$1',
+      [manual],
+    );
+    await fixture.connection.pool.query(
+      "update orders set source='order_link', stage='returned' where id=$1",
+      [returned],
+    );
+    const created = app.get(SummarizeOrderCreated);
+    for (const id of [manual, returned]) {
+      await created.handle({ ...event(fixture.a, id), type: 'order.created' });
+    }
+    await finishOrderDay(fixture.a, day);
+    const sales = async () =>
+      (
+        await fixture.connection.pool.query(
+          "select dimension, value from store_daily_metrics where store_id=$1 and day=$2 and metric='sales' and value<>0 order by dimension",
+          [fixture.a, day],
+        )
+      ).rows;
+    expect(await sales()).toEqual([
+      { dimension: 'manual', value: '124500' },
+      { dimension: 'order_link', value: '125000' },
+    ]);
+    await fixture.connection.pool.query(
+      "update orders set stage='cancelled', cancel_reason='customer_cancelled' where id=$1",
+      [manual],
+    );
+    await app.get(SummarizeOrderStageChanged).handle({
+      ...event(fixture.a, manual),
+      type: 'order.stage_changed',
+      payload: { orderId: manual, from: 'to_confirm', to: 'cancelled' },
+    });
+    await finishOrderDay(fixture.a, day);
+    expect(await sales()).toEqual([{ dimension: 'order_link', value: '125000' }]);
   });
 
   it('moves the first order day on every buyer activity row after a cancellation', async () => {
@@ -420,36 +389,5 @@ describe('Daily order summaries', () => {
       payload: { orderId: first, from: 'to_confirm', to: 'cancelled' },
     });
     expect(await activities()).toEqual([{ day: '2026-11-10', first_day: '2026-11-10' }]);
-  });
-
-  it('publishes a changed lifecycle and snapshots eligible customers', async () => {
-    const eligible = randomUUID();
-    const blocked = randomUUID();
-    const foreign = randomUUID();
-    await fixture.connection.pool.query(
-      `insert into contacts(id,store_id,name,source,kind,is_blocked,created_at) values
-         ($1,$4,'রিনা','manual','customer',false,'2026-11-01T12:00:00Z'),
-         ($2,$4,'সুমন','manual','customer',true,'2026-11-01T12:00:00Z'),
-         ($3,$5,'করিম','manual','customer',false,'2026-11-01T12:00:00Z')`,
-      [eligible, blocked, foreign, fixture.a, fixture.b],
-    );
-    await fixture.connection.pool.query(
-      "insert into contact_stats (contact_id,store_id,lifecycle_stage) values ($1,$3,'new'),($2,$4,'regulars')",
-      [blocked, foreign, fixture.a, fixture.b],
-    );
-    const stats = app.get(ContactStatsService);
-    await stats.refresh(fixture.a, eligible);
-    await stats.refresh(fixture.a, eligible);
-    const events = await fixture.connection.pool.query(
-      "select payload from outbox_events where store_id=$1 and type='contact.lifecycle_changed'",
-      [fixture.a],
-    );
-    expect(events.rows).toEqual([{ payload: { contactId: eligible } }]);
-    await app.get(AnalyticsSummariesService).refreshLifecycle(fixture.a);
-    const { rows } = await fixture.connection.pool.query(
-      "select dimension, value from store_daily_metrics where store_id=$1 and day='2026-11-19' and metric='lifecycle' and value<>0",
-      [fixture.a],
-    );
-    expect(rows).toEqual([{ dimension: 'bought_once', value: '1' }]);
   });
 });

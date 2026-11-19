@@ -1,7 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
-import { ContactStatsModule } from '../contacts/contact-stats.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
@@ -18,7 +17,6 @@ import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed
 @Module({
   imports: [
     ClockModule,
-    ContactStatsModule,
     ContactsModule,
     OrdersModule,
     StoresModule,
