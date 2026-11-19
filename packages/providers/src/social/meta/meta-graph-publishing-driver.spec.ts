@@ -73,6 +73,19 @@ describe('MetaGraphPublishingDriver', () => {
     expect(JSON.parse(options.body)).toEqual({ photo_id: 'photo' });
   });
 
+  it.each([80001, 80002])(
+    'reports Meta throttle %s as a confirmed retryable rejection',
+    async (code) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ error: { code } }, { status: 400 })),
+      );
+      await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+        code: 'retryable',
+      });
+    },
+  );
+
   it('distinguishes a confirmed rejection from an unknown publishing result', async () => {
     const fetch = vi
       .fn()

@@ -15,7 +15,7 @@ const storyResult = z.object({ post_id: z.string().min(1) });
 const errorResult = z.object({
   error: z.object({ code: z.number(), is_transient: z.boolean().optional() }),
 });
-const retryableCodes = [1, 2, 4, 17, 32, 613];
+const retryableCodes = [1, 2, 4, 17, 32, 613, 80001, 80002];
 const containerStates = {
   IN_PROGRESS: 'processing',
   FINISHED: 'ready',
