@@ -416,9 +416,13 @@ Unicode spellings before matching.
 
 `conversations` (with `version` for the AI write check), `messages`, `social_comments`, `saved_replies`, `ai_agent_settings` (go-live test questions included), `ai_rule_changes` (before and after of every taught rule or settings save, for undo), `knowledge_items`, `knowledge_chunks` (pgvector, 512 dimensions, exact scan per store, with the embedding model), `ai_runs` (partitioned by month, kept 13 months), `assistant_messages`; customer memory is `contact_memories` in Customers. Its progress belongs to each conversation: `memory_built_through_message_id`, its paired `memory_built_through_message_at`, and `memory_version`. `contact_memories.version` guards concurrent changes across conversations and staff edits; `cleared_at` prevents old evidence from repopulating cleared memory. Photo questions compare a vision-tier description of the customer's photo, embedded, against `products.image_embedding`. Usage goes to `usage_events`. Full design: [docs/data](../data/README.md).
 
+### Saved replies
+
+Staff with `chats.view` can list saved replies and read their text for the composer. Staff with `chats.edit` can create, change and delete replies. These routes require the Chats extension. Shortcuts are optional and unique within a store. Each write records the staff member in the audit log. Create and update also record the submitted field names.
+
 ### Customer memory processing
 
-These are implementation requirements for CHAT-4; the schema and contracts do not implement the worker.
+These are implementation requirements for CHAT-8. The schema and contracts define the stored memory and its validation.
 
 - Both staff edits and model output use `contactMemorySchema` from `packages/contracts/src/contact-memory.ts`. Facts have an allowed kind, a value of at most 160 characters, a source (`customer_message`, `own_order` or `staff`), a UUID source id and an ISO timestamp. Unknown fields are rejected. A source id must belong to this customer and store; a model cannot label its own output as `staff`.
 - Read the contact memory version, this conversation's memory version and checkpoint, and a fixed final message id. Only process messages after that conversation's checkpoint and the retained clear cutoff. Use `(created_at, id)` ordering; retain both checkpoint values so message retention does not erase the covered timestamp. A delayed insert earlier than the checkpoint invalidates that conversation's checkpoint and queues a guarded rebuild respecting the clear cutoff. Never compare checkpoints from different conversations. Skip repeated completed checkpoints. Do not advance to a later message that arrived during the model call.
