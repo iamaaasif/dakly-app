@@ -88,7 +88,13 @@ describe('SocialPublishingService', () => {
       stores,
     );
     const recovery = new SocialPublishRecoveryRepository(application.db);
-    const scheduling = new SocialPublishingQueueService(repository, recovery, clock, queue);
+    const scheduling = new SocialPublishingQueueService(
+      repository,
+      recovery,
+      clock,
+      service,
+      queue,
+    );
     return {
       service,
       scheduling,
@@ -446,7 +452,7 @@ describe('SocialPublishingService', () => {
     const futureId = `${future.postTargetId}-${later.getTime()}`;
     await scheduling.recoverDueTargets();
     expect(await queue.getJob(`publish-${futureId}`)).toBeUndefined();
-    await scheduling.enqueueTarget(fixture.a, target);
+    await scheduling.enqueueTargets(fixture.a, [target]);
     const check = await queue.getJob(`check-${id}`);
     const publish = await queue.getJob(`publish-${id}`);
     const jobIds = (await queue.getJobs(['delayed', 'waiting'])).filter(({ id: jobId }) =>
@@ -466,10 +472,8 @@ describe('SocialPublishingService', () => {
     });
   });
 
-  it('requeues a failed publishing job when the target still needs work', async () => {
-    const { scheduling, accounts } = publishing();
-    const target = await setupTarget(accounts, 'facebook_page', await post());
-    const id = `publish-${target.postTargetId}-${now.getTime()}`;
+  async function failPublishJob(target: Omit<ScheduledPostTarget, 'storeId'>) {
+    const id = `publish-${target.postTargetId}-${Date.parse(target.scheduledFor)}`;
     await queue.add(
       'publish-post-target',
       { storeId: fixture.a, ...target },
@@ -490,9 +494,98 @@ describe('SocialPublishingService', () => {
     } finally {
       await worker.close();
     }
+    return id;
+  }
+
+  it('requeues a failed publishing job when the target still needs work', async () => {
+    const { scheduling, accounts } = publishing();
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    const id = await failPublishJob(target);
     await scheduling.recoverDueTargets();
     expect(await queue.getJobState(id)).toBe('waiting');
-    expect((await queue.getJob(id))?.attemptsMade).toBe(0);
+    expect((await queue.getJob(id))?.attemptsMade).toBe(1);
+  });
+
+  it('settles an exhausted publishing job without retrying it after the retry window', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { scheduling, accounts, notify } = publishing(driver);
+    const past = new Date(now.getTime() - 30 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    const id = await failPublishJob(target);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('failed');
+    expect((await queue.getJob(id))?.attemptsMade).toBe(1);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_PUBLISH_WINDOW_ENDED',
+    });
+    expect(notify).toHaveBeenCalledExactlyOnceWith(
+      fixture.a,
+      expect.objectContaining({ category: 'fix_now' }),
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('settles an expired target after Valkey evicts its failed job', async () => {
+    const { scheduling, accounts } = publishing();
+    const past = new Date(now.getTime() - 31 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    const id = await failPublishJob(target);
+    await queue.remove(id);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('unknown');
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_PUBLISH_WINDOW_ENDED',
+    });
+  });
+
+  it('fails a target first queued after the retry window instead of posting late', async () => {
+    const { scheduling, accounts } = publishing();
+    const past = new Date(now.getTime() - 31 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    await scheduling.enqueueTargets(fixture.a, [target]);
+    expect(await queue.getJobState(`publish-${target.postTargetId}-${past.getTime()}`)).toBe(
+      'unknown',
+    );
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_PUBLISH_WINDOW_ENDED',
+    });
+  });
+
+  it('uses a saved Meta receipt when an exhausted job is past its retry window', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { scheduling, accounts, notify, publish } = publishing(driver);
+    const past = new Date(now.getTime() - 31 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    const repository = new SocialRepository(fixture.tenant);
+    await fixture.connection.pool.query(
+      "update post_targets set status='publishing' where store_id=$1 and id=$2",
+      [fixture.a, target.postTargetId],
+    );
+    const beforeReceipt = await repository.findPublishTarget(fixture.a, target);
+    await fixture.connection.pool.query(
+      "update post_targets set published_at=$1, external_post_id='page-post-id' where store_id=$2 and id=$3",
+      [past, fixture.a, target.postTargetId],
+    );
+    expect(
+      await repository.updatePublishTarget(fixture.a, beforeReceipt!.target, { status: 'failed' }),
+    ).toBeUndefined();
+    const id = await failPublishJob(target);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('failed');
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      external_post_id: 'page-post-id',
+    });
+    expect(publish).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ type: 'post.published' }),
+    );
+    expect(notify).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('flags a missing storage object before publishing', async () => {

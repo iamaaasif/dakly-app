@@ -10,10 +10,13 @@ import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { CHECK_POST_TARGET } from './jobs/check-post-target.job';
 import { PUBLISH_POST_TARGET } from './jobs/publish-post-target.job';
 import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
+import { SocialPublishingService } from './social-publishing.service';
 import { SocialRepository } from './social.repository';
 
 const BATCH_SIZE = 100;
-const retryDelay = Math.floor((30 * MINUTE_MS) / 7);
+const RETRY_WINDOW_MS = 30 * MINUTE_MS;
+// Three exponential retries use 1 + 2 + 4 units of delay.
+const retryDelay = Math.floor(RETRY_WINDOW_MS / 7);
 
 @Injectable()
 export class SocialPublishingQueueService {
@@ -22,23 +25,40 @@ export class SocialPublishingQueueService {
     @Inject(SocialPublishRecoveryRepository)
     private readonly recovery: SocialPublishRecoveryRepository,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(SocialPublishingService) private readonly publishing: SocialPublishingService,
     @InjectQueue(QUEUES.outbound) private readonly queue: Queue<ScheduledPostTarget>,
   ) {}
 
   async recoverDueTargets() {
     const before = new Date(this.clock.now().getTime() + DAY_MS);
-    const failedIds = new Set((await this.queue.getFailed()).map(({ id }) => id));
     let after: string | null = null;
     for (;;) {
       const stores = await this.recovery.dueStoreIds(before, after, BATCH_SIZE);
-      for (const storeId of stores) await this.restoreJobs(storeId, before, failedIds);
+      for (const storeId of stores) await this.restoreJobs(storeId, before);
       if (stores.length < BATCH_SIZE) return;
       after = stores.at(-1) ?? null;
     }
   }
 
-  async enqueueTarget(storeId: string, input: Omit<ScheduledPostTarget, 'storeId'>) {
-    await this.queue.addBulk(this.jobsFor({ storeId, ...input }));
+  async enqueueTargets(storeId: string, inputs: Omit<ScheduledPostTarget, 'storeId'>[]) {
+    const planned = inputs.flatMap((input) => this.jobsFor({ storeId, ...input }));
+    const now = this.clock.now().getTime();
+    const timely = planned.filter((job) => this.deadline(job) > now);
+    const expired = planned.filter(
+      (job) => job.name === PUBLISH_POST_TARGET && this.deadline(job) <= now,
+    );
+    const jobs = timely.length ? await this.queue.addBulk(timely) : [];
+    const failed = await Promise.all(jobs.map((job) => job.isFailed()));
+    for (const [index, job] of jobs.entries()) {
+      if (failed[index]) await this.retryFailed(job);
+    }
+    for (const { data, opts } of expired) {
+      const state = await this.queue.getJobState(opts.jobId);
+      if (state === 'failed' || state === 'unknown' || state === 'completed') {
+        const { postTargetId, scheduledFor } = data;
+        await this.publishing.settleExpiredTarget(storeId, { postTargetId, scheduledFor });
+      }
+    }
   }
 
   private jobsFor(data: ScheduledPostTarget) {
@@ -72,28 +92,27 @@ export class SocialPublishingQueueService {
     ];
   }
 
-  private async restoreJobs(storeId: string, before: Date, failedIds: Set<string | undefined>) {
+  private async restoreJobs(storeId: string, before: Date) {
     let after: string | undefined;
     for (;;) {
       const rows = await this.repository.pendingPublishTargets(storeId, before, after, BATCH_SIZE);
-      const planned = rows.flatMap(({ id, scheduledFor }) =>
-        scheduledFor
-          ? this.jobsFor({ storeId, postTargetId: id, scheduledFor: scheduledFor.toISOString() })
-          : [],
+      const targets = rows.flatMap(({ id, scheduledFor }) =>
+        scheduledFor ? [{ postTargetId: id, scheduledFor: scheduledFor.toISOString() }] : [],
       );
-      const jobs = planned.length ? await this.queue.addBulk(planned) : [];
-      for (const failed of jobs.filter(({ id }) => failedIds.has(id))) {
-        await this.retryFailed(failed);
-      }
+      await this.enqueueTargets(storeId, targets);
       if (rows.length < BATCH_SIZE) return;
       after = rows.at(-1)?.id;
     }
   }
 
+  private deadline({ name, data }: { name: string; data: ScheduledPostTarget }) {
+    return Date.parse(data.scheduledFor) + (name === PUBLISH_POST_TARGET ? RETRY_WINDOW_MS : 0);
+  }
+
   private async retryFailed(job: Job<ScheduledPostTarget>) {
-    if (!(await job.isFailed())) return;
+    if (this.clock.now().getTime() >= this.deadline(job)) return;
     try {
-      await job.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
+      await job.retry('failed');
     } catch (failure) {
       // Overlapping sweeps can restore the same job.
       if (await job.isFailed()) throw failure;

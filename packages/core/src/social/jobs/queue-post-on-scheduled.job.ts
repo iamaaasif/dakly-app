@@ -21,6 +21,6 @@ export class QueuePostOnScheduledJob implements JobHandler {
       storeId,
       payload: { postTargetId, scheduledFor },
     } = event.parse(data);
-    await this.publishing.enqueueTarget(storeId, { postTargetId, scheduledFor });
+    await this.publishing.enqueueTargets(storeId, [{ postTargetId, scheduledFor }]);
   }
 }

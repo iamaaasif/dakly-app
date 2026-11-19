@@ -226,6 +226,7 @@ export class SocialRepository {
       status: (typeof postTargets.$inferSelect)['status'];
       attempts: number;
       scheduledFor: Date;
+      publishedAt: Date | null;
     },
     changes: TargetWrite,
   ) {
@@ -240,6 +241,9 @@ export class SocialRepository {
             eq(postTargets.status, current.status),
             eq(postTargets.attempts, current.attempts),
             eq(postTargets.scheduledFor, current.scheduledFor),
+            current.publishedAt
+              ? eq(postTargets.publishedAt, current.publishedAt)
+              : isNull(postTargets.publishedAt),
           ),
         )
         .returning({ id: postTargets.id }),

@@ -78,6 +78,15 @@ export class SocialPublishingService {
     });
   }
 
+  async settleExpiredTarget(storeId: string, input: JobTarget) {
+    const target = (await this.repository.findPublishTarget(storeId, input))?.target;
+    if (!target || this.attemptedRecently(target, this.clock.now())) return;
+    const error = target.publishedAt
+      ? undefined
+      : publishError(socialError('POST_PUBLISH_WINDOW_ENDED'), target.status);
+    await this.finish(storeId, target, error);
+  }
+
   async publishTarget(storeId: string, input: JobTarget, finalAttempt: boolean) {
     const match = await this.repository.findPublishTarget(storeId, input);
     if (!match) return;
@@ -105,9 +114,12 @@ export class SocialPublishingService {
   private checkDue(target: PublishingTarget) {
     const now = this.clock.now();
     if (target.scheduledFor > now) throw socialError('POST_NOT_DUE');
+    if (this.attemptedRecently(target, now)) throw socialError('POST_PUBLISH_UNCONFIRMED');
+  }
+
+  private attemptedRecently(target: PublishingTarget, now: Date) {
     // A second delivery can see a claim before the first Meta request returns.
-    if (target.attempts > 0 && now.getTime() - target.updatedAt.getTime() < MINUTE_MS)
-      throw socialError('POST_PUBLISH_UNCONFIRMED');
+    return target.attempts > 0 && now.getTime() - target.updatedAt.getTime() < MINUTE_MS;
   }
 
   private async publishApproved(storeId: string, match: PendingPost, finalAttempt: boolean) {
