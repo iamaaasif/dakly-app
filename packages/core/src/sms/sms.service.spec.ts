@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import { type SmsDriver, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
+import { type SmsDriver, SmsSendRefused, SmsSendTimeout } from '@dakly/providers/sms/sms-driver';
 
 import { SmsService } from './sms.service';
 
@@ -80,11 +80,19 @@ describe('shared SMS delivery', () => {
             }),
         };
         const sending = new SmsService(driver).send({ to: '01712345678', text: 'অর্ডার নিশ্চিত' });
-        const outcome = expect(sending).rejects.toMatchObject({
+        let settled = false;
+        const outcome = sending.catch((error: unknown) => error).finally(() => (settled = true));
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(settled).toBe(false);
+        expect(cancelled).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1);
+        const error = await outcome;
+        expect(error).toBeInstanceOf(SmsSendTimeout);
+        expect(error).toMatchObject({
           code: 'SMS_SEND_TIMEOUT',
           message: 'The SMS provider did not answer in time',
         });
-        await Promise.all([outcome, vi.advanceTimersByTimeAsync(30_000)]);
         expect(cancelled).toHaveBeenCalledTimes(1);
       } finally {
         log.mockRestore();
