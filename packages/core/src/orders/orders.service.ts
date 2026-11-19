@@ -34,6 +34,7 @@ import {
   orderStageTimes,
   productArchiveStages,
   recordOrderCreation,
+  recordOrderEdit,
   recordOrderStage,
   requireEditableOrder,
   staffConfirmation,
@@ -188,13 +189,12 @@ export class OrdersService {
         paymentStatus: totals.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         updatedAt: now,
       });
-      await this.audit.record(storeId, {
-        action: 'order.edited',
-        entityType: 'order',
-        entityId: orderId,
-        actor,
-        after: { changedFields: Object.keys(changes) },
-      });
+      await recordOrderEdit(
+        storeId,
+        orderId,
+        { actor, occurredAt: now.toISOString(), changedFields: Object.keys(changes) },
+        { audit: this.audit, outbox: this.outbox },
+      );
       return this.getById(storeId, orderId, access);
     });
   }

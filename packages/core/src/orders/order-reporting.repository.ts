@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, count, eq, ne, sql } from 'drizzle-orm';
 
 import { orders } from '@dakly/db/schema/orders';
 
@@ -8,6 +8,58 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 @Injectable()
 export class OrderReportingRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+
+  async reportingAnchor(storeId: string, orderId: string, timeZone: string, now: Date) {
+    const [order] = await this.database.forStore(storeId, (tx) => {
+      const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
+      return tx
+        .select({
+          day: sql<string>`${day}::text`,
+          buyerContactId: orders.buyerContactId,
+          retained: sql<boolean>`${day} >= ${retainedDay(now, timeZone)}`,
+        })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
+    });
+    return order;
+  }
+
+  async buyerActivityDays(storeId: string, contactId: string, timeZone: string, now: Date) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ day: string; firstDay: number }>(sql`
+        with first_order as (
+          select (created_at at time zone ${timeZone})::date - date '1970-01-01' as day
+          from orders where store_id = ${storeId} and buyer_contact_id = ${contactId}
+            and stage <> 'cancelled'
+          order by created_at limit 1
+        )
+        select distinct (o.created_at at time zone ${timeZone})::date::text as day,
+          first_order.day as "firstDay"
+        from orders o cross join first_order
+        where o.store_id = ${storeId} and o.buyer_contact_id = ${contactId}
+          and o.stage <> 'cancelled'
+          and o.created_at >= (${retainedDay(now, timeZone)})::timestamp at time zone ${timeZone}
+      `),
+    );
+    return rows;
+  }
+
+  async countCreatedOrders(storeId: string, day: string, timeZone: string) {
+    const [total] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ count: count() })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            ne(orders.stage, 'cancelled'),
+            sql`${orders.createdAt} >= ${day}::date::timestamp at time zone ${timeZone}`,
+            sql`${orders.createdAt} < (${day}::date + 1)::timestamp at time zone ${timeZone}`,
+          ),
+        ),
+    );
+    return total!.count;
+  }
 
   async buyerContactId(storeId: string, orderId: string) {
     const [order] = await this.database.forStore(storeId, (tx) =>
@@ -62,4 +114,8 @@ export class OrderReportingRepository {
       lastOrderAt: totals.lastOrderAt === null ? null : new Date(totals.lastOrderAt),
     };
   }
+}
+
+function retainedDay(now: Date, timeZone: string) {
+  return sql`((${now.toISOString()}::timestamptz at time zone ${timeZone})::date - interval '24 months')::date`;
 }

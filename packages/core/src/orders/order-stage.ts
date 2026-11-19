@@ -128,6 +128,30 @@ export async function recordOrderCreation(
     );
 }
 
+export async function recordOrderEdit(
+  storeId: string,
+  orderId: string,
+  {
+    actor,
+    occurredAt,
+    changedFields,
+  }: {
+    actor: AuditEntry['actor'];
+    occurredAt: string;
+    changedFields: string[];
+  },
+  { audit, outbox }: { audit: AuditService; outbox: OutboxService },
+) {
+  await audit.record(storeId, {
+    action: 'order.edited',
+    entityType: 'order',
+    entityId: orderId,
+    actor,
+    after: { changedFields },
+  });
+  await outbox.publish({ type: 'order.edited', storeId, occurredAt, payload: { orderId } });
+}
+
 export async function recordOrderStage(
   storeId: string,
   orderId: string,
