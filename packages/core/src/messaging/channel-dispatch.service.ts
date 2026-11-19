@@ -12,8 +12,8 @@ import { DAY_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { messagingError } from './messaging.errors';
-import type { OutgoingChannelMessage } from './messaging.service';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
+import type { OutgoingChannelMessage } from './outgoing-channel-message';
 
 type ChannelMessage = {
   id: string;
