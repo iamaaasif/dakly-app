@@ -1,5 +1,5 @@
 {
-  "id": "85bc85f4-e684-4e3d-9f76-b2d162c911a3",
+  "id": "c7915f7d-7339-465e-88bd-1350b43abdd7",
   "prevId": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
   "version": "7",
   "dialect": "postgresql",
@@ -7037,25 +7037,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sms_credits": {
-          "name": "sms_credits",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_attempts": {
-          "name": "send_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7573,6 +7554,33 @@
           "method": "btree",
           "with": {}
         },
+        "campaigns_store_id_created_at_id_idx": {
+          "name": "campaigns_store_id_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "campaigns_due_idx": {
           "name": "campaigns_due_idx",
           "columns": [
@@ -7613,34 +7621,6 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'scheduled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_sending_idx": {
-          "name": "campaigns_sending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "started_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending'",
           "concurrently": false,
           "method": "btree",
           "with": {}

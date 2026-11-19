@@ -306,15 +306,8 @@
     {
       "idx": 43,
       "version": "7",
-      "when": 1795053483550,
-      "tag": "0043_campaign_delivery",
-      "breakpoints": true
-    },
-    {
-      "idx": 44,
-      "version": "7",
-      "when": 1795053487423,
-      "tag": "0044_campaign_opt_out_base",
+      "when": 1795059739050,
+      "tag": "0043_campaign_list_order",
       "breakpoints": true
     }
   ]
