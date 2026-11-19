@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
+import { type AutomationGraph, automationGraphSchema } from './automations/graph';
 import type { CampaignChannel } from './campaigns';
 
-import { type AutomationGraph, automationGraphSchema } from './automations/graph';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
