@@ -1,5 +1,5 @@
 {
-  "id": "0e1ed680-1783-4559-85ab-b7cc40bc66e2",
+  "id": "c8bec70a-7872-4993-9940-a02c1e87d79a",
   "prevId": "85816cce-4ed9-40fc-82f1-7b30bd77ce57",
   "version": "7",
   "dialect": "postgresql",
@@ -18413,7 +18413,7 @@
       "checkConstraints": {
         "webhook_events_provider": {
           "name": "webhook_events_provider",
-          "value": "\"webhook_events\".\"provider\" in ('meta', 'whatsapp', 'sms', 'sendgrid')"
+          "value": "\"webhook_events\".\"provider\" in ('meta', 'whatsapp', 'sms', 'sendgrid', 'bkash', 'nagad', 'city_bank')"
         },
         "webhook_events_status": {
           "name": "webhook_events_status",
