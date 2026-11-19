@@ -127,8 +127,8 @@ describe('Campaign estimate and approval (Postgres)', () => {
     const draft = createCampaignSchema.parse({
       name: 'ফিরে আসুন',
       channel: 'sms',
-      // 161 GSM-7 characters: two parts.
-      content: { text: `Rina's shop: ${'a'.repeat(148)}` },
+      // The 150-character message needs a second part only once the opt-out link is included.
+      content: { text: `Rina's shop: ${'a'.repeat(137)}` },
       includeSegmentIds: [includeId],
       excludeSegmentIds: [excludeId],
       scheduledFor: sendAt.toISOString(),
