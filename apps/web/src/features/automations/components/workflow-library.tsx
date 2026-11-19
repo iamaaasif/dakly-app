@@ -69,7 +69,14 @@ export function WorkflowLibrary() {
     router.push(query.size ? `/automations/new?${query}` : '/automations/new', { scroll: false });
   }
   function create(draft: CreateAutomationInput) {
-    action.mutate({ draft }, { onSuccess: () => router.push('/automations?tab=draft') });
+    action.mutate(
+      { draft },
+      {
+        onSuccess: (workflow) => {
+          if (workflow) router.push(`/automations/${workflow.id}`);
+        },
+      },
+    );
   }
   return (
     <main className="min-h-screen bg-surface-muted">

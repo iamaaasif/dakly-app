@@ -1148,6 +1148,7 @@ fixture('GET /automations/:automationId', async () => {
     { id, versionId } = await publishedAutomation(a);
   const own = (await success(a, 'GET', `/automations/${id}`, 200)).json();
   expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
+  expect(own.activeRuns).toBe(0);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
 });
 fixture('GET /automations/:automationId/trigger-preview', async () => {

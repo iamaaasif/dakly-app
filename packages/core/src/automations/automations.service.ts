@@ -82,9 +82,13 @@ export class AutomationsService {
 
   async get(storeId: string, automationId: string): Promise<AutomationDetailResponse> {
     const automation = await this.findVisible(storeId, automationId);
-    const versions = await this.repository.listVersions(storeId, automationId);
+    const [versions, activeRuns] = await Promise.all([
+      this.repository.listVersions(storeId, automationId),
+      this.repository.countActiveRuns(storeId, automationId),
+    ]);
     return {
       ...toAutomationResponse(automation),
+      activeRuns,
       versions: versions.map((version) => ({
         ...version,
         publishedAt: version.publishedAt.toISOString(),
