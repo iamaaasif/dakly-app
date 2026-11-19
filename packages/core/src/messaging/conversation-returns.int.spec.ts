@@ -121,7 +121,7 @@ it('returns a due chat once and keeps a staff extension in force', async () => {
   expect(await f.row('conversations', due)).toMatchObject({
     responder: 'ai',
     ai_resumes_at: null,
-    version: 1,
+    version: 0,
     status: 'needs_you',
     assignee_user_id: f.userA,
   });
@@ -140,4 +140,32 @@ it('returns a due chat once and keeps a staff extension in force', async () => {
   expect(rows).toEqual([
     { actor_type: 'system', after: { changedFields: ['responder', 'aiResumesAt'] } },
   ]);
+});
+
+it('keeps a deadline when Chats is disabled after a return was queued', async () => {
+  const past = new Date(now.getTime() - MINUTE_MS);
+  const due = await timedConversation(f.a, f.userA, past);
+  const sweep = app.get(QueueConversationReturnsJob);
+  await sweep.handle({});
+  const queued = (await queue.getWaiting()).find(({ data }) => data.conversationId === due);
+  expect(queued?.data).toEqual({ storeId: f.a, conversationId: due });
+  const { pool } = f.connection;
+  await pool.query('update stores set extensions = array[]::text[] where id = $1', [f.a]);
+  try {
+    await app.get(ReturnConversationToAiJob).handle(queued!.data);
+    expect(await f.row('conversations', due)).toMatchObject({
+      responder: 'human',
+      ai_resumes_at: past,
+    });
+    await queued!.remove();
+    await sweep.handle({});
+    expect((await queue.getWaiting()).some(({ data }) => data.conversationId === due)).toBe(false);
+  } finally {
+    await pool.query("update stores set extensions = array['chats'] where id = $1", [f.a]);
+  }
+  await sweep.handle({});
+  const resumed = (await queue.getWaiting()).find(({ data }) => data.conversationId === due);
+  expect(resumed?.data).toEqual({ storeId: f.a, conversationId: due });
+  await app.get(ReturnConversationToAiJob).handle(resumed!.data);
+  expect(await f.row('conversations', due)).toMatchObject({ responder: 'ai', ai_resumes_at: null });
 });

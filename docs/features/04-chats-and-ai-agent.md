@@ -378,7 +378,7 @@ Staff with edit access can set status, assign an active member or clear the assi
 
 Staff can add internal notes to the inbox thread. A note records its author and time, stays inside Dakly, and leaves the customer preview, reply window and unread count as they were.
 
-Staff can take over until they hand back, or choose a return after 30 minutes, one hour or six hours. The worker checks for due returns every minute. It reads the current deadline before returning a chat to AI, so a hand back or extended takeover can change what a queued job does.
+Staff can take over until they hand back, or choose a return after 30 minutes, one hour or six hours. The worker checks for due returns every minute in stores with Chats enabled. It checks the extension and reads the current deadline again when it handles the job. Turning off Chats keeps the deadline, and an extended takeover keeps its new deadline even if a job has already been queued.
 
 ### Events
 

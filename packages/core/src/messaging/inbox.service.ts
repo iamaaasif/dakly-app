@@ -70,15 +70,13 @@ export class InboxService {
     return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);
       await this.find(storeId, id, 'no key update');
-      const now = this.clock.now();
       const note = await this.repository.addNote(
         storeId,
         id,
         { ...input, authorUserId: actor.userId },
-        now,
+        this.clock.now(),
       );
       if (!note) throw messagingError('MESSAGING_PREPARATION_FAILED');
-      await this.repository.update(storeId, id, {}, now);
       return messageResponse(note);
     });
   }
@@ -135,6 +133,8 @@ export class InboxService {
       const before = await this.repository.find(storeId, id, 'no key update');
       const now = this.clock.now();
       if (!before?.aiResumesAt || before.aiResumesAt > now) return;
+      const { extensions } = await this.stores.settings(storeId);
+      if (!extensions.includes('chats')) return;
       const canReturn =
         before.responder === 'human' &&
         (await this.contacts.findRecipient(storeId, before.contactId));
@@ -145,6 +145,7 @@ export class InboxService {
           ? { responder: 'ai', aiResumesAt: null, handoverReason: null, handedOverAt: null }
           : { aiResumesAt: null },
         now,
+        { bumpVersion: false },
       );
       if (after) await this.recordChange(storeId, actor, before, after);
     });

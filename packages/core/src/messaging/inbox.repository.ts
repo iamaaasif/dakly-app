@@ -60,9 +60,9 @@ export class InboxRepository {
     @Inject(DATABASE) private readonly globalDatabase: Database,
   ) {}
 
-  async dueReturns() {
+  async dueReturns(asOf: Date) {
     const result = await this.globalDatabase.execute<{ storeId: string; conversationId: string }>(
-      sql`select store_id as "storeId", conversation_id as "conversationId" from due_conversation_returns(100)`,
+      sql`select store_id as "storeId", conversation_id as "conversationId" from due_conversation_returns(${asOf}, 100)`,
     );
     return result.rows;
   }
@@ -162,11 +162,22 @@ export class InboxRepository {
     return row;
   }
 
-  async update(storeId: string, id: string, change: ConversationChange, now: Date) {
+  async update(
+    storeId: string,
+    id: string,
+    change: ConversationChange,
+    now: Date,
+    { bumpVersion }: { bumpVersion: boolean } = { bumpVersion: true },
+  ) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(conversations)
-        .set({ ...change, updatedAt: now, version: sql`${conversations.version} + 1` })
+        .set({
+          ...change,
+          updatedAt: now,
+          // A responder-only system change must not cancel an inbound reopen.
+          version: bumpVersion ? sql`${conversations.version} + 1` : undefined,
+        })
         .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id)))
         .returning(fields),
     );

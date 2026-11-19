@@ -2143,7 +2143,7 @@ fixture('POST /conversations/:conversationId/notes', async () => {
     last_message_at: before.last_message_at,
     window_expires_at: before.window_expires_at,
     unread_count: before.unread_count,
-    version: before.version + 1,
+    version: before.version,
   });
   const events = await f.admin.pool.query(
     "select type from outbox_events where store_id = $1 and type like 'message.%'",

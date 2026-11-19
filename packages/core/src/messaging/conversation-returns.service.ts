@@ -18,9 +18,10 @@ export class ConversationReturnsService {
   ) {}
 
   async enqueueDue(): Promise<void> {
-    const due = await this.repository.dueReturns();
+    const now = this.clock.now();
+    const due = await this.repository.dueReturns(now);
     if (!due.length) return;
-    const minute = Math.floor(this.clock.now().getTime() / MINUTE_MS);
+    const minute = Math.floor(now.getTime() / MINUTE_MS);
     await this.queue.addBulk(
       due.map((data) => ({
         name: RETURN_CONVERSATION_TO_AI,
