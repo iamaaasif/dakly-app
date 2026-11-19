@@ -165,9 +165,6 @@ export const campaigns = pgTable(
     index('campaigns_start_due_by_store_idx')
       .on(table.storeId, table.scheduledFor, table.id)
       .where(sql`${table.status} = 'scheduled'`),
-    index('campaigns_sending_idx')
-      .on(table.storeId, table.startedAt, table.id)
-      .where(sql`${table.status} = 'sending'`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -219,13 +216,6 @@ export const campaignRecipients = pgTable(
     readAt: timestamptz('read_at'),
     tappedAt: timestamptz('tapped_at'),
     failedAt: timestamptz('failed_at'),
-    // The sender's lease on a recipient in sending. A stale claim is resent under the same
-    // operation key. Retain the last claim on a failed unknown outcome for the marketing cap.
-    claimedAt: timestamptz('claimed_at'),
-    // Credits of a message the provider took or may have taken; the campaign charges their sum.
-    smsCredits: integer('sms_credits'),
-    // Counted so a message whose outcome never resolves stops being sent after a few calls.
-    sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [

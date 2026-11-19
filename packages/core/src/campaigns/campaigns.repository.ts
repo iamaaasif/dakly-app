@@ -271,11 +271,11 @@ export class CampaignsRepository {
   }
 }
 
-export function statusWhere(storeId: string, id: string, status: CampaignStatus) {
+function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 
-export function recipientsWhere(storeId: string, campaignId: string) {
+function recipientsWhere(storeId: string, campaignId: string) {
   return and(
     eq(campaignRecipients.storeId, storeId),
     eq(campaignRecipients.campaignId, campaignId),

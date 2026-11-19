@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import type { TrackedLinkKind, TrackedLinkSourceType } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -94,35 +94,6 @@ export class LinksRepository {
   async findOptOutLink(storeId: string, trackedLinkId: string): Promise<OptOutLink | undefined> {
     const [link] = await this.tenant.forStore(storeId, (tx) =>
       selectOptOutLink(tx, storeId, trackedLinkId),
-    );
-    return link;
-  }
-
-  async lockOptOutSource(storeId: string, { sourceType, sourceId, contactId }: OptOutLink) {
-    const key = `opt-out:${storeId}:${sourceType}:${sourceId}:${contactId}`;
-    await this.tenant.inTransaction(storeId, (tx) =>
-      tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`),
-    );
-  }
-
-  async findOptOutLinkFor(
-    storeId: string,
-    { sourceType, sourceId, contactId }: OptOutLink,
-  ): Promise<{ id: string; code: string } | undefined> {
-    const [link] = await this.tenant.forStore(storeId, (tx) =>
-      tx
-        .select({ id: trackedLinks.id, code: trackedLinks.code })
-        .from(trackedLinks)
-        .where(
-          and(
-            eq(trackedLinks.storeId, storeId),
-            eq(trackedLinks.sourceType, sourceType),
-            sourceId === null ? isNull(trackedLinks.sourceId) : eq(trackedLinks.sourceId, sourceId),
-            eq(trackedLinks.contactId, contactId),
-            eq(trackedLinks.kind, 'sms_opt_out'),
-          ),
-        )
-        .limit(1),
     );
     return link;
   }

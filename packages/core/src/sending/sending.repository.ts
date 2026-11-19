@@ -19,7 +19,6 @@ type SendWindow = {
   contactIds: string[];
   after: Date;
   until: Date;
-  dispatch?: boolean;
   excludeWorkflowStepId?: string;
   includeCommittedFuture?: boolean;
 };
@@ -47,8 +46,8 @@ export class SendingRepository {
     const window = { storeId, contactIds, ...range };
     return this.database.forStore(storeId, async (tx) => {
       const sends = [...(await campaignSends(tx, window)), ...(await workflowSends(tx, window))];
-      // Live checks reserve a slot for unresolved campaign claims. Audience estimates
-      // count those claims in the window in which they occurred.
+      // A recipient still in sending is a send happening now. Workflow steps always have a
+      // channel and send time here; the where clause filters the nulls.
       return sends.map((send) => ({
         contactId: send.contactId,
         channel: send.channel as MarketingSend['channel'],
@@ -58,25 +57,13 @@ export class SendingRepository {
   }
 }
 
-function campaignSends(
-  tx: Transaction,
-  { storeId, contactIds, after, until, dispatch, includeCommittedFuture }: SendWindow,
-) {
-  const live = dispatch || includeCommittedFuture;
-  const pending = eq(campaignRecipients.status, 'sending');
-  const claimTime = or(
-    and(
-      eq(campaignRecipients.status, 'failed'),
-      eq(campaignRecipients.errorCode, 'outcome_unknown'),
-    ),
-    live ? undefined : pending,
-  );
+function campaignSends(tx: Transaction, window: SendWindow) {
+  const { storeId, contactIds, after, until, includeCommittedFuture } = window;
   return tx
     .select({
       contactId: campaignRecipients.contactId,
       channel: campaigns.channel,
-      sentAt: sql<Date | null>`case when ${claimTime} then ${campaignRecipients.claimedAt}
-        else ${campaignRecipients.sentAt} end`.mapWith(campaignRecipients.sentAt),
+      sentAt: campaignRecipients.sentAt,
     })
     .from(campaignRecipients)
     .innerJoin(
@@ -91,12 +78,7 @@ function campaignSends(
         eq(campaignRecipients.storeId, storeId),
         inArray(campaignRecipients.contactId, contactIds),
         or(
-          live ? pending : undefined,
-          and(
-            claimTime,
-            gt(campaignRecipients.claimedAt, after),
-            includeCommittedFuture ? undefined : lte(campaignRecipients.claimedAt, until),
-          ),
+          eq(campaignRecipients.status, 'sending'),
           and(
             inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
             gt(campaignRecipients.sentAt, after),

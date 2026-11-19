@@ -51,31 +51,6 @@ describe('tracked link filters without RLS assistance', () => {
     );
   });
 
-  it('finds an opt-out link only in the selected store, with or without a source id', async () => {
-    const withSource = link(contactA, 'sms_opt_out');
-    const withoutSource = {
-      ...link(contactA, 'sms_opt_out'),
-      sourceType: 'chat' as const,
-      sourceId: null,
-    };
-    await repository.insert(f.a, [withSource, withoutSource]);
-    const source = (row: typeof withSource | typeof withoutSource) => ({
-      sourceType: row.sourceType,
-      sourceId: row.sourceId,
-      contactId: contactA,
-    });
-
-    expect(await repository.findOptOutLinkFor(f.b, source(withSource))).toBeUndefined();
-    expect(await repository.findOptOutLinkFor(f.a, source(withSource))).toEqual({
-      id: withSource.id,
-      code: withSource.code,
-    });
-    expect(await repository.findOptOutLinkFor(f.a, source(withoutSource))).toEqual({
-      id: withoutSource.id,
-      code: withoutSource.code,
-    });
-  });
-
   it('skips a code another store already holds', async () => {
     const taken = link(contactB, 'redirect');
     await repository.insert(f.b, [taken]);

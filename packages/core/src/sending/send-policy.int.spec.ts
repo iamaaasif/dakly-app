@@ -15,7 +15,7 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { StoresService } from '../stores/stores.service';
-import { SendPolicyService } from './send-policy.service';
+import { type SendRequest, SendPolicyService } from './send-policy.service';
 import { SendingModule } from './sending.module';
 
 class TestModule {}
@@ -66,20 +66,12 @@ async function campaignSend(
   storeId: string,
   contactId: string,
   sentAt: Date | null,
-  {
-    status = 'sent',
-    category = 'marketing',
-    claimedAt = null,
-  }: {
-    status?: string;
-    category?: string;
-    claimedAt?: Date | null;
-  } = {},
+  { status = 'sent', category = 'marketing' } = {},
 ) {
   const campaignId = await campaign(storeId, category);
   await admin.pool.query(
-    'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,claimed_at) values($1,$2,$3,$4,$5,$6,$7)',
-    [randomUUID(), storeId, campaignId, contactId, status, sentAt, claimedAt],
+    'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at) values($1,$2,$3,$4,$5,$6)',
+    [randomUUID(), storeId, campaignId, contactId, status, sentAt],
   );
 }
 
@@ -115,11 +107,7 @@ async function workflowSend(
 }
 
 // The sending job runs the gate inside its store transaction.
-function check(
-  storeId: string,
-  contactId: string,
-  change: Partial<Parameters<SendPolicyService['check']>[1]> = {},
-) {
+function check(storeId: string, contactId: string, change: Partial<SendRequest> = {}) {
   return app.get(StoreTransaction).run(storeId, () =>
     policy.check(storeId, {
       contactId,
@@ -211,20 +199,6 @@ describe('SendPolicyService (Postgres)', () => {
     expect(await check(storeA, contactId)).toEqual({ action: 'send' });
   });
 
-  it.each([
-    ['campaign', campaignSend],
-    ['workflow', workflowSend],
-  ])('counts a committed %s send when the campaign worker clock is behind', async (_type, send) => {
-    const contactId = await consentedContact(storeA);
-    await send(storeA, contactId, new Date(noon.getTime() + 1000));
-
-    expect(await check(storeA, contactId, { at: () => noon })).toEqual({
-      action: 'skip',
-      reason: 'frequency_cap',
-    });
-    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
-  });
-
   it('skips a contact who withdrew after approval', async () => {
     const contactId = await consentedContact(storeA);
     expect(await check(storeA, contactId)).toEqual({ action: 'send' });
@@ -284,37 +258,6 @@ describe('SendPolicyService (Postgres)', () => {
     await campaignSend(storeA, contactId, null, { status: 'sending' });
 
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
-  });
-
-  it('counts a campaign claim in its own window when approving a future audience', async () => {
-    const contactId = await consentedContact(storeA);
-    await campaignSend(storeA, contactId, null, {
-      status: 'sending',
-      claimedAt: hoursBefore(1),
-    });
-
-    expect(await policy.checkAudience(storeA, audienceOf([contactId]))).toEqual([
-      expect.objectContaining({ decision: { action: 'skip', reason: 'frequency_cap' } }),
-    ]);
-    expect(
-      await policy.checkAudience(storeA, audienceOf([contactId], hoursBefore(-8 * 24))),
-    ).toEqual([expect.objectContaining({ decision: { action: 'send' } })]);
-  });
-
-  it('counts a charged unknown outcome from its original dispatch time', async () => {
-    const contactId = await consentedContact(storeA);
-    const campaignId = await campaign(storeA);
-    await admin.pool.query(
-      "insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,claimed_at,failed_at,error_code,sms_credits) values($1,$2,$3,$4,'failed',$5,$6,'outcome_unknown',1)",
-      [randomUUID(), storeA, campaignId, contactId, hoursBefore(1), hoursBefore(0)],
-    );
-    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
-
-    await admin.pool.query('update campaign_recipients set claimed_at=$2 where campaign_id=$1', [
-      campaignId,
-      hoursBefore(25),
-    ]);
-    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
   });
 
   it('reads the dispatch clock after waiting for the contact lock', async () => {

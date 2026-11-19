@@ -31,11 +31,7 @@ export type SendDecision =
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
-type CapReadOptions = {
-  dispatch?: boolean;
-  excludeWorkflowStepId?: string;
-  includeCommittedFuture?: boolean;
-};
+type CapReadOptions = { excludeWorkflowStepId?: string; includeCommittedFuture?: boolean };
 type SendWindow = { windowClosesAt?: Date | null };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
@@ -92,33 +88,19 @@ export class SendPolicyService {
     }
   }
 
-  async check(
-    storeId: string,
-    request: Omit<SendRequest, 'at'> & { at: Date | (() => Date) },
-  ): Promise<SendDecision> {
-    if (
-      request.category === 'marketing' &&
-      !(await this.lockForDispatch(storeId, request.contactId))
-    )
-      return skip('no_address');
-    // A campaign samples its clock after waiting on the contact locks.
-    const readAt = request.at;
-    const live = typeof readAt === 'function';
-    const at = live ? readAt() : readAt;
-    const reason = await this.recipientReason(storeId, { ...request, at });
+  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
+    if (request.category === 'marketing') this.requireTransaction();
+    const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
     if (request.category !== 'marketing') return SEND;
 
+    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
     const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
+    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], at, {
-      dispatch: true,
-      includeCommittedFuture: live,
-    });
-    return capReached(sends, { ...request, at }, settings.frequencyCap)
-      ? skip('frequency_cap')
-      : SEND;
+    await this.repository.lockContact(storeId, request.contactId);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
   private async recipientReason(

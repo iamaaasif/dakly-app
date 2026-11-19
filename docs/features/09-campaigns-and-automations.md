@@ -345,7 +345,7 @@ Each change is a guarded update from one state, listed in a table in `CampaignsS
 | `POST /campaigns/:campaignId/pause`      | `sending`                             | `paused`    | `CAMPAIGN_NOT_SENDING`                                                  |
 | `POST /campaigns/:campaignId/resume`     | `paused` with `pause_reason` `manual` | `sending`   | `CAMPAIGN_NOT_PAUSED`; `CAMPAIGN_PAUSED_BY_SYSTEM` for any other reason |
 
-- Under the current CAMP-2 rules, edit and cancel work until 5 minutes before `scheduledFor`. Inside that window, or past the send time, they return `CAMPAIGN_CHANGE_TOO_LATE` (409). Each runs in one store transaction that locks the campaign and releases its credit reservation through `WalletService.release`. CAMP-3 will replace the cancellation cutoff and allow cancellation during sending.
+- Edit and cancel (CAMP-R7) work until 5 minutes before `scheduledFor`, by the Clock; inside that, or past the send time, they are refused with `CAMPAIGN_CHANGE_TOO_LATE` (409). Each runs in one store transaction that locks the campaign and releases its credit reservation through `WalletService.release`, last, so the wallet lock is held only until commit.
 - Edit is its own action, because returning to draft lets go of the frozen audience and the credits, which a `PATCH` should not do on the side. It deletes the recipients and clears the approver, approval time, estimated cost and counts. The draft can then be changed and approved again, which freezes the audience and reserves anew. The reservation key holds the approval time, so a second approval is not taken for a replay of the first.
 - Cancel keeps the recipients and moves the queued ones to `cancelled`; skipped ones stay skipped. It sets `finished_at`, which starts the 372-day recipient retention ([growth.md](../data/growth.md)).
 - Pause sets `pause_reason` to `manual`, and resume clears it. Until the sender (CAMP-3) is built, they only move the status.
@@ -355,10 +355,6 @@ Each change is a guarded update from one state, listed in a table in `CampaignsS
 
 ### Sender (CAMP-3)
 
-The batch worker can reuse a contact's opt-out code at the base saved at approval. Recipient rows have fields for the dispatch claim, provider attempts and charged SMS credits. The recovery sweep finds stores with a sending campaign, then reads each store's earliest campaign under store RLS. The send gate checks current consent and frequency after the contact lock.
-
-When the short-link host changes, redirect old links to their equivalents at the current short-link base. Preserve the code and whether the link is an opt-out. The confirmation page opens on the current host and posts from the configured short-link origin.
-
 The sender runs on the `campaign` queue in `apps/worker`. The `start-due-campaigns` sweep gets up to 100 due store IDs from `campaign_due_stores` and saves the last ID in Valkey to continue next tick. For each store, one guarded update sets `sending` and `started_at` on up to 100 due scheduled rows under store RLS. It skips rows locked by edits or cancellation. A failed store is logged and the sweep continues to the next one. Immediate approvals record the start time when approved. The sender PR adds the recurring schedule and the batch job that sends to recipients.
 
 ### Frozen destinations and final send checks
@@ -367,7 +363,7 @@ At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each
 
 Before every actual send, verify the contact, identity, connection, channel and frozen address still agree in this store. Never silently switch a scheduled recipient to another Page, number or contact after a merge or edit; require a new approved audience or record an ineligible recipient. Connection binding is immutable after approval. These ownership and address checks are service requirements alongside database tenant constraints.
 
-The final gate rechecks consent, window, block, plan and frequency. For SMS, the claim commits the decision. A withdrawal or cancellation that commits first stops the new claim. An authorized attempt can submit after the commit, with no transaction held across the provider call. A queued recipient denied at the gate records a skip reason, such as `no_consent` or `window_closed`, and the campaign releases the unused credits at settlement. Reconcile a provider-accepted or uncertain attempt before settling its cost.
+Immediately before provider submission, repeat consent, window, block, plan and frequency checks. Both `queued` and pre-submission `sending` may become `skipped` with a skip reason. Record the skip and release its reserved cost atomically, with no provider send. A provider-accepted or uncertain submission must be reconciled; it cannot be relabelled as an unsent skip. A withdrawal after scheduling records `no_consent`; a closed Messenger window records `window_closed`.
 
 ### Send gate (CAMP-9)
 
@@ -380,7 +376,7 @@ The final gate rechecks consent, window, block, plan and frequency. For SMS, the
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
 6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time whose own `category` is `marketing`, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
 
-   A campaign recipient counts once it is `sent`, `delivered` or `read`. A failed recipient with `outcome_unknown` counts from its dispatch claim time. A recipient still `sending` occupies a slot at the live gate, while audience estimates count it in the window of its claim. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed`. Unconfirmed sends count because the provider may have accepted them. A confirmed refusal does not count. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
+   A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed`. An unconfirmed step counts because the provider may have accepted it. A confirmed refusal does not count. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
@@ -585,7 +581,7 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 - A workflow version is published while 40 people wait on a deleted step: they finish on the old version.
 - Crash after a workflow claim and before enqueue: lease recovery queues the same step and provider idempotency prevents a second send.
 - A contact on two Messenger Pages uses the selected Page identity; SMS accepts null connection and identity.
-- Consent is withdrawn after approval but before an SMS claim commits: skip and release unused credits at settlement without calling the provider. A withdrawal after the claim prevents a later resend.
+- Consent is withdrawn after approval while a recipient is queued or claimed but unsent: skip and release cost without calling the provider.
 
 ### Acceptance
 

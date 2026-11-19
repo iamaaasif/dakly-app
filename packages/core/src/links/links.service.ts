@@ -56,7 +56,6 @@ export class LinksService {
     storeId: string,
     links: NewTrackedLink[],
     _actor: AuditEntry['actor'],
-    base = this.shortLinkBase(),
   ): Promise<TrackedLink[]> {
     let pending: NewTrackedLinkRow[] = links.map((link) => ({
       targetUrl: null,
@@ -71,32 +70,12 @@ export class LinksService {
       for (const row of pending) row.code = newCode();
     }
     if (pending.length) throw linkError('LINK_CODES_EXHAUSTED');
-    return rows.map((row) => ({
-      id: row.id,
-      code: row.code,
-      url: linkUrl(row.kind, row.code, base),
-    }));
+    return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
   }
 
-  // A resend must carry the same text, so a contact has one opt-out link per source.
-  async optOutLink(
-    storeId: string,
-    link: LinkSource & { contactId: string },
-    actor: AuditEntry['actor'],
-    base = this.shortLinkBase(),
-  ): Promise<TrackedLink> {
-    return this.transaction.run(storeId, async () => {
-      await this.repository.lockOptOutSource(storeId, link);
-      const existing = await this.repository.findOptOutLinkFor(storeId, link);
-      if (existing)
-        return { id: existing.id, code: existing.code, url: this.optOutUrl(existing.code, base) };
-      const [created] = await this.create(storeId, [{ ...link, kind: 'sms_opt_out' }], actor, base);
-      return created!;
-    });
-  }
-
-  optOutUrl(code: string, base = this.shortLinkBase()): string {
-    return linkUrl('sms_opt_out', code, base);
+  // A sender that kept the code builds the same address again.
+  optOutUrl(code: string): string {
+    return linkUrl('sms_opt_out', code);
   }
 
   shortLinkBase(): string {
@@ -206,6 +185,10 @@ function newCode(): string {
   ).join('');
 }
 
-function linkUrl(kind: NewTrackedLink['kind'], code: string, base: string): string {
+function linkUrl(
+  kind: NewTrackedLink['kind'],
+  code: string,
+  base = loadEnv().SHORT_LINK_BASE_URL,
+): string {
   return kind === 'redirect' ? `${base}/${code}` : `${base}/s/${code}`;
 }

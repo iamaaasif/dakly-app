@@ -10,6 +10,7 @@ import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 
+import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsService } from '../segments/segments.service';
 import { StoresService } from '../stores/stores.service';
@@ -217,10 +218,16 @@ describe('Campaign estimate and approval (Postgres)', () => {
 
     expect(approved.status).toBe('scheduled');
     const { rows: times } = await admin.pool.query(
-      'select approved_at, started_at from campaigns where id=$1',
+      'select approved_at, started_at, short_link_base from campaigns where id=$1',
       [campaignId],
     );
-    expect(times).toEqual([{ approved_at: expect.any(Date), started_at: null }]);
+    expect(times).toEqual([
+      {
+        approved_at: expect.any(Date),
+        started_at: null,
+        short_link_base: loadEnv().SHORT_LINK_BASE_URL,
+      },
+    ]);
     const [counts] = (
       await admin.pool.query('select recipients_count, skipped_count from campaigns where id=$1', [
         campaignId,
