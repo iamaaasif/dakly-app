@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadEnv, loadStaffEnv, loadWorkerEnv, resetEnvForTests } from './env';
+import { loadEnv, loadStaffEnv, resetEnvForTests } from './env';
 
 describe('loadEnv', () => {
   it.each(['https://localhost:6379', 'redis://localhost/-1', 'redis://localhost/1.5'])(
@@ -43,12 +43,6 @@ describe('SMS driver configuration', () => {
       MAILPIT_SMTP_HOST: '127.0.0.1',
       MAILPIT_SMTP_PORT: 1025,
     });
-  });
-
-  it('requires a stable destination hash key at worker startup', () => {
-    expect(() => loadWorkerEnv(base)).toThrow('CODE_HASH_KEY is required to start the worker');
-    const CODE_HASH_KEY = randomBytes(32).toString('base64');
-    expect(loadWorkerEnv({ ...base, CODE_HASH_KEY }).CODE_HASH_KEY).toBe(CODE_HASH_KEY);
   });
 
   it('requires staff Access and session configuration in production', () => {

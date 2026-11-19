@@ -9,7 +9,6 @@ import type {
 } from '@dakly/contracts/stores';
 import { stores, storeCounters } from '@dakly/db/schema/stores';
 
-import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const storeColumns = {
@@ -91,19 +90,14 @@ export class StoresRepository {
 
   async sendingSettings(
     storeId: string,
-    lock?: 'share',
   ): Promise<{ timeZone: string; sending: unknown } | undefined> {
-    const read = (tx: Transaction) => {
-      const query = tx
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
         .select({ timeZone: stores.timeZone, sending: sql<unknown>`${stores.settings}->'sending'` })
         .from(stores)
         .where(eq(stores.id, storeId))
-        .limit(1);
-      return lock ? query.for(lock) : query;
-    };
-    const [row] = lock
-      ? await this.tenant.inTransaction(storeId, read)
-      : await this.tenant.forStore(storeId, read);
+        .limit(1),
+    );
     return row;
   }
 

@@ -7,7 +7,6 @@ import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
-import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
 
@@ -22,7 +21,7 @@ import { AutomationRunsService } from './automation-runs.service';
     StoresModule,
     WalletsModule,
   ],
-  providers: [AutomationConditionsService, AutomationRunsRepository, AutomationRunsService],
+  providers: [AutomationRunsRepository, AutomationRunsService],
   exports: [AutomationRunsService],
 })
 export class AutomationRunsModule {}

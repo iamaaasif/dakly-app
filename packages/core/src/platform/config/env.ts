@@ -110,12 +110,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   return env;
 }
 
-export function loadWorkerEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  const env = loadEnv(source);
-  if (!env.CODE_HASH_KEY) throw new Error('CODE_HASH_KEY is required to start the worker');
-  return env;
-}
-
 function parseEnv(source: NodeJS.ProcessEnv): Env {
   const env = envSchema.parse(source);
   assertLlmEnv(env);

@@ -9,7 +9,6 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
-import { HOUR_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
@@ -30,10 +29,12 @@ export type SendDecision =
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
-type CapReadOptions = { excludeWorkflowStepId?: string; includeCommittedFuture?: boolean };
+type CapReadOptions = { includeCommittedFuture?: boolean };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
+
+const HOUR = 60 * 60 * 1000;
 
 const SEND: SendDecision = { action: 'send' };
 
@@ -67,31 +68,6 @@ export class SendPolicyService {
     return { decision: checked!.decision, destination: checked!.phone, at };
   }
 
-  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
-    if (request.category === 'marketing') this.requireTransaction();
-    const reason = await this.recipientReason(storeId, request);
-    if (reason) return skip(reason);
-    if (request.category !== 'marketing') return SEND;
-
-    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
-    const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
-    if (quietUntil) return { action: 'defer', until: quietUntil };
-    await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
-    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
-  }
-
-  // A retry keeps its reservation and replaces its prior count with the new dispatch.
-  async recheckForSend(storeId: string, request: Omit<SendRequest, 'at'>, workflowStepId: string) {
-    const exists = await this.lockForDispatch(storeId, request.contactId);
-    const at = this.clock.now();
-    const decision = exists
-      ? await this.recheck(storeId, { ...request, at }, workflowStepId)
-      : skip('no_address');
-    return { decision, at };
-  }
-
   private async lockForDispatch(storeId: string, contactId: string) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, contactId);
@@ -104,33 +80,24 @@ export class SendPolicyService {
     }
   }
 
-  private async recheck(
-    storeId: string,
-    request: SendRequest,
-    workflowStepId: string,
-  ): Promise<SendDecision> {
-    const reason = await this.recipientReason(storeId, request);
-    if (reason) return skip(reason);
-    if (request.category !== 'marketing') return SEND;
-    const { contactId, channel, at } = request;
-    const limit = await this.audienceLimits(
-      storeId,
-      { contactIds: [contactId], channel, at },
-      { excludeWorkflowStepId: workflowStepId, includeCommittedFuture: true },
-    );
-    return limit(contactId);
-  }
-
-  private async recipientReason(
-    storeId: string,
-    request: SendRequest,
-  ): Promise<SkipReason | undefined> {
+  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
+    if (request.category === 'marketing') this.requireTransaction();
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =
       contact && request.category === 'marketing'
         ? await this.consents.current(storeId, [request.contactId], request.channel)
         : [];
-    return recipientSkip(contact, consent?.status, request);
+    const reason = recipientSkip(contact, consent?.status, request);
+    if (reason) return skip(reason);
+    if (request.category !== 'marketing') return SEND;
+
+    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
+    const settings = await this.stores.sendingSettings(storeId);
+    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
+    if (quietUntil) return { action: 'defer', until: quietUntil };
+    await this.repository.lockContact(storeId, request.contactId);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
@@ -192,7 +159,7 @@ export class SendPolicyService {
         : SEND;
   }
 
-  // Live dispatches count already-committed rows even if another worker’s clock was ahead.
+  // Live checks count committed rows even if another worker's clock was ahead.
   private listWeekOfSends(
     storeId: string,
     contactIds: string[],
@@ -200,7 +167,7 @@ export class SendPolicyService {
     capRead?: CapReadOptions,
   ) {
     return this.repository.listMarketingSends(storeId, contactIds, {
-      after: new Date(at.getTime() - 7 * 24 * HOUR_MS),
+      after: new Date(at.getTime() - 7 * 24 * HOUR),
       until: at,
       ...capRead,
     });
@@ -234,7 +201,7 @@ function capReached(
   { channel, at }: Pick<SendRequest, 'channel' | 'at'>,
   { perChannelPerDay, perSevenDays }: SendingSettings['frequencyCap'],
 ): boolean {
-  const dayStart = new Date(at.getTime() - 24 * HOUR_MS);
+  const dayStart = new Date(at.getTime() - 24 * HOUR);
   const onChannelToday = sends.filter(
     (send) => send.channel === channel && send.sentAt > dayStart,
   ).length;
@@ -251,7 +218,7 @@ function quietHoursEnd(
   if (local.hour >= endHour && local.hour < startHour) return undefined;
   const hoursToEnd = (endHour - local.hour + 24) % 24;
   const intoHour = (local.minute * 60 + local.second) * 1000 + at.getUTCMilliseconds();
-  return new Date(at.getTime() + hoursToEnd * HOUR_MS - intoHour);
+  return new Date(at.getTime() + hoursToEnd * HOUR - intoHour);
 }
 
 function localClock(at: Date, timeZone: string) {

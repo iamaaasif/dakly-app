@@ -5,8 +5,6 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 
 import type { TagChange } from '../contacts/contacts.service';
 import type { PreparedSmsSender } from '../messaging/messaging.service';
-import { loadEnv } from '../platform/config/env';
-import { hashCode } from '../platform/crypto/code-hash';
 import { DAY_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
@@ -20,9 +18,6 @@ import { wakeTime } from './automation-waits';
 
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
-
-export type Condition = AutomationGraph['workflowFilters'][number];
-export type PathChoice = { outcome: string; next: string };
 
 export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
@@ -49,7 +44,7 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
-  | { outcome: 'late' | 'destination_changed' }
+  | { outcome: 'late' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: Exclude<SendDecision, { action: 'send' }> }
   | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
@@ -93,33 +88,6 @@ export function scheduleWait(
   };
 }
 
-export function firstSendStop(
-  claim: RunClaim,
-  step: SendStep,
-  started: Exclude<GateResult, 'not_live' | { body: string }>,
-): StepResult {
-  const at = claim.claimedAt;
-  const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
-  if ('exitReason' in started) return { ...exited(started.exitReason, at), claim };
-  if ('outcome' in started) {
-    if (started.outcome === 'late')
-      return { ...goOn(step.next, at), claim, step: { ...row, outcome: 'late' } };
-    return {
-      ...failed("The contact's phone changed during SMS preparation", at),
-      claim,
-      step: { ...row, outcome: 'failed' },
-    };
-  }
-  const { decision } = started;
-  if (decision.action === 'defer')
-    return { claim, run: { status: 'waiting', wakeAt: decision.until } };
-  return {
-    ...ifNotReachable(step, at),
-    claim,
-    step: { ...row, outcome: 'skipped', skipReason: decision.reason },
-  };
-}
-
 // Tasks for staff, team notices, handing to a person and coupons have no owning service yet, and
 // publish refuses them. The tag change is written with the step, under the claim.
 export function runAction(
@@ -148,12 +116,6 @@ export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
 
 export function messageBody(step: SendStep, optOutUrl: string | undefined): string {
   return optOutUrl ? `${step.message.text}\n${optOutUrl}` : step.message.text;
-}
-
-export function workflowDestinationHash(storeId: string, phone: string | null): string | null {
-  return phone
-    ? hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify(['workflow-sms', storeId, phone]))
-    : null;
 }
 
 export function ifNotReachable(step: SendStep, now: Date) {

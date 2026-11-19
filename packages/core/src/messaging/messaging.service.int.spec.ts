@@ -36,9 +36,9 @@ let storeB: string;
 function watchDriver() {
   const calls: { to: string; isTransactionOpen: boolean }[] = [];
   const send = MailpitSmsDriver.prototype.send;
-  vi.spyOn(MailpitSmsDriver.prototype, 'send').mockImplementation(async function (message, signal) {
+  vi.spyOn(MailpitSmsDriver.prototype, 'send').mockImplementation(async function (message) {
     calls.push({ to: message.to, isTransactionOpen: transaction.isOpen() });
-    const result = await send.call(this, message, signal);
+    const result = await send.call(this, message);
     sentIds.push(result.providerMessageId);
     return result;
   });
