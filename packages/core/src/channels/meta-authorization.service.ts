@@ -138,8 +138,8 @@ export class MetaAuthorizationService {
         await this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
           driver.subscribePage(id, token),
         );
-      const now = this.clock.now();
       const ids = await this.transaction.runLocked(storeId, async () => {
+        const now = this.clock.now();
         const ids: string[] = [];
         for (const { page, ...account } of selected) {
           const secret = this.encryptPageToken(storeId, page.accessToken);

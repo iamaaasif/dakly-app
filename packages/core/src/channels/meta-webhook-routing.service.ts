@@ -8,6 +8,7 @@ import type {
 
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
+import { MINUTE_MS } from '../platform/time';
 import { ChannelConnectionsService } from './channel-connections.service';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
 
@@ -57,7 +58,7 @@ export class MetaWebhookRoutingService {
       const externalAccountId = message.accountExternalId;
       const storeId = stores.get(externalAccountId);
       if (!storeId) continue;
-      const outcome = await this.receive(storeId, message);
+      const outcome = await this.receive(storeId, message, delivery.receivedAt);
       if (outcome === 'stored' || outcome === 'duplicate') processed = true;
       else reason = outcome;
     }
@@ -69,13 +70,15 @@ export class MetaWebhookRoutingService {
     );
   }
 
-  private async receive(storeId: string, message: InboundMessage) {
+  private async receive(storeId: string, message: InboundMessage, receivedAt: Date) {
     if (!message.text) return 'unsupported_attachment';
     const connection = await this.connections.findInbound(storeId, {
       kind: connectionKind[message.channel],
       externalAccountId: message.accountExternalId,
     });
     if (!connection) return 'unknown_account';
+    if (receivedAt < connection.connectedAt) return 'stale_delivery';
+    if (message.sentAt.getTime() > receivedAt.getTime() + MINUTE_MS) return 'invalid_timestamp';
     return this.messaging.receiveInboundMessage(storeId, {
       connectionId: connection.id,
       externalSenderId: message.senderExternalId,

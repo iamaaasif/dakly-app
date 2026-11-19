@@ -61,7 +61,7 @@ async function connection(storeId: string, kind = 'facebook_page') {
   await admin.pool.query(
     `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
     values ($1, $2, $3, $4, 'Inbound test', $5)`,
-    [id, storeId, kind, id, sentAt],
+    [id, storeId, kind, id, new Date(sentAt.getTime() - MINUTE_MS)],
   );
   return id;
 }

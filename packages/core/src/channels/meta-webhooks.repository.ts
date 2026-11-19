@@ -32,7 +32,7 @@ export class MetaWebhooksRepository {
 
   async findReceived(id: string) {
     const [row] = await this.database
-      .select({ payload: webhookEvents.payload })
+      .select({ payload: webhookEvents.payload, receivedAt: webhookEvents.receivedAt })
       .from(webhookEvents)
       .where(
         and(

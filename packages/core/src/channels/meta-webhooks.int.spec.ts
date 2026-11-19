@@ -187,7 +187,7 @@ describe('Meta webhook intake', () => {
           await admin.pool.query(
             `insert into channel_connections (id, store_id, kind, external_account_id, display_name, status, connected_at)
            values ($1, $2, 'facebook_page', $3, 'Routing test', $4, $5)`,
-            [randomUUID(), storeId, accountId, status, new Date(1795053599000)],
+            [randomUUID(), storeId, accountId, status, new Date(1795053540000)],
           );
         expect((await post(payload)).statusCode).toBe(200);
         const [received] = await stored(payload);
@@ -222,72 +222,82 @@ describe('Meta webhook intake', () => {
     },
   );
 
-  it('keeps a delayed delivery from reaching the next owner of a Page', async () => {
-    const firstStore = randomUUID();
-    const secondStore = randomUUID();
-    const accountId = randomUUID();
-    const beforeTransfer = 1795053600000;
-    const payload = JSON.stringify({
-      object: 'page',
-      entry: [
-        {
-          id: accountId,
-          messaging: [
-            {
-              sender: { id: '987' },
-              recipient: { id: accountId },
-              timestamp: beforeTransfer,
-              message: { mid: 'mid.001', text: 'আগের দোকানের বার্তা' },
-            },
-          ],
-        },
-      ],
-    });
-    await admin.pool.query(
-      "insert into stores (id, name) values ($1, 'Old shop'), ($2, 'New shop')",
-      [firstStore, secondStore],
-    );
-    try {
+  it.each(['before', 'after'] as const)(
+    'keeps a delayed delivery arriving %s transfer from reaching the next shop',
+    async (arrival) => {
+      const firstStore = randomUUID();
+      const secondStore = randomUUID();
+      const accountId = randomUUID();
+      const transferAt = Date.now() - 1000;
+      const providerTime = transferAt + 30_000;
+      const payload = JSON.stringify({
+        object: 'page',
+        entry: [
+          {
+            id: accountId,
+            messaging: [
+              {
+                sender: { id: '987' },
+                recipient: { id: accountId },
+                timestamp: providerTime,
+                message: { mid: 'mid.001', text: 'আগের দোকানের বার্তা' },
+              },
+            ],
+          },
+        ],
+      });
       await admin.pool.query(
-        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+        "insert into stores (id, name) values ($1, 'Old shop'), ($2, 'New shop')",
+        [firstStore, secondStore],
+      );
+      try {
+        await admin.pool.query(
+          `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
         values ($1, $2, 'facebook_page', $3, 'Old Page', $4)`,
-        [randomUUID(), firstStore, accountId, new Date(beforeTransfer - 1000)],
-      );
-      expect((await post(payload)).statusCode).toBe(200);
-      const [received] = await stored(payload);
-      await admin.pool.query(
-        "update channel_connections set status = 'disconnected' where store_id = $1",
-        [firstStore],
-      );
-      await admin.pool.query(
-        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+          [randomUUID(), firstStore, accountId, new Date(transferAt - 120_000)],
+        );
+        if (arrival === 'before') expect((await post(payload)).statusCode).toBe(200);
+        await admin.pool.query(
+          "update channel_connections set status = 'disconnected' where store_id = $1",
+          [firstStore],
+        );
+        await admin.pool.query(
+          `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
         values ($1, $2, 'facebook_page', $3, 'Transferred Page', $4)`,
-        [randomUUID(), secondStore, accountId, new Date(beforeTransfer + 1000)],
-      );
-      await app.get(ProcessWebhookEventJob).handle({ webhookEventId: received?.id });
-      expect(await stored(payload)).toEqual([
-        expect.objectContaining({ status: 'ignored', error: 'stale_delivery', payload: null }),
-      ]);
-      for (const table of ['contacts', 'messages']) {
-        const result = await admin.pool.query(`select id from ${table} where store_id = $1`, [
-          secondStore,
+          [randomUUID(), secondStore, accountId, new Date(transferAt)],
+        );
+        if (arrival === 'after') expect((await post(payload)).statusCode).toBe(200);
+        const [received] = await stored(payload);
+        if (arrival === 'before')
+          await admin.pool.query('update webhook_events set received_at = $1 where id = $2', [
+            new Date(transferAt - 500),
+            received?.id,
+          ]);
+        await app.get(ProcessWebhookEventJob).handle({ webhookEventId: received?.id });
+        expect(await stored(payload)).toEqual([
+          expect.objectContaining({ status: 'ignored', error: 'stale_delivery', payload: null }),
         ]);
-        expect(result.rows).toEqual([]);
+        for (const table of ['contacts', 'messages']) {
+          const result = await admin.pool.query(`select id from ${table} where store_id = $1`, [
+            secondStore,
+          ]);
+          expect(result.rows).toEqual([]);
+        }
+      } finally {
+        const stores = [firstStore, secondStore];
+        for (const table of [
+          'outbox_events',
+          'messages',
+          'conversations',
+          'contact_identities',
+          'contacts',
+          'channel_connections',
+        ])
+          await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [stores]);
+        await admin.pool.query('delete from stores where id = any($1::uuid[])', [stores]);
       }
-    } finally {
-      const stores = [firstStore, secondStore];
-      for (const table of [
-        'outbox_events',
-        'messages',
-        'conversations',
-        'contact_identities',
-        'contacts',
-        'channel_connections',
-      ])
-        await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [stores]);
-      await admin.pool.query('delete from stores where id = any($1::uuid[])', [stores]);
-    }
-  });
+    },
+  );
 
   it('rejects a signature for different bytes and logs the rejection without the payload', async () => {
     const payload = delivery('instagram');
