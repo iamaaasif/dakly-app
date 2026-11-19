@@ -196,9 +196,13 @@ atomically and retain business data when an extension is disabled.
 | `GET /brand-profile`, `GET /content-pieces`, `GET /content-pieces/:contentPieceId`                                              | `social.view` |
 | `PUT /brand-profile`, `POST /content-pieces`, `PATCH /content-pieces/:contentPieceId`, `DELETE /content-pieces/:contentPieceId` | `social.edit` |
 | `GET /posts`, `GET /posts/:postId`, `POST /posts` (idem), `PATCH /posts/:postId`, `DELETE /posts/:postId`                       | `socialPosts` |
-| `POST /posts/:postId/schedule`, `POST /posts/:postId/publish-now`, `POST /posts/:postId/approve`                                | `socialPosts` |
+| `POST /posts/:postId/schedule`, `POST /posts/:postId/approve`                                                                   | `social.edit` |
+| `POST /posts/:postId/publish-now`                                                                                               | `socialPosts` |
 | `POST /posts/captions` (AI writing)                                                                                             | `socialPosts` |
-| `GET /posts/queue-slots`, `PUT /posts/queue-slots`                                                                              | `socialPosts` |
+| `GET /posts/queue-slots`                                                                                                        | `social.view` |
+| `PUT /posts/queue-slots`                                                                                                        | `social.edit` |
+
+An Owner, Admin or Marketer must approve an AI-written draft.
 
 ## Campaigns and automations (09)
 
