@@ -19,6 +19,7 @@ import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationSendRetryService } from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 import { AutomationsModule } from './automations.module';
 
@@ -44,6 +45,7 @@ import { AutomationsModule } from './automations.module';
     AutomationRunsService,
     AutomationEntryRepository,
     AutomationEntryService,
+    AutomationSendRetryService,
     AutomationSmsDeliveryService,
     AutomationBirthdaysService,
     AutomationBirthdaySweepService,

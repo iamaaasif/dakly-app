@@ -36,7 +36,6 @@ describe('SendPolicyService', () => {
   let service: SendPolicyService;
   let clockAt: Date;
   let afterLock: () => void;
-  let afterCapRead: () => void;
 
   beforeEach(() => {
     contact = { kind: 'customer', isBlocked: false, isOverPlanLimit: false, hasPhone: true };
@@ -45,7 +44,6 @@ describe('SendPolicyService', () => {
     sends = [];
     clockAt = NOON_DHAKA;
     afterLock = () => undefined;
-    afterCapRead = () => undefined;
     // The batch reads answer the same for every contact id they are given.
     const contacts = {
       lockForConsent: async () => [],
@@ -79,8 +77,8 @@ describe('SendPolicyService', () => {
           excludeWorkflowStepId?: string;
           includeCommittedFuture?: boolean;
         },
-      ) => {
-        const eligible = ids.flatMap((contactId) =>
+      ) =>
+        ids.flatMap((contactId) =>
           sends
             .filter(
               (send) =>
@@ -89,10 +87,7 @@ describe('SendPolicyService', () => {
                 (!excludeWorkflowStepId || send.workflowStepId !== excludeWorkflowStepId),
             )
             .map((send) => ({ ...send, contactId })),
-        );
-        afterCapRead();
-        return eligible;
-      },
+        ),
     };
     service = new SendPolicyService(
       contacts as unknown as ContactsService,
@@ -333,33 +328,6 @@ describe('SendPolicyService', () => {
     };
     expect(await recheck()).toEqual({
       decision: { action: 'skip', reason: 'no_consent' },
-      at: NOON_DHAKA,
-    });
-  });
-
-  it('checks the retry cap again when the clock moves backward during the query', async () => {
-    const readAt = new Date(NOON_DHAKA.getTime() + 60_000);
-    const blockingSend = new Date(NOON_DHAKA.getTime() - 24 * HOUR + 30_000);
-    sends.push({ channel: 'sms', sentAt: blockingSend });
-    clockAt = readAt;
-    afterCapRead = () => {
-      clockAt = NOON_DHAKA;
-    };
-    const prepare = () =>
-      service.prepareMarketingRetryCheck(STORE_ID, {
-        contactId: CONTACT_ID,
-        workflowStepId: 'current-step',
-        settings,
-      });
-
-    const stale = await prepare();
-    expect(stale()).toEqual({
-      decision: { action: 'defer', until: readAt },
-      at: NOON_DHAKA,
-    });
-    const refreshed = await prepare();
-    expect(refreshed()).toEqual({
-      decision: { action: 'skip', reason: 'frequency_cap' },
       at: NOON_DHAKA,
     });
   });

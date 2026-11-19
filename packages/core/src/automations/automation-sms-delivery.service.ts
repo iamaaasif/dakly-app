@@ -7,7 +7,7 @@ import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationRunsRepository, type RunClaim } from './automation-runs.repository';
-import { retryAfterError } from './automation-send-retry';
+import { retryAfterError } from './automation-send-retry.service';
 import {
   type CreditSettlement,
   endWithUnknownOutcome,

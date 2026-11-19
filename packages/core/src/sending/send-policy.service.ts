@@ -70,6 +70,18 @@ export class SendPolicyService {
     return { decision: checked!.decision, destination: checked!.phone, at };
   }
 
+  private async lockForDispatch(storeId: string, contactId: string) {
+    this.requireTransaction();
+    await this.repository.lockContact(storeId, contactId);
+    try {
+      await this.contacts.lockForConsent(storeId, [contactId]);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
+      throw error;
+    }
+  }
+
   async check(storeId: string, request: SendRequest): Promise<SendDecision> {
     if (request.category === 'marketing') this.requireTransaction();
     const reason = await this.recipientReason(storeId, request);
@@ -83,6 +95,18 @@ export class SendPolicyService {
     await this.repository.lockContact(storeId, request.contactId);
     const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
+  }
+
+  private async recipientReason(
+    storeId: string,
+    request: SendRequest,
+  ): Promise<SkipReason | undefined> {
+    const contact = await this.contacts.findRecipient(storeId, request.contactId);
+    const [consent] =
+      contact && request.category === 'marketing'
+        ? await this.consents.current(storeId, [request.contactId], request.channel)
+        : [];
+    return recipientSkip(contact, consent?.status, request);
   }
 
   // The recipient and workflow stay locked while the runner prepares the final time and cap check.
@@ -103,8 +127,7 @@ export class SendPolicyService {
     }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
   ) {
     this.requireTransaction();
-    const readAt = this.clock.now();
-    const sends = await this.listWeekOfSends(storeId, [contactId], readAt, {
+    const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
       includeCommittedFuture: true,
     });
@@ -112,37 +135,11 @@ export class SendPolicyService {
       const at = this.clock.now();
       const until = quietHoursEnd(at, quietHours, timeZone);
       if (until) return { decision: { action: 'defer', until }, at };
-      // The loaded window may omit sends if the clock moved back during the query.
-      if (at < readAt) return { decision: { action: 'defer' as const, until: readAt }, at };
       const weekStart = new Date(at.getTime() - WEEK_MS);
       const counted = sends.filter((send) => send.sentAt > weekStart);
       const reached = capReached(counted, { channel: 'sms', at }, frequencyCap);
       return { decision: reached ? skip('frequency_cap') : SEND, at };
     };
-  }
-
-  private async lockForDispatch(storeId: string, contactId: string) {
-    this.requireTransaction();
-    await this.repository.lockContact(storeId, contactId);
-    try {
-      await this.contacts.lockForConsent(storeId, [contactId]);
-      return true;
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
-      throw error;
-    }
-  }
-
-  private async recipientReason(
-    storeId: string,
-    request: SendRequest,
-  ): Promise<SkipReason | undefined> {
-    const contact = await this.contacts.findRecipient(storeId, request.contactId);
-    const [consent] =
-      contact && request.category === 'marketing'
-        ? await this.consents.current(storeId, [request.contactId], request.channel)
-        : [];
-    return recipientSkip(contact, consent?.status, request);
   }
 
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
@@ -205,7 +202,7 @@ export class SendPolicyService {
         : SEND;
   }
 
-  // Live dispatches count already-committed rows even if another worker’s clock was ahead.
+  // Live checks count committed rows even if another worker's clock was ahead.
   private listWeekOfSends(
     storeId: string,
     contactIds: string[],

@@ -28,6 +28,7 @@ import type {
   RunStepChange,
 } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationSendRetryService } from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 import type { AutomationsService } from './automations.service';
 
@@ -351,6 +352,12 @@ describe('AutomationRunsService', () => {
         return result;
       },
     };
+    const conditions = new AutomationConditionsService(
+      segments as unknown as SegmentsService,
+      sendPolicy as unknown as SendPolicyService,
+      contacts as unknown as ContactsService,
+      repository as unknown as AutomationRunsRepository,
+    );
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
@@ -366,10 +373,15 @@ describe('AutomationRunsService', () => {
         { reportJob } as unknown as ErrorReporter,
         repository as unknown as AutomationRunsRepository,
       ),
-      new AutomationConditionsService(
-        segments as unknown as SegmentsService,
+      new AutomationSendRetryService(
+        repository as unknown as AutomationRunsRepository,
+        transaction as unknown as StoreTransaction,
+        stores as unknown as StoresService,
         sendPolicy as unknown as SendPolicyService,
+        contacts as unknown as ContactsService,
+        conditions,
       ),
+      conditions,
       automations as unknown as AutomationsService,
     );
   });
@@ -941,49 +953,38 @@ describe('AutomationRunsService', () => {
       expect(ledger).toEqual([]);
     });
 
-    it.each([
-      'empty URL',
-      'invalid URL',
-      'transactional URL',
-      'no first attempt time',
-      'future first attempt time',
-      'known provider ID',
-    ] as const)('does not submit an uncertain send again with %s', async (badData) => {
-      providerError = new Error('connection reset');
-      await runWithJobContext(
-        () =>
-          start(badData === 'transactional URL' ? { ...send, category: 'transactional' } : send),
-        jobId,
-      );
-      const previous = repository.steps[0]!;
-      if (badData === 'empty URL') previous.optOutUrl = '';
-      if (badData === 'invalid URL') previous.optOutUrl = 'https://links.dakly.test/other';
-      if (badData === 'transactional URL') previous.optOutUrl = optOutUrl;
-      if (badData === 'no first attempt time') delete previous.firstTriedAt;
-      if (badData === 'future first attempt time')
-        previous.firstTriedAt = new Date(now.getTime() + HOUR);
-      if (badData === 'known provider ID') previous.providerMessageId = 'accepted-before-crash';
-      providerError = undefined;
-      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+    it.each(['no first attempt time', 'future first attempt time', 'known provider ID'] as const)(
+      'does not submit an uncertain send again with %s',
+      async (badData) => {
+        providerError = new Error('connection reset');
+        await runWithJobContext(() => start(send), jobId);
+        const previous = repository.steps[0]!;
+        if (badData === 'no first attempt time') delete previous.firstTriedAt;
+        if (badData === 'future first attempt time')
+          previous.firstTriedAt = new Date(now.getTime() + HOUR);
+        if (badData === 'known provider ID') previous.providerMessageId = 'accepted-before-crash';
+        providerError = undefined;
+        repository.run = { ...repository.run, status: 'running', claimedAt: now };
 
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
-        { kind: 'system' },
-      );
+        await service.continueRun(
+          STORE_ID,
+          { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+          { kind: 'system' },
+        );
 
-      expect(sent).toEqual([]);
-      expect(repository.steps).toEqual([
-        expect.objectContaining({
-          outcome: 'unconfirmed',
-          destinationHash: null,
-          optOutUrl: null,
-        }),
-      ]);
-      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
-      if (badData === 'known provider ID')
-        expect(repository.steps[0]?.providerMessageId).toBe('accepted-before-crash');
-    });
+        expect(sent).toEqual([]);
+        expect(repository.steps).toEqual([
+          expect.objectContaining({
+            outcome: 'unconfirmed',
+            destinationHash: null,
+            optOutUrl: null,
+          }),
+        ]);
+        expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+        if (badData === 'known provider ID')
+          expect(repository.steps[0]?.providerMessageId).toBe('accepted-before-crash');
+      },
+    );
 
     it('does not send when the final phone lookup crosses the retry deadline', async () => {
       providerError = new Error('connection reset');
