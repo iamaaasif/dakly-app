@@ -283,7 +283,7 @@ describe('SocialPublishingService', () => {
     expect(comment).not.toHaveBeenCalled();
   });
 
-  it('retains the first comment warning when publication completes on recovery', async () => {
+  it('sends the first comment once when the publication event needs a retry', async () => {
     const driver = new FakeMetaPublishingDriver();
     const comment = vi.spyOn(driver, 'comment');
     const { service, accounts, publish } = publishing(driver);
@@ -296,9 +296,9 @@ describe('SocialPublishingService', () => {
     await service.publishTarget(fixture.a, target, true);
     expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
       status: 'published',
-      error_code: 'POST_COMMENT_UNCONFIRMED',
+      error_code: null,
     });
-    expect(comment).not.toHaveBeenCalled();
+    expect(comment).toHaveBeenCalledTimes(1);
   });
 
   it('stops before any Meta request when the store is suspended', async () => {
@@ -307,11 +307,35 @@ describe('SocialPublishingService', () => {
     const { service, accounts, isActive } = publishing(driver);
     const target = await setupTarget(accounts, 'facebook_page', await post());
     isActive.mockResolvedValue(false);
-    await service.publishTarget(fixture.a, target, true);
-    expect(upload).not.toHaveBeenCalled();
+    await expect(service.publishTarget(fixture.a, target, false)).rejects.toMatchObject({
+      code: 'POST_STORE_INACTIVE',
+    });
     expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
       status: 'scheduled',
       attempts: 0,
+    });
+    await service.publishTarget(fixture.a, target, true);
+    expect(upload).not.toHaveBeenCalled();
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_STORE_INACTIVE',
+    });
+  });
+
+  it('does not send photos to Meta if the store is suspended during media lookup', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const upload = vi.spyOn(driver, 'uploadFacebookPhotos');
+    const { service, accounts, isActive, storage } = publishing(driver);
+    storage.getObjectMetadata.mockImplementationOnce(async () => {
+      isActive.mockResolvedValue(false);
+      return { contentType: 'image/jpeg', sizeBytes: 42 };
+    });
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    await service.publishTarget(fixture.a, target, true);
+    expect(upload).not.toHaveBeenCalled();
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_STORE_INACTIVE',
     });
   });
 

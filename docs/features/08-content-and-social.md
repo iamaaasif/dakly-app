@@ -187,12 +187,14 @@ target.
 Instagram targets require JPEG photos when saved, approved and published. The
 publishing service handles one target at a time and records `post.published` or
 `post.failed`. Instagram waits for its media container to finish. A successful
-target stays published when another target fails. A first comment goes to
-Instagram only. The next SOC-2 change connects this service to scheduled jobs,
+target stays published when another target fails. A suspended store cannot
+publish. Its target fails if the store is still suspended on the last attempt.
+A first comment goes to Instagram only. The next SOC-2 change connects this service to scheduled jobs,
 day-ahead checks and Fix now notifications.
 
 If Meta receives a publish request without returning a result, Dakly checks the
-Instagram container for confirmation. For a Facebook result it cannot confirm,
+Instagram container for confirmation. A confirmed container can be marked
+published even if Meta did not return the post ID. For a Facebook result it cannot confirm,
 Dakly asks the shop to check the Page before posting again.
 
 Facebook and Instagram use the connected Page token. Live publishing requires

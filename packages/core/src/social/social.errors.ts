@@ -18,6 +18,7 @@ const errors = {
   POST_MEDIA_NOT_FOUND: { status: 404, message: 'Photo not found' },
   POST_DRAFT_REQUIRED: { status: 409, message: 'Only drafts can be changed' },
   POST_INSTAGRAM_PHOTO_FORMAT: { status: 400, message: 'Use JPEG photos for Instagram' },
+  POST_STORE_INACTIVE: { status: 409, message: 'This store cannot publish posts' },
   POST_NOT_DUE: { status: 409, message: 'This post is not due yet' },
   POST_TOKEN_EXPIRED: { status: 409, message: 'Reconnect the account before posting' },
   POST_PROVIDER_REJECTED: { status: 502, message: 'Meta rejected the post' },

@@ -72,13 +72,13 @@ export class SocialPublishingService {
       return;
     }
     this.checkDue(target);
-    const attempted = await this.recordTarget(storeId, target, {
-      action: 'post.publish_attempted',
-      attempts: target.attempts + 1,
-    });
-    if (!attempted) return;
     let receipt: PublishReceipt | undefined;
     try {
+      const attempted = await this.recordTarget(storeId, target, {
+        action: 'post.publish_attempted',
+        attempts: target.attempts + 1,
+      });
+      if (!attempted) return;
       receipt = await this.publishApproved(storeId, match, driver);
     } catch (failure) {
       if (!finalAttempt) throw failure;
@@ -99,11 +99,12 @@ export class SocialPublishingService {
       errorCode,
       errorMessage: errorCode ? socialError(errorCode).message : null,
     });
-    if (!confirmed || !(await this.finish(storeId, target))) return;
+    if (!confirmed) return;
     if (firstComment && externalId)
       await this.comment(storeId, target, firstComment.verifyToken, () =>
         firstComment.send(externalId),
       );
+    await this.finish(storeId, target);
   }
 
   private checkDue(target: PublishingTarget) {
@@ -212,6 +213,7 @@ export class SocialPublishingService {
       throw socialError('POST_PUBLISH_UNCONFIRMED');
     }
     const content = await this.contentFor(storeId, { post, target }, kind);
+    if (!(await this.stores.isActive(storeId))) throw socialError('POST_STORE_INACTIVE');
     if (kind === 'instagram') return this.sendInstagram(context, content);
     const photos = content.photoUrls.length
       ? await this.meta('facebook_upload_photos', () =>
@@ -351,7 +353,7 @@ export class SocialPublishingService {
           action === 'post.comment_attempted') &&
         !(await this.stores.isActive(storeId))
       )
-        return false;
+        throw socialError('POST_STORE_INACTIVE');
       if (
         !(await this.repository.updatePublishTarget(storeId, target, {
           ...changes,
