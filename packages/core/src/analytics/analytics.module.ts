@@ -8,6 +8,7 @@ import { StoresModule } from '../stores/stores.module';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsRepository } from './analytics.repository';
 import { AnalyticsService } from './analytics.service';
+import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderEdited } from './jobs/summarize-order-edited.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
@@ -18,6 +19,7 @@ import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed
     AnalyticsRepository,
     AnalyticsService,
     AnalyticsSummariesService,
+    SummarizeOrderCodCollected,
     SummarizeOrderCreated,
     SummarizeOrderEdited,
     SummarizeOrderStageChanged,

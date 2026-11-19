@@ -35,7 +35,7 @@ export class AnalyticsSummariesService {
       if (!order) return;
       const { day, buyerContactId } = order;
       if (order.retained) {
-        await this.writeOrderCounts(storeId, { from: day, through: day }, timeZone, now);
+        await this.writeOrderMetrics(storeId, { from: day, through: day }, timeZone, now);
       }
       if (buyerContactId) await this.refreshBuyer(storeId, buyerContactId, timeZone, now);
     });
@@ -66,7 +66,7 @@ export class AnalyticsSummariesService {
     await this.transaction.run(storeId, async () => {
       await this.summaries.lockSummaries(storeId);
       const timeZone = await this.stores.timeZone(storeId);
-      await this.writeOrderCounts(storeId, period, timeZone, this.clock.now());
+      await this.writeOrderMetrics(storeId, period, timeZone, this.clock.now());
     });
   }
 
@@ -89,18 +89,24 @@ export class AnalyticsSummariesService {
     return ids.length === BUYER_PAGE_SIZE ? (ids.at(-1) ?? null) : null;
   }
 
-  private async writeOrderCounts(
+  private async writeOrderMetrics(
     storeId: string,
     period: ReportPeriod,
     timeZone: string,
     now: Date,
   ) {
-    const orders = await this.orders.orderCountsForRange(storeId, { ...period, timeZone });
-    const former = await this.summaries.readDailyMetric(storeId, period, 'orders');
-    const counts = new Map(former.map(({ day }) => [day, 0n]));
-    for (const { day, count } of orders) counts.set(day, BigInt(count));
-    const metrics = Array.from(counts, ([day, value]) => ({ day, metric: 'orders', value }));
-    if (metrics.length) await this.summaries.save(storeId, metrics, now);
+    const rows = await this.orders.dailyOrderMetrics(storeId, { ...period, timeZone });
+    const byDay = new Map(rows.map((row) => [row.day, row]));
+    const metrics = [];
+    for (let day = period.from; day <= period.through; day = shiftReportDay(day, 1)) {
+      const totals = byDay.get(day);
+      metrics.push(
+        { day, metric: 'orders', value: BigInt(totals?.orders ?? 0) },
+        { day, metric: 'delivered_orders', value: BigInt(totals?.deliveredOrders ?? 0) },
+        { day, metric: 'net_spend', value: BigInt(totals?.netSpend ?? 0) },
+      );
+    }
+    await this.summaries.save(storeId, metrics, now);
   }
 
   async refreshLifecycle(storeId: string) {

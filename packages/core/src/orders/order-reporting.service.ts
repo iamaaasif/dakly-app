@@ -36,7 +36,7 @@ export class OrderReportingService {
     return this.orders.oldestRetainedOrderDay(storeId, timeZone, now);
   }
 
-  orderCountsForRange(storeId: string, range: { from: string; through: string; timeZone: string }) {
-    return this.orders.orderCountsForRange(storeId, range);
+  dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.orders.dailyOrderMetrics(storeId, range);
   }
 }

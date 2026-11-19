@@ -1,9 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
 
 import { orders } from '@dakly/db/schema/orders';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+
+const DELIVERED = sql`stage in ('delivered', 'partially_delivered')`;
+const NET_SPEND = sql<string>`coalesce(sum(coalesce(delivered_items_subtotal_poisha, items_subtotal_poisha)
+  - coalesce(delivered_order_discount_poisha, order_discount_poisha)) filter (
+  where ${DELIVERED} and (
+    payment_status = 'paid'
+    or (payment_status = 'advance_paid' and cod_amount_poisha = 0)
+    or (payment_status = 'cod_collected' and cod_collected_poisha >= cod_amount_poisha)
+  )), 0)::text`;
 
 @Injectable()
 export class OrderReportingRepository {
@@ -85,13 +94,15 @@ export class OrderReportingRepository {
     return order?.day;
   }
 
-  orderCountsForRange(storeId: string, range: { from: string; through: string; timeZone: string }) {
+  dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
     const { from, through, timeZone } = range;
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
           day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
-          count: count(),
+          orders: sql<string>`count(*)::text`,
+          deliveredOrders: sql<string>`count(*) filter (where ${DELIVERED})::text`,
+          netSpend: NET_SPEND,
         })
         .from(orders)
         .where(
@@ -137,15 +148,9 @@ export class OrderReportingRepository {
           and stage <> 'cancelled'
       )
       select count(*)::int as "ordersCount",
-        count(*) filter (where stage in ('delivered', 'partially_delivered'))::int as "deliveredCount",
+        count(*) filter (where ${DELIVERED})::int as "deliveredCount",
         count(*) filter (where stage = 'returned')::int as "returnedCount",
-        coalesce(sum(coalesce(delivered_items_subtotal_poisha, items_subtotal_poisha)
-          - coalesce(delivered_order_discount_poisha, order_discount_poisha)) filter (
-          where stage in ('delivered', 'partially_delivered') and (
-            payment_status = 'paid'
-            or (payment_status = 'advance_paid' and cod_amount_poisha = 0)
-            or (payment_status = 'cod_collected' and cod_collected_poisha >= cod_amount_poisha)
-          )), 0)::text as "netSpendPoisha",
+        ${NET_SPEND} as "netSpendPoisha",
         min(created_at) as "firstOrderAt", max(created_at) as "lastOrderAt",
         percentile_cont(0.5) within group (order by day - previous_day) as "usualGapDays"
       from buyer_orders

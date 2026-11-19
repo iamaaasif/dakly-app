@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, gte, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, lte, notInArray, sql } from 'drizzle-orm';
 
 import { storeDailyMetrics } from '@dakly/db/schema/analytics';
 
@@ -14,11 +14,12 @@ const BUYER_ACTIVITY = 'buyer_activity';
 export class AnalyticsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  readDailyMetric(storeId: string, period: ReportPeriod, metric: string) {
+  readDailyMetrics(storeId: string, period: ReportPeriod, metrics: string[]) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
           day: storeDailyMetrics.day,
+          metric: storeDailyMetrics.metric,
           value: sql`${storeDailyMetrics.value}::text`.mapWith(BigInt),
         })
         .from(storeDailyMetrics)
@@ -27,7 +28,7 @@ export class AnalyticsRepository {
             eq(storeDailyMetrics.storeId, storeId),
             gte(storeDailyMetrics.day, period.from),
             lte(storeDailyMetrics.day, period.through),
-            eq(storeDailyMetrics.metric, metric),
+            inArray(storeDailyMetrics.metric, metrics),
             eq(storeDailyMetrics.dimension, ''),
           ),
         ),
@@ -77,7 +78,7 @@ export class AnalyticsRepository {
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            eq(storeDailyMetrics.metric, 'orders'),
+            inArray(storeDailyMetrics.metric, ['orders', 'delivered_orders', 'net_spend']),
             sql`${storeDailyMetrics.day} >= (${through}::date - interval '24 months')::date`,
           ),
         )
@@ -100,7 +101,7 @@ export class AnalyticsRepository {
               select day, metric, dimension from store_daily_metrics
               where store_id = ${storeId} and (
                 (metric = 'order_event' and day < ${eventBefore}::date)
-                or (metric in ('orders', 'buyer_activity', 'lifecycle')
+                or (metric in ('orders', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
                   and day < (${storeDay}::date - interval '24 months')::date)
               )
               order by day, metric, dimension limit ${limit}

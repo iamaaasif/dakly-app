@@ -60,6 +60,24 @@ describe('Analytics reports', () => {
     expect((await reports.orders(fixture.b, period)).total).toBe(9n);
   });
 
+  it('divides period net spend by delivered orders in integer poisha', async () => {
+    await fixture.connection.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,value) values
+       ($1,'2026-11-05','net_spend',10001),($1,'2026-11-05','delivered_orders',2),
+       ($1,'2026-11-07','net_spend',20001),($1,'2026-11-07','delivered_orders',3)`,
+      [fixture.a],
+    );
+    expect(await reports.averageOrderValue(fixture.a, period)).toEqual({
+      total: 6000n,
+      points: [
+        { day: '2026-11-05', value: 5001n },
+        { day: '2026-11-06', value: 0n },
+        { day: '2026-11-07', value: 6667n },
+      ],
+    });
+    expect((await reports.averageOrderValue(fixture.b, period)).total).toBe(0n);
+  });
+
   it('counts a returning buyer once and keeps first-time buyers separate', async () => {
     await fixture.connection.pool.query(
       `insert into store_daily_metrics (store_id,day,metric,dimension,value) values

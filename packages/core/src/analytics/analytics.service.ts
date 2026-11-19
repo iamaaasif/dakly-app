@@ -31,10 +31,30 @@ export class AnalyticsService {
   }
 
   async orders(storeId: string, period: ReportPeriod) {
-    const rows = await this.repository.readDailyMetric(storeId, period, 'orders');
+    const rows = await this.repository.readDailyMetrics(storeId, period, ['orders']);
     return {
-      total: rows.reduce((total, { value }) => total + value, 0n),
+      total: sumPoints(rows),
       points: fillDays(period, rows),
+    };
+  }
+
+  async averageOrderValue(storeId: string, period: ReportPeriod) {
+    const rows = await this.repository.readDailyMetrics(storeId, period, [
+      'net_spend',
+      'delivered_orders',
+    ]);
+    const spend = rows.filter(({ metric }) => metric === 'net_spend');
+    const delivered = rows.filter(({ metric }) => metric === 'delivered_orders');
+    const spendByDay = new Map(spend.map(({ day, value }) => [day, value]));
+    return {
+      total: averagePoisha(sumPoints(spend), sumPoints(delivered)),
+      points: fillDays(
+        period,
+        delivered.map(({ day, value }) => ({
+          day,
+          value: averagePoisha(spendByDay.get(day) ?? 0n, value),
+        })),
+      ),
     };
   }
 
@@ -73,4 +93,12 @@ function fillDays(period: ReportPeriod, rows: Point[]): Point[] {
     points.push({ day, value: values.get(day) ?? 0n });
   }
   return points;
+}
+
+function sumPoints(points: Point[]) {
+  return points.reduce((total, { value }) => total + value, 0n);
+}
+
+function averagePoisha(spend: bigint, orders: bigint) {
+  return orders === 0n ? 0n : (spend + orders / 2n) / orders;
 }

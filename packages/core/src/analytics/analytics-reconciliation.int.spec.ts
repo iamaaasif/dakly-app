@@ -31,7 +31,7 @@ Module({
   ],
 })(TestModule);
 
-describe('Lifecycle summaries', () => {
+describe('Analytics reconciliation', () => {
   const fixture = new OwnerIsolationFixture();
   const now = new Date('2026-11-19T06:00:25Z');
   let app: INestApplicationContext;
@@ -48,6 +48,9 @@ describe('Lifecycle summaries', () => {
       'delete from store_daily_metrics where store_id=any($1::uuid[])',
       [[fixture.a, fixture.b]],
     );
+    await fixture.connection.pool.query('delete from orders where store_id=any($1::uuid[])', [
+      [fixture.a, fixture.b],
+    ]);
     await fixture.close();
   });
 
@@ -116,5 +119,35 @@ describe('Lifecycle summaries', () => {
         [fixture.b],
       ),
     ).toMatchObject({ rowCount: 1 });
+  });
+  it('repairs stale spend on the original day when a return event was missed', async () => {
+    await fixture.connection.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,recipient_name,
+        recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+        cod_amount_poisha,created_at,stage,payment_status)
+      values ($1,$2,1001,'manual','user','রিনা','01710000005','Mirpur','Dhaka',125000,125000,
+        '2026-11-07T18:00:00Z','returned','paid')`,
+      [randomUUID(), fixture.a],
+    );
+    await fixture.connection.pool.query(
+      `insert into store_daily_metrics(store_id,day,metric,value) values
+       ($1,'2026-11-08','net_spend',125000),($1,'2026-11-08','delivered_orders',1)`,
+      [fixture.a],
+    );
+    await app.get(ReconcileAnalyticsJob).handle({
+      storeId: fixture.a,
+      day: '2026-11-19',
+      page: { kind: 'orders', period: { from: '2026-11-08', through: '2026-11-08' } },
+    });
+    const { rows } = await fixture.connection.pool.query(
+      `select metric, value from store_daily_metrics
+       where store_id=$1 and day='2026-11-08' order by metric`,
+      [fixture.a],
+    );
+    expect(rows).toEqual([
+      { metric: 'delivered_orders', value: '0' },
+      { metric: 'net_spend', value: '0' },
+      { metric: 'orders', value: '1' },
+    ]);
   });
 });
