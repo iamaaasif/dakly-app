@@ -833,6 +833,40 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
     });
 
+    it('prepares on the next claim when a top-up makes an unprepared send eligible', async () => {
+      const wakeAt = new Date(now.getTime() - 25 * HOUR);
+      const resumedAt = new Date(wakeAt.getTime() + 23 * HOUR);
+      const read = repository.findRun.bind(repository);
+      let reads = 0;
+      repository.findRun = async (storeId, runId) => {
+        const snapshot = await read(storeId, runId);
+        if (++reads === 2) {
+          repository.run = {
+            ...repository.run,
+            balanceResumedAt: resumedAt,
+            hasBalanceResumeSendAllowance: true,
+          };
+        }
+        return snapshot;
+      };
+
+      await start(send, { wakeAt });
+
+      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt });
+      expect(ledger).toEqual([]);
+      expect(sent).toEqual([]);
+
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toHaveLength(1);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
+    });
+
     it('ends an uncertain send when the goal is reached during the resend check', async () => {
       providerError = new Error('connection reset');
       await runWithJobContext(

@@ -201,11 +201,11 @@ export class AutomationRunsService {
   // check for the contact can run.
   private async startSend(claim: RunClaim, step: SendStep, facts: RunFacts) {
     const checkedAt = await this.repository.schedulerTime(facts.storeId);
-    const prepared =
-      step.channels.includes('sms') && !(await this.readLateGateResult(facts, checkedAt))
-        ? await this.smsDelivery.prepare(facts)
-        : undefined;
-    const planned = await this.authorizeFirstSend(claim, step, facts, prepared?.to ?? null);
+    const shouldPrepare =
+      step.channels.includes('sms') && !(await this.readLateGateResult(facts, checkedAt));
+    const prepared = shouldPrepare ? await this.smsDelivery.prepare(facts) : undefined;
+    const preparedPhone = shouldPrepare ? (prepared?.to ?? null) : undefined;
+    const planned = await this.authorizeFirstSend(claim, step, facts, preparedPhone);
     if ('stop' in planned) return planned.stop;
     if (prepared)
       return this.smsDelivery.deliver(
@@ -219,7 +219,7 @@ export class AutomationRunsService {
     claim: RunClaim,
     step: SendStep,
     facts: RunFacts,
-    preparedPhone: string | null,
+    preparedPhone: string | null | undefined,
   ) {
     const { storeId } = facts;
     let renewed = claim;
@@ -257,7 +257,7 @@ export class AutomationRunsService {
     claim: RunClaim,
     step: SendStep,
     facts: RunFacts,
-    preparedPhone: string | null,
+    preparedPhone: string | null | undefined,
   ): Promise<GateResult> {
     const { storeId, contactId } = facts;
     // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
@@ -300,9 +300,12 @@ export class AutomationRunsService {
     delivery: Omit<Delivery, 'body'>,
     { automationId, wakeAt }: RunFacts,
     times: { sentAt: Date; firstTriedAt: Date },
-    preparedPhone: string | null,
+    preparedPhone: string | null | undefined,
   ): Promise<GateResult> {
     const { storeId, claim, destination } = delivery;
+    // A concurrent top-up can make a send eligible after the preflight skipped preparation.
+    if (preparedPhone === undefined)
+      return { decision: { action: 'defer', until: wakeAt ?? times.firstTriedAt } };
     if (destination !== preparedPhone) return { outcome: 'destination_changed' };
     const body = await this.writeSend(delivery, times);
     if (body === undefined) {
