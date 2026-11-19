@@ -16,8 +16,8 @@ export class ProcessWebhookEventJob implements JobHandler {
     @Inject(MetaWebhookRoutingService) private readonly routing: MetaWebhookRoutingService,
   ) {}
 
-  async handle(data: unknown) {
+  async handle(data: unknown, finalAttempt: boolean) {
     const { webhookEventId } = payload.parse(data);
-    await this.routing.process(webhookEventId);
+    await this.routing.process(webhookEventId, finalAttempt);
   }
 }
