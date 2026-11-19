@@ -12,6 +12,7 @@ import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
+import { InboxModule } from '@dakly/core/messaging/inbox.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { OrdersModule } from '@dakly/core/orders/orders.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -44,6 +45,7 @@ import { HealthController } from './health.controller';
     ImportsModule,
     KnowledgeModule,
     LinksModule,
+    InboxModule,
     SegmentsModule,
     AutomationsModule,
     CampaignsModule,

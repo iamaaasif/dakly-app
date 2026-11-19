@@ -141,7 +141,7 @@ function PhotoEntry({ name, photo, index, actions }: PhotoEntryProps) {
         width={80}
         height={80}
         unoptimized
-        className="size-20 rounded-md object-cover"
+        className="size-20 rounded-lg object-cover"
       />
       {actions ? (
         <div className="flex gap-2">
@@ -184,7 +184,7 @@ function PhotoInput({ id, input, disabled, onFile }: PhotoInputProps) {
     <div className="space-y-3">
       <Label
         htmlFor={id}
-        className="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-input-border bg-surface-muted text-sm focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus has-disabled:cursor-not-allowed has-disabled:opacity-50"
+        className="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input-border bg-surface-muted text-xs font-medium text-text-muted focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus hover:border-text hover:text-text has-disabled:cursor-not-allowed has-disabled:opacity-50"
       >
         <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
         Add photo

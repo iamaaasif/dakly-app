@@ -9,6 +9,7 @@ import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OrderReportingRepository } from './order-reporting.repository';
 import { OrdersModule } from './orders.module';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -114,6 +115,28 @@ describe('OrdersService', () => {
       code: 'ORDER_NOT_FOUND',
     });
   });
+  it('scopes buyer reporting to the store even on the owner connection', async () => {
+    const contactId = randomUUID();
+    const id = await order(fixture.a, 1420, 'to_confirm');
+    await fixture.connection.pool.query(
+      "insert into contacts(id,store_id,name,kind,source) values($1,$2,'রিনা','customer','manual')",
+      [contactId, fixture.a],
+    );
+    await fixture.connection.pool.query('update orders set buyer_contact_id=$2 where id=$1', [
+      id,
+      contactId,
+    ]);
+    const reporting = new OrderReportingRepository(fixture.tenant);
+    expect(await reporting.buyerContactId(fixture.a, id)).toBe(contactId);
+    expect(await reporting.buyerContactId(fixture.b, id)).toBeUndefined();
+    expect(await reporting.contactOrderTotals(fixture.a, contactId, 'Asia/Dhaka')).toMatchObject({
+      ordersCount: 1,
+    });
+    expect(await reporting.contactOrderTotals(fixture.b, contactId, 'Asia/Dhaka')).toMatchObject({
+      ordersCount: 0,
+    });
+  });
+
   it('keeps stock reserved through hold and confirmation and releases it on cancellation', async () => {
     const id = await order(fixture.a, 1006, 'to_confirm');
     const variantId = await trackedItem(id, 1);

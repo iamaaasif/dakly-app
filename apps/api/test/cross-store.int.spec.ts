@@ -2039,6 +2039,199 @@ fixture('DELETE /channel-connections/:channelConnectionId', async () => {
   expect(events.rows).toEqual([{ payload: { channelConnectionId: own } }]);
 });
 
+async function seedConversation(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    "insert into conversations(id,store_id,contact_id,channel_connection_id,channel) values($1,$2,$3,$4,'messenger')",
+    [id, shop.id, await contact(shop), await seedChannel(shop)],
+  );
+  return id;
+}
+
+async function enableChats(shop: Shop) {
+  await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
+}
+
+fixture('GET /conversations', async () => {
+  const { a, b } = await pair();
+  await seedConversation(a);
+  const own = await seedConversation(b);
+  expect((await f.request(b.owner, 'GET', '/conversations')).statusCode).toBe(403);
+  await enableChats(b);
+  await success(b, 'GET', `/conversations?cursor=0000-01-01T00:00:00Z_${own}`, 400);
+  const result = await success(b, 'GET', '/conversations', 200);
+  expect(result.json()).toMatchObject({ items: [{ id: own }], nextCursor: null });
+  const second = await seedConversation(b);
+  await success(b, 'PATCH', `/conversations/${own}`, 200, { status: 'later' });
+  expect((await success(b, 'GET', '/conversations?status=later', 200)).json()).toMatchObject({
+    items: [{ id: own, status: 'later' }],
+    nextCursor: null,
+  });
+  const [latest, older] = [own, second].sort();
+  await f.admin.pool.query('update conversations set last_message_at = $1 where id = $2', [
+    '2026-11-18T10:00:00.123456Z',
+    latest,
+  ]);
+  const page = (await success(b, 'GET', '/conversations?limit=1', 200)).json();
+  expect(page.items).toMatchObject([{ id: latest }]);
+  expect(page.nextCursor).toEqual(expect.any(String));
+  const next = await success(b, 'GET', `/conversations?limit=1&cursor=${page.nextCursor}`, 200);
+  expect(next.json()).toMatchObject({ items: [{ id: older }], nextCursor: null });
+
+  const removed = await seedConversation(b);
+  const { contact_id: removedContactId } = await f.row('conversations', removed);
+  await f.admin.pool.query('update conversations set last_message_at = now() where id = $1', [
+    removed,
+  ]);
+  await success(b, 'DELETE', `/contacts/${removedContactId}`, 204);
+  expect((await success(b, 'GET', '/conversations?limit=1', 200)).json().items).toMatchObject([
+    { id: latest },
+  ]);
+  const url = (id: string) => `/conversations/${id}`;
+  await hidden(b, 'GET', url, removed);
+  await hidden(b, 'GET', (id) => `${url(id)}/messages`, removed);
+  await hidden(b, 'PATCH', url, removed, () => ({ status: 'later' }));
+  await hidden(b, 'POST', (id) => `${url(id)}/take-over`, removed);
+  await hidden(b, 'POST', (id) => `${url(id)}/return-to-ai`, removed);
+});
+
+fixture('GET /conversations/:conversationId', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}`;
+  await hidden(b, 'GET', url, await seedConversation(a));
+  const own = await seedConversation(b);
+  expect((await success(b, 'GET', url(own), 200)).json()).toMatchObject({ id: own });
+});
+
+fixture('GET /conversations/:conversationId/messages', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/messages`;
+  await hidden(b, 'GET', url, await seedConversation(a));
+  const own = await seedConversation(b);
+  const [newest, older] = [randomUUID(), randomUUID()].sort();
+  await success(b, 'GET', `${url(own)}?cursor=0000-01-01T00:00:00Z_${newest}`, 400);
+  await f.admin.pool.query(
+    `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at)
+     values($1,$2,$3,'in','customer','text','দাম কত?','received','2026-11-18T10:00:00.123456Z'),
+     ($4,$2,$3,'in','customer','text','সাইজ কত?','received','2026-11-18T10:00:00.123123Z')`,
+    [newest, b.id, own, older],
+  );
+  const page = (await success(b, 'GET', `${url(own)}?limit=1`, 200)).json();
+  expect(page.items).toMatchObject([
+    { id: newest, body: 'দাম কত?', status: 'received', authorType: 'customer' },
+  ]);
+  expect(page.nextCursor).toEqual(expect.any(String));
+  const next = await success(b, 'GET', `${url(own)}?limit=1&cursor=${page.nextCursor}`, 200);
+  expect(next.json()).toMatchObject({
+    items: [{ id: older, body: 'সাইজ কত?' }],
+    nextCursor: null,
+  });
+});
+
+fixture('PATCH /conversations/:conversationId', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  await hidden(b, 'PATCH', url, foreign, () => ({ status: 'done' }));
+  await success(b, 'PATCH', url(own), 400, { assigneeUserId: a.member.id });
+  const changed = await success(b, 'PATCH', url(own), 200, {
+    status: 'done',
+    assigneeUserId: b.member.id,
+  });
+  expect(changed.json()).toMatchObject({
+    status: 'done',
+    assigneeUserId: b.member.id,
+    responder: 'ai',
+  });
+  expect(await f.row('conversations', foreign)).toMatchObject({ status: 'open' });
+  expect(await f.row('conversations', own)).toMatchObject({ version: 1 });
+  await success(b, 'PATCH', url(own), 200, {
+    status: 'done',
+    assigneeUserId: b.member.id.toUpperCase(),
+  });
+  expect(await f.row('conversations', own)).toMatchObject({ version: 1 });
+  const records = await f.admin.pool.query(
+    'select actor_user_id, "after" from audit_log where store_id = $1 and entity_id = $2',
+    [b.id, own],
+  );
+  expect(records.rows).toEqual([
+    { actor_user_id: b.owner.id, after: { changedFields: ['status', 'assigneeUserId'] } },
+  ]);
+  const { id: roleId } = (
+    await success(b, 'POST', '/roles', 201, {
+      name: 'Chats view only',
+      permissions: { ...permissions, areas: { chats: 'view' } },
+    })
+  ).json();
+  await f.admin.pool.query(
+    'update memberships set built_in_role = null, role_id = $1 where id = $2',
+    [roleId, b.membership],
+  );
+  expect((await f.request(b.member, 'GET', url(own))).statusCode).toBe(200);
+  expect((await f.request(b.member, 'PATCH', url(own), { assigneeUserId: null })).statusCode).toBe(
+    403,
+  );
+  expect((await success(b, 'PATCH', url(own), 200, { assigneeUserId: null })).json()).toMatchObject(
+    { assigneeUserId: null },
+  );
+  const locker = await f.admin.pool.connect();
+  let assignment: ReturnType<typeof f.request> | undefined;
+  try {
+    await locker.query('begin');
+    await locker.query('select id from conversations where id = $1 for no key update', [own]);
+    const {
+      rows: [backend],
+    } = await locker.query<{ pid: number }>('select pg_backend_pid() as pid');
+    assignment = f.request(b.owner, 'PATCH', url(own), { assigneeUserId: b.member.id });
+    await vi.waitFor(async () => {
+      const { rows } = await f.admin.pool.query(
+        'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+        [backend!.pid],
+      );
+      expect(rows).toHaveLength(1);
+    });
+    await locker.query(
+      "update conversations set status = 'open', version = version + 1 where id = $1",
+      [own],
+    );
+    await locker.query('commit');
+  } catch (error) {
+    await locker.query('rollback');
+    await assignment;
+    throw error;
+  } finally {
+    locker.release();
+  }
+  const assigned = await assignment;
+  expect(assigned.statusCode, assigned.body).toBe(200);
+  expect(assigned.json()).toMatchObject({ status: 'open', assigneeUserId: b.member.id });
+});
+
+for (const [path, responder] of [
+  ['take-over', 'human'],
+  ['return-to-ai', 'ai'],
+] as const) {
+  fixture(`POST /conversations/:conversationId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/conversations/${id}/${path}`;
+    const foreign = await seedConversation(a);
+    const own = await seedConversation(b);
+    await hidden(b, 'POST', url, foreign);
+    if (path === 'return-to-ai')
+      await f.admin.pool.query("update conversations set responder = 'human' where id = $1", [own]);
+    expect((await success(b, 'POST', url(own), 200)).json()).toMatchObject({
+      status: 'open',
+      responder,
+    });
+    expect(await f.row('conversations', foreign)).toMatchObject({ responder: 'ai' });
+  });
+}
+
 fixture('GET /sms-sender-ids', async () => {
   const { a, b } = await pair(),
     aId = await smsSender(a),

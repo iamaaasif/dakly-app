@@ -38,9 +38,15 @@ export class InboundMessagingRepository {
 
   getConversation(storeId: string, input: ConversationInput, now: Date) {
     return this.database.forStore(storeId, async (tx) => {
+      const fields = {
+        id: conversations.id,
+        status: conversations.status,
+        lastInboundAt: conversations.lastInboundAt,
+        version: conversations.version,
+      };
       for (;;) {
         const [existing] = await tx
-          .select({ id: conversations.id })
+          .select(fields)
           .from(conversations)
           .where(
             and(
@@ -56,7 +62,7 @@ export class InboundMessagingRepository {
           .onConflictDoNothing({
             target: [conversations.channelConnectionId, conversations.contactId],
           })
-          .returning({ id: conversations.id });
+          .returning(fields);
         if (inserted) return { ...inserted, started: true };
       }
     });
@@ -92,14 +98,21 @@ export class InboundMessagingRepository {
       at,
       expiry,
       preview,
-    }: { conversationId: string; at: Date; expiry: Date; preview: string },
+      reopenVersion,
+    }: { conversationId: string; at: Date; expiry: Date; preview: string; reopenVersion?: number },
     now: Date,
   ) {
     const sentAt = at.toISOString();
+    const canReopen =
+      reopenVersion === undefined ? undefined : sql`${conversations.version} = ${reopenVersion}`;
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(conversations)
         .set({
+          ...(canReopen && {
+            status: sql`case when ${canReopen} then 'open' else ${conversations.status} end`,
+            version: sql`case when ${canReopen} then ${conversations.version} + 1 else ${conversations.version} end`,
+          }),
           lastInboundAt: sql`greatest(${conversations.lastInboundAt}, ${sentAt}::timestamptz)`,
           lastMessageAt: sql`greatest(${conversations.lastMessageAt}, ${sentAt}::timestamptz)`,
           windowExpiresAt: sql`greatest(${conversations.windowExpiresAt}, ${expiry.toISOString()}::timestamptz)`,
