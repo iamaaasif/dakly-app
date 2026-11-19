@@ -17,6 +17,7 @@ const WORKFLOW_JOBS_AT_ONCE = 5;
 // One job at a time per worker. Campaign jobs still tolerate overlap between workers.
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
+  inbound: TRANSACTIONAL_JOBS_AT_ONCE,
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
   bulk: BULK_JOBS_AT_ONCE,
   workflow: WORKFLOW_JOBS_AT_ONCE,
@@ -109,5 +110,15 @@ export class CampaignJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.campaign, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.inbound, { concurrency: concurrency.inbound, autorun: false })
+export class InboundJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.inbound, discovery, reporter);
   }
 }
