@@ -1,5 +1,6 @@
-import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { BullModule, InjectQueue } from '@nestjs/bullmq';
+import { Module, type OnModuleDestroy } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 
 import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
@@ -35,4 +36,11 @@ import { MetaWebhooksService } from './meta-webhooks.service';
   controllers: [MetaWebhooksController],
   providers: [MetaWebhooksRepository, MetaWebhooksService],
 })
-export class MetaWebhooksModule {}
+export class MetaWebhooksModule implements OnModuleDestroy {
+  constructor(@InjectQueue(QUEUES.inbound) private readonly queue: Queue) {}
+
+  onModuleDestroy(): Promise<void> {
+    // The producer can still be connecting when Nest tries to send QUIT.
+    return this.queue.disconnect();
+  }
+}

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer, type AddressInfo, type Socket } from 'node:net';
 
 import { getQueueToken } from '@nestjs/bullmq';
 import { Logger, Module } from '@nestjs/common';
@@ -229,6 +231,35 @@ describe('Meta webhook intake', () => {
     const payload = `{"object":"page","entry":[{"text":"${'a'.repeat(2 * 1024 * 1024)}"}]}`;
     expect((await post(payload)).statusCode).toBe(413);
     expect(await stored(payload)).toEqual([]);
+  });
+
+  it('closes cleanly when the inbound producer has not reached Valkey readiness', async () => {
+    const connections = new Set<Socket>();
+    const server = createServer((socket) => connections.add(socket));
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const { port } = server.address() as AddressInfo;
+    const redisUrl = process.env.REDIS_URL;
+    vi.stubEnv('REDIS_URL', `redis://127.0.0.1:${port}`);
+    resetEnvForTests();
+
+    class ColdStartModule {}
+    Module({ imports: [DatabaseModule, MetaWebhooksModule] })(ColdStartModule);
+    let producer: Queue | undefined;
+    try {
+      const coldApp = await NestFactory.createApplicationContext(ColdStartModule, {
+        logger: false,
+      });
+      producer = coldApp.get<Queue>(getQueueToken('inbound'));
+      expect((await producer.waitUntilReady()).status).not.toBe('ready');
+      await expect(coldApp.close()).resolves.toBeUndefined();
+    } finally {
+      await producer?.disconnect();
+      for (const socket of connections) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      vi.stubEnv('REDIS_URL', redisUrl);
+      resetEnvForTests();
+    }
   });
 
   it('queues the saved row on a retry after enqueue fails', async () => {
