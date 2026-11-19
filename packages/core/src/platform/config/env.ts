@@ -15,7 +15,11 @@ const envSchema = z.object({
   SENDGRID_API_KEY: z.string().min(1).optional(),
   GOOGLE_IDENTITY_DRIVER: z.enum(['fake', 'google']).optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  META_CHANNEL_DRIVER: z.enum(['fake', 'graph']).optional(),
+  META_APP_ID: z.string().min(1).optional(),
   META_APP_SECRET: z.string().min(1).optional(),
+  META_LOGIN_CONFIG_ID: z.string().min(1).optional(),
+  META_OAUTH_REDIRECT_URI: z.url().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().min(1).optional(),
   LLM_DRIVER: z.enum(['openai', 'fake']).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
@@ -96,6 +100,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 function parseEnv(source: NodeJS.ProcessEnv): Env {
   const env = envSchema.parse(source);
   assertLlmEnv(env);
+  assertMetaEnv(env);
   if (env.NODE_ENV === 'production' && env.SMS_DRIVER === 'mailpit') {
     throw new Error('SMS_DRIVER=mailpit is not allowed in production');
   }
@@ -112,6 +117,25 @@ function parseEnv(source: NodeJS.ProcessEnv): Env {
       source.ENCRYPTION_MASTER_KEYS,
     ),
   };
+}
+
+function assertMetaEnv(env: z.infer<typeof envSchema>): void {
+  if (env.META_CHANNEL_DRIVER === 'fake') {
+    if (env.NODE_ENV === 'production')
+      throw new Error('Fake Meta channel driver is not allowed in production');
+    if (!env.META_OAUTH_REDIRECT_URI) throw new Error('Meta redirect URI is required');
+  }
+  if (env.META_CHANNEL_DRIVER !== 'graph') return;
+  if (
+    !env.META_APP_ID ||
+    !env.META_APP_SECRET ||
+    !env.META_LOGIN_CONFIG_ID ||
+    !env.META_OAUTH_REDIRECT_URI
+  ) {
+    throw new Error('Meta app id, secret, login configuration and redirect URI are required');
+  }
+  if (new URL(env.META_OAUTH_REDIRECT_URI).protocol !== 'https:')
+    throw new Error('Meta Graph requires an HTTPS redirect URI');
 }
 
 function assertLlmEnv(env: z.infer<typeof envSchema>): void {

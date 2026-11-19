@@ -34,3 +34,16 @@ export type ChannelCredentials = {
   accessToken: string;
   accountExternalId: string;
 };
+
+export type MetaPage = {
+  id: string;
+  name: string;
+  accessToken: string;
+  instagram: { id: string; name: string } | null;
+};
+
+export type MetaAuthorizationDriver = {
+  authorizationUrl(state: string): string;
+  exchangeAuthorizationCode(code: string): Promise<string>;
+  listAccounts(userToken: string): Promise<MetaPage[]>;
+};
