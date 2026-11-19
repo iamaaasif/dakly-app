@@ -44,7 +44,11 @@ describe('Worker job schedulers', () => {
       scheduler('wake-snoozed-notifications'),
     ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
-    const bulkSweeps = [scheduler('staff-audit-maintenance'), scheduler('fail-stuck-imports')];
+    const bulkSweeps = [
+      scheduler('staff-audit-maintenance'),
+      scheduler('fail-stuck-imports'),
+      scheduler('sweep-contact-stats', 86400000),
+    ];
     expect(bulk.schedulers).toEqual([...bulkSweeps, ...bulkSweeps]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),

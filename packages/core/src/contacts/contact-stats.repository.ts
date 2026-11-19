@@ -1,0 +1,94 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
+
+import type { ContactSource } from '@dakly/contracts/contacts';
+import { contacts, contactStats } from '@dakly/db/schema/contacts';
+
+import { TenantDatabase } from '../platform/database/tenant-database';
+
+export type ContactStatsWrite = Omit<
+  typeof contactStats.$inferInsert,
+  'storeId' | 'contactId' | 'favouriteCategory'
+>;
+
+@Injectable()
+export class ContactStatsRepository {
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+
+  contactIds(storeId: string, after: string | null, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            isNull(contacts.deletedAt),
+            after ? gt(contacts.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(contacts.id))
+        .limit(limit),
+    );
+  }
+
+  async lockContact(storeId: string, contactId: string) {
+    const [contact] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          kind: contacts.kind,
+          source: contacts.source,
+          createdAt: contacts.createdAt,
+          isBlocked: contacts.isBlocked,
+          deletedAt: contacts.deletedAt,
+        })
+        .from(contacts)
+        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, contactId)))
+        .for('no key update'),
+    );
+    return contact;
+  }
+
+  async bestBySpend(
+    storeId: string,
+    contactId: string,
+    netSpendPoisha: number,
+    intentionalSources: readonly ContactSource[],
+  ) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ best: boolean }>(sql`
+      select count(*) filter (
+        where (s.net_spend_poisha, c.id) > (${netSpendPoisha}::bigint, ${contactId}::uuid)
+      ) < count(*) / 10 as best
+      from contacts c left join contact_stats s on s.store_id = c.store_id and s.contact_id = c.id
+      where c.store_id = ${storeId} and c.deleted_at is null and not c.is_blocked
+        and c.kind <> 'not_customer'
+        and (c.id = ${contactId} or s.orders_count > 0 or (
+          c.kind = 'customer' and c.source = any(${sql.param(intentionalSources)}::text[])
+        ))
+    `),
+    );
+    return rows[0]!.best;
+  }
+
+  async save(storeId: string, contactId: string, stats: ContactStatsWrite) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(contactStats)
+        .values({ ...stats, storeId, contactId })
+        .onConflictDoUpdate({
+          target: contactStats.contactId,
+          set: stats,
+          setWhere: sql`
+          ${contactStats.storeId} = ${storeId} and
+          (${contactStats.ordersCount}, ${contactStats.deliveredCount}, ${contactStats.returnedCount},
+           ${contactStats.netSpendPoisha}, ${contactStats.firstOrderAt}, ${contactStats.lastOrderAt},
+           ${contactStats.usualGapDays}, ${contactStats.lifecycleStage})
+          is distinct from
+          (excluded.orders_count, excluded.delivered_count, excluded.returned_count,
+           excluded.net_spend_poisha, excluded.first_order_at, excluded.last_order_at,
+           excluded.usual_gap_days, excluded.lifecycle_stage)`,
+        }),
+    );
+  }
+}

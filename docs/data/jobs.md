@@ -58,6 +58,10 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 Per-store cap: one running campaign batch per store.
 
+Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
+Order creation, stage changes and COD collection give the order ID, which the service uses to find
+the buyer. The subscriber recomputes the contact's row from current orders.
+
 ## workflow
 
 | Job                       | Started by                              | Payload                                              | Makes a rerun harmless                                                                             |
@@ -74,11 +78,14 @@ Per-store cap: one running campaign batch per store.
 | `check-channel-token`       | Sweep `channel_connections_expiring_before`, daily      | `storeId`, `channelConnectionId` | Status only set, notification deduped                                |
 | `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                            |
 | `sync-whatsapp-templates`   | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                  |
-| `refresh-contact-stats`     | Order or message outbox event                           | `storeId`, `contactId`           | Recomputes the row                                                   |
 | `build-daily-metrics`       | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                       |
 | `run-maintenance`           | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance) |
 
 ## bulk
+
+`sweep-contact-stats` runs daily and pages through `maintenance_store_ids`. It queues
+`reconcile-contact-stats` with `storeId`, once per store per sweep day. The repair recomputes
+contact stats in pages and leaves matching rows unchanged.
 
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
