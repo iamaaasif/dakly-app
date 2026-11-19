@@ -13,20 +13,22 @@ export default async function CampaignsPage({
 }) {
   await requireSession();
   const query = campaignListQuerySchema.safeParse(await searchParams);
-  return query.success ? (
-    <CampaignsScreen query={query.data} />
-  ) : (
+  return (
     <StorePage permission="canViewCampaigns">
-      <p role="alert" className="p-6">
-        The campaign filters are invalid.{' '}
-        <Link
-          href="/campaigns"
-          className="inline-flex min-h-10 min-w-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          Open all campaigns
-        </Link>
-        .
-      </p>
+      {query.success ? (
+        <CampaignsScreen query={query.data} />
+      ) : (
+        <p role="alert" className="p-6">
+          The campaign filters are invalid.{' '}
+          <Link
+            href="/campaigns"
+            className="inline-flex min-h-10 min-w-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          >
+            Open all campaigns
+          </Link>
+          .
+        </p>
+      )}
     </StorePage>
   );
 }

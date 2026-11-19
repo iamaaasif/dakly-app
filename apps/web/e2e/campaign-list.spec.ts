@@ -110,9 +110,12 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
     const submitSearch = page.getByRole('button', { name: 'Search', exact: true });
     await search.fill('Unapplied name');
+    await status.focus();
     await status.selectOption('sent');
     await expect(page).toHaveURL(/status=sent/);
     await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
+    await expect(search).toHaveValue('Unapplied name');
+    await expect(status).toBeFocused();
     await channel.selectOption('sms');
     await expect(page).toHaveURL(/channel=sms/);
     await createdFrom.fill('2026-11-01');

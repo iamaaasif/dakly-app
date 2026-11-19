@@ -2,6 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -41,29 +42,28 @@ const campaignFilterSchema = filterFields
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const router = useRouter();
+  const { search, status, channel, createdFrom, createdThrough } = query;
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
     resolver: zodResolver(campaignFilterSchema),
-    defaultValues: {
-      search: query.search ?? '',
-      status: query.status ?? '',
-      channel: query.channel ?? '',
-      createdFrom: query.createdFrom ?? '',
-      createdThrough: query.createdThrough ?? '',
-    },
+    defaultValues: { search, status, channel, createdFrom, createdThrough },
   });
+  const { getValues, reset } = form;
+  useEffect(() => {
+    reset({ search: getValues('search'), status, channel, createdFrom, createdThrough });
+  }, [status, channel, createdFrom, createdThrough, getValues, reset]);
   const visit = (filters: CampaignListQuery) =>
     router.push(campaignListHref({ ...filters, limit: query.limit }));
   const apply = form.handleSubmit(visit);
   function applyFilter() {
     const parsed = campaignFilterSchema.safeParse({
-      ...form.getValues(),
-      search: query.search ?? '',
+      ...getValues(),
+      search: search ?? '',
     });
     if (parsed.success) visit(parsed.data);
     else void form.trigger();
   }
   function clear() {
-    form.reset({
+    reset({
       search: '',
       status: '',
       channel: '',
