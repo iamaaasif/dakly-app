@@ -128,8 +128,6 @@ export class AnalyticsSummariesService {
     await this.transaction.run(storeId, async () => {
       await this.summaries.lockSummaries(storeId, 'lifecycle');
       const now = this.clock.now();
-      const timeZone = await this.stores.timeZone(storeId);
-      if (reportDay(now, timeZone) !== day) return;
       const rows = await this.contactStats.lifecycleCounts(storeId);
       const counts = new Map(rows.map(({ stage, count }) => [stage, count]));
       const metrics = lifecycleStages

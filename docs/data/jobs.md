@@ -109,7 +109,7 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 | `purge-contact`            | Sweep `due_contact_purges`               | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots                                                                                                                            |
 | sweep `fail-stuck-imports` | Every 30 seconds                         | none                                                          | `stores_with_stuck_imports`, then a guarded update on `last_progress_at` and `requeue_count`: queue again up to 4 times, then fail                                                                                                                            |
 
-`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000. The final contact stats rank page publishes `contact_stats.repaired`. One bulk job captures that store’s lifecycle snapshot while the contact stats repair date is current in the store.
+`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000. The final contact stats rank page publishes `contact_stats.repaired`. The first completion per UTC repair day wins. One bulk job counts the stages when it runs and stores a snapshot under the repair’s local date. Replays leave that snapshot in place.
 
 ## payments
 

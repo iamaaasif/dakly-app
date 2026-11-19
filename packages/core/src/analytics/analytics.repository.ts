@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, gte, inArray, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, lte, ne, notInArray, sql } from 'drizzle-orm';
 
 import { storeDailyMetrics } from '@dakly/db/schema/analytics';
 
@@ -182,8 +182,11 @@ export class AnalyticsRepository {
             storeDailyMetrics.dimension,
           ],
           set: { value: sql`excluded.value`, updatedAt },
-          setWhere: sql`${eq(storeDailyMetrics.storeId, storeId)}
-          and ${storeDailyMetrics.value} is distinct from excluded.value`,
+          setWhere: and(
+            eq(storeDailyMetrics.storeId, storeId),
+            ne(storeDailyMetrics.metric, 'lifecycle'),
+            sql`${storeDailyMetrics.value} is distinct from excluded.value`,
+          ),
         }),
     );
   }
