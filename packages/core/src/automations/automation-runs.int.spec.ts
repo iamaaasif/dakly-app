@@ -837,10 +837,59 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(sentFor(runId!)).toEqual([]);
         if (reclaim) {
           expect(await run(runId!)).toMatchObject({ status: 'running' });
-          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+          expect(await sendStep(runId!)).toEqual([
+            expect.objectContaining({ outcome: 'preparing' }),
+          ]);
           expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
         } else {
           expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+          expect(await ledgerFor(runId!)).toEqual([
+            { kind: 'reserve', delta: -1 },
+            { kind: 'release', delta: 1 },
+          ]);
+        }
+      },
+    );
+
+    it.each(['marketing', 'transactional'] as const)(
+      'rechecks consent for a %s first SMS after the phone lookup',
+      async (category) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          runIds: [runId],
+        } = await dueRuns(send(category), 1, 'active', contact);
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            await runner.consents.record(
+              storeId,
+              {
+                contactId: contact,
+                channel: 'sms',
+                status: 'withdrawn',
+                source: 'opt_out_link',
+                evidence: null,
+              },
+              { kind: 'system' },
+            );
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+        } finally {
+          phone.mockRestore();
+        }
+        if (category === 'transactional') {
+          expect(sentFor(runId!)).toHaveLength(1);
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        } else {
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await sendStep(runId!)).toEqual([
+            expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_consent' }),
+          ]);
           expect(await ledgerFor(runId!)).toEqual([
             { kind: 'reserve', delta: -1 },
             { kind: 'release', delta: 1 },

@@ -44,7 +44,11 @@ import {
   type StepResult,
   workflowDestinationHash,
 } from './automation-step-rules';
-import { authorizeFirstSubmission, WorkflowSubmissionStopped } from './automation-submit-guard';
+import {
+  authorizeFirstSubmission,
+  recoverUnsubmittedSms,
+  WorkflowSubmissionStopped,
+} from './automation-submit-guard';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
@@ -120,6 +124,7 @@ export class AutomationRunsService {
       step.kind === 'send' &&
       (await this.repository.findSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
+    if (isSending && isSending.preparing) return recoverUnsubmittedSms(held, now);
     // A send handed to the provider by an earlier claim is not sent again; its run ends.
     if (isSending) return endWithUnknownOutcome(held ?? failed(NO_ANSWER, now));
     if (held) return held;
@@ -274,16 +279,10 @@ export class AutomationRunsService {
       return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    const firstTriedAt = await this.repository.schedulerTime(storeId);
-    if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
+    const checkedAt = await this.repository.schedulerTime(storeId);
+    if (isLateSend(facts.wakeAt, checkedAt)) return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
-    const body = await this.writeSend(
-      { storeId, claim, contactId, step, destination },
-      {
-        sentAt: at,
-        firstTriedAt,
-      },
-    );
+    const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
     if (body === undefined) return { decision: noCredits };
     return { decision, body, destination, at };
   }
@@ -303,7 +302,7 @@ export class AutomationRunsService {
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
     { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body'>,
-    times: { sentAt: Date; firstTriedAt: Date },
+    sentAt: Date,
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing
@@ -334,9 +333,9 @@ export class AutomationRunsService {
       kind: 'send',
       category: step.category,
       id,
-      outcome: 'sending',
+      outcome: 'preparing',
       channel: 'sms',
-      ...times,
+      sentAt,
       destinationHash: workflowDestinationHash(storeId, destination),
       optOutUrl: optOut?.url,
     });
@@ -382,10 +381,12 @@ export class AutomationRunsService {
           facts: { storeId, wakeAt },
           claim,
           step,
-          checkPhone: async () => {
-            await this.contacts.lockForConsent(storeId, [contactId]);
-            return (await this.contacts.getPhoneForSend(storeId, contactId)) === preparedPhone;
-          },
+          checkRecipient: () =>
+            this.sendPolicy.checkRecipientForSubmission(
+              storeId,
+              { contactId, channel: 'sms', category: step.category },
+              preparedPhone,
+            ),
         });
       },
     } as const;

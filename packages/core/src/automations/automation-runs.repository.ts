@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import type {
   AutomationExitReason,
@@ -67,10 +67,11 @@ export type RunStepChange = {
   sentAt?: Date;
   firstTriedAt?: Date;
 };
-// A send handed to the provider whose outcome is not known yet.
+// A send that has reserved credits and has not settled.
 export type SendingStep = {
   id: string;
   firstTriedAt: Date | null;
+  preparing?: true;
   latestDispatchAt: Date | null;
   optOutUrl: string | null;
   destinationHash: string | null;
@@ -166,6 +167,7 @@ export class AutomationRunsRepository {
       const query = tx
         .select({
           id: automationRunSteps.id,
+          outcome: automationRunSteps.outcome,
           firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
           optOutUrl: automationRunSteps.optOutUrl,
@@ -177,7 +179,7 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.storeId, storeId),
             eq(automationRunSteps.runId, runId),
             eq(automationRunSteps.stepKey, stepKey),
-            eq(automationRunSteps.outcome, 'sending'),
+            inArray(automationRunSteps.outcome, ['preparing', 'sending']),
           ),
         )
         .limit(1);
@@ -186,7 +188,8 @@ export class AutomationRunsRepository {
     if (!row) return undefined;
     return {
       id: row.id,
-      firstTriedAt: row.firstTriedAt ?? row.sentAt,
+      ...(row.outcome === 'preparing' && { preparing: true as const }),
+      firstTriedAt: row.outcome === 'preparing' ? null : (row.firstTriedAt ?? row.sentAt),
       latestDispatchAt: row.sentAt ?? row.firstTriedAt,
       optOutUrl: row.optOutUrl,
       destinationHash: row.destinationHash,

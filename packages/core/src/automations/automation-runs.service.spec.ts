@@ -96,7 +96,10 @@ class FakeRunsRepository {
   }
 
   async findSendingStep(_storeId: string, _runId: string, stepKey: string) {
-    return this.steps.find((row) => row.stepKey === stepKey && row.outcome === 'sending');
+    const row = this.steps.find(
+      (row) => row.stepKey === stepKey && ['preparing', 'sending'].includes(row.outcome),
+    );
+    return row && { ...row, ...(row.outcome === 'preparing' && { preparing: true }) };
   }
 
   async changeStep(_storeId: string, _runId: string, stepKey: string, change: RunStepChange) {
@@ -216,10 +219,6 @@ describe('AutomationRunsService', () => {
       },
     };
     const contacts = {
-      lockForConsent: async () => {
-        submissionChecked = true;
-        return [];
-      },
       getPhoneForSend: async () => '01711000201',
       findTags: async () => tags,
       changeTag: async (
@@ -236,6 +235,10 @@ describe('AutomationRunsService', () => {
     };
     const sendPolicy = {
       check: async () => decision,
+      checkRecipientForSubmission: async () => {
+        submissionChecked = true;
+        return { phoneMatches: true };
+      },
       checkForSend: async () => ({
         decision,
         destination: '01711000201',
@@ -499,8 +502,23 @@ describe('AutomationRunsService', () => {
 
       await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
       expect(sent).toEqual([]);
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'preparing' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+    });
+
+    it('releases a recovered reservation when the provider boundary was never reached', async () => {
+      schedulerUnavailable = 'during submission';
+      await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
+      schedulerUnavailable = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+      expect(sent).toEqual([]);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'release']);
     });
 
     it('sends a transactional SMS without an opt-out link', async () => {
