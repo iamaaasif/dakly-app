@@ -84,6 +84,7 @@ export type AutomationVersionResponse = {
 };
 export type AutomationDetailResponse = AutomationResponse & {
   versions: AutomationVersionResponse[];
+  activeRuns: number;
 };
 export type AutomationListItem = AutomationResponse & {
   trigger: AutomationGraph['trigger']['key'];

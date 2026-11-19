@@ -115,6 +115,22 @@ export class AutomationsRepository {
     return row;
   }
 
+  async countActiveRuns(storeId: string, automationId: string): Promise<number> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ count: count() })
+        .from(automationRuns)
+        .where(
+          and(
+            eq(automationRuns.storeId, storeId),
+            eq(automationRuns.automationId, automationId),
+            inArray(automationRuns.status, ['waiting', 'running']),
+          ),
+        ),
+    );
+    return row!.count;
+  }
+
   async countWithStatus(storeId: string, statuses: readonly AutomationStatus[]): Promise<number> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
