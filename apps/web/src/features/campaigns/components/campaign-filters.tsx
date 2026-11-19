@@ -16,13 +16,12 @@ import { campaignChannelLabels, campaignStatusLabels } from '../campaign-labels'
 
 const { search, status, channel } = campaignListQuerySchema.shape;
 const empty = z.literal('');
-const dateField = z.string().optional();
 const filterFields = z.strictObject({
   search: search.or(empty),
   status: status.or(empty),
   channel: channel.or(empty),
-  createdFrom: dateField,
-  createdThrough: dateField,
+  createdFrom: z.string().optional(),
+  createdThrough: z.string().optional(),
 });
 type FiltersInput = z.input<typeof filterFields>;
 
@@ -42,12 +41,15 @@ const campaignFilterSchema = filterFields
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const router = useRouter();
-  const { search, status, channel, createdFrom, createdThrough } = query;
+  const { search = '', status = '', channel = '', createdFrom = '', createdThrough = '' } = query;
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
     resolver: zodResolver(campaignFilterSchema),
     defaultValues: { search, status, channel, createdFrom, createdThrough },
   });
-  const { getValues, reset } = form;
+  const { getValues, reset, resetField } = form;
+  useEffect(() => {
+    resetField('search', { defaultValue: search });
+  }, [search, resetField]);
   useEffect(() => {
     reset({ search: getValues('search'), status, channel, createdFrom, createdThrough });
   }, [status, channel, createdFrom, createdThrough, getValues, reset]);
@@ -57,7 +59,7 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   function applyFilter() {
     const parsed = campaignFilterSchema.safeParse({
       ...getValues(),
-      search: search ?? '',
+      search,
     });
     if (parsed.success) visit(parsed.data);
     else void form.trigger();
@@ -81,15 +83,13 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
         className="grid grid-cols-2 items-start gap-3 xl:flex"
       >
         <FilterFields applyFilter={applyFilter} />
-        <div className="flex items-end xl:self-end">
-          <button
-            type="button"
-            onClick={clear}
-            className="inline-flex min-h-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            Clear filters
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={clear}
+          className="inline-flex min-h-10 items-center justify-self-start text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus xl:self-end"
+        >
+          Clear filters
+        </button>
       </form>
     </FormProvider>
   );

@@ -116,6 +116,12 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
     await expect(search).toHaveValue('Unapplied name');
     await expect(status).toBeFocused();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/campaigns$/);
+    await expect(status).toHaveValue('');
+    await expect(search).toHaveValue('Unapplied name');
+    await status.selectOption('sent');
+    await expect(page).toHaveURL(/status=sent/);
     await channel.selectOption('sms');
     await expect(page).toHaveURL(/channel=sms/);
     await createdFrom.fill('2026-11-01');
@@ -144,8 +150,10 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect(page).toHaveURL(/status=sent/);
     await search.fill('Puja');
     await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
-    await submitSearch.click();
+    await submitSearch.focus();
+    await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/search=Puja/);
+    await expect(submitSearch).toBeFocused();
     const sentRow = page.getByRole('row', { name: /Puja winback/ });
     const sentLink = sentRow.getByRole('link', { name: 'Puja winback', exact: true });
     await expect(sentLink).toBeVisible();

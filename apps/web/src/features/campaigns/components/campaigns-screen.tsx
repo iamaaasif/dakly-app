@@ -31,7 +31,7 @@ export function CampaignsScreen({ query }: { query: CampaignListQuery }) {
           </Link>
         )}
       </header>
-      <CampaignFilters key={`${session?.contextTag ?? ''}/${query.search ?? ''}`} query={query} />
+      <CampaignFilters key={session?.contextTag} query={query} />
       <CampaignListState query={query} campaigns={campaigns} />
     </main>
   );
