@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0050_snapshot.json`: **95 tables, 1265 columns, 382 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0050_snapshot.json`: **95 tables, 1263 columns, 383 explicit indexes and 299 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -443,6 +443,7 @@ erDiagram
     users |o..o{ messages : "author_user_id"
     users |o..o{ messages : "rated_by_user_id"
     conversations ||..o{ messages : "store_id, conversation_id"
+    contact_identities |o..o{ messages : "store_id, recipient_identity_id"
     stores ||..o{ social_comments : "store_id"
     channel_connections ||..o{ social_comments : "channel_connection_id"
     post_targets |o..o{ social_comments : "post_target_id"
@@ -705,6 +706,8 @@ erDiagram
         text media_text "NULL; text"
         text external_id "NULL; text"
         text idempotency_key "NULL; text"
+        uuid recipient_identity_id FK "NULL; uuid"
+        text send_category "NULL; text"
         text status "NOT NULL; text"
         text error_code "NULL; text"
         text source_type "NOT NULL; text"
@@ -1455,10 +1458,6 @@ erDiagram
         text template_key "NULL; text"
         text trigger_type "NOT NULL; text"
         text status "NOT NULL; text"
-        text pause_reason "NULL; text"
-        integer balance_pause_revision "NULL; integer"
-        timestamp_with_time_zone balance_resumed_at "NULL; timestamp with time zone"
-        boolean has_balance_resume_send_allowance "NOT NULL; boolean"
         boolean is_transactional "NOT NULL; boolean"
         smallint priority "NOT NULL; smallint"
         jsonb draft_graph "NOT NULL; jsonb"
@@ -1954,6 +1953,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `messages_author_user_id_users_id_fk`                                | `messages(author_user_id)`                                | `users(id)`                                 | no action |
 | `messages_rated_by_user_id_users_id_fk`                              | `messages(rated_by_user_id)`                              | `users(id)`                                 | no action |
 | `messages_conversation_id_store_fk`                                  | `messages(store_id, conversation_id)`                     | `conversations(store_id, id)`               | no action |
+| `messages_recipient_identity_store_fk`                               | `messages(store_id, recipient_identity_id)`               | `contact_identities(store_id, id)`          | no action |
 | `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
 | `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
 | `sms_messages_store_id_stores_id_fk`                                 | `sms_messages(store_id)`                                  | `stores(id)`                                | no action |

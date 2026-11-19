@@ -46,7 +46,7 @@ describe('inbox filters without RLS assistance', () => {
        values ($1, $2, $3, 'in', 'customer', 'text', 'received')`,
       [messageId, storeId, id],
     );
-    return { id, messageId };
+    return { id, messageId, contactId, connectionId };
   }
 
   it('lists, reads and updates only conversations and messages in the selected store', async () => {
@@ -72,5 +72,26 @@ describe('inbox filters without RLS assistance', () => {
     const added = await repository.addNote(f.b, second.id, note, now);
     expect(added).toMatchObject({ ...note, kind: 'note' });
     expect(await repository.messages(f.a, first.id, page)).toHaveLength(1);
+  });
+
+  it('keeps a send intent tied to an identity in the same store even for the table owner', async () => {
+    const own = await conversation(f.a);
+    const foreign = await conversation(f.b);
+    const identityId = randomUUID();
+    const { pool } = f.connection;
+    await pool.query(
+      `insert into contact_identities (id, store_id, contact_id, channel_connection_id, channel, external_id)
+       values ($1, $2, $3, $4, 'messenger', 'other-shop-recipient')`,
+      [identityId, f.b, foreign.contactId, foreign.connectionId],
+    );
+    await expect(
+      pool.query('update messages set recipient_identity_id = $1 where id = $2', [
+        identityId,
+        own.messageId,
+      ]),
+    ).rejects.toMatchObject({ code: '23503', constraint: 'messages_recipient_identity_store_fk' });
+    await expect(
+      pool.query("update messages set send_category = 'unexpected' where id = $1", [own.messageId]),
+    ).rejects.toMatchObject({ code: '23514', constraint: 'messages_send_category' });
   });
 });

@@ -16,8 +16,11 @@ export type InboundMessage = {
 };
 
 export type OutboundMessage = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
   externalConversationId: string;
   text: string;
+  operationKey: string;
+  humanAgent?: boolean;
 };
 
 export type SendResult = {
@@ -55,7 +58,7 @@ export type MetaTokenHealthDriver = {
 };
 
 export class MetaRequestError extends Error {
-  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
+  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response' | 'rejected') {
     super('Meta request failed');
     this.name = 'MetaRequestError';
   }

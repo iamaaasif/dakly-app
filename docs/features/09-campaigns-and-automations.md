@@ -368,7 +368,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 1. Contact: a deleted contact is `no_address`; a blocked contact is `blocked` for every category.
 2. Marketing only: a Not a customer contact is `not_customer`; a contact past the plan's customer limit (ACC-R8) is `over_plan_limit`; a channel consent that is not `granted` in `contact_consent_current` is `no_consent`, so a withdrawal after approval skips.
 3. SMS needs a phone, else `no_address`, for every category.
-4. Window: SMS has none. Messenger, Instagram and WhatsApp skip as `window_closed` until CHAT-2 stores inbound message times and CHN-3 adds WhatsApp templates.
+4. Window. SMS has no window. Messenger and Instagram dispatch can pass the selected conversation's deadline to `checkForSend`. The gate compares it with the clock after locking the contact. Without a chat deadline the gate returns `window_closed`. WhatsApp templates follow CHN-3.
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
 6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time whose own `category` is `marketing`, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
 

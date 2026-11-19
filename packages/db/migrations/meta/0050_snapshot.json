@@ -1,5 +1,5 @@
 {
-  "id": "8c47c93d-e8aa-46a0-8f80-e9ae31a99987",
+  "id": "89929922-4109-456e-a9c3-f1feed85b335",
   "prevId": "f6d021a3-10ea-4331-ba95-93b97fa8e794",
   "version": "7",
   "dialect": "postgresql",
@@ -5241,31 +5241,6 @@
           "notNull": true,
           "default": "'draft'"
         },
-        "pause_reason": {
-          "name": "pause_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "balance_pause_revision": {
-          "name": "balance_pause_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "balance_resumed_at": {
-          "name": "balance_resumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "has_balance_resume_send_allowance": {
-          "name": "has_balance_resume_send_allowance",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "is_transactional": {
           "name": "is_transactional",
           "type": "boolean",
@@ -5456,18 +5431,6 @@
         "automations_status": {
           "name": "automations_status",
           "value": "\"automations\".\"status\" in ('draft', 'active', 'paused', 'archived')"
-        },
-        "automations_pause_reason": {
-          "name": "automations_pause_reason",
-          "value": "\"automations\".\"pause_reason\" in ('manual', 'balance')"
-        },
-        "automations_paused_has_reason": {
-          "name": "automations_paused_has_reason",
-          "value": "(\"automations\".\"status\" = 'paused') = (\"automations\".\"pause_reason\" is not null)"
-        },
-        "automations_balance_pause_revision": {
-          "name": "automations_balance_pause_revision",
-          "value": "\"automations\".\"pause_reason\" is distinct from 'balance'\n        or (\"automations\".\"balance_pause_revision\" is not null and \"automations\".\"balance_pause_revision\" >= 0)"
         }
       },
       "isRLSEnabled": false
@@ -9741,6 +9704,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "recipient_identity_id": {
+          "name": "recipient_identity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "send_category": {
+          "name": "send_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -9974,6 +9949,28 @@
           "method": "btree",
           "with": {}
         },
+        "messages_recipient_identity_idx": {
+          "name": "messages_recipient_identity_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recipient_identity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"messages\".\"recipient_identity_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "messages_rated_by_user_id_idx": {
           "name": "messages_rated_by_user_id_idx",
           "columns": [
@@ -10057,6 +10054,21 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "messages_recipient_identity_store_fk": {
+          "name": "messages_recipient_identity_store_fk",
+          "tableFrom": "messages",
+          "tableTo": "contact_identities",
+          "columnsFrom": [
+            "store_id",
+            "recipient_identity_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -10082,6 +10094,10 @@
         "messages_source_type": {
           "name": "messages_source_type",
           "value": "\"messages\".\"source_type\" in ('chat', 'campaign', 'automation', 'transactional')"
+        },
+        "messages_send_category": {
+          "name": "messages_send_category",
+          "value": "\"messages\".\"send_category\" in ('staff_reply', 'transactional', 'marketing')"
         },
         "messages_ai_rating": {
           "name": "messages_ai_rating",
