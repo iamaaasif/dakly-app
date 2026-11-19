@@ -370,6 +370,23 @@ describe('Payment intents (Postgres)', () => {
     });
   });
 
+  it('requeues the persisted signature after a delivery job is lost', async () => {
+    const intent = await pendingIntent();
+    const payload = JSON.stringify(intent.merchantReference);
+    expect((await deliver(payload)).statusCode).toBe(204);
+    const lost = jobs.pop()!;
+    const originalClock = clock.now;
+    clock.now = () => new Date('2026-11-19T03:02:00.000Z');
+    try {
+      await callbacks.recoverPending();
+      expect(jobs).toContainEqual(lost);
+      await verifier.process(lost.webhookEventId, lost.attemptId, false);
+    } finally {
+      clock.now = originalClock;
+    }
+    expect(await receipt(payload)).toMatchObject({ status: 'processed', payload: null });
+  });
+
   it('moves a failed provider check out of the due page so other intents can run', async () => {
     const intent = await pendingIntent();
     const unavailable = new PaymentGatewayService(payments, repository, clock, encryption, [
@@ -527,6 +544,7 @@ describe('Payment intents (Postgres)', () => {
     ]);
     const jobs = new PaymentJobsService(
       callbackRepository,
+      callbacks,
       new PaymentSettlementsRepository(database),
       {} as StoresService,
       clock,

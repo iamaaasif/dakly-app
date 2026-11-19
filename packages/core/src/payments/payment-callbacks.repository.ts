@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 
 import { gateways } from '@dakly/contracts/payments';
 import type { Database } from '@dakly/db/client';
@@ -70,6 +70,26 @@ export class PaymentCallbacksRepository {
         ),
       );
     return receipt;
+  }
+
+  listReceivedBefore(before: Date, after?: string) {
+    return this.database
+      .select({
+        id: webhookEvents.id,
+        receivedAt: webhookEvents.receivedAt,
+        attemptIds: sql<string[]>`array(select jsonb_object_keys(${attempts}))`,
+      })
+      .from(webhookEvents)
+      .where(
+        and(
+          inArray(webhookEvents.provider, gateways),
+          eq(webhookEvents.status, 'received'),
+          lt(webhookEvents.receivedAt, before),
+          after ? gt(webhookEvents.id, after) : undefined,
+        ),
+      )
+      .orderBy(webhookEvents.id)
+      .limit(100);
   }
 
   async finish(
