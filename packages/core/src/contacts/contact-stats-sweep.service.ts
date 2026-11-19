@@ -76,6 +76,7 @@ export class ContactStatsSweepService {
       await this.bulk.addBulk([repairJob({ ...firstRankPage, ranking: { kind: 'rank', cutoff } })]);
     } else {
       const now = this.clock.now();
+      // Rank writes skip rows after the UTC cutoff, so this page may be incomplete.
       if (now.toISOString().slice(0, 10) !== day) return;
       await this.transaction.run(storeId, async () => {
         const timeZone = await this.stores.timeZone(storeId);

@@ -161,8 +161,11 @@ describe('Nightly contact stats repair', () => {
       lifecycle_stage: 'new',
       net_spend_poisha: '2500000',
     });
-    vi.mocked(app.get(Clock).now).mockReturnValue(new Date('2026-11-20T06:00:00Z'));
+    vi.mocked(app.get(Clock).now)
+      .mockReturnValueOnce(new Date(day + 'T23:59:59Z'))
+      .mockReturnValue(new Date('2026-11-20T00:00:00Z'));
     await worker.handle(rank?.data);
     expect(await stored(firstId!)).toMatchObject({ lifecycle_stage: 'new' });
+    expect(await completion()).toEqual([...completed, { payload: { day } }]);
   });
 });

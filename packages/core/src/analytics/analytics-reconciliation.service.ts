@@ -10,6 +10,8 @@ import { StoresService } from '../stores/stores.service';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { shiftReportDay } from './report-period';
 
+const STORE_PAGE_SIZE = 100;
+
 export const RECONCILE_ANALYTICS = 'reconcile-analytics';
 export const analyticsReconciliationPayload = z.strictObject({
   storeId: z.uuid(),
@@ -39,13 +41,13 @@ export class AnalyticsReconciliationService {
     const day = this.clock.now().toISOString().slice(0, 10);
     let after: string | null = null;
     for (;;) {
-      const stores = await this.stores.maintenanceStoreIds(after, 100);
+      const stores = await this.stores.maintenanceStoreIds(after, STORE_PAGE_SIZE);
       await this.queue.addBulk(
         stores.map((storeId) =>
           reconciliationJob({ storeId, day, page: { kind: 'orders', period: null } }),
         ),
       );
-      if (stores.length < 100) return;
+      if (stores.length < STORE_PAGE_SIZE) return;
       after = stores.at(-1) ?? null;
     }
   }
