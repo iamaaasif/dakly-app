@@ -84,15 +84,9 @@ export function DashboardMetrics({
   );
 }
 
-function ReportChange({
-  total,
-  previous,
-  period,
-}: {
-  total: bigint;
-  previous: bigint;
-  period: number;
-}) {
+type Comparison = { total: bigint; previous: bigint; period: number };
+
+function ReportChange({ total, previous, period }: Comparison) {
   let variant: 'neutral' | 'success' | 'danger' = 'neutral';
   if (previous > 0n && total !== previous) variant = total > previous ? 'success' : 'danger';
   return (
