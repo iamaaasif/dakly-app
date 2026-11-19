@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FieldArrayWithId, UseFormRegister } from 'react-hook-form';
 
-import type { CreateOrderValues, OrderCatalogueProduct } from '@dakly/contracts/orders';
+import type { OrderEditorValues, OrderCatalogueProduct } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -10,17 +10,17 @@ import { useOrderCatalogue } from '../api/order-catalogue';
 import { formatMoney } from '@/lib/format-money';
 
 export type VariantChoice = {
-  productId: string;
+  productId?: string;
   label: string;
   price: number;
   stock: number | null;
 };
 
 type ProductFieldsProps = {
-  fields: FieldArrayWithId<CreateOrderValues, 'items'>[];
+  fields: FieldArrayWithId<OrderEditorValues, 'items'>[];
   variants: Record<string, VariantChoice>;
   ids: string[];
-  register: UseFormRegister<CreateOrderValues>;
+  register: UseFormRegister<OrderEditorValues>;
   onChoose: (index: number, id: string, variant?: VariantChoice) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
@@ -74,7 +74,9 @@ export function OrderProductFields({
   );
 }
 
-export function orderVariantChoices(products: OrderCatalogueProduct[]) {
+export function orderVariantChoices(
+  products: OrderCatalogueProduct[],
+): Record<string, VariantChoice> {
   return Object.fromEntries(
     products.flatMap((product) =>
       product.variants

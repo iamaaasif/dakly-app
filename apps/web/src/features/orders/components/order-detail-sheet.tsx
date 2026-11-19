@@ -7,8 +7,9 @@ import { Sheet, type SheetProps } from '@dakly/ui/sheet';
 
 import { useOrderStage } from '../api/change-order-stage';
 import { useOrder } from '../api/get-order';
-import { canConfirmOrder } from '../order-actions';
+import { canConfirmOrder, canEditOrder } from '../order-actions';
 import { orderSourceLabels } from '../order-labels';
+import { EditOrderDialog } from './edit-order-dialog';
 import { OrderDetails } from './order-details';
 import { orderStageActions, stageActionLabels, type StageAction } from './order-stage-actions';
 import { OrderStageDialog } from './order-stage-dialog';
@@ -27,6 +28,7 @@ export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailShe
   const stage = useRef<HTMLSpanElement>(null);
   const canEdit = data?.currentStore?.canEditOrders;
   const canConfirm = canConfirmOrder(order, canEdit);
+  const editable = canEditOrder(order, canEdit);
   const actions = orderStageActions(order, canEdit);
 
   return (
@@ -37,8 +39,8 @@ export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailShe
       restoreFocusTo={restoreFocusTo}
       footer={
         order &&
-        (canConfirm || actions.length > 0) && (
-          <OrderStageFooter {...{ order, transition, stage, canConfirm, actions }} />
+        (canConfirm || actions.length > 0 || editable) && (
+          <OrderStageFooter {...{ order, transition, stage, canConfirm, actions, editable }} />
         )
       }
     >
@@ -90,15 +92,11 @@ type OrderStageFooterProps = {
   stage: RefObject<HTMLSpanElement | null>;
   canConfirm: boolean;
   actions: readonly StageAction[];
+  editable: boolean;
 };
 
-function OrderStageFooter({
-  order,
-  transition,
-  stage,
-  canConfirm,
-  actions,
-}: OrderStageFooterProps) {
+function OrderStageFooter(props: OrderStageFooterProps) {
+  const { order, transition, stage, canConfirm, actions, editable } = props;
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
     const drawer = button.closest('[role="dialog"]');
     transition.mutate(
@@ -129,6 +127,7 @@ function OrderStageFooter({
           Mark confirmed
         </Button>
       )}
+      {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
       {actions.map((action, index) =>
         action === 'to_confirm' || action === 'delivered' ? (
           <Button
