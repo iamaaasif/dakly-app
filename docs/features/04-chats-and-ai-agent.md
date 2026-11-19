@@ -62,7 +62,7 @@ Facebook sellers lose orders because nobody answers "price koto?" at 11 pm. Chat
 
 **AI reply pipeline** (target: first reply within 10 seconds)
 
-1. **Batch:** wait 4 seconds for more messages from the same person, then treat them as one turn (customers often send 3 short messages).
+1. **Batch:** wait for more messages from the same person, then treat them as one turn. The store's debounce defaults to 8 seconds.
 2. **Classify intent** into one of: greeting, price, size or stock, delivery, payment, order (sharing name, phone or address), yes or confirm, where's my order, exchange, complaint, photo, special request, other. Also detect language (Bangla script, Banglish, English).
 3. **Hand-over check:** complaint (damaged, wrong, fake, refund words) → hand over if "Damaged, wrong or fake" is on; exchange or return → hand over if "Refunds and exchanges" is on; custom or bulk order → hand over if "Special requests" is on; the customer asks for a person; or the AI's confidence is low. On hand-over Dakly sends a holding reply ("একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।"), moves the chat to Needs you, records the reason and notifies the assignee or Owner.
 4. **Retrieve facts:** the product the customer means (from text, a product card they tapped, the post they came from, or a photo matched against product images), its price, sale price, sizes and live stock; shop rules; taught answers; facts learned from files and links; the customer's orders and courier status.
@@ -308,7 +308,9 @@ AI reply pipeline (`AiAgentService.reply`)
 6. Check the draft in code: every ৳ amount and stock number must appear in this run's tool results; no phone but the shop's; no link but Dakly's; under 600 characters. A failed check hands over instead of sending.
 7. Send through the outbox, save the AI run id and sources on the message, consume one AI conversation unit.
 
-No database transaction or row lock is held during a model call (pending review must-fix). Before sending, the service re-reads `responder` and drops the AI reply if a person took over meanwhile.
+AI-4 runs the first three steps for Messenger and Instagram. Each delayed job reads the current chat, checks consent and classifies the new messages from the latest sender. Internal notes stay outside the model input. If hand-over is needed, Dakly saves the reason, queues a fixed holding reply to that sender and notifies the assignee or Owner. A normal classification ends the job. AI-5 adds generated replies and the rest of the pipeline.
+
+The model call runs outside the transaction. Before a hand-over, the service checks the responder, conversation version, latest inbound message and current send eligibility again. The hand-over, queued holding reply and notification are saved together. Holding replies are free.
 
 Agent tools take no store id, contact id or price; those come from the job. Tools: `search_products`, `get_product`, `get_delivery_charge`, `search_knowledge`, `get_my_orders`, `get_order_status`, `draft_order`, `confirm_order`, `create_payment_link`, `send_product_card`, `add_to_restock_list`, `hand_over`.
 
@@ -350,11 +352,12 @@ outcome in `ai_runs`. A schema mismatch gets one retry within the 20-second
 model budget. The service returns the parsed output, tool calls or a typed
 failure.
 
-Content Studio and Ask Dakly supply a usage reference. The service consumes
-one unit after a schema-valid result, and the same reference makes a retry
-free. Chats checks its allowance before any model work and consumes the
-conversation unit when it saves the outgoing AI reply, using the contact and
-window as the reference.
+Content Studio and Ask Dakly supply a usage reference. The service charges
+after a schema-valid result, and using the same reference makes a retry free.
+Content Studio passes the quantity, 3 for a generation and 1 for an edit.
+Ask Dakly uses 1 unit. Chats checks its allowance before any model work and
+consumes the conversation unit when it saves the outgoing AI reply, using the
+contact and window as the reference.
 
 The allowance check reads the current plan period and leaves the balance available until an AI reply is saved. AI-5 adds consumption and the rolling contact window.
 

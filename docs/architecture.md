@@ -122,7 +122,7 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 1. Meta (or the WhatsApp BSP) posts a webhook. The API checks the `X-Hub-Signature-256` signature, saves the raw payload to `webhook_events` with a provider-specific deduplication key (for Meta, the SHA-256 hex digest of the verified delivery bytes), queues an `inbound` job and returns 200. Target under 100 ms.
 2. The inbound worker resolves the store from the Page or phone id, finds or creates the contact and chat, saves the message, downloads media to R2, and pushes it to the inbox over Server-Sent Events.
 3. If AI is on for this chat and no person holds it, the worker schedules an `ai-reply` job 8 seconds later (the store's wait setting). A new customer message resets the timer, so one reply answers the whole thought.
-4. The AI worker runs the agent (see AI section). It may answer, ask a question, create a draft order through tools, or hand over. Saved replies that match are sent without calling the model.
+4. The AI worker runs the agent (see AI section). It may answer, ask a question, create a draft order through tools, or hand over. Staff choose saved replies by hand.
 5. The reply goes to the `outbound` queue, which sends it through the provider adapter with an idempotency key, then records the status callbacks (sent, delivered, read).
 6. If anything fails (model timeout, provider error) the chat is handed to the team with a reason; nothing is lost.
 
