@@ -1,4 +1,9 @@
-import { MetaRequestError, type MetaAuthorizationDriver, type MetaPage } from '../channel-driver';
+import {
+  MetaRequestError,
+  type MetaAuthorizationDriver,
+  type MetaPage,
+  type MetaTokenHealthDriver,
+} from '../channel-driver';
 
 const authorizationCode = 'dakly-local-meta-code';
 const userToken = 'fake-meta-user-credential';
@@ -17,7 +22,7 @@ const pages: MetaPage[] = [
   },
 ];
 
-export class FakeMetaChannelDriver implements MetaAuthorizationDriver {
+export class FakeMetaChannelDriver implements MetaAuthorizationDriver, MetaTokenHealthDriver {
   constructor(private readonly redirectUri: string) {}
 
   authorizationUrl(state: string): string {
@@ -40,5 +45,9 @@ export class FakeMetaChannelDriver implements MetaAuthorizationDriver {
   async subscribePage(pageId: string, accessToken: string): Promise<void> {
     if (!pages.some((page) => page.id === pageId && page.accessToken === accessToken))
       throw new MetaRequestError('auth_error');
+  }
+
+  async isTokenValid(accessToken: string): Promise<boolean> {
+    return pages.some((page) => page.accessToken === accessToken);
   }
 }
