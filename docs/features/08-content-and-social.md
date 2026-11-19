@@ -197,8 +197,8 @@ Dakly asks the shop to check the Page before posting again.
 
 Facebook and Instagram use the connected Page token. Live publishing requires
 Meta app review for `pages_manage_posts` and `instagram_content_publish`. Stores
-may need to reconnect to grant them. First comments also need the network's comment
-permission.
+may need to reconnect to grant them. An Instagram first comment needs comment
+permission. Dakly shows a warning if it cannot confirm the comment.
 
 Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
 caption generation and checks generated text before scheduling.

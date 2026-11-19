@@ -22,7 +22,7 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
-import { socialError } from './social.errors';
+import { publishError, socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
 export const META_PUBLISHING_DRIVER = Symbol('META_PUBLISHING_DRIVER');
@@ -42,6 +42,7 @@ type PublishContext = {
   target: PublishingTarget;
   driver: MetaPublishingDriver;
   account: MetaPostingAccount;
+  credential: { ciphertext: Buffer; keyVersion: number };
 };
 
 @Injectable()
@@ -97,7 +98,7 @@ export class SocialPublishingService {
       receipt = await this.publishApproved(storeId, match, driver);
     } catch (failure) {
       if (!finalAttempt) throw failure;
-      await this.finish(storeId, target, this.publishError(failure, target));
+      await this.finish(storeId, target, publishError(failure, target.status));
       return;
     }
     if (receipt) await this.completeTarget(storeId, target, driver, receipt);
@@ -111,17 +112,20 @@ export class SocialPublishingService {
   ) {
     const { externalId, firstComment } = receipt;
     // Record Meta's receipt before notifying consumers so a rolled-back event can be retried.
+    const errorCode = firstComment ? 'POST_COMMENT_UNCONFIRMED' : null;
     const confirmed = await this.recordTarget(storeId, target, {
       action: 'post.publish_confirmed',
       externalPostId: externalId,
       publishedAt: this.clock.now(),
+      errorCode,
+      errorMessage: errorCode ? socialError(errorCode).message : null,
     });
     if (!confirmed || !(await this.finish(storeId, target))) return;
     if (firstComment && externalId)
-      await this.comment(
-        { storeId, target, driver, account: firstComment.account },
-        externalId,
-        firstComment.text,
+      await this.comment(storeId, target, () =>
+        this.meta('post_first_comment', () =>
+          driver.comment(firstComment.account, externalId, firstComment.text),
+        ),
       );
   }
 
@@ -165,7 +169,7 @@ export class SocialPublishingService {
         accountId: credential.externalAccountId,
         accessToken: token.toString('utf8'),
       };
-      const context = { storeId, target, driver, account };
+      const context = { storeId, target, driver, account, credential };
       const externalId = await this.sendPost({ ...context, post, kind: credential.kind });
       if (externalId === undefined) return;
       const firstComment =
@@ -241,7 +245,7 @@ export class SocialPublishingService {
           driver.uploadFacebookPhotos(account, content.photoUrls),
         )
       : [];
-    return this.sendClaimed(storeId, target, () =>
+    return this.sendClaimed(context, () =>
       this.meta('facebook_publish_post', () => driver.publishFacebook(account, content, photos)),
     );
   }
@@ -266,10 +270,8 @@ export class SocialPublishingService {
     };
   }
 
-  private async sendInstagram(
-    { storeId, target, driver, account }: PublishContext,
-    content: MetaPost,
-  ) {
+  private async sendInstagram(context: PublishContext, content: MetaPost) {
+    const { storeId, target, driver, account } = context;
     let containerId = target.containerId;
     if (!containerId) {
       containerId = await this.meta('instagram_create_container', () =>
@@ -293,23 +295,36 @@ export class SocialPublishingService {
       throw socialError('POST_PROVIDER_REJECTED');
     }
     if (state !== 'ready') throw socialError('POST_CONTAINER_PROCESSING');
-    return this.sendClaimed(storeId, target, () =>
+    return this.sendClaimed(context, () =>
       this.meta('instagram_publish_post', () => driver.publishInstagram(account, savedId)),
     );
   }
 
   private async sendClaimed(
-    storeId: string,
-    target: PublishingTarget,
+    { storeId, target, credential }: PublishContext,
     send: () => Promise<string>,
   ) {
-    if (
-      !(await this.recordTarget(storeId, target, {
+    const claimed = await this.recordTarget(
+      storeId,
+      target,
+      {
         action: 'post.publishing',
         status: 'publishing',
-      }))
-    )
-      return;
+      },
+      async () => {
+        const current = await this.credential(
+          storeId,
+          target.channelConnectionId,
+          this.clock.now(),
+        );
+        if (
+          current.keyVersion !== credential.keyVersion ||
+          !current.ciphertext.equals(credential.ciphertext)
+        )
+          throw socialError('POST_TOKEN_EXPIRED');
+      },
+    );
+    if (!claimed) return;
     try {
       return await send();
     } catch (error) {
@@ -322,31 +337,17 @@ export class SocialPublishingService {
     }
   }
 
-  private publishError(error: unknown, target: PublishingTarget) {
-    if (target.status === 'publishing') return socialError('POST_PUBLISH_UNCONFIRMED');
-    if (error instanceof AppError) return error;
-    return socialError(
-      error instanceof MetaPublishingError && error.code === 'rejected'
-        ? 'POST_PROVIDER_REJECTED'
-        : 'POST_PROVIDER_UNAVAILABLE',
-    );
-  }
-
-  private async comment(
-    { storeId, target, driver, account }: PublishContext,
-    externalId: string,
-    text: string,
-  ) {
+  private async comment(storeId: string, target: PublishingTarget, send: () => Promise<void>) {
     try {
-      await this.meta('post_first_comment', () => driver.comment(account, externalId, text));
+      await send();
     } catch {
-      const error = socialError('POST_COMMENT_FAILED');
-      await this.recordTarget(storeId, target, {
-        action: 'post.comment_failed',
-        errorCode: error.code,
-        errorMessage: error.message,
-      });
+      return;
     }
+    await this.recordTarget(storeId, target, {
+      action: 'post.comment_published',
+      errorCode: null,
+      errorMessage: null,
+    });
   }
 
   private finish(storeId: string, target: PublishingTarget, error?: AppError) {
@@ -359,8 +360,8 @@ export class SocialPublishingService {
       {
         action: `post.${status}`,
         status,
-        errorCode: error?.code ?? null,
-        errorMessage: error?.message ?? null,
+        errorCode: error?.code ?? target.errorCode,
+        errorMessage: error?.message ?? target.errorMessage,
       },
       async () => {
         if (!error)

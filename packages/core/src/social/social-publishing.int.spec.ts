@@ -82,15 +82,7 @@ describe('SocialPublishingService', () => {
       clock,
       stores,
     );
-    const scheduling = new SocialPublishingQueueService(
-      repository,
-      driver,
-      clock,
-      {
-        maintenanceStoreIds: vi.fn(async () => [fixture.a, fixture.b]),
-      } as unknown as StoresService,
-      queue,
-    );
+    const scheduling = new SocialPublishingQueueService(repository, driver, clock, stores, queue);
     return {
       service,
       scheduling,
@@ -282,6 +274,45 @@ describe('SocialPublishingService', () => {
       expect.stringContaining('fake-instagram'),
       'ইনস্টাগ্রাম',
     );
+  });
+
+  it('does not publish after the page disconnects while its photos are uploading', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { service, accounts } = publishing(driver);
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    vi.spyOn(driver, 'uploadFacebookPhotos').mockImplementationOnce(async () => {
+      accounts.clear();
+      return ['photo'];
+    });
+    await service.publishTarget(fixture.a, target, true);
+    expect(send).not.toHaveBeenCalled();
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_TOKEN_EXPIRED',
+    });
+  });
+
+  it('retains the first comment warning when publication completes on recovery', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const comment = vi.spyOn(driver, 'comment');
+    const { service, accounts, publish } = publishing(driver);
+    const postId = await post();
+    await fixture.connection.pool.query(
+      'update posts set first_comment=$1 where store_id=$2 and id=$3',
+      ['ইনস্টাগ্রাম', fixture.a, postId],
+    );
+    const target = await setupTarget(accounts, 'instagram', postId);
+    publish.mockRejectedValueOnce(new Error('Cannot write event'));
+    await expect(service.publishTarget(fixture.a, target, true)).rejects.toThrow(
+      'Cannot write event',
+    );
+    await service.publishTarget(fixture.a, target, true);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      error_code: 'POST_COMMENT_UNCONFIRMED',
+    });
+    expect(comment).not.toHaveBeenCalled();
   });
 
   it('stops before any Meta request when the store is suspended', async () => {

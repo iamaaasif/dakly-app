@@ -1,3 +1,6 @@
+import type { PostResponse } from '@dakly/contracts/social';
+import { MetaPublishingError } from '@dakly/providers/social/meta-publishing-driver';
+
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const errors = {
@@ -21,7 +24,7 @@ const errors = {
   POST_PROVIDER_UNAVAILABLE: { status: 503, message: 'Meta is unavailable' },
   POST_PUBLISH_UNCONFIRMED: { status: 503, message: 'Check the account before posting again' },
   POST_CONTAINER_PROCESSING: { status: 503, message: 'Instagram is preparing the photo' },
-  POST_COMMENT_FAILED: { status: 502, message: 'The post was published without its first comment' },
+  POST_COMMENT_UNCONFIRMED: { status: 502, message: 'Check the first comment on Instagram' },
   POST_PHOTOS_REQUIRED: { status: 400, message: 'Choose photos for this post' },
   POST_CAPTION_TOO_LONG: { status: 400, message: 'Use at most 2,200 characters on Instagram' },
   POST_TOO_MANY_HASHTAGS: { status: 400, message: 'Use at most 30 hashtags on Instagram' },
@@ -29,4 +32,14 @@ const errors = {
 
 export function socialError(code: keyof typeof errors) {
   return new AppError(code, errors[code]);
+}
+
+export function publishError(error: unknown, status: PostResponse['targets'][number]['status']) {
+  if (status === 'publishing') return socialError('POST_PUBLISH_UNCONFIRMED');
+  if (error instanceof AppError) return error;
+  return socialError(
+    error instanceof MetaPublishingError && error.code === 'rejected'
+      ? 'POST_PROVIDER_REJECTED'
+      : 'POST_PROVIDER_UNAVAILABLE',
+  );
 }
