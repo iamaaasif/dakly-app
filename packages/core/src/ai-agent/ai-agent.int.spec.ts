@@ -7,12 +7,15 @@ import { NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 
-import type { ChatClassification } from '@dakly/contracts/chat-classification';
+import {
+  chatClassificationSchema,
+  type ChatClassification,
+} from '@dakly/contracts/chat-classification';
 import { createDatabase } from '@dakly/db/client';
 import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
-import { AiGate } from '../ai/ai-gate';
+import { AiService } from '../ai/ai.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { loadEnv } from '../platform/config/env';
@@ -159,7 +162,7 @@ const classification: ChatClassification = {
   handover: null,
 };
 
-function script(output: ChatClassification, duringCall?: () => Promise<void>) {
+function script(output: ChatClassification, duringCall?: () => Promise<void>, calls = 1) {
   const response: LlmResult = {
     kind: 'output',
     output,
@@ -167,7 +170,7 @@ function script(output: ChatClassification, duringCall?: () => Promise<void>) {
     responseId: 'fake-classification',
     model: 'gpt-6-luna',
   };
-  const driver = new FakeLlmDriver([response]);
+  const driver = new FakeLlmDriver(Array.from({ length: calls }, () => response));
   const inputs: string[] = [];
   vi.spyOn(FakeLlmDriver.prototype, 'respond').mockImplementation(async (request) => {
     inputs.push(request.input);
@@ -360,10 +363,20 @@ it('stops after a routine classification', async () => {
 it('delays classification while the store has three model calls running', async () => {
   const active = await shop();
   const message = await receive(active, 'Hello');
-  const gate = app.get(AiGate);
-  const permits = await Promise.all(Array.from({ length: 3 }, () => gate.acquire(active.storeId)));
+  const finish = Promise.withResolvers<void>();
+  const inputs = script(classification, () => finish.promise, 3);
+  const ai = app.get(AiService);
+  const running = Array.from({ length: 3 }, () =>
+    ai.run(active.storeId, {
+      tier: 'fast',
+      purpose: 'classify',
+      prompt: { version: 'test-capacity', instructions: 'Classify this test message.' },
+      input: 'Hello',
+      output: chatClassificationSchema,
+    }),
+  );
   try {
-    expect(permits.map(({ kind }) => kind)).toEqual(['acquired', 'acquired', 'acquired']);
+    await vi.waitFor(() => expect(inputs).toHaveLength(3));
     await expect(agent.reply(active.storeId, message.conversation_id, message.id)).resolves.toEqual(
       {
         delayUntil: expect.any(Number),
@@ -371,7 +384,7 @@ it('delays classification while the store has three model calls running', async 
     );
     expect(await observe(active)).toMatchObject({ replies: [], notices: [], runs: [] });
   } finally {
-    for (const permit of permits)
-      if (permit.kind === 'acquired') await gate.release(active.storeId, permit.ticket);
+    finish.resolve();
+    await Promise.all(running);
   }
 });
