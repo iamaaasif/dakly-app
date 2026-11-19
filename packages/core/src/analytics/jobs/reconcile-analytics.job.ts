@@ -8,7 +8,7 @@ import {
   RECONCILE_ANALYTICS,
 } from '../analytics-reconciliation.service';
 
-@HandlesJob({ queue: QUEUES.sync, name: RECONCILE_ANALYTICS })
+@HandlesJob({ queue: QUEUES.bulk, name: RECONCILE_ANALYTICS })
 export class ReconcileAnalyticsJob implements JobHandler {
   constructor(
     @Inject(AnalyticsReconciliationService) private readonly repair: AnalyticsReconciliationService,

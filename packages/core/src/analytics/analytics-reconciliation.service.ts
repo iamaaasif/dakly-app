@@ -31,7 +31,7 @@ export class AnalyticsReconciliationService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(AnalyticsSummariesService) private readonly summaries: AnalyticsSummariesService,
     @Inject(Clock) private readonly clock: Clock,
-    @InjectQueue(QUEUES.sync) private readonly queue: Queue,
+    @InjectQueue(QUEUES.bulk) private readonly queue: Queue,
   ) {}
 
   async schedule() {
@@ -50,8 +50,7 @@ export class AnalyticsReconciliationService {
   }
 
   async reconcile(repair: Repair) {
-    const { day, storeId, page } = repair;
-    if (day !== this.clock.now().toISOString().slice(0, 10)) return;
+    const { storeId, page } = repair;
     if (page.kind === 'retention') {
       if (await this.summaries.pruneExpiredRows(storeId))
         await this.queue.addBulk([

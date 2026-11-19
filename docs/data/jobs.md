@@ -84,8 +84,6 @@ Per-store cap: one running campaign batch per store.
 | `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run            |
 | `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                                |
 
-`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It then writes the lifecycle snapshot and prunes expired report rows in batches of 5,000.
-
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
 ## bulk
@@ -108,6 +106,8 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 | `undo-contact-merge`       | Staff undoes within 7 days (D29)         | `storeId`, `contactMergeId`                                   | After-state checks preserve later edits; dependent merges block; withdrawals stay effective; `undone_at` set atomically                                                                                                                                       |
 | `purge-contact`            | Sweep `due_contact_purges`               | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots                                                                                                                            |
 | sweep `fail-stuck-imports` | Every 30 seconds                         | none                                                          | `stores_with_stuck_imports`, then a guarded update on `last_progress_at` and `requeue_count`: queue again up to 4 times, then fail                                                                                                                            |
+
+`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It then writes the lifecycle snapshot and prunes expired report rows in batches of 5,000.
 
 ## payments
 
@@ -141,7 +141,7 @@ Clear empties memory, sets `cleared_at`, increments the contact-memory version a
 
 ## Metrics and attribution
 
-Order, payment, return and send/tap outbox events schedule bounded summary work that becomes visible within five minutes. Nightly reconciliation recomputes affected days from retained source evidence; it is a repair path, not the only refresh. Late returns and corrections restate the original store-local metric day as defined by ANA-1 and refresh affected totals. Each dashboard exposes summary age. The definitions and handlers remain planned.
+Order, payment, return and send/tap outbox events schedule bounded summary work that becomes visible within five minutes. Nightly reconciliation recomputes affected days from retained source evidence; it is a repair path, not the only refresh. Late returns and corrections restate the original store-local metric day as defined by ANA-1 and refresh affected totals. ANA-1 implements the order summary handlers and nightly report repair. Marketing attribution handlers follow ANA-2.
 
 Attribution rebuilds cover 365 days plus the maximum seven-day lookback. They read individual `tracked_link_visits`, kept 13 months with exact times ([growth.md](growth.md#link-visits-without-personal-data)). Retain workflow steps for 372 days after their run finishes, never from step creation while the run is active. Campaign eligibility keeps equivalent evidence. A redirect creates one `event_key`; retrying its write reuses the key, while another actual visit gets a new key. First/last tap counters on the link do not replace the visits or the daily rows. See [ADR 0008](../adr/0008-retain-attribution-evidence.md).
 

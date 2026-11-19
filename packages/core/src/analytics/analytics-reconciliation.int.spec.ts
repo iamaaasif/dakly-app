@@ -107,7 +107,7 @@ describe('Analytics reconciliation', () => {
     ).toMatchObject({ rowCount: 1 });
   });
 
-  it('starts a nightly repair from the oldest retained order for the store', async () => {
+  it('continues a nightly repair after UTC midnight', async () => {
     await fixture.connection.pool.query(
       `insert into orders(id,store_id,number,source,created_by_type,recipient_name,
         recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha,created_at)
@@ -117,7 +117,7 @@ describe('Analytics reconciliation', () => {
     );
     await app.get(ReconcileAnalyticsJob).handle({
       storeId: fixture.b,
-      day: '2026-11-19',
+      day: '2026-11-18',
       page: { kind: 'orders', period: null },
     });
     const { rows } = await fixture.connection.pool.query(

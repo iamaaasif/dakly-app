@@ -14,7 +14,7 @@ import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
     AnalyticsModule,
     ClockModule,
     StoresModule,
-    BullModule.registerQueue({ name: QUEUES.sync }),
+    BullModule.registerQueue({ name: QUEUES.bulk }),
   ],
   providers: [AnalyticsReconciliationService, ReconcileAnalyticsJob, SweepAnalyticsJob],
 })
