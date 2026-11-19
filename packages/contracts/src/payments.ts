@@ -1,4 +1,7 @@
+import { z } from 'zod';
+
 export const gateways = ['bkash', 'nagad', 'city_bank'] as const;
+export const paymentGatewaySchema = z.enum(gateways);
 export const paymentGateways = [...gateways, 'manual'] as const;
 export const gatewayModes = ['live', 'sandbox'] as const;
 export const gatewayCredentialStatuses = ['connected', 'needs_attention', 'disconnected'] as const;
@@ -56,3 +59,27 @@ export const settlementLineStatuses = [
   'refunded',
   'escalated',
 ] as const;
+
+const intentFields = {
+  gateway: paymentGatewaySchema,
+  amountPoisha: z.int().positive(),
+  expiresAt: z.date(),
+};
+
+export const createPaymentIntentSchema = z.discriminatedUnion('flow', [
+  z.strictObject({
+    ...intentFields,
+    flow: z.literal('billing'),
+    purpose: z.enum(['subscription', 'whatsapp_top_up', 'sms_pack', 'ai_top_up']),
+    invoiceId: z.uuid().optional(),
+  }),
+  z.strictObject({
+    ...intentFields,
+    flow: z.literal('shop'),
+    purpose: z.enum(['order_advance', 'order_full']),
+    orderId: z.uuid().optional(),
+    credentialId: z.uuid(),
+  }),
+]);
+
+export type CreatePaymentIntent = z.infer<typeof createPaymentIntentSchema>;

@@ -360,6 +360,20 @@ Usage (PAY-1): every billable AI action goes through `UsageService.consume(store
 - Top-ups are not drawn yet. The AI top-up wallet (`ai_conversations`) has no service yet; PAY-11 serves only the SMS and WhatsApp wallets.
 - A consume that crosses 80% or 100% of the allowance notifies members with `billing.view` (Owner, Admin and custom roles that view billing, the roles that can top up) in the `billing` category, with dedupe key `usage-<percent>:<unit>:<period start>`, so each notice goes once per period. The `usage.threshold_reached` event is not emitted yet.
 
+### Payment intents and callbacks (PAY-2)
+
+Creating an intent records a `created` event in the same store transaction. A shop
+intent needs a connected credential for its gateway in that store. Billing
+intents use Dakly's own merchant account. When checkout starts, the intent
+records the gateway payment id and becomes `pending`.
+
+The callback verifies the original request body through the gateway driver.
+It records a callback event once per gateway event id and makes a pending
+intent due for verification. A callback alone never marks an intent paid.
+A server-to-server result must match the reference, currency and amount.
+An amount or currency mismatch, duplicate transaction or late success goes
+to `needs_review` and leaves the intent unpaid.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:
