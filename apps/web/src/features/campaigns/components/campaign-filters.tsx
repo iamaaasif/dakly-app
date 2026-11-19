@@ -50,11 +50,12 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const { getValues, reset, resetField } = form;
   const submittedSearch = useRef(search);
   useEffect(() => {
-    resetField('search', { defaultValue: search });
+    // A submitted search can finish after the user has started typing again.
+    if (submittedSearch.current !== search) resetField('search', { defaultValue: search });
   }, [search, resetField]);
   useEffect(() => {
     submittedSearch.current = search;
-    reset({ search: getValues('search'), status, channel, createdFrom, createdThrough });
+    reset({ search: getValues('search') ?? '', status, channel, createdFrom, createdThrough });
   }, [status, channel, createdFrom, createdThrough, getValues, reset, search, params]);
   const visit = (filters: CampaignListQuery) =>
     router.push(campaignListHref({ ...filters, limit: query.limit }));
