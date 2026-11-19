@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
 
-import type { ChannelConnection } from '@dakly/contracts/channels';
 import type {
   CreatePostInput,
   EditPostInput,
@@ -345,7 +344,9 @@ export class SocialService {
     previous: Target[],
   ) {
     const retained = new Set(previous.map(({ channelConnectionId }) => channelConnectionId));
-    const connections = await this.targetConnections(storeId, input.targets);
+    const ids = input.targets.map(({ channelConnectionId }) => channelConnectionId);
+    const selected = await this.channels.postingConnections(storeId, { ids });
+    const connections = new Map(selected.map((connection) => [connection.id, connection]));
     for (const target of input.targets) {
       const connection = connections.get(target.channelConnectionId);
       if (!connection || (connection.status !== 'active' && !retained.has(connection.id)))
@@ -365,21 +366,5 @@ export class SocialService {
     if (Array.from(caption).length > 2_200) throw socialError('POST_CAPTION_TOO_LONG');
     if ((caption.match(/#[\p{L}\p{M}\p{N}_]+/gu)?.length ?? 0) > 30)
       throw socialError('POST_TOO_MANY_HASHTAGS');
-  }
-
-  private async targetConnections(storeId: string, targets: CreatePostInput['targets']) {
-    const wanted = new Set(targets.map(({ channelConnectionId }) => channelConnectionId));
-    const matches = new Map<string, ChannelConnection>();
-    let cursor: string | undefined;
-    while (matches.size < wanted.size) {
-      const page = await this.channels.list(storeId, { cursor, limit: 100 });
-      for (const connection of page.items) {
-        if (wanted.has(connection.id) && connection.kind !== 'whatsapp')
-          matches.set(connection.id, connection);
-      }
-      if (!page.nextCursor) break;
-      cursor = page.nextCursor;
-    }
-    return matches;
   }
 }
