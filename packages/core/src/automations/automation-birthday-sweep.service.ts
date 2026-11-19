@@ -1,0 +1,48 @@
+import { InjectQueue } from '@nestjs/bullmq';
+import { Inject, Injectable } from '@nestjs/common';
+import type { Queue } from 'bullmq';
+
+import { Clock } from '../platform/clock';
+import { QUEUES } from '../platform/queue/queues';
+import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
+import { StoresService } from '../stores/stores.service';
+import { RECORD_AUTOMATION_BIRTHDAYS } from './jobs/record-automation-birthdays.job';
+
+const STORE_PAGE_SIZE = 100;
+
+@Injectable()
+export class AutomationBirthdaySweepService {
+  constructor(
+    @Inject(Clock) private readonly clock: Clock,
+    @Inject(StoresService) private readonly stores: StoresService,
+    @InjectQueue(QUEUES.bulk) private readonly bulk: Queue,
+  ) {}
+
+  async sweep() {
+    const at = this.clock.now();
+    const occurredAt = at.toISOString();
+    let after: string | null = null;
+    for (;;) {
+      const ids = await this.stores.maintenanceStoreIds(after, STORE_PAGE_SIZE);
+      const jobs = [];
+      for (const storeId of ids) {
+        const timeZone = await this.stores.timeZone(storeId);
+        const day = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' }).format(at);
+        jobs.push({
+          name: RECORD_AUTOMATION_BIRTHDAYS,
+          data: { storeId, day, occurredAt },
+          opts: {
+            jobId: `${RECORD_AUTOMATION_BIRTHDAYS}-${storeId}-${day}`,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
+            removeOnComplete: { age: (2 * DAY_MS) / 1000 },
+            removeOnFail: 100,
+          },
+        });
+      }
+      if (jobs.length > 0) await this.bulk.addBulk(jobs);
+      if (ids.length < STORE_PAGE_SIZE) return;
+      after = ids.at(-1) ?? null;
+    }
+  }
+}

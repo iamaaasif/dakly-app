@@ -445,7 +445,7 @@ A consent grant or a workflow's tag action can start an active workflow. Adding 
 
 Link tapped waits for CAMP-10 to record taps on workflow messages.
 
-The daily birthday job looks at each store's local date and records one event per contact and date. A birthday workflow can limit entry to a saved segment. A 29 February birthday matches on 29 February.
+An hourly sweep queues one birthday job per store and local date. That job records one event per contact and date. A birthday workflow can limit entry to a saved segment. A 29 February birthday matches on 29 February.
 
 `GET /automations/:automationId/trigger-preview` uses the draft trigger and returns up to 10 matching events still in the outbox, newest first. It checks current segment membership for birthdays. It needs `automations.view`.
 

@@ -7,7 +7,7 @@ CREATE FUNCTION public.automation_trigger_preview(
   p_type text, p_channels text[], p_sources text[],
   p_tag text, p_before timestamptz, p_before_id uuid, p_limit integer
 ) RETURNS TABLE(id uuid, contact_id uuid, occurred_at timestamptz)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
   SELECT e.id, (e.payload->>'contactId')::uuid, e.occurred_at
   FROM public.outbox_events e

@@ -32,18 +32,28 @@ export class AutomationPreviewService {
 
     const segment = trigger.filters.find((filter) => filter.field === 'segment');
     const items: AutomationTriggerPreview['items'] = [];
-    let after: (typeof items)[number] | undefined;
-    for (;;) {
-      const rows = await this.repository.list(storeId, selection, after);
-      for (const row of rows) {
-        if (segment && !(await this.segments.hasContact(storeId, segment.segmentId, row.contactId)))
-          continue;
-        items.push(row);
-        if (items.length === PREVIEW_LIMIT) return { items };
-      }
-      if (rows.length < TRIGGER_PREVIEW_PAGE_SIZE) return { items };
-      after = rows.at(-1);
-    }
+    let rows: AutomationTriggerPreview['items'] = [];
+    do {
+      rows = await this.repository.list(storeId, selection, rows.at(-1));
+      const matches = segment ? await this.inSegment(storeId, segment.segmentId, rows) : rows;
+      items.push(...matches.slice(0, PREVIEW_LIMIT - items.length));
+    } while (rows.length === TRIGGER_PREVIEW_PAGE_SIZE && items.length < PREVIEW_LIMIT);
+    return { items };
+  }
+
+  private async inSegment(
+    storeId: string,
+    segmentId: string,
+    rows: AutomationTriggerPreview['items'],
+  ) {
+    if (rows.length === 0) return rows;
+    const ids = await this.segments.matchingContactIds(
+      storeId,
+      segmentId,
+      rows.map(({ contactId }) => contactId),
+    );
+    const members = new Set(ids);
+    return rows.filter(({ contactId }) => members.has(contactId));
   }
 }
 

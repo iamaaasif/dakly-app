@@ -371,7 +371,7 @@ export class ContactsService {
   listIdsMatching(
     storeId: string,
     rules: SegmentRules,
-    page: { cursor?: string; limit: number },
+    page: { cursor?: string; limit: number; contactIds?: string[] },
   ): Promise<string[]> {
     return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }

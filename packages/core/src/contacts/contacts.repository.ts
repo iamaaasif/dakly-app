@@ -363,14 +363,18 @@ export class ContactsRepository {
   async listIdsMatching(
     storeId: string,
     rules: SegmentRules,
-    page: { cursor?: string; limit: number },
+    page: { cursor?: string; limit: number; contactIds?: string[] },
   ): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: contacts.id })
         .from(contacts)
         .where(
-          and(matching(storeId, rules), page.cursor ? gt(contacts.id, page.cursor) : undefined),
+          and(
+            matching(storeId, rules),
+            page.cursor ? gt(contacts.id, page.cursor) : undefined,
+            page.contactIds ? inArray(contacts.id, page.contactIds) : undefined,
+          ),
         )
         .orderBy(asc(contacts.id))
         .limit(page.limit),

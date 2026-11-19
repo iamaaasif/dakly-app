@@ -11,6 +11,7 @@ import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AutomationBirthdaySweepService } from './automation-birthday-sweep.service';
 import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
@@ -22,7 +23,7 @@ import { AutomationTriggerQueue } from './automation-trigger-queue.service';
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
   imports: [
-    BullModule.registerQueue({ name: QUEUES.transactional }),
+    BullModule.registerQueue({ name: QUEUES.transactional }, { name: QUEUES.bulk }),
     ClockModule,
     ContactsModule,
     OutboxModule,
@@ -40,12 +41,14 @@ import { AutomationTriggerQueue } from './automation-trigger-queue.service';
     AutomationEntryRepository,
     AutomationEntryService,
     AutomationBirthdaysService,
+    AutomationBirthdaySweepService,
     AutomationTriggerQueue,
   ],
   exports: [
     AutomationRunsService,
     AutomationEntryService,
     AutomationBirthdaysService,
+    AutomationBirthdaySweepService,
     AutomationTriggerQueue,
   ],
 })
