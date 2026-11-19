@@ -6,13 +6,20 @@ import {
   createOrderFormSchema,
   type CreateOrderInput,
   type CreateOrderValues,
+  type OrderDetail,
+  type OrderCatalogueProduct,
+  type OrderCatalogueStock,
+  type OrderEditorValues,
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
+import { FormField } from '@dakly/ui/form-field';
+import { Input } from '@dakly/ui/input';
+import { QueryError } from '@dakly/ui/query-error';
 
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
-import { useOrderCatalogueProducts } from '../api/order-catalogue';
+import { useOrderCatalogueProducts, useOrderCatalogueStock } from '../api/order-catalogue';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -23,6 +30,11 @@ import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
+const newOrderDefaults: CreateOrderValues = {
+  buyer: { name: '' },
+  recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
+  items: [newLine],
+};
 
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
@@ -30,12 +42,9 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   const create = useCreateOrder();
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
     resolver: zodResolver(createOrderFormSchema),
-    defaultValues: {
-      buyer: { name: '' },
-      recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
-      items: [newLine],
-    },
+    defaultValues: newOrderDefaults,
   });
+  const busy = create.isPending || create.mustRetry;
   function save(input: CreateOrderInput) {
     create.mutate(input, { onSuccess: (order) => onSaved(order.id) });
   }
@@ -50,15 +59,14 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       title="New order"
       open
       onClose={onClose}
-      closeDisabled={create.isPending || create.mustRetry}
+      closeDisabled={busy}
       className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
     >
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={create.isPending || create.mustRetry} className="space-y-3">
-              <OrderRecipientFields />
-              <ItemsAndAmounts />
+            <fieldset disabled={busy} className="space-y-3">
+              <OrderEditorFields />
             </fieldset>
           </div>
           {create.error && (
@@ -69,15 +77,18 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
             </p>
           )}
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              disabled={create.isPending || create.mustRetry}
-            >
+            <Button variant="secondary" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
             <Button type="submit" loading={create.isPending}>
               {create.mustRetry ? 'Retry save' : 'Save order'}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={form.handleSubmit((input) => save({ ...input, confirm: true }))}
+            >
+              Save as confirmed
             </Button>
           </div>
         </form>
@@ -86,15 +97,28 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   );
 }
 
-function ItemsAndAmounts() {
+export function OrderEditorFields({ order }: { order?: OrderDetail }) {
+  return (
+    <>
+      <OrderRecipientFields order={order} />
+      <ItemsAndAmounts order={order} />
+    </>
+  );
+}
+
+function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   const productIds = useRef<Record<string, string>>({});
-  const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
+  const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
-  const items = useWatch({ control, name: 'items' });
+  const items = useWatch({ control, name: 'items' }) ?? [];
+  const stock = useOrderCatalogueStock(
+    order?.items.filter(({ isStockTracked }) => isStockTracked).map(({ variantId }) => variantId) ??
+      [],
+  );
   const selectedProducts = useOrderCatalogueProducts([
     ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
-  ]);
-  const variants = orderVariantChoices(selectedProducts.flatMap(({ data }) => data ?? []));
+  ]).flatMap(({ data }) => data ?? []);
+  const variants = draftVariantChoices(selectedProducts, order, stock.data);
 
   return (
     <>
@@ -106,38 +130,142 @@ function ItemsAndAmounts() {
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant) productIds.current[id] = variant.productId;
-          setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
+          if (variant?.productId) productIds.current[id] = variant.productId;
+          const savedLine = order?.items.find((item) => item.variantId === id);
+          setValue(`items.${index}.lineDiscountPoisha`, savedLine?.lineDiscountPoisha ?? 0, {
+            shouldDirty: true,
+          });
+          setValue(`items.${index}.variantId`, id, {
+            shouldDirty: true,
+            shouldValidate: formState.isSubmitted,
+          });
         }}
       />
+      {stock.error && (
+        <QueryError
+          message={stock.error.message}
+          onRetry={() => void stock.refetch()}
+          retryLabel="Retry stock"
+        />
+      )}
       {formState.errors.items && (
         <p role="alert" className="text-danger">
           Choose a different variant for each line and enter a positive quantity.
         </p>
       )}
-      <OrderPreview variants={variants} />
+      <OrderAmountFields hasAdvance={Boolean(order?.advancePaidPoisha)} />
+      <OrderPreview variants={variants} order={order} />
     </>
   );
 }
 
-function OrderPreview({ variants }: { variants: Record<string, VariantChoice> }) {
-  const [areaId, items, override] = useWatch<
-    CreateOrderValues,
-    ['recipient.areaId', 'items', 'deliveryChargePoisha']
-  >({ name: ['recipient.areaId', 'items', 'deliveryChargePoisha'] });
-  const quote = useOrderDelivery(areaId);
-  const delivery = override ? takaInput.safeParse(override).data : quote.data?.chargePoisha;
-  if (delivery === undefined) return null;
-  const total = items.reduce((sum, item) => {
-    const variant = variants[item.variantId];
-    return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
-      ? sum + variant.price * item.quantity
-      : NaN;
-  }, delivery);
-  if (!Number.isSafeInteger(total) || total < 0) return null;
+function draftVariantChoices(
+  products: OrderCatalogueProduct[],
+  order?: OrderDetail,
+  stock?: OrderCatalogueStock,
+) {
+  const variants = orderVariantChoices(products);
+  const stockByVariant = new Map(stock?.map(({ variantId, available }) => [variantId, available]));
+  for (const item of order?.items ?? []) {
+    variants[item.variantId] = {
+      label: [item.productName, item.variantTitle].filter(Boolean).join(' · '),
+      price: item.unitPricePoisha,
+      stock: item.isStockTracked ? (stockByVariant.get(item.variantId) ?? null) : null,
+    };
+  }
+  return variants;
+}
+
+function OrderAmountFields({ hasAdvance }: { hasAdvance: boolean }) {
+  const { register } = useFormContext<OrderEditorValues>();
   return (
-    <p className="rounded-md bg-surface-muted p-3">
-      Cash on delivery <strong>{formatMoney(total)}</strong>
+    <div className="grid gap-2 sm:grid-cols-2">
+      {(
+        [
+          ['orderDiscountPoisha', 'Discount (৳)'],
+          ['advancePaidPoisha', 'Advance paid (৳)'],
+        ] as const
+      ).map(([name, label]) => (
+        <FormField key={name} name={name} label={label}>
+          {(props) => (
+            <Input
+              {...props}
+              inputMode="decimal"
+              readOnly={name === 'advancePaidPoisha' && hasAdvance}
+              {...register(name, { setValueAs: (value: string) => value.trim() || undefined })}
+            />
+          )}
+        </FormField>
+      ))}
+    </div>
+  );
+}
+
+function OrderPreview({
+  variants,
+  order,
+}: {
+  variants: Record<string, VariantChoice>;
+  order?: OrderDetail;
+}) {
+  const [areaId, items, override, discount, advance] = useWatch<
+    OrderEditorValues,
+    [
+      'recipient.areaId',
+      'items',
+      'deliveryChargePoisha',
+      'orderDiscountPoisha',
+      'advancePaidPoisha',
+    ]
+  >({
+    name: [
+      'recipient.areaId',
+      'items',
+      'deliveryChargePoisha',
+      'orderDiscountPoisha',
+      'advancePaidPoisha',
+    ],
+  });
+  const quote = useOrderDelivery(areaId, order);
+  const charge = override ? takaInput.safeParse(override).data : quote.chargePoisha;
+  const orderDiscount = moneyInputOr(discount);
+  const paid = moneyInputOr(advance, order?.advancePaidPoisha);
+  const subtotal = orderDraftSubtotal(items, variants);
+  if (!Number.isSafeInteger(subtotal) || orderDiscount === undefined) return null;
+  if (orderDiscount > subtotal) {
+    return (
+      <p role="alert" className="text-danger">
+        Discount cannot exceed the item total.
+      </p>
+    );
+  }
+  if (charge === undefined || paid === undefined) return null;
+  const total = subtotal - orderDiscount + charge;
+  if (!Number.isSafeInteger(total)) return null;
+  return (
+    <p className="flex flex-wrap gap-x-4 rounded-md bg-surface-muted p-3">
+      <span>
+        Total <strong>{formatMoney(total)}</strong>
+      </span>
+      <span>
+        Cash on delivery <strong>{formatMoney(Math.max(0, total - paid))}</strong>
+      </span>
     </p>
   );
+}
+
+function orderDraftSubtotal(
+  items: OrderEditorValues['items'],
+  variants: Record<string, VariantChoice>,
+) {
+  return (items ?? []).reduce((sum, item) => {
+    const variant = variants[item.variantId];
+    if (!variant || !Number.isSafeInteger(item.quantity) || item.quantity <= 0) return NaN;
+    const net = variant.price * item.quantity - (item.lineDiscountPoisha ?? 0);
+    return net >= 0 ? sum + net : NaN;
+  }, 0);
+}
+
+function moneyInputOr(value: string | undefined, fallback = 0) {
+  return value ? takaInput.safeParse(value).data : fallback;
 }

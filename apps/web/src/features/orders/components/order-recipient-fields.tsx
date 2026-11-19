@@ -1,6 +1,7 @@
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import type { CreateOrderValues } from '@dakly/contracts/orders';
+import type { OrderDetail, OrderEditorValues } from '@dakly/contracts/orders';
+import { bdMobileSchema } from '@dakly/contracts/phone';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
@@ -10,17 +11,17 @@ import { Input } from '@dakly/ui/input';
 import { useOrderDelivery } from '../api/get-delivery-charge';
 import { useSetupDeliveryZones } from '../api/setup-delivery-zones';
 import { OrderAreaFields } from './order-area-fields';
+import { OrderBuyerFields } from './order-buyer-fields';
 import { takaInputFromPoisha } from '@/lib/format-money';
 import { useSessionContext } from '@/lib/session-context';
 
-export function OrderRecipientFields() {
-  const { control, register } = useFormContext<CreateOrderValues>();
-  const isBuyer = useWatch({ control, name: 'recipient.isBuyer' });
+export function OrderRecipientFields({ order }: { order?: OrderDetail }) {
+  const { register } = useFormContext<OrderEditorValues>();
 
   return (
     <fieldset className="space-y-2">
       <legend className="font-semibold">Buyer and delivery details</legend>
-      <BuyerFields />
+      {order ? <EditBuyerDetails order={order} /> : <OrderBuyerFields />}
       <div className="grid gap-2 sm:grid-cols-2">
         <FormField name="recipient.phone" label="Recipient phone">
           {(props) => (
@@ -32,38 +33,76 @@ export function OrderRecipientFields() {
                 {...props}
                 type="tel"
                 autoComplete="tel-national"
-                {...register('recipient.phone')}
+                placeholder={order?.recipientPhone}
+                {...register('recipient.phone', {
+                  setValueAs: (value: string) => value.trim() || undefined,
+                })}
               />
             </div>
           )}
         </FormField>
-        {!isBuyer && (
-          <FormField name="recipient.name" label="Recipient name">
-            {(props) => <Input {...props} {...register('recipient.name')} />}
-          </FormField>
-        )}
+        <FormField name="recipient.name" label="Recipient name">
+          {(props) => <Input {...props} {...register('recipient.name')} />}
+        </FormField>
         <div className="sm:col-span-2">
           <FormField name="recipient.address" label="Address">
             {(props) => <Input {...props} {...register('recipient.address')} />}
           </FormField>
         </div>
       </div>
-      <DeliveryChargeFields />
+      <DeliveryChargeFields order={order} />
     </fieldset>
   );
 }
 
-function DeliveryChargeFields() {
-  const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
+function EditBuyerDetails({ order }: { order: OrderDetail }) {
+  const { control, setValue } = useFormContext<OrderEditorValues>();
+  const isBuyer = useWatch({ control, name: 'recipient.isBuyer' });
+  return (
+    <>
+      <p>
+        Buyer <strong>{order.buyerName ?? 'Unnamed customer'}</strong>
+      </p>
+      <div className="flex min-h-10 items-center gap-3 pl-2">
+        <Checkbox
+          id="different-recipient"
+          checked={isBuyer === false}
+          onCheckedChange={(value) => {
+            const next = value !== true;
+            const original = next === order.isRecipientBuyer;
+            setValue('recipient.isBuyer', next, { shouldDirty: true });
+            const name = next ? (order.buyerName ?? '') : '';
+            setValue('recipient.name', original ? order.recipientName : name, {
+              shouldDirty: true,
+            });
+            setValue(
+              'recipient.phone',
+              original ? bdMobileSchema.safeParse(order.recipientPhone).data : '',
+              { shouldDirty: true },
+            );
+          }}
+        />
+        <label htmlFor="different-recipient">Deliver to someone else</label>
+      </div>
+    </>
+  );
+}
+
+function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
+  const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const areaId = useWatch({ control, name: 'recipient.areaId' });
-  const { data: charge, error, refetch } = useOrderDelivery(areaId);
+  const { chargePoisha: charge, error, refetch } = useOrderDelivery(areaId, order);
   const missingZones = error instanceof ApiError && error.code === 'DELIVERY_DEFAULT_REQUIRED';
   return (
     <>
       <div className="grid gap-2 sm:grid-cols-3">
         <OrderAreaFields
+          currentDistrict={order?.recipientDistrict}
           onChange={(id) =>
-            setValue('recipient.areaId', id ?? 0, { shouldValidate: formState.isSubmitted })
+            setValue('recipient.areaId', id ?? (order ? undefined : 0), {
+              shouldDirty: true,
+              shouldValidate: formState.isSubmitted,
+            })
           }
         />
         <FormField name="deliveryChargePoisha" label="Delivery charge (৳)">
@@ -71,7 +110,7 @@ function DeliveryChargeFields() {
             <Input
               {...props}
               inputMode="decimal"
-              placeholder={charge ? takaInputFromPoisha(charge.chargePoisha) : 'Choose an area'}
+              placeholder={charge === undefined ? 'Choose an area' : takaInputFromPoisha(charge)}
               {...register('deliveryChargePoisha', {
                 setValueAs: (value: string) => value.trim() || undefined,
               })}
@@ -106,38 +145,5 @@ function SetupDeliveryZones({ retryQuote }: { retryQuote: () => void }) {
         </p>
       )}
     </div>
-  );
-}
-
-function BuyerFields() {
-  const { control, getValues, register, setValue } = useFormContext<CreateOrderValues>();
-  const isBuyer = useWatch({ control, name: 'recipient.isBuyer' });
-  return (
-    <>
-      <FormField name="buyer.name" label="Buyer name">
-        {(props) => (
-          <Input
-            {...props}
-            {...register('buyer.name', {
-              onChange: (event) => {
-                if (getValues('recipient.isBuyer')) setValue('recipient.name', event.target.value);
-              },
-            })}
-          />
-        )}
-      </FormField>
-      <div className="flex min-h-10 items-center gap-3 pl-2">
-        <Checkbox
-          id="different-recipient"
-          checked={!isBuyer}
-          onCheckedChange={(different) => {
-            setValue('recipient.isBuyer', different !== true);
-            setValue('recipient.name', different ? '' : getValues('buyer.name'));
-            setValue('recipient.phone', '');
-          }}
-        />
-        <label htmlFor="different-recipient">Deliver to someone else</label>
-      </div>
-    </>
   );
 }
