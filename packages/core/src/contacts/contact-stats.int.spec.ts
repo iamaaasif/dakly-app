@@ -11,7 +11,6 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { ContactStatsModule } from './contact-stats.module';
 import { ContactStatsRepository } from './contact-stats.repository';
 import { ContactStatsService } from './contact-stats.service';
-import {} from './jobs/reconcile-contact-stats.job';
 import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-stats-on-order-stage-changed.job';
 
 class TestModule {}
