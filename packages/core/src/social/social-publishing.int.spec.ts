@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
+import { Queue, Worker } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { ScheduledPostTarget } from '@dakly/contracts/social';
+import { createDatabase } from '@dakly/db/client';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 import { FakeMetaPublishingDriver } from '@dakly/providers/social/meta/fake-meta-publishing-driver';
 import { MetaPublishingError } from '@dakly/providers/social/meta-publishing-driver';
@@ -9,21 +12,37 @@ import { MetaPublishingError } from '@dakly/providers/social/meta-publishing-dri
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import type { AuditService } from '../audit/audit.service';
 import type { ChannelConnectionsService } from '../channels/channel-connections.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 import { loadEnv } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
+import { QUEUES } from '../platform/queue/queues';
+import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import type { StoresService } from '../stores/stores.service';
+import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
+import { SocialPublishingQueueService } from './social-publishing-queue.service';
 import { SocialPublishingService } from './social-publishing.service';
 import { SocialRepository } from './social.repository';
 
 describe('SocialPublishingService', () => {
   const fixture = new OwnerIsolationFixture();
+  const application = createDatabase(process.env.DATABASE_URL!);
   const now = new Date('2026-11-20T06:00:00Z');
   const encryption = new EnvelopeEncryption(loadEnv().encryption);
+  const queue = new Queue<ScheduledPostTarget>(QUEUES.outbound, {
+    connection: toRedisConnection(process.env.REDIS_URL!),
+    prefix: `social-tests-${randomUUID()}`,
+  });
+
   beforeAll(() => fixture.setup());
-  afterAll(() => fixture.close());
+  afterAll(async () => {
+    await queue.obliterate({ force: true });
+    await queue.close();
+    await fixture.close();
+    await application.pool.end();
+  });
 
   function publishing(
     driver = new FakeMetaPublishingDriver(),
@@ -50,6 +69,7 @@ describe('SocialPublishingService', () => {
       })),
       createDownloadUrl: vi.fn(() => 'https://storage.test/photo.jpg'),
     };
+    const notify = vi.fn();
     const isActive = vi.fn(async () => true);
     const stores = { isActive } as unknown as StoresService;
     const publish = vi.fn();
@@ -63,11 +83,22 @@ describe('SocialPublishingService', () => {
       new StoreTransaction(fixture.tenant),
       { record } as unknown as AuditService,
       { publish } as unknown as OutboxService,
+      { notify } as unknown as NotificationsService,
       clock,
       stores,
     );
+    const recovery = new SocialPublishRecoveryRepository(application.db);
+    const scheduling = new SocialPublishingQueueService(
+      repository,
+      recovery,
+      clock,
+      service,
+      queue,
+    );
     return {
       service,
+      scheduling,
+      notify,
       accounts,
       publish,
       record,
@@ -127,7 +158,7 @@ describe('SocialPublishingService', () => {
       .spyOn(driver, 'publishInstagram')
       .mockRejectedValueOnce(new MetaPublishingError('retryable'))
       .mockRejectedValue(new MetaPublishingError('rejected'));
-    const { service, accounts, publish, clock } = publishing(driver);
+    const { service, accounts, publish, notify, clock } = publishing(driver);
     const postId = await post();
     const page = await setupTarget(accounts, 'facebook_page', postId);
     const ig = await setupTarget(accounts, 'instagram', postId);
@@ -157,6 +188,10 @@ describe('SocialPublishingService', () => {
       'post.published',
       'post.failed',
     ]);
+    expect(notify).toHaveBeenCalledExactlyOnceWith(
+      fixture.a,
+      expect.objectContaining({ category: 'fix_now', recipientPermission: 'social.edit' }),
+    );
   });
 
   it('does not publish twice when Instagram accepted the post before its response was lost', async () => {
@@ -217,7 +252,7 @@ describe('SocialPublishingService', () => {
   it('records the confirmed result after an event write fails without publishing again', async () => {
     const driver = new FakeMetaPublishingDriver();
     const send = vi.spyOn(driver, 'publishFacebook');
-    const { service, accounts, publish } = publishing(driver);
+    const { service, accounts, publish, notify } = publishing(driver);
     const target = await setupTarget(accounts, 'facebook_page', await post());
     publish.mockRejectedValueOnce(new Error('Cannot write event'));
     await expect(service.publishTarget(fixture.a, target, true)).rejects.toThrow(
@@ -232,6 +267,7 @@ describe('SocialPublishingService', () => {
       status: 'published',
     });
     expect(send).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('sends the first comment only to Instagram when the post goes to both accounts', async () => {
@@ -406,6 +442,168 @@ describe('SocialPublishingService', () => {
     });
   });
 
+  it('recovers one publish job and one day-ahead check for a target due within 24 hours', async () => {
+    const { scheduling, accounts } = publishing();
+    const date = new Date(now.getTime() + DAY_MS);
+    const later = new Date(now.getTime() + 2 * DAY_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), date);
+    const future = await setupTarget(accounts, 'facebook_page', await post(), later);
+    const id = `${target.postTargetId}-${date.getTime()}`;
+    const futureId = `${future.postTargetId}-${later.getTime()}`;
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJob(`publish-${futureId}`)).toBeUndefined();
+    await scheduling.enqueueTargets(fixture.a, [target]);
+    const check = await queue.getJob(`check-${id}`);
+    const publish = await queue.getJob(`publish-${id}`);
+    const jobIds = (await queue.getJobs(['delayed', 'waiting'])).filter(({ id: jobId }) =>
+      jobId?.endsWith(id),
+    );
+    expect(jobIds.map(({ name }) => name).sort()).toEqual([
+      'check-post-target',
+      'publish-post-target',
+    ]);
+    expect(check).toMatchObject({
+      data: { storeId: fixture.a, ...target },
+      opts: { delay: 0 },
+    });
+    expect(publish).toMatchObject({
+      data: { storeId: fixture.a, ...target },
+      opts: { delay: DAY_MS, attempts: 4 },
+    });
+  });
+
+  async function failPublishJob(target: Omit<ScheduledPostTarget, 'storeId'>) {
+    const id = `publish-${target.postTargetId}-${Date.parse(target.scheduledFor)}`;
+    await queue.add(
+      'publish-post-target',
+      { storeId: fixture.a, ...target },
+      { jobId: id, attempts: 1 },
+    );
+    const worker = new Worker(
+      QUEUES.outbound,
+      async () => {
+        throw new Error('Write unavailable');
+      },
+      {
+        connection: toRedisConnection(process.env.REDIS_URL!),
+        prefix: queue.opts.prefix,
+      },
+    );
+    try {
+      await expect.poll(() => queue.getJobState(id)).toBe('failed');
+    } finally {
+      await worker.close();
+    }
+    return id;
+  }
+
+  it('requeues a failed publishing job when the target still needs work', async () => {
+    const { scheduling, accounts } = publishing();
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    const id = await failPublishJob(target);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('waiting');
+    expect((await queue.getJob(id))?.attemptsMade).toBe(1);
+  });
+
+  it('settles an exhausted publishing job without retrying it after the retry window', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { scheduling, accounts, notify } = publishing(driver);
+    const past = new Date(now.getTime() - 30 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    const id = await failPublishJob(target);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('failed');
+    expect((await queue.getJob(id))?.attemptsMade).toBe(1);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_PUBLISH_WINDOW_ENDED',
+    });
+    expect(notify).toHaveBeenCalledExactlyOnceWith(
+      fixture.a,
+      expect.objectContaining({ category: 'fix_now' }),
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('settles an expired target after Valkey evicts its failed job', async () => {
+    const { scheduling, accounts } = publishing();
+    const past = new Date(now.getTime() - 31 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    const id = await failPublishJob(target);
+    await queue.remove(id);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('unknown');
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_PUBLISH_WINDOW_ENDED',
+    });
+  });
+
+  it('fails a target first queued after the retry window instead of posting late', async () => {
+    const { scheduling, accounts } = publishing();
+    const past = new Date(now.getTime() - 31 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    await scheduling.enqueueTargets(fixture.a, [target]);
+    expect(await queue.getJobState(`publish-${target.postTargetId}-${past.getTime()}`)).toBe(
+      'unknown',
+    );
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_PUBLISH_WINDOW_ENDED',
+    });
+  });
+
+  it('uses a saved Meta receipt when an exhausted job is past its retry window', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { scheduling, accounts, notify, publish } = publishing(driver);
+    const past = new Date(now.getTime() - 31 * MINUTE_MS);
+    const target = await setupTarget(accounts, 'facebook_page', await post(), past);
+    const repository = new SocialRepository(fixture.tenant);
+    await fixture.connection.pool.query(
+      "update post_targets set status='publishing' where store_id=$1 and id=$2",
+      [fixture.a, target.postTargetId],
+    );
+    const beforeReceipt = await repository.findPublishTarget(fixture.a, target);
+    await fixture.connection.pool.query(
+      "update post_targets set published_at=$1, external_post_id='page-post-id' where store_id=$2 and id=$3",
+      [past, fixture.a, target.postTargetId],
+    );
+    expect(
+      await repository.updatePublishTarget(fixture.a, beforeReceipt!.target, { status: 'failed' }),
+    ).toBeUndefined();
+    const id = await failPublishJob(target);
+    await scheduling.recoverDueTargets();
+    expect(await queue.getJobState(id)).toBe('failed');
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      external_post_id: 'page-post-id',
+    });
+    expect(publish).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ type: 'post.published' }),
+    );
+    expect(notify).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('flags a missing storage object before publishing', async () => {
+    const { service, accounts, storage } = publishing();
+    const target = await setupTarget(
+      accounts,
+      'instagram',
+      await post(),
+      new Date(now.getTime() + DAY_MS / 2),
+    );
+    storage.getObjectMetadata.mockResolvedValue(null);
+    await service.checkTarget(fixture.a, target);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'scheduled',
+      error_code: 'POST_MEDIA_NOT_FOUND',
+    });
+  });
+
   it('validates the stored Instagram caption before calling Meta', async () => {
     const driver = new FakeMetaPublishingDriver();
     const create = vi.spyOn(driver, 'createInstagramContainer');
@@ -428,7 +626,7 @@ describe('SocialPublishingService', () => {
     const send = vi
       .spyOn(driver, 'publishFacebook')
       .mockRejectedValueOnce(new MetaPublishingError('auth_error'));
-    const { service, accounts, recordRejectedToken, clock } = publishing(driver);
+    const { service, accounts, recordRejectedToken, notify, clock } = publishing(driver);
     const target = await setupTarget(accounts, 'facebook_page', await post());
     const [channelConnectionId] = [...accounts.keys()];
     await expect(service.publishTarget(fixture.a, target, false)).rejects.toMatchObject({
@@ -449,6 +647,10 @@ describe('SocialPublishingService', () => {
       error_code: 'POST_TOKEN_EXPIRED',
     });
     expect(send).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      fixture.a,
+      expect.objectContaining({ category: 'fix_now' }),
+    );
   });
 
   it('preserves the token rejection if recording the reconnect fails', async () => {
@@ -497,6 +699,30 @@ describe('SocialPublishingService', () => {
     await service.publishTarget(fixture.a, target, true);
     expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
       status: 'failed',
+      error_code: 'POST_TOKEN_EXPIRED',
+    });
+    expect(callMeta).not.toHaveBeenCalled();
+    expect(storage.getObjectMetadata).not.toHaveBeenCalled();
+  });
+
+  it('flags an expired Page token for its store without calling Meta', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const callMeta = vi.spyOn(driver, 'publishFacebook');
+    const { service, accounts, postingCredential, storage } = publishing(
+      driver,
+      new Date(now.getTime() - MINUTE_MS),
+    );
+    const target = await setupTarget(
+      accounts,
+      'facebook_page',
+      await post(),
+      new Date(now.getTime() + DAY_MS),
+    );
+    await service.checkTarget(fixture.b, target);
+    expect(postingCredential).not.toHaveBeenCalled();
+    await service.checkTarget(fixture.a, target);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'scheduled',
       error_code: 'POST_TOKEN_EXPIRED',
     });
     expect(callMeta).not.toHaveBeenCalled();
