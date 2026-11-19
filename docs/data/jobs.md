@@ -107,7 +107,7 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 | `purge-contact`            | Sweep `due_contact_purges`               | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots                                                                                                                            |
 | sweep `fail-stuck-imports` | Every 30 seconds                         | none                                                          | `stores_with_stuck_imports`, then a guarded update on `last_progress_at` and `requeue_count`: queue again up to 4 times, then fail                                                                                                                            |
 
-`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It then writes the lifecycle snapshot and prunes expired report rows in batches of 5,000.
+`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000. The final contact stats rank page publishes `contact_stats.repaired`. One bulk job captures that store’s lifecycle snapshot while the contact stats repair date is current in the store.
 
 ## payments
 
@@ -163,6 +163,8 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
 | ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `contact.deleted`         | `ContactsService.remove` and `removeAll`                         | `contactId`                                                             | ANA-1 buyer activity cleanup                                 |
+| `contact_stats.repaired`  | Nightly contact stats repair, after the store’s last page        | `day`                                                                   | ANA-1 nightly lifecycle snapshot                             |
 | `order.created`           | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
 | `order.edited`            | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
 | `order.stage_changed`     | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |

@@ -9,6 +9,20 @@ export const contactCreatedEventSchema = z.strictObject({
   payload: z.strictObject({ contactId: z.uuid() }),
 });
 
+export const contactDeletedEventSchema = z.strictObject({
+  type: z.literal('contact.deleted'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ contactId: z.uuid() }),
+});
+
+export const contactStatsRepairedEventSchema = z.strictObject({
+  type: z.literal('contact_stats.repaired'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ day: z.iso.date() }),
+});
+
 export const consentChangedEventSchema = z.strictObject({
   type: z.literal('consent.changed'),
   storeId: z.uuid(),

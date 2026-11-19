@@ -7,6 +7,7 @@ import { StoresModule } from '../stores/stores.module';
 import { AnalyticsReconciliationService } from './analytics-reconciliation.service';
 import { AnalyticsModule } from './analytics.module';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
+import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
 import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
 
 @Module({
@@ -16,6 +17,11 @@ import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
     StoresModule,
     BullModule.registerQueue({ name: QUEUES.bulk }),
   ],
-  providers: [AnalyticsReconciliationService, ReconcileAnalyticsJob, SweepAnalyticsJob],
+  providers: [
+    AnalyticsReconciliationService,
+    ReconcileAnalyticsJob,
+    ScheduleLifecycleOnStatsRepaired,
+    SweepAnalyticsJob,
+  ],
 })
 export class AnalyticsRepairModule {}

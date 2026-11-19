@@ -1,18 +1,22 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { BullModule } from '@nestjs/bullmq';
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { RECONCILE_ANALYTICS } from './analytics-reconciliation.service';
 import { AnalyticsRepairModule } from './analytics-repair.module';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
+import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
 
 class TestModule {}
 Module({
@@ -51,7 +55,7 @@ describe('Analytics reconciliation', () => {
     await fixture.close();
   });
 
-  it('writes one nightly lifecycle snapshot with the eligible contacts in that store', async () => {
+  it('writes one store-local snapshot after contact stats are ready', async () => {
     const eligible = randomUUID();
     const blocked = randomUUID();
     const foreign = randomUUID();
@@ -71,11 +75,50 @@ describe('Analytics reconciliation', () => {
       day: '2026-11-19',
       page: { kind: 'buyers', after: null },
     });
-    const { rows } = await fixture.connection.pool.query(
-      "select dimension, value from store_daily_metrics where store_id=$1 and day='2026-11-19' and metric='lifecycle' and value<>0",
+    const snapshot = () =>
+      fixture.connection.pool.query(
+        "select dimension, value from store_daily_metrics where store_id=$1 and day='2026-11-18' and metric='lifecycle' and value<>0",
+        [fixture.a],
+      );
+    expect((await snapshot()).rows).toEqual([]);
+    await fixture.connection.pool.query(
+      "update stores set time_zone='Atlantic/Azores' where id=$1",
       [fixture.a],
     );
-    expect(rows).toEqual([{ dimension: 'regulars', value: '1' }]);
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValue(new Date('2026-11-19T00:15:00Z'));
+    try {
+      const event = {
+        type: 'contact_stats.repaired',
+        storeId: fixture.a,
+        occurredAt: clock().toISOString(),
+        payload: { day: '2026-11-18' },
+      };
+      const listener = app.get(ScheduleLifecycleOnStatsRepaired);
+      await listener.handle({ ...event, id: randomUUID() });
+      await listener.handle({ ...event, id: randomUUID() });
+      const queue = app.get<Queue>(getQueueToken(QUEUES.bulk));
+      const queued = await queue.getJob(
+        `${RECONCILE_ANALYTICS}-${fixture.a}-2026-11-18-lifecycle-start`,
+      );
+      expect(
+        (await queue.getWaiting()).filter((job) => {
+          return job.data.storeId === fixture.a && job.data.page.kind === 'lifecycle';
+        }),
+      ).toHaveLength(1);
+      await app.get(ReconcileAnalyticsJob).handle(queued?.data);
+      expect((await snapshot()).rows).toEqual([{ dimension: 'regulars', value: '1' }]);
+      await queued?.remove();
+    } finally {
+      clock.mockReturnValue(now);
+      await fixture.connection.pool.query(
+        "delete from store_daily_metrics where store_id=$1 and metric='lifecycle' and day='2026-11-18'",
+        [fixture.a],
+      );
+      await fixture.connection.pool.query("update stores set time_zone='Asia/Dhaka' where id=$1", [
+        fixture.a,
+      ]);
+    }
   });
 
   it('prunes expired report rows and preserves other features and stores', async () => {
