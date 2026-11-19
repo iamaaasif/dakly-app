@@ -57,6 +57,12 @@ describe('Worker job schedulers', () => {
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
       ...bulkIntervals,
     ]);
+    expect(sync.schedulers).toEqual([
+      scheduler('queue-channel-token-checks', 86400000),
+      scheduler('queue-conversation-returns', 60000),
+      scheduler('queue-channel-token-checks', 86400000),
+      scheduler('queue-conversation-returns', 60000),
+    ]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),
       scheduler('wake-due-runs', 60000),
