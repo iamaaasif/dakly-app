@@ -1,5 +1,6 @@
 CREATE INDEX "webhook_events_recovery_idx" ON "webhook_events" USING btree ("provider","status","received_at","id");
 --> statement-breakpoint
+-- Written by hand below this line
 CREATE OR REPLACE FUNCTION public.purge_webhook_events(p_before timestamptz) RETURNS integer
   LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
@@ -15,3 +16,7 @@ AS $$
   )
   SELECT count(*)::integer FROM gone
 $$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION public.purge_webhook_events(timestamptz) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION public.purge_webhook_events(timestamptz) TO dakly_app;
