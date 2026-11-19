@@ -10,6 +10,10 @@ const ORDER_ERRORS = {
     message: 'Order totals are too large or a line discount exceeds its price',
   },
   ORDER_PRICE_REQUIRED: { status: 409, message: 'Set a price for each item before ordering' },
+  ORDER_CHANGED: {
+    status: 409,
+    message: 'This order changed. Close the form and reopen it to edit.',
+  },
   ORDER_NOT_EDITABLE: { status: 409, message: 'This order can no longer be edited' },
   ORDER_ADVANCE_ALREADY_PAID: { status: 409, message: 'An advance has already been recorded' },
   ORDER_DELIVERED_QUANTITY_INVALID: {

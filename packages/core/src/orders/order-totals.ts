@@ -1,7 +1,23 @@
-import type { OrderDetail, OrderItem, OrderSummary } from '@dakly/contracts/orders';
+import type { EditOrderInput, OrderDetail, OrderItem, OrderSummary } from '@dakly/contracts/orders';
 
 import { orderError } from './orders.errors';
 import type { OrderItemWrite } from './orders.repository';
+
+export function editedOrderTotals(
+  items: OrderItemWrite[],
+  order: Pick<OrderSummary, 'advancePaidPoisha' | 'orderDiscountPoisha' | 'deliveryChargePoisha'>,
+  input: EditOrderInput,
+  deliveryChargePoisha: number | undefined,
+) {
+  const advancePaidPoisha = input.advancePaidPoisha ?? order.advancePaidPoisha;
+  if (order.advancePaidPoisha > 0 && order.advancePaidPoisha !== advancePaidPoisha)
+    throw orderError('ORDER_ADVANCE_ALREADY_PAID');
+  return orderTotals(items, {
+    orderDiscountPoisha: input.orderDiscountPoisha ?? order.orderDiscountPoisha,
+    deliveryChargePoisha: deliveryChargePoisha ?? order.deliveryChargePoisha,
+    advancePaidPoisha,
+  });
+}
 
 export function orderTotals(
   items: OrderItemWrite[],

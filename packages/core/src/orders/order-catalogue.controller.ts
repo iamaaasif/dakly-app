@@ -2,9 +2,11 @@ import { Controller, Get, Inject, Param, ParseUUIDPipe, Query } from '@nestjs/co
 
 import {
   orderCatalogueQuerySchema,
+  orderCatalogueStockQuerySchema,
   type OrderCataloguePage,
   type OrderCatalogueProduct,
   type OrderCatalogueQuery,
+  type OrderCatalogueStock,
 } from '@dakly/contracts/orders';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
@@ -23,6 +25,15 @@ export class OrderCatalogueController {
     @Query(new ZodValidationPipe(orderCatalogueQuerySchema)) query: OrderCatalogueQuery,
   ): Promise<OrderCataloguePage> {
     return this.products.listForOrders(storeId, query);
+  }
+
+  @Get('stock')
+  @RequirePermission('orders.edit')
+  stock(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(orderCatalogueStockQuerySchema)) query: { variantIds: string[] },
+  ): Promise<OrderCatalogueStock> {
+    return this.products.orderVariantStock(storeId, query.variantIds);
   }
 
   @Get(':productId')
