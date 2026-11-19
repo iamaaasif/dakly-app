@@ -399,6 +399,25 @@ describe('Campaign sender (Postgres)', () => {
     },
   );
 
+  it('yields after the elapsed batch budget so another job can run', async () => {
+    const { id } = await sendingCampaign(2);
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+      calls.push({ ...message });
+      now.mockReturnValue(16 * 1000);
+      return driver.send(message);
+    });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toEqual(noon);
+      expect(calls).toHaveLength(1);
+      expect((await recipients(id)).map((row) => row.status).sort()).toEqual(['queued', 'sent']);
+    } finally {
+      now.mockRestore();
+    }
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+    expect(calls).toHaveLength(2);
+  });
+
   it('records the provider answer of a worker whose claim was taken meanwhile', async () => {
     const { id, phones } = await sendingCampaign(1);
     vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation(async (message) => {

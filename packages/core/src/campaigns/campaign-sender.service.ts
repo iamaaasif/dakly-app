@@ -99,6 +99,7 @@ export class CampaignSenderService {
   }
 
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
+    const deadline = performance.now() + MINUTE_MS / 4;
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId);
       if (claim.kind === 'stop') {
@@ -108,6 +109,7 @@ export class CampaignSenderService {
       if (claim.kind === 'defer') return claim.until;
       if (claim.kind === 'send') await this.deliver(storeId, claim);
       if (claim.kind === 'receipt') await this.reconcileReceipt(storeId, claim);
+      if (performance.now() >= deadline) break;
     }
     return this.clock.now();
   }
