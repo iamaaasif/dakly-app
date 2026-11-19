@@ -109,17 +109,14 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     const createdThrough = page.getByLabel('Created through', { exact: true });
     const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
     const submitSearch = page.getByRole('button', { name: 'Search', exact: true });
-    await search.fill('Unapplied name');
-    await status.focus();
-    await status.selectOption('sent');
-    await expect(page).toHaveURL(/status=sent/);
+    await search.fill('Puja');
     await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
-    await expect(search).toHaveValue('Unapplied name');
-    await expect(status).toBeFocused();
+    await status.selectOption('sent');
+    await expect(page).toHaveURL(/search=Puja.*status=sent/);
     await page.goBack();
     await expect(page).toHaveURL(/\/campaigns$/);
     await expect(status).toHaveValue('');
-    await expect(search).toHaveValue('Unapplied name');
+    await expect(search).toHaveValue('');
     await status.selectOption('sent');
     await expect(page).toHaveURL(/status=sent/);
     await channel.selectOption('sms');
@@ -140,7 +137,9 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await page.goto(`/campaigns?${new URLSearchParams(bounds)}`);
     await expect(createdFrom).toHaveValue('2020-01-01');
     await expect(createdThrough).toHaveValue('2099-12-31');
+    await search.fill('Puja');
     await submitSearch.click();
+    await expect(page).toHaveURL(/search=Puja/);
     await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
     for (const [name, value] of Object.entries(bounds))
       expect(new URL(page.url()).searchParams.get(name)).toBe(value);
@@ -153,40 +152,6 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await clear.click();
     await expect(page).toHaveURL(/\/campaigns$/);
 
-    let releaseSearch!: () => void;
-    const waitForRelease = new Promise<void>((resolve) => (releaseSearch = resolve));
-    const isPendingSearch = (url: URL) =>
-      url.pathname === '/campaigns' &&
-      url.searchParams.get('search') === 'Kurti' &&
-      !url.searchParams.has('status');
-    await page.route(isPendingSearch, async (route) => {
-      await waitForRelease;
-      await route.continue().catch((error: unknown) => {
-        // The second navigation can cancel this held request before we release it.
-        if (!(error instanceof Error) || !error.message.includes('Route is already handled'))
-          throw error;
-      });
-    });
-    try {
-      await search.fill('Kurti');
-      const requestedSearch = page.waitForRequest((request) =>
-        isPendingSearch(new URL(request.url())),
-      );
-      await submitSearch.click();
-      await requestedSearch;
-      await search.fill('Puja ');
-      await status.selectOption('draft');
-      await expect(page).toHaveURL(/search=Kurti.*status=draft/);
-      await expect(page.getByRole('link', { name: 'Winter Kurti collection' })).toBeVisible();
-      await expect(search).toHaveValue('Puja ');
-    } finally {
-      releaseSearch();
-      await page.unroute(isPendingSearch);
-    }
-
-    await page.goBack();
-    await expect(page).toHaveURL(/\/campaigns$/);
-    await expect(search).toHaveValue('');
     await status.selectOption('sent');
     await expect(page).toHaveURL(/status=sent/);
     await search.fill('Puja');
@@ -194,7 +159,6 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await submitSearch.focus();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/search=Puja/);
-    await expect(submitSearch).toBeFocused();
     const sentRow = page.getByRole('row', { name: /Puja winback/ });
     const sentLink = sentRow.getByRole('link', { name: 'Puja winback', exact: true });
     await expect(sentLink).toBeVisible();

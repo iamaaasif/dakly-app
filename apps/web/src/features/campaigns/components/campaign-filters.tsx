@@ -1,8 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -41,47 +40,21 @@ const campaignFilterSchema = filterFields
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const router = useRouter();
-  const params = useSearchParams().toString();
   const { search = '', status = '', channel = '', createdFrom = '', createdThrough = '' } = query;
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
     resolver: zodResolver(campaignFilterSchema),
-    defaultValues: { search, status, channel, createdFrom, createdThrough },
+    values: { search, status, channel, createdFrom, createdThrough },
   });
-  const { getValues, reset, resetField } = form;
-  const submittedSearch = useRef(search);
-  useEffect(() => {
-    // A submitted search can finish after the user has started typing again.
-    if (submittedSearch.current !== search) resetField('search', { defaultValue: search });
-  }, [search, resetField]);
-  useEffect(() => {
-    submittedSearch.current = search;
-    reset({ search: getValues('search') ?? '', status, channel, createdFrom, createdThrough });
-  }, [status, channel, createdFrom, createdThrough, getValues, reset, search, params]);
   const visit = (filters: CampaignListQuery) =>
     router.push(campaignListHref({ ...filters, limit: query.limit }));
-  const apply = form.handleSubmit((filters) => {
-    submittedSearch.current = filters.search ?? '';
-    visit(filters);
-  });
-  function applyFilter() {
-    const parsed = campaignFilterSchema.safeParse({
-      ...getValues(),
-      search: submittedSearch.current,
-    });
-    if (parsed.success) visit(parsed.data);
-    else void form.trigger();
-  }
-  function clear() {
-    submittedSearch.current = '';
-    reset({ search: '', status: '', channel: '', createdFrom: '', createdThrough: '' });
-    router.push('/campaigns');
-  }
+  const applyFilter = form.handleSubmit(visit);
+  const clear = () => router.push('/campaigns');
 
   return (
     <FormProvider {...form}>
       <form
         aria-label="Filter campaigns"
-        onSubmit={apply}
+        onSubmit={applyFilter}
         className="grid grid-cols-2 items-start gap-3 xl:flex"
       >
         <FilterFields applyFilter={applyFilter} />
