@@ -32,8 +32,20 @@ export class AnalyticsSummariesService {
       if (!order) return;
       const { day, buyerContactId } = order;
       if (order.retained) {
-        const count = await this.orders.countCreatedOrders(storeId, day, timeZone);
-        await this.summaries.save(storeId, [{ day, metric: 'orders', value: BigInt(count) }], now);
+        const [totals] = await this.orders.dailyOrderMetrics(storeId, {
+          from: day,
+          through: day,
+          timeZone,
+        });
+        await this.summaries.save(
+          storeId,
+          [
+            { day, metric: 'orders', value: BigInt(totals?.orders ?? 0) },
+            { day, metric: 'delivered_orders', value: BigInt(totals?.deliveredOrders ?? 0) },
+            { day, metric: 'net_spend', value: BigInt(totals?.netSpend ?? 0) },
+          ],
+          now,
+        );
       }
       if (buyerContactId) await this.refreshBuyer(storeId, buyerContactId, timeZone, now);
     });

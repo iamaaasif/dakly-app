@@ -11,6 +11,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
 
@@ -110,6 +111,60 @@ describe('Daily order summaries', () => {
     vi.mocked(app.get(Clock).now).mockReturnValueOnce(new Date('2026-11-19T06:01:00Z'));
     await handler.handle(change);
     expect(await ordersFor(fixture.a)).toEqual(restated);
+  });
+
+  it('restates net spend and delivered orders on the original day after a late return', async () => {
+    const orderId = await order(fixture.a, '2026-10-20T18:30:00Z');
+    const handler = app.get(SummarizeOrderStageChanged);
+    await fixture.connection.pool.query(
+      "update orders set stage='delivered', order_discount_poisha=500 where id=$1",
+      [orderId],
+    );
+    await handler.handle({
+      ...event(fixture.a, orderId),
+      type: 'order.stage_changed',
+      payload: { orderId, from: 'with_courier', to: 'delivered' },
+    });
+    const metrics = async () =>
+      (
+        await fixture.connection.pool.query(
+          `select day::text, metric, value from store_daily_metrics
+           where store_id=$1 and day in ('2026-10-21','2026-11-19')
+             and metric in ('orders','net_spend','delivered_orders') and dimension='' order by metric`,
+          [fixture.a],
+        )
+      ).rows;
+    expect(await metrics()).toContainEqual({ day: '2026-10-21', metric: 'net_spend', value: '0' });
+    await fixture.connection.pool.query(
+      "update orders set payment_status='cod_collected', cod_collected_poisha=cod_amount_poisha where id=$1",
+      [orderId],
+    );
+    await app.get(SummarizeOrderCodCollected).handle({
+      ...event(fixture.a, orderId),
+      type: 'order.cod_collected',
+    });
+    expect(await metrics()).toEqual([
+      { day: '2026-10-21', metric: 'delivered_orders', value: '1' },
+      { day: '2026-10-21', metric: 'net_spend', value: '124500' },
+      { day: '2026-10-21', metric: 'orders', value: '1' },
+    ]);
+    await fixture.connection.pool.query("update orders set stage='returned' where id=$1", [
+      orderId,
+    ]);
+    const returned = {
+      ...event(fixture.a, orderId),
+      type: 'order.stage_changed',
+      payload: { orderId, from: 'delivered', to: 'returned' },
+    };
+    await handler.handle(returned);
+    const restated = await metrics();
+    expect(restated).toEqual([
+      { day: '2026-10-21', metric: 'delivered_orders', value: '0' },
+      { day: '2026-10-21', metric: 'net_spend', value: '0' },
+      { day: '2026-10-21', metric: 'orders', value: '1' },
+    ]);
+    await handler.handle(returned);
+    expect(await metrics()).toEqual(restated);
   });
 
   it('deduplicates a source event after it has already been applied', async () => {

@@ -7,6 +7,7 @@ import { ClockModule } from '../platform/clock.module';
 import { StoresModule } from '../stores/stores.module';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsRepository } from './analytics.repository';
+import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderEdited } from './jobs/summarize-order-edited.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
@@ -16,6 +17,7 @@ import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed
   providers: [
     AnalyticsRepository,
     AnalyticsSummariesService,
+    SummarizeOrderCodCollected,
     SummarizeOrderCreated,
     SummarizeOrderEdited,
     SummarizeOrderStageChanged,

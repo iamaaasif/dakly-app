@@ -24,7 +24,7 @@ export class OrderReportingService {
     return this.orders.buyerActivityDays(storeId, contactId, timeZone, now);
   }
 
-  countCreatedOrders(storeId: string, day: string, timeZone: string) {
-    return this.orders.countCreatedOrders(storeId, day, timeZone);
+  dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.orders.dailyOrderMetrics(storeId, range);
   }
 }
