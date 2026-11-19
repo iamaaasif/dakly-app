@@ -360,6 +360,28 @@ Usage (PAY-1): every billable AI action goes through `UsageService.consume(store
 - Top-ups are not drawn yet. The AI top-up wallet (`ai_conversations`) has no service yet; PAY-11 serves only the SMS and WhatsApp wallets.
 - A consume that crosses 80% or 100% of the allowance notifies members with `billing.view` (Owner, Admin and custom roles that view billing, the roles that can top up) in the `billing` category, with dedupe key `usage-<percent>:<unit>:<period start>`, so each notice goes once per period. The `usage.threshold_reached` event is not emitted yet.
 
+### Payment intents and callbacks (PAY-2)
+
+Creating an intent records a `created` event in the same store transaction. A shop
+intent needs a connected credential for its gateway in that store. Billing
+intents use Dakly's own merchant account. When checkout starts, the intent
+records the gateway payment id and becomes `pending`.
+
+The API limits signed callback bodies to 64 KB and limits requests by IP.
+It saves the original bytes and the gateway's signature headers in
+`webhook_events`. The hash of both deduplicates exact replays. The API queues a
+job and returns 204. The worker looks up the
+merchant reference and verifies the bytes with that merchant's credentials.
+An unknown reference or invalid signature is marked ignored and its payload
+is cleared. A verified callback records one payment event per gateway event
+id and makes the intent due for a check. Completed intake rows use the
+seven-day webhook purge.
+A server-to-server result must match the reference, currency and amount.
+An amount or currency mismatch, duplicate transaction or late success goes
+to `needs_review` and leaves the intent unpaid. The event retains the gateway
+transaction id and verified amount for review. The browser return belongs to the
+gateway integration and can only request a server-to-server check.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:

@@ -4,13 +4,13 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 
-import { loadEnv } from '../platform/config/env';
+import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsService } from '../segments/segments.service';
 import { StoresService } from '../stores/stores.service';
@@ -34,6 +34,7 @@ const access = (role: 'owner' | 'marketer'): StoreAccess => ({
 });
 const owner = { access: access('owner'), actor };
 const HOUR = 60 * 60 * 1000;
+const SHORT_LINK_BASE = 'https://s.example.test/l';
 // Tomorrow at 12:00 in Dhaka (UTC+6), outside quiet hours, so the cap is checked.
 const today = new Date();
 const sendAt = new Date(
@@ -99,6 +100,8 @@ describe('Campaign estimate and approval (Postgres)', () => {
   let estimate: Awaited<ReturnType<CampaignsService['estimate']>>;
 
   beforeAll(async () => {
+    vi.stubEnv('SHORT_LINK_BASE_URL', SHORT_LINK_BASE);
+    resetEnvForTests();
     await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
     await admin.pool.query(
       "insert into users(id,name,email) values($1::uuid,'রিনা',$1::text || '@example.test')",
@@ -144,6 +147,8 @@ describe('Campaign estimate and approval (Postgres)', () => {
       await admin.pool.query('delete from stores where id=$1', [storeId]);
       await admin.pool.query('delete from users where id=$1', [userId]);
     } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
       await admin.pool.end();
     }
   });
@@ -225,7 +230,7 @@ describe('Campaign estimate and approval (Postgres)', () => {
       {
         approved_at: expect.any(Date),
         started_at: null,
-        short_link_base: loadEnv().SHORT_LINK_BASE_URL,
+        short_link_base: SHORT_LINK_BASE,
       },
     ]);
     const [counts] = (

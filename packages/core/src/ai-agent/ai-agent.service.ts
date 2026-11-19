@@ -95,7 +95,7 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
-    const reason = (await this.usage.hasAllowance(storeId, 'ai_conversation'))
+    const reason = (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
       ? await this.classify(storeId, burstText(turn, debounceSeconds * 1000))
       : 'allowance_used';
     if (reason === 'busy') return { delayUntil: this.clock.now().getTime() + 1000 };

@@ -34,6 +34,6 @@ import { AiService } from './ai.service';
       },
     },
   ],
-  exports: [AiService],
+  exports: [AiService, AiRunsService],
 })
 export class AiModule {}
