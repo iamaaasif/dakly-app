@@ -13,8 +13,10 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DAY_MS } from '../platform/time';
+import { SegmentsModule } from '../segments/segments.module';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
+import { StartAutomationOnBirthday } from './jobs/start-automation-on-birthday.job';
 import { StartAutomationOnTagAdded } from './jobs/start-automation-on-tag-added.job';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -78,7 +80,7 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     class TestModule {}
     Module({
-      imports: [DatabaseModule, ContactsModule],
+      imports: [DatabaseModule, ContactsModule, SegmentsModule],
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
@@ -203,5 +205,25 @@ describe('AutomationEntryService (Postgres)', () => {
       },
     });
     expect(await runs(id)).toEqual([]);
+  });
+
+  it('starts the birthday workflow for a matching contact', async () => {
+    const id = await workflow({ rule: 'every_time' }, { key: 'birthday', filters: [] });
+    const excluded = await workflow(
+      { rule: 'every_time' },
+      {
+        key: 'birthday',
+        filters: [{ field: 'segment', segmentId: randomUUID() }],
+      },
+    );
+    await new StartAutomationOnBirthday(entries).handle({
+      id: randomUUID(),
+      storeId,
+      type: 'contact.birthday',
+      occurredAt: now.toISOString(),
+      payload: { contactId, day: now.toISOString().slice(0, 10) },
+    });
+    expect(await runs(id)).toHaveLength(1);
+    expect(await runs(excluded)).toEqual([]);
   });
 });
