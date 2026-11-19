@@ -24,7 +24,7 @@ AS $$
       WHEN 'contact.tag_added' THEN e.payload->>'tag' = p_tag
       ELSE true
     END
-  ORDER BY e.occurred_at DESC, e.id DESC
+  ORDER BY e.occurred_at DESC NULLS LAST, e.id DESC NULLS LAST
   LIMIT LEAST(GREATEST(p_limit, 1), 100)
 $$;
 --> statement-breakpoint

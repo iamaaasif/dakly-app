@@ -30,13 +30,11 @@ export class AutomationBirthdaySweepService {
         const day = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' }).format(at);
         const jobId = `${RECORD_AUTOMATION_BIRTHDAYS}-${storeId}-${day}`;
         const previous = await this.bulk.getJob(jobId);
-        if (previous) {
-          // A failed job still owns the date's id, so the next sweep must retry it.
-          if (await previous.isFailed()) {
-            await previous.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
-          }
-          continue;
+        // A failed job still owns the date's id, so the next sweep must retry it.
+        if (await previous?.isFailed()) {
+          await previous.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
         }
+        if (previous) continue;
         jobs.push({
           name: RECORD_AUTOMATION_BIRTHDAYS,
           data: { storeId, day, occurredAt },
