@@ -9,13 +9,6 @@ export const contactCreatedEventSchema = z.strictObject({
   payload: z.strictObject({ contactId: z.uuid() }),
 });
 
-export const contactLifecycleChangedEventSchema = z.strictObject({
-  type: z.literal('contact.lifecycle_changed'),
-  storeId: z.uuid(),
-  occurredAt: z.iso.datetime(),
-  payload: z.strictObject({ contactId: z.uuid() }),
-});
-
 export const consentChangedEventSchema = z.strictObject({
   type: z.literal('consent.changed'),
   storeId: z.uuid(),

@@ -218,17 +218,17 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 
 ### Data
 
-`store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The order subscribers write `orders`, `delivered_orders` and `net_spend` by the original creation day. Net spend and the delivered count supply Average order value. COD collection and late returns restate that day.
+`store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The order subscribers write `orders`, `sales`, `delivered_orders` and `net_spend` by the original creation day. Sales is split by order source. Delivered sales is net spend, which also supplies Average order value with the delivered count. COD collection and late returns restate that day.
 
 Each `buyer_activity` row records one buyer and day, with the first non-cancelled order day as its value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
 
-Each store lifecycle snapshot holds a count for each of the six stages. Contact stats publish `contact.lifecycle_changed` when a stage changes.
+The nightly lifecycle snapshot stores the count for each of the six stages. Reports read the latest snapshot inside the selected period.
 
-Pending order changes for the same store and original day share a refresh at the end of the current minute. A change received while a refresh runs schedules another refresh. The subscriber records the event ID and a pending day marker with its buyer activity writes before enqueueing. Replaying an event reschedules a pending day without applying the buyer changes twice. A refresh clears only the marker version it read. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
+Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
 
-Reports use the current and previous ranges of store-local calendar days. A returning buyer is counted once across the full period. The daily points count that same group on each day it ordered. Lifecycle counts read the latest snapshot inside the period.
+The current and previous periods use store-local calendar days. Sales sums the source amounts. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 
-Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It reads the original creation dates and clears stale buyer activity for removed or excluded buyers. The worker also refreshes lifecycle counts and removes expired order event markers in pages of 5,000. Lifecycle events for a store share one refresh at the end of the minute. Full design: [docs/data](../data/README.md).
+Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It rebuilds from the original creation dates and removes stale buyer activity for excluded buyers. It writes one lifecycle snapshot per store and prunes expired report rows in pages of 5,000.
 
 ### Acceptance
 

@@ -327,8 +327,15 @@
     {
       "idx": 46,
       "version": "7",
-      "when": 1795070043750,
-      "tag": "0046_buyer_activity_lookup",
+      "when": 1795074536978,
+      "tag": "0046_chat_return_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795078910153,
+      "tag": "0047_buyer_activity_lookup",
       "breakpoints": true
     }
   ]

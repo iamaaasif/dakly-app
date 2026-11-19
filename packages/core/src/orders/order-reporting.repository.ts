@@ -18,14 +18,13 @@ const NET_SPEND = sql<string>`coalesce(sum(coalesce(delivered_items_subtotal_poi
 export class OrderReportingRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async reportingAnchor(storeId: string, orderId: string, timeZone: string, now: Date) {
+  async reportingAnchor(storeId: string, orderId: string, timeZone: string) {
     const [order] = await this.database.forStore(storeId, (tx) => {
       const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
       return tx
         .select({
           day: sql<string>`${day}::text`,
           buyerContactId: orders.buyerContactId,
-          retained: sql<boolean>`${day} >= ${retainedDay(now, timeZone)}`,
         })
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
@@ -36,7 +35,7 @@ export class OrderReportingRepository {
   async reportBuyerIds(
     storeId: string,
     after: string | null,
-    { timeZone, now, limit }: { timeZone: string; now: Date; limit: number },
+    { timeZone, since, limit }: { timeZone: string; since: string; limit: number },
   ) {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -48,7 +47,7 @@ export class OrderReportingRepository {
             isNotNull(orders.buyerContactId),
             after ? gt(orders.buyerContactId, after) : undefined,
             ne(orders.stage, 'cancelled'),
-            sql`${orders.createdAt} >= (${retainedDay(now, timeZone)})::timestamp at time zone ${timeZone}`,
+            sql`${orders.createdAt} >= ${since}::date::timestamp at time zone ${timeZone}`,
           ),
         )
         .orderBy(asc(orders.buyerContactId))
@@ -57,7 +56,24 @@ export class OrderReportingRepository {
     return rows.map(({ id }) => id);
   }
 
-  async buyerActivityDays(storeId: string, contactId: string, timeZone: string, now: Date) {
+  async oldestRetainedOrderDay(storeId: string, timeZone: string, since: string) {
+    const [order] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text` })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            sql`${orders.createdAt} >= ${since}::date::timestamp at time zone ${timeZone}`,
+          ),
+        )
+        .orderBy(asc(orders.createdAt))
+        .limit(1),
+    );
+    return order?.day;
+  }
+
+  async buyerActivityDays(storeId: string, contactId: string, timeZone: string, since: string) {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ day: string; firstDay: number }>(sql`
         with first_order as (
@@ -71,27 +87,10 @@ export class OrderReportingRepository {
         from orders o cross join first_order
         where o.store_id = ${storeId} and o.buyer_contact_id = ${contactId}
           and o.stage <> 'cancelled'
-          and o.created_at >= (${retainedDay(now, timeZone)})::timestamp at time zone ${timeZone}
+          and o.created_at >= ${since}::date::timestamp at time zone ${timeZone}
       `),
     );
     return rows;
-  }
-
-  async oldestRetainedOrderDay(storeId: string, timeZone: string, now: Date) {
-    const [order] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text` })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.storeId, storeId),
-            sql`${orders.createdAt} >= (${retainedDay(now, timeZone)})::timestamp at time zone ${timeZone}`,
-          ),
-        )
-        .orderBy(asc(orders.createdAt))
-        .limit(1),
-    );
-    return order?.day;
   }
 
   dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
@@ -100,9 +99,11 @@ export class OrderReportingRepository {
       tx
         .select({
           day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
+          source: orders.source,
           orders: sql<string>`count(*)::text`,
-          deliveredOrders: sql<string>`count(*) filter (where ${DELIVERED})::text`,
-          netSpend: NET_SPEND,
+          sales: sql<string>`sum(${orders.itemsSubtotalPoisha} - ${orders.orderDiscountPoisha})::text`,
+          delivered_orders: sql<string>`count(*) filter (where ${DELIVERED})::text`,
+          net_spend: NET_SPEND,
         })
         .from(orders)
         .where(
@@ -113,7 +114,7 @@ export class OrderReportingRepository {
             sql`${orders.createdAt} < (${through}::date + 1)::timestamp at time zone ${timeZone}`,
           ),
         )
-        .groupBy(sql`1`),
+        .groupBy(sql`1`, orders.source),
     );
   }
 
@@ -164,8 +165,4 @@ export class OrderReportingRepository {
       lastOrderAt: totals.lastOrderAt === null ? null : new Date(totals.lastOrderAt),
     };
   }
-}
-
-function retainedDay(now: Date, timeZone: string) {
-  return sql`((${now.toISOString()}::timestamptz at time zone ${timeZone})::date - interval '24 months')::date`;
 }

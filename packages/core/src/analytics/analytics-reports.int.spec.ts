@@ -62,22 +62,43 @@ describe('Analytics reports', () => {
     expect((await reports.orders(fixture.b, period)).total).toBe(9n);
   });
 
-  it('divides period net spend by delivered orders in integer poisha', async () => {
+  it('sums Sales across order sources and keeps Delivered sales separate', async () => {
     await fixture.connection.pool.query(
-      `insert into store_daily_metrics (store_id,day,metric,value) values
-       ($1,'2026-11-05','net_spend',10001),($1,'2026-11-05','delivered_orders',2),
-       ($1,'2026-11-07','net_spend',20001),($1,'2026-11-07','delivered_orders',3)`,
-      [fixture.a],
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+       ($1,'2026-11-05','sales','manual',125000),($1,'2026-11-05','sales','order_link',50000),
+       ($1,'2026-11-07','sales','manual',10000),($1,'2026-11-06','net_spend','',25010),
+       ($2,'2026-11-05','sales','manual',500000)`,
+      [fixture.a, fixture.b],
     );
-    expect(await reports.averageOrderValue(fixture.a, period)).toEqual({
-      total: 6000n,
+    expect(await reports.sales(fixture.a, period)).toEqual({
+      total: 185000n,
       points: [
-        { day: '2026-11-05', value: 5001n },
+        { day: '2026-11-05', value: 175000n },
         { day: '2026-11-06', value: 0n },
-        { day: '2026-11-07', value: 6667n },
+        { day: '2026-11-07', value: 10000n },
       ],
     });
-    expect((await reports.averageOrderValue(fixture.b, period)).total).toBe(0n);
+    expect((await reports.deliveredSales(fixture.a, period)).total).toBe(25010n);
+    expect((await reports.sales(fixture.b, period)).total).toBe(500000n);
+  });
+
+  it('divides period net spend by delivered orders in integer poisha', async () => {
+    const averagePeriod = { from: '2026-11-09', through: '2026-11-11' };
+    await fixture.connection.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,value) values
+       ($1,'2026-11-09','net_spend',10001),($1,'2026-11-09','delivered_orders',2),
+       ($1,'2026-11-11','net_spend',20001),($1,'2026-11-11','delivered_orders',3)`,
+      [fixture.a],
+    );
+    expect(await reports.averageOrderValue(fixture.a, averagePeriod)).toEqual({
+      total: 6000n,
+      points: [
+        { day: '2026-11-09', value: 5001n },
+        { day: '2026-11-10', value: 0n },
+        { day: '2026-11-11', value: 6667n },
+      ],
+    });
+    expect((await reports.averageOrderValue(fixture.b, averagePeriod)).total).toBe(0n);
   });
 
   it('counts a returning buyer once and keeps first-time buyers separate', async () => {

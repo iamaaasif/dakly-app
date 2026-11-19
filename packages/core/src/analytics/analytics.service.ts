@@ -33,12 +33,16 @@ export class AnalyticsService {
     };
   }
 
-  async orders(storeId: string, period: ReportPeriod) {
-    const rows = await this.repository.readDailyMetrics(storeId, period, ['orders']);
-    return {
-      total: sumPoints(rows),
-      points: fillDays(period, rows),
-    };
+  orders(storeId: string, period: ReportPeriod) {
+    return this.readOrderMetric(storeId, period, 'orders');
+  }
+
+  sales(storeId: string, period: ReportPeriod) {
+    return this.readOrderMetric(storeId, period, 'sales');
+  }
+
+  deliveredSales(storeId: string, period: ReportPeriod) {
+    return this.readOrderMetric(storeId, period, 'net_spend');
   }
 
   async averageOrderValue(storeId: string, period: ReportPeriod) {
@@ -77,6 +81,11 @@ export class AnalyticsService {
       (typeof stages)[number],
       number
     >;
+  }
+
+  private async readOrderMetric(storeId: string, period: ReportPeriod, metric: string) {
+    const rows = await this.repository.readDailyMetrics(storeId, period, [metric]);
+    return { total: sumPoints(rows), points: fillDays(period, rows) };
   }
 
   private async readBuyers(storeId: string, period: ReportPeriod, kind: 'new' | 'returning') {

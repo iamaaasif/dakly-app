@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
-import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
 import { ContactStatsRepository } from './contact-stats.repository';
 import { ContactStatsService } from './contact-stats.service';
@@ -12,7 +11,7 @@ import { RefreshContactStatsOnOrderCreated } from './jobs/refresh-contact-stats-
 import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-stats-on-order-stage-changed.job';
 
 @Module({
-  imports: [ClockModule, OrdersModule, StoresModule, OutboxModule],
+  imports: [ClockModule, OrdersModule, StoresModule],
   providers: [
     ContactStatsRepository,
     ContactStatsService,

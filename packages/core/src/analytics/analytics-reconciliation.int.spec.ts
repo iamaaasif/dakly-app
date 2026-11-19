@@ -1,20 +1,17 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { BullModule, getQueueToken } from '@nestjs/bullmq';
+import { BullModule } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { AnalyticsRepairModule } from './analytics-repair.module';
-import { QueueLifecycleSnapshot } from './jobs/queue-lifecycle-snapshot.job';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 
 class TestModule {}
@@ -54,35 +51,26 @@ describe('Analytics reconciliation', () => {
     await fixture.close();
   });
 
-  it('refreshes the store once after the last change in a minute', async () => {
-    const contactId = randomUUID();
+  it('writes one nightly lifecycle snapshot with the eligible contacts in that store', async () => {
+    const eligible = randomUUID();
+    const blocked = randomUUID();
+    const foreign = randomUUID();
     await fixture.connection.pool.query(
-      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'সুমন','manual','customer')",
-      [contactId, fixture.a],
+      `insert into contacts(id,store_id,name,source,kind,is_blocked) values
+       ($1,$4,'সুমন','manual','customer',false),($2,$4,'রিনা','manual','customer',true),
+       ($3,$5,'করিম','manual','customer',false)`,
+      [eligible, blocked, foreign, fixture.a, fixture.b],
     );
     await fixture.connection.pool.query(
-      "insert into contact_stats(contact_id,store_id,lifecycle_stage) values($1,$2,'new')",
-      [contactId, fixture.a],
+      `insert into contact_stats(contact_id,store_id,lifecycle_stage) values
+       ($1,$4,'regulars'),($2,$4,'new'),($3,$5,'regulars')`,
+      [eligible, blocked, foreign, fixture.a, fixture.b],
     );
-    const handler = app.get(QueueLifecycleSnapshot);
-    const event = {
-      type: 'contact.lifecycle_changed',
+    await app.get(ReconcileAnalyticsJob).handle({
       storeId: fixture.a,
-      occurredAt: now.toISOString(),
-      payload: { contactId },
-    };
-    await handler.handle({ ...event, id: randomUUID() });
-    await fixture.connection.pool.query(
-      "update contact_stats set lifecycle_stage='regulars' where contact_id=$1",
-      [contactId],
-    );
-    await handler.handle({ ...event, id: randomUUID() });
-    const queue = app.get<Queue>(getQueueToken(QUEUES.sync));
-    const jobs = (await queue.getDelayed()).filter(({ data }) => data.storeId === fixture.a);
-    expect(jobs.map(({ data, opts }) => ({ storeId: data.storeId, delay: opts.delay }))).toEqual([
-      { storeId: fixture.a, delay: 35000 },
-    ]);
-    await app.get(ReconcileAnalyticsJob).handle(jobs[0]?.data);
+      day: '2026-11-19',
+      page: { kind: 'buyers', after: null },
+    });
     const { rows } = await fixture.connection.pool.query(
       "select dimension, value from store_daily_metrics where store_id=$1 and day='2026-11-19' and metric='lifecycle' and value<>0",
       [fixture.a],
@@ -90,13 +78,12 @@ describe('Analytics reconciliation', () => {
     expect(rows).toEqual([{ dimension: 'regulars', value: '1' }]);
   });
 
-  it('keeps each summary only for its own retention period', async () => {
+  it('prunes expired report rows and preserves other features and stores', async () => {
     await fixture.connection.pool.query(
       `insert into store_daily_metrics(store_id,day,metric,dimension,value) values
-        ($1,'2026-11-11','order_event',$3,1),($1,'2026-11-12','order_event',$4,1),
-        ($1,'2026-11-11','orders','',8),($2,'2026-11-11','order_event',$3,1),
-        ($1,'2024-11-18','orders','',2),($1,'2024-11-18','ai_runs','',2)`,
-      [fixture.a, fixture.b, randomUUID(), randomUUID()],
+       ($1,'2024-11-19','orders','',8),($1,'2024-11-18','sales','manual',20),
+       ($1,'2024-11-18','ai_runs','',2),($2,'2024-11-18','sales','manual',5)`,
+      [fixture.a, fixture.b],
     );
     await app.get(ReconcileAnalyticsJob).handle({
       storeId: fixture.a,
@@ -110,16 +97,36 @@ describe('Analytics reconciliation', () => {
     );
     expect(rows).toEqual([
       { metric: 'ai_runs', day: '2024-11-18' },
-      { metric: 'orders', day: '2026-11-11' },
-      { metric: 'order_event', day: '2026-11-12' },
+      { metric: 'orders', day: '2024-11-19' },
     ]);
     expect(
       await fixture.connection.pool.query(
-        "select 1 from store_daily_metrics where store_id=$1 and metric='order_event'",
+        "select 1 from store_daily_metrics where store_id=$1 and metric='sales'",
         [fixture.b],
       ),
     ).toMatchObject({ rowCount: 1 });
   });
+
+  it('starts a nightly repair from the oldest retained order for the store', async () => {
+    await fixture.connection.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,recipient_name,
+        recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha,created_at)
+      values ($1,$2,1001,'manual','user','রিনা','01710000005','Mirpur','Dhaka',125000,125000,
+        '2026-11-18T18:00:00Z')`,
+      [randomUUID(), fixture.b],
+    );
+    await app.get(ReconcileAnalyticsJob).handle({
+      storeId: fixture.b,
+      day: '2026-11-19',
+      page: { kind: 'orders', period: null },
+    });
+    const { rows } = await fixture.connection.pool.query(
+      "select day::text,value from store_daily_metrics where store_id=$1 and metric='orders' and dimension=''",
+      [fixture.b],
+    );
+    expect(rows).toEqual([{ day: '2026-11-19', value: '1' }]);
+  });
+
   it('repairs stale spend on the original day when a return event was missed', async () => {
     await fixture.connection.pool.query(
       `insert into orders(id,store_id,number,source,created_by_type,recipient_name,
@@ -141,7 +148,7 @@ describe('Analytics reconciliation', () => {
     });
     const { rows } = await fixture.connection.pool.query(
       `select metric, value from store_daily_metrics
-       where store_id=$1 and day='2026-11-08' order by metric`,
+       where store_id=$1 and day='2026-11-08' and dimension='' order by metric`,
       [fixture.a],
     );
     expect(rows).toEqual([

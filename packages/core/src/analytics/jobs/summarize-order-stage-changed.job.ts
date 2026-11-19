@@ -10,14 +10,14 @@ import { AnalyticsSummariesService } from '../analytics-summaries.service';
 
 const event = orderStageChangedEventSchema.extend({ id: z.uuid() });
 
-@HandlesEvent('order.stage_changed', { queue: QUEUES.transactional })
+@HandlesEvent('order.stage_changed', { queue: QUEUES.sync })
 export class SummarizeOrderStageChanged implements JobHandler {
   constructor(
     @Inject(AnalyticsSummariesService) private readonly summaries: AnalyticsSummariesService,
   ) {}
 
   async handle(data: unknown) {
-    const { id, occurredAt, storeId, payload } = event.parse(data);
-    await this.summaries.refreshOrder(storeId, payload.orderId, { id, occurredAt });
+    const { storeId, payload } = event.parse(data);
+    await this.summaries.refreshOrder(storeId, payload.orderId);
   }
 }

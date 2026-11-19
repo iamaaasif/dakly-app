@@ -5,7 +5,6 @@ import type { ContactSource } from '@dakly/contracts/contacts';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import {
@@ -35,7 +34,6 @@ export class ContactStatsService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
-    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   async refreshOrder(storeId: string, orderId: string) {
@@ -85,14 +83,12 @@ export class ContactStatsService {
       if (!contact || (rank && rank.day !== now.toISOString().slice(0, 10))) return;
       const timeZone = await this.stores.timeZone(storeId);
       const totals = await this.orders.contactOrderTotals(storeId, contactId, timeZone);
-      const previous = (await this.repository.lifecycleStage(storeId, contactId)) ?? 'none';
       const lifecycleStage = await this.lifecycleStage(storeId, contactId, {
         contact,
         totals,
         now,
         timeZone,
         cutoff: rank?.cutoff,
-        previous,
       });
       await this.repository.save(storeId, contactId, {
         ...totals,
@@ -100,14 +96,6 @@ export class ContactStatsService {
         lifecycleStage,
         updatedAt: now,
       });
-      if (previous !== lifecycleStage) {
-        await this.outbox.publish({
-          type: 'contact.lifecycle_changed',
-          storeId,
-          occurredAt: now.toISOString(),
-          payload: { contactId },
-        });
-      }
     });
   }
 
@@ -120,16 +108,14 @@ export class ContactStatsService {
       now,
       timeZone,
       cutoff,
-      previous,
     }: {
       contact: NonNullable<Awaited<ReturnType<ContactStatsRepository['lockContact']>>>;
       totals: Awaited<ReturnType<OrderReportingService['contactOrderTotals']>>;
       now: Date;
       timeZone: string;
       cutoff?: BestSpendCutoff | null;
-      previous: NonNullable<ContactStatsWrite['lifecycleStage']>;
     },
-  ): Promise<NonNullable<ContactStatsWrite['lifecycleStage']>> {
+  ): Promise<ContactStatsWrite['lifecycleStage']> {
     if (!isCustomer(contact, totals.ordersCount)) return 'none';
     const day = new Intl.DateTimeFormat('en-CA', { timeZone });
     const daysSince = (date: Date) =>
@@ -138,28 +124,24 @@ export class ContactStatsService {
     if (sinceLast > (await this.stores.customerInactivityDays(storeId))) return 'stopped_buying';
     if (
       totals.netSpendPoisha > BEST_SPEND_POISHA &&
-      (await bestStageApplies(contactId, totals.netSpendPoisha, { cutoff, previous }))
+      (await this.bestStageApplies(storeId, contactId, totals.netSpendPoisha, cutoff))
     )
       return 'best';
     return purchaseStage(totals, sinceLast, daysSince);
   }
-}
 
-function bestStageApplies(
-  contactId: string,
-  spend: bigint,
-  {
-    cutoff,
-    previous,
-  }: {
-    cutoff?: BestSpendCutoff | null;
-    previous: NonNullable<ContactStatsWrite['lifecycleStage']>;
-  },
-) {
-  if (cutoff === undefined) return previous === 'best';
-  if (cutoff === null) return false;
-  const amount = BigInt(cutoff.netSpendPoisha);
-  return spend > amount || (spend === amount && contactId >= cutoff.contactId);
+  private async bestStageApplies(
+    storeId: string,
+    contactId: string,
+    spend: bigint,
+    cutoff?: BestSpendCutoff | null,
+  ) {
+    if (cutoff === undefined)
+      return (await this.repository.lifecycleStage(storeId, contactId)) === 'best';
+    if (cutoff === null) return false;
+    const amount = BigInt(cutoff.netSpendPoisha);
+    return spend > amount || (spend === amount && contactId >= cutoff.contactId);
+  }
 }
 
 function isCustomer(
@@ -176,7 +158,7 @@ function purchaseStage(
   totals: Awaited<ReturnType<OrderReportingService['contactOrderTotals']>>,
   sinceLast: number,
   daysSince: (date: Date) => number,
-): NonNullable<ContactStatsWrite['lifecycleStage']> {
+): ContactStatsWrite['lifecycleStage'] {
   if (totals.usualGapDays !== null && sinceLast > 1.5 * totals.usualGapDays) return 'slipping_away';
   if (totals.firstOrderAt && daysSince(totals.firstOrderAt) < 30) return 'new';
   return totals.ordersCount >= 2 ? 'regulars' : 'bought_once';

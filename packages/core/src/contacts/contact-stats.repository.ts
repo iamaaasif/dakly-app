@@ -56,6 +56,28 @@ export class ContactStatsRepository {
     return rows;
   }
 
+  countLifecycleStages(storeId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ stage: contactStats.lifecycleStage, count: count() })
+        .from(contactStats)
+        .innerJoin(
+          contacts,
+          and(eq(contacts.storeId, storeId), eq(contacts.id, contactStats.contactId)),
+        )
+        .where(
+          and(
+            eq(contactStats.storeId, storeId),
+            ne(contactStats.lifecycleStage, 'none'),
+            isNull(contacts.deletedAt),
+            eq(contacts.isBlocked, false),
+            ne(contacts.kind, 'not_customer'),
+          ),
+        )
+        .groupBy(contactStats.lifecycleStage),
+    );
+  }
+
   async bestSpendCutoff(storeId: string) {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<BestSpendCutoff>(sql`
@@ -89,28 +111,6 @@ export class ContactStatsRepository {
         .for('no key update'),
     );
     return contact;
-  }
-
-  countLifecycleStages(storeId: string) {
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ stage: contactStats.lifecycleStage, count: count() })
-        .from(contactStats)
-        .innerJoin(
-          contacts,
-          and(eq(contacts.storeId, storeId), eq(contacts.id, contactStats.contactId)),
-        )
-        .where(
-          and(
-            eq(contactStats.storeId, storeId),
-            ne(contactStats.lifecycleStage, 'none'),
-            isNull(contacts.deletedAt),
-            eq(contacts.isBlocked, false),
-            ne(contacts.kind, 'not_customer'),
-          ),
-        )
-        .groupBy(contactStats.lifecycleStage),
-    );
   }
 
   async lifecycleStage(storeId: string, contactId: string) {

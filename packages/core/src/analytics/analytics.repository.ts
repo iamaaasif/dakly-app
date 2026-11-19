@@ -8,9 +8,6 @@ import type { ReportPeriod } from './report-period';
 
 type Metric = { day: string; metric: string; dimension?: string; value: bigint };
 
-type PendingOrderDay = { day: string; generation: string };
-
-const ORDER_PENDING = 'order_refresh_pending';
 const BUYER_ACTIVITY = 'buyer_activity';
 
 @Injectable()
@@ -23,7 +20,7 @@ export class AnalyticsRepository {
         .select({
           day: storeDailyMetrics.day,
           metric: storeDailyMetrics.metric,
-          value: sql`${storeDailyMetrics.value}::text`.mapWith(BigInt),
+          value: sql`sum(${storeDailyMetrics.value})::text`.mapWith(BigInt),
         })
         .from(storeDailyMetrics)
         .where(
@@ -32,9 +29,10 @@ export class AnalyticsRepository {
             gte(storeDailyMetrics.day, period.from),
             lte(storeDailyMetrics.day, period.through),
             inArray(storeDailyMetrics.metric, metrics),
-            eq(storeDailyMetrics.dimension, ''),
+            sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
           ),
-        ),
+        )
+        .groupBy(storeDailyMetrics.day, storeDailyMetrics.metric),
     );
   }
 
@@ -81,12 +79,7 @@ export class AnalyticsRepository {
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            inArray(storeDailyMetrics.metric, [
-              'orders',
-              'delivered_orders',
-              'net_spend',
-              ORDER_PENDING,
-            ]),
+            inArray(storeDailyMetrics.metric, ['orders', 'delivered_orders', 'net_spend', 'sales']),
             gte(storeDailyMetrics.day, since),
           ),
         )
@@ -96,24 +89,18 @@ export class AnalyticsRepository {
     return row?.day;
   }
 
-  async pruneExpiredRows(
-    storeId: string,
-    { eventBefore, reportBefore }: { eventBefore: string; reportBefore: string },
-  ) {
+  async pruneExpiredRows(storeId: string, reportBefore: string) {
     const limit = 5000;
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ count: number }>(sql`
         with removed as (
           delete from store_daily_metrics
           where store_id = ${storeId} and (day, metric, dimension) in (
-              select day, metric, dimension from store_daily_metrics
-              where store_id = ${storeId} and (
-                (metric = 'order_event' and day < ${eventBefore}::date)
-                or (metric in ('orders', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', ${ORDER_PENDING})
-                  and day < ${reportBefore}::date)
-              )
-              order by day, metric, dimension limit ${limit}
-            )
+            select day, metric, dimension from store_daily_metrics
+            where store_id = ${storeId} and day < ${reportBefore}::date
+              and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
+            order by day, metric, dimension limit ${limit}
+          )
           returning 1
         )
         select count(*)::int from removed
@@ -147,71 +134,6 @@ export class AnalyticsRepository {
     );
   }
 
-  markOrderDayPending(storeId: string, day: string, updatedAt: Date) {
-    return this.database.inTransaction(storeId, (tx) =>
-      tx
-        .insert(storeDailyMetrics)
-        .values({ storeId, day, metric: ORDER_PENDING, value: 1, updatedAt })
-        .onConflictDoUpdate({
-          target: [
-            storeDailyMetrics.storeId,
-            storeDailyMetrics.day,
-            storeDailyMetrics.metric,
-            storeDailyMetrics.dimension,
-          ],
-          set: { value: sql`${storeDailyMetrics.value} + 1`, updatedAt },
-        }),
-    );
-  }
-
-  pendingOrderDays(storeId: string, period: ReportPeriod) {
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          day: storeDailyMetrics.day,
-          generation: sql<string>`${storeDailyMetrics.value}::text`,
-        })
-        .from(storeDailyMetrics)
-        .where(
-          and(
-            eq(storeDailyMetrics.storeId, storeId),
-            gte(storeDailyMetrics.day, period.from),
-            lte(storeDailyMetrics.day, period.through),
-            eq(storeDailyMetrics.metric, ORDER_PENDING),
-          ),
-        ),
-    );
-  }
-
-  clearOrderDays(storeId: string, pending: PendingOrderDay[]) {
-    const versions = sql.join(
-      pending.map(({ day, generation }) => sql`(${day}::date, ${generation}::bigint)`),
-      sql`, `,
-    );
-    return this.database.inTransaction(storeId, (tx) =>
-      tx.execute(sql`delete from store_daily_metrics
-        where store_id = ${storeId} and metric = ${ORDER_PENDING} and (day, value) in (${versions})`),
-    );
-  }
-
-  async recordEvent(storeId: string, event: { id: string; occurredAt: string }, now: Date) {
-    const [row] = await this.database.inTransaction(storeId, (tx) =>
-      tx
-        .insert(storeDailyMetrics)
-        .values({
-          storeId,
-          day: event.occurredAt.slice(0, 10),
-          metric: 'order_event',
-          dimension: event.id,
-          value: 1,
-          updatedAt: now,
-        })
-        .onConflictDoNothing()
-        .returning({ dimension: storeDailyMetrics.dimension }),
-    );
-    return row !== undefined;
-  }
-
   async replaceBuyerActivity(
     storeId: string,
     contactId: string,
@@ -224,27 +146,20 @@ export class AnalyticsRepository {
           eq(storeDailyMetrics.storeId, storeId),
           eq(storeDailyMetrics.metric, BUYER_ACTIVITY),
           eq(storeDailyMetrics.dimension, contactId),
-          days.length
-            ? notInArray(
-                storeDailyMetrics.day,
-                days.map(({ day }) => day),
-              )
-            : undefined,
+          notInArray(
+            storeDailyMetrics.day,
+            days.map(({ day }) => day),
+          ),
         ),
       ),
     );
-    if (days.length) {
-      await this.save(
-        storeId,
-        days.map(({ day, firstDay }) => ({
-          day,
-          metric: BUYER_ACTIVITY,
-          dimension: contactId,
-          value: BigInt(firstDay),
-        })),
-        now,
-      );
-    }
+    const metrics = days.map(({ day, firstDay }) => ({
+      day,
+      metric: BUYER_ACTIVITY,
+      dimension: contactId,
+      value: BigInt(firstDay),
+    }));
+    if (metrics.length) await this.save(storeId, metrics, now);
   }
 
   async save(storeId: string, metrics: Metric[], updatedAt: Date) {
@@ -252,11 +167,9 @@ export class AnalyticsRepository {
       tx
         .insert(storeDailyMetrics)
         .values(
-          metrics.map(({ day, metric, dimension, value }) => ({
+          metrics.map(({ value, ...metric }) => ({
             storeId,
-            day,
-            metric,
-            dimension,
+            ...metric,
             value: sql`${value.toString()}::bigint`,
             updatedAt,
           })),
