@@ -1,4 +1,4 @@
-import { automationTriggers } from '@dakly/contracts/automations/catalogue';
+import { isTriggerReadyBeforeChannels } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { automationTemplates, type TemplateKey } from '@dakly/contracts/automations/templates';
 
@@ -42,12 +42,11 @@ export const workflowTemplates = (Object.keys(automationTemplates) as TemplateKe
   const channels = [
     ...new Set(steps.flatMap((step) => (step.kind === 'send' ? step.channels : []))),
   ];
-  const trigger = automationTriggers[template.graph.trigger.key];
   return {
     ...template,
     key,
     channels,
-    available: trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source),
+    available: isTriggerReadyBeforeChannels(template.graph.trigger.key),
   };
 });
 

@@ -11,7 +11,7 @@ import {
   type CreateAutomationInput,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
-import { automationTriggers } from '@dakly/contracts/automations/catalogue';
+import { isTriggerReadyBeforeChannels } from '@dakly/contracts/automations/catalogue';
 import {
   type AutomationGraph,
   type AutomationStep,
@@ -226,7 +226,7 @@ export class AutomationsService {
 // the store can use today.
 function checkPublishable(graph: AutomationGraph) {
   checkRunnable(graph);
-  if (!isTriggerAvailable(graph.trigger.key))
+  if (!isTriggerReadyBeforeChannels(graph.trigger.key))
     throw automationError('AUTOMATION_TRIGGER_UNAVAILABLE', [
       { path: 'trigger.key', message: `${graph.trigger.key} is not available yet` },
     ]);
@@ -290,13 +290,6 @@ function checkTapGoalsAndExits(
     throw automationError('AUTOMATION_TAPS_UNAVAILABLE', [
       { path: 'exitConditions', message: 'A tap exit is not available yet' },
     ]);
-}
-
-// Before channel connections (D40) a store has Dakly data and SMS only: a trigger ready before
-// Channels needs nothing else (birthdays live on contacts), once some task emits its event.
-function isTriggerAvailable(key: AutomationGraph['trigger']['key']): boolean {
-  const trigger = automationTriggers[key];
-  return trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source);
 }
 
 function splitSendKeys(step: AutomationStep): string[] {
