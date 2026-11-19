@@ -257,9 +257,10 @@ export class ProductsRepository {
   async findStockVariant(
     storeId: string,
     variantId: string,
+    lockProduct = false,
   ): Promise<{ isStockTracked: boolean } | undefined> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
+    const rows = await this.database.forStore(storeId, (tx) => {
+      const variant = tx
         .select({ isStockTracked: products.isStockTracked })
         .from(productVariants)
         .innerJoin(products, eq(products.id, productVariants.productId))
@@ -269,8 +270,10 @@ export class ProductsRepository {
             eq(products.storeId, storeId),
             eq(productVariants.id, variantId),
           ),
-        ),
-    );
+        );
+      // An absolute import uses the current tracking flag and locks in product edit order.
+      return lockProduct ? variant.for('no key update', { of: products }) : variant;
+    });
     return rows[0];
   }
 

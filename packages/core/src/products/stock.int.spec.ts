@@ -168,6 +168,35 @@ describe('ProductsService stock ledger', () => {
     expect(await movements(id)).toEqual([]);
   });
 
+  it('keeps stock unchanged when a concurrent edit turns tracking off', async () => {
+    const id = await variant(2);
+    const { product_id: productId } = await f.row('product_variants', id);
+    const edit = await f.connection.pool.connect();
+    let reconciliation: Promise<void> | undefined;
+    try {
+      await edit.query('begin');
+      const { rows } = await edit.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await edit.query('update products set is_stock_tracked = false where id = $1', [productId]);
+      await edit.query('select id from product_variants where id = $1 for no key update', [id]);
+      reconciliation = service.moveStock(f.a, id, { kind: 'import', onHand: 5, reference });
+      await expect
+        .poll(async () => {
+          const waiting = await f.connection.pool.query(
+            'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+            [rows[0]!.pid],
+          );
+          return waiting.rowCount;
+        })
+        .toBe(1);
+    } finally {
+      await edit.query('commit');
+      edit.release();
+      await reconciliation;
+    }
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 2, reserved: 0 });
+    expect(await movements(id)).toEqual([]);
+  });
+
   it('rejects zero or negative reserve quantities and counter overflow', async () => {
     const id = await variant(2147483647);
     for (const quantity of [0, -1])

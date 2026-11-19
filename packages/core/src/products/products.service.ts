@@ -45,7 +45,11 @@ type StockReference = { actor: Actor } & (
 );
 
 type StockMovement = { kind: StockMovementKind; quantity: number; reference: StockReference };
-type ImportedStock = { kind: 'import'; onHand: number; reference: StockReference };
+type ImportedStock = {
+  kind: 'import';
+  onHand: number;
+  reference: { actor: Actor; reason: string };
+};
 type StockMovementInput = StockMovement | ImportedStock;
 type UpdatedStock = {
   onHand: number;
@@ -165,11 +169,15 @@ export class ProductsService {
 
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
     return this.transaction.run(storeId, async () => {
-      const variant = await this.repository.findStockVariant(storeId, variantId);
+      const isAbsoluteImport = 'onHand' in input;
+      const variant = await this.repository.findStockVariant(storeId, variantId, isAbsoluteImport);
       if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
+      if (isAbsoluteImport) {
+        if (!variant.isStockTracked) return;
+        return this.reconcileImportedStock(storeId, variantId, input);
+      }
       // Order movements follow the tracking flag saved on the order item.
       if (!variant.isStockTracked && !input.reference.orderId) return;
-      if ('onHand' in input) return this.reconcileImportedStock(storeId, variantId, input);
       const { kind, quantity } = input;
       if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
         throw productError('STOCK_QUANTITY_INVALID');
