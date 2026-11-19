@@ -87,17 +87,18 @@ describe('Lifecycle summaries', () => {
     expect(rows).toEqual([{ dimension: 'regulars', value: '1' }]);
   });
 
-  it('removes only expired event markers for the store', async () => {
+  it('keeps each summary only for its own retention period', async () => {
     await fixture.connection.pool.query(
       `insert into store_daily_metrics(store_id,day,metric,dimension,value) values
         ($1,'2026-11-11','order_event',$3,1),($1,'2026-11-12','order_event',$4,1),
-        ($1,'2026-11-11','orders','',8),($2,'2026-11-11','order_event',$3,1)`,
+        ($1,'2026-11-11','orders','',8),($2,'2026-11-11','order_event',$3,1),
+        ($1,'2024-11-18','orders','',2),($1,'2024-11-18','ai_runs','',2)`,
       [fixture.a, fixture.b, randomUUID(), randomUUID()],
     );
     await app.get(ReconcileAnalyticsJob).handle({
       storeId: fixture.a,
       day: '2026-11-19',
-      page: { kind: 'markers', batch: 0 },
+      page: { kind: 'retention', batch: 0 },
     });
     const { rows } = await fixture.connection.pool.query(
       `select metric, day::text from store_daily_metrics
@@ -105,6 +106,7 @@ describe('Lifecycle summaries', () => {
       [fixture.a],
     );
     expect(rows).toEqual([
+      { metric: 'ai_runs', day: '2024-11-18' },
       { metric: 'orders', day: '2026-11-11' },
       { metric: 'order_event', day: '2026-11-12' },
     ]);

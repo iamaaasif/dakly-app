@@ -21,7 +21,7 @@ export const analyticsReconciliationPayload = z.strictObject({
     }),
     z.strictObject({ kind: z.literal('buyers'), after: z.uuid().nullable() }),
     z.strictObject({ kind: z.literal('lifecycle'), minute: z.int().nonnegative() }),
-    z.strictObject({ kind: z.literal('markers'), batch: z.int().nonnegative() }),
+    z.strictObject({ kind: z.literal('retention'), batch: z.int().nonnegative() }),
   ]),
 });
 type Repair = z.infer<typeof analyticsReconciliationPayload>;
@@ -67,10 +67,10 @@ export class AnalyticsReconciliationService {
       await this.summaries.refreshLifecycle(storeId);
       return;
     }
-    if (page.kind === 'markers') {
-      if (await this.summaries.pruneEventMarkers(storeId))
+    if (page.kind === 'retention') {
+      if (await this.summaries.pruneExpiredRows(storeId))
         await this.queue.addBulk([
-          reconciliationJob({ ...repair, page: { kind: 'markers', batch: page.batch + 1 } }),
+          reconciliationJob({ ...repair, page: { kind: 'retention', batch: page.batch + 1 } }),
         ]);
       return;
     }
@@ -83,7 +83,7 @@ export class AnalyticsReconciliationService {
       else {
         await this.summaries.refreshLifecycle(storeId);
         await this.queue.addBulk([
-          reconciliationJob({ ...repair, page: { kind: 'markers', batch: 0 } }),
+          reconciliationJob({ ...repair, page: { kind: 'retention', batch: 0 } }),
         ]);
       }
       return;

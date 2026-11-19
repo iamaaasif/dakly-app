@@ -53,9 +53,13 @@ export class AnalyticsSummariesService {
     return { from: from ?? through, through };
   }
 
-  async pruneEventMarkers(storeId: string) {
-    const day = this.clock.now().toISOString().slice(0, 10);
-    return this.summaries.pruneEventMarkers(storeId, shiftReportDay(day, -7));
+  async pruneExpiredRows(storeId: string) {
+    const now = this.clock.now();
+    const timeZone = await this.stores.timeZone(storeId);
+    return this.summaries.pruneExpiredRows(storeId, {
+      eventBefore: shiftReportDay(now.toISOString().slice(0, 10), -7),
+      storeDay: reportDay(now, timeZone),
+    });
   }
 
   async reconcileOrderRange(storeId: string, period: ReportPeriod) {

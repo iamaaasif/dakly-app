@@ -86,7 +86,7 @@ The daily token sweep makes one Meta call per active connection with no fixed ex
 
 `sweep-analytics` runs at 00:00 UTC. It starts one reconciliation per store and sweep day.
 `reconcile-analytics` handles up to 31 local order days or 100 buyers per job, then refreshes
-lifecycle counts and prunes event markers more than seven UTC calendar days old in batches of 5,000.
+lifecycle counts. It prunes order event markers older than seven UTC calendar days and its daily summaries older than 24 store-local months in batches of 5,000.
 A lifecycle event queues a refresh for the end of the minute. Events for the same store and minute share that job ID.
 
 ## bulk

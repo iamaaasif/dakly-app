@@ -87,17 +87,23 @@ export class AnalyticsRepository {
     return row?.day;
   }
 
-  async pruneEventMarkers(storeId: string, before: string) {
+  async pruneExpiredRows(
+    storeId: string,
+    { eventBefore, storeDay }: { eventBefore: string; storeDay: string },
+  ) {
     const limit = 5000;
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ count: number }>(sql`
         with removed as (
           delete from store_daily_metrics
-          where store_id = ${storeId} and metric = 'order_event'
-            and (day, dimension) in (
-              select day, dimension from store_daily_metrics
-              where store_id = ${storeId} and metric = 'order_event' and day < ${before}::date
-              order by day, dimension limit ${limit}
+          where store_id = ${storeId} and (day, metric, dimension) in (
+              select day, metric, dimension from store_daily_metrics
+              where store_id = ${storeId} and (
+                (metric = 'order_event' and day < ${eventBefore}::date)
+                or (metric in ('orders', 'buyer_activity', 'lifecycle')
+                  and day < (${storeDay}::date - interval '24 months')::date)
+              )
+              order by day, metric, dimension limit ${limit}
             )
           returning 1
         )
