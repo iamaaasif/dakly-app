@@ -16,11 +16,7 @@ import { AutomationEntryRepository } from './automation-entry.repository';
 
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
-export const automationTriggerEvent = z.discriminatedUnion('type', [
-  automationConsentEvent,
-  automationTagEvent,
-]);
-export type TriggerEvent =
+type TriggerEvent =
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
   | Omit<z.infer<typeof automationTagEvent>, 'storeId'>;
 
@@ -74,7 +70,7 @@ export class AutomationEntryService {
   }
 }
 
-export function triggerFor(event: TriggerEvent) {
+function triggerFor(event: TriggerEvent) {
   if (event.type === 'contact.tag_added') return 'tag_added';
   if (event.payload.status === 'granted' && event.payload.source !== 'import')
     return 'consent_given';
