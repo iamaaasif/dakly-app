@@ -26,7 +26,8 @@ export const automationTriggerEvent = z.discriminatedUnion('type', [
 ]);
 export type TriggerEvent =
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
-  | Omit<z.infer<typeof automationTagEvent>, 'storeId'>;
+  | Omit<z.infer<typeof automationTagEvent>, 'storeId'>
+  | Omit<z.infer<typeof automationBirthdayEvent>, 'storeId'>;
 
 @Injectable()
 export class AutomationEntryService {

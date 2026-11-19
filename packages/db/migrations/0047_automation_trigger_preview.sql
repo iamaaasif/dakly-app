@@ -1,6 +1,7 @@
 CREATE INDEX "contacts_birthday_idx" ON "contacts" USING btree ("store_id","birthday_month","birthday_day","id") WHERE "contacts"."deleted_at" is null and "contacts"."birthday_month" is not null;--> statement-breakpoint
 CREATE INDEX "outbox_events_automation_preview_idx" ON "outbox_events" USING btree ("store_id","type","occurred_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE type in ('consent.changed', 'contact.tag_added', 'contact.birthday');--> statement-breakpoint
-CREATE UNIQUE INDEX "outbox_events_birthday_contact_day_key" ON "outbox_events" USING btree ("store_id",(payload->>'contactId'),(payload->>'day')) WHERE type = 'contact.birthday';--> statement-breakpoint
+CREATE UNIQUE INDEX "outbox_events_birthday_contact_day_key" ON "outbox_events" USING btree ("store_id",(payload->>'contactId'),(payload->>'day')) WHERE type = 'contact.birthday';
+--> statement-breakpoint
 -- The app role can only insert into the outbox. Give it just the preview fields
 -- for the store set by TenantDatabase and the three workflow event types.
 CREATE FUNCTION public.automation_trigger_preview(

@@ -11,6 +11,7 @@ export class StartAutomationOnBirthday implements JobHandler {
   constructor(@Inject(AutomationTriggerQueue) private readonly triggers: AutomationTriggerQueue) {}
 
   async handle(data: unknown) {
-    await this.triggers.enqueue(automationBirthdayEvent.parse(data));
+    const { storeId, ...event } = automationBirthdayEvent.parse(data);
+    await this.triggers.enqueue(storeId, event);
   }
 }
