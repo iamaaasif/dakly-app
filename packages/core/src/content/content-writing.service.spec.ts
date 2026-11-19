@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrandProfile } from '@dakly/contracts/content';
 import type { ContentWriteInput } from '@dakly/contracts/content-writing';
 import type { ProductResponse } from '@dakly/contracts/products';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import type { AiRequest, AiService } from '../ai/ai.service';
 import type { AuditService } from '../audit/audit.service';
@@ -10,6 +11,7 @@ import { Clock } from '../platform/clock';
 import { resetEnvForTests } from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { ProductsService } from '../products/products.service';
+import type { TeamService } from '../team/team.service';
 import type { UsageService } from '../usage/usage.service';
 import type { ContentRepository } from './content.repository';
 import { ContentService } from './content.service';
@@ -33,9 +35,17 @@ const profile: BrandProfile = {
   callToActionEn: 'Send a message',
 };
 
+const access: StoreAccess = {
+  role: 'custom',
+  areas: { products: 'edit', social: 'edit' },
+  seeFullPhone: false,
+  exportLists: false,
+  refund: false,
+};
+
 type Output = { options: string[] };
 
-function writing(run: (request: AiRequest<Output>) => Promise<unknown>) {
+function writing(run: (request: AiRequest<Output>) => Promise<unknown>, prices = [31337]) {
   return new ContentService(
     { findBrandProfile: async () => profile } as unknown as ContentRepository,
     new Clock(),
@@ -50,11 +60,20 @@ function writing(run: (request: AiRequest<Output>) => Promise<unknown>) {
           category: 'Accessories',
           description: 'Cotton with stitched edges',
           pricePoisha: 31337,
-          variants: [{ optionValues: { Color: 'Green' }, sku: 'private-sku', available: 765 }],
+          variants: prices.map((pricePoisha) => ({
+            optionValues: { Color: 'Green' },
+            sku: 'private-sku',
+            available: 765,
+            pricePoisha,
+          })),
         } as ProductResponse;
       },
     } as unknown as ProductsService,
     { remaining: async () => 10 } as unknown as UsageService,
+    {
+      canAccess: (access: StoreAccess, area: 'products' | 'social') =>
+        ['view', 'edit'].includes(access.areas[area] ?? ''),
+    } as unknown as TeamService,
   );
 }
 
@@ -82,13 +101,15 @@ describe('ContentService writing', () => {
     const service = writing((request) =>
       modelResponse(request, [`${avoided} scarves`, 'New scarves', 'Pick a scarf']),
     );
-    await expect(service.write(storeId, topic)).rejects.toMatchObject({ code: 'CONTENT_INVALID' });
+    await expect(service.write(storeId, access, topic)).rejects.toMatchObject({
+      code: 'CONTENT_INVALID',
+    });
   });
 
   it('returns one option for an edit', async () => {
     const service = writing((request) => modelResponse(request, ['New scarves']));
     await expect(
-      service.write(storeId, {
+      service.write(storeId, access, {
         operation: 'shorten',
         body: 'Our new scarves are here today',
         kind: 'facebook_post',
@@ -115,7 +136,7 @@ describe('ContentService writing', () => {
       ]);
     });
     await expect(
-      service.write(storeId, {
+      service.write(storeId, access, {
         operation: 'generate',
         kind: 'product_description',
         productId,
@@ -134,7 +155,7 @@ describe('ContentService writing', () => {
         modelResponse(request, [claim, 'Cotton scarf', 'Green scarf']),
       );
       await expect(
-        service.write(storeId, {
+        service.write(storeId, access, {
           operation: 'generate',
           kind: 'product_description',
           productId,
@@ -144,6 +165,43 @@ describe('ContentService writing', () => {
       ).rejects.toMatchObject({ code: 'CONTENT_INVALID' });
     },
   );
+
+  it('keeps a saved profile out of model input for a product editor without social access', async () => {
+    const service = writing((request) => {
+      expect(JSON.parse(request.input).brand).toBeUndefined();
+      return modelResponse(request, ['Cheap scarves', 'Cotton scarf', 'A green scarf']);
+    });
+    const input: ContentWriteInput = {
+      operation: 'generate',
+      kind: 'product_description',
+      productId,
+      language: 'en',
+      tone: 'friendly',
+    };
+    await expect(
+      service.write(storeId, { ...access, areas: { products: 'edit' } }, input),
+    ).rejects.toMatchObject({ code: 'CONTENT_INVALID' });
+  });
+
+  it('rejects a general price when variants sell at different prices', async () => {
+    const service = writing(
+      (request) => {
+        expect(JSON.parse(request.input).product.pricePoisha).toBeUndefined();
+        return modelResponse(request, ['Cotton scarf for ৳313.37', 'Cotton scarf', 'Green scarf']);
+      },
+      [31337, 35000],
+    );
+    const input: ContentWriteInput = {
+      operation: 'generate',
+      kind: 'product_description',
+      productId,
+      language: 'en',
+      tone: 'friendly',
+    };
+    await expect(service.write(storeId, access, input)).rejects.toMatchObject({
+      code: 'CONTENT_INVALID',
+    });
+  });
 
   it('returns a valid draft when its charge finishes after the writing deadline', async () => {
     vi.useFakeTimers();
@@ -158,7 +216,7 @@ describe('ContentService writing', () => {
         await debit;
         return response;
       });
-      const outcome = service.write(storeId, topic).catch((error: unknown) => error);
+      const outcome = service.write(storeId, access, topic).catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(20_000);
       charged();
       await expect(outcome).resolves.toMatchObject({ options });
@@ -171,7 +229,7 @@ describe('ContentService writing', () => {
     vi.useFakeTimers();
     try {
       const service = writing(() => new Promise(() => undefined));
-      const outcome = expect(service.write(storeId, topic)).rejects.toMatchObject({
+      const outcome = expect(service.write(storeId, access, topic)).rejects.toMatchObject({
         code: 'CONTENT_TIMEOUT',
       });
       await vi.advanceTimersByTimeAsync(20_000);

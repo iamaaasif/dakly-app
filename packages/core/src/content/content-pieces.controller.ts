@@ -29,21 +29,16 @@ import {
 } from '@dakly/contracts/content-writing';
 import type { StoreAccess } from '@dakly/contracts/team';
 
-import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { TeamService } from '../team/team.service';
 import { ContentService } from './content.service';
 
 @Controller('content-pieces')
 export class ContentPiecesController {
-  constructor(
-    @Inject(ContentService) private readonly content: ContentService,
-    @Inject(TeamService) private readonly team: TeamService,
-  ) {}
+  constructor(@Inject(ContentService) private readonly content: ContentService) {}
 
   @Get()
   @RequirePermission('social.view')
@@ -81,9 +76,7 @@ export class ContentPiecesController {
     @CurrentAccess() access: StoreAccess,
     @Body(new ZodValidationPipe(contentWriteRequestSchema)) input: ContentWriteInput,
   ): Promise<ContentWriteResult> {
-    if (input.productId && !this.team.canAccess(access, 'products', 'view'))
-      throw new AppError('PERMISSION_DENIED', PLATFORM_ERRORS.PERMISSION_DENIED);
-    return this.content.write(storeId, input);
+    return this.content.write(storeId, access, input);
   }
 
   @Patch(':contentPieceId')
