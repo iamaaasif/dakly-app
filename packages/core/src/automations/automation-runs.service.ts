@@ -53,6 +53,7 @@ const CLAIMS_PER_STORE = 100;
 const system = { kind: 'system' } as const;
 
 type Condition = AutomationGraph['workflowFilters'][number];
+type PathChoice = { outcome: string; next: string };
 const NO_ANSWER = 'The SMS provider did not answer';
 
 @Injectable()
@@ -206,7 +207,7 @@ export class AutomationRunsService {
     paths: { condition: Condition; next: string }[],
     facts: RunFacts,
     at: Date,
-  ): Promise<{ outcome: string; next: string } | undefined> {
+  ): Promise<PathChoice | undefined> {
     for (const [index, path] of paths.entries())
       if (await this.holds(path.condition, facts, at))
         return { outcome: `path_${index + 1}`, next: path.next };
@@ -278,7 +279,6 @@ export class AutomationRunsService {
     if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
     if ('outcome' in started)
       return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
-    const { decision } = started;
     if ('body' in started)
       return this.deliver(
         {
@@ -292,15 +292,14 @@ export class AutomationRunsService {
         },
         started.at,
       );
+    const { decision } = started;
     if (decision.action === 'defer')
       return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
-    if (decision.action === 'skip')
-      return {
-        ...ifNotReachable(step, gatedAt),
-        claim: renewed,
-        step: { ...row, outcome: 'skipped', skipReason: decision.reason },
-      };
-    return undefined;
+    return {
+      ...ifNotReachable(step, gatedAt),
+      claim: renewed,
+      step: { ...row, outcome: 'skipped', skipReason: decision.reason },
+    };
   }
 
   private async gateSend(claim: RunClaim, step: SendStep, facts: RunFacts): Promise<GateResult> {
