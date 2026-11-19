@@ -12,7 +12,7 @@ import { ErrorReporter } from '../platform/logging/error-reporter';
 import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
-import { SendPolicyService, type SendDecision } from '../sending/send-policy.service';
+import { SendPolicyService, type SkipReason } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
@@ -159,23 +159,14 @@ export class CampaignSenderService {
   private async skipSubmission(
     storeId: string,
     campaign: LockedCampaign,
-    {
-      recipient,
-      reason,
-    }: {
-      recipient: ClaimableRecipient;
-      reason: Extract<SendDecision, { action: 'skip' }>['reason'];
-    },
+    { recipient, reason }: { recipient: ClaimableRecipient; reason: SkipReason },
   ): Promise<Claim> {
     if (recipient.status === 'sending') return this.expireClaim(storeId, campaign, recipient);
     await this.repository.changeRecipient(
       storeId,
       recipient.id,
       { status: 'queued' },
-      {
-        status: 'skipped',
-        skipReason: reason,
-      },
+      { status: 'skipped', skipReason: reason },
     );
     return { kind: 'next' };
   }
@@ -202,34 +193,27 @@ export class CampaignSenderService {
       recipient.id,
     );
     const { decision, at } = decide();
-    if (decision.action === 'defer') {
-      if (!recipient.optOutLinkCode)
-        await this.repository.changeRecipient(
-          storeId,
-          recipient.id,
-          { status: recipient.status },
-          { status: recipient.status, optOutLinkCode: code },
-        );
-      return { kind: 'defer', until: decision.until };
-    }
     if (decision.action === 'skip')
       return this.skipSubmission(storeId, campaign, { recipient, reason: decision.reason });
-    const change = {
-      status: 'sending',
-      claimedAt: at,
-      dispatchStartedAt: at,
-      sendAttempts: recipient.sendAttempts + 1,
-      optOutLinkCode: code,
-    } as const;
-    if (
-      !(await this.repository.changeRecipient(
-        storeId,
-        recipient.id,
-        { status: recipient.status },
-        change,
-      ))
-    )
-      return { kind: 'next' };
+    if (decision.action === 'defer' && recipient.optOutLinkCode)
+      return { kind: 'defer', until: decision.until };
+    const change =
+      decision.action === 'send'
+        ? {
+            status: 'sending' as const,
+            claimedAt: at,
+            dispatchStartedAt: at,
+            sendAttempts: recipient.sendAttempts + 1,
+          }
+        : { status: recipient.status };
+    const saved = await this.repository.changeRecipient(
+      storeId,
+      recipient.id,
+      { status: recipient.status },
+      { ...change, optOutLinkCode: code },
+    );
+    if (decision.action === 'defer') return { kind: 'defer', until: decision.until };
+    if (!saved) return { kind: 'next' };
     const url = this.links.optOutUrl(code, campaign.shortLinkBase ?? undefined);
     const body = marketingSmsText(campaign.content.text, url);
     return {
