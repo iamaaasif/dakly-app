@@ -19,6 +19,17 @@ describe('content writing request', () => {
     expect(contentWriteRequestSchema.parse(request)).toEqual(request);
   });
 
+  it('uses a topic with a saved product for a Facebook post', () => {
+    const request = {
+      ...preferences,
+      operation: 'generate',
+      kind: 'facebook_post',
+      topic: 'Eid',
+      productId,
+    };
+    expect(contentWriteRequestSchema.parse(request)).toEqual(request);
+  });
+
   it('requires text for an edit', () => {
     const request = { ...preferences, operation: 'translate', kind: 'sms' };
     expect(contentWriteRequestSchema.safeParse(request).success).toBe(false);

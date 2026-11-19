@@ -16,6 +16,8 @@ import {
   type ContentWriteInput,
   type ContentWriteResult,
 } from '@dakly/contracts/content-writing';
+import type { ProductResponse } from '@dakly/contracts/products';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AiService } from '../ai/ai.service';
 import { AuditService } from '../audit/audit.service';
@@ -23,7 +25,9 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { hashCode } from '../platform/crypto/code-hash';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { ProductsService } from '../products/products.service';
+import { TeamService } from '../team/team.service';
 import { UsageService } from '../usage/usage.service';
 import { contentPieceNotFound, contentWriteError } from './content.errors';
 import { ContentRepository } from './content.repository';
@@ -41,6 +45,7 @@ export class ContentService {
     @Inject(AiService) private readonly ai: AiService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(TeamService) private readonly team: TeamService,
   ) {}
 
   async brandProfile(storeId: string): Promise<BrandProfile> {
@@ -134,7 +139,13 @@ export class ContentService {
     });
   }
 
-  async write(storeId: string, input: ContentWriteInput): Promise<ContentWriteResult> {
+  async write(
+    storeId: string,
+    access: StoreAccess,
+    input: ContentWriteInput,
+  ): Promise<ContentWriteResult> {
+    if (input.productId && !this.team.canAccess(access, 'products', 'view'))
+      throw new AppError('PERMISSION_DENIED', PLATFORM_ERRORS.PERMISSION_DENIED);
     if (!loadEnv().CODE_HASH_KEY) throw contentWriteError('CONTENT_UNAVAILABLE');
     const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -146,7 +157,11 @@ export class ContentService {
     });
     try {
       return await Promise.race([
-        this.writeOptions(storeId, input, abort.signal, () => clearTimeout(timer)),
+        this.writeOptions(storeId, input, {
+          access,
+          signal: abort.signal,
+          acceptOutput: () => clearTimeout(timer),
+        }),
         deadline,
       ]);
     } finally {
@@ -157,34 +172,36 @@ export class ContentService {
   private async writeOptions(
     storeId: string,
     input: ContentWriteInput,
-    signal: AbortSignal,
-    acceptOutput: () => void,
+    {
+      access,
+      signal,
+      acceptOutput,
+    }: {
+      access: StoreAccess;
+      signal: AbortSignal;
+      acceptOutput: () => void;
+    },
   ) {
     const { productId, ...request } = input;
     const [brand, savedProduct] = await Promise.all([
       this.brandProfile(storeId),
       productId ? this.products.getById(storeId, productId) : undefined,
     ]);
-    const productFacts = savedProduct && {
-      name: savedProduct.name,
-      category: savedProduct.category,
-      description: savedProduct.description,
-      variants: savedProduct.variants.map((variant) => variant.optionValues),
-    };
-    const pricePoisha = savedProduct?.pricePoisha;
-    const product = productFacts && { ...productFacts, pricePoisha };
+    const { facts: product, numbers: supportedNumbers } = savedProduct
+      ? productWritingDetails(savedProduct)
+      : {};
+    const visibleBrand = this.team.canAccess(access, 'social', 'view') ? brand : undefined;
     const quantity = input.operation === 'generate' ? 3 : 1;
     if ((await this.usage.remaining(storeId, 'ai_content')) < quantity)
       throw contentWriteError('CONTENT_CREDITS_UNAVAILABLE');
     const avoided = brand.wordsToAvoid.map(normalize).filter(Boolean);
-    const supportedNumbers = productFacts && numbersIn(JSON.stringify(productFacts));
     const limit = formatLimits[input.kind];
     const output = contentWriteOutputSchema.refine(({ options }) => {
       const valid = validOptions(options, {
         quantity,
         avoided,
         supportedNumbers,
-        pricePoisha,
+        pricePoisha: product?.pricePoisha,
         limit,
       });
       // A valid draft can now be charged. Wait for that charge so the caller gets the draft.
@@ -197,7 +214,7 @@ export class ContentService {
       usageQuantity: quantity,
       tier: 'writer',
       prompt: contentWritingV1,
-      input: JSON.stringify({ request, brand, product, characterLimit: limit }),
+      input: JSON.stringify({ request, brand: visibleBrand, product, characterLimit: limit }),
       output,
       signal,
     });
@@ -227,6 +244,21 @@ type PieceRow = Awaited<ReturnType<ContentRepository['createPiece']>>;
 
 function toPiece({ createdAt, updatedAt, ...piece }: PieceRow): ContentPiece {
   return { ...piece, createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString() };
+}
+
+function productWritingDetails(product: ProductResponse) {
+  const facts = {
+    name: product.name,
+    category: product.category,
+    description: product.description,
+    variants: product.variants.map((variant) => variant.optionValues),
+  };
+  const firstPrice = product.variants[0]?.pricePoisha;
+  const pricePoisha =
+    firstPrice && product.variants.every((variant) => variant.pricePoisha === firstPrice)
+      ? firstPrice
+      : undefined;
+  return { facts: { ...facts, pricePoisha }, numbers: numbersIn(JSON.stringify(facts)) };
 }
 
 const formatLimits: Record<ContentWriteInput['kind'], number> = {

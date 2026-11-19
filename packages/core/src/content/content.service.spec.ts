@@ -5,6 +5,7 @@ import type { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { ProductsService } from '../products/products.service';
+import type { TeamService } from '../team/team.service';
 import type { UsageService } from '../usage/usage.service';
 import type { ContentRepository } from './content.repository';
 import { ContentService } from './content.service';
@@ -23,6 +24,7 @@ function serviceWith(repository: Partial<ContentRepository>) {
     {} as AiService,
     {} as ProductsService,
     {} as UsageService,
+    {} as TeamService,
   );
 }
 
