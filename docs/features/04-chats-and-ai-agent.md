@@ -174,7 +174,7 @@ From the help centres of AiPraktor, Nabik, Intercom Fin, Gorgias, respond.io and
 #### Replying
 
 - **Wait before answering.** Customers split one question into several messages. AiPraktor waits 0–15 seconds per channel (default about 15 s on Messenger) before replying. **Dakly:** wait 8 seconds by default on Messenger, Instagram and WhatsApp (editable 0–20 s), resetting on each new customer message, so one reply answers the whole thought.
-- **Saved replies that answer automatically, free of AI cost.** AiPraktor matches customer phrasings and keyword pairs ("delivery + charge"), ignores punctuation, emojis and greetings ("bhai", "apu"), fills placeholders from records, and won't fire when several replies match, the message has several questions, or a person holds the chat. **Dakly:** same, and it suggests phrasings from the last 14 days of chats. Saved-reply answers don't count as AI conversations.
+- **Saved replies that answer automatically, free of AI cost.** AiPraktor matches customer phrasings and keyword pairs ("delivery + charge"), ignores punctuation, emojis and greetings ("bhai", "apu"), fills placeholders from records, and won't fire when several replies match, the message has several questions, or a person holds the chat. **Dakly:** staff choose saved replies by hand in release 1. The AI agent handles automatic answers (D43).
 - **Comments.** Reply publicly using the customer's name, never with phone, address or price details; send the details by private reply. Meta allows one private reply per comment, within 7 days of the comment. Delete clear spam or abuse automatically; hide uncertain ones for the team.
 - **Follow-ups and Messenger broadcasts inside the window.** AiPraktor sends one follow-up per hot or warm lead within 24 hours of the last message, and broadcasts only to people who messaged in the last 23 hours, skipping anyone broadcast to in the last 24 hours. **Dakly:** same limits for Messenger and Instagram; anything outside the window uses approved templates only.
 
@@ -296,9 +296,11 @@ Inbound
 2. Voice notes are transcribed and images described; both are saved on the message so staff and the AI read the same text.
 3. The AI listener schedules an `ai-reply` job keyed by conversation id with the store's debounce (default 8 s). Each new message resets it, so one reply answers a burst.
 
+Inbound messages keep the exact sender identity in the same store. A reply can address the account that sent the message even when one contact has several identities.
+
 AI reply pipeline (`AiAgentService.reply`)
 
-1. Gates, no model call: AI switched on, contact is not Not a customer, responder is `ai`, window open, allowance left, no saved reply matches (a match is sent free).
+1. Gates, no model call: AI switched on, contact is not Not a customer, responder is `ai`, window open, allowance left.
 2. Classify with the fast tier: intent, language, sentiment, asks for a person, hand-over category.
 3. Hand-over rules in code on that output plus keyword lists (refund, damaged, fake, ফেরত). A match sends the holding reply and stops. Hand-over always wins.
 4. Build context: platform rules, store settings, delivery zones (stable, first, so the prompt cache hits), then the customer card, the customer memory (CHAT-R11), a summary plus the last 20 messages, and product candidates.
@@ -353,6 +355,8 @@ one unit after a schema-valid result, and the same reference makes a retry
 free. Chats checks its allowance before any model work and consumes the
 conversation unit when it saves the outgoing AI reply, using the contact and
 window as the reference.
+
+The allowance check reads the current plan period and leaves the balance available until an AI reply is saved. AI-5 adds consumption and the rolling contact window.
 
 Valkey allows up to three calls at a time per store. Three provider errors
 within one minute pause new calls for two minutes across stores. Customer
