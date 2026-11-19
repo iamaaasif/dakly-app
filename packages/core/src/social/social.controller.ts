@@ -18,11 +18,13 @@ import {
   editPostSchema,
   postIdempotencyKeySchema,
   postListQuerySchema,
+  schedulePostSchema,
   type CreatePostInput,
   type EditPostInput,
   type PostListQuery,
   type PostListResponse,
   type PostResponse,
+  type SchedulePostInput,
 } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -84,6 +86,34 @@ export class SocialController {
     @Body(new ZodValidationPipe(editPostSchema)) input: EditPostInput,
   ): Promise<PostResponse> {
     return this.social.editDraft(storeId, postId, input, { kind: 'user', userId });
+  }
+
+  @Post(':postId/approve')
+  @RequirePermission('social.edit')
+  @HttpCode(200)
+  approveDraft(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('postId', ParseUUIDPipe) postId: string,
+  ): Promise<PostResponse> {
+    return this.social.approveDraft(storeId, postId, { actor: { kind: 'user', userId }, access });
+  }
+
+  @Post(':postId/schedule')
+  @RequirePermission('social.edit')
+  @HttpCode(200)
+  schedulePost(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Body(new ZodValidationPipe(schedulePostSchema)) input: SchedulePostInput,
+  ): Promise<PostResponse> {
+    return this.social.schedulePost(storeId, postId, input, {
+      actor: { kind: 'user', userId },
+      access,
+    });
   }
 
   @Delete(':postId')
