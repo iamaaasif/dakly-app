@@ -9,11 +9,14 @@ import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-mai
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
+import { AnalyticsModule } from '@dakly/core/analytics/analytics.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
+import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
@@ -69,6 +72,8 @@ import { JobSchedulers } from './job-schedulers';
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
+    StartAutomationOnConsent,
+    StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
     JobSchedulers,
@@ -97,6 +102,7 @@ import { JobSchedulers } from './job-schedulers';
     ClockModule,
     ImportsModule,
     ContactStatsRepairModule,
+    AnalyticsModule,
     KnowledgeIndexModule,
     BullModule.forRootAsync({
       useFactory: () => {
