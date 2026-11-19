@@ -127,7 +127,7 @@ describe('SocialPublishingService', () => {
     return { postTargetId: target, scheduledFor: deadline.toISOString() };
   }
 
-  async function post() {
+  async function post(firstComment: string | null = null) {
     const postId = randomUUID();
     const fileId = randomUUID();
     await fixture.connection.pool.query(
@@ -135,8 +135,8 @@ describe('SocialPublishingService', () => {
       [fileId, fixture.a],
     );
     await fixture.connection.pool.query(
-      "insert into posts(id,store_id,caption,media_file_ids,created_by_user_id) values($1,$2,'Common caption',$3,$4)",
-      [postId, fixture.a, [fileId], fixture.userA],
+      "insert into posts(id,store_id,caption,media_file_ids,created_by_user_id,first_comment) values($1,$2,'Common caption',$3,$4,$5)",
+      [postId, fixture.a, [fileId], fixture.userA, firstComment],
     );
     return postId;
   }
@@ -264,11 +264,7 @@ describe('SocialPublishingService', () => {
     const driver = new FakeMetaPublishingDriver();
     const comment = vi.spyOn(driver, 'comment');
     const { service, accounts } = publishing(driver);
-    const postId = await post();
-    await fixture.connection.pool.query(
-      'update posts set first_comment=$1 where store_id=$2 and id=$3',
-      ['ইনস্টাগ্রাম', fixture.a, postId],
-    );
+    const postId = await post('ইনস্টাগ্রাম');
     const page = await setupTarget(accounts, 'facebook_page', postId);
     const instagram = await setupTarget(accounts, 'instagram', postId);
     await service.publishTarget(fixture.a, page, true);
@@ -301,11 +297,7 @@ describe('SocialPublishingService', () => {
     const driver = new FakeMetaPublishingDriver();
     const comment = vi.spyOn(driver, 'comment');
     const { service, accounts } = publishing(driver);
-    const postId = await post();
-    await fixture.connection.pool.query(
-      'update posts set first_comment=$1 where store_id=$2 and id=$3',
-      ['ইনস্টাগ্রাম', fixture.a, postId],
-    );
+    const postId = await post('ইনস্টাগ্রাম');
     const target = await setupTarget(accounts, 'instagram', postId);
     vi.spyOn(driver, 'publishInstagram').mockImplementationOnce(async () => {
       accounts.clear();
@@ -323,11 +315,7 @@ describe('SocialPublishingService', () => {
     const driver = new FakeMetaPublishingDriver();
     const comment = vi.spyOn(driver, 'comment');
     const { service, accounts, publish } = publishing(driver);
-    const postId = await post();
-    await fixture.connection.pool.query(
-      'update posts set first_comment=$1 where store_id=$2 and id=$3',
-      ['ইনস্টাগ্রাম', fixture.a, postId],
-    );
+    const postId = await post('ইনস্টাগ্রাম');
     const target = await setupTarget(accounts, 'instagram', postId);
     publish.mockRejectedValueOnce(new Error('Cannot write event'));
     await expect(service.publishTarget(fixture.a, target, true)).rejects.toThrow(
@@ -471,6 +459,39 @@ describe('SocialPublishingService', () => {
       fixture.a,
       expect.objectContaining({ category: 'fix_now' }),
     );
+  });
+
+  it('preserves the token rejection if recording the reconnect fails', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    vi.spyOn(driver, 'publishFacebook').mockRejectedValueOnce(
+      new MetaPublishingError('auth_error'),
+    );
+    const { service, accounts, recordRejectedToken } = publishing(driver);
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    recordRejectedToken.mockRejectedValueOnce(new Error('Reconnect write unavailable'));
+    await service.publishTarget(fixture.a, target, true);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_TOKEN_EXPIRED',
+    });
+  });
+
+  it('marks the Instagram account for reconnect when its first comment rejects the token', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    vi.spyOn(driver, 'comment').mockRejectedValueOnce(new MetaPublishingError('auth_error'));
+    const { service, accounts, recordRejectedToken } = publishing(driver);
+    const target = await setupTarget(accounts, 'instagram', await post('ইনস্টাগ্রাম'));
+    const [channelConnectionId] = [...accounts.keys()];
+    await service.publishTarget(fixture.a, target, true);
+    expect(recordRejectedToken).toHaveBeenCalledExactlyOnceWith(
+      fixture.a,
+      channelConnectionId,
+      expect.any(Buffer),
+    );
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      error_code: 'POST_COMMENT_UNCONFIRMED',
+    });
   });
 
   it('flags an expired Page token for its store without calling Meta', async () => {

@@ -34,7 +34,7 @@ type Changes = Parameters<SocialRepository['updatePublishTarget']>[2];
 type AccountKind = 'facebook_page' | 'instagram';
 type PublishReceipt = {
   externalId: string | null;
-  firstComment?: { account: MetaPostingAccount; text: string; verifyToken: () => Promise<void> };
+  firstComment?: { verifyToken: () => Promise<void>; send: (postId: string) => Promise<void> };
 };
 type MetaDelivery = PublishContext & { post: PendingPost['post']; kind: AccountKind };
 type PublishContext = {
@@ -109,15 +109,10 @@ export class SocialPublishingService {
       await this.finish(storeId, target, publishError(failure, target.status));
       return;
     }
-    if (receipt) await this.completeTarget(storeId, target, driver, receipt);
+    if (receipt) await this.completeTarget(storeId, target, receipt);
   }
 
-  private async completeTarget(
-    storeId: string,
-    target: PublishingTarget,
-    driver: MetaPublishingDriver,
-    receipt: PublishReceipt,
-  ) {
+  private async completeTarget(storeId: string, target: PublishingTarget, receipt: PublishReceipt) {
     const { externalId, firstComment } = receipt;
     // Record Meta's receipt before notifying consumers so a rolled-back event can be retried.
     const errorCode = firstComment ? 'POST_COMMENT_UNCONFIRMED' : null;
@@ -131,9 +126,7 @@ export class SocialPublishingService {
     if (!confirmed || !(await this.finish(storeId, target))) return;
     if (firstComment && externalId)
       await this.comment(storeId, target, firstComment.verifyToken, () =>
-        this.meta('post_first_comment', () =>
-          driver.comment(firstComment.account, externalId, firstComment.text),
-        ),
+        firstComment.send(externalId),
       );
   }
 
@@ -171,22 +164,31 @@ export class SocialPublishingService {
         )
           throw socialError('POST_TOKEN_EXPIRED');
       };
+      const request = <Result>(send: () => Promise<Result>) =>
+        send().catch(async (failure: unknown) => {
+          if (failure instanceof MetaPublishingError && failure.code === 'auth_error')
+            await this.channels
+              .recordRejectedToken(storeId, channelConnectionId, credential.ciphertext)
+              .catch(() => this.logger.error('Could not record the rejected Meta credential'));
+          throw failure;
+        });
       const context = { storeId, target, driver, account, verifyToken };
-      const externalId = await this.sendPost({ ...context, post, kind: credential.kind });
+      const externalId = await request(() =>
+        this.sendPost({ ...context, post, kind: credential.kind }),
+      );
       if (externalId === undefined) return;
+      const text = post.firstComment;
       const firstComment =
-        credential.kind === 'instagram' && post.kind === 'post' && post.firstComment
-          ? { account, text: post.firstComment, verifyToken }
+        credential.kind === 'instagram' && post.kind === 'post' && text
+          ? {
+              verifyToken,
+              send: (id: string) =>
+                request(() =>
+                  this.meta('post_first_comment', () => driver.comment(account, id, text)),
+                ),
+            }
           : undefined;
       return { externalId, firstComment };
-    } catch (failure) {
-      if (failure instanceof MetaPublishingError && failure.code === 'auth_error')
-        await this.channels.recordRejectedToken(
-          storeId,
-          channelConnectionId,
-          credential.ciphertext,
-        );
-      throw failure;
     } finally {
       token.fill(0);
     }
@@ -272,10 +274,8 @@ export class SocialPublishingService {
       containerId = await this.meta('instagram_create_container', () =>
         driver.createInstagramContainer(account, content),
       );
-      if (
-        !(await this.recordTarget(storeId, target, { action: 'post.container_saved', containerId }))
-      )
-        return;
+      const change = { action: 'post.container_saved', containerId };
+      if (!(await this.recordTarget(storeId, target, change))) return;
     }
     const state = await this.meta('instagram_container_status', () =>
       driver.instagramContainerState(account, containerId),
@@ -320,15 +320,8 @@ export class SocialPublishingService {
     send: () => Promise<void>,
   ) {
     try {
-      if (
-        !(await this.recordTarget(
-          storeId,
-          target,
-          { action: 'post.comment_attempted' },
-          verifyToken,
-        ))
-      )
-        return;
+      const change = { action: 'post.comment_attempted' };
+      if (!(await this.recordTarget(storeId, target, change, verifyToken))) return;
       await send();
     } catch {
       return;
