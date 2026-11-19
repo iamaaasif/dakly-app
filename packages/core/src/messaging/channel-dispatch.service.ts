@@ -26,12 +26,15 @@ type DispatchRow = Awaited<ReturnType<OutboundMessagingRepository['findForDispat
 type DispatchIntent = DispatchRow &
   Pick<OutgoingChannelMessage, 'identityId' | 'category'> & { body: string };
 
+// Meta's Human Agent tag gives staff seven days to reply.
+const HUMAN_AGENT_WINDOW_MS = 7 * DAY_MS;
+
 function humanAgentDeadline(
   message: Pick<DispatchRow, 'authorType' | 'category' | 'lastInboundAt'>,
 ) {
   const { authorType, category, lastInboundAt } = message;
   return authorType === 'user' && category === 'staff_reply' && lastInboundAt
-    ? new Date(lastInboundAt.getTime() + 7 * DAY_MS)
+    ? new Date(lastInboundAt.getTime() + HUMAN_AGENT_WINDOW_MS)
     : null;
 }
 
@@ -54,18 +57,12 @@ export class ChannelDispatchService {
     if (!pending) return;
     let sent;
     try {
-      sent = await this.connections.sendMetaMessage(
-        storeId,
-        pending.connectionId,
-        {
-          channel: pending.channel,
-          externalConversationId: pending.externalId,
-          text: pending.body,
-          operationKey: messageId,
-          humanAgent: pending.humanAgent,
-        },
-        pending.credential,
-      );
+      sent = await this.connections.sendMetaMessage(pending.credential, {
+        externalConversationId: pending.externalId,
+        text: pending.body,
+        operationKey: messageId,
+        humanAgent: pending.humanAgent,
+      });
     } catch (error) {
       if (error instanceof AppError && error.code === 'DECRYPTION_FAILED')
         return this.recordChannelOutcome(storeId, pending, 'connection_unavailable', 'attempted');

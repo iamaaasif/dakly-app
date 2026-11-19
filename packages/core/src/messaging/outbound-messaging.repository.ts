@@ -10,6 +10,8 @@ type SendOutcome =
   | { status: 'sent'; externalId: string; sentAt: Date; errorCode: null }
   | { status: 'failed'; errorCode: string };
 
+// The worker claims a queued send with this marker before it calls Meta.
+// A queued row that keeps the marker waits for reconciliation.
 export const SEND_UNCONFIRMED = 'send_unconfirmed';
 
 function queuedMessage(storeId: string, messageId: string) {

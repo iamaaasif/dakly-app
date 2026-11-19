@@ -20,8 +20,6 @@ import { messagingError } from './messaging.errors';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
 import type { OutgoingChannelMessage } from './outgoing-channel-message';
 
-export type { OutgoingChannelMessage } from './outgoing-channel-message';
-
 export type InboundMessageInput = {
   kind: (typeof channelConnectionKinds)[number];
   externalAccountId: string;
@@ -150,18 +148,11 @@ export class MessagingService {
   }
 
   // The caller records status and cost in its own short transaction, before and after this.
-  send(
+  async send(
     storeId: string,
     message: OutgoingMessage,
     prepared?: PreparedSmsSender | PreparedSms,
-  ): Promise<SentMessage>;
-  send(storeId: string, message: OutgoingChannelMessage): Promise<{ messageId: string }>;
-  async send(
-    storeId: string,
-    message: OutgoingMessage | OutgoingChannelMessage,
-    prepared?: PreparedSmsSender | PreparedSms,
-  ): Promise<SentMessage | { messageId: string }> {
-    if (message.channel !== 'sms') return this.queueChannelMessage(storeId, message);
+  ): Promise<SentMessage> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
     const sms =
       prepared && 'contactId' in prepared
@@ -184,7 +175,7 @@ export class MessagingService {
     return { providerMessageId, parts, credits: parts };
   }
 
-  private queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
+  queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
     return this.transaction.run(storeId, async () => {
       const conversation = await this.outbound.findConversation(storeId, input);
       if (!conversation || !(await this.identities.findOutboundIdentity(storeId, input)))

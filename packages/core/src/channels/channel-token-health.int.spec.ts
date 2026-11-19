@@ -329,34 +329,27 @@ it('marks a rejected send credential and tells the owner', async () => {
   const connections = app.get(ChannelConnectionsService);
   const prepared = await connections.prepareMetaSend(storeId, connectionId, 'messenger');
   const message = {
-    channel: 'messenger',
     externalConversationId: 'recipient-test',
     text: 'Fixture reply',
     operationKey: randomUUID(),
-  } as const;
+  };
   await expect(
-    app
-      .get(StoreTransaction)
-      .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message, prepared)),
+    app.get(StoreTransaction).run(storeId, () => connections.sendMetaMessage(prepared, message)),
   ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
   await expect(
-    app
-      .get(AccountTransaction)
-      .run(userId, () => connections.sendMetaMessage(storeId, connectionId, message, prepared)),
+    app.get(AccountTransaction).run(userId, () => connections.sendMetaMessage(prepared, message)),
   ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
   const failedRecord = vi
     .spyOn(connections, 'recordRejectedToken')
     .mockRejectedValueOnce(new Error('Database connection lost'));
   try {
-    await expect(
-      connections.sendMetaMessage(storeId, connectionId, message, prepared),
-    ).rejects.toMatchObject({
+    await expect(connections.sendMetaMessage(prepared, message)).rejects.toMatchObject({
       code: 'auth_error',
     });
   } finally {
     failedRecord.mockRestore();
   }
-  const rejectedSend = connections.sendMetaMessage(storeId, connectionId, message, prepared);
+  const rejectedSend = connections.sendMetaMessage(prepared, message);
   await expect(rejectedSend).rejects.toMatchObject({ code: 'auth_error' });
   await expect(rejectedSend).rejects.toBeInstanceOf(MetaRequestError);
   const status = await admin.pool.query('select status from channel_connections where id = $1', [

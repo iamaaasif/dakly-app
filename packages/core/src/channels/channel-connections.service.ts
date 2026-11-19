@@ -90,21 +90,10 @@ export class ChannelConnectionsService {
     return { storeId, connectionId, channel, ciphertext, externalAccountId, keyVersion };
   }
 
-  async sendMetaMessage(
-    storeId: string,
-    connectionId: string,
-    message: OutboundMessage,
-    prepared: PreparedMetaSend,
-  ) {
+  async sendMetaMessage(prepared: PreparedMetaSend, message: Omit<OutboundMessage, 'channel'>) {
     if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
     if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
-    if (
-      prepared.storeId !== storeId ||
-      prepared.connectionId !== connectionId ||
-      prepared.channel !== message.channel
-    )
-      throw connectionError('CHANNEL_NOT_CONNECTED');
-    const { ciphertext, externalAccountId, keyVersion } = prepared;
+    const { storeId, connectionId, channel, ciphertext, externalAccountId, keyVersion } = prepared;
     const token = this.encryption.decrypt(
       { owner: 'store', storeId, purpose: 'channel-access-token' },
       { ciphertext, keyVersion },
@@ -114,7 +103,7 @@ export class ChannelConnectionsService {
       return await measureVendorCall(this.logger, 'meta_send', 'Meta send measured', () =>
         driver.send(
           { accountExternalId: externalAccountId, accessToken: token.toString() },
-          message,
+          { ...message, channel },
         ),
       );
     } catch (error) {

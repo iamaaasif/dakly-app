@@ -146,8 +146,8 @@ it('queues an outbound reply once per store and operation key with Chats off', a
     actor: { kind: 'ai', aiRunId },
   } as const;
   const results = await Promise.all([
-    messaging.send(storeId, input),
-    messaging.send(storeId, input),
+    messaging.queueChannelMessage(storeId, input),
+    messaging.queueChannelMessage(storeId, input),
   ]);
   const { rows } = await admin.pool.query(
     "select id, body, status, ai_run_id from messages where store_id = $1 and direction = 'out'",
@@ -163,10 +163,13 @@ it('queues an outbound reply once per store and operation key with Chats off', a
   );
   expect(events.rows).toEqual([{ payload: { messageId: rows[0]?.id } }]);
   await expect(
-    messaging.send(storeId, { ...input, content: 'A different reply' }),
+    messaging.queueChannelMessage(storeId, { ...input, content: 'A different reply' }),
   ).rejects.toMatchObject({ code: 'MESSAGE_OPERATION_CONFLICT' });
   await expect(
-    messaging.send(storeId, { ...input, actor: { kind: 'ai', aiRunId: randomUUID() } }),
+    messaging.queueChannelMessage(storeId, {
+      ...input,
+      actor: { kind: 'ai', aiRunId: randomUUID() },
+    }),
   ).rejects.toMatchObject({ code: 'MESSAGE_OPERATION_CONFLICT' });
 });
 
