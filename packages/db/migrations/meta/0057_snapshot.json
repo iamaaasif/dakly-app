@@ -1,5 +1,5 @@
 {
-  "id": "c8bec70a-7872-4993-9940-a02c1e87d79a",
+  "id": "029fe3d8-93df-440c-9dc2-98b121ad788f",
   "prevId": "85816cce-4ed9-40fc-82f1-7b30bd77ce57",
   "version": "7",
   "dialect": "postgresql",
@@ -7505,6 +7505,12 @@
         "approved_at": {
           "name": "approved_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "short_link_base": {
+          "name": "short_link_base",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -15190,27 +15196,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "attributed_touch_id": {
-          "name": "attributed_touch_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "attributed_touch_at": {
           "name": "attributed_touch_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_amount_poisha": {
-          "name": "attributed_amount_poisha",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_window_days": {
-          "name": "attributed_window_days",
-          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },

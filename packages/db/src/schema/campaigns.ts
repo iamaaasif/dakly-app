@@ -120,6 +120,7 @@ export const campaigns = pgTable(
     scheduledFor: timestamptz('scheduled_for'),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     approvedAt: timestamptz('approved_at'),
+    shortLinkBase: text('short_link_base'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
     estimatedCostPoisha: poisha('estimated_cost_poisha'),
