@@ -129,13 +129,13 @@ async function settings(page: Page) {
     .getByRole('navigation', { name: 'Settings sections' })
     .getByRole('link', { name: 'Extensions', exact: true })
     .click();
-  await page.getByLabel('Sales', { exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Sales', exact: true }).check();
   await page.getByLabel('Chats', { exact: true }).uncheck();
   await page.getByLabel('Social auto-post', { exact: true }).uncheck();
   await page.getByRole('button', { name: 'Save extensions' }).click();
   await expect(page.getByText('Extensions saved.')).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Sales', { exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Sales', exact: true })).toBeChecked();
   await expect(page.getByLabel('Chats', { exact: true })).not.toBeChecked();
   await pictures(page, 'settings-extensions');
 }
@@ -252,7 +252,7 @@ async function customSettingsAccess(
     [fixture.storeId, result.rows[0].id, fixture.ownerId],
   );
   await page.goto('/settings?tab=extensions');
-  await expect(page.getByLabel('Sales', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox', { name: 'Sales', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save extensions' })).toBeHidden();
   const context = await (await page.request.get('/api/me/context')).json();
   const denied = await page.request.patch('/api/store/extensions', {
