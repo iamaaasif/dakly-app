@@ -268,7 +268,7 @@ export class AutomationRunsService {
     if (decision.action !== 'send') return { decision };
     if (destination !== preparedPhone) return { outcome: 'destination_changed' };
     if (firstTriedAt.getTime() - claim.claimedAt.getTime() >= WORKFLOW_LEASE_MS)
-      return { decision: { action: 'defer', until: firstTriedAt } };
+      return { decision: { action: 'defer', until: facts.wakeAt ?? firstTriedAt } };
     const body = await this.writeSend(
       { storeId, claim, contactId, step, destination },
       { sentAt: at, firstTriedAt },

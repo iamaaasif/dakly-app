@@ -962,6 +962,41 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(sentFor(second.runIds[0]!)).toHaveLength(1);
     });
 
+    it('keeps the original send cutoff when preparation outlives the worker lease', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const startedAt = new Date();
+      const wakeAt = new Date(startedAt.getTime() - 24 * HOUR + 7 * MINUTE);
+      databaseNow = startedAt;
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [runId, wakeAt]);
+
+      const read = ContactsService.prototype.getPhoneForSend;
+      const phone = vi
+        .spyOn(ContactsService.prototype, 'getPhoneForSend')
+        .mockImplementationOnce(async function (shop, person) {
+          const value = await read.call(this, shop, person);
+          databaseNow = new Date(startedAt.getTime() + 6 * MINUTE);
+          return value;
+        });
+      try {
+        await runDueStep(runner, runId!);
+        expect(await run(runId!)).toMatchObject({ status: 'waiting', wake_at: wakeAt });
+        expect(await sendStep(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+      } finally {
+        phone.mockRestore();
+      }
+
+      databaseNow = new Date(startedAt.getTime() + 8 * MINUTE);
+      await runDueStep(runner, runId!);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'late' })]);
+      expect(sentFor(runId!)).toEqual([]);
+      expect(await ledgerFor(runId!)).toEqual([]);
+    });
+
     it.each([false, true])(
       'leaves a failed preparation for lease recovery, paused=%s',
       async (pause) => {
