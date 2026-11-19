@@ -43,6 +43,9 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   changed phone clears its WhatsApp verification, because a typed phone proves nothing.
 - `DELETE /contacts/:contactId` (`customers.edit`) soft deletes the contact: it is
   gone from the list and the profile, and its phone can be saved on another contact.
+  If the sender writes again, Dakly retires the old channel identity and makes a
+  new contact and conversation. The old identity remains linked to campaign
+  history until the purge.
 - A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`,
   on create and on edit. The error never names or links the other contact, because the
   member may not be allowed to see who has the number.
@@ -77,8 +80,7 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
   Messenger or Instagram opt-in has to come from the customer, so `granted` there fails with
   `400 CONSENT_OPT_IN_NEEDS_CUSTOMER`. A withdrawal is accepted on every channel except email. Email is not accepted (D20). A contact that is
   missing or in another store returns `404 CONTACT_NOT_FOUND`.
-- STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
-  `ConsentService.record` when it receives them.
+- An inbound `STOP` or `বন্ধ` on WhatsApp or Messenger writes a withdrawal through `ConsentService.record` in the same transaction as the message. A repeated delivery leaves the consent history unchanged.
 
 The web app has two customer screens.
 
