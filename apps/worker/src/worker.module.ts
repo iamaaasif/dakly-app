@@ -18,7 +18,6 @@ import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/recor
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
-import { StartAutomationRunJob } from '@dakly/core/automations/jobs/start-automation-run.job';
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
@@ -80,7 +79,6 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnConsent,
     SweepAutomationBirthdaysJob,
     StartAutomationOnTagAdded,
-    StartAutomationRunJob,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
     JobSchedulers,

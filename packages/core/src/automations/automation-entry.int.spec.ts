@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -13,14 +12,12 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
-import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS } from '../platform/time';
 import { SegmentsModule } from '../segments/segments.module';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
-import { AutomationTriggerQueue } from './automation-trigger-queue.service';
+import { StartAutomationOnBirthday } from './jobs/start-automation-on-birthday.job';
 import { StartAutomationOnTagAdded } from './jobs/start-automation-on-tag-added.job';
-import { StartAutomationRunJob } from './jobs/start-automation-run.job';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
@@ -61,7 +58,6 @@ describe('AutomationEntryService (Postgres)', () => {
   let app: INestApplicationContext;
   let entries: AutomationEntryService;
   let now = firstDay;
-  const queued: { data: unknown }[] = [];
   const start = (automationId: string, id = randomUUID(), source: 'manual' | 'import' = 'manual') =>
     entries.start(storeId, automationId, {
       id,
@@ -88,12 +84,7 @@ describe('AutomationEntryService (Postgres)', () => {
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
-        AutomationTriggerQueue,
         { provide: Clock, useValue: { now: () => now } },
-        {
-          provide: getQueueToken(QUEUES.transactional),
-          useValue: { add: async (_name: string, data: unknown) => queued.push({ data }) },
-        },
       ],
     })(TestModule);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
@@ -190,11 +181,10 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     expect(rows).toHaveLength(1);
     const [event] = rows;
-    await new StartAutomationOnTagAdded(app.get(AutomationTriggerQueue)).handle({
+    await new StartAutomationOnTagAdded(entries).handle({
       ...event,
       occurredAt: event.occurredAt.toISOString(),
     });
-    for (const { data } of queued.splice(0)) await new StartAutomationRunJob(entries).handle(data);
     expect(await runs(id)).toHaveLength(1);
     expect(await runs(other)).toEqual([]);
   });
@@ -215,5 +205,25 @@ describe('AutomationEntryService (Postgres)', () => {
       },
     });
     expect(await runs(id)).toEqual([]);
+  });
+
+  it('starts the birthday workflow for a matching contact', async () => {
+    const id = await workflow({ rule: 'every_time' }, { key: 'birthday', filters: [] });
+    const excluded = await workflow(
+      { rule: 'every_time' },
+      {
+        key: 'birthday',
+        filters: [{ field: 'segment', segmentId: randomUUID() }],
+      },
+    );
+    await new StartAutomationOnBirthday(entries).handle({
+      id: randomUUID(),
+      storeId,
+      type: 'contact.birthday',
+      occurredAt: now.toISOString(),
+      payload: { contactId, day: now.toISOString().slice(0, 10) },
+    });
+    expect(await runs(id)).toHaveLength(1);
+    expect(await runs(excluded)).toEqual([]);
   });
 });

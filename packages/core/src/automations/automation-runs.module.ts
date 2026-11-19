@@ -18,12 +18,11 @@ import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
-import { AutomationTriggerQueue } from './automation-trigger-queue.service';
 
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
   imports: [
-    BullModule.registerQueue({ name: QUEUES.transactional }, { name: QUEUES.bulk }),
+    BullModule.registerQueue({ name: QUEUES.bulk }),
     ClockModule,
     ContactsModule,
     OutboxModule,
@@ -42,14 +41,12 @@ import { AutomationTriggerQueue } from './automation-trigger-queue.service';
     AutomationEntryService,
     AutomationBirthdaysService,
     AutomationBirthdaySweepService,
-    AutomationTriggerQueue,
   ],
   exports: [
     AutomationRunsService,
     AutomationEntryService,
     AutomationBirthdaysService,
     AutomationBirthdaySweepService,
-    AutomationTriggerQueue,
   ],
 })
 export class AutomationRunsModule {}
