@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { Queue } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { ScheduledPostTarget } from '@dakly/contracts/social';
@@ -63,6 +63,11 @@ describe('SocialPublishingService', () => {
       createDownloadUrl: vi.fn(() => 'https://storage.test/photo.jpg'),
     };
     const notify = vi.fn();
+    const isActive = vi.fn(async () => true);
+    const stores = {
+      isActive,
+      maintenanceStoreIds: vi.fn(async () => [fixture.a, fixture.b]),
+    } as unknown as StoresService;
     const publish = vi.fn();
     const service = new SocialPublishingService(
       repository,
@@ -75,6 +80,7 @@ describe('SocialPublishingService', () => {
       { publish } as unknown as OutboxService,
       { notify } as unknown as NotificationsService,
       clock,
+      stores,
     );
     const scheduling = new SocialPublishingQueueService(
       repository,
@@ -85,7 +91,17 @@ describe('SocialPublishingService', () => {
       } as unknown as StoresService,
       queue,
     );
-    return { service, scheduling, accounts, publish, notify, storage, postingCredential, clock };
+    return {
+      service,
+      scheduling,
+      accounts,
+      publish,
+      notify,
+      storage,
+      postingCredential,
+      clock,
+      isActive,
+    };
   }
 
   async function setupTarget(
@@ -134,15 +150,18 @@ describe('SocialPublishingService', () => {
     const facebook = vi.spyOn(driver, 'publishFacebook');
     const instagram = vi
       .spyOn(driver, 'publishInstagram')
+      .mockRejectedValueOnce(new MetaPublishingError('retryable'))
       .mockRejectedValue(new MetaPublishingError('rejected'));
-    const { service, accounts, publish, notify } = publishing(driver);
+    const { service, accounts, publish, notify, clock } = publishing(driver);
     const postId = await post();
     const page = await setupTarget(accounts, 'facebook_page', postId);
     const ig = await setupTarget(accounts, 'instagram', postId);
     await service.publishTarget(fixture.a, page, false);
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      clock.now.mockReturnValue(new Date(now.getTime() + attempt * 5 * MINUTE_MS));
       await expect(service.publishTarget(fixture.a, ig, false)).rejects.toThrow();
     }
+    clock.now.mockReturnValue(new Date(now.getTime() + 15 * MINUTE_MS));
     await service.publishTarget(fixture.a, ig, true);
     expect(await fixture.row('post_targets', page.postTargetId)).toMatchObject({
       status: 'published',
@@ -195,32 +214,88 @@ describe('SocialPublishingService', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the first delivery’s success when a duplicate finds a live Facebook claim', async () => {
+  it('keeps the first delivery’s success when a duplicate arrives during photo upload', async () => {
     const driver = new FakeMetaPublishingDriver();
-    const reply = Promise.withResolvers<string>();
-    const prepared = Promise.withResolvers<void>();
-    const send = vi.spyOn(driver, 'publishFacebook').mockImplementationOnce(() => {
-      prepared.resolve();
+    const reply = Promise.withResolvers<string[]>();
+    const preparing = Promise.withResolvers<void>();
+    const upload = vi.spyOn(driver, 'uploadFacebookPhotos').mockImplementationOnce(() => {
+      preparing.resolve();
       return reply.promise;
     });
+    const send = vi.spyOn(driver, 'publishFacebook');
     const { service, accounts } = publishing(driver);
     const target = await setupTarget(accounts, 'facebook_page', await post());
     const first = service.publishTarget(fixture.a, target, false);
-    await Promise.race([prepared.promise, first]);
+    await Promise.race([preparing.promise, first]);
     try {
       await expect(service.publishTarget(fixture.a, target, false)).rejects.toThrow(
         'Check the account',
       );
     } finally {
-      reply.resolve('confirmed-post');
+      reply.resolve(['photo']);
       await first;
     }
     expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
       status: 'published',
-      external_post_id: 'confirmed-post',
       attempts: 1,
     });
+    expect(upload).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('records the confirmed result after an event write fails without publishing again', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { service, accounts, publish, notify } = publishing(driver);
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    publish.mockRejectedValueOnce(new Error('Cannot write event'));
+    await expect(service.publishTarget(fixture.a, target, true)).rejects.toThrow(
+      'Cannot write event',
+    );
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'publishing',
+      external_post_id: expect.stringContaining('fake-facebook'),
+    });
+    await service.publishTarget(fixture.a, target, true);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('sends the first comment only to Instagram when the post goes to both accounts', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const comment = vi.spyOn(driver, 'comment');
+    const { service, accounts } = publishing(driver);
+    const postId = await post();
+    await fixture.connection.pool.query(
+      'update posts set first_comment=$1 where store_id=$2 and id=$3',
+      ['ইনস্টাগ্রাম', fixture.a, postId],
+    );
+    const page = await setupTarget(accounts, 'facebook_page', postId);
+    const instagram = await setupTarget(accounts, 'instagram', postId);
+    await service.publishTarget(fixture.a, page, true);
+    await service.publishTarget(fixture.a, instagram, true);
+    expect(comment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ accessToken: 'fake-page-token' }),
+      expect.stringContaining('fake-instagram'),
+      'ইনস্টাগ্রাম',
+    );
+  });
+
+  it('stops before any Meta request when the store is suspended', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const upload = vi.spyOn(driver, 'uploadFacebookPhotos');
+    const { service, accounts, isActive } = publishing(driver);
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    isActive.mockResolvedValue(false);
+    await service.publishTarget(fixture.a, target, true);
+    expect(upload).not.toHaveBeenCalled();
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'scheduled',
+      attempts: 0,
+    });
   });
 
   it('recovers one delayed publish job and one day-ahead check for an already scheduled target', async () => {
@@ -247,6 +322,35 @@ describe('SocialPublishingService', () => {
     });
   });
 
+  it('requeues a failed publishing job when the target still needs work', async () => {
+    const { scheduling, accounts } = publishing();
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    const id = `publish-${target.postTargetId}-${now.getTime()}`;
+    await queue.add(
+      'publish-post-target',
+      { storeId: fixture.a, ...target },
+      { jobId: id, attempts: 1 },
+    );
+    const worker = new Worker(
+      QUEUES.outbound,
+      async () => {
+        throw new Error('Write unavailable');
+      },
+      {
+        connection: toRedisConnection(process.env.REDIS_URL!),
+        prefix: queue.opts.prefix,
+      },
+    );
+    try {
+      await expect.poll(() => queue.getJobState(id)).toBe('failed');
+    } finally {
+      await worker.close();
+    }
+    await scheduling.onApplicationBootstrap();
+    expect(await queue.getJobState(id)).toBe('waiting');
+    expect((await queue.getJob(id))?.attemptsMade).toBe(0);
+  });
+
   it('flags a missing storage object before publishing', async () => {
     const { service, accounts, storage } = publishing();
     const target = await setupTarget(
@@ -260,6 +364,23 @@ describe('SocialPublishingService', () => {
     expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
       status: 'scheduled',
       error_code: 'POST_MEDIA_NOT_FOUND',
+    });
+  });
+
+  it('validates the stored Instagram caption before calling Meta', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const create = vi.spyOn(driver, 'createInstagramContainer');
+    const { service, accounts } = publishing(driver);
+    const target = await setupTarget(accounts, 'instagram', await post());
+    await fixture.connection.pool.query(
+      'update post_targets set caption_override=$1 where store_id=$2 and id=$3',
+      ['ক'.repeat(2201), fixture.a, target.postTargetId],
+    );
+    await service.publishTarget(fixture.a, target, true);
+    expect(create).not.toHaveBeenCalled();
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_CAPTION_TOO_LONG',
     });
   });
 

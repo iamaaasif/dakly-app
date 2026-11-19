@@ -188,7 +188,8 @@ The worker queues a publish job for each target. Instagram waits for its media
 container to finish. A successful target stays published when another target
 fails. Each target gets three retries over 30 minutes and a Fix now notification
 if it fails. A check 24 hours before publishing flags an account that needs
-reconnecting or a photo that is missing. Instagram requires JPEG photos.
+reconnecting or a photo that is missing. Instagram targets require JPEG photos
+when saved, approved and published. A first comment goes to Instagram only.
 
 If Meta receives a publish request without returning a result, Dakly checks the
 Instagram container for confirmation. For a Facebook result it cannot confirm,

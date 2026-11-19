@@ -158,7 +158,7 @@ export class SocialRepository {
   listPostMedia(storeId: string, ids: string[], now: Date) {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: files.id, objectKey: files.objectKey })
+        .select({ id: files.id, objectKey: files.objectKey, contentType: files.contentType })
         .from(files)
         .where(
           and(

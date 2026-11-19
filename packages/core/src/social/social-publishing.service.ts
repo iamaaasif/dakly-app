@@ -20,6 +20,8 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
+import { StoresService } from '../stores/stores.service';
+import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
@@ -31,6 +33,10 @@ type PublishingTarget = SavedTarget['target'] & { scheduledFor: Date };
 type PendingPost = { post: SavedTarget['post']; target: PublishingTarget };
 type Changes = Parameters<SocialRepository['updatePublishTarget']>[2];
 type AccountKind = 'facebook_page' | 'instagram';
+type PublishReceipt = {
+  externalId: string | null;
+  firstComment?: { account: MetaPostingAccount; text: string };
+};
 type PublishContext = {
   storeId: string;
   target: PublishingTarget;
@@ -54,6 +60,7 @@ export class SocialPublishingService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
   async checkTarget(storeId: string, input: JobTarget) {
@@ -75,18 +82,47 @@ export class SocialPublishingService {
     const match = await this.currentTarget(storeId, input);
     if (!driver || !match) return;
     const { target } = match;
+    if (target.publishedAt) {
+      await this.finish(storeId, target);
+      return;
+    }
     this.checkDue(target);
     const attempted = await this.recordTarget(storeId, target, {
       action: 'post.publish_attempted',
       attempts: target.attempts + 1,
     });
     if (!attempted) return;
+    let receipt: PublishReceipt | undefined;
     try {
-      await this.publishApproved(storeId, match, driver);
+      receipt = await this.publishApproved(storeId, match, driver);
     } catch (failure) {
-      if (!finalAttempt || target.status === 'published') throw failure;
-      await this.finish(storeId, target, { error: this.publishError(failure, target) });
+      if (!finalAttempt) throw failure;
+      await this.finish(storeId, target, this.publishError(failure, target));
+      return;
     }
+    if (receipt) await this.completeTarget(storeId, target, driver, receipt);
+  }
+
+  private async completeTarget(
+    storeId: string,
+    target: PublishingTarget,
+    driver: MetaPublishingDriver,
+    receipt: PublishReceipt,
+  ) {
+    const { externalId, firstComment } = receipt;
+    // Record Meta's receipt before notifying consumers so a rolled-back event can be retried.
+    const confirmed = await this.recordTarget(storeId, target, {
+      action: 'post.publish_confirmed',
+      externalPostId: externalId,
+      publishedAt: this.clock.now(),
+    });
+    if (!confirmed || !(await this.finish(storeId, target))) return;
+    if (firstComment && externalId)
+      await this.comment(
+        { storeId, target, driver, account: firstComment.account },
+        externalId,
+        firstComment.text,
+      );
   }
 
   private async checkInputs(storeId: string, { post, target }: PendingPost) {
@@ -99,13 +135,7 @@ export class SocialPublishingService {
       await this.photoKeys(storeId, post.mediaFileIds, kind, target.scheduledFor);
       return null;
     } catch (failure) {
-      if (
-        failure instanceof AppError &&
-        ['POST_TOKEN_EXPIRED', 'POST_MEDIA_NOT_FOUND', 'POST_INSTAGRAM_PHOTO_FORMAT'].includes(
-          failure.code,
-        )
-      )
-        return failure;
+      if (failure instanceof AppError) return failure;
       throw failure;
     }
   }
@@ -114,7 +144,7 @@ export class SocialPublishingService {
     const now = this.clock.now();
     if (target.scheduledFor > now) throw socialError('POST_NOT_DUE');
     // A second delivery can see a claim before the first Meta request returns.
-    if (target.status === 'publishing' && now.getTime() - target.updatedAt.getTime() < MINUTE_MS)
+    if (target.attempts > 0 && now.getTime() - target.updatedAt.getTime() < MINUTE_MS)
       throw socialError('POST_PUBLISH_UNCONFIRMED');
   }
 
@@ -138,9 +168,11 @@ export class SocialPublishingService {
       const context = { storeId, target, driver, account };
       const externalId = await this.sendPost({ ...context, post, kind: credential.kind });
       if (externalId === undefined) return;
-      const saved = await this.finish(storeId, target, { externalId });
-      if (saved && externalId && post.kind === 'post' && post.firstComment)
-        await this.comment(context, externalId, post.firstComment);
+      const firstComment =
+        credential.kind === 'instagram' && post.kind === 'post' && post.firstComment
+          ? { account, text: post.firstComment }
+          : undefined;
+      return { externalId, firstComment };
     } finally {
       token.fill(0);
     }
@@ -177,8 +209,7 @@ export class SocialPublishingService {
           () => this.storage.getObjectMetadata(key),
         );
         if (!metadata) throw socialError('POST_MEDIA_NOT_FOUND');
-        if (kind === 'instagram' && metadata.contentType !== 'image/jpeg')
-          throw socialError('POST_INSTAGRAM_PHOTO_FORMAT');
+        if (kind === 'instagram') validateInstagramPhotos([metadata]);
         return key;
       }),
     );
@@ -203,13 +234,7 @@ export class SocialPublishingService {
       }
       throw socialError('POST_PUBLISH_UNCONFIRMED');
     }
-    const keys = await this.photoKeys(storeId, post.mediaFileIds, kind, this.clock.now());
-    const content: MetaPost = {
-      kind: post.kind,
-      caption: target.captionOverride ?? post.caption ?? '',
-      linkUrl: post.linkUrl,
-      photoUrls: keys.map((key) => this.storage.createDownloadUrl(key, HOUR_MS / 1_000)),
-    };
+    const content = await this.contentFor(storeId, { post, target }, kind);
     if (kind === 'instagram') return this.sendInstagram(context, content);
     const photos = content.photoUrls.length
       ? await this.meta('facebook_upload_photos', () =>
@@ -219,6 +244,26 @@ export class SocialPublishingService {
     return this.sendClaimed(storeId, target, () =>
       this.meta('facebook_publish_post', () => driver.publishFacebook(account, content, photos)),
     );
+  }
+
+  private async contentFor(
+    storeId: string,
+    { post, target }: PendingPost,
+    kind: AccountKind,
+  ): Promise<MetaPost> {
+    const caption = target.captionOverride ?? post.caption ?? '';
+    if (kind === 'instagram') validateInstagramPost(caption, post.mediaFileIds.length);
+    if (post.kind === 'story' && post.mediaFileIds.length !== 1)
+      throw socialError('POST_PHOTOS_REQUIRED');
+    if (!caption.trim() && !post.linkUrl && !post.mediaFileIds.length)
+      throw socialError('POST_CONTENT_REQUIRED');
+    const keys = await this.photoKeys(storeId, post.mediaFileIds, kind, this.clock.now());
+    return {
+      kind: post.kind,
+      caption,
+      linkUrl: post.linkUrl,
+      photoUrls: keys.map((key) => this.storage.createDownloadUrl(key, HOUR_MS / 1_000)),
+    };
   }
 
   private async sendInstagram(
@@ -304,55 +349,37 @@ export class SocialPublishingService {
     }
   }
 
-  private finish(
-    storeId: string,
-    target: PublishingTarget,
-    result: { externalId: string | null } | { error: AppError },
-  ) {
-    const occurredAt = this.clock.now();
+  private finish(storeId: string, target: PublishingTarget, error?: AppError) {
+    const common = { storeId, occurredAt: this.clock.now().toISOString() };
     const payload = { postId: target.postId, postTargetId: target.id };
-    if ('externalId' in result)
-      return this.recordTarget(
-        storeId,
-        target,
-        {
-          action: 'post.published',
-          status: 'published',
-          externalPostId: result.externalId,
-          publishedAt: occurredAt,
-          errorCode: null,
-          errorMessage: null,
-        },
-        () =>
-          this.outbox.publish({
-            type: 'post.published',
-            storeId,
-            occurredAt: occurredAt.toISOString(),
-            payload: { ...payload, externalPostId: result.externalId },
-          }),
-      );
+    const status = error ? 'failed' : 'published';
     return this.recordTarget(
       storeId,
       target,
       {
-        action: 'post.failed',
-        status: 'failed',
-        errorCode: result.error.code,
-        errorMessage: result.error.message,
+        action: `post.${status}`,
+        status,
+        errorCode: error?.code ?? null,
+        errorMessage: error?.message ?? null,
       },
       async () => {
+        if (!error)
+          return this.outbox.publish({
+            ...common,
+            type: 'post.published',
+            payload: { ...payload, externalPostId: target.externalPostId },
+          });
         await this.outbox.publish({
+          ...common,
           type: 'post.failed',
-          storeId,
-          occurredAt: occurredAt.toISOString(),
-          payload: { ...payload, errorCode: result.error.code },
+          payload: { ...payload, errorCode: error.code },
         });
         await this.notifications.notify(storeId, {
           type: 'post.failed',
           category: 'fix_now',
           recipientPermission: 'social.edit',
           title: 'A post could not be published',
-          body: result.error.message,
+          body: error.message,
           dedupeKey: `post.failed:${target.id}:${target.scheduledFor.toISOString()}`,
         });
       },
@@ -366,6 +393,11 @@ export class SocialPublishingService {
     afterUpdate?: () => Promise<void>,
   ) {
     const updated = await this.transaction.run(storeId, async () => {
+      if (
+        (changes.attempts !== undefined || changes.status === 'publishing') &&
+        !(await this.stores.isActive(storeId))
+      )
+        return false;
       if (
         !(await this.repository.updatePublishTarget(storeId, target, {
           ...changes,
