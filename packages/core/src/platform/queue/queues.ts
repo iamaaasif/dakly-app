@@ -1,5 +1,6 @@
 export const QUEUES = {
   inbound: 'inbound',
+  aiReply: 'ai-reply',
   outbound: 'outbound',
   sync: 'sync',
   bulk: 'bulk',

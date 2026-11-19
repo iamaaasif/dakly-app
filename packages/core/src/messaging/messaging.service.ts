@@ -82,7 +82,7 @@ export class MessagingService {
       const externalIdentity = [connection.id, input.externalMessageId];
       const idempotencyKey = `inbound:${hashToken(JSON.stringify(externalIdentity)).toString('hex')}`;
       if (!(await this.inbound.claimMessageKey(storeId, idempotencyKey))) return 'duplicate';
-      return this.storeInbound(storeId, input, { ...connection, idempotencyKey }, this.clock.now());
+      return this.storeInbound(storeId, input, { ...connection, idempotencyKey });
     });
   }
 
@@ -90,13 +90,14 @@ export class MessagingService {
     storeId: string,
     input: InboundMessageInput,
     delivery: { id: string; channel: (typeof chatChannels)[number]; idempotencyKey: string },
-    now: Date,
   ): Promise<ReceiveOutcome> {
     const { id: connectionId, channel, idempotencyKey } = delivery;
     const { id: senderIdentityId, contactId } = await this.contactsService.findOrCreateByIdentity(
       storeId,
       { channel, connectionId, externalId: input.externalSenderId },
     );
+    // Sample receipt time after the contact lock so a waiting webhook cannot backdate the burst.
+    const now = this.clock.now();
     const conversation = await this.inbound.getConversation(
       storeId,
       { channel, channelConnectionId: connectionId, contactId },
