@@ -83,7 +83,41 @@ Per-store cap: one running campaign batch per store.
 | `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run |
 | `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                     |
 
-Use the job ID from a failed `build-order-summary` error report to retry while the job is still in the sync queue. The pending day marker lives in Postgres, so replaying an affected source event can requeue the day after the failed job is evicted. The retry reads current orders for the original day and skips days outside retention.
+Use the job ID from a failed `build-order-summary` error report to retry while the job is still in the sync queue. If the queue no longer has the job, read the pending dates for the affected store in a store-scoped psql session with `store_id` set.
+
+```sql
+select day from store_daily_metrics
+where store_id = :'store_id'::uuid and metric = 'order_refresh_pending'
+order by day;
+```
+
+Set `STORE_ID` and `ORDER_DAY` to the affected store and one of those dates. Run this with the built worker and its usual environment.
+
+```sh
+pnpm --filter @dakly/worker exec node --input-type=module - "$STORE_ID" "$ORDER_DAY" <<'JS'
+import { Queue } from 'bullmq';
+import { BUILD_ORDER_SUMMARY } from '@dakly/core/analytics/analytics-summaries.service';
+import { loadEnv } from '@dakly/core/platform/config/env';
+import { QUEUES } from '@dakly/core/platform/queue/queues';
+import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+
+const [storeId, day] = process.argv.slice(2);
+const env = loadEnv();
+const queue = new Queue(QUEUES.sync, {
+  connection: toRedisConnection(env.REDIS_URL),
+  prefix: env.QUEUE_PREFIX,
+});
+try {
+  await queue.add(BUILD_ORDER_SUMMARY, { storeId, day }, {
+    deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
+  });
+} finally {
+  await queue.close();
+}
+JS
+```
+
+The retry reads current orders for the original day and skips dates outside retention. The ANA-1 reconciliation follow-up repairs pending days nightly.
 
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
