@@ -9,10 +9,54 @@ const driver = new MetaGraphChannelDriver({
   redirectUri: 'https://shop.example.test/integrations/meta',
 });
 
+const pageCredentials = { accountExternalId: '123', accessToken: 'test-page-credential' };
+const messengerReply = {
+  channel: 'messenger',
+  externalConversationId: '999',
+  text: 'জি, পণ্যটি আছে।',
+  operationKey: '2ec0ca9c-2253-48f6-944c-1a54438fae45',
+} as const;
+
 describe('MetaGraphChannelDriver', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('sends a Messenger reply with an operation reference for the echo', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      const request = new Request(url, init);
+      expect(url.hostname).toBe('graph.facebook.com');
+      expect(url.pathname).toMatch(/\/123\/messages$/);
+      expect(url.search).toBe('');
+      expect(request.method).toBe('POST');
+      expect(request.headers.get('authorization')).toBe('Bearer test-page-credential');
+      expect(await request.json()).toEqual({
+        recipient: { id: messengerReply.externalConversationId },
+        message: { text: messengerReply.text, metadata: messengerReply.operationKey },
+        messaging_type: 'RESPONSE',
+      });
+      return Response.json({ message_id: 'm_accepted', recipient_id: '999' });
+    });
+    await expect(driver.send(pageCredentials, messengerReply)).resolves.toEqual({
+      externalMessageId: 'm_accepted',
+    });
+  });
+
+  it('preserves the difference between an invalid credential and an uncertain send', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json({ error: { code: 190, message: 'private details' } }, { status: 400 }),
+    );
+    await expect(driver.send(pageCredentials, messengerReply)).rejects.toMatchObject({
+      code: 'auth_error',
+      message: 'Meta request failed',
+    });
+    vi.stubGlobal('fetch', async () => {
+      throw new DOMException('Request timed out', 'TimeoutError');
+    });
+    await expect(driver.send(pageCredentials, messengerReply)).rejects.toMatchObject({
+      code: 'unavailable',
+    });
   });
 
   it('opens Facebook Login for Business with a server-selected redirect and state', () => {

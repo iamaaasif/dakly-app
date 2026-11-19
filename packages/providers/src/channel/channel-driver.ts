@@ -16,8 +16,10 @@ export type InboundMessage = {
 };
 
 export type OutboundMessage = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
   externalConversationId: string;
   text: string;
+  operationKey: string;
 };
 
 export type SendResult = {

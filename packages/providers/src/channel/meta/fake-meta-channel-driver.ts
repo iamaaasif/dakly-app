@@ -1,5 +1,8 @@
+import { createHash } from 'node:crypto';
+
 import {
   MetaRequestError,
+  type ChannelDriver,
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
@@ -22,7 +25,9 @@ const pages: MetaPage[] = [
   },
 ];
 
-export class FakeMetaChannelDriver implements MetaAuthorizationDriver, MetaTokenHealthDriver {
+export class FakeMetaChannelDriver
+  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+{
   constructor(private readonly redirectUri: string) {}
 
   authorizationUrl(state: string): string {
@@ -50,4 +55,15 @@ export class FakeMetaChannelDriver implements MetaAuthorizationDriver, MetaToken
   async isTokenValid(accessToken: string): Promise<boolean> {
     return pages.some((page) => page.accessToken === accessToken);
   }
+
+  send: ChannelDriver['send'] = async ({ accountExternalId, accessToken }, message) => {
+    const connected = pages.some((page) => {
+      const account = message.channel === 'messenger' ? page.id : page.instagram?.id;
+      return account === accountExternalId && page.accessToken === accessToken;
+    });
+    if (!connected) throw new MetaRequestError('auth_error');
+    const reference = JSON.stringify([message.channel, accountExternalId, message.operationKey]);
+    const externalMessageId = `fake-${createHash('sha256').update(reference).digest('hex')}`;
+    return { externalMessageId };
+  };
 }

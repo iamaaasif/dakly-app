@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import {
   MetaRequestError,
+  type ChannelDriver,
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
@@ -62,7 +63,9 @@ type MetaApp = {
   redirectUri: string;
 };
 
-export class MetaGraphChannelDriver implements MetaAuthorizationDriver, MetaTokenHealthDriver {
+export class MetaGraphChannelDriver
+  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+{
   constructor(private readonly app: MetaApp) {}
 
   authorizationUrl(state: string): string {
@@ -142,11 +145,27 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver, MetaToke
     return result.data.is_valid;
   }
 
+  send: ChannelDriver['send'] = async ({ accountExternalId, accessToken }, message) => {
+    const messenger = message.channel === 'messenger';
+    const body = JSON.stringify({
+      recipient: { id: message.externalConversationId },
+      message: { text: message.text, ...(messenger && { metadata: message.operationKey }) },
+      ...(messenger && { messaging_type: 'RESPONSE' }),
+    });
+    const response = await this.request(
+      `${encodeURIComponent(accountExternalId)}/messages`,
+      {},
+      z.object({ message_id: z.string().min(1) }),
+      { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
+    );
+    return { externalMessageId: response.message_id };
+  };
+
   private async request<T>(
     path: string,
     query: Record<string, string>,
     schema: z.ZodType<T>,
-    options: { signal: AbortSignal; accessToken?: string; method?: 'POST' },
+    options: { signal: AbortSignal; accessToken?: string; method?: 'POST'; body?: string },
   ): Promise<T> {
     const url = new URL(path, graph);
     url.search = new URLSearchParams(query).toString();
@@ -157,7 +176,11 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver, MetaToke
         signal: options.signal,
         method: options.method,
         redirect: 'error',
-        ...(options.accessToken && { headers: { authorization: `Bearer ${options.accessToken}` } }),
+        body: options.body,
+        headers: {
+          ...(options.accessToken && { authorization: `Bearer ${options.accessToken}` }),
+          ...(options.body && { 'content-type': 'application/json' }),
+        },
       });
       payload = await response.json();
     } catch {
