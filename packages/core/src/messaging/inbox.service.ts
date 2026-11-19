@@ -92,7 +92,7 @@ export class InboxService {
         input.assigneeUserId === undefined ? before.assigneeUserId : input.assigneeUserId;
       if (status === before.status && assigneeUserId === before.assigneeUserId)
         return conversationResponse(before);
-      const after = await this.repository.update(storeId, id, input, this.clock.now());
+      const after = await this.repository.update(storeId, id, input, { now: this.clock.now() });
       if (!after) throw messagingError('CONVERSATION_NOT_FOUND');
       await this.recordChange(storeId, { kind: 'user', userId }, before, after);
       return conversationResponse(after);
@@ -120,7 +120,7 @@ export class InboxService {
         storeId,
         id,
         { responder, aiResumesAt, handoverReason: null, handedOverAt: null },
-        now,
+        { now },
       );
       if (!after) throw messagingError('CONVERSATION_NOT_FOUND');
       await this.recordChange(storeId, actor, before, after);
@@ -145,8 +145,7 @@ export class InboxService {
         canReturn
           ? { responder: 'ai', aiResumesAt: null, handoverReason: null, handedOverAt: null }
           : { aiResumesAt: null },
-        now,
-        { bumpVersion: false },
+        { now, bumpVersion: false },
       );
       if (after) await this.recordChange(storeId, actor, before, after);
     });

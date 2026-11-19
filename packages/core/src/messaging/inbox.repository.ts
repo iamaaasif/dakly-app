@@ -166,8 +166,7 @@ export class InboxRepository {
     storeId: string,
     id: string,
     change: ConversationChange,
-    now: Date,
-    { bumpVersion }: { bumpVersion: boolean } = { bumpVersion: true },
+    { now, bumpVersion = true }: { now: Date; bumpVersion?: boolean },
   ) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
