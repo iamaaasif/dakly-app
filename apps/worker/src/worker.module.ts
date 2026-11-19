@@ -59,6 +59,7 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
 
 import { JobSchedulers } from './job-schedulers';
 
@@ -115,6 +116,7 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    SocialPublishingModule,
     MetaWebhookMaintenanceModule,
     MessagingModule,
     ChannelTokenHealthModule,

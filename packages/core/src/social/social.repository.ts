@@ -50,6 +50,20 @@ const targetFields = {
   errorMessage: postTargets.errorMessage,
 };
 
+type TargetWrite = Partial<
+  Pick<
+    typeof postTargets.$inferInsert,
+    | 'status'
+    | 'attempts'
+    | 'containerId'
+    | 'externalPostId'
+    | 'publishedAt'
+    | 'errorCode'
+    | 'errorMessage'
+    | 'updatedAt'
+  >
+>;
+
 type PostWrite = Omit<CreatePostInput, 'targets'> & { updatedAt: Date };
 
 function selectPostsWithTargets(storeId: string, tx: Transaction) {
@@ -144,7 +158,7 @@ export class SocialRepository {
   listPostMedia(storeId: string, ids: string[], now: Date) {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: files.id })
+        .select({ id: files.id, objectKey: files.objectKey })
         .from(files)
         .where(
           and(
@@ -157,6 +171,77 @@ export class SocialRepository {
           ),
         ),
     );
+  }
+
+  async findPublishTarget(storeId: string, postTargetId: string) {
+    const [match] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          target: {
+            ...targetFields,
+            attempts: postTargets.attempts,
+            updatedAt: postTargets.updatedAt,
+            containerId: postTargets.containerId,
+          },
+          post: postFields,
+        })
+        .from(postTargets)
+        .innerJoin(posts, and(eq(posts.id, postTargets.postId), eq(posts.storeId, storeId)))
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            eq(postTargets.id, postTargetId),
+            inArray(postTargets.status, ['scheduled', 'publishing']),
+            isNull(posts.deletedAt),
+          ),
+        ),
+    );
+    return match;
+  }
+
+  pendingPublishTargets(storeId: string, after: string | undefined, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: postTargets.id, scheduledFor: postTargets.scheduledFor })
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            inArray(postTargets.status, ['scheduled', 'publishing']),
+            after ? gt(postTargets.id, after) : undefined,
+          ),
+        )
+        .orderBy(postTargets.id)
+        .limit(limit),
+    );
+  }
+
+  async updatePublishTarget(
+    storeId: string,
+    current: {
+      id: string;
+      status: (typeof postTargets.$inferSelect)['status'];
+      attempts: number;
+      scheduledFor: Date;
+    },
+    changes: TargetWrite,
+  ) {
+    const [updated] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(postTargets)
+        .set(changes)
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            eq(postTargets.id, current.id),
+            eq(postTargets.status, current.status),
+            eq(postTargets.attempts, current.attempts),
+            eq(postTargets.scheduledFor, current.scheduledFor),
+          ),
+        )
+        .returning({ id: postTargets.id }),
+    );
+    return updated;
   }
 
   async findByIdempotencyKey(storeId: string, userId: string, idempotencyKey: string) {

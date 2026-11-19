@@ -184,13 +184,18 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
-The Meta publishing driver uses the connected Page token for Facebook and
-Instagram. It can upload unpublished Page photos, publish a Page post or story,
-and create, check and publish an Instagram media container. The worker that uses
-this driver is the next SOC-2 change. Live publishing requires Meta app review.
+The worker queues a publish job for each target. Instagram waits for its media
+container to finish. A successful target stays published when another target
+fails. Each target gets three retries over 30 minutes and a Fix now notification
+if it fails. A check 24 hours before publishing flags an account that needs
+reconnecting or a photo that is missing. If Meta receives a publish request
+without returning a result, Dakly checks the Instagram container for confirmation.
+For a Facebook result it cannot confirm, Dakly asks the shop to check the Page
+before posting again. Live publishing requires Meta's review of the app's
+publishing permissions.
 
-Publishing (SOC-2), insights (SOC-3), and the web screens (SOC-5) are separate
-tasks. SOC-4 adds AI caption generation and checks generated text before scheduling.
+Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
+caption generation and checks generated text before scheduling.
 
 ### Screens in release 1
 

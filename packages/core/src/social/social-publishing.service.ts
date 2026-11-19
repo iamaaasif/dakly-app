@@ -1,0 +1,392 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+
+import type { ScheduledPostTarget } from '@dakly/contracts/social';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
+import {
+  MetaPublishingError,
+  type MetaPost,
+  type MetaPostingAccount,
+  type MetaPublishingDriver,
+} from '@dakly/providers/social/meta-publishing-driver';
+
+import { AuditService } from '../audit/audit.service';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { Clock } from '../platform/clock';
+import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError } from '../platform/errors/app-error';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
+import { measureVendorCall } from '../platform/logging/vendor-call-metric';
+import { OutboxService } from '../platform/outbox/outbox.service';
+import { HOUR_MS, MINUTE_MS } from '../platform/time';
+import { socialError } from './social.errors';
+import { SocialRepository } from './social.repository';
+
+export const META_PUBLISHING_DRIVER = Symbol('META_PUBLISHING_DRIVER');
+
+type JobTarget = Omit<ScheduledPostTarget, 'storeId'>;
+type SavedTarget = NonNullable<Awaited<ReturnType<SocialRepository['findPublishTarget']>>>;
+type PublishingTarget = SavedTarget['target'] & { scheduledFor: Date };
+type PendingPost = { post: SavedTarget['post']; target: PublishingTarget };
+type Changes = Parameters<SocialRepository['updatePublishTarget']>[2];
+type AccountKind = 'facebook_page' | 'instagram';
+type PublishContext = {
+  storeId: string;
+  target: PublishingTarget;
+  driver: MetaPublishingDriver;
+  account: MetaPostingAccount;
+};
+
+@Injectable()
+export class SocialPublishingService {
+  private readonly logger = new Logger(SocialPublishingService.name);
+
+  constructor(
+    @Inject(SocialRepository) private readonly repository: SocialRepository,
+    @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
+    @Inject(FILE_STORAGE_DRIVER)
+    private readonly storage: Pick<FileStorageDriver, 'getObjectMetadata' | 'createDownloadUrl'>,
+    @Inject(META_PUBLISHING_DRIVER) private readonly driver: MetaPublishingDriver | null,
+    @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(Clock) private readonly clock: Clock,
+  ) {}
+
+  async checkTarget(storeId: string, input: JobTarget) {
+    const match = await this.currentTarget(storeId, input);
+    if (!match || match.target.status !== 'scheduled') return;
+    const { target } = match;
+    const error = await this.checkInputs(storeId, match);
+    const errorCode = error?.code ?? null;
+    if (target.errorCode === errorCode) return;
+    await this.recordTarget(storeId, target, {
+      action: 'post.preflight_checked',
+      errorCode,
+      errorMessage: error?.message ?? null,
+    });
+  }
+
+  async publishTarget(storeId: string, input: JobTarget, finalAttempt: boolean) {
+    const driver = this.driver;
+    const match = await this.currentTarget(storeId, input);
+    if (!driver || !match) return;
+    const { target } = match;
+    this.checkDue(target);
+    const attempted = await this.recordTarget(storeId, target, {
+      action: 'post.publish_attempted',
+      attempts: target.attempts + 1,
+    });
+    if (!attempted) return;
+    try {
+      await this.publishApproved(storeId, match, driver);
+    } catch (failure) {
+      if (!finalAttempt || target.status === 'published') throw failure;
+      await this.finish(storeId, target, { error: this.publishError(failure, target) });
+    }
+  }
+
+  private async checkInputs(storeId: string, { post, target }: PendingPost) {
+    try {
+      const { kind } = await this.credential(
+        storeId,
+        target.channelConnectionId,
+        target.scheduledFor,
+      );
+      await this.photoKeys(storeId, post.mediaFileIds, kind, target.scheduledFor);
+      return null;
+    } catch (failure) {
+      if (
+        failure instanceof AppError &&
+        ['POST_TOKEN_EXPIRED', 'POST_MEDIA_NOT_FOUND', 'POST_INSTAGRAM_PHOTO_FORMAT'].includes(
+          failure.code,
+        )
+      )
+        return failure;
+      throw failure;
+    }
+  }
+
+  private checkDue(target: PublishingTarget) {
+    const now = this.clock.now();
+    if (target.scheduledFor > now) throw socialError('POST_NOT_DUE');
+    // A second delivery can see a claim before the first Meta request returns.
+    if (target.status === 'publishing' && now.getTime() - target.updatedAt.getTime() < MINUTE_MS)
+      throw socialError('POST_PUBLISH_UNCONFIRMED');
+  }
+
+  private async publishApproved(
+    storeId: string,
+    { post, target }: PendingPost,
+    driver: MetaPublishingDriver,
+  ) {
+    if (post.isAiWritten && (!post.approvedAt || !post.approvedByUserId))
+      throw socialError('POST_APPROVAL_REQUIRED');
+    const credential = await this.credential(storeId, target.channelConnectionId, this.clock.now());
+    const token = this.encryption.decrypt(
+      { owner: 'store', storeId, purpose: 'channel-access-token' },
+      credential,
+    );
+    try {
+      const account = {
+        accountId: credential.externalAccountId,
+        accessToken: token.toString('utf8'),
+      };
+      const context = { storeId, target, driver, account };
+      const externalId = await this.sendPost({ ...context, post, kind: credential.kind });
+      if (externalId === undefined) return;
+      const saved = await this.finish(storeId, target, { externalId });
+      if (saved && externalId && post.kind === 'post' && post.firstComment)
+        await this.comment(context, externalId, post.firstComment);
+    } finally {
+      token.fill(0);
+    }
+  }
+
+  private async currentTarget(storeId: string, input: JobTarget): Promise<PendingPost | undefined> {
+    const match = await this.repository.findPublishTarget(storeId, input.postTargetId);
+    if (match?.target.scheduledFor?.toISOString() !== input.scheduledFor) return;
+    return {
+      post: match.post,
+      target: { ...match.target, scheduledFor: match.target.scheduledFor },
+    };
+  }
+
+  private async credential(storeId: string, connectionId: string, asOf: Date) {
+    const credential = await this.channels.postingCredential(storeId, connectionId);
+    if (!credential || (credential.expiresAt && credential.expiresAt <= asOf))
+      throw socialError('POST_TOKEN_EXPIRED');
+    return credential;
+  }
+
+  private async photoKeys(storeId: string, fileIds: string[], kind: AccountKind, asOf: Date) {
+    if (!fileIds.length) return [];
+    const rows = await this.repository.listPostMedia(storeId, fileIds, asOf);
+    const keys = new Map(rows.map(({ id, objectKey }) => [id, objectKey]));
+    return Promise.all(
+      fileIds.map(async (fileId) => {
+        const key = keys.get(fileId);
+        if (!key) throw socialError('POST_MEDIA_NOT_FOUND');
+        const metadata = await measureVendorCall(
+          this.logger,
+          'post_photo_metadata',
+          'Post photo metadata request measured',
+          () => this.storage.getObjectMetadata(key),
+        );
+        if (!metadata) throw socialError('POST_MEDIA_NOT_FOUND');
+        if (kind === 'instagram' && metadata.contentType !== 'image/jpeg')
+          throw socialError('POST_INSTAGRAM_PHOTO_FORMAT');
+        return key;
+      }),
+    );
+  }
+
+  private async sendPost({
+    post,
+    kind,
+    ...context
+  }: PublishContext & { post: PendingPost['post']; kind: AccountKind }): Promise<
+    string | null | undefined
+  > {
+    const { storeId, target, driver, account } = context;
+    if (target.status === 'publishing') {
+      const containerId = target.containerId;
+      // A timed-out publish may have succeeded. Reconcile the Instagram container without a second write to Meta.
+      if (kind === 'instagram' && containerId) {
+        const state = await this.meta('instagram_container_status', () =>
+          driver.instagramContainerState(account, containerId),
+        );
+        if (state === 'published') return null;
+      }
+      throw socialError('POST_PUBLISH_UNCONFIRMED');
+    }
+    const keys = await this.photoKeys(storeId, post.mediaFileIds, kind, this.clock.now());
+    const content: MetaPost = {
+      kind: post.kind,
+      caption: target.captionOverride ?? post.caption ?? '',
+      linkUrl: post.linkUrl,
+      photoUrls: keys.map((key) => this.storage.createDownloadUrl(key, HOUR_MS / 1_000)),
+    };
+    if (kind === 'instagram') return this.sendInstagram(context, content);
+    const photos = content.photoUrls.length
+      ? await this.meta('facebook_upload_photos', () =>
+          driver.uploadFacebookPhotos(account, content.photoUrls),
+        )
+      : [];
+    return this.sendClaimed(storeId, target, () =>
+      this.meta('facebook_publish_post', () => driver.publishFacebook(account, content, photos)),
+    );
+  }
+
+  private async sendInstagram(
+    { storeId, target, driver, account }: PublishContext,
+    content: MetaPost,
+  ) {
+    let containerId = target.containerId;
+    if (!containerId) {
+      containerId = await this.meta('instagram_create_container', () =>
+        driver.createInstagramContainer(account, content),
+      );
+      if (
+        !(await this.recordTarget(storeId, target, { action: 'post.container_saved', containerId }))
+      )
+        return;
+    }
+    const savedId = containerId;
+    const state = await this.meta('instagram_container_status', () =>
+      driver.instagramContainerState(account, savedId),
+    );
+    if (state === 'published') return null;
+    if (state === 'failed') {
+      await this.recordTarget(storeId, target, {
+        action: 'post.container_cleared',
+        containerId: null,
+      });
+      throw socialError('POST_PROVIDER_REJECTED');
+    }
+    if (state !== 'ready') throw socialError('POST_CONTAINER_PROCESSING');
+    return this.sendClaimed(storeId, target, () =>
+      this.meta('instagram_publish_post', () => driver.publishInstagram(account, savedId)),
+    );
+  }
+
+  private async sendClaimed(
+    storeId: string,
+    target: PublishingTarget,
+    send: () => Promise<string>,
+  ) {
+    if (
+      !(await this.recordTarget(storeId, target, {
+        action: 'post.publishing',
+        status: 'publishing',
+      }))
+    )
+      return;
+    try {
+      return await send();
+    } catch (error) {
+      if (error instanceof MetaPublishingError && error.code !== 'unavailable')
+        await this.recordTarget(storeId, target, {
+          action: 'post.publish_rejected',
+          status: 'scheduled',
+        });
+      throw error;
+    }
+  }
+
+  private publishError(error: unknown, target: PublishingTarget) {
+    if (target.status === 'publishing') return socialError('POST_PUBLISH_UNCONFIRMED');
+    if (error instanceof AppError) return error;
+    return socialError(
+      error instanceof MetaPublishingError && error.code === 'rejected'
+        ? 'POST_PROVIDER_REJECTED'
+        : 'POST_PROVIDER_UNAVAILABLE',
+    );
+  }
+
+  private async comment(
+    { storeId, target, driver, account }: PublishContext,
+    externalId: string,
+    text: string,
+  ) {
+    try {
+      await this.meta('post_first_comment', () => driver.comment(account, externalId, text));
+    } catch {
+      const error = socialError('POST_COMMENT_FAILED');
+      await this.recordTarget(storeId, target, {
+        action: 'post.comment_failed',
+        errorCode: error.code,
+        errorMessage: error.message,
+      });
+    }
+  }
+
+  private finish(
+    storeId: string,
+    target: PublishingTarget,
+    result: { externalId: string | null } | { error: AppError },
+  ) {
+    const occurredAt = this.clock.now();
+    const payload = { postId: target.postId, postTargetId: target.id };
+    if ('externalId' in result)
+      return this.recordTarget(
+        storeId,
+        target,
+        {
+          action: 'post.published',
+          status: 'published',
+          externalPostId: result.externalId,
+          publishedAt: occurredAt,
+          errorCode: null,
+          errorMessage: null,
+        },
+        () =>
+          this.outbox.publish({
+            type: 'post.published',
+            storeId,
+            occurredAt: occurredAt.toISOString(),
+            payload: { ...payload, externalPostId: result.externalId },
+          }),
+      );
+    return this.recordTarget(
+      storeId,
+      target,
+      {
+        action: 'post.failed',
+        status: 'failed',
+        errorCode: result.error.code,
+        errorMessage: result.error.message,
+      },
+      async () => {
+        await this.outbox.publish({
+          type: 'post.failed',
+          storeId,
+          occurredAt: occurredAt.toISOString(),
+          payload: { ...payload, errorCode: result.error.code },
+        });
+        await this.notifications.notify(storeId, {
+          type: 'post.failed',
+          category: 'fix_now',
+          recipientPermission: 'social.edit',
+          title: 'A post could not be published',
+          body: result.error.message,
+          dedupeKey: `post.failed:${target.id}:${target.scheduledFor.toISOString()}`,
+        });
+      },
+    );
+  }
+
+  private async recordTarget(
+    storeId: string,
+    target: PublishingTarget,
+    { action, ...changes }: Changes & { action: string },
+    afterUpdate?: () => Promise<void>,
+  ) {
+    const updated = await this.transaction.run(storeId, async () => {
+      if (
+        !(await this.repository.updatePublishTarget(storeId, target, {
+          ...changes,
+          updatedAt: this.clock.now(),
+        }))
+      )
+        return false;
+      await this.audit.record(storeId, {
+        actor: { kind: 'system' },
+        action,
+        entityType: 'post_target',
+        entityId: target.id,
+      });
+      await afterUpdate?.();
+      return true;
+    });
+    if (updated) Object.assign(target, changes);
+    return updated;
+  }
+
+  private meta<Result>(operation: string, call: () => Promise<Result>) {
+    return measureVendorCall(this.logger, operation, 'Meta publishing request measured', call);
+  }
+}
