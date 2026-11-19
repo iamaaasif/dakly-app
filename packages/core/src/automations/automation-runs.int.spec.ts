@@ -1,11 +1,12 @@
 import 'reflect-metadata';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, aroundEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { countSmsParts } from '@dakly/contracts/sms';
@@ -44,11 +45,13 @@ const staffUserId = randomUUID();
 const ownerEmail = `owner-${ownerId}@example.test`;
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
-type WorkerContext = {
-  started: Promise<INestApplicationContext>;
-  closing?: Promise<void>;
+type RunnerFixture = {
+  signal: AbortSignal;
+  applications: Promise<INestApplicationContext>[];
+  pending: Set<Promise<unknown>>;
+  closing: boolean;
 };
-const applications = new Set<WorkerContext>();
+const fixtures = new AsyncLocalStorage<RunnerFixture>();
 
 type StepJobData = {
   storeId: string;
@@ -59,6 +62,8 @@ type StepJobData = {
 
 // A worker without dispatchers: queued step jobs stay in the queue to be read and run by hand.
 async function worker() {
+  const fixture = fixtures.getStore()!;
+  checkFixture(fixture);
   class TestModule {}
   Module({
     imports: [
@@ -74,36 +79,59 @@ async function worker() {
     providers: [WakeDueRunsJob, ContinueAutomationRunJob, ResumeWorkflowsOnWalletCredited],
   })(TestModule);
   const started = NestFactory.createApplicationContext(TestModule, { logger: false });
-  applications.add({ started });
+  fixture.applications.push(started);
   const application = await started;
+  checkFixture(fixture);
+
+  // Vitest can begin teardown while a timed-out test callback still has work in flight.
+  async function run<T>(work: () => Promise<T>): Promise<T> {
+    checkFixture(fixture);
+    const pending = work();
+    fixture.pending.add(pending);
+    try {
+      const result = await pending;
+      checkFixture(fixture);
+      return result;
+    } finally {
+      fixture.pending.delete(pending);
+    }
+  }
+
+  const entries = application.get(AutomationEntryService);
+  const consents = application.get(ConsentService);
+  const wallets = application.get(WalletService);
   return {
-    sweep: () => application.get(WakeDueRunsJob).handle({}),
+    sweep: () => run(() => application.get(WakeDueRunsJob).handle({})),
     runStep: (data: StepJobData) =>
-      runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data)),
-    entries: application.get(AutomationEntryService),
-    consents: application.get(ConsentService),
+      run(() => runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data))),
+    entries: {
+      start: (...args: Parameters<typeof entries.start>) => run(() => entries.start(...args)),
+    },
+    consents: {
+      record: (...args: Parameters<typeof consents.record>) => run(() => consents.record(...args)),
+    },
     resumeOnCredit: (data: unknown) =>
-      application.get(ResumeWorkflowsOnWalletCredited).handle(data),
-    wallets: application.get(WalletService),
+      run(() => application.get(ResumeWorkflowsOnWalletCredited).handle(data)),
+    wallets: {
+      credit: (...args: Parameters<typeof wallets.credit>) => run(() => wallets.credit(...args)),
+    },
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
+}
+
+function checkFixture({ signal, closing }: RunnerFixture) {
+  signal.throwIfAborted();
+  if (closing) throw new Error('Runner test fixture is closing');
+}
+
+async function drainFixture(fixture: RunnerFixture) {
+  fixture.closing = true;
+  await Promise.allSettled(fixture.pending);
 }
 
 function throwFirstRejection(results: PromiseSettledResult<unknown>[]) {
   const failure = results.find((result) => result.status === 'rejected');
   if (failure) throw failure.reason;
-}
-
-async function closeWorkers() {
-  const closing = [...applications].map((context) => {
-    context.closing ??= context.started
-      .then((application) => application.close())
-      .finally(() => {
-        applications.delete(context);
-      });
-    return context.closing;
-  });
-  throwFirstRejection(await Promise.allSettled(closing));
 }
 
 async function queuedSteps(queue: Queue): Promise<StepJobData[]> {
@@ -237,11 +265,21 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     );
   });
 
-  afterEach(closeWorkers);
+  aroundEach(async (runTest, { signal }) => {
+    const fixture: RunnerFixture = { signal, applications: [], pending: new Set(), closing: false };
+    try {
+      await fixtures.run(fixture, runTest);
+    } finally {
+      await drainFixture(fixture);
+      const closed = await Promise.allSettled(
+        fixture.applications.map(async (started) => (await started).close()),
+      );
+      throwFirstRejection(closed);
+    }
+  });
 
   afterAll(async () => {
     try {
-      await closeWorkers();
       await admin.pool.query('delete from automation_runs where store_id=$1', [storeId]);
       await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
       await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
@@ -264,15 +302,12 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     }
   });
 
-  it('claims a due run once even with two sweepers at the same moment', async ({ signal }) => {
+  it('claims a due run once even with two sweepers at the same moment', async () => {
     // More than one claim batch, so both sweepers loop over the same rows.
     const { runIds } = await dueRuns(wait, 150);
-    signal.throwIfAborted();
     const [first, second] = await Promise.all([worker(), worker()]);
-    signal.throwIfAborted();
 
     throwFirstRejection(await Promise.allSettled([first.sweep(), second.sweep()]));
-    signal.throwIfAborted();
     // A sweep takes at most 100 of one store's runs, so the rest come in the next sweep.
     await first.sweep();
 
@@ -742,7 +777,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+      await drainFixture(fixtures.getStore()!);
       clockNow = daytime;
       databaseNow = undefined;
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation((message) => sms.send(message));
