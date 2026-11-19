@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0058_snapshot.json`: **95 tables, 1275 columns, 388 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0059_snapshot.json`: **95 tables, 1276 columns, 389 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1417,6 +1417,7 @@ erDiagram
         uuid contact_identity_id FK "NULL; uuid"
         text destination_address "NULL; text"
         text status "NOT NULL; text"
+        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         integer sms_credits "NULL; integer"

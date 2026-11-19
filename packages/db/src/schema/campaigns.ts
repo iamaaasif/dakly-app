@@ -167,6 +167,9 @@ export const campaigns = pgTable(
     index('campaigns_start_due_by_store_idx')
       .on(table.storeId, table.scheduledFor, table.id)
       .where(sql`${table.status} = 'scheduled'`),
+    index('campaigns_unsettled_idx')
+      .on(table.storeId, table.settlementPendingAt, table.id)
+      .where(sql`${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -209,6 +212,8 @@ export const campaignRecipients = pgTable(
     // Phone or page-scoped id at freeze time.
     destinationAddress: text('destination_address'),
     status: text('status', { enum: recipientStatuses }).notNull(),
+    // An expired claim can be reconciled after the worker stops waiting for the provider.
+    claimedAt: timestamptz('claimed_at'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     smsCredits: integer('sms_credits'),

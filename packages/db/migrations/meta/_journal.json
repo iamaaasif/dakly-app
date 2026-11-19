@@ -414,6 +414,13 @@
       "when": 1795118126187,
       "tag": "0058_campaign_cancel_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795119391917,
+      "tag": "0059_campaign_cancel_claims",
+      "breakpoints": true
     }
   ]
 }
