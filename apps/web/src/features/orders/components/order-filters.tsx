@@ -41,14 +41,13 @@ export function OrderFilters({ query }: OrderFiltersProps) {
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-start gap-1 sm:gap-2">
+      <div className="flex flex-wrap items-end gap-2">
         <OrderSearch query={query} />
         <Button
           ref={trigger}
           variant="secondary"
           aria-expanded={expanded}
           aria-controls={panelId}
-          className="min-h-11 gap-1 px-2 text-sm sm:min-h-10 sm:gap-2 sm:px-4 sm:text-base"
           onClick={() => setPanel({ applied, expanded: !expanded })}
         >
           <SlidersHorizontal aria-hidden="true" size={16} strokeWidth={1.75} />

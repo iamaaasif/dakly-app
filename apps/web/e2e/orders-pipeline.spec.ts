@@ -16,9 +16,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string; storeIds: string[] };
   const storeId = fixture.storeIds[0]!;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence =
-    process.env.WEB_7_ORDERS_SCREENSHOTS ??
-    resolve(process.cwd(), '../../docs/design/evidence/ord-5-pipeline');
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-orders-list');
   const orderIds: string[] = [];
   const productId = randomUUID();
   const variantId = randomUUID();
@@ -76,10 +74,11 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
         .toBeLessThanOrEqual(width);
-      await page.screenshot({
-        path: resolve(evidence, `${name}-${width}.png`),
-        animations: 'disabled',
-      });
+      if (name === 'pipeline')
+        await page.screenshot({
+          path: resolve(evidence, `orders-list-${width}x${height}.png`),
+          animations: 'disabled',
+        });
     }
   }
 
@@ -189,6 +188,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('1 high-risk order')).toBeVisible();
     await expect(page.getByText('৳5,780 COD still with couriers')).toBeVisible();
     await expect(page.getByText('Cotton Panjabi (L) × 2')).toBeVisible();
+    await expect(page.getByText('Search orders', { exact: true })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Search orders' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveAttribute(
       'aria-expanded',
