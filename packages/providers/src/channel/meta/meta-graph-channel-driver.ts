@@ -43,6 +43,13 @@ function selectablePage(
   };
 }
 
+function responseError(status: number, payload: unknown): MetaRequestError {
+  const code = graphErrorSchema.safeParse(payload).data?.error.code;
+  const permissionDenied = code === 10 || (code !== undefined && code >= 200 && code <= 299);
+  const authError = status === 401 || code === 190 || code === 459 || permissionDenied;
+  return new MetaRequestError(authError ? 'auth_error' : 'unavailable');
+}
+
 type MetaApp = {
   appId: string;
   appSecret: string;
@@ -145,12 +152,7 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
     } catch {
       throw new MetaRequestError('unavailable');
     }
-    if (!response.ok) {
-      const code = graphErrorSchema.safeParse(payload).data?.error.code;
-      throw new MetaRequestError(
-        response.status === 401 || code === 190 || code === 459 ? 'auth_error' : 'unavailable',
-      );
-    }
+    if (!response.ok) throw responseError(response.status, payload);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new MetaRequestError('invalid_response');
     return parsed.data;

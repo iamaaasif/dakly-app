@@ -1718,7 +1718,16 @@ fixture('POST /channel-connections/meta', async () => {
   ]);
   expect((await f.request(a.member, 'POST', metaConnect, input)).statusCode).toBe(403);
 
-  const connected = await success(a, 'POST', metaConnect, 201, input);
+  const submissions = await Promise.all([
+    f.request(a.owner, 'POST', metaConnect, input),
+    f.request(a.owner, 'POST', metaConnect, input),
+  ]);
+  expect(submissions.filter((response) => response.statusCode === 201)).toHaveLength(1);
+  const connected = submissions.find((response) => response.statusCode === 201)!;
+  const replay = submissions.find((response) => response.statusCode !== 201)!;
+  expect(['META_SELECTION_NOT_FOUND', 'META_SELECTION_IN_PROGRESS']).toContain(
+    replay.json().error.code,
+  );
   const { ids } = connected.json();
   expect(ids).toHaveLength(2);
   await expectSavedMetaCredential(a, ids[0], 'facebook_page');
@@ -1730,7 +1739,10 @@ fixture('POST /channel-connections/meta', async () => {
     { kind: 'facebook_page', externalAccountId: '1001002' },
     instagramSelection,
   ]);
-  expect((await success(b, 'GET', '/channel-connections', 200)).json()).toEqual({ items: [] });
+  expect((await success(b, 'GET', '/channel-connections', 200)).json()).toEqual({
+    items: [],
+    nextCursor: null,
+  });
   const events = await f.admin.pool.query(
     'select payload from outbox_events where store_id=$1 and type=$2',
     [a.id, 'channel.connected'],
@@ -1767,6 +1779,7 @@ fixture('GET /channel-connections', async () => {
   const own = await seedChannel(b);
   const result = await success(b, 'GET', '/channel-connections', 200);
   expect(result.json()).toEqual({
+    nextCursor: null,
     items: [
       {
         id: own,
@@ -1780,6 +1793,18 @@ fixture('GET /channel-connections', async () => {
       },
     ],
   });
+  const second = await seedChannel(b);
+  const firstPage = await success(b, 'GET', '/channel-connections?limit=1', 200);
+  const { items, nextCursor } = firstPage.json();
+  expect(items.map(({ id }: { id: string }) => id)).toEqual([nextCursor]);
+  const nextPage = await success(
+    b,
+    'GET',
+    `/channel-connections?limit=1&cursor=${nextCursor}`,
+    200,
+  );
+  expect(nextPage.json().nextCursor).toBeNull();
+  expect([nextCursor, nextPage.json().items[0].id].sort()).toEqual([own, second].sort());
   expect((await f.request(b.member, 'GET', '/channel-connections')).statusCode).toBe(403);
 });
 

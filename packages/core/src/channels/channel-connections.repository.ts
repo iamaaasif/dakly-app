@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, lt, ne, sql } from 'drizzle-orm';
 
+import type { ChannelConnectionListQuery } from '@dakly/contracts/channels';
 import { channelConnections } from '@dakly/db/schema/channels';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -31,14 +32,41 @@ const connectionFields = {
 export class ChannelConnectionsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string) {
+  list(storeId: string, { cursor, limit }: ChannelConnectionListQuery) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select(connectionFields)
         .from(channelConnections)
-        .where(eq(channelConnections.storeId, storeId))
-        .orderBy(desc(channelConnections.connectedAt), desc(channelConnections.id)),
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            cursor ? lt(channelConnections.id, cursor) : undefined,
+          ),
+        )
+        .orderBy(desc(channelConnections.id))
+        .limit(limit + 1),
     );
+  }
+
+  async hasForeignOwner(
+    storeId: string,
+    accounts: Pick<MetaConnection, 'kind' | 'externalAccountId'>[],
+  ) {
+    const values = sql.join(
+      accounts.map(
+        ({ kind, externalAccountId }) => sql`(${kind}::text, ${externalAccountId}::text)`,
+      ),
+      sql`, `,
+    );
+    const result = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ conflict: boolean }>(sql`
+        select exists (
+          select 1 from (values ${values}) as accounts(kind, external_id)
+          where store_id_for_channel_account(kind, external_id) <> ${storeId}::uuid
+        ) as conflict
+      `),
+    );
+    return result.rows[0]?.conflict ?? false;
   }
 
   saveMeta(storeId: string, account: MetaConnection, now: Date) {

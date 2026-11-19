@@ -24,6 +24,13 @@ export type MetaAuthorizationAccounts = {
   }[];
 };
 
+export const channelConnectionListQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type ChannelConnectionListQuery = z.infer<typeof channelConnectionListQuerySchema>;
+
 export type ChannelConnection = {
   id: string;
   kind: (typeof channelConnectionKinds)[number];

@@ -130,6 +130,19 @@ describe('MetaGraphChannelDriver', () => {
     expect(request!.headers.get('authorization')).toBe('Bearer test-page-credential');
   });
 
+  it('treats a Meta Page permission denial as an authorization error', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json(
+        { error: { code: 200, message: 'private permission details' } },
+        { status: 403 },
+      ),
+    );
+    await expect(driver.subscribePage('123', 'test-page-credential')).rejects.toMatchObject({
+      code: 'auth_error',
+      message: 'Meta request failed',
+    });
+  });
+
   it('returns a typed failure without the vendor error text', async () => {
     vi.stubGlobal('fetch', async () =>
       Response.json({ error: { code: 190, message: 'private token details' } }, { status: 400 }),
