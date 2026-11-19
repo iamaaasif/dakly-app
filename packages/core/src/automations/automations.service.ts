@@ -46,9 +46,12 @@ type StatusMove = keyof typeof STATUS_MOVES;
 const PAUSE_REASONS = {
   publish: { pauseReason: null },
   enable: { pauseReason: null },
-  pause: { pauseReason: 'manual' },
+  pause: { pauseReason: 'manual', hasBalanceResumeSendAllowance: false },
   archive: { pauseReason: null },
-} as const satisfies Record<StatusMove, { pauseReason?: AutomationPauseReason | null }>;
+} as const satisfies Record<
+  StatusMove,
+  { pauseReason: AutomationPauseReason | null; hasBalanceResumeSendAllowance?: boolean }
+>;
 
 // An archived workflow is deleted for the shop; its versions stay for the runs on them.
 const VISIBLE_STATUSES = ['draft', 'active', 'paused'] as const;
@@ -219,12 +222,13 @@ export class AutomationsService {
   ): Promise<AutomationResponse> {
     const { from, to } = STATUS_MOVES[move];
     // Only a top-up ends a pause for a short balance (resumeAfterTopUp).
-    const automation = await this.repository.change(storeId, automationId, from, {
-      status: to,
-      ...PAUSE_REASONS[move],
-      updatedAt: this.clock.now(),
-      ...(to === 'active' && { unlessPausedFor: 'balance' }),
-    });
+    const automation = await this.repository.change(
+      storeId,
+      automationId,
+      from,
+      { status: to, ...PAUSE_REASONS[move], updatedAt: this.clock.now() },
+      to === 'active' ? 'balance' : undefined,
+    );
     if (automation) return toAutomationResponse(automation);
     const current = await this.findVisible(storeId, automationId);
     if (current.status === 'paused' && current.pauseReason === 'balance')

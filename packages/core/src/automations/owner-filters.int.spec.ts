@@ -96,10 +96,7 @@ describe('automation filters without RLS assistance', () => {
       await repository.change(f.b, a.automation.id, ['paused'], { ...toActive }),
     ).toBeUndefined();
     expect(
-      await repository.change(f.a, a.automation.id, ['paused'], {
-        ...toActive,
-        unlessPausedFor: 'balance',
-      }),
+      await repository.change(f.a, a.automation.id, ['paused'], toActive, 'balance'),
     ).toBeUndefined();
     await f.tenant.forStore(f.b, async () => {
       const ids = await repository.lockBalancePaused(f.b, 2);

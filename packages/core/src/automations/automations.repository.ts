@@ -52,13 +52,12 @@ const versionColumns = {
 type AutomationChange = {
   status?: AutomationStatus;
   pauseReason?: AutomationPauseReason | null;
+  hasBalanceResumeSendAllowance?: boolean;
   name?: string;
   graph?: AutomationGraph;
   triggerType?: TriggerKey;
   publishedVersionId?: string;
   updatedAt: Date;
-  // Not a column: leaves a workflow paused for this reason as it is.
-  unlessPausedFor?: AutomationPauseReason;
 };
 
 @Injectable()
@@ -130,16 +129,13 @@ export class AutomationsRepository {
     storeId: string,
     id: string,
     from: readonly AutomationStatus[],
-    { graph, unlessPausedFor, ...change }: AutomationChange,
+    { graph, ...change }: AutomationChange,
+    unlessPausedFor?: AutomationPauseReason,
   ): Promise<Automation | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automations)
-        .set({
-          ...change,
-          ...(graph && { draftGraph: graph }),
-          ...(change.pauseReason === 'manual' && { hasBalanceResumeSendAllowance: false }),
-        })
+        .set({ ...change, ...(graph && { draftGraph: graph }) })
         .where(
           and(
             eq(automations.storeId, storeId),
