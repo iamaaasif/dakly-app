@@ -23,15 +23,15 @@ export const META_AUTHORIZATION_DRIVER = Symbol('META_AUTHORIZATION_DRIVER');
 
 const loginLifetimeSeconds = 10 * 60;
 
-type Actor = { userId: string; access: StoreAccess };
+type Actor = { userId: string; sessionId: string; access: StoreAccess };
 
 function stateKey(
   storeId: string,
-  userId: string,
+  actor: Actor,
   kind: 'state' | 'selection',
   value: string,
 ): string {
-  return `meta-auth:${storeId}:${userId}:${kind}:${hashToken(value).toString('hex')}`;
+  return `meta-auth:${storeId}:${actor.userId}:${actor.sessionId}:${kind}:${hashToken(value).toString('hex')}`;
 }
 
 function loginError(code: keyof typeof META_AUTHORIZATION_ERRORS) {
@@ -54,7 +54,7 @@ export class MetaAuthorizationService {
     const state = randomBytes(32).toString('base64url');
     const authorizationUrl = driver.authorizationUrl(state);
     await this.valkey.connection.set(
-      stateKey(storeId, actor.userId, 'state', state),
+      stateKey(storeId, actor, 'state', state),
       '1',
       'EX',
       loginLifetimeSeconds,
@@ -68,7 +68,7 @@ export class MetaAuthorizationService {
     input: MetaAuthorizationInput,
   ): Promise<MetaAuthorizationAccounts> {
     const driver = this.authorizedDriver(actor.access);
-    const state = stateKey(storeId, actor.userId, 'state', input.state);
+    const state = stateKey(storeId, actor, 'state', input.state);
     if (!(await this.valkey.connection.getdel(state)))
       throw loginError('META_LOGIN_STATE_NOT_FOUND');
 
@@ -86,7 +86,7 @@ export class MetaAuthorizationService {
         plaintext,
       );
       await this.valkey.connection.set(
-        stateKey(storeId, actor.userId, 'selection', selectionId),
+        stateKey(storeId, actor, 'selection', selectionId),
         JSON.stringify({
           keyVersion: secret.keyVersion,
           ciphertext: secret.ciphertext.toString('base64'),
