@@ -212,6 +212,8 @@ export class SocialService {
     input: Pick<CreatePostInput, 'kind' | 'caption' | 'mediaFileIds' | 'targets'>,
     previous: Target[],
   ) {
+    if (input.kind === 'story' && input.mediaFileIds.length !== 1)
+      throw socialError('POST_PHOTOS_REQUIRED');
     const retained = new Set(previous.map(({ channelConnectionId }) => channelConnectionId));
     const ids = input.targets.map(({ channelConnectionId }) => channelConnectionId);
     const selected = await this.channels.postingConnections(storeId, ids);
@@ -220,8 +222,6 @@ export class SocialService {
       const connection = connections.get(target.channelConnectionId);
       if (!connection || (connection.status !== 'active' && !retained.has(connection.id)))
         throw socialError('POST_CONNECTION_NOT_FOUND');
-      if (input.kind === 'story' && input.mediaFileIds.length !== 1)
-        throw socialError('POST_PHOTOS_REQUIRED');
       if (connection.kind === 'instagram')
         this.validateInstagram(
           target.captionOverride ?? input.caption ?? '',

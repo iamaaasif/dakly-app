@@ -3026,6 +3026,19 @@ describe('every production shop route isolates its data', () => {
       expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
+  it('requires one photo for a story draft even without any targets', async () => {
+    const shop = await f.shop();
+    const story = await f.request(
+      shop.owner,
+      'POST',
+      '/posts',
+      { kind: 'story' },
+      { 'idempotency-key': randomUUID() },
+    );
+    expect(story.statusCode, story.body).toBe(400);
+    expect(story.json().error.code).toBe('POST_PHOTOS_REQUIRED');
+  });
+
   it('keeps post media in its own store on create and edit', async () => {
     const { a, b } = await pair();
     const foreignPhoto = await seedPostPhoto(a);
