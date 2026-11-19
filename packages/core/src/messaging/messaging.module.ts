@@ -10,6 +10,8 @@ import { SmsModule } from '../sms/sms.module';
 import { SmsSendersModule } from '../sms-senders/sms-senders.module';
 import { StoresModule } from '../stores/stores.module';
 import { ChannelDispatchService } from './channel-dispatch.service';
+import { ChannelReceiptsRepository } from './channel-receipts.repository';
+import { ChannelReceiptsService } from './channel-receipts.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { MessagingService } from './messaging.service';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
@@ -31,7 +33,9 @@ import { OutboundMessagingRepository } from './outbound-messaging.repository';
     ChannelDispatchService,
     InboundMessagingRepository,
     OutboundMessagingRepository,
+    ChannelReceiptsRepository,
+    ChannelReceiptsService,
   ],
-  exports: [MessagingService, ChannelDispatchService],
+  exports: [MessagingService, ChannelDispatchService, ChannelReceiptsService],
 })
 export class MessagingModule {}

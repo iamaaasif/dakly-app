@@ -1140,8 +1140,15 @@ fixture('POST /automations', async () => {
   const { a, b } = await pair(),
     id = await automation(a),
     before = await f.row('automations', id);
-  const own = await automation(b);
-  expect((await f.row('automations', own)).store_id).toBe(b.id);
+  const response = await success(b, 'POST', '/automations', 201, {
+    name: 'Birthday template',
+    templateKey: 'birthday',
+  });
+  expect(response.json()).toMatchObject({
+    templateKey: 'birthday',
+    graph: { trigger: { key: 'birthday' }, firstStepKey: 'morning' },
+  });
+  expect((await f.row('automations', response.json().id)).store_id).toBe(b.id);
   expect(await f.row('automations', id)).toEqual(before);
 });
 fixture('GET /automations/:automationId', async () => {

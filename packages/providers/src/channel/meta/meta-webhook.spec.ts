@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseMetaWebhook } from './meta-webhook';
+import { parseMetaReceipts, parseMetaWebhook } from './meta-webhook';
 
 const timestamp = 1795053600000;
 const message = {
@@ -88,6 +88,118 @@ describe('Meta webhook messages', () => {
         object: 'whatsapp_business_account',
         entry: [{ id: '10001', messaging: [message] }],
       }),
+    ).toEqual([]);
+  });
+});
+
+describe('Meta webhook receipts', () => {
+  it('normalizes Messenger deliveries by id and reads by watermark', () => {
+    const target = { sender: { id: '10003' }, recipient: { id: '10001' } };
+    expect(
+      parseMetaReceipts({
+        object: 'page',
+        entry: [
+          {
+            id: '10001',
+            messaging: [
+              { ...target, delivery: { mids: ['mid.10004'], watermark: timestamp } },
+              { ...target, timestamp: timestamp + 500, read: { watermark: timestamp } },
+              {
+                ...target,
+                recipient: { id: 'other' },
+                delivery: { mids: ['wrong'], watermark: timestamp },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        kind: 'delivered',
+        channel: 'messenger',
+        accountExternalId: '10001',
+        recipientExternalId: '10003',
+        occurredAt: new Date(timestamp),
+        externalMessageIds: ['mid.10004'],
+      },
+      {
+        kind: 'read',
+        channel: 'messenger',
+        accountExternalId: '10001',
+        recipientExternalId: '10003',
+        occurredAt: new Date(timestamp + 500),
+        through: new Date(timestamp),
+      },
+    ]);
+  });
+
+  it('reads an Instagram seen receipt for the specific message', () => {
+    expect(
+      parseMetaReceipts({
+        object: 'instagram',
+        entry: [
+          {
+            id: '10001',
+            messaging: [
+              {
+                sender: message.sender,
+                recipient: message.recipient,
+                timestamp,
+                read: { mid: 'mid.10004' },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        kind: 'read',
+        channel: 'instagram',
+        accountExternalId: '10001',
+        recipientExternalId: '10003',
+        occurredAt: new Date(timestamp),
+        externalMessageIds: ['mid.10004'],
+      },
+    ]);
+  });
+
+  it('only correlates an echo sent by the Page with an opaque operation id', () => {
+    const operationKey = '00000000-0000-4000-8000-000000000001';
+    const echo = { mid: 'mid.outside', is_echo: true, metadata: operationKey, app_id: 10111 };
+    const outbound = {
+      sender: message.recipient,
+      recipient: message.sender,
+      timestamp,
+      message: echo,
+    };
+    expect(
+      parseMetaReceipts({
+        object: 'page',
+        entry: [
+          {
+            id: '10001',
+            messaging: [
+              outbound,
+              { ...message, message: echo },
+              { ...outbound, message: { ...echo, metadata: 'wrong' } },
+            ],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        kind: 'echo',
+        channel: 'messenger',
+        accountExternalId: '10001',
+        recipientExternalId: '10003',
+        occurredAt: new Date(timestamp),
+        externalMessageId: echo.mid,
+        operationKey,
+        appExternalId: '10111',
+      },
+    ]);
+    expect(
+      parseMetaReceipts({ object: 'instagram', entry: [{ id: '10001', messaging: [outbound] }] }),
     ).toEqual([]);
   });
 });

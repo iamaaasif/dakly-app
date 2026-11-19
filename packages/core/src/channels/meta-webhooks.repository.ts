@@ -44,13 +44,15 @@ export class MetaWebhooksRepository {
     return row;
   }
 
-  async findStoresForAccounts(accounts: Map<string, string>) {
+  async findStoresForAccounts(accounts: { kind: string; externalAccountId: string }[]) {
     const result = await this.database.execute<{
+      kind: string;
       externalAccountId: string;
       storeId: string | null;
     }>(sql`
-      select account_id as "externalAccountId", store_id_for_channel_account(kind, account_id) as "storeId"
-      from unnest(${sql.param([...accounts.keys()])}::text[], ${sql.param([...accounts.values()])}::text[])
+      select kind, account_id as "externalAccountId", store_id_for_channel_account(kind, account_id) as "storeId"
+      from unnest(${sql.param(accounts.map((account) => account.externalAccountId))}::text[],
+        ${sql.param(accounts.map((account) => account.kind))}::text[])
         as accounts(account_id, kind)
     `);
     return result.rows;

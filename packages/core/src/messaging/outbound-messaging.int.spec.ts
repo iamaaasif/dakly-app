@@ -182,7 +182,7 @@ it('submits a queued reply once outside the database transaction', async () => {
   expect(calls).toEqual([{ inside: false, operationKey: messageId }]);
   const sent = await f.row('messages', messageId);
   expect(sent).toMatchObject({ status: 'sent', external_id: `fake-${messageId}` });
-  expect(new Date(String(sent.sent_at))).toEqual(now);
+  expect(new Date(String(sent.sent_at))).toEqual(new Date(now.getTime() + MINUTE_MS));
 });
 
 it('never submits twice if the worker lost its result after provider acceptance', async () => {
