@@ -11,16 +11,18 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import { createDatabase } from '@dakly/db/client';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
+import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { StoreTransaction } from '../platform/database/store-transaction';
+import { runWithJobContext } from '../platform/logging/job-context';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
@@ -60,7 +62,8 @@ async function worker() {
   applications.push(application);
   return {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
-    runStep: (data: StepJobData) => application.get(ContinueAutomationRunJob).handle(data),
+    runStep: (data: StepJobData) =>
+      runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data)),
     consents: application.get(ConsentService),
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
@@ -172,6 +175,8 @@ async function waitForBlocker(backendPid: number, count = 1) {
 
 describe('Workflow runner (Postgres and Valkey)', () => {
   beforeAll(async () => {
+    vi.stubEnv('CODE_HASH_KEY', Buffer.alloc(32, 5).toString('base64'));
+    resetEnvForTests();
     await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
     await admin.pool.query(
       "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'সুমি আক্তার','01711000201','manual','customer')",
@@ -197,6 +202,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from contacts where store_id=$1', [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
     } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
       await admin.pool.end();
     }
   });
@@ -537,6 +544,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         : new Date(opensAt.getTime() + (real > opensAt ? 24 * HOUR : 0));
     let clockNow = daytime;
     let databaseNow: Date | undefined;
+    const schedulerTime = AutomationRunsRepository.prototype.schedulerTime;
+    const fixtureSchedulerTime = async () => databaseNow ?? clockNow;
     const send = (
       category: 'marketing' | 'transactional',
       ifNotReachable: 'skip' | 'exit' = 'skip',
@@ -584,7 +593,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     async function sendStep(runId: string) {
       const result = await admin.pool.query(
-        'select outcome,category,channel,skip_reason,provider_message_id,opt_out_code from automation_run_steps where run_id=$1 and kind=$2',
+        'select outcome,category,channel,skip_reason,provider_message_id from automation_run_steps where run_id=$1 and kind=$2',
         [runId, 'send'],
       );
       return result.rows;
@@ -598,14 +607,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       return result.rows;
     }
 
-    async function balance() {
-      const result = await admin.pool.query(
-        "select balance_quantity_after::int as balance from wallet_ledger where store_id=$1 and wallet='sms_credits' order by revision desc limit 1",
-        [storeId],
-      );
-      return result.rows[0].balance as number;
-    }
-
     function sentFor(runId: string) {
       return sms.messages.filter((message) => message.idempotencyKey?.startsWith(`run:${runId}:`));
     }
@@ -615,8 +616,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         sms.send(message),
       );
       vi.spyOn(Clock.prototype, 'now').mockImplementation(() => clockNow);
-      vi.spyOn(StoreTransaction.prototype, 'databaseTime').mockImplementation(
-        async () => databaseNow ?? clockNow,
+      vi.spyOn(AutomationRunsRepository.prototype, 'schedulerTime').mockImplementation(
+        fixtureSchedulerTime,
       );
     });
 
@@ -630,38 +631,48 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       vi.restoreAllMocks();
     });
 
-    it('sends through the gate with the opt-out link and the step key, and a retry sends once', async () => {
+    it('sends through the gate with the opt-out link and the step key', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
         runIds: [runId],
       } = await dueRuns(send('marketing'), 1, 'active', contact);
-      // The provider takes the message but the answer is lost.
+      const retryFields = async () =>
+        (
+          await admin.pool.query(
+            "select destination_hash,opt_out_url,first_tried_at from automation_run_steps where run_id=$1 and kind='send'",
+            [runId],
+          )
+        ).rows;
+      let inFlight: Awaited<ReturnType<typeof retryFields>> = [];
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
-        await sms.send(message);
-        throw new Error('socket hang up');
+        inFlight = await retryFields();
+        return sms.send(message);
       });
 
       await runDueStep(runner, runId!);
-      expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
-      const [started] = await sendStep(runId!);
-      expect(started).toMatchObject({ outcome: 'sending', opt_out_code: expect.any(String) });
 
-      await wakeNow(runId!);
-      await runDueStep(runner, runId!);
-
+      const link = await admin.pool.query(
+        "select kind,code from tracked_links where store_id=$1 and source_type='automation' and contact_id=$2",
+        [storeId, contact],
+      );
+      expect(link.rows).toEqual([{ kind: 'sms_opt_out', code: expect.any(String) }]);
       const sent = sentFor(runId!);
+      const optOutUrl = `${loadEnv().SHORT_LINK_BASE_URL}/s/${link.rows[0].code}`;
       expect(sent).toHaveLength(1);
       expect(sent[0]).toMatchObject({
         idempotencyKey: `run:${runId}:first`,
-        text: `নতুন কালেকশন এসেছে\n${loadEnv().SHORT_LINK_BASE_URL}/s/${started.opt_out_code}`,
+        text: `নতুন কালেকশন এসেছে\n${optOutUrl}`,
       });
-      const link = await admin.pool.query(
-        'select kind,source_type,contact_id from tracked_links where code=$1',
-        [started.opt_out_code],
-      );
-      expect(link.rows).toEqual([
-        { kind: 'sms_opt_out', source_type: 'automation', contact_id: contact },
+      expect(inFlight).toEqual([
+        {
+          destination_hash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          opt_out_url: optOutUrl,
+          first_tried_at: daytime,
+        },
+      ]);
+      expect(await retryFields()).toEqual([
+        { destination_hash: null, opt_out_url: null, first_tried_at: daytime },
       ]);
       expect(await sendStep(runId!)).toEqual([
         expect.objectContaining({ outcome: 'sent', category: 'marketing', channel: 'sms' }),
@@ -766,68 +777,284 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect((await run(runId!)).current_step_key).toBe('end');
     });
 
-    it('retries a temporary provider error, then fails the run after 36 hours', async () => {
+    it('fails the run and keeps the credits when the provider gives no answer', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
         runIds: [runId],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValue(new Error('connection refused'));
-
-      await runDueStep(runner, runId!);
-      const retrying = await admin.pool.query(
-        'select status,wake_at,last_error from automation_runs where id=$1',
-        [runId],
-      );
-      expect(retrying.rows[0]).toMatchObject({
-        status: 'waiting',
-        wake_at: new Date(daytime.getTime() + MINUTE),
-        last_error: 'The SMS provider did not answer; trying again',
+      // The provider takes the message but the answer is lost.
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        await sms.send(message);
+        throw new Error('socket hang up');
       });
 
-      clockNow = new Date(daytime.getTime() + 36 * HOUR);
-      await wakeNow(runId!);
       await runDueStep(runner, runId!);
+      await runner.sweep();
 
+      expect(sentFor(runId!)).toHaveLength(1);
       const failed = await admin.pool.query(
-        'select status,last_error,finished_at from automation_runs where id=$1',
+        'select status,last_error from automation_runs where id=$1',
         [runId],
       );
       expect(failed.rows[0]).toEqual({
         status: 'failed',
-        last_error: expect.stringContaining('The SMS provider did not answer for 36 hours.'),
-        finished_at: clockNow,
+        last_error: expect.stringContaining('credits stay reserved'),
       });
-      expect(failed.rows[0]?.last_error).toContain('credits stay reserved');
       expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
-      // The provider may have taken it, so the credits stay reserved for reconciliation.
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
     });
 
-    it('releases credits and leaves the cap free when the final contact lookup fails', async () => {
+    it.each(['a new worker claims the run', 'the contact changes phone'] as const)(
+      'does not submit the first SMS if %s during provider preparation',
+      async (change) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const reclaim = change === 'a new worker claims the run';
+        databaseNow = new Date(Date.now() - (reclaim ? 6 * MINUTE : 0));
+        const {
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            if (reclaim) {
+              const oldClaim = (await run(runId!)).claimed_at;
+              databaseNow = new Date();
+              await runner.sweep();
+              expect((await run(runId!)).claimed_at).not.toEqual(oldClaim);
+            } else {
+              await admin.pool.query('update contacts set phone=$2 where id=$1', [
+                contact,
+                '01712000998',
+              ]);
+            }
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        if (reclaim) {
+          expect(await run(runId!)).toMatchObject({ status: 'running' });
+          expect(await sendStep(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+          await runDueStep(runner, runId!);
+          expect(sentFor(runId!)).toHaveLength(1);
+          expect(await ledgerFor(runId!)).toEqual([
+            { kind: 'reserve', delta: -1 },
+            { kind: 'release', delta: 1 },
+            { kind: 'charge', delta: -1 },
+          ]);
+        } else {
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+        }
+      },
+    );
+
+    it.each(['marketing', 'transactional'] as const)(
+      'rechecks consent for a %s first SMS after the phone lookup',
+      async (category) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          runIds: [runId],
+        } = await dueRuns(send(category), 1, 'active', contact);
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            await runner.consents.record(
+              storeId,
+              {
+                contactId: contact,
+                channel: 'sms',
+                status: 'withdrawn',
+                source: 'opt_out_link',
+                evidence: null,
+              },
+              { kind: 'system' },
+            );
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+        } finally {
+          phone.mockRestore();
+        }
+        if (category === 'transactional') {
+          expect(sentFor(runId!)).toHaveLength(1);
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        } else {
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await sendStep(runId!)).toEqual([
+            expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_consent' }),
+          ]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+        }
+      },
+    );
+
+    it.each(['quiet hours start', 'the workflow pauses'] as const)(
+      'does not reserve or send when %s during message preparation',
+      async (change) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        databaseNow = new Date();
+        clockNow = new Date(opensAt.getTime() + 11 * HOUR);
+        const {
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            if (change === 'the workflow pauses')
+              await admin.pool.query("update automations set status='paused' where id=$1", [
+                automationId,
+              ]);
+            else clockNow = new Date(opensAt.getTime() + 12 * HOUR);
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({
+          status: 'waiting',
+          current_step_key: 'first',
+        });
+        if (change === 'quiet hours start')
+          expect((await run(runId!)).wake_at).toEqual(
+            new Date(opensAt.getTime() + 24 * HOUR - 30 * MINUTE),
+          );
+      },
+    );
+
+    it('releases credits and leaves the cap free when the provider refuses delivery', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
-      const hook = vi
-        .spyOn(ContactsService.prototype, 'getPhoneForSend')
-        .mockRejectedValueOnce(new Error('database unavailable'));
-      try {
-        await runDueStep(runner, first.runIds[0]!);
-        expect(sentFor(first.runIds[0]!)).toEqual([]);
-        expect(await sendStep(first.runIds[0]!)).toEqual([
-          expect.objectContaining({ outcome: 'failed' }),
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
+      await runDueStep(runner, first.runIds[0]!);
+      expect(sentFor(first.runIds[0]!)).toEqual([]);
+      expect(await sendStep(first.runIds[0]!)).toEqual([
+        expect.objectContaining({ outcome: 'failed' }),
+      ]);
+      expect(await ledgerFor(first.runIds[0]!)).toEqual([
+        { kind: 'reserve', delta: -1 },
+        { kind: 'release', delta: 1 },
+      ]);
+      const second = await dueRuns(send('marketing'), 1, 'active', contact);
+      await runDueStep(runner, second.runIds[0]!);
+      expect(sentFor(second.runIds[0]!)).toHaveLength(1);
+    });
+
+    it.each(['allowed', 'quiet hours'] as const)(
+      'keeps the original send cutoff when preparation outlives the worker lease in %s',
+      async (policy) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const startedAt = new Date();
+        const wakeAt = new Date(startedAt.getTime() - 24 * HOUR + 7 * MINUTE);
+        databaseNow = startedAt;
+        await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+          runId,
+          wakeAt,
         ]);
-        expect(await ledgerFor(first.runIds[0]!)).toEqual([
+
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            databaseNow = new Date(startedAt.getTime() + 6 * MINUTE);
+            if (policy === 'quiet hours') clockNow = new Date(opensAt.getTime() + 12 * HOUR);
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+          expect(await run(runId!)).toMatchObject({ status: 'waiting', wake_at: wakeAt });
+          expect(await sendStep(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+        } finally {
+          phone.mockRestore();
+        }
+
+        databaseNow = new Date(startedAt.getTime() + 8 * MINUTE);
+        await runDueStep(runner, runId!);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'late' })]);
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+      },
+    );
+
+    it.each([false, true])(
+      'leaves a failed preparation for lease recovery, paused=%s',
+      async (pause) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async () => {
+            if (pause)
+              await admin.pool.query("update automations set status='paused' where id=$1", [
+                automationId,
+              ]);
+            throw new Error('database unavailable');
+          });
+        try {
+          await expect(runDueStep(runner, runId!)).rejects.toMatchObject({
+            code: 'MESSAGING_PREPARATION_FAILED',
+          });
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'first' });
+        if (pause)
+          await admin.pool.query("update automations set status='active' where id=$1", [
+            automationId,
+          ]);
+        await admin.pool.query(
+          "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
+          [runId],
+        );
+        const oldJob = (await runner.queue.getJobs(['waiting'])).find(
+          (job) => job.data.automationRunId === runId,
+        );
+        await oldJob?.remove();
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!)).toHaveLength(1);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
           { kind: 'reserve', delta: -1 },
           { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
         ]);
-        const second = await dueRuns(send('marketing'), 1, 'active', contact);
-        await runDueStep(runner, second.runIds[0]!);
-        expect(sentFor(second.runIds[0]!)).toHaveLength(1);
-      } finally {
-        hook.mockRestore();
-      }
-    });
+      },
+    );
 
     it.each([
       ['before gate', 'skip'],
@@ -1353,27 +1580,40 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const {
         runIds: [runId],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
-      databaseNow = daytime;
-      clockNow = new Date(daytime.getTime() - 6 * MINUTE);
-      let stolen = 0;
+      const scheduler = vi.mocked(AutomationRunsRepository.prototype.schedulerTime);
+      scheduler.mockImplementation(schedulerTime);
+      clockNow = new Date(Date.now() - 6 * MINUTE);
+      let reclaimed: boolean | undefined;
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
-        const result = await admin.pool.query(
-          "update automation_runs set claimed_at=$2 where id=$1 and status='running' and claimed_at < $2::timestamptz - interval '5 minutes' returning id",
-          [runId, daytime],
-        );
-        stolen = result.rowCount ?? 0;
+        const sweep = await admin.pool.connect();
+        try {
+          await sweep.query('begin');
+          const { rows } = await sweep.query<{ reclaimed: boolean }>(
+            'select exists (select 1 from due_automation_runs(1000, 100) where automation_run_id=$1) as reclaimed',
+            [runId],
+          );
+          reclaimed = rows[0]?.reclaimed;
+        } finally {
+          // The sweep may find other due fixtures. Leave all claims as they were.
+          await sweep.query('rollback');
+          sweep.release();
+        }
         return sms.send(message);
       });
 
-      await runDueStep(runner, runId!);
+      try {
+        await runDueStep(runner, runId!);
 
-      expect(stolen).toBe(0);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
-      expect(await ledgerFor(runId!)).toEqual([
-        { kind: 'reserve', delta: -1 },
-        { kind: 'release', delta: 1 },
-        { kind: 'charge', delta: -1 },
-      ]);
+        expect(reclaimed).toBe(false);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      } finally {
+        scheduler.mockImplementation(fixtureSchedulerTime);
+      }
     });
 
     it('counts an accepted send with a lost answer toward the marketing cap', async () => {
@@ -1395,56 +1635,105 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await ledgerFor(first.runIds[0]!)).toEqual([{ kind: 'reserve', delta: -1 }]);
     });
 
-    it.each(['after eligibility read', 'after gate commit'] as const)(
-      'refuses a replaced phone %s without sending or keeping credits',
-      async (when) => {
-        const runner = await worker();
-        const contact = await customer(true, runner);
+    it('refuses a replaced phone while the final dispatch gate waits', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const blocker = await admin.pool.connect();
+      let running: ReturnType<typeof runDueStep> | undefined;
+      let transactionOpen = false;
+      try {
+        await blocker.query('begin');
+        transactionOpen = true;
         const {
-          runIds: [runId],
-        } = await dueRuns(send('marketing'), 1, 'active', contact);
-        const replacePhone = () =>
-          admin.pool.query('update contacts set phone=$1 where id=$2', [
-            `0191100${String(++phone).padStart(4, '0')}`,
-            contact,
-          ]);
-        const originalRead = ContactsService.prototype.findRecipients;
-        const originalSend = MessagingService.prototype.send;
-        let replacement: ReturnType<typeof replacePhone> | undefined;
-        const readHook =
-          when === 'after eligibility read'
-            ? vi
-                .spyOn(ContactsService.prototype, 'findRecipients')
-                .mockImplementationOnce(async function (store, ids) {
-                  const rows = await originalRead.call(this, store, ids);
-                  replacement = replacePhone().then(async (result) => {
-                    expect(await sendStep(runId!)).toHaveLength(1);
-                    return result;
-                  });
-                  return rows;
-                })
-            : undefined;
-        const hook = vi
-          .spyOn(MessagingService.prototype, 'send')
-          .mockImplementationOnce(async function (store, message, prepared) {
-            if (when === 'after gate commit') replacement = replacePhone();
-            await replacement;
-            return originalSend.call(this, store, message, prepared);
-          });
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('select id from contacts where store_id=$1 and id=$2 for update', [
+          storeId,
+          contact,
+        ]);
+        running = runDueStep(runner, runId!);
+        void running.catch(() => undefined);
+        await waitForBlocker(pid);
+        await blocker.query('update contacts set phone=$1 where id=$2', [
+          `0191100${String(++phone).padStart(4, '0')}`,
+          contact,
+        ]);
+        await blocker.query('commit');
+        transactionOpen = false;
+        await running;
+      } finally {
         try {
-          await runDueStep(runner, runId!);
-          expect(sentFor(runId!)).toEqual([]);
-          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
-          expect(await ledgerFor(runId!)).toEqual([
-            { kind: 'reserve', delta: -1 },
-            { kind: 'release', delta: 1 },
-          ]);
+          if (transactionOpen) await blocker.query('rollback');
         } finally {
-          hook.mockRestore();
-          readHook?.mockRestore();
+          blocker.release(true);
+          await running?.catch(() => undefined);
         }
-      },
-    );
+      }
+      expect(sentFor(runId!)).toEqual([]);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(await ledgerFor(runId!)).toEqual([]);
+    });
+
+    it('submits to the authorized phone if the contact changes it after gate commit', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        rows: [{ phone: authorizedPhone }],
+      } = await admin.pool.query<{ phone: string }>(
+        'select phone from contacts where store_id=$1 and id=$2',
+        [storeId, contact],
+      );
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const replacement = {
+        text: 'update contacts set phone=$1 where store_id=$2 and id=$3',
+        values: [`0191100${String(++phone).padStart(4, '0')}`, storeId, contact],
+      };
+      const checkForSend = SendPolicyService.prototype.checkForSend;
+      const policy = vi
+        .spyOn(SendPolicyService.prototype, 'checkForSend')
+        .mockImplementationOnce(async function (shop, request) {
+          const checked = await checkForSend.call(this, shop, request);
+          const writer = await admin.pool.connect();
+          try {
+            await writer.query('begin');
+            await writer.query("set local lock_timeout = '100ms'");
+            await expect(writer.query(replacement)).rejects.toMatchObject({ code: '55P03' });
+          } finally {
+            try {
+              await writer.query('rollback');
+            } finally {
+              writer.release(true);
+            }
+          }
+          return checked;
+        });
+      const sendPrepared = MessagingService.prototype.send;
+      const hook = vi
+        .spyOn(MessagingService.prototype, 'send')
+        .mockImplementationOnce(async function (shop, message, prepared) {
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+          await admin.pool.query(replacement);
+          return sendPrepared.call(this, shop, message, prepared);
+        });
+      try {
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!).map((message) => message.to)).toEqual([authorizedPhone]);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      } finally {
+        policy.mockRestore();
+        hook.mockRestore();
+      }
+    });
 
     it('enforces the cap when an earlier-started run reaches the lock second', async () => {
       const runner = await worker();
@@ -1508,196 +1797,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         [expect.objectContaining({ outcome: 'sent', category: 'transactional' })],
         [expect.objectContaining({ outcome: 'sent', category: 'marketing' })],
         [expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' })],
-      ]);
-    });
-
-    it('keeps the credits reserved when a stopped version ends a run whose send is unconfirmed', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const {
-        runIds: [runId],
-      } = await dueRuns(send('transactional'), 1, 'active', contact);
-      const before = await balance();
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, runId!);
-      await admin.pool.query(
-        'update automation_versions set is_stopped=true where id=(select version_id from automation_runs where id=$1)',
-        [runId],
-      );
-
-      await wakeNow(runId!);
-      await runDueStep(runner, runId!);
-
-      expect(await run(runId!)).toMatchObject({ status: 'exited' });
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
-      expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-      expect(await balance()).toBe(before - 1);
-    });
-
-    it('keeps the credits reserved when the resend check refuses', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const {
-        runIds: [runId],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      const before = await balance();
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, runId!);
-      await runner.consents.record(
-        storeId,
-        {
-          contactId: contact,
-          channel: 'sms',
-          status: 'withdrawn',
-          source: 'opt_out_link',
-          evidence: null,
-        },
-        { kind: 'system' },
-      );
-
-      await wakeNow(runId!);
-      await runDueStep(runner, runId!);
-
-      expect(await sendStep(runId!)).toEqual([
-        expect.objectContaining({ outcome: 'unconfirmed', skip_reason: 'no_consent' }),
-      ]);
-      expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-      expect(await balance()).toBe(before - 1);
-    });
-
-    it('applies the current marketing cap when an uncertain attempt ages out', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      clockNow = new Date(opensAt.getTime() - 24 * HOUR);
-      const {
-        runIds: [earlier],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, earlier!);
-
-      clockNow = new Date(clockNow.getTime() + 25 * HOUR);
-      const {
-        runIds: [newer],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      await runDueStep(runner, newer!);
-      expect(sentFor(newer!)).toHaveLength(1);
-
-      await wakeNow(earlier!);
-      await runDueStep(runner, earlier!);
-      expect(sentFor(earlier!)).toEqual([]);
-      expect(await sendStep(earlier!)).toEqual([
-        expect.objectContaining({ outcome: 'unconfirmed', skip_reason: 'frequency_cap' }),
-      ]);
-      expect(await ledgerFor(earlier!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-    });
-
-    it('counts a later uncertain retry without extending the original deadline', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const firstTriedAt = new Date(opensAt.getTime() - 24 * HOUR);
-      clockNow = firstTriedAt;
-      const {
-        runIds: [earlier],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, earlier!);
-
-      clockNow = new Date(firstTriedAt.getTime() + 25 * HOUR);
-      await wakeNow(earlier!);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, earlier!);
-      const timings = await admin.pool.query(
-        'select first_tried_at, sent_at from automation_run_steps where run_id=$1 and kind=$2',
-        [earlier, 'send'],
-      );
-      expect(timings.rows).toEqual([{ first_tried_at: firstTriedAt, sent_at: clockNow }]);
-
-      // The other worker has a slightly slower clock after it takes the same contact lock.
-      clockNow = new Date(clockNow.getTime() - 50);
-      const {
-        runIds: [newer],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      await runDueStep(runner, newer!);
-      expect(sentFor(newer!)).toEqual([]);
-      expect(await sendStep(newer!)).toEqual([
-        expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' }),
-      ]);
-    });
-
-    it('does not submit a retry after waiting on its step row across the deadline', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const firstTriedAt = new Date(opensAt.getTime() - 48 * HOUR);
-      const expiresAt = firstTriedAt.getTime() + 36 * HOUR;
-      clockNow = firstTriedAt;
-      const {
-        runIds: [runId],
-      } = await dueRuns(send('transactional'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, runId!);
-      await wakeNow(runId!);
-      clockNow = new Date(expiresAt - MINUTE);
-
-      const blocker = await admin.pool.connect();
-      let resending: Promise<void> | undefined;
-      try {
-        const { rows } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-        await blocker.query('begin');
-        await blocker.query('select id from automation_run_steps where run_id=$1 for update', [
-          runId,
-        ]);
-        resending = runDueStep(runner, runId!);
-        void resending.catch(() => undefined);
-        await waitForBlocker(rows[0]!.pid);
-        clockNow = new Date(expiresAt);
-        await blocker.query('commit');
-        await resending;
-
-        expect(sentFor(runId!)).toEqual([]);
-        expect(await sendStep(runId!)).toEqual([
-          expect.objectContaining({ outcome: 'unconfirmed' }),
-        ]);
-        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-      } finally {
-        await blocker.query('rollback');
-        blocker.release();
-        await resending?.catch(() => undefined);
-      }
-    });
-
-    it('keeps the marketing cap when a slower worker settles a retry', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const firstTriedAt = new Date(opensAt.getTime() - 24 * HOUR);
-      clockNow = firstTriedAt;
-      const {
-        runIds: [earlier],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
-        await sms.send(message);
-        throw new Error('socket hang up');
-      });
-      await runDueStep(runner, earlier!);
-
-      clockNow = new Date(firstTriedAt.getTime() - 100);
-      await wakeNow(earlier!);
-      await runDueStep(runner, earlier!);
-      const timings = await admin.pool.query(
-        'select first_tried_at, sent_at from automation_run_steps where run_id=$1 and kind=$2',
-        [earlier, 'send'],
-      );
-      expect(timings.rows).toEqual([{ first_tried_at: firstTriedAt, sent_at: firstTriedAt }]);
-      expect(sentFor(earlier!)).toHaveLength(1);
-      expect(await sendStep(earlier!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
-
-      clockNow = new Date(firstTriedAt.getTime() + 24 * HOUR - 25);
-      const {
-        runIds: [newer],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      await runDueStep(runner, newer!);
-      expect(sentFor(newer!)).toEqual([]);
-      expect(await sendStep(newer!)).toEqual([
-        expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' }),
       ]);
     });
 

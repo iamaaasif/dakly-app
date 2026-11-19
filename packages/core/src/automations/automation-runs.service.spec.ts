@@ -1,15 +1,21 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
-import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
+import type {
+  MessagingService,
+  OutgoingMessage,
+  PreparedSms,
+} from '../messaging/messaging.service';
+import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { ErrorReporter } from '../platform/logging/error-reporter';
+import { runWithJobContext } from '../platform/logging/job-context';
 import type { SegmentsService } from '../segments/segments.service';
-import type { SendDecision, SendPolicyService, SkipReason } from '../sending/send-policy.service';
+import type { SendDecision, SendPolicyService } from '../sending/send-policy.service';
 import type { StoresService } from '../stores/stores.service';
 import type { WalletService } from '../wallets/wallet.service';
 import { AutomationConditionsService } from './automation-conditions.service';
@@ -22,6 +28,7 @@ import type {
   RunStepChange,
 } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 
 const STORE_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a01';
 const RUN_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a02';
@@ -54,6 +61,8 @@ function graphWith(first: AutomationStep): AutomationGraph {
 class FakeRunsRepository {
   run!: ClaimedRun & { id: string; lastError?: string | null };
   steps: NewRunStep[] = [];
+
+  constructor(readonly schedulerTime: () => Promise<Date>) {}
 
   async findRun(_storeId: string, runId: string) {
     return runId === this.run.id ? this.run : undefined;
@@ -93,17 +102,8 @@ class FakeRunsRepository {
     return this.tappedStepKeys;
   }
 
-  async findSendingStep(_storeId: string, _runId: string, stepKey: string) {
-    const step = this.steps.find((row) => row.stepKey === stepKey && row.outcome === 'sending');
-    return (
-      step && {
-        id: step.id!,
-        firstTriedAt: step.firstTriedAt ?? step.sentAt!,
-        latestDispatchAt: step.sentAt!,
-        optOutCode: step.optOutCode ?? null,
-        destination: step.destination ?? null,
-      }
-    );
+  async hasSendingStep(_storeId: string, _runId: string, stepKey: string) {
+    return this.steps.some((row) => row.stepKey === stepKey && row.outcome === 'sending');
   }
 
   async changeStep(_storeId: string, _runId: string, stepKey: string, change: RunStepChange) {
@@ -123,22 +123,19 @@ const send: AutomationStep = {
 const optOutUrl = 'https://links.dakly.test/s/Ab3dE6gH';
 
 describe('AutomationRunsService', () => {
+  const reportJob = vi.fn();
   let repository: FakeRunsRepository;
   let tags: string[];
   let segmentMembers: string[];
   let clockNow: Date;
   let databaseNow: Date | undefined;
   let decision: SendDecision;
-  let recheckReason: SkipReason | undefined;
-  let recheckDefer: Date | undefined;
-  let duringRecheck: () => void;
-  let contactPhone: string;
-  let reported: string[];
   let sent: OutgoingMessage[];
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
-  let clockFailsAfterGate: boolean;
-  let gateCommitted: boolean;
+  let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
+  let submissionChecked: boolean;
+  let submissionCommitted: boolean;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
   let service: AutomationRunsService;
@@ -166,21 +163,27 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
-    repository = new FakeRunsRepository();
+    reportJob.mockClear();
+    vi.spyOn(env, 'loadEnv').mockReturnValue({
+      CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
+    } as env.Env);
+    repository = new FakeRunsRepository(async () => {
+      const during = schedulerUnavailable === 'during submission' && submissionChecked;
+      const after = schedulerUnavailable === 'after authorization' && submissionCommitted;
+      if ((during || after) && !sent.length)
+        throw new Error('Scheduler clock unavailable before provider dispatch');
+      return databaseNow ?? clockNow;
+    });
     tags = [];
     segmentMembers = [];
     clockNow = now;
     databaseNow = undefined;
     decision = { action: 'send' };
-    recheckReason = undefined;
-    recheckDefer = undefined;
-    duringRecheck = () => undefined;
-    contactPhone = '01712345678';
-    reported = [];
     sent = [];
     providerError = undefined;
-    clockFailsAfterGate = false;
-    gateCommitted = false;
+    schedulerUnavailable = undefined;
+    submissionChecked = false;
+    submissionCommitted = false;
     senderLookupError = undefined;
     balance = 10;
     ledger = [];
@@ -222,8 +225,8 @@ describe('AutomationRunsService', () => {
       },
     };
     const contacts = {
+      getPhoneForSend: async () => '01711000201',
       findTags: async () => tags,
-      findRecipients: async () => [{ phone: contactPhone }],
       changeTag: async (
         _storeId: string,
         _contactId: string,
@@ -236,37 +239,30 @@ describe('AutomationRunsService', () => {
       hasContact: async (_storeId: string, segmentId: string, contactId: string) =>
         segmentId === SEGMENT_ID && segmentMembers.includes(contactId),
     };
-    const recheck = (): SendDecision => {
-      duringRecheck();
-      if (recheckReason) return { action: 'skip', reason: recheckReason };
-      return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
-    };
     const sendPolicy = {
       check: async () => decision,
-      checkForSend: async () => ({
-        decision,
-        destination: contactPhone,
-        at: databaseNow ?? clockNow,
-      }),
-      recheckForSend: async () => ({ decision: recheck(), at: databaseNow ?? clockNow }),
+      checkForSend: async () => {
+        submissionChecked = true;
+        return { decision, destination: '01711000201', at: clockNow };
+      },
     };
-    const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
-      prepareSender: async () => {
+      prepareSender: async (storeId: string) => {
         if (senderLookupError) throw senderLookupError;
-        return { name: undefined };
+        return { storeId, name: undefined };
       },
-      send: async (_storeId: string, message: OutgoingMessage) => {
-        if (message.destination !== undefined && message.destination !== contactPhone)
-          throw new AppError('MESSAGING_DESTINATION_CHANGED', {
-            status: 409,
-            message: "The contact's phone changed after this message was decided",
-          });
+      prepareSms: async (storeId: string, contactId: string) => ({
+        storeId,
+        contactId,
+        to: '01711000201',
+        sender: undefined,
+      }),
+      send: async (_storeId: string, message: OutgoingMessage, prepared: PreparedSms) => {
         if (providerError) throw providerError;
         if (!sent.some((earlier) => earlier.operationKey === message.operationKey))
-          sent.push(message);
+          sent.push({ ...message, destination: prepared.to });
         return { providerMessageId: 'sms-1', parts: 1, credits: 1 };
       },
     };
@@ -278,13 +274,8 @@ describe('AutomationRunsService', () => {
     const transaction = {
       run: async (_storeId: string, work: () => Promise<unknown>) => {
         const result = await work();
-        if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
+        if (submissionChecked) submissionCommitted = true;
         return result;
-      },
-      databaseTime: async () => {
-        if (clockFailsAfterGate && gateCommitted && !sent.length)
-          throw new Error('Database clock unavailable before provider dispatch');
-        return databaseNow ?? clockNow;
       },
     };
     service = new AutomationRunsService(
@@ -296,13 +287,20 @@ describe('AutomationRunsService', () => {
       messaging as unknown as MessagingService,
       links as unknown as LinksService,
       wallets as unknown as WalletService,
-      reporter as unknown as ErrorReporter,
+      new AutomationSmsDeliveryService(
+        messaging as unknown as MessagingService,
+        wallets as unknown as WalletService,
+        { reportJob } as unknown as ErrorReporter,
+        repository as unknown as AutomationRunsRepository,
+      ),
       new AutomationConditionsService(
         segments as unknown as SegmentsService,
         sendPolicy as unknown as SendPolicyService,
       ),
     );
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it.each([
     [{ until: 'duration', minutes: 90 }, '2026-11-16T06:30:00.000Z'],
@@ -482,7 +480,7 @@ describe('AutomationRunsService', () => {
           contactId: CONTACT_ID,
           body: `নতুন কালেকশন এসেছে\n${optOutUrl}`,
           operationKey: `run:${RUN_ID}:first`,
-          destination: '01712345678',
+          destination: '01711000201',
         },
       ]);
       expect(next).toEqual({ runId: RUN_ID, stepKey: 'end', claimedAt: now });
@@ -492,7 +490,6 @@ describe('AutomationRunsService', () => {
           kind: 'send',
           category: 'marketing',
           channel: 'sms',
-          optOutCode: 'Ab3dE6gH',
           outcome: 'sent',
           providerMessageId: 'sms-1',
           sentAt: now,
@@ -500,11 +497,36 @@ describe('AutomationRunsService', () => {
       ]);
     });
 
-    it('dispatches without another clock read after reserving the send', async () => {
-      clockFailsAfterGate = true;
+    it('dispatches without another clock read after authorizing submission', async () => {
+      schedulerUnavailable = 'after authorization';
 
       await start(send);
 
+      expect(submissionCommitted).toBe(true);
+      expect(sent).toHaveLength(1);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
+    });
+
+    it('does not call the provider if the final authorization clock read fails', async () => {
+      schedulerUnavailable = 'during submission';
+
+      await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
+      expect(sent).toEqual([]);
+      expect(repository.steps).toEqual([]);
+      expect(ledger).toEqual([]);
+    });
+
+    it('lets the replacement worker reserve once after an authorization failure', async () => {
+      schedulerUnavailable = 'during submission';
+      await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
+      schedulerUnavailable = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
       expect(sent).toHaveLength(1);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
@@ -582,243 +604,69 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
     });
 
-    it('retries a temporary error with back-off, then sends the same text once', async () => {
+    it('fails the run when the provider gives no answer', async () => {
       providerError = new Error('connection reset');
-      await start(send);
-      expect(repository.run).toMatchObject({
-        status: 'waiting',
-        currentStepKey: 'first',
-        wakeAt: new Date(now.getTime() + 60 * 1000),
-        lastError: 'The SMS provider did not answer; trying again',
-      });
+      await runWithJobContext(() => start(send), 'workflow-job-lease-1');
 
-      // The gate's cap is not asked again for a send already counted.
-      decision = { action: 'skip', reason: 'frequency_cap' };
-      providerError = undefined;
-      clockNow = new Date(now.getTime() + 2 * 60 * 1000);
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
+      expect(reportJob).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
+        'workflow-job-lease-1',
+        { runId: RUN_ID, stepKey: 'first' },
       );
-
-      expect(sent.map((message) => message.body)).toEqual([`নতুন কালেকশন এসেছে\n${optOutUrl}`]);
-      expect(repository.steps).toEqual([
-        expect.objectContaining({ outcome: 'sent', sentAt: clockNow }),
-      ]);
-      expect(repository.run).toMatchObject({ currentStepKey: 'end', lastError: null });
-    });
-
-    it('keeps the original cap time when a slower worker settles a retry', async () => {
-      providerError = new Error('connection reset');
-      await start(send);
-      providerError = undefined;
-      clockNow = new Date(now.getTime() - 50);
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
-      );
-
-      expect(sent).toHaveLength(1);
-      expect(repository.steps).toEqual([
-        expect.objectContaining({ outcome: 'sent', firstTriedAt: now, sentAt: now }),
-      ]);
-    });
-
-    it('holds a resend when the workflow pauses during the eligibility check', async () => {
-      providerError = new Error('connection reset');
-      await start(send);
-      providerError = undefined;
-      repository.run = { ...repository.run, status: 'running', claimedAt: now };
-      duringRecheck = () => {
-        repository.run = { ...repository.run, automationStatus: 'paused' };
-      };
-
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
-        { kind: 'system' },
-      );
-
-      expect(sent).toEqual([]);
-      expect(repository.run).toMatchObject({ status: 'waiting', currentStepKey: 'first' });
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
-      expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
-    });
-
-    it('ends an uncertain send when the goal is reached during the resend check', async () => {
-      providerError = new Error('connection reset');
-      await start(send, { graph: { ...graphWith(send), goal: { kind: 'got_tag', tag: 'paid' } } });
-      providerError = undefined;
-      repository.run = { ...repository.run, status: 'running', claimedAt: now };
-      duringRecheck = () => {
-        tags = ['paid'];
-      };
-
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
-        { kind: 'system' },
-      );
-
-      expect(sent).toEqual([]);
-      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'goal' });
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
-      expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
-    });
-
-    it('fails the step before a resend when consent was withdrawn meanwhile', async () => {
-      providerError = new Error('connection reset');
-      await start(send);
-      providerError = undefined;
-      recheckReason = 'no_consent';
-      repository.run = { ...repository.run, status: 'running', claimedAt: now };
-
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
-        { kind: 'system' },
-      );
-
-      expect(sent).toEqual([]);
-      expect(repository.steps).toEqual([
-        expect.objectContaining({ outcome: 'unconfirmed', skipReason: 'no_consent' }),
-      ]);
-      expect(repository.run).toMatchObject({ currentStepKey: 'end' });
-    });
-
-    it('waits out quiet hours before a resend, then sends after they end', async () => {
-      // 20:50 in Dhaka: the provider does not answer.
-      clockNow = new Date('2026-11-16T14:50:00Z');
-      providerError = new Error('connection reset');
-      await start(send, { wakeAt: clockNow });
-      expect(reported).toEqual([`run:${RUN_ID}:first`]);
-      providerError = undefined;
-
-      // 02:00: inside quiet hours, so the run waits until 09:00 and the row stays sending.
-      clockNow = new Date('2026-11-16T20:00:00Z');
-      recheckDefer = new Date('2026-11-17T03:00:00Z');
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
-      );
-      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: recheckDefer });
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
-      expect(sent).toEqual([]);
-
-      clockNow = new Date('2026-11-17T03:01:00Z');
-      recheckDefer = undefined;
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
-      );
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
-      expect(sent).toHaveLength(1);
-    });
-
-    it('freezes the phone and ends a resend to a contact whose phone changed as unconfirmed', async () => {
-      providerError = new Error('connection reset');
-      await start(send);
-      expect(repository.steps).toEqual([expect.objectContaining({ destination: '01712345678' })]);
-      providerError = undefined;
-      contactPhone = '01812345678';
-      repository.run = { ...repository.run, status: 'running', claimedAt: now };
-
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
-        { kind: 'system' },
-      );
-
-      expect(sent).toEqual([]);
-      expect(repository.run.lastError).toContain("The contact's phone changed");
+      expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
+      expect(repository.run.lastError).toContain('The SMS provider did not answer');
       expect(repository.run.lastError).toContain('credits stay reserved');
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
-    it('does not resend a message whose run was due more than a day ago', async () => {
+    it('reports an uncertain response even when the settlement clock is unavailable', async () => {
       providerError = new Error('connection reset');
-      await start(send);
-      providerError = undefined;
-      clockNow = new Date(now.getTime() + 26 * HOUR);
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow, wakeAt: now };
+      schedulerUnavailable = 'after authorization';
 
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
+      await expect(runWithJobContext(() => start(send), 'workflow-job-lease-1')).rejects.toThrow(
+        'Scheduler clock unavailable before provider dispatch',
       );
 
-      expect(sent).toEqual([]);
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
-      expect(repository.run).toMatchObject({ currentStepKey: 'end' });
+      expect(reportJob).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
+        'workflow-job-lease-1',
+        { runId: RUN_ID, stepKey: 'first' },
+      );
     });
 
-    it('wakes at the retry deadline when quiet hours last longer', async () => {
-      const deadline = new Date(now.getTime() + 36 * HOUR);
+    it('rejects an uncertain response report without a worker job id', async () => {
       providerError = new Error('connection reset');
-      await start(send);
-      providerError = undefined;
-      clockNow = new Date(deadline.getTime() - HOUR);
-      recheckDefer = new Date(deadline.getTime() + HOUR);
-      repository.run = {
-        ...repository.run,
-        status: 'running',
-        claimedAt: clockNow,
-        wakeAt: clockNow,
-      };
 
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
-      );
+      await expect(start(send)).rejects.toThrow('Workflow SMS reporting requires a worker job ID');
 
-      expect(sent).toEqual([]);
-      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: deadline });
+      expect(reportJob).not.toHaveBeenCalled();
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
     });
 
-    it('fails the run with a readable reason after 36 hours of temporary errors', async () => {
-      providerError = new Error('connection reset');
+    it('does not send again a step that an earlier claim handed to the provider', async () => {
+      repository.steps = [
+        { stepKey: 'first', kind: 'send', outcome: 'sending', sentAt: claimedAt },
+      ];
+
       await start(send);
-      clockNow = new Date(now.getTime() + 36 * HOUR);
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
-      );
-
-      expect(repository.run).toMatchObject({
-        status: 'failed',
-        currentStepKey: 'first',
-        lastError: expect.stringContaining('The SMS provider did not answer for 36 hours.'),
-      });
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'failed' });
       expect(repository.run.lastError).toContain('credits stay reserved');
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
     it('fails the run with the message of a refused send', async () => {
-      providerError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+      providerError = new AppError('SMS_SEND_REFUSED', {
         status: 422,
-        message: 'This contact has no phone number',
+        message: 'The SMS provider refused the message',
       });
 
       await start(send);
 
       expect(repository.run).toMatchObject({
         status: 'failed',
-        lastError: 'This contact has no phone number',
+        lastError: 'The SMS provider refused the message',
       });
     });
   });
@@ -836,10 +684,10 @@ describe('AutomationRunsService', () => {
       expect(balance).toBe(9);
     });
 
-    it('releases the credits when the send fails', async () => {
-      providerError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+    it('releases the credits when the provider definitively refuses', async () => {
+      providerError = new AppError('SMS_SEND_REFUSED', {
         status: 422,
-        message: 'This contact has no phone number',
+        message: 'The provider refused the message',
       });
 
       await start(send);
@@ -848,17 +696,24 @@ describe('AutomationRunsService', () => {
       expect(balance).toBe(10);
     });
 
+    it('retains an authorized send when an unexpected AppError follows authorization', async () => {
+      providerError = new AppError('MESSAGING_PREPARATION_FAILED', {
+        status: 500,
+        message: 'The provider response was incomplete',
+      });
+      await runWithJobContext(() => start(send));
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+    });
+
     // The first try may have reached the provider, so these end the step and keep the credits.
     async function afterUnknownOutcome(change: Partial<ClaimedRun> = {}) {
-      providerError = new Error('connection reset');
-      await start(send);
-      providerError = undefined;
-      repository.run = { ...repository.run, status: 'running', claimedAt: now, ...change };
-      return service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
-        { kind: 'system' },
-      );
+      repository.steps = [
+        { stepKey: 'first', kind: 'send', outcome: 'sending', sentAt: claimedAt },
+      ];
+      ledger = [{ key, kind: 'reserve', quantity: 1 }];
+      balance = 9;
+      return start(send, change);
     }
 
     it.each([
@@ -866,7 +721,7 @@ describe('AutomationRunsService', () => {
       ['an archived workflow', { automationStatus: 'archived' }, 'exited'],
       ['the attempts limit', { attempts: 10 }, 'failed'],
     ] as const)(
-      'keeps the credits reserved when %s ends a run whose send is unconfirmed',
+      'keeps the credits reserved when %s ends a run whose send has no answer',
       async (_case, change, status) => {
         await afterUnknownOutcome(change);
 
@@ -882,28 +737,10 @@ describe('AutomationRunsService', () => {
       },
     );
 
-    it('keeps the credits reserved when the resend check refuses', async () => {
-      recheckReason = 'no_consent';
-      await afterUnknownOutcome();
-
-      expect(repository.steps).toEqual([
-        expect.objectContaining({ outcome: 'unconfirmed', skipReason: 'no_consent' }),
-      ]);
-      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
-      expect(balance).toBe(9);
-    });
-
-    it('keeps the credits reserved after 36 hours with no answer', async () => {
+    it('keeps the credits reserved when the provider gives no answer', async () => {
       providerError = new Error('connection reset');
-      await start(send);
-      clockNow = new Date(now.getTime() + 36 * HOUR);
-      repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
-      await service.continueRun(
-        STORE_ID,
-        { runId: RUN_ID, stepKey: 'first', claimedAt: clockNow },
-        { kind: 'system' },
-      );
+      await runWithJobContext(() => start(send));
 
       expect(repository.run.status).toBe('failed');
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);

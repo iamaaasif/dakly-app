@@ -35,6 +35,7 @@ import { contactConsentCurrent } from '@dakly/db/schema/consents';
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
+import { escapeLike } from '../platform/database/escape-like';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Contact = {
@@ -237,7 +238,7 @@ export class ContactsRepository {
     const tags = adding
       ? sql`array_append(${contacts.tags}, ${tag})`
       : sql`array_remove(${contacts.tags}, ${tag})`;
-    await this.database.forStore(storeId, (tx) =>
+    const [changed] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(contacts)
         .set({ tags })
@@ -248,8 +249,10 @@ export class ContactsRepository {
             isNull(contacts.deletedAt),
             changesTags,
           ),
-        ),
+        )
+        .returning({ id: contacts.id }),
     );
+    return Boolean(changed);
   }
 
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
@@ -349,10 +352,6 @@ export class ContactsRepository {
     );
     return rows.map((row) => row.id);
   }
-}
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, '\\$&');
 }
 
 // Segments compile here because contacts owns the table (module-boundaries.md). Every value is a

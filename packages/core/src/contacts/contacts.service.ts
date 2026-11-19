@@ -12,7 +12,7 @@ import type {
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
-import type { CreateOrderInput } from '@dakly/contracts/orders';
+import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
@@ -20,6 +20,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -60,6 +61,7 @@ export type ImportContactBatch = {
 export class ContactsService {
   constructor(
     @Inject(ContactsRepository) private readonly contactsRepository: ContactsRepository,
+    @Inject(ContactIdentitiesRepository) private readonly identities: ContactIdentitiesRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
@@ -90,6 +92,28 @@ export class ContactsService {
       return created;
     });
     return toContactResponse(contact, access.seeFullPhone);
+  }
+
+  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string> {
+    return this.transaction.run(storeId, async () => {
+      for (;;) {
+        const existing = await this.identities.findInboundIdentity(storeId, input);
+        if (existing) {
+          if (!existing.deletedAt) return existing.contactId;
+          await this.identities.retireInboundIdentity(storeId, existing.id);
+        }
+        const now = this.clock.now();
+        const identity = await this.identities.createInboundIdentity(storeId, input, now);
+        if (!identity) continue;
+        await this.outbox.publish({
+          type: 'contact.created',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { contactId: identity.contactId },
+        });
+        return identity.contactId;
+      }
+    });
   }
 
   async list(
@@ -172,6 +196,24 @@ export class ContactsService {
       });
   }
 
+  async hasOrderPhoneMatch(
+    storeId: string,
+    {
+      buyerContactId,
+      recipientPhone,
+      isRecipientBuyer,
+    }: Pick<OrderDetail, 'buyerContactId' | 'recipientPhone' | 'isRecipientBuyer'>,
+    { seeFullPhone }: Access,
+  ): Promise<boolean> {
+    if (!isRecipientBuyer || !buyerContactId || !seeFullPhone) return false;
+    const [match] = await this.orderContacts.findOpenPhoneMatch(
+      storeId,
+      buyerContactId,
+      recipientPhone,
+    );
+    return match !== undefined;
+  }
+
   // Import undo keeps a contact once a new order makes the imported record useful.
   async markOrderLinked(storeId: string, contactId: string, _actor: Actor): Promise<void> {
     if (!(await this.orderContacts.markOrderLinked(storeId, contactId, this.clock.now())))
@@ -200,7 +242,21 @@ export class ContactsService {
 
   // A workflow's tag action. A deleted contact is left as it is.
   changeTag(storeId: string, contactId: string, change: TagChange, _actor: Actor): Promise<void> {
-    return this.contactsRepository.changeTag(storeId, contactId, change, MAX_CONTACT_TAGS);
+    return this.transaction.run(storeId, async () => {
+      const changed = await this.contactsRepository.changeTag(
+        storeId,
+        contactId,
+        change,
+        MAX_CONTACT_TAGS,
+      );
+      if (!changed || change.change !== 'add') return;
+      await this.outbox.publish({
+        type: 'contact.tag_added',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { contactId, tag: change.tag },
+      });
+    });
   }
 
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the

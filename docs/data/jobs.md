@@ -2,15 +2,17 @@
 
 Planned release 1 background jobs: its queue, what starts it, its payload and what makes a second run harmless. The rules are in [jobs.md](../rules/jobs.md); the queues are the nine in [architecture.md](../architecture.md#queues). These contracts guide feature implementation; the schema PR does not implement the handlers. Every payload has `storeId` unless the row says "sweep", and is parsed with a zod schema in the job file.
 
-A job that loses its Valkey entry is found again by a sweep: each sweep calls a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
+A store job that loses its Valkey entry is found again by a sweep. Store sweeps call a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
 
 ## inbound
 
-| Job                      | Started by                          | Payload                     | Makes a rerun harmless                                                               |
-| ------------------------ | ----------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
-| `process-webhook-event`  | Webhook intake after saving the row | `storeId`, `webhookEventId` | `webhook_events.status` is checked; unique `messages (conversation_id, external_id)` |
-| `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                                            |
-| `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)`                |
+| Job                      | Started by                          | Payload                     | Makes a rerun harmless                                                |
+| ------------------------ | ----------------------------------- | --------------------------- | --------------------------------------------------------------------- |
+| `process-webhook-event`  | Webhook intake after saving the row | `webhookEventId`            | Job id is the webhook row id. The worker checks the event status.     |
+| `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                             |
+| `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)` |
+
+`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`.
 
 ## ai-reply
 
@@ -26,18 +28,23 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## transactional
 
-| Job                           | Started by                                 | Payload                                           | Makes a rerun harmless                                                                                     |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `send-sign-in-code`           | Sign-in or sign-up request                 | `userId` or target, code id (no store)            | Code id in Valkey; sent once                                                                               |
-| `send-team-invite`            | Invite created                             | `storeId`, `membershipId`                         | Sender idempotency key = invite token hash                                                                 |
-| `send-order-confirmation`     | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                              | Outbound message idempotency key = order id + kind                                                         |
-| `send-payment-link`           | Advance requested                          | `storeId`, `paymentIntentId`                      | Event `sent` recorded once                                                                                 |
-| `send-notification`           | Outbox event a notification rule matches   | `storeId`, `notificationId`                       | Unique `(store_id, user_id, dedupe_key)`                                                                   |
-| `send-push`                   | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`                       | Notification status checked                                                                                |
-| `StreamNotificationOnCreated` | `notification.created` outbox event        | the event (`storeId`, `notificationId`, `userId`) | Publishes ids to Valkey only; each open stream sends each of its last 1,000 row ids once                   |
-| `send-invoice-email`          | Invoice paid                               | `storeId`, `invoiceId`                            | Sender idempotency key = invoice id                                                                        |
-| `relay-outbox`                | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
-| `wake-snoozed-notifications`  | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
+| Job                                                     | Started by                                 | Payload                                           | Makes a rerun harmless                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `send-sign-in-code`                                     | Sign-in or sign-up request                 | `userId` or target, code id (no store)            | Code id in Valkey; sent once                                                                               |
+| `send-team-invite`                                      | Invite created                             | `storeId`, `membershipId`                         | Sender idempotency key = invite token hash                                                                 |
+| `send-order-confirmation`                               | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                              | Outbound message idempotency key = order id + kind                                                         |
+| `send-payment-link`                                     | Advance requested                          | `storeId`, `paymentIntentId`                      | Event `sent` recorded once                                                                                 |
+| `send-notification`                                     | Outbox event a notification rule matches   | `storeId`, `notificationId`                       | Unique `(store_id, user_id, dedupe_key)`                                                                   |
+| `send-push`                                             | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`                       | Notification status checked                                                                                |
+| `StreamNotificationOnCreated`                           | `notification.created` outbox event        | the event (`storeId`, `notificationId`, `userId`) | Publishes ids to Valkey only; each open stream sends each of its last 1,000 row ids once                   |
+| `send-invoice-email`                                    | Invoice paid                               | `storeId`, `invoiceId`                            | Sender idempotency key = invoice id                                                                        |
+| `relay-outbox`                                          | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
+| `wake-snoozed-notifications`                            | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
+| `StartAutomationOnConsent`, `StartAutomationOnTagAdded` | Consent grant or tag added                 | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
+
+Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
+Order creation, stage changes and COD collection give the order ID, which the service uses to find
+the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## outbound
 
@@ -58,25 +65,36 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                              | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | --------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Outbox event matching an active trigger | `storeId`, `automationId`, `contactId`, `triggerKey` | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
-| `continue-automation-run` | The sweep, or the step before it        | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                            | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                       | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
+| ------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `continue-automation-run` | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`     | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
 
 ## sync
 
-| Job                         | Started by                                              | Payload                          | Makes a rerun harmless                                               |
-| --------------------------- | ------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------- |
-| `refresh-post-metrics`      | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                   |
-| `check-channel-token`       | Sweep `channel_connections_expiring_before`, daily      | `storeId`, `channelConnectionId` | Status only set, notification deduped                                |
-| `return-conversation-to-ai` | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                            |
-| `sync-whatsapp-templates`   | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                  |
-| `refresh-contact-stats`     | Order or message outbox event                           | `storeId`, `contactId`           | Recomputes the row                                                   |
-| `build-daily-metrics`       | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                       |
-| `run-maintenance`           | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance) |
+| Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                                              |
+| ---------------------------- | ------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                                                  |
+| `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`                            |
+| `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                                               |
+| `queue-conversation-returns` | Every minute                                            | none (sweep)                     | Reads up to 100 due IDs in stores with Chats enabled and queues one job per conversation and minute |
+| `return-conversation-to-ai`  | `queue-conversation-returns`                            | `storeId`, `conversationId`      | Checks the extension and deadline before returning the chat and clearing `ai_resumes_at`            |
+| `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                                                 |
+| `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                                      |
+| `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run            |
+| `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                                |
+
+The ANA-1 reconciliation follow-up repairs missed day refreshes nightly.
+
+The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
 ## bulk
+
+`sweep-contact-stats` runs at 00:00 UTC daily and pages through `maintenance_store_ids`. It queues
+`reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contacts
+and queues the next cursor. The last totals page measures the Best customers cutoff.
+Ranking pages check contacts whose stage differs from the cutoff before writing a new stage.
+Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contact lock keeps an in-flight rank update ahead of any newer update for the same contact.
 
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -142,24 +160,30 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 
 The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
-| Event                  | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
-| ---------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `contact.created`      | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
-| `consent.changed`      | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
-| `segment.saved`        | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
-| `campaign.approved`    | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
-| `conversation.started` | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
-| `message.received`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
-| `message.delivered`    | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.read`         | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.failed`       | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.tapped`       | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
-| `message.opted_out`    | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
-| `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
+| ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `order.created`           | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.edited`            | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
+| `order.stage_changed`     | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.cod_collected`     | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
+| `contact.tag_added`       | CAMP-11, `ContactsService.changeTag`                             | `contactId`, `tag`                                                      | Tag-added workflow trigger                                   |
+| `segment.saved`           | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
+| `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
+| `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
+| `message.received`        | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
+| `message.delivered`       | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.read`            | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.failed`          | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.tapped`          | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
+| `message.opted_out`       | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
+| `channel.connected`       | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.disconnected`    | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.needs_reconnect` | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
+| `notification.created`    | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
-
-[Feature 02](../features/02-channel-connections.md) lists `channel.connected`, `channel.needs_reconnect` and `channel.disconnected`. No M2 or M3 task emits them yet, so they are not in the catalogue.
 
 ## Send-time and financial gates
 

@@ -14,12 +14,14 @@ import { jobLogBindings } from '../logging/job-context';
 import {
   BulkJobDispatcher,
   CampaignJobDispatcher,
+  InboundJobDispatcher,
+  SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
 } from './job-dispatcher';
 import { HandlesJob, type JobHandler } from './job-handler';
 import { scheduleJob } from './job-schedule';
-import { QUEUES, type QueueName } from './queues';
+import { QUEUES, type QueueName, WORKER_QUEUES } from './queues';
 import { toRedisConnection } from './redis-connection';
 
 const SCHEDULED = 'scheduled-test-job';
@@ -33,18 +35,26 @@ class TransactionalScheduledHandler implements JobHandler {
   }
 }
 
+class InboundScheduledHandler extends TransactionalScheduledHandler {}
+
+class SyncScheduledHandler extends TransactionalScheduledHandler {}
+
 class BulkScheduledHandler extends TransactionalScheduledHandler {}
 
 class CampaignScheduledHandler extends TransactionalScheduledHandler {}
 
 class WorkflowScheduledHandler extends TransactionalScheduledHandler {}
 
+HandlesJob({ queue: QUEUES.inbound, name: SCHEDULED })(InboundScheduledHandler);
+HandlesJob({ queue: QUEUES.sync, name: SCHEDULED })(SyncScheduledHandler);
 HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalScheduledHandler);
 HandlesJob({ queue: QUEUES.bulk, name: SCHEDULED })(BulkScheduledHandler);
 HandlesJob({ queue: QUEUES.campaign, name: SCHEDULED })(CampaignScheduledHandler);
 HandlesJob({ queue: QUEUES.workflow, name: SCHEDULED })(WorkflowScheduledHandler);
 
 const setups = {
+  inbound: [InboundScheduledHandler, InboundJobDispatcher],
+  sync: [SyncScheduledHandler, SyncJobDispatcher],
   transactional: [TransactionalScheduledHandler, TransactionalJobDispatcher],
   bulk: [BulkScheduledHandler, BulkJobDispatcher],
   workflow: [WorkflowScheduledHandler, WorkflowJobDispatcher],
@@ -92,7 +102,7 @@ afterEach(async () => {
   await Promise.all(applications.splice(0).map((application) => application.close()));
 });
 
-describe.each(Object.values(QUEUES))('Scheduled job on %s', (queueName) => {
+describe.each(WORKER_QUEUES)('Scheduled job on %s', (queueName) => {
   it('runs one job per interval across two workers, each in its own job context', async () => {
     const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
     const first = await start(queueName, prefix);
@@ -118,8 +128,9 @@ describe.each(Object.values(QUEUES))('Scheduled job on %s', (queueName) => {
     expect(jobLogBindings()).toEqual({});
   });
 
-  // Transactional and workflow run five jobs at once, so the next tick starts beside the active run.
-  const overlapping = queueName === QUEUES.bulk || queueName === QUEUES.campaign ? 1 : 2;
+  // Inbound, transactional and workflow run five jobs at once, so the next tick starts beside the active run.
+  const overlapping =
+    queueName === QUEUES.bulk || queueName === QUEUES.campaign || queueName === QUEUES.sync ? 1 : 2;
   it(`runs ${overlapping} tick(s) at once on one worker and waits for them at shutdown`, async () => {
     let finish!: () => void;
     const pending = new Promise<void>((resolve) => {
@@ -183,5 +194,24 @@ describe.each(Object.values(QUEUES))('Scheduled job on %s', (queueName) => {
     expect(report).toHaveBeenCalledTimes(3);
     expect(report.mock.calls.map(([, reportedId]) => reportedId)).toEqual([jobId, jobId, jobId]);
     expect(JSON.stringify(report.mock.calls)).not.toContain('private-scheduled-failure');
+  });
+});
+
+describe('Calendar schedules', () => {
+  it('schedules UTC midnight and keeps a pending job on restart', async () => {
+    const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
+    const { queue } = await start(QUEUES.bulk, prefix);
+    await scheduleJob(queue, SCHEDULED, { pattern: '0 0 * * *', tz: 'UTC' });
+    const [scheduled] = await queue.getJobSchedulers();
+    expect(scheduled).toMatchObject({ name: SCHEDULED, pattern: '0 0 * * *', tz: 'UTC' });
+    expect(new Date(scheduled?.next ?? 1).toISOString()).toMatch(/T00:00:00\.000Z$/);
+    expect(scheduled?.next).toBeGreaterThan(Date.now());
+
+    await queue.pause();
+    const [pending] = await queue.getDelayed();
+    await pending!.promote();
+    await scheduleJob(queue, SCHEDULED, { pattern: '0 0 * * *', tz: 'UTC' });
+    expect(await queue.getDelayedCount()).toBe(0);
+    expect((await queue.getJobs(['paused'])).map(({ id }) => id)).toEqual([pending?.id]);
   });
 });

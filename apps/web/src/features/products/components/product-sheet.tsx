@@ -9,6 +9,8 @@ import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
+import { ProductReadiness } from './product-readiness';
+import { ProductThumbnail } from './product-thumbnail';
 import { ProductsLoading } from './products-loading';
 import { SessionDialog } from '@/components/session-dialog';
 import { formatMoney } from '@/lib/format-money';
@@ -20,7 +22,7 @@ export function ProductSheet({ productId, onClose }: ProductSheetProps) {
   return (
     <SessionDialog
       title={data?.name ?? 'Product'}
-      className="inset-y-0 left-auto m-0 h-dvh max-w-sm rounded-none border-y-0 border-r-0"
+      className="inset-y-0 left-auto m-0 h-dvh max-w-md rounded-none border-y-0 border-r-0"
       open
       onClose={onClose}
     >
@@ -34,6 +36,7 @@ export function ProductSheet({ productId, onClose }: ProductSheetProps) {
 }
 
 type ProductDetailsProps = { product: ProductResponse };
+
 function ProductDetails({ product }: ProductDetailsProps) {
   const change = useChangeProduct(product.id);
   const { data: session } = useSessionContext();
@@ -41,9 +44,7 @@ function ProductDetails({ product }: ProductDetailsProps) {
   const canEdit = session?.currentStore?.canEditProducts;
   return (
     <div className="space-y-6">
-      {product.category ? (
-        <p className="text-sm wrap-anywhere text-text-muted">{product.category}</p>
-      ) : null}
+      <ProductDetailHeader product={product} />
       <ProductPhotos product={product} />
       {editing && canEdit ? (
         <>
@@ -56,18 +57,14 @@ function ProductDetails({ product }: ProductDetailsProps) {
         <>
           <ProductOverview product={product} />
           {canEdit ? (
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setEditing(true)}>Edit product</Button>
-              <Button
-                variant="secondary"
-                loading={change.isPending}
-                onClick={() =>
-                  change.mutate({ status: product.status === 'hidden' ? 'active' : 'hidden' })
-                }
-              >
-                {product.status === 'hidden' ? 'Show product' : 'Hide product'}
-              </Button>
-            </div>
+            <ProductDetailActions
+              product={product}
+              isPending={change.isPending}
+              onEdit={() => setEditing(true)}
+              onToggleStatus={() =>
+                change.mutate({ status: product.status === 'hidden' ? 'active' : 'hidden' })
+              }
+            />
           ) : null}
         </>
       )}
@@ -80,38 +77,92 @@ function ProductDetails({ product }: ProductDetailsProps) {
   );
 }
 
+type ProductDetailHeaderProps = { product: ProductResponse };
+
+function ProductDetailHeader({ product }: ProductDetailHeaderProps) {
+  return (
+    <div className="flex items-start gap-3">
+      <ProductThumbnail product={product} />
+      <div className="min-w-0 flex-1">
+        {product.category ? (
+          <p className="text-xs wrap-anywhere text-text-muted">{product.category}</p>
+        ) : null}
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <ProductReadiness product={product} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ProductDetailActionsProps = {
+  product: ProductResponse;
+  isPending: boolean;
+  onEdit: () => void;
+  onToggleStatus: () => void;
+};
+
+function ProductDetailActions({
+  product,
+  isPending,
+  onEdit,
+  onToggleStatus,
+}: ProductDetailActionsProps) {
+  return (
+    <div className="flex flex-wrap gap-2 pt-2">
+      <Button onClick={onEdit}>Edit product</Button>
+      <Button variant="secondary" loading={isPending} onClick={onToggleStatus}>
+        {product.status === 'hidden' ? 'Show product' : 'Hide product'}
+      </Button>
+    </div>
+  );
+}
+
 function ProductOverview({ product }: ProductDetailsProps) {
-  const price = Math.min(...product.variants.map((variant) => variant.pricePoisha));
+  const prices = product.variants.map((variant) => variant.pricePoisha);
+  const price = Math.min(...prices);
+  const totalAvailable = product.variants.reduce((total, variant) => total + variant.available, 0);
   return (
     <>
       <section className="space-y-2">
-        <h2 className="font-semibold">Description</h2>
-        <p className="wrap-anywhere whitespace-pre-wrap">
-          {product.description || 'No description yet.'}
+        <h2 className="text-sm font-semibold text-text">Description</h2>
+        <p className="text-sm wrap-anywhere whitespace-pre-wrap text-text-muted">
+          {product.description || "No description yet. It's used in posts and your order link."}
         </p>
       </section>
-      <dl className="grid grid-cols-2 gap-4 rounded-lg bg-surface-muted p-4">
-        <div>
-          <dt className="text-sm text-text-muted">Price from</dt>
-          <dd className="font-semibold tabular-nums">
+      <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-surface-muted p-3">
+        <div className="space-y-0.5">
+          <dt className="text-xs text-text-muted">Price from</dt>
+          <dd className="font-semibold text-text tabular-nums">
             {price ? formatMoney(price) : 'Needs a price'}
           </dd>
         </div>
-        <div>
-          <dt className="text-sm text-text-muted">Visibility</dt>
-          <dd>{product.status === 'hidden' ? 'Hidden' : 'Shown'}</dd>
+        <div className="space-y-0.5">
+          <dt className="text-xs text-text-muted">Visibility</dt>
+          <dd className="text-sm font-medium text-text">
+            {product.status === 'hidden' ? 'Hidden' : 'Shown'}
+          </dd>
+        </div>
+        <div className="space-y-0.5">
+          <dt className="text-xs text-text-muted">Stock</dt>
+          <dd className="text-sm font-medium text-text">
+            {product.isStockTracked ? `${totalAvailable} available` : 'Not tracked'}
+          </dd>
         </div>
       </dl>
       <section className="space-y-2">
-        <h2 className="font-semibold">Stock</h2>
+        <h2 className="text-sm font-semibold text-text">Stock</h2>
         {product.isStockTracked ? (
-          product.variants.map((variant) => (
-            <p key={variant.id} className="wrap-anywhere">
-              {variant.title}: {variant.available} available · {variant.reserved} reserved
-            </p>
-          ))
+          <div className="space-y-1.5">
+            {product.variants.map((variant) => (
+              <p key={variant.id} className="text-sm wrap-anywhere text-text-muted">
+                <span className="font-medium text-text">{variant.title}:</span> {variant.available}{' '}
+                available · {variant.reserved} reserved
+              </p>
+            ))}
+          </div>
         ) : (
-          <p>Not tracked</p>
+          <p className="text-sm text-text-muted">Not tracked</p>
         )}
       </section>
     </>

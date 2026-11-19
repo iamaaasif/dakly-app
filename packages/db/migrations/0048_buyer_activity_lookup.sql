@@ -1,0 +1,1 @@
+CREATE INDEX "store_daily_metrics_buyer_activity_idx" ON "store_daily_metrics" USING btree ("store_id","dimension","day") WHERE "store_daily_metrics"."metric" = 'buyer_activity';

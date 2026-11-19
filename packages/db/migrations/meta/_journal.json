@@ -306,8 +306,43 @@
     {
       "idx": 43,
       "version": "7",
-      "when": 1795024576798,
-      "tag": "0043_automation_send_retries",
+      "when": 1795059739050,
+      "tag": "0043_campaign_list_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795064750012,
+      "tag": "0044_meta-channel-token-checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1795069535421,
+      "tag": "0045_contact_stats_returned_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1795074536978,
+      "tag": "0046_chat_return_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795078611375,
+      "tag": "0047_automation_send_retries",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1795081269803,
+      "tag": "0048_buyer_activity_lookup",
       "breakpoints": true
     }
   ]

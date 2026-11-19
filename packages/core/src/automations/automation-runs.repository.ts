@@ -54,27 +54,13 @@ export type NewRunStep = {
   outcome: string;
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
-  optOutCode?: string | null;
-  destination?: string | null;
+  optOutUrl?: string | null;
+  destinationHash?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
   firstTriedAt?: Date;
 };
-export type RunStepChange = {
-  outcome: string;
-  providerMessageId?: string;
-  skipReason?: SkipReason;
-  sentAt?: Date;
-  firstTriedAt?: Date;
-};
-// A send handed to the provider whose outcome is not known yet.
-export type SendingStep = {
-  id: string;
-  firstTriedAt: Date;
-  latestDispatchAt: Date;
-  optOutCode: string | null;
-  destination: string | null;
-};
+export type RunStepChange = { outcome: string; providerMessageId?: string; sentAt?: Date };
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -91,6 +77,18 @@ export class AutomationRunsRepository {
         claimed_at as "claimedAt" from due_automation_runs(${limit}, ${perStore})`,
     );
     return result.rows.map((row) => ({ ...row, claimedAt: new Date(row.claimedAt) }));
+  }
+
+  // Lease and wake timestamps use the same clock as due_automation_runs.
+  async schedulerTime(storeId: string): Promise<Date> {
+    return this.database.forStore(storeId, async (tx) => {
+      const { rows } = await tx.execute<{ milliseconds: string }>(
+        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
+      );
+      const [time] = rows;
+      if (!time) throw new Error('Postgres did not return the workflow scheduler time');
+      return new Date(Number(time.milliseconds));
+    });
   }
 
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
@@ -144,21 +142,11 @@ export class AutomationRunsRepository {
     return rows.map((row) => row.stepKey);
   }
 
-  async findSendingStep(
-    storeId: string,
-    runId: string,
-    stepKey: string,
-    lock = false,
-  ): Promise<SendingStep | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) => {
-      const query = tx
-        .select({
-          id: automationRunSteps.id,
-          firstTriedAt: automationRunSteps.firstTriedAt,
-          sentAt: automationRunSteps.sentAt,
-          optOutCode: automationRunSteps.optOutCode,
-          destination: automationRunSteps.destination,
-        })
+  // A send handed to the provider whose outcome is not known yet.
+  async hasSendingStep(storeId: string, runId: string, stepKey: string): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: automationRunSteps.id })
         .from(automationRunSteps)
         .where(
           and(
@@ -168,21 +156,19 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.outcome, 'sending'),
           ),
         )
-        .limit(1);
-      return lock ? query.for('update') : query;
-    });
-    if (!row) return undefined;
-    const firstTriedAt = row.firstTriedAt ?? row.sentAt;
-    return firstTriedAt
-      ? { ...row, firstTriedAt, latestDispatchAt: row.sentAt ?? firstTriedAt }
-      : undefined;
+        .limit(1),
+    );
+    return rows.length > 0;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRunSteps)
-        .set(change)
+        .set({
+          ...change,
+          ...(change.outcome !== 'sending' && { destinationHash: null, optOutUrl: null }),
+        })
         .where(
           and(
             eq(automationRunSteps.storeId, storeId),
@@ -212,13 +198,19 @@ export class AutomationRunsRepository {
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read
   // in the same statement so a pause or stop that committed first is seen.
-  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+  async moveRunIfLive(
+    storeId: string,
+    claim: RunClaim,
+    change: RunChange,
+    gate?: 'dispatch',
+  ): Promise<boolean> {
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
-        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped}
+      ${gate ? sql`for share of ${automations}, ${automationVersions}` : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

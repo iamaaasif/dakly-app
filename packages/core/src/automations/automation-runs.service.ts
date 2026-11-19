@@ -10,7 +10,7 @@ import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { ErrorReporter } from '../platform/logging/error-reporter';
+import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -20,21 +20,18 @@ import {
   type ClaimedRun,
   type DueRun,
   type RunClaim,
-  type SendingStep,
 } from './automation-runs.repository';
-import { deliverAutomationSms, endExpiredRetry, retryDecision } from './automation-send-retry';
+import { AutomationSmsDeliveryService, SMS_NO_ANSWER } from './automation-sms-delivery.service';
 import {
-  type CreditSettlement,
   type Delivery,
   endWithUnknownOutcome,
   exited,
   type GateResult,
   failed,
+  firstSendStop,
   goOn,
   holdOrEnd,
-  holdOwnedClaim,
   holdsClaim,
-  ifNotReachable,
   isLateSend,
   messageBody,
   noCredits,
@@ -46,12 +43,15 @@ import {
   type RunFacts,
   type SendStep,
   type StepResult,
+  workflowDestinationHash,
 } from './automation-step-rules';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
 // And at most this many of one store's runs, so a backlog cannot hold back other stores.
 const CLAIMS_PER_STORE = 100;
+// Matches the lease compared by due_automation_runs in Postgres.
+const WORKFLOW_LEASE_MS = 5 * MINUTE_MS;
 const system = { kind: 'system' } as const;
 
 @Injectable()
@@ -65,7 +65,8 @@ export class AutomationRunsService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(WalletService) private readonly wallets: WalletService,
-    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
+    @Inject(AutomationSmsDeliveryService)
+    private readonly smsDelivery: AutomationSmsDeliveryService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
   ) {}
 
@@ -87,7 +88,7 @@ export class AutomationRunsService {
     const found = await this.repository.findRun(storeId, queued.runId);
     if (!found || !holdsClaim(found, queued)) return undefined;
     // A job that starts late takes a fresh lease and works under it.
-    const now = await this.transaction.databaseTime(storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const started = await this.repository.startWork(storeId, queued, now);
     if (!started) return undefined;
     const claim = { ...queued, claimedAt: started.claimedAt };
@@ -104,7 +105,7 @@ export class AutomationRunsService {
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
         await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
-      if (result.credits) await this.settleCredits(storeId, claim, result.credits);
+      if (result.credits) await this.smsDelivery.settleCredits(storeId, claim, result.credits);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
@@ -115,32 +116,29 @@ export class AutomationRunsService {
     claim: RunClaim,
     run: ClaimedRun,
   ): Promise<StepResult | undefined> {
-    const now = await this.transaction.databaseTime(storeId);
+    const now = await this.repository.schedulerTime(storeId);
     const step = run.graph.steps[claim.stepKey]!;
-    const started =
-      step.kind === 'send'
-        ? await this.repository.findSendingStep(storeId, claim.runId, claim.stepKey)
-        : undefined;
+    const isSending =
+      step.kind === 'send' &&
+      (await this.repository.hasSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
-    if (held) return started ? endWithUnknownOutcome(held) : held;
+    // A send handed to the provider by an earlier claim is not sent again; its run ends.
+    if (isSending) return endWithUnknownOutcome(held ?? failed(SMS_NO_ANSWER, now));
+    if (held) return held;
     const facts: RunFacts = {
-      graph: run.graph,
       storeId,
+      graph: run.graph,
       runId: claim.runId,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
     };
-    const exitReason = await this.conditions.exitReason(storeId, run.graph, facts, now);
-    if (exitReason) {
-      const result = exited(exitReason, now);
-      return started ? endWithUnknownOutcome(result) : result;
-    }
-    if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
+    const exitReason = await this.conditions.exitReason(run.graph, facts, now);
+    if (exitReason) return exited(exitReason, now);
     if (
       shouldPrepareSender(step) &&
-      !isLateSend(facts.wakeAt, await this.transaction.databaseTime(storeId))
+      !isLateSend(facts.wakeAt, await this.repository.schedulerTime(storeId))
     )
       facts.preparedSender = await this.messaging.prepareSender(storeId);
     return this.runKind(claim, step, facts, now);
@@ -159,12 +157,7 @@ export class AutomationRunsService {
         return scheduleWait(stepKey, step, now, timeZone);
       }
       case 'condition': {
-        const choice = (await this.conditions.firstHoldingPath(
-          facts.storeId,
-          step.paths,
-          facts,
-          now,
-        )) ?? {
+        const choice = (await this.conditions.firstHoldingPath(step.paths, facts, now)) ?? {
           outcome: 'else',
           next: step.elseNext,
         };
@@ -181,9 +174,10 @@ export class AutomationRunsService {
         };
       }
       case 'send':
+        // Versions published before the guard still fail instead of sending without review.
         if (step.reviewBeforeSending)
           return failed('Review before sending is not available yet', now);
-        return this.startSend(claim, step, facts, now);
+        return this.startSend(claim, step, facts);
       case 'action':
         return runAction(stepKey, step, now);
       case 'exit':
@@ -197,108 +191,105 @@ export class AutomationRunsService {
   // The gate decides, the opt-out link is made and the send row is written in one short
   // transaction that also renews the claim, so the frequency cap counts this send before another
   // check for the contact can run.
-  private async startSend(
+  private async startSend(claim: RunClaim, step: SendStep, facts: RunFacts) {
+    const checkedAt = await this.repository.schedulerTime(facts.storeId);
+    const prepared =
+      step.channels.includes('sms') && !isLateSend(facts.wakeAt, checkedAt)
+        ? await this.smsDelivery.prepare(facts)
+        : undefined;
+    const planned = await this.authorizeFirstSend(claim, step, facts, prepared?.to ?? null);
+    if ('stop' in planned) return planned.stop;
+    if (prepared)
+      return this.smsDelivery.deliver(
+        { storeId: facts.storeId, contactId: facts.contactId, step },
+        prepared,
+        planned,
+      );
+  }
+
+  private async authorizeFirstSend(
     claim: RunClaim,
     step: SendStep,
     facts: RunFacts,
-    now: Date,
-  ): Promise<StepResult | undefined> {
-    const { storeId, contactId } = facts;
-    const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
+    preparedPhone: string | null,
+  ) {
+    const { storeId } = facts;
     let renewed = claim;
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
-      const renewal = { status: 'running', claimedAt: now } as const;
-      if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
-      renewed = { ...claim, claimedAt: now };
-      const checkedAt = await this.transaction.databaseTime(storeId);
+      const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
+      if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return 'not_live';
+      const checkedAt = await this.repository.schedulerTime(storeId);
       const result = isLateSend(facts.wakeAt, checkedAt)
         ? ({ outcome: 'late' } as const)
-        : await this.gateSend(renewed, step, facts);
-      const claimedAt = await this.transaction.databaseTime(storeId);
-      // The live move holds this run row; renew after the gate's other locks and writes.
-      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
+        : await this.gateSend(claim, step, facts, preparedPhone);
+      const claimedAt = await this.repository.schedulerTime(storeId);
+      // Renew on the sweep's Postgres clock so it cannot retake a fresh lease early.
+      await this.repository.moveRun(storeId, claim, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
       return result;
     });
-    // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      if (!run || !holdsClaim(run, renewed)) return undefined;
-      const held = holdOrEnd(run, await this.transaction.databaseTime(storeId));
-      return held && { ...held, claim: renewed };
+      if (!run || !holdsClaim(run, renewed)) return { stop: undefined };
+      const held = holdOrEnd(run, await this.repository.schedulerTime(storeId));
+      return { stop: held && { ...held, claim: renewed } };
     }
-    const gatedAt = renewed.claimedAt;
-    if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
-    if ('outcome' in started)
-      return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
-    const { decision } = started;
-    if ('body' in started)
-      return deliverAutomationSms(
-        { messaging: this.messaging, reporter: this.reporter, transaction: this.transaction },
-        {
-          storeId,
-          claim: renewed,
-          contactId,
-          step,
-          body: started.body,
-          isFirstTry: true,
-          preparedSender: facts.preparedSender,
-          destination: started.destination,
-        },
-        started.at,
-        started.at,
-      );
-    if (decision.action === 'defer')
-      return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
-    if (decision.action === 'skip')
-      return {
-        ...ifNotReachable(step, gatedAt),
-        claim: renewed,
-        step: { ...row, outcome: 'skipped', skipReason: decision.reason },
-      };
-    return undefined;
+    if ('body' in started) return { claim: renewed, body: started.body, at: started.at };
+    return { stop: firstSendStop(renewed, step, started) };
   }
 
-  // With a send row that may have reached the provider, ending the run keeps its credits.
-  private async gateSend(claim: RunClaim, step: SendStep, facts: RunFacts): Promise<GateResult> {
+  private async gateSend(
+    claim: RunClaim,
+    step: SendStep,
+    facts: RunFacts,
+    preparedPhone: string | null,
+  ): Promise<GateResult> {
     const { storeId, contactId } = facts;
     // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
     if (!step.channels.includes('sms'))
       return { decision: { action: 'skip', reason: 'window_closed' } };
     await this.wallets.lockForReservation(storeId, 'sms_credits');
+    if (
+      !(await this.repository.moveRunIfLive(
+        storeId,
+        claim,
+        { status: 'running', claimedAt: claim.claimedAt },
+        'dispatch',
+      ))
+    )
+      return 'not_live';
     const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
       contactId,
       channel: 'sms',
       category: step.category,
     });
-    if (
-      !(await this.repository.moveRunIfLive(storeId, claim, {
-        status: 'running',
-        claimedAt: claim.claimedAt,
-      }))
-    )
-      return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    if (isLateSend(facts.wakeAt, at)) return { outcome: 'late' };
+    const firstTriedAt = await this.repository.schedulerTime(storeId);
+    if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
+    if (firstTriedAt.getTime() - claim.claimedAt.getTime() >= WORKFLOW_LEASE_MS)
+      return { decision: { action: 'defer', until: facts.wakeAt ?? firstTriedAt } };
     if (decision.action !== 'send') return { decision };
-    const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
+    if (destination !== preparedPhone) return { outcome: 'destination_changed' };
+    const body = await this.writeSend(
+      { storeId, claim, contactId, step, destination },
+      { sentAt: at, firstTriedAt },
+    );
     if (body === undefined) return { decision: noCredits };
     return { decision, body, destination, at };
   }
 
   private async refreshExitReason(facts: RunFacts, at: Date) {
-    const { storeId, contactId, runId, graph } = facts;
-    const tags = await this.contacts.findTags(storeId, contactId);
-    const tappedStepKeys = await this.repository.listTappedStepKeys(storeId, runId);
-    return this.conditions.exitReason(storeId, graph, { ...facts, tags, tappedStepKeys }, at);
+    const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
+    const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
+    return this.conditions.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
-    { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body' | 'isFirstTry'>,
-    now: Date,
+    { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body'>,
+    times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing
@@ -331,103 +322,10 @@ export class AutomationRunsService {
       id,
       outcome: 'sending',
       channel: 'sms',
-      sentAt: now,
-      firstTriedAt: now,
-      optOutCode: optOut?.code,
-      destination,
+      ...times,
+      destinationHash: workflowDestinationHash(storeId, destination),
+      optOutUrl: optOut?.url,
     });
     return messageBody(step, optOut?.url);
-  }
-
-  private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
-    const key = operationKey(claim);
-    // Every send row was written with its reservation, in the same transaction.
-    const reservationId = (await this.wallets.findByIdempotencyKey(storeId, key))!.entryId;
-    if (credits.settle === 'charge')
-      await this.wallets.charge(storeId, {
-        reservationId,
-        quantity: credits.quantity,
-        idempotencyKey: `${key}:charge`,
-        actor: system,
-      });
-    else
-      await this.wallets.release(storeId, {
-        reservationId,
-        idempotencyKey: `${key}:release`,
-        actor: system,
-      });
-  }
-
-  private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
-    const { storeId, contactId, wakeAt } = facts;
-    const { firstTriedAt, optOutCode, destination } = started;
-    const preflight = await this.transaction.databaseTime(storeId);
-    const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
-      ? undefined
-      : await this.messaging.prepareSender(storeId);
-    const gated = await this.transaction.run(storeId, async () => {
-      const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
-      if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
-      const locked = await this.repository.findSendingStep(
-        storeId,
-        claim.runId,
-        claim.stepKey,
-        true,
-      );
-      if (!locked) return undefined;
-      const checkedAt = await this.transaction.databaseTime(storeId);
-      const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-      const { result, at } = early
-        ? { result: early, at: checkedAt }
-        : await this.recheckResend(step, facts, locked);
-      const claimedAt = await this.transaction.databaseTime(storeId);
-      if (!(await this.repository.moveRunIfLive(storeId, claim, { status: 'running', claimedAt })))
-        return undefined;
-      if (result) return { result, claim: { ...claim, claimedAt }, at: claimedAt };
-      const renewed = { ...claim, claimedAt };
-      // A slower worker must not age out a previously submitted message early.
-      const sentAt = at > locked.latestDispatchAt ? at : locked.latestDispatchAt;
-      const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
-      await this.repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
-      const afterWrite = await this.transaction.databaseTime(storeId);
-      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt: afterWrite });
-      return { result, claim: { ...claim, claimedAt: afterWrite }, at: sentAt };
-    });
-    if (!gated) {
-      const run = await this.repository.findRun(storeId, claim.runId);
-      const held = holdOwnedClaim(run, claim, await this.transaction.databaseTime(storeId));
-      return held && endWithUnknownOutcome(held);
-    }
-    if (gated.result) return { ...gated.result, claim: gated.claim };
-    return deliverAutomationSms(
-      { messaging: this.messaging, reporter: this.reporter, transaction: this.transaction },
-      {
-        storeId,
-        claim: gated.claim,
-        contactId,
-        step,
-        body: messageBody(step, optOutCode ? this.links.optOutUrl(optOutCode) : undefined),
-        destination,
-        preparedSender,
-        isFirstTry: false,
-      },
-      firstTriedAt,
-      gated.at,
-    );
-  }
-
-  private async recheckResend(step: SendStep, facts: RunFacts, { id, firstTriedAt }: SendingStep) {
-    const { decision, at } = await this.sendPolicy.recheckForSend(
-      facts.storeId,
-      { contactId: facts.contactId, channel: 'sms', category: step.category },
-      id,
-    );
-    const exit = await this.refreshExitReason(facts, at);
-    const now = await this.transaction.databaseTime(facts.storeId);
-    const result = exit
-      ? endWithUnknownOutcome(exited(exit, now))
-      : (endExpiredRetry(step, firstTriedAt, facts.wakeAt, now) ??
-        retryDecision(step, firstTriedAt, decision, now));
-    return { result, at };
   }
 }

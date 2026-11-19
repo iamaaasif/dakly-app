@@ -17,6 +17,7 @@ async function bootstrap(): Promise<void> {
     new FastifyAdapter(createHttpServer(env.API_TRUSTED_PROXIES)),
     {
       bufferLogs: true,
+      rawBody: true,
     },
   );
   await registerSessionCookies(app);

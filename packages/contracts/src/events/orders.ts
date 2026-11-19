@@ -27,6 +27,13 @@ export const orderCreatedEventSchema = z.strictObject({
   payload: z.strictObject({ orderId: z.uuid() }),
 });
 
+export const orderEditedEventSchema = z.strictObject({
+  type: z.literal('order.edited'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ orderId: z.uuid() }),
+});
+
 export const orderCodCollectedEventSchema = z.strictObject({
   type: z.literal('order.cod_collected'),
   storeId: z.uuid(),

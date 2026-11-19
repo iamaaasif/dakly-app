@@ -16,7 +16,12 @@ const contextSchema = z.discriminatedUnion('owner', [
   z.object({
     owner: z.literal('store'),
     storeId: z.uuid(),
-    purpose: z.enum(['channel-access-token', 'payment-gateway-credentials', 'bkash-agreement']),
+    purpose: z.enum([
+      'channel-access-token',
+      'meta-selection-token',
+      'payment-gateway-credentials',
+      'bkash-agreement',
+    ]),
   }),
 ]);
 export type EncryptionContext = z.infer<typeof contextSchema>;

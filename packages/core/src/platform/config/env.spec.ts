@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadEnv, loadStaffEnv, resetEnvForTests } from './env';
+import { loadEnv, loadStaffEnv, loadWorkerEnv, resetEnvForTests } from './env';
 
 describe('loadEnv', () => {
   it.each(['https://localhost:6379', 'redis://localhost/-1', 'redis://localhost/1.5'])(
@@ -45,6 +45,12 @@ describe('SMS driver configuration', () => {
     });
   });
 
+  it('requires a stable destination hash key at worker startup', () => {
+    expect(() => loadWorkerEnv(base)).toThrow('CODE_HASH_KEY is required to start the worker');
+    const CODE_HASH_KEY = randomBytes(32).toString('base64');
+    expect(loadWorkerEnv({ ...base, CODE_HASH_KEY }).CODE_HASH_KEY).toBe(CODE_HASH_KEY);
+  });
+
   it('requires staff Access and session configuration in production', () => {
     expect(() => loadStaffEnv({ ...base, NODE_ENV: 'production' })).toThrow(
       'Staff Access and session configuration is required in production',
@@ -53,6 +59,34 @@ describe('SMS driver configuration', () => {
 
   it('rejects unsupported driver names', () => {
     expect(() => loadEnv({ ...base, SMS_DRIVER: 'unavailable' })).toThrow();
+  });
+});
+
+describe('Meta channel configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+
+  it('refuses the fake channel driver in production', () => {
+    expect(() => loadEnv({ ...base, NODE_ENV: 'production', META_CHANNEL_DRIVER: 'fake' })).toThrow(
+      'Fake Meta channel driver is not allowed in production',
+    );
+  });
+
+  it('requires a complete app configuration when the graph driver is enabled', () => {
+    expect(() => loadEnv({ ...base, META_CHANNEL_DRIVER: 'graph' })).toThrow(
+      'Meta app id, secret, login configuration and redirect URI are required',
+    );
+    const graph = {
+      ...base,
+      META_CHANNEL_DRIVER: 'graph',
+      META_APP_ID: '123',
+      META_APP_SECRET: 'local-test-value',
+      META_LOGIN_CONFIG_ID: '456',
+      META_OAUTH_REDIRECT_URI: 'https://shop.example.test/integrations/meta',
+    };
+    expect(loadEnv(graph).metaChannel).toMatchObject({ driver: 'graph', appId: '123' });
+    expect(() =>
+      loadEnv({ ...graph, META_OAUTH_REDIRECT_URI: 'http://shop.example.test/integrations/meta' }),
+    ).toThrow('Meta Graph requires an HTTPS redirect URI');
   });
 });
 

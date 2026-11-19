@@ -211,7 +211,12 @@ The entry flow is thorough and local-first (mobile number + OTP, bKash/Nagad mes
 
 ### App shell (WEB-3, WEB-7)
 
-The signed-in shell matches the design images and contains only implemented destinations. The sidebar shows the Dakly mark and tagline, then links under small uppercase headings in the design's order: Workspace (Dashboard), Customers (All customers, Segments, by view access), Store information (Store settings by Store settings view, Team and permissions by Team view) and Configuration (Extensions, by Store settings view). A heading with no visible link is hidden. Sales, Marketing and Social auto post join when their screens exist. Settings sits above the foot for every member of a shop and counts as the current location on Security, Ownership transfer and Support access, which it leads to; Log out and Collapse close the sidebar. Collapse is local state: the sidebar shrinks to labeled icons and the choice is kept while the verified context is unchanged. The phone drawer supports keyboard focus containment, Escape and return focus. My profile, Security, Ownership transfer and Support access (current owner) are reached from Settings, which lists them for every member; only the store information and extensions tabs need Store settings view access. Plain `/settings` opens on Store information but is the Settings page itself, so Store settings is marked current only on `/settings?tab=store`. Customer creation requires edit access. Store and profile names come from the API. The header holds the shop chooser, the notification bell and an account menu with Profile, Security and Sign out. Sign out in the menu and Log out in the sidebar use the same code: it calls the account endpoint, clears the browser query cache and returns to `/sign-in`. The shop chooser is a native select laid over a chip that shows the selected shop's initials and full name, so a long name wraps instead of being cut; on a phone the chip takes its own row under the menu, bell and account buttons. It loads bounded pages on request, and the selected name stays available even when its option is outside the loaded page. The plan name from the design is not shown because the session context has no plan.
+The signed-in shell matches the design images and contains only implemented destinations.
+
+- **Sidebar**: The Dakly mark and tagline sit at the top. Links are grouped under small uppercase headings in the design's order: Workspace (Dashboard), Customers (All customers, Segments), Sales (Orders, Products), Store information (Store settings, Team and permissions) and Configuration (Extensions). Each link is visible only when its permission flag is active (`canViewCustomers`, `canViewSegments`, `canViewOrders`, `canViewProducts`, `canViewStoreSettings`, `canViewTeam`), and a heading with no visible link is hidden. Customer creation requires edit access. Marketing and Social auto post join when their screens exist. Settings sits above the foot for every member of a shop and counts as the current location on Security, Ownership transfer and Support access, which it leads to; Log out and Collapse close the sidebar. Collapse is local state: the sidebar shrinks to labeled icons and the choice is kept while the verified context is unchanged. The phone drawer supports keyboard focus containment, Escape and return focus.
+- **Header**: Holds the shop chooser, notification bell and an account menu with Profile, Security and Sign out. Store and profile names come from the API. The shop chooser is a native select laid over a chip that shows the selected shop's initials and full name, so a long name wraps instead of being cut; on a phone the chip takes its own row under the menu, bell and account buttons. It loads bounded pages on request, and the selected name stays available even when its option is outside the loaded page. The plan name from the design is not shown because the session context has no plan.
+- **Settings**: Reached from the sidebar Settings link. Lists My profile, Security, Ownership transfer and Support access (current owner) for every member; only the store information and extensions tabs need Store settings view access. Plain `/settings` opens on Store information but is the Settings page itself, so Store settings is marked current only on `/settings?tab=store`.
+- **Sign out**: Sign out in the menu and Log out in the sidebar use the same code: it calls the account endpoint, clears the browser query cache and returns to `/sign-in`.
 
 `GET /me/context` requires an account session. It returns the profile id/name, `hasMemberships`, the independently verified current shop with screen capabilities, and `contextTag`. `GET /me/stores?after=<store UUID>&limit=50` returns a bounded `{ items, nextCursor }` picker page; `limit` is 1–50. The picker loads further pages only on request and preserves a selected shop outside loaded pages. There is no account membership cap. The session guard reads the session and membership from primary PostgreSQL once per request; the context service reuses those access results and existing account/team services. It adds no table, column, cross-request permission cache or browser authorization rule. Removed membership leaves the account usable with no current shop.
 
@@ -512,20 +517,24 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 ## SMS delivery in development
 
 ACC-1 provides `SmsDriver.send({ to, text })`, returning `{ providerMessageId }`.
-`MailpitSmsDriver` takes SMTP `{ host, port }` options and captures each SMS as an
-email to `<phone>@sms.test`. Its provider message id is Mailpit's queue id,
-so the API and UI can retrieve the captured message. The adapter sets five-second
-SMTP timeouts and returns `SMS_SEND_FAILED` without the raw vendor error. It logs
-neither phone numbers nor message text. `FakeSmsDriver` keeps message copies in
-memory and returns distinct ids for unit tests.
+`MailpitSmsDriver` uses an SMTP host and port to capture each SMS as an email
+to `<phone>@sms.test`. It also uses the Mailpit API URL at runtime to look up a
+capture by Message-ID. A definite refusal raises `SmsSendRefused`, which the
+core service maps to `SMS_SEND_REFUSED`. An uncertain attempt without a matching
+capture raises a generic `SMS_SEND_FAILED`. The adapter leaves the raw vendor
+error, phone and message text out of logs and errors. `FakeSmsDriver` keeps
+message copies in memory and returns distinct ids for unit tests.
+[Feature 09](09-campaigns-and-automations.md#core-send-step) describes
+the sandbox receipt rules.
 
 `docker compose` runs Mailpit on localhost: SMTP port 1025 and UI/API port 8025.
 CI uses the same ports and checks readiness before tests. `MAILPIT_SMTP_HOST` and
-`MAILPIT_SMTP_PORT` configure the SMTP connection; `MAILPIT_API_URL` configures
-integration test read-back. The integration test removes only its own message.
+`MAILPIT_SMTP_PORT` configure the SMTP connection. `MAILPIT_API_URL` configures
+runtime receipt lookup and integration test read-back. The integration test
+removes only its own message.
 
 `SMS_DRIVER=mailpit` is the only supported selection. SmsModule selects Mailpit in
-development and tests, using the SMTP settings above. Application startup fails in
+development and tests, using the settings above. Application startup fails in
 production even when `SMS_DRIVER` is omitted: no usable production driver exists
 until ACC-14 supplies the provider account, sender id and adapter. Pure environment
 parsing remains separate from the consumer factory so cookie settings do not

@@ -82,13 +82,15 @@ resend is explicit. See [account and team](../features/01-account-and-team.md).
 
 ## Channels (02)
 
-| Route                                                                                                          | Permission      |
-| -------------------------------------------------------------------------------------------------------------- | --------------- |
-| `GET /channel-connections`                                                                                     | `storeSettings` |
-| `POST /channel-connections/meta`, `POST /channel-connections/whatsapp`                                         | `storeSettings` |
-| `POST /channel-connections/:channelConnectionId/reconnect`, `DELETE /channel-connections/:channelConnectionId` | `storeSettings` |
-| `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`         |
-| `GET /sms-sender-ids`, `POST /sms-sender-ids`, `POST /sms-sender-ids/:smsSenderIdId/test`                      | `storeSettings` |
+| Route                                                                                     | Permission                           |
+| ----------------------------------------------------------------------------------------- | ------------------------------------ |
+| `GET /channel-connections`                                                                | `storeSettings.view`                 |
+| `POST /channel-connections/meta/start`, `POST /channel-connections/meta/accounts`         | `storeSettings.edit`, Owner or Admin |
+| `POST /channel-connections/meta`, `DELETE /channel-connections/:channelConnectionId`      | `storeSettings.edit`, Owner or Admin |
+| `POST /channel-connections/whatsapp`                                                      | `storeSettings`                      |
+| `POST /channel-connections/:channelConnectionId/reconnect`                                | `storeSettings`                      |
+| `PATCH /channel-connections/:channelConnectionId/ai`                                      | `chats`                              |
+| `GET /sms-sender-ids`, `POST /sms-sender-ids`, `POST /sms-sender-ids/:smsSenderIdId/test` | `storeSettings`                      |
 
 Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
 requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
@@ -122,21 +124,23 @@ atomically and retain business data when an extension is disabled.
 
 ## Chats and AI agent (04)
 
-| Route                                                                                                                    | Permission                                                        |
-| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `GET /conversations`, `GET /conversations/:conversationId`, `GET /conversations/:conversationId/messages`                | `chats`                                                           |
-| `POST /conversations/:conversationId/messages` (idem)                                                                    | `chats`                                                           |
-| `PATCH /conversations/:conversationId` (status, assignee)                                                                | `chats`                                                           |
-| `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`                      | `chats`                                                           |
-| `POST /messages/:messageId/rating`                                                                                       | `chats`                                                           |
-| `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                         | `chats`                                                           |
-| `GET /saved-replies`, `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId` | `chats`                                                           |
-| `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live`        | `chats`                                                           |
-| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                                   | Owner or Admin                                                    |
-| `GET /knowledge-items`, `GET /knowledge-items/:knowledgeItemId`                                                          | `storeSettings`                                                   |
-| `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId`           | `storeSettings`                                                   |
-| `POST /knowledge-items/uploads` (returns a file ID and signed PUT URL for PDF or plain text)                             | `storeSettings`                                                   |
-| `GET /events/stream`                                                                                                     | any member; Server-Sent Events for new messages and notifications |
+| Route                                                                                                             | Permission                                                        |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `GET /conversations`, `GET /conversations/:conversationId`, `GET /conversations/:conversationId/messages`         | Chats extension, `chats.view`                                     |
+| `POST /conversations/:conversationId/messages` (idem)                                                             | `chats`                                                           |
+| `PATCH /conversations/:conversationId` (status, assignee)                                                         | Chats extension, `chats.edit`                                     |
+| `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`               | Chats extension, `chats.edit`                                     |
+| `POST /conversations/:conversationId/notes`                                                                       | Chats extension, `chats.edit`                                     |
+| `POST /messages/:messageId/rating`                                                                                | `chats`                                                           |
+| `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                  | `chats`                                                           |
+| `GET /saved-replies`                                                                                              | Chats extension, `chats.view`                                     |
+| `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId`                | Chats extension, `chats.edit`                                     |
+| `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live` | `chats`                                                           |
+| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                            | Owner or Admin                                                    |
+| `GET /knowledge-items`, `GET /knowledge-items/:knowledgeItemId`                                                   | `storeSettings`                                                   |
+| `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId`    | `storeSettings`                                                   |
+| `POST /knowledge-items/uploads` (returns a file ID and signed PUT URL for PDF or plain text)                      | `storeSettings`                                                   |
+| `GET /events/stream`                                                                                              | any member; Server-Sent Events for new messages and notifications |
 
 ## Products and stock (05)
 
@@ -158,6 +162,8 @@ atomically and retain business data when an extension is disabled.
 | Route                                                                                                                            | Permission      |
 | -------------------------------------------------------------------------------------------------------------------------------- | --------------- |
 | `GET /orders`, `GET /orders/:orderId`, `GET /orders/:orderId/timeline`                                                           | `orders`        |
+| `GET /orders/catalogue`, `GET /orders/catalogue/:productId`                                                                      | `orders.edit`   |
+| `GET /orders/catalogue/stock` (variant IDs)                                                                                      | `orders.edit`   |
 | `POST /orders` (idem), `PATCH /orders/:orderId`                                                                                  | `orders`        |
 | `POST /orders/:orderId/stage` (to, reason, follow-up date)                                                                       | `orders`        |
 | `POST /orders/:orderId/courier` (courier name, tracking code)                                                                    | `orders`        |
@@ -166,6 +172,7 @@ atomically and retain business data when an extension is disabled.
 | `POST /orders/bulk-stage`                                                                                                        | `orders`        |
 | `GET /delivery-zones`, `POST /delivery-zones`, `PATCH /delivery-zones/:deliveryZoneId`, `DELETE /delivery-zones/:deliveryZoneId` | `storeSettings` |
 | `POST /delivery-zones/initialize-defaults` (empty stores only)                                                                   | `storeSettings` |
+| `GET /delivery-zones/charge?areaId=`                                                                                             | `orders.edit`   |
 | `GET /areas?parentId=`                                                                                                           | any member      |
 
 ## Payments and billing (07)

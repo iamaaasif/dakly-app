@@ -59,13 +59,17 @@ export function hasSameMemberRole(
   );
 }
 
-export function canChangeExtensions(access: StoreAccess): boolean {
+export function hasStoreAdminRole(access: StoreAccess): boolean {
   return access.role === 'owner' || access.role === 'admin';
+}
+
+export function canChangeExtensions(access: StoreAccess): boolean {
+  return hasStoreAdminRole(access);
 }
 
 // Checked only while the store's "Only owners and admins can approve sends" setting is on.
 export function canApproveSends(access: StoreAccess): boolean {
-  return access.role === 'owner' || access.role === 'admin';
+  return hasStoreAdminRole(access);
 }
 
 export function canApproveSupport(access: StoreAccess): boolean {

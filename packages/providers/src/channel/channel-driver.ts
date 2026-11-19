@@ -6,6 +6,7 @@ export type ChannelKind = 'messenger' | 'instagram' | 'whatsapp';
 
 export type InboundMessage = {
   channel: ChannelKind;
+  accountExternalId: string;
   externalConversationId: string;
   externalMessageId: string;
   senderExternalId: string;
@@ -34,3 +35,28 @@ export type ChannelCredentials = {
   accessToken: string;
   accountExternalId: string;
 };
+
+export type MetaPage = {
+  id: string;
+  name: string;
+  accessToken: string;
+  instagram: { id: string; name: string } | null;
+};
+
+export type MetaAuthorizationDriver = {
+  authorizationUrl(state: string): string;
+  exchangeAuthorizationCode(code: string): Promise<string>;
+  listAccounts(userToken: string): Promise<MetaPage[]>;
+  subscribePage(pageId: string, accessToken: string): Promise<void>;
+};
+
+export type MetaTokenHealthDriver = {
+  isTokenValid(accessToken: string): Promise<boolean>;
+};
+
+export class MetaRequestError extends Error {
+  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
+    super('Meta request failed');
+    this.name = 'MetaRequestError';
+  }
+}

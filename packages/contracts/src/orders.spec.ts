@@ -7,6 +7,7 @@ import {
   editOrderSchema,
   orderListQuerySchema,
   orderStageChangeSchema,
+  partialDeliveryFormSchema,
 } from './orders';
 
 describe('order list query', () => {
@@ -16,6 +17,15 @@ describe('order list query', () => {
       cursor: 1003,
       limit: 10,
     });
+  });
+
+  it('rejects a reversed date range or unknown source and courier', () => {
+    for (const query of [
+      { createdFrom: '2026-11-18', createdThrough: '2026-11-17' },
+      { source: 'marketplace' },
+      { courier: 'unknown' },
+    ])
+      expect(orderListQuerySchema.safeParse(query).success).toBe(false);
   });
 
   it.each([
@@ -106,6 +116,16 @@ it('rejects a hold follow-up date in year zero', () => {
   ).toBe(false);
 });
 
+it('accepts a delivery-only patch and refuses an empty order edit', () => {
+  const expectedUpdatedAt = '2026-11-18T02:00:00.000Z';
+  expect(editOrderSchema.parse({ expectedUpdatedAt, recipient: { address: 'Mirpur' } })).toEqual({
+    expectedUpdatedAt,
+    recipient: { address: 'Mirpur' },
+  });
+  for (const empty of [{}, { expectedUpdatedAt }, { recipient: {} }])
+    expect(editOrderSchema.safeParse(empty).success).toBe(false);
+});
+
 describe('manual delivery inputs', () => {
   it('accepts no courier and requires the name only for Other', () => {
     expect(dispatchOrderSchema.parse({})).toEqual({});
@@ -133,4 +153,18 @@ describe('manual delivery inputs', () => {
       }).success,
     ).toBe(false);
   });
+});
+
+it.each([
+  [0, 'Enter at least one delivered unit.'],
+  [2, 'Use Mark delivered if all units arrived.'],
+])('explains why %s of two units cannot be partly delivered', (quantity, message) => {
+  const id = 'e67183e9-ab27-4cf5-a671-7ee21a509efe';
+  const form = partialDeliveryFormSchema([{ id, quantity: 2 }]);
+  const result = form.safeParse({
+    to: 'partially_delivered',
+    items: [{ itemId: id, quantity }],
+    note: 'Staff counted the parcel',
+  });
+  expect(result.error?.issues).toMatchObject([{ path: ['items', 0, 'quantity'], message }]);
 });

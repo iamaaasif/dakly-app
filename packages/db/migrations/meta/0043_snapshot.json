@@ -1,5 +1,5 @@
 {
-  "id": "ed6ad400-81c4-42f1-bdcc-96f4768a3084",
+  "id": "c7915f7d-7339-465e-88bd-1350b43abdd7",
   "prevId": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
   "version": "7",
   "dialect": "postgresql",
@@ -4343,24 +4343,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "opt_out_code": {
-          "name": "opt_out_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "destination": {
-          "name": "destination",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_tried_at": {
-          "name": "first_tried_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "skip_reason": {
           "name": "skip_reason",
           "type": "text",
@@ -7562,6 +7544,33 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_store_id_created_at_id_idx": {
+          "name": "campaigns_store_id_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

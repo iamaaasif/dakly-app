@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
+  editableOrderStages,
+  editablePaymentStatuses,
   orderStages,
   orderTabs,
   type OrderDetail,
@@ -11,18 +13,10 @@ import {
 
 import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../platform/outbox/outbox.service';
+import { orderError } from './orders.errors';
 import type { StageWrite } from './orders.repository';
 
-export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
-  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
-  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
-  to_pack: ['with_courier', 'on_hold', 'cancelled'],
-  with_courier: ['delivered', 'partially_delivered', 'returned'],
-  delivered: ['returned'],
-  partially_delivered: ['returned'],
-  returned: [],
-  cancelled: [],
-};
+export const staffConfirmation = { to: 'to_pack' } as const;
 
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 
@@ -68,14 +62,18 @@ export function isSyncedOrder(source: OrderDetail['source']): boolean {
   return source === 'shopify' || source === 'woocommerce';
 }
 
-export function canEditOrder(
-  order: Pick<OrderDetail, 'source' | 'stage' | 'paymentStatus'>,
-): boolean {
-  return (
-    !isSyncedOrder(order.source) &&
-    ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage) &&
-    ['cod_pending', 'advance_paid'].includes(order.paymentStatus)
-  );
+export function requireEditableOrder(
+  order: Pick<OrderDetail, 'source' | 'stage' | 'paymentStatus'> & { updatedAt: Date },
+  expectedUpdatedAt?: string,
+): void {
+  if (
+    isSyncedOrder(order.source) ||
+    !editableOrderStages.includes(order.stage) ||
+    !editablePaymentStatuses.includes(order.paymentStatus)
+  )
+    throw orderError('ORDER_NOT_EDITABLE');
+  if (expectedUpdatedAt && expectedUpdatedAt !== order.updatedAt.toISOString())
+    throw orderError('ORDER_CHANGED');
 }
 
 const stageSnapshot = z.object({ state: z.enum(orderStages) });
@@ -92,6 +90,52 @@ export async function orderStageHistory(storeId: string, orderId: string, audit:
     to: stageSnapshot.parse(after).state,
     occurredAt: createdAt.toISOString(),
   }));
+}
+
+export async function recordOrderCreation(
+  storeId: string,
+  { id, stage, createdAt }: { id: string; stage?: OrderStage; createdAt: Date },
+  actor: AuditEntry['actor'],
+  services: { audit: AuditService; outbox: OutboxService },
+): Promise<void> {
+  const occurredAt = createdAt.toISOString();
+  await services.outbox.publish({
+    type: 'order.created',
+    storeId,
+    occurredAt,
+    payload: { orderId: id },
+  });
+  if (stage === staffConfirmation.to)
+    await recordOrderStage(
+      storeId,
+      id,
+      { from: 'to_confirm', change: staffConfirmation, actor, occurredAt, confirmed: true },
+      services,
+    );
+}
+
+export async function recordOrderEdit(
+  storeId: string,
+  orderId: string,
+  {
+    actor,
+    occurredAt,
+    changedFields,
+  }: {
+    actor: AuditEntry['actor'];
+    occurredAt: string;
+    changedFields: string[];
+  },
+  { audit, outbox }: { audit: AuditService; outbox: OutboxService },
+) {
+  await audit.record(storeId, {
+    action: 'order.edited',
+    entityType: 'order',
+    entityId: orderId,
+    actor,
+    after: { changedFields },
+  });
+  await outbox.publish({ type: 'order.edited', storeId, occurredAt, payload: { orderId } });
 }
 
 export async function recordOrderStage(

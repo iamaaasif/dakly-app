@@ -18,6 +18,25 @@ const trackedLink = {
 } as const;
 
 const examples: DaklyEvent[] = [
+  { type: 'contact.tag_added', storeId, occurredAt, payload: { contactId, tag: 'ভিআইপি' } },
+  {
+    type: 'channel.needs_reconnect',
+    storeId,
+    occurredAt,
+    payload: { channelConnectionId: connectionId },
+  },
+  {
+    type: 'channel.connected',
+    storeId,
+    occurredAt,
+    payload: { channelConnectionId: connectionId },
+  },
+  {
+    type: 'channel.disconnected',
+    storeId,
+    occurredAt,
+    payload: { channelConnectionId: connectionId },
+  },
   {
     type: 'knowledge.index_requested',
     storeId,
@@ -31,6 +50,7 @@ const examples: DaklyEvent[] = [
     payload: { orderId, from: 'to_confirm', to: 'to_pack' },
   },
   { type: 'order.confirmed', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.edited', storeId, occurredAt, payload: { orderId } },
   { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
