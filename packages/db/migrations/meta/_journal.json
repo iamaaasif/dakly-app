@@ -423,13 +423,6 @@
       "breakpoints": true
     },
     {
-      "idx": 59,
-      "version": "7",
-      "when": 1795126690008,
-      "tag": "0059_campaign_balance_recovery",
-      "breakpoints": true
-    },
-    {
       "idx": 60,
       "version": "7",
       "when": 1795129703521,
