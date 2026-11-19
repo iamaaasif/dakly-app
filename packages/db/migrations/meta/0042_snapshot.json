@@ -1,5 +1,5 @@
 {
-  "id": "4877d3e6-9681-4e8d-a7c9-9c0118bf4b50",
+  "id": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
   "prevId": "127c6853-fb60-4231-8c32-aeb59b57c292",
   "version": "7",
   "dialect": "postgresql",
@@ -4574,7 +4574,7 @@
         },
         "automation_run_steps_skip_reason": {
           "name": "automation_run_steps_skip_reason",
-          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
+          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
         }
       },
       "isRLSEnabled": false
@@ -4953,7 +4953,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
@@ -7037,25 +7037,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sms_credits": {
-          "name": "sms_credits",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_attempts": {
-          "name": "send_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7300,7 +7281,7 @@
         },
         "campaign_recipients_skip_reason_value": {
           "name": "campaign_recipients_skip_reason_value",
-          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
+          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
         }
       },
       "isRLSEnabled": false
@@ -7613,34 +7594,6 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'scheduled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_sending_idx": {
-          "name": "campaigns_sending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "started_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending'",
           "concurrently": false,
           "method": "btree",
           "with": {}

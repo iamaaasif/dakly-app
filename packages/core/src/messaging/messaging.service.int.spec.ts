@@ -156,22 +156,6 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(sent).toMatchObject({ parts: 2, credits: 2 });
   });
 
-  it('sends one SMS for the same operation key twice', async () => {
-    const contact = await contacts.create(
-      storeA,
-      { name: 'Farhana Islam', phone: '01712345606' },
-      fullPhone,
-      { kind: 'system' },
-    );
-    watchDriver();
-
-    const first = await send(storeA, contact.id, 'Your order has shipped');
-    const second = await send(storeA, contact.id, 'Your order has shipped');
-
-    expect(second).toEqual(first);
-    expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
-  });
-
   it('reads the final phone after an unprepared sender lookup finishes', async () => {
     const contact = await contacts.create(
       storeA,
@@ -205,6 +189,62 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       ),
     ).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
+  });
+
+  it('refuses before the provider a destination the contact no longer has', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Sumi Akter', phone: '01712345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const changed = messaging.send(storeA, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `test-${contact.id}`,
+      destination: '01712345610',
+    });
+
+    expect(await errorCode(changed)).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a phone the contact did not have when the send was decided', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Rina Begum', phone: '01712345611' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const changed = messaging.send(storeA, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `test-${contact.id}`,
+      destination: null,
+    });
+
+    expect(await errorCode(changed)).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
+  it('sends one SMS for the same operation key twice', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Farhana Islam', phone: '01712345606' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    watchDriver();
+
+    const first = await send(storeA, contact.id, 'Your order has shipped');
+    const second = await send(storeA, contact.id, 'Your order has shipped');
+
+    expect(second).toEqual(first);
+    expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
   });
 
   it('sends from the shared sender until the store’s sender name is approved', async () => {
@@ -331,7 +371,7 @@ describe('MessagingService (Postgres and Mailpit)', () => {
   it('refuses a phone that is no longer the approved number, and sends to the approved one', async () => {
     const contact = await contacts.create(
       storeA,
-      { name: 'সাবিনা ইয়াসমিন', phone: '01712345609' },
+      { name: 'সাবিনা ইয়াসমিন', phone: '01712345621' },
       fullPhone,
       { kind: 'system' },
     );
@@ -348,8 +388,8 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await errorCode(approved('01712345600'))).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(await errorCode(approved(null))).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
-    const sent = await approved('01712345609');
-    expect(calls.map((call) => call.to)).toEqual(['01712345609']);
+    const sent = await approved('01712345621');
+    expect(calls.map((call) => call.to)).toEqual(['01712345621']);
     expect(await capturedText(sent.providerMessageId)).toBe('নতুন কালেকশন এসেছে');
   });
 

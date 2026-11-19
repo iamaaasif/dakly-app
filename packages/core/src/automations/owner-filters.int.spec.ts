@@ -97,6 +97,7 @@ describe('automation filters without RLS assistance', () => {
     // Renewing to the same time keeps the claim the rest of this test uses.
     expect(await runs.startWork(f.a, claim, claimedAt)).toEqual({ attempts: 1, claimedAt });
     expect(await runs.moveRun(f.b, claim, { status: 'done' })).toBe(false);
+    expect(await runs.moveRunIfLive(f.b, claim, { status: 'done' })).toBe(false);
     await expect(runs.insertStep(f.b, runId, contactId, step)).rejects.toThrow();
     expect((await f.row('automation_runs', runId)).status).toBe('running');
 
@@ -113,6 +114,18 @@ describe('automation filters without RLS assistance', () => {
       attempts: 1,
       graph,
     });
+    const sending = {
+      stepKey: 'offer',
+      kind: 'send',
+      outcome: 'sending',
+      sentAt: claimedAt,
+    } as const;
+    await runs.insertStep(f.a, runId, contactId, sending);
+    expect(await runs.hasSendingStep(f.b, runId, 'offer')).toBe(false);
+    await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
+    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(true);
+    await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
+    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(false);
     expect(await runs.moveRun(f.a, claim, { status: 'done' })).toBe(true);
   });
 });

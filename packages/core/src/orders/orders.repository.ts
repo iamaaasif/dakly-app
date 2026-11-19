@@ -43,6 +43,7 @@ const summaryColumns = {
 
 const detailColumns = {
   ...summaryColumns,
+  updatedAt: orders.updatedAt,
   buyerContactId: orders.buyerContactId,
   isRecipientBuyer: orders.isRecipientBuyer,
   recipientAddress: orders.recipientAddress,

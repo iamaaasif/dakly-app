@@ -299,15 +299,22 @@
     {
       "idx": 42,
       "version": "7",
-      "when": 1795023711211,
-      "tag": "0042_campaign_delivery",
+      "when": 1795024484066,
+      "tag": "0042_automation_send_costs",
       "breakpoints": true
     },
     {
       "idx": 43,
       "version": "7",
-      "when": 1795034951806,
-      "tag": "0043_campaign_opt_out_base",
+      "when": 1795053483550,
+      "tag": "0043_campaign_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795053487423,
+      "tag": "0044_campaign_opt_out_base",
       "breakpoints": true
     }
   ]

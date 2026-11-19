@@ -21,12 +21,12 @@ type LinkSource = { sourceType: TrackedLinkSourceType; sourceId: string };
 export type NewTrackedLink =
   | (LinkSource & { kind: 'redirect'; targetUrl: string; contactId: string | null })
   | (LinkSource & { kind: 'sms_opt_out'; contactId: string });
-export type TrackedLink = { id: string; url: string };
+export type TrackedLink = { id: string; code: string; url: string };
 export type Visitor = { ip: string; userAgent: string | undefined };
 
 const CODE_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const CODE_LENGTH = 8;
 const CODE_ATTEMPTS = 3;
+export const TRACKED_LINK_CODE_LENGTH = 8;
 // Shared mobile carrier addresses put many customers behind one IP, so the limit is generous.
 const TAPS_PER_IP_PER_MINUTE = 120;
 // Longer than one Asia/Dhaka day, so the salt lives through the day it was made on and then goes.
@@ -71,7 +71,11 @@ export class LinksService {
       for (const row of pending) row.code = newCode();
     }
     if (pending.length) throw linkError('LINK_CODES_EXHAUSTED');
-    return rows.map((row) => ({ id: row.id, url: linkUrl(row.kind, row.code, base) }));
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      url: linkUrl(row.kind, row.code, base),
+    }));
   }
 
   // A resend must carry the same text, so a contact has one opt-out link per source.
@@ -82,9 +86,14 @@ export class LinksService {
     base = this.shortLinkBase(),
   ): Promise<TrackedLink> {
     const existing = await this.repository.findOptOutLinkFor(storeId, link);
-    if (existing) return { id: existing.id, url: linkUrl('sms_opt_out', existing.code, base) };
+    if (existing)
+      return { id: existing.id, code: existing.code, url: this.optOutUrl(existing.code, base) };
     const [created] = await this.create(storeId, [{ ...link, kind: 'sms_opt_out' }], actor, base);
     return created!;
+  }
+
+  optOutUrl(code: string, base = this.shortLinkBase()): string {
+    return linkUrl('sms_opt_out', code, base);
   }
 
   shortLinkBase(): string {
@@ -93,7 +102,7 @@ export class LinksService {
 
   // An opt-out address as long as a real one, so an estimate counts the characters it adds.
   sampleOptOutUrl(base = this.shortLinkBase()): string {
-    return linkUrl('sms_opt_out', CODE_ALPHABET[0]!.repeat(CODE_LENGTH), base);
+    return linkUrl('sms_opt_out', CODE_ALPHABET[0]!.repeat(TRACKED_LINK_CODE_LENGTH), base);
   }
 
   // D31: a visit keeps only an HMAC of the address and browser, never either value.
@@ -189,7 +198,7 @@ export class LinksService {
 
 function newCode(): string {
   return Array.from(
-    { length: CODE_LENGTH },
+    { length: TRACKED_LINK_CODE_LENGTH },
     () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)],
   ).join('');
 }

@@ -1,6 +1,6 @@
 {
-  "id": "0be5a429-4040-4ff9-bb22-e0cd59a099ff",
-  "prevId": "4877d3e6-9681-4e8d-a7c9-9c0118bf4b50",
+  "id": "85bc85f4-e684-4e3d-9f76-b2d162c911a3",
+  "prevId": "ea3499e1-87dc-40b6-8230-eccf0c59569d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4574,7 +4574,7 @@
         },
         "automation_run_steps_skip_reason": {
           "name": "automation_run_steps_skip_reason",
-          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
+          "value": "\"automation_run_steps\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
         }
       },
       "isRLSEnabled": false
@@ -4953,7 +4953,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
@@ -7300,7 +7300,7 @@
         },
         "campaign_recipients_skip_reason_value": {
           "name": "campaign_recipients_skip_reason_value",
-          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit')"
+          "value": "\"campaign_recipients\".\"skip_reason\" in ('no_consent', 'not_customer', 'blocked', 'no_address', 'over_plan_limit', 'frequency_cap', 'window_closed', 'meta_user_limit', 'do_not_call', 'daily_reach_limit', 'no_credits')"
         }
       },
       "isRLSEnabled": false
@@ -7413,12 +7413,6 @@
         "approved_at": {
           "name": "approved_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "short_link_base": {
-          "name": "short_link_base",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

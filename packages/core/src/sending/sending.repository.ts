@@ -14,7 +14,14 @@ export type MarketingSend = {
   sentAt: Date;
 };
 
-type SendWindow = { storeId: string; contactIds: string[]; after: Date; until: Date };
+type SendWindow = {
+  storeId: string;
+  contactIds: string[];
+  after: Date;
+  until: Date;
+  dispatch?: boolean;
+  includeCommittedFuture?: boolean;
+};
 
 // Read-only: the frequency cap counts campaign and workflow sends together from Postgres (A2).
 @Injectable()
@@ -34,22 +41,17 @@ export class SendingRepository {
   listMarketingSends(
     storeId: string,
     contactIds: string[],
-    after: Date,
-    until: Date,
-    dispatch = false,
+    range: Omit<SendWindow, 'storeId' | 'contactIds'>,
   ): Promise<MarketingSend[]> {
-    const window = { storeId, contactIds, after, until };
+    const window = { storeId, contactIds, ...range };
     return this.database.forStore(storeId, async (tx) => {
-      const sends = [
-        ...(await campaignSends(tx, window, dispatch)),
-        ...(await workflowSends(tx, window)),
-      ];
-      // A live check reserves a slot for unresolved campaign claims. An audience estimate
-      // counts those claims in the window in which they occurred.
+      const sends = [...(await campaignSends(tx, window)), ...(await workflowSends(tx, window))];
+      // Live checks reserve a slot for unresolved campaign claims. Audience estimates
+      // count those claims in the window in which they occurred.
       return sends.map((send) => ({
         contactId: send.contactId,
         channel: send.channel as MarketingSend['channel'],
-        sentAt: send.sentAt ?? until,
+        sentAt: send.sentAt ?? range.until,
       }));
     });
   }
@@ -57,16 +59,16 @@ export class SendingRepository {
 
 function campaignSends(
   tx: Transaction,
-  { storeId, contactIds, after, until }: SendWindow,
-  dispatch: boolean,
+  { storeId, contactIds, after, until, dispatch, includeCommittedFuture }: SendWindow,
 ) {
+  const live = dispatch || includeCommittedFuture;
   const pending = eq(campaignRecipients.status, 'sending');
   const claimTime = or(
     and(
       eq(campaignRecipients.status, 'failed'),
       eq(campaignRecipients.errorCode, 'outcome_unknown'),
     ),
-    dispatch ? undefined : pending,
+    live ? undefined : pending,
   );
   return tx
     .select({
@@ -88,16 +90,16 @@ function campaignSends(
         eq(campaignRecipients.storeId, storeId),
         inArray(campaignRecipients.contactId, contactIds),
         or(
-          dispatch ? pending : undefined,
+          live ? pending : undefined,
           and(
             claimTime,
             gt(campaignRecipients.claimedAt, after),
-            lte(campaignRecipients.claimedAt, until),
+            includeCommittedFuture ? undefined : lte(campaignRecipients.claimedAt, until),
           ),
           and(
             inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
             gt(campaignRecipients.sentAt, after),
-            lte(campaignRecipients.sentAt, until),
+            includeCommittedFuture ? undefined : lte(campaignRecipients.sentAt, until),
           ),
         ),
         eq(campaigns.category, 'marketing'),
@@ -105,8 +107,9 @@ function campaignSends(
     );
 }
 
-// A send step counts from its send time, while sending and once sent; a failed send does not.
-function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: SendWindow) {
+// Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
+function workflowSends(tx: Transaction, window: SendWindow) {
+  const { storeId, contactIds, after, until, includeCommittedFuture } = window;
   return tx
     .select({
       contactId: automationRunSteps.contactId,
@@ -119,10 +122,10 @@ function workflowSends(tx: Transaction, { storeId, contactIds, after, until }: S
         eq(automationRunSteps.storeId, storeId),
         inArray(automationRunSteps.contactId, contactIds),
         gt(automationRunSteps.sentAt, after),
-        lte(automationRunSteps.sentAt, until),
+        includeCommittedFuture ? undefined : lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
         eq(automationRunSteps.category, 'marketing'),
-        inArray(automationRunSteps.outcome, ['sending', 'sent']),
+        inArray(automationRunSteps.outcome, ['sending', 'sent', 'unconfirmed']),
       ),
     );
 }

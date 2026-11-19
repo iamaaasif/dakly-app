@@ -6,15 +6,20 @@ import {
   createOrderFormSchema,
   type CreateOrderInput,
   type CreateOrderValues,
+  type OrderDetail,
+  type OrderCatalogueProduct,
+  type OrderCatalogueStock,
+  type OrderEditorValues,
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
+import { QueryError } from '@dakly/ui/query-error';
 
 import { useCreateOrder } from '../api/create-order';
 import { useOrderDelivery } from '../api/get-delivery-charge';
-import { useOrderCatalogueProducts } from '../api/order-catalogue';
+import { useOrderCatalogueProducts, useOrderCatalogueStock } from '../api/order-catalogue';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -61,8 +66,7 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
             <fieldset disabled={busy} className="space-y-3">
-              <OrderRecipientFields />
-              <ItemsAndAmounts />
+              <OrderEditorFields />
             </fieldset>
           </div>
           {create.error && (
@@ -93,15 +97,28 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   );
 }
 
-function ItemsAndAmounts() {
+export function OrderEditorFields({ order }: { order?: OrderDetail }) {
+  return (
+    <>
+      <OrderRecipientFields order={order} />
+      <ItemsAndAmounts order={order} />
+    </>
+  );
+}
+
+function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
   const productIds = useRef<Record<string, string>>({});
-  const { control, register, setValue, formState } = useFormContext<CreateOrderValues>();
+  const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
-  const items = useWatch({ control, name: 'items' });
+  const items = useWatch({ control, name: 'items' }) ?? [];
+  const stock = useOrderCatalogueStock(
+    order?.items.filter(({ isStockTracked }) => isStockTracked).map(({ variantId }) => variantId) ??
+      [],
+  );
   const selectedProducts = useOrderCatalogueProducts([
     ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
-  ]);
-  const variants = orderVariantChoices(selectedProducts.flatMap(({ data }) => data ?? []));
+  ]).flatMap(({ data }) => data ?? []);
+  const variants = draftVariantChoices(selectedProducts, order, stock.data);
 
   return (
     <>
@@ -113,23 +130,54 @@ function ItemsAndAmounts() {
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant) productIds.current[id] = variant.productId;
-          setValue(`items.${index}.variantId`, id, { shouldValidate: formState.isSubmitted });
+          if (variant?.productId) productIds.current[id] = variant.productId;
+          const savedLine = order?.items.find((item) => item.variantId === id);
+          setValue(`items.${index}.lineDiscountPoisha`, savedLine?.lineDiscountPoisha ?? 0, {
+            shouldDirty: true,
+          });
+          setValue(`items.${index}.variantId`, id, {
+            shouldDirty: true,
+            shouldValidate: formState.isSubmitted,
+          });
         }}
       />
+      {stock.error && (
+        <QueryError
+          message={stock.error.message}
+          onRetry={() => void stock.refetch()}
+          retryLabel="Retry stock"
+        />
+      )}
       {formState.errors.items && (
         <p role="alert" className="text-danger">
           Choose a different variant for each line and enter a positive quantity.
         </p>
       )}
-      <OrderAmountFields />
-      <OrderPreview variants={variants} />
+      <OrderAmountFields hasAdvance={Boolean(order?.advancePaidPoisha)} />
+      <OrderPreview variants={variants} order={order} />
     </>
   );
 }
 
-function OrderAmountFields() {
-  const { register } = useFormContext<CreateOrderValues>();
+function draftVariantChoices(
+  products: OrderCatalogueProduct[],
+  order?: OrderDetail,
+  stock?: OrderCatalogueStock,
+) {
+  const variants = orderVariantChoices(products);
+  const stockByVariant = new Map(stock?.map(({ variantId, available }) => [variantId, available]));
+  for (const item of order?.items ?? []) {
+    variants[item.variantId] = {
+      label: [item.productName, item.variantTitle].filter(Boolean).join(' · '),
+      price: item.unitPricePoisha,
+      stock: item.isStockTracked ? (stockByVariant.get(item.variantId) ?? null) : null,
+    };
+  }
+  return variants;
+}
+
+function OrderAmountFields({ hasAdvance }: { hasAdvance: boolean }) {
+  const { register } = useFormContext<OrderEditorValues>();
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {(
@@ -143,6 +191,7 @@ function OrderAmountFields() {
             <Input
               {...props}
               inputMode="decimal"
+              readOnly={name === 'advancePaidPoisha' && hasAdvance}
               {...register(name, { setValueAs: (value: string) => value.trim() || undefined })}
             />
           )}
@@ -152,9 +201,15 @@ function OrderAmountFields() {
   );
 }
 
-function OrderPreview({ variants }: { variants: Record<string, VariantChoice> }) {
+function OrderPreview({
+  variants,
+  order,
+}: {
+  variants: Record<string, VariantChoice>;
+  order?: OrderDetail;
+}) {
   const [areaId, items, override, discount, advance] = useWatch<
-    CreateOrderValues,
+    OrderEditorValues,
     [
       'recipient.areaId',
       'items',
@@ -171,18 +226,12 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
       'advancePaidPoisha',
     ],
   });
-  const quote = useOrderDelivery(areaId);
-  const charge = moneyInputOr(override, quote.data?.chargePoisha);
-  const orderDiscount = moneyInputOr(discount, 0);
-  const paid = moneyInputOr(advance, 0);
-  if (orderDiscount === undefined) return null;
-  const subtotal = items.reduce((sum, item) => {
-    const variant = variants[item.variantId];
-    return variant && Number.isSafeInteger(item.quantity) && item.quantity > 0
-      ? sum + variant.price * item.quantity
-      : NaN;
-  }, 0);
-  if (!Number.isSafeInteger(subtotal)) return null;
+  const quote = useOrderDelivery(areaId, order);
+  const charge = override ? takaInput.safeParse(override).data : quote.chargePoisha;
+  const orderDiscount = moneyInputOr(discount);
+  const paid = moneyInputOr(advance, order?.advancePaidPoisha);
+  const subtotal = orderDraftSubtotal(items, variants);
+  if (!Number.isSafeInteger(subtotal) || orderDiscount === undefined) return null;
   if (orderDiscount > subtotal) {
     return (
       <p role="alert" className="text-danger">
@@ -205,6 +254,18 @@ function OrderPreview({ variants }: { variants: Record<string, VariantChoice> })
   );
 }
 
-function moneyInputOr(value: string | undefined, fallback?: number) {
+function orderDraftSubtotal(
+  items: OrderEditorValues['items'],
+  variants: Record<string, VariantChoice>,
+) {
+  return (items ?? []).reduce((sum, item) => {
+    const variant = variants[item.variantId];
+    if (!variant || !Number.isSafeInteger(item.quantity) || item.quantity <= 0) return NaN;
+    const net = variant.price * item.quantity - (item.lineDiscountPoisha ?? 0);
+    return net >= 0 ? sum + net : NaN;
+  }, 0);
+}
+
+function moneyInputOr(value: string | undefined, fallback = 0) {
   return value ? takaInput.safeParse(value).data : fallback;
 }
