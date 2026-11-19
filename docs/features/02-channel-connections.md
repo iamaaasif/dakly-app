@@ -145,6 +145,8 @@ Webhook intake
 3. The handler saves one payload per signed delivery in `webhook_events`. Its external id is the SHA-256 hex digest of the verified bytes. The handler queues one `process-webhook-event` job by row id and returns 200. An identical retry restores a missing job for an unprocessed row.
 4. CHN-4 adds the worker. It parses with the driver and finds each store through `store_id_for_channel_account(kind, externalId)`. CHAT-1 and CHAT-2 handle individual message and receipt deduplication.
 
+A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
+
 Enable live intake after the worker can clear processed payloads and recover acknowledged deliveries if their Valkey jobs are lost. Run the seven-day webhook purge before enabling live intake.
 
 Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
