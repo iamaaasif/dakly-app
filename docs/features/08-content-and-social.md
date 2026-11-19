@@ -192,7 +192,8 @@ reconnecting or a photo that is missing. Instagram targets require JPEG photos
 when saved, approved and published. A suspended store cannot publish. Its
 target fails if the store is still suspended on the last attempt. A first
 comment goes to Instagram only. A recovery job runs each minute and restores
-missing or failed jobs for targets due within 24 hours.
+missing or failed jobs for targets due within 24 hours. It also picks up targets
+that became due while Meta publishing was disabled.
 
 If Meta receives a publish request without returning a result, Dakly checks the
 Instagram container for confirmation. A confirmed container can be marked
