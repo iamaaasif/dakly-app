@@ -157,6 +157,7 @@ export const campaigns = pgTable(
     }),
 
     index('campaigns_store_id_status_idx').on(table.storeId, table.status, table.createdAt),
+    index('campaigns_store_id_created_at_id_idx').on(table.storeId, table.createdAt, table.id),
     index('campaigns_due_idx')
       .on(table.scheduledFor)
       .where(sql`${table.status} = 'scheduled'`),
