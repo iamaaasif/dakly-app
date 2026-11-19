@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { X } from 'lucide-react';
-import { useRef, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   FormProvider,
   useFieldArray,
@@ -82,17 +81,8 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       open
       onClose={onClose}
       closeDisabled={busy}
-      className="max-h-[calc(100dvh-1rem)] max-w-160 p-4 open:flex open:flex-col sm:p-6 [&>div:first-child>button]:hidden"
+      className="max-h-[calc(100dvh-1rem)] max-w-160 p-4 open:flex open:flex-col sm:p-6"
     >
-      <Button
-        aria-label="Close dialog"
-        className="absolute top-3 right-3 min-h-11 min-w-11 px-2 sm:min-h-10 sm:min-w-10"
-        variant="secondary"
-        disabled={busy}
-        onClick={onClose}
-      >
-        <X aria-hidden="true" size={16} strokeWidth={1.75} />
-      </Button>
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
           <div className="min-h-0 overflow-y-auto px-0.5">
@@ -175,6 +165,7 @@ type ItemsAndAmountsProps = { order?: OrderDetail };
 
 function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
   const productIds = useRef<Record<string, string>>({});
+  const [pickedVariants, setPickedVariants] = useState<Record<string, VariantChoice>>({});
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' }) ?? [];
@@ -185,7 +176,9 @@ function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
   const selectedProducts = useOrderCatalogueProducts([
     ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
   ]).flatMap(({ data }) => data ?? []);
-  const variants = draftVariantChoices(selectedProducts, order, stock.data);
+  const variants = order
+    ? draftVariantChoices(selectedProducts, order, stock.data)
+    : pickedVariants;
 
   return (
     <>
@@ -198,7 +191,8 @@ function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant?.productId) productIds.current[id] = variant.productId;
+          if (order && variant?.productId) productIds.current[id] = variant.productId;
+          if (!order && variant) setPickedVariants((previous) => ({ ...previous, [id]: variant }));
           const savedLine = order?.items.find((item) => item.variantId === id);
           setValue(`items.${index}.lineDiscountPoisha`, savedLine?.lineDiscountPoisha ?? 0, {
             shouldDirty: true,

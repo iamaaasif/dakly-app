@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import type { DeliveryZoneListResponse } from '@dakly/contracts/delivery';
-import type { OrderCataloguePage, OrderCatalogueProduct } from '@dakly/contracts/orders';
 import { createDatabase } from '@dakly/db/client';
 
 const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-new-order');
@@ -159,126 +158,22 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     const size = create.getByLabel('Size 1', { exact: true });
     await expect(product.getByRole('option', { name: /Cotton Panjabi/ })).toHaveCount(0);
     await create.getByRole('button', { name: 'Load more products' }).click();
-    const productDetail = `**/api/orders/catalogue/${productId}`;
-    await page.route(productDetail, async (route) => {
-      const response = await route.fetch();
-      const older: OrderCatalogueProduct = await response.json();
-      await route.fulfill({
-        response,
-        json: {
-          ...older,
-          variants: older.variants
-            .filter(({ id }) => id !== largerVariantId)
-            .map((variant) => ({ ...variant, pricePoisha: 100000, available: 4 })),
-        },
-      });
-    });
     await product.selectOption(productId);
-    await expect(size.getByRole('option', { name: 'M · 4 left' })).toHaveCount(1);
-    await expect(size.getByRole('option', { name: 'L · 2 left' })).toHaveCount(0);
-    await page.unroute(productDetail);
-    const catalogueSearch = create.getByText('Search products', { exact: true });
-    await catalogueSearch.click();
-    const search = create.getByLabel('Product name');
-    const refreshedList = page.waitForResponse((response) =>
-      response.url().includes('/orders/catalogue?search=Cotton+Panjabi'),
-    );
-    await search.fill('Cotton Panjabi');
-    await refreshedList;
-    await expect(size.getByRole('option', { name: 'M · 5 left' })).toHaveCount(1);
-    await page.route(productDetail, (route) => route.fulfill({ status: 503 }));
-    const failedDetail = page.waitForResponse(
-      (response) =>
-        response.url().endsWith(`/api/orders/catalogue/${productId}`) && response.status() === 503,
-    );
-    const beforeSizing = page.waitForResponse((response) =>
-      response.url().includes('/orders/catalogue?search=Unlisted+product'),
-    );
-    await search.fill('Unlisted product');
-    expect(await (await beforeSizing).json()).toMatchObject({ items: [] });
-    await expect(product).toHaveValue(productId);
-    await expect(size.getByRole('option', { name: 'M · 5 left' })).toHaveCount(1);
     await expect(size).toHaveValue('');
     await create.getByRole('button', { name: 'Save order' }).click();
     await expect(size).toHaveAttribute('aria-invalid', 'true');
     await expect(size.getByRole('option', { name: 'M · 5 left' })).toHaveCount(1);
     await size.selectOption(variantId);
-    await failedDetail;
-    await page.unroute(productDetail);
-    await search.clear();
-    await catalogueSearch.click();
     await expect(size).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
     const cod = create.getByText(/^Cash on delivery/);
     await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await create.getByRole('button', { name: 'Add product' }).click();
     await expect(create.getByText('Cash on delivery')).toHaveCount(0);
-    let releaseDetail!: () => void;
-    const holdDetail = new Promise<void>((resolve) => {
-      releaseDetail = resolve;
-    });
-    await page.route(productDetail, async (route) => {
-      const response = await route.fetch();
-      const data: OrderCatalogueProduct = await response.json();
-      await holdDetail;
-      await route.fulfill({
-        response,
-        json: { ...data, variants: data.variants.filter(({ id }) => id !== variantId) },
-      });
-    });
-    const detailRequest = page.waitForRequest((request) =>
-      request.url().endsWith(`/api/orders/catalogue/${productId}`),
-    );
-    const delayedDetail = page.waitForResponse((response) =>
-      response.url().endsWith(`/api/orders/catalogue/${productId}`),
-    );
-    try {
-      await create.getByLabel('Product 2', { exact: true }).selectOption(productId);
-      await detailRequest;
-      await catalogueSearch.click();
-      const laterSearch = page.waitForResponse((response) =>
-        response.url().includes('/orders/catalogue?search=Panjabi'),
-      );
-      await search.fill('Panjabi');
-      await laterSearch;
-    } finally {
-      releaseDetail();
-    }
-    await delayedDetail;
-    await page.unroute(productDetail);
     await create.getByRole('button', { name: 'Remove' }).last().click();
-    await expect(size).toHaveValue(variantId);
-    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
-
-    const catalogueUpdate = /\/api\/orders\/catalogue\?search=Cotton\+Pa(n)?$/;
-    await page.route(catalogueUpdate, async (route) => {
-      const response = await route.fetch();
-      const result: OrderCataloguePage = await response.json();
-      const pricePoisha = route.request().url().endsWith('Pan') ? 0 : 150000;
-      await route.fulfill({
-        response,
-        json: {
-          ...result,
-          items: result.items.map((item) => ({
-            ...item,
-            variants: item.variants.map((variant) =>
-              variant.id === variantId ? { ...variant, pricePoisha } : variant,
-            ),
-          })),
-        },
-      });
-    });
-    await search.fill('Cotton Pa');
-    await expect(cod.getByText('৳1,560', { exact: true })).toBeVisible();
-    await search.fill('Cotton Pan');
-    await expect(size).toHaveValue('');
-    await expect(cod).toHaveCount(0);
-    await create.getByRole('button', { name: 'Save order' }).click();
-    await expect(size).toHaveAttribute('aria-invalid', 'true');
-    await page.unroute(catalogueUpdate);
-    await search.fill('Cotton Panj');
-    await size.selectOption(variantId);
-
+    const catalogueSearch = create.getByText('Search products', { exact: true });
+    await catalogueSearch.click();
+    const search = create.getByLabel('Product name');
     const catalogueFiltered = page.waitForResponse((response) =>
       response.url().includes('/orders/catalogue?search=Missing+product'),
     );

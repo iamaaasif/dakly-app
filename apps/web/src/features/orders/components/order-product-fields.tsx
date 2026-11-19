@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import type { FieldArrayWithId, UseFormRegister } from 'react-hook-form';
 
 import type { OrderEditorValues, OrderCatalogueProduct } from '@dakly/contracts/orders';
@@ -8,7 +8,7 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
-import { useOrderCatalogue, useSelectedCatalogueProduct } from '../api/order-catalogue';
+import { useOrderCatalogue, useOrderCatalogueProducts } from '../api/order-catalogue';
 import { formatMoney } from '@/lib/format-money';
 
 export type VariantChoice = {
@@ -45,9 +45,6 @@ export function OrderProductFields({
   const pages = products.data?.pages ?? [];
   const catalogue = pages.flatMap((page) => page.items);
   const choices = orderVariantChoices(catalogue);
-  const requestedAt = new Map(
-    pages.flatMap((page) => page.items.map(({ id }) => [id, page.requestedAt] as const)),
-  );
   return (
     <fieldset className="space-y-2">
       <legend className="font-semibold">Products</legend>
@@ -62,7 +59,7 @@ export function OrderProductFields({
           onRemove: fields.length > 1 ? onRemove : undefined,
         };
         return isNew ? (
-          <NewOrderProductLine key={field.id} {...{ catalogue, requestedAt, ...line }} />
+          <NewOrderProductLine key={field.id} {...{ catalogue, ...line }} />
         ) : (
           <OrderProductLine key={field.id} choices={choices} {...line} />
         );
@@ -76,7 +73,11 @@ export function OrderProductFields({
           Load more products
         </Button>
       )}
-      <Button variant="secondary" disabled={fields.length >= 100} onClick={onAdd}>
+      <Button
+        variant={isNew ? 'link' : 'secondary'}
+        disabled={fields.length >= 100}
+        onClick={onAdd}
+      >
         {isNew && <Plus aria-hidden="true" size={16} strokeWidth={1.75} />}
         Add product
       </Button>
@@ -156,7 +157,6 @@ const selectClass =
 
 function NewOrderProductLine({
   catalogue,
-  requestedAt,
   ids,
   index,
   variants,
@@ -165,17 +165,17 @@ function NewOrderProductLine({
   onRemove,
 }: Omit<ProductLineProps, 'choices'> & {
   catalogue: OrderCatalogueProduct[];
-  requestedAt: Map<string, number>;
 }) {
-  const [productId, setProductId] = useState('');
-  const listed = catalogue.find(({ id }) => id === productId);
-  const product = useSelectedCatalogueProduct(productId, listed, requestedAt.get(productId));
+  const [chosen, setChosen] = useState<OrderCatalogueProduct>();
+  const inCatalogue = catalogue.some(({ id }) => id === chosen?.id);
+  const [detail] = useOrderCatalogueProducts(chosen && !inCatalogue ? [chosen.id] : []);
+  const product = detail?.data ?? chosen;
   const id = ids[index] ?? '';
-  const productChoices = product ? orderVariantChoices([product]) : {};
+  const productChoices = chosen ? orderVariantChoices([chosen]) : {};
   const selected = variants[id] ?? productChoices[id];
   const isTaken = (variantId: string) => variantId !== id && ids.includes(variantId);
   function chooseProduct(next: OrderCatalogueProduct | undefined) {
-    setProductId(next?.id ?? '');
+    setChosen(next);
     onChoose(index, '');
   }
   return (
@@ -183,7 +183,8 @@ function NewOrderProductLine({
       <div className="grid grid-cols-2 items-start gap-2 sm:grid-cols-[2fr_1.5fr_4rem_1fr]">
         <ProductChoiceField {...{ catalogue, product, index, isTaken }} onChange={chooseProduct} />
         <OrderSizeField
-          {...{ id, index, product, isTaken }}
+          {...{ id, index, isTaken }}
+          product={chosen}
           choose={(nextId) => onChoose(index, nextId, productChoices[nextId])}
         />
         <FormField name={`items.${index}.quantity`} label="Qty">
@@ -274,10 +275,6 @@ function OrderSizeField({
   const options = product?.variants.filter(({ pricePoisha }) => pricePoisha > 0) ?? [];
   const selected = options.find((variant) => variant.id === id);
   const tracked = product?.isStockTracked;
-  const missingSize = Boolean(id && product && !selected);
-  useEffect(() => {
-    if (missingSize) choose('');
-  }, [choose, missingSize]);
   return (
     <FormField
       name={`items.${index}.variantId`}
@@ -290,7 +287,6 @@ function OrderSizeField({
           aria-label={`Size ${index + 1}`}
           className={selectClass}
           value={selected?.id ?? ''}
-          aria-invalid={props['aria-invalid'] || missingSize}
           disabled={!options.length}
           onChange={(event) => choose(event.target.value)}
         >
