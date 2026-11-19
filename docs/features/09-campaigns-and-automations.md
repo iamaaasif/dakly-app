@@ -367,7 +367,7 @@ At approval, bind each non-SMS campaign to `channel_connection_id`. Resolve each
 
 Before every actual send, verify the contact, identity, connection, channel and frozen address still agree in this store. Never silently switch a scheduled recipient to another Page, number or contact after a merge or edit; require a new approved audience or record an ineligible recipient. Connection binding is immutable after approval. These ownership and address checks are service requirements alongside database tenant constraints.
 
-Immediately before provider submission, repeat consent, window, block, plan and frequency checks. Both `queued` and pre-submission `sending` may become `skipped` with a skip reason. Record the skip and release its reserved cost atomically, with no provider send. A provider-accepted or uncertain submission must be reconciled; it cannot be relabelled as an unsent skip. A withdrawal after scheduling records `no_consent`; a closed Messenger window records `window_closed`.
+The final gate rechecks consent, window, block, plan and frequency. For SMS, the claim commits the decision. A withdrawal or cancellation that commits first stops the new claim. An authorized attempt can submit after the commit, with no transaction held across the provider call. A queued recipient denied at the gate records a skip reason, such as `no_consent` or `window_closed`, and the campaign releases the unused credits at settlement. Reconcile a provider-accepted or uncertain attempt before settling its cost.
 
 ### Send gate (CAMP-9)
 
@@ -585,7 +585,7 @@ Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`,
 - A workflow version is published while 40 people wait on a deleted step: they finish on the old version.
 - Crash after a workflow claim and before enqueue: lease recovery queues the same step and provider idempotency prevents a second send.
 - A contact on two Messenger Pages uses the selected Page identity; SMS accepts null connection and identity.
-- Consent is withdrawn after approval while a recipient is queued or claimed but unsent: skip and release cost without calling the provider.
+- Consent is withdrawn after approval but before an SMS claim commits: skip and release unused credits at settlement without calling the provider. A withdrawal after the claim prevents a later resend.
 
 ### Acceptance
 
