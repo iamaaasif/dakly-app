@@ -21,3 +21,14 @@ export type MetaAuthorizationAccounts = {
     instagram: { id: string; name: string } | null;
   }[];
 };
+
+export type ChannelConnection = {
+  id: string;
+  kind: (typeof channelConnectionKinds)[number];
+  displayName: string;
+  externalAccountId: string;
+  status: (typeof channelConnectionStatuses)[number];
+  tokenExpiresAt: string | null;
+  connectedAt: string;
+  disconnectedAt: string | null;
+};

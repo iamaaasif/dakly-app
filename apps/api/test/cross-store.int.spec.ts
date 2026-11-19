@@ -1650,6 +1650,67 @@ async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'request
     await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
   return id;
 }
+async function seedChannel(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into channel_connections(id,store_id,kind,external_account_id,display_name,access_token_ciphertext,key_version)
+     values($1::uuid,$2,'facebook_page',$1::uuid::text,'রিনার দোকান',$3,1)`,
+    [id, shop.id, Buffer.from('encrypted-page-credential')],
+  );
+  return id;
+}
+
+fixture('GET /channel-connections', async () => {
+  const { a, b } = await pair();
+  await seedChannel(a);
+  const own = await seedChannel(b);
+  const result = await success(b, 'GET', '/channel-connections', 200);
+  expect(result.json()).toEqual({
+    items: [
+      {
+        id: own,
+        kind: 'facebook_page',
+        displayName: 'রিনার দোকান',
+        externalAccountId: own,
+        status: 'active',
+        tokenExpiresAt: null,
+        connectedAt: expect.any(String),
+        disconnectedAt: null,
+      },
+    ],
+  });
+  expect((await f.request(b.member, 'GET', '/channel-connections')).statusCode).toBe(403);
+});
+
+fixture('DELETE /channel-connections/:channelConnectionId', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedChannel(a);
+  const own = await seedChannel(b);
+  const url = (id: string) => `/channel-connections/${id}`;
+  const conversation = randomUUID();
+  await f.admin.pool.query(
+    `with contact as (insert into contacts(id,store_id,name,source,kind) values($4,$1,'রিনা','messenger','chat_only') returning id)
+     insert into conversations(id,store_id,contact_id,channel_connection_id,channel)
+     select $2,$1,id,$3,'messenger' from contact`,
+    [b.id, conversation, own, randomUUID()],
+  );
+  await hidden(b, 'DELETE', url, foreign);
+  expect((await f.request(b.member, 'DELETE', url(own))).statusCode).toBe(403);
+  await success(b, 'DELETE', url(own), 204);
+  expect(await f.row('conversations', conversation)).toMatchObject({ channel_connection_id: own });
+  expect(await f.row('channel_connections', foreign)).toMatchObject({ status: 'active' });
+  expect(await f.row('channel_connections', own)).toMatchObject({
+    status: 'disconnected',
+    access_token_ciphertext: null,
+    key_version: null,
+  });
+  const events = await f.admin.pool.query(
+    'select payload from outbox_events where store_id=$1 and type=$2',
+    [b.id, 'channel.disconnected'],
+  );
+  expect(events.rows).toEqual([{ payload: { channelConnectionId: own } }]);
+});
+
 fixture('GET /sms-sender-ids', async () => {
   const { a, b } = await pair(),
     aId = await smsSender(a),

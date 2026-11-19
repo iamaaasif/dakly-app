@@ -46,4 +46,5 @@ export type MetaAuthorizationDriver = {
   authorizationUrl(state: string): string;
   exchangeAuthorizationCode(code: string): Promise<string>;
   listAccounts(userToken: string): Promise<MetaPage[]>;
+  subscribePage(pageId: string, accessToken: string): Promise<void>;
 };

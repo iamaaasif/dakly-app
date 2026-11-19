@@ -4,10 +4,15 @@ import type { MetaAuthorizationDriver } from '@dakly/providers/channel/channel-d
 import { FakeMetaChannelDriver } from '@dakly/providers/channel/meta/fake-meta-channel-driver';
 import { MetaGraphChannelDriver } from '@dakly/providers/channel/meta/meta-graph-channel-driver';
 
+import { ClockModule } from '../platform/clock.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { loadEnv } from '../platform/config/env';
 import { CryptoModule } from '../platform/crypto/crypto.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { TeamModule } from '../team/team.module';
+import { ChannelConnectionsController } from './channel-connections.controller';
+import { ChannelConnectionsRepository } from './channel-connections.repository';
+import { ChannelConnectionsService } from './channel-connections.service';
 import { MetaAuthorizationController } from './meta-authorization.controller';
 import { META_AUTHORIZATION_DRIVER, MetaAuthorizationService } from './meta-authorization.service';
 
@@ -20,11 +25,13 @@ function createMetaAuthorizationDriver(): MetaAuthorizationDriver | null {
 }
 
 @Module({
-  imports: [CacheModule, CryptoModule, TeamModule],
-  controllers: [MetaAuthorizationController],
+  imports: [CacheModule, ClockModule, CryptoModule, OutboxModule, TeamModule],
+  controllers: [MetaAuthorizationController, ChannelConnectionsController],
   providers: [
     { provide: META_AUTHORIZATION_DRIVER, useFactory: createMetaAuthorizationDriver },
     MetaAuthorizationService,
+    ChannelConnectionsService,
+    ChannelConnectionsRepository,
   ],
 })
 export class MetaAuthorizationModule {}
