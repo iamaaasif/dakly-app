@@ -42,6 +42,19 @@ describe('selectAttributionTouch', () => {
     expect(selectAttributionTouch([tap, read], orderAt, 7)).toEqual(tap);
   });
 
+  it.each([
+    { kind: 'delivery', sourceType: 'campaign', channel: 'sms' },
+    { kind: 'chat', sourceType: 'post', channel: 'facebook' },
+  ] as const)('uses the later $kind when a tap falls in the same minute', (source) => {
+    const later = {
+      ...campaignTap,
+      id: workflowRead.id,
+      ...source,
+      eligibleAt: new Date('2026-11-17T06:00:59Z'),
+    };
+    expect(selectAttributionTouch([campaignTap, later], orderAt, 7)).toEqual(later);
+  });
+
   it('prefers the campaign when the eligibility time and kind are tied', () => {
     const workflowTap = { ...campaignTap, id: workflowRead.id, sourceType: 'automation' as const };
     expect(selectAttributionTouch([workflowTap, campaignTap], orderAt, 7)).toEqual(campaignTap);

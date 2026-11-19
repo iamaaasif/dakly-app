@@ -20,23 +20,27 @@ export function selectAttributionTouch(
 ): AttributionTouch | undefined {
   const end = orderAt.getTime();
   const start = end - windowDays * DAY_MS;
-  let winner: AttributionTouch | undefined;
-  for (const touch of touches) {
-    const time = touch.eligibleAt.getTime();
-    if (time < start || time > end) continue;
-    if (!winner || compareTouches(touch, winner) > 0) winner = touch;
-  }
-  return winner;
+  const eligible = touches.filter(({ eligibleAt }) => {
+    const time = eligibleAt.getTime();
+    return time >= start && time <= end;
+  });
+  const tappedMinutes = new Set(eligible.filter(({ kind }) => kind === 'tap').map(touchMinute));
+  // Only a read loses to an earlier tap in the same minute.
+  const candidates = eligible.filter(
+    (touch) => touch.kind !== 'read' || !tappedMinutes.has(touchMinute(touch)),
+  );
+  const latest = candidates.reduce(
+    (time, touch) => Math.max(time, touch.eligibleAt.getTime()),
+    Number.NEGATIVE_INFINITY,
+  );
+  const tied = candidates.filter((touch) => touch.eligibleAt.getTime() === latest);
+  const hasCampaign = tied.some(({ sourceType }) => sourceType === 'campaign');
+  return tied
+    .filter(({ sourceType }) => !hasCampaign || sourceType !== 'automation')
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(-1);
 }
 
-function compareTouches(left: AttributionTouch, right: AttributionTouch) {
-  const leftTime = left.eligibleAt.getTime();
-  const rightTime = right.eligibleAt.getTime();
-  return (
-    Math.floor(leftTime / MINUTE_MS) - Math.floor(rightTime / MINUTE_MS) ||
-    Number(left.kind === 'tap') - Number(right.kind === 'tap') ||
-    Number(left.sourceType === 'campaign') - Number(right.sourceType === 'campaign') ||
-    leftTime - rightTime ||
-    left.id.localeCompare(right.id)
-  );
+function touchMinute(touch: AttributionTouch) {
+  return Math.floor(touch.eligibleAt.getTime() / MINUTE_MS);
 }
