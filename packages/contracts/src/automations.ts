@@ -34,7 +34,7 @@ export const AUTOMATION_NAME_MAX = 80;
 
 const automationNameSchema = z.string().trim().min(1).max(AUTOMATION_NAME_MAX);
 
-export const automationDraftSchema = z.strictObject({
+const automationDraftSchema = z.strictObject({
   name: automationNameSchema,
   graph: automationGraphSchema,
 });
@@ -45,12 +45,9 @@ export const createAutomationSchema = z.union([
     templateKey: z.enum(Object.keys(automationTemplates) as TemplateKey[]),
   }),
 ]);
-const draftChangeSchema = automationDraftSchema.partial();
-export const changeAutomationSchema = draftChangeSchema.refine(
-  (input) => input.name !== undefined || input.graph !== undefined,
-  'Nothing to change',
-);
-export const publishAutomationSchema = draftChangeSchema.optional();
+export const changeAutomationSchema = automationDraftSchema
+  .partial()
+  .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
 export type AutomationTriggerPreview = {
   items: { id: string; contactId: string; occurredAt: string }[];
 };

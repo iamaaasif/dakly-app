@@ -143,25 +143,22 @@ export class AutomationsService {
     storeId: string,
     automationId: string,
     { access, actor }: Approver,
-    draft?: ChangeAutomationInput,
   ): Promise<AutomationResponse> {
     await this.checkCanApprove(storeId, access);
     return this.transaction.run(storeId, async () => {
       // The status update locks the row first, so a second publish or a draft edit waits, and
       // the checks run on the graph that is published. A refusal rolls the status back.
       const locked = await this.move(storeId, automationId, 'publish');
-      const graph = draft?.graph ?? locked.graph;
-      checkPublishable(graph);
+      checkPublishable(locked.graph);
       const now = this.clock.now();
       const version = await this.repository.insertVersion(storeId, automationId, {
-        graph,
+        graph: locked.graph,
         publishedByUserId: actor.kind === 'user' ? actor.userId : null,
         publishedAt: now,
       });
       const published = await this.repository.change(storeId, automationId, ['active'], {
-        ...draft,
         publishedVersionId: version.id,
-        triggerType: graph.trigger.key,
+        triggerType: locked.graph.trigger.key,
         updatedAt: now,
       });
       return toAutomationResponse(published!);

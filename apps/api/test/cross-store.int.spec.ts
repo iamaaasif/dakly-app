@@ -1218,7 +1218,7 @@ fixture('GET /automations/:automationId/trigger-preview', async () => {
 // Each action runs on a workflow in the status it starts from.
 for (const [method, action, status, start, expected] of [
   ['PATCH', '', 200, 'draft', { name: 'নতুন নাম' }],
-  ['POST', '/publish', 200, 'draft', { status: 'active', name: 'নতুন নাম' }],
+  ['POST', '/publish', 200, 'draft', { status: 'active' }],
   ['POST', '/pause', 200, 'active', { status: 'paused' }],
   ['POST', '/enable', 200, 'paused', { status: 'active' }],
   ['POST', '/archive', 204, 'active', { status: 'archived' }],
@@ -1232,27 +1232,8 @@ for (const [method, action, status, start, expected] of [
     };
     const own = await prepare(b),
       foreign = await prepare(a);
-    const draft = { name: 'নতুন নাম', graph: { ...welcome, reEntry: { rule: 'every_time' } } };
-    const payload = method === 'PATCH' || action === '/publish' ? draft : undefined;
-    if (action === '/publish') {
-      const previous = await f.row('automations', own);
-      await success(b, 'POST', `/automations/${own}/publish`, 409, {
-        name: 'Unready chat template',
-        graph: {
-          ...welcome,
-          trigger: {
-            key: 'chat_started',
-            filters: [{ field: 'channel', channels: ['messenger'] }],
-          },
-        },
-      });
-      expect(await f.row('automations', own)).toEqual(previous);
-    }
-    const response = await success(b, method, `/automations/${own}${action}`, status, payload);
-    if (action === '/publish') {
-      const version = await f.row('automation_versions', response.json().publishedVersionId);
-      expect(version.graph).toEqual(draft.graph);
-    }
+    const payload = method === 'PATCH' ? { name: 'নতুন নাম' } : undefined;
+    await success(b, method, `/automations/${own}${action}`, status, payload);
     expect(await f.row('automations', own)).toMatchObject(expected);
     const before = await f.row('automations', foreign);
     await hidden(

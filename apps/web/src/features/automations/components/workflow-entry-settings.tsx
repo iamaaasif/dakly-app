@@ -27,13 +27,13 @@ const reEntryLabels = {
 function ReEntryField({ rule }: { rule: AutomationGraph['reEntry']['rule'] }) {
   const { register, setValue } = useFormContext<SettingsInput>();
   function changeRule(rule: AutomationGraph['reEntry']['rule']) {
-    setValue('graph.reEntry', rule === 'every_days' ? { rule, days: 30 } : { rule }, {
+    setValue('reEntry', rule === 'every_days' ? { rule, days: 30 } : { rule }, {
       shouldDirty: true,
     });
   }
   return (
     <>
-      <FormField name="graph.reEntry.rule" label="Re-entry">
+      <FormField name="reEntry.rule" label="Re-entry">
         {(field) => (
           <Select value={rule} onValueChange={changeRule}>
             <SelectTrigger {...field}>
@@ -50,11 +50,11 @@ function ReEntryField({ rule }: { rule: AutomationGraph['reEntry']['rule'] }) {
         )}
       </FormField>
       {rule === 'every_days' && (
-        <FormField name="graph.reEntry.days" label="Days between entries">
+        <FormField name="reEntry.days" label="Days between entries">
           {(field) => (
             <Input
               {...field}
-              {...register('graph.reEntry.days', { valueAsNumber: true })}
+              {...register('reEntry.days', { valueAsNumber: true })}
               type="number"
             />
           )}
@@ -66,14 +66,14 @@ function ReEntryField({ rule }: { rule: AutomationGraph['reEntry']['rule'] }) {
 
 export function WorkflowEntrySettings() {
   const { control } = useFormContext<SettingsInput>();
-  const graph = useWatch({ control, name: 'graph' });
+  const [reEntry, trigger, steps] = useWatch({ control, name: ['reEntry', 'trigger', 'steps'] });
   return (
     <section
       className="space-y-4 rounded-lg border border-border bg-surface p-4"
       aria-label="Entry and exit rules"
     >
-      <ReEntryField rule={graph.reEntry?.rule ?? 'every_days'} />
-      {removesOwnTag(graph) && (
+      <ReEntryField rule={reEntry?.rule ?? 'every_days'} />
+      {removesOwnTag({ reEntry, trigger, steps }) && (
         <p role="status" className="text-sm text-warning">
           This workflow removes its trigger tag. Adding that tag again can restart the workflow.
         </p>
@@ -85,7 +85,7 @@ export function WorkflowEntrySettings() {
 
 function ExitRules() {
   const { control, register } = useFormContext<SettingsInput>();
-  const { fields, append, remove } = useFieldArray({ control, name: 'graph.exitConditions' });
+  const { fields, append, remove } = useFieldArray({ control, name: 'exitConditions' });
   return (
     <div className="space-y-3">
       <h2 className="font-semibold">Exit rules</h2>
@@ -98,8 +98,8 @@ function ExitRules() {
             </Button>
           </div>
           {exit.kind === 'got_tag' && (
-            <FormField name={`graph.exitConditions.${index}.tag`} label="Exit tag">
-              {(field) => <Input {...field} {...register(`graph.exitConditions.${index}.tag`)} />}
+            <FormField name={`exitConditions.${index}.tag`} label="Exit tag">
+              {(field) => <Input {...field} {...register(`exitConditions.${index}.tag`)} />}
             </FormField>
           )}
         </div>

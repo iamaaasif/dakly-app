@@ -2,18 +2,18 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { FormProvider, useForm, useFormContext } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
+import { type AutomationGraph, automationGraphSchema } from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
-import { FormField } from '@dakly/ui/form-field';
-import { Input } from '@dakly/ui/input';
 import { QueryError } from '@dakly/ui/query-error';
 
-import { useAutomation, useSaveAutomation } from '../api/automation-settings';
+import { usePublishAutomation, useSaveAutomation } from '../api/automation-settings';
+import { useAutomation } from '../api/automations';
 import { statusLabels, triggerLabels } from '../automation-labels';
-import { settingsSchema, type SettingsInput, type SettingsValues } from '../workflow-settings-form';
+import type { SettingsInput } from '../workflow-settings-form';
 import { WorkflowEntrySettings } from './workflow-entry-settings';
 import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowStepSettings } from './workflow-step-settings';
@@ -25,7 +25,7 @@ export function WorkflowSettings({ id }: { id: string }) {
     return (
       <QueryError message="Could not load this workflow." onRetry={() => void workflow.refetch()} />
     );
-  if (!workflow.data)
+  if (!workflow.data || (workflow.isFetching && !workflow.isFetchedAfterMount))
     return (
       <p role="status" className="p-4">
         Loading workflow…
@@ -34,144 +34,130 @@ export function WorkflowSettings({ id }: { id: string }) {
   return <SettingsForm key={id} workflow={workflow.data} refresh={workflow.refetch} />;
 }
 
-type SettingsFormProps = {
+type SettingsProps = {
   workflow: AutomationDetailResponse;
-  refresh: () => Promise<{ data?: AutomationDetailResponse; isError: boolean }>;
+  refresh: ReturnType<typeof useAutomation>['refetch'];
 };
 
-function SettingsForm({ workflow, refresh }: SettingsFormProps) {
+function useEditor({ workflow, refresh }: SettingsProps) {
   const router = useRouter();
   const save = useSaveAutomation(workflow.id);
-  const [confirmation, setConfirmation] = useState<{ draft: SettingsValues; count: number }>();
-  const form = useForm<SettingsInput, undefined, SettingsValues>({
-    resolver: zodResolver(settingsSchema),
-    defaultValues: { name: workflow.name, graph: workflow.graph },
+  const publish = usePublishAutomation(workflow.id);
+  const [count, setCount] = useState<number>();
+  const form = useForm<SettingsInput, undefined, AutomationGraph>({
+    resolver: zodResolver(automationGraphSchema),
+    defaultValues: workflow.graph,
   });
+  const { errors, isDirty, isSubmitting } = form.formState;
+  const { reset } = form;
+  useEffect(() => {
+    if (!isDirty) reset(workflow.graph);
+  }, [isDirty, reset, workflow.graph]);
+  const pending = isSubmitting || save.isPending || publish.isPending;
 
-  async function confirm(draft: SettingsValues) {
-    const current = await refresh();
-    if (current.isError || !current.data) {
+  async function saveGraph(graph: AutomationGraph) {
+    try {
+      await save.mutateAsync(graph);
+      reset(graph);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const confirm = form.handleSubmit(async () => {
+    const result = await refresh();
+    if (result.isError || !result.data) {
       form.setError('root', { message: 'Could not check who is in this workflow. Try again.' });
       return;
     }
-    setConfirmation({ draft, count: current.data.activeRuns });
-  }
+    save.reset();
+    publish.reset();
+    setCount(result.data.activeRuns);
+  });
 
-  function submit(draft: SettingsValues, publish: boolean) {
-    save.mutate(
-      { draft, publish },
-      {
-        onSuccess: () => (publish ? router.push('/automations?tab=active') : form.reset(draft)),
-      },
-    );
-  }
-  return (
-    <FormProvider {...form}>
-      <form
-        method="post"
-        className="min-h-screen bg-surface-muted"
-        onSubmit={form.handleSubmit((draft) => submit(draft, false))}
-      >
-        <SettingsHeader
-          workflow={workflow}
-          pending={save.isPending || form.formState.isSubmitting}
-          onPublish={form.handleSubmit(confirm)}
-        />
-        <SettingsFields
-          pending={save.isPending || form.formState.isSubmitting}
-          error={confirmation ? undefined : save.error?.message}
-        />
-      </form>
-      {confirmation && (
-        <PublishDialog
-          count={confirmation.count}
-          pending={save.isPending}
-          error={save.error?.message}
-          onClose={() => {
-            save.reset();
-            setConfirmation(undefined);
-          }}
-          onPublish={() => submit(confirmation.draft, true)}
-        />
-      )}
-    </FormProvider>
-  );
+  const start = form.handleSubmit(async (graph) => {
+    if (isDirty && !(await saveGraph(graph))) return;
+    publish.mutate(undefined, { onSuccess: () => router.push('/automations?tab=active') });
+  });
+
+  const validation =
+    errors.root?.message ??
+    (Object.keys(errors).length ? 'Check the workflow settings before saving.' : undefined);
+  return {
+    form,
+    pending,
+    saving: save.isPending,
+    count,
+    confirm,
+    start,
+    save: form.handleSubmit(saveGraph),
+    close: () => {
+      save.reset();
+      publish.reset();
+      setCount(undefined);
+    },
+    error: save.error?.message ?? publish.error?.message ?? validation,
+  };
 }
 
-function SettingsFields({ error, pending }: { error?: string; pending: boolean }) {
-  const { register, formState } = useFormContext<SettingsInput>();
-  return (
-    <fieldset disabled={pending} className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
-      <FormField name="name" label="Workflow name">
-        {(field) => <Input {...field} {...register('name')} />}
-      </FormField>
-      {(error || formState.errors.root?.message) && (
-        <p role="alert" className="text-danger">
-          {error ?? formState.errors.root?.message}
-        </p>
-      )}
-      {formState.errors.graph && (
-        <p role="alert" className="text-danger">
-          Check the workflow settings before saving.
-        </p>
-      )}
-      <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <WorkflowEntrySettings />
-        <WorkflowStepSettings />
-      </div>
-    </fieldset>
-  );
-}
-
-function SettingsHeader({
-  workflow,
-  pending,
-  onPublish,
-}: {
-  workflow: AutomationDetailResponse;
-  pending: boolean;
-  onPublish: () => void;
-}) {
+function SettingsForm(props: SettingsProps) {
+  const { workflow } = props;
+  const editor = useEditor(props);
+  const { saving } = editor;
+  const paused = workflow.status === 'paused';
+  const publishLabel = paused ? 'Publish and enable' : 'Publish changes';
   const subtitle = `${statusLabels[workflow.status]} · When ${triggerLabels[workflow.graph.trigger.key]}`;
   return (
-    <WorkflowPageHeader title={workflow.name} subtitle={subtitle}>
-      <Button variant="secondary" type="submit" disabled={pending}>
-        Save draft
-      </Button>
-      <Button loading={pending} onClick={onPublish}>
-        {workflow.status === 'draft' ? 'Start workflow' : 'Publish changes'}
-      </Button>
-    </WorkflowPageHeader>
-  );
-}
-
-function PublishDialog({
-  count,
-  error,
-  pending,
-  onClose,
-  onPublish,
-}: {
-  count: number;
-  error?: string;
-  pending: boolean;
-  onClose: () => void;
-  onPublish: () => void;
-}) {
-  return (
-    <SessionDialog open title="Publish workflow?" onClose={onClose} closeDisabled={pending}>
-      <p>{count === 1 ? '1 person is' : `${count} people are`} in this workflow now.</p>
-      <p className="mt-2 text-sm text-text-muted">
-        People already in the workflow continue on the version they entered.
-      </p>
-      {error && (
-        <p role="alert" className="mt-2 text-danger">
-          {error}
-        </p>
+    <FormProvider {...editor.form}>
+      <form
+        method="post"
+        noValidate
+        className="min-h-screen bg-surface-muted"
+        onSubmit={editor.save}
+      >
+        <WorkflowPageHeader title={workflow.name} subtitle={subtitle}>
+          <Button variant="secondary" type="submit" loading={saving} disabled={editor.pending}>
+            Save draft
+          </Button>
+          <Button disabled={editor.pending} onClick={editor.confirm}>
+            {workflow.status === 'draft' ? 'Start workflow' : publishLabel}
+          </Button>
+        </WorkflowPageHeader>
+        <fieldset disabled={editor.pending} className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
+          {editor.count === undefined && editor.error && (
+            <p role="alert" className="text-danger">
+              {editor.error}
+            </p>
+          )}
+          <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <WorkflowEntrySettings />
+            <WorkflowStepSettings />
+          </div>
+        </fieldset>
+      </form>
+      {editor.count !== undefined && (
+        <SessionDialog
+          open
+          title={paused ? 'Publish and enable workflow?' : 'Publish workflow?'}
+          onClose={editor.close}
+          closeDisabled={editor.pending}
+        >
+          <p>
+            {editor.count === 1 ? '1 person is' : `${editor.count} people are`} in this workflow
+            now.
+          </p>
+          <p className="mt-2 text-sm text-text-muted">People keep their current version.</p>
+          {editor.error && (
+            <p role="alert" className="mt-2 text-danger">
+              {editor.error}
+            </p>
+          )}
+          <Button className="mt-4" onClick={editor.start} loading={editor.pending}>
+            Publish workflow
+          </Button>
+        </SessionDialog>
       )}
-      <Button className="mt-4" onClick={onPublish} loading={pending}>
-        Publish workflow
-      </Button>
-    </SessionDialog>
+    </FormProvider>
   );
 }

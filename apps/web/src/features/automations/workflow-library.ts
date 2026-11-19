@@ -28,12 +28,21 @@ export function stepLabel(step: AutomationStep): string {
   return 'Exit';
 }
 
+export const minutesPerUnit = { minutes: 1, hours: 60, days: 1440 };
+export type DelayUnit = keyof typeof minutesPerUnit;
+
+export function delayUnit(minutes: number): DelayUnit {
+  if (minutes % minutesPerUnit.days === 0) return 'days';
+  if (minutes % minutesPerUnit.hours === 0) return 'hours';
+  return 'minutes';
+}
+
 function waitLabel(wait: Extract<AutomationStep, { kind: 'wait' }>['wait']) {
   if (wait.until === 'time_of_day') return `Wait until ${wait.time}`;
   if (wait.until !== 'duration') return 'Wait';
-  if (wait.minutes % 1440 === 0) return `Wait ${wait.minutes / 1440}d`;
-  if (wait.minutes % 60 === 0) return `Wait ${wait.minutes / 60}h`;
-  return `Wait ${wait.minutes} min`;
+  const unit = delayUnit(wait.minutes);
+  const suffix = { minutes: ' min', hours: 'h', days: 'd' }[unit];
+  return `Wait ${wait.minutes / minutesPerUnit[unit]}${suffix}`;
 }
 
 export const workflowTemplates = (Object.keys(automationTemplates) as TemplateKey[]).map((key) => {

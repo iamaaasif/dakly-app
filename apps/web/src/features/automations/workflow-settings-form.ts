@@ -1,12 +1,10 @@
 import type { z } from 'zod';
 
-import { automationDraftSchema } from '@dakly/contracts/automations';
+import type { automationGraphSchema } from '@dakly/contracts/automations/graph';
 
-export const settingsSchema = automationDraftSchema;
-export type SettingsInput = z.input<typeof settingsSchema>;
-export type SettingsValues = z.output<typeof settingsSchema>;
+export type SettingsInput = z.input<typeof automationGraphSchema>;
 
-export function removesOwnTag(graph: SettingsInput['graph']) {
+export function removesOwnTag(graph: Pick<SettingsInput, 'reEntry' | 'trigger' | 'steps'>) {
   if (graph.trigger.key !== 'tag_added' || graph.reEntry?.rule !== 'every_time') return false;
   const filter = graph.trigger.filters.find((item) => item.field === 'tag');
   return Object.values(graph.steps).some(

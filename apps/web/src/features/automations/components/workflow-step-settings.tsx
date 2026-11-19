@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import {
@@ -8,14 +9,16 @@ import {
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 import { Textarea } from '@dakly/ui/textarea';
 
 import { channelLabels } from '../automation-labels';
+import { delayUnit, type DelayUnit, minutesPerUnit } from '../workflow-library';
 import type { SettingsInput } from '../workflow-settings-form';
 
 type WaitStep = Extract<AutomationStep, { kind: 'wait' }>;
 type SendStep = Extract<AutomationStep, { kind: 'send' }>;
-type UpdateStep = (step: AutomationStep) => void;
+type StepSettings<Step> = { stepKey: string; step: Step; update: (step: Step) => void };
 
 function delayValue(wait: WaitStep['wait']) {
   if ('time' in wait) return { field: 'time', value: wait.time };
@@ -24,48 +27,57 @@ function delayValue(wait: WaitStep['wait']) {
   return { field: 'minutesBefore', value: wait.minutesBefore };
 }
 
-function DelayFields({
-  stepKey,
-  step,
-  update,
-}: {
-  stepKey: string;
-  step: WaitStep;
-  update: UpdateStep;
-}) {
+function DelayFields({ stepKey, step, update }: StepSettings<WaitStep>) {
   const { field, value } = delayValue(step.wait);
-  const isTime = field === 'time';
+  const [unit, setUnit] = useState(() =>
+    typeof value === 'number' ? delayUnit(value) : 'minutes',
+  );
+  const numeric = typeof value === 'number';
+  const amount = numeric ? value / minutesPerUnit[unit] : value;
+  function change(value: string | number, unit: DelayUnit) {
+    update({
+      ...step,
+      wait: {
+        ...step.wait,
+        [field]: typeof value === 'number' ? value * minutesPerUnit[unit] : value,
+      },
+    });
+  }
   return (
-    <FormField
-      name={`graph.steps.${stepKey}.wait.${field}`}
-      label={isTime ? 'Time of day' : 'Delay in minutes'}
-    >
+    <FormField name={`steps.${stepKey}.wait.${field}`} label={numeric ? 'Delay' : 'Time of day'}>
       {(control) => (
-        <Input
-          {...control}
-          type={isTime ? 'time' : 'number'}
-          value={Number.isNaN(value) ? '' : value}
-          onChange={({ target }) =>
-            update({
-              ...step,
-              wait: { ...step.wait, [field]: isTime ? target.value : target.valueAsNumber },
-            })
-          }
-        />
+        <div className="flex gap-2">
+          <Input
+            {...control}
+            type={numeric ? 'number' : 'time'}
+            value={Number.isNaN(amount) ? '' : amount}
+            onChange={({ target }) => change(numeric ? target.valueAsNumber : target.value, unit)}
+          />
+          {numeric && (
+            <Select
+              value={unit}
+              onValueChange={(next: DelayUnit) => {
+                setUnit(next);
+                change(amount, next);
+              }}
+            >
+              <SelectTrigger aria-label="Delay unit" className="w-32 shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="minutes">Minutes</SelectItem>
+                <SelectItem value="hours">Hours</SelectItem>
+                <SelectItem value="days">Days</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       )}
     </FormField>
   );
 }
 
-function MessageFields({
-  stepKey,
-  step,
-  update,
-}: {
-  stepKey: string;
-  step: SendStep;
-  update: UpdateStep;
-}) {
+function MessageFields({ stepKey, step, update }: StepSettings<SendStep>) {
   function moveUp(channel: SendStep['channels'][number], index: number) {
     const channels = [...step.channels];
     channels.splice(index, 1);
@@ -74,7 +86,7 @@ function MessageFields({
   }
   return (
     <div className="space-y-3">
-      <FormField name={`graph.steps.${stepKey}.message.text`} label="Message text">
+      <FormField name={`steps.${stepKey}.message.text`} label="Message text">
         {(control) => (
           <Textarea
             {...control}
@@ -121,20 +133,14 @@ function orderedEditableSteps(graph: Pick<AutomationGraph, 'firstStepKey' | 'ste
 
 export function WorkflowStepSettings() {
   const { control, getValues, setValue, formState } = useFormContext<SettingsInput>();
-  const graph = useWatch({ control, name: 'graph' });
-  const steps = orderedEditableSteps(graph);
+  const [firstStepKey, stepsByKey] = useWatch({ control, name: ['firstStepKey', 'steps'] });
+  const steps = orderedEditableSteps({ firstStepKey, steps: stepsByKey });
   if (!steps.length) return null;
 
   function update(key: string, step: AutomationStep) {
     // Step keys belong to the graph, including keys React Hook Form reserves in field paths.
-    setValue(
-      'graph.steps',
-      { ...getValues('graph.steps'), [key]: step },
-      {
-        shouldDirty: true,
-        shouldValidate: formState.isSubmitted,
-      },
-    );
+    const next = { ...getValues('steps'), [key]: step };
+    setValue('steps', next, { shouldDirty: true, shouldValidate: formState.isSubmitted });
   }
   return (
     <section className="space-y-4" aria-label="Workflow steps">

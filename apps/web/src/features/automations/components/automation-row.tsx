@@ -6,7 +6,7 @@ import { useState } from 'react';
 
 import type { AutomationListItem } from '@dakly/contracts/automations';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 import { Dialog } from '@dakly/ui/dialog';
 import {
   DropdownMenu,
@@ -91,7 +91,7 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
         )}
         <Link
           href={`/automations/${workflow.id}`}
-          className="inline-flex min-h-10 items-center rounded-md border border-input-border px-3 font-medium hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className={buttonVariants({ variant: 'secondary' })}
         >
           Edit
         </Link>
