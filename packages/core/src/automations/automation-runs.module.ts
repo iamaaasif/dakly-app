@@ -11,6 +11,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationSmsDeliveryService } from './automation-sms-delivery';
 
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
@@ -24,7 +25,12 @@ import { AutomationRunsService } from './automation-runs.service';
     StoresModule,
     WalletsModule,
   ],
-  providers: [AutomationConditionsService, AutomationRunsRepository, AutomationRunsService],
+  providers: [
+    AutomationConditionsService,
+    AutomationRunsRepository,
+    AutomationRunsService,
+    AutomationSmsDeliveryService,
+  ],
   exports: [AutomationRunsService],
 })
 export class AutomationRunsModule {}

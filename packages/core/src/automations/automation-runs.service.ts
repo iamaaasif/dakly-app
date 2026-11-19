@@ -10,7 +10,6 @@ import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { ErrorReporter } from '../platform/logging/error-reporter';
 import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
@@ -22,12 +21,7 @@ import {
   type DueRun,
   type RunClaim,
 } from './automation-runs.repository';
-import {
-  deliverAutomationSms,
-  prepareAutomationSms,
-  settleAutomationCredits,
-  SMS_NO_ANSWER,
-} from './automation-sms-delivery';
+import { AutomationSmsDeliveryService, SMS_NO_ANSWER } from './automation-sms-delivery';
 import {
   type Delivery,
   endWithUnknownOutcome,
@@ -71,7 +65,8 @@ export class AutomationRunsService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(WalletService) private readonly wallets: WalletService,
-    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
+    @Inject(AutomationSmsDeliveryService)
+    private readonly smsDelivery: AutomationSmsDeliveryService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
   ) {}
 
@@ -110,8 +105,7 @@ export class AutomationRunsService {
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
         await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
-      if (result.credits)
-        await settleAutomationCredits(this.wallets, storeId, claim, result.credits);
+      if (result.credits) await this.smsDelivery.settleCredits(storeId, claim, result.credits);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
@@ -201,13 +195,12 @@ export class AutomationRunsService {
     const checkedAt = await this.repository.schedulerTime(facts.storeId);
     const prepared =
       step.channels.includes('sms') && !isLateSend(facts.wakeAt, checkedAt)
-        ? await prepareAutomationSms(this.messaging, facts)
+        ? await this.smsDelivery.prepare(facts)
         : undefined;
     const planned = await this.authorizeFirstSend(claim, step, facts, prepared?.to ?? null);
     if ('stop' in planned) return planned.stop;
     if (prepared)
-      return deliverAutomationSms(
-        { messaging: this.messaging, reporter: this.reporter, repository: this.repository },
+      return this.smsDelivery.deliver(
         { storeId: facts.storeId, contactId: facts.contactId, step },
         prepared,
         planned,
