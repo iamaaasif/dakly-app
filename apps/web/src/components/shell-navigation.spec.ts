@@ -45,6 +45,8 @@ describe('navigationGroups', () => {
         canEditOrders: false,
         canViewCampaigns: false,
         canEditCampaigns: false,
+        canViewAutomations: false,
+        canEditAutomations: false,
         canViewCustomers: true,
         canCreateCustomer: false,
         canViewSegments: true,

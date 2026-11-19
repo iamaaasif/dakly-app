@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { type AutomationGraph, automationGraphSchema } from './automations/graph';
+import type { CampaignChannel } from './campaigns';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
@@ -28,8 +29,9 @@ export type AutomationExitReason = (typeof automationExitReasons)[number];
 export type AutomationStepKind = (typeof automationStepKinds)[number];
 
 export const MAX_AUTOMATIONS_PER_STORE = 100;
+export const AUTOMATION_NAME_MAX = 80;
 
-const automationNameSchema = z.string().trim().min(1).max(80);
+const automationNameSchema = z.string().trim().min(1).max(AUTOMATION_NAME_MAX);
 
 export const createAutomationSchema = z.strictObject({
   name: automationNameSchema,
@@ -70,4 +72,10 @@ export type AutomationVersionResponse = {
 export type AutomationDetailResponse = AutomationResponse & {
   versions: AutomationVersionResponse[];
 };
-export type AutomationListResponse = { items: AutomationResponse[]; nextCursor: string | null };
+export type AutomationListItem = AutomationResponse & {
+  trigger: AutomationGraph['trigger']['key'];
+  stepCount: number;
+  channels: CampaignChannel[];
+  enteredLast30Days: number;
+};
+export type AutomationListResponse = { items: AutomationListItem[]; nextCursor: string | null };

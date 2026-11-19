@@ -12,7 +12,7 @@ type SendOutcome =
 
 // The worker claims a queued send with this marker before it calls Meta.
 // A queued row that keeps the marker waits for reconciliation.
-const SEND_UNCONFIRMED = 'send_unconfirmed';
+export const SEND_UNCONFIRMED = 'send_unconfirmed';
 
 function queuedMessage(storeId: string, messageId: string) {
   return and(

@@ -84,7 +84,8 @@ export class MetaWebhooksService {
         {
           jobId: webhookEventId,
           attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
+          // The final receipt retry must follow Meta's five-second send timeout.
+          backoff: { type: 'exponential', delay: 2000 },
           removeOnComplete: { age: 60 * 60 },
           removeOnFail: 100,
         },

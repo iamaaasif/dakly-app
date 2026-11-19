@@ -22,7 +22,7 @@ async function capture(page: Page, name: string) {
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
     if (name === 'edit-detail') {
-      await expect(page.getByRole('button', { name: 'Edit order' })).toBeInViewport();
+      await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeInViewport();
     } else if (name !== 'pipeline') {
       const dialog = page.getByRole('dialog', {
         name: name === 'edit' ? 'Edit order' : 'New order',
@@ -343,7 +343,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     });
     expect(newPrice.status()).toBe(200);
     await page.reload();
-    const editButton = detail.getByRole('button', { name: 'Edit order' });
+    const editButton = detail.getByRole('button', { name: 'Edit', exact: true });
     await expect(editButton).toBeVisible();
     await capture(page, 'edit-detail');
     await editButton.click();

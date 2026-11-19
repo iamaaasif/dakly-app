@@ -170,6 +170,11 @@ export const automationRuns = pgTable(
       table.automationId,
       table.status,
     ),
+    index('automation_runs_recent_entries_idx').on(
+      table.storeId,
+      table.automationId,
+      table.enteredAt,
+    ),
     index('automation_runs_store_contact_idx').on(table.storeId, table.contactId),
     index('automation_runs_version_id_idx').on(table.versionId),
     index('automation_runs_contact_id_idx').on(table.contactId),

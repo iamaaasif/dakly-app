@@ -22,6 +22,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { automationError } from './automations.errors';
@@ -58,8 +59,24 @@ export class AutomationsService {
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
-    const rows = await this.repository.list(storeId, VISIBLE_STATUSES, query);
-    const items = rows.slice(0, query.limit).map(toAutomationResponse);
+    const since = new Date(this.clock.now().getTime() - 30 * DAY_MS);
+    const rows = await this.repository.list(storeId, VISIBLE_STATUSES, query, since);
+    const items = rows
+      .slice(0, query.limit)
+      .map(({ publishedGraph, enteredLast30Days, ...row }) => {
+        const graph = publishedGraph ?? row.graph;
+        const steps = Object.values(graph.steps);
+        const channels = [
+          ...new Set(steps.flatMap((step) => (step.kind === 'send' ? step.channels : []))),
+        ];
+        return {
+          ...toAutomationResponse(row),
+          trigger: graph.trigger.key,
+          stepCount: steps.length,
+          channels,
+          enteredLast30Days,
+        };
+      });
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 

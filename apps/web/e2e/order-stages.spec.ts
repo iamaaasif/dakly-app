@@ -97,7 +97,8 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await expect(detail.getByText('Tracking code PATH-1050')).toBeVisible();
     await expect(detail.getByText('To pack → With courier')).toBeVisible();
 
-    await detail.getByRole('button', { name: 'Partly delivered' }).click();
+    await detail.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Partly delivered' }).click();
     const partial = page.getByRole('dialog', { name: 'Partly delivered' });
     const medium = partial.getByLabel(`${panjabi} · M · delivered out of 1`);
     const large = partial.getByLabel(`${panjabi} · L · delivered out of 1`);
@@ -121,7 +122,8 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     await expect(detail.getByText('With courier → Partly delivered')).toBeVisible();
     await expect(detail.getByText('One item was sent back')).toBeVisible();
 
-    await detail.getByRole('button', { name: 'Record COD collected' }).click();
+    await detail.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Record COD collected' }).click();
     const cod = page.getByRole('dialog', { name: 'Record COD collected' });
     await expect(cod.getByLabel('Amount collected (৳)')).toHaveValue('1310.00');
     await cod.getByLabel('Amount collected (৳)').fill('1200.50');

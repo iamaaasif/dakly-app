@@ -1129,7 +1129,12 @@ fixture('GET /automations', async () => {
     .json()
     .items.map((item: { id: string }) => item.id);
   expect(ids).toEqual([bId]);
-  expect((await success(a, 'GET', '/automations', 200)).json().items[0].id).toBe(aId);
+  expect((await success(a, 'GET', '/automations', 200)).json().items[0]).toMatchObject({
+    id: aId,
+    enteredLast30Days: 0,
+    trigger: 'consent_given',
+    channels: ['sms'],
+  });
 });
 fixture('POST /automations', async () => {
   const { a, b } = await pair(),
