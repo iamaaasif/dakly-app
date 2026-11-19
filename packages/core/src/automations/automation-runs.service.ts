@@ -26,6 +26,7 @@ import {
   claimRetryDispatch,
   deliverAutomationSms,
   endExpiredRetry,
+  endIncompleteRetry,
   hasRetryDetails,
   retryDecision,
   settleAutomationCredits,
@@ -358,12 +359,8 @@ export class AutomationRunsService {
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
     const { storeId, contactId, wakeAt } = facts;
     const preflight = await this.repository.schedulerTime(storeId);
-    if (!hasRetryDetails(step, started))
-      return endWithUnknownOutcome(
-        failed('The SMS is missing its original delivery details', preflight),
-      );
-    const { firstTriedAt, optOutUrl } = started;
-    const preparedSender = endExpiredRetry(step, firstTriedAt, wakeAt, preflight)
+    if (!hasRetryDetails(step, started)) return endIncompleteRetry(preflight);
+    const preparedSender = endExpiredRetry(step, started.firstTriedAt, wakeAt, preflight)
       ? undefined
       : await this.messaging.prepareSender(storeId);
     const gated = await claimRetryDispatch({
@@ -387,12 +384,12 @@ export class AutomationRunsService {
         claim: gated.claim,
         contactId,
         step,
-        body: messageBody(step, optOutUrl ?? undefined),
+        body: messageBody(step, gated.optOutUrl ?? undefined),
         destination: gated.destination,
         preparedSender,
         isFirstTry: false,
       },
-      firstTriedAt,
+      gated.firstTriedAt,
       gated.at,
     );
   }

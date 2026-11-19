@@ -75,6 +75,7 @@ export type SendingStep = {
   latestDispatchAt: Date | null;
   optOutUrl: string | null;
   destinationHash: string | null;
+  providerMessageId: string | null;
 };
 
 @Injectable()
@@ -161,9 +162,10 @@ export class AutomationRunsRepository {
         .select({
           id: automationRunSteps.id,
           firstTriedAt: automationRunSteps.firstTriedAt,
-          sentAt: automationRunSteps.sentAt,
+          latestDispatchAt: automationRunSteps.sentAt,
           optOutUrl: automationRunSteps.optOutUrl,
           destinationHash: automationRunSteps.destinationHash,
+          providerMessageId: automationRunSteps.providerMessageId,
         })
         .from(automationRunSteps)
         .where(
@@ -177,14 +179,7 @@ export class AutomationRunsRepository {
         .limit(1);
       return lock ? query.for('update') : query;
     });
-    if (!row) return undefined;
-    return {
-      id: row.id,
-      firstTriedAt: row.firstTriedAt ?? row.sentAt,
-      latestDispatchAt: row.sentAt ?? row.firstTriedAt,
-      optOutUrl: row.optOutUrl,
-      destinationHash: row.destinationHash,
-    };
+    return row;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {

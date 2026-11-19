@@ -54,7 +54,7 @@ function graphWith(first: AutomationStep): AutomationGraph {
 // One claimed run in memory. A move applies only under the claim it was given, as in Postgres.
 class FakeRunsRepository {
   run!: ClaimedRun & { id: string; lastError?: string | null };
-  steps: NewRunStep[] = [];
+  steps: (NewRunStep & Pick<RunStepChange, 'providerMessageId'>)[] = [];
 
   constructor(readonly schedulerTime: () => Promise<Date>) {}
 
@@ -101,10 +101,11 @@ class FakeRunsRepository {
     return (
       step && {
         id: step.id!,
-        firstTriedAt: step.firstTriedAt ?? step.sentAt ?? null,
-        latestDispatchAt: step.sentAt ?? step.firstTriedAt ?? null,
+        firstTriedAt: step.firstTriedAt ?? null,
+        latestDispatchAt: step.sentAt ?? null,
         optOutUrl: step.optOutUrl ?? null,
         destinationHash: step.destinationHash ?? null,
+        providerMessageId: step.providerMessageId ?? null,
       }
     );
   }
@@ -139,6 +140,7 @@ describe('AutomationRunsService', () => {
   let recheckReason: SkipReason | undefined;
   let recheckDefer: Date | undefined;
   let duringRecheck: () => void;
+  let duringPhoneRead: () => void;
   let contactPhone: string;
   let reported: string[];
   let sent: OutgoingMessage[];
@@ -189,6 +191,7 @@ describe('AutomationRunsService', () => {
     recheckReason = undefined;
     recheckDefer = undefined;
     duringRecheck = () => undefined;
+    duringPhoneRead = () => undefined;
     contactPhone = '01712345678';
     reported = [];
     sent = [];
@@ -238,7 +241,10 @@ describe('AutomationRunsService', () => {
     const contacts = {
       findTags: async () => tags,
       findRecipients: async () => [{ phone: contactPhone }],
-      getPhoneForSend: async () => contactPhone,
+      getPhoneForSend: async () => {
+        duringPhoneRead();
+        return contactPhone;
+      },
       changeTag: async (
         _storeId: string,
         _contactId: string,
@@ -799,6 +805,68 @@ describe('AutomationRunsService', () => {
         expect.objectContaining({ id: 'legacy', outcome: 'unconfirmed' }),
       ]);
       expect(ledger).toEqual([]);
+    });
+
+    it.each([
+      'empty URL',
+      'invalid URL',
+      'transactional URL',
+      'no first attempt time',
+      'known provider ID',
+    ] as const)('does not submit an uncertain send again with %s', async (badData) => {
+      providerError = new Error('connection reset');
+      await start(badData === 'transactional URL' ? { ...send, category: 'transactional' } : send);
+      const previous = repository.steps[0]!;
+      if (badData === 'empty URL') previous.optOutUrl = '';
+      if (badData === 'invalid URL') previous.optOutUrl = 'https://links.dakly.test/other';
+      if (badData === 'transactional URL') previous.optOutUrl = optOutUrl;
+      if (badData === 'no first attempt time') delete previous.firstTriedAt;
+      if (badData === 'known provider ID') previous.providerMessageId = 'accepted-before-crash';
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({
+          outcome: 'unconfirmed',
+          destinationHash: null,
+          optOutUrl: null,
+        }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+      if (badData === 'known provider ID')
+        expect(repository.steps[0]?.providerMessageId).toBe('accepted-before-crash');
+    });
+
+    it('does not send when the final phone lookup crosses the retry deadline', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      const firstTriedAt = new Date(now.getTime() - 36 * HOUR + 1000);
+      repository.steps[0]!.firstTriedAt = firstTriedAt;
+      providerError = undefined;
+      duringPhoneRead = () => {
+        databaseNow = new Date(now.getTime() + 2000);
+      };
+      repository.run = { ...repository.run, status: 'running', claimedAt: now, wakeAt: now };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run.lastError).toContain('The SMS provider did not answer for 36 hours');
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'unconfirmed', firstTriedAt }),
+      ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
 
     it('does not resend a message whose run was due more than a day ago', async () => {
