@@ -1610,6 +1610,76 @@ async function notification(shop: Shop) {
   );
   return result.rows[0].id as string;
 }
+async function enableSavedReplies(shop: Shop) {
+  await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
+}
+
+async function savedReply(shop: Shop, shortcut: string) {
+  const result = await success(shop, 'POST', '/saved-replies', 201, {
+    title: 'ঢাকার ভেতরে',
+    body: 'ঢাকায় ডেলিভারি চার্জ ৬০ টাকা।',
+    shortcut,
+  });
+  return result.json().id as string;
+}
+
+fixture('GET /saved-replies', async () => {
+  const { a, b } = await pair();
+  expect((await f.request(b.owner, 'GET', '/saved-replies')).statusCode).toBe(403);
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  await savedReply(a, 'delivery');
+  const own = await savedReply(b, 'delivery');
+  const result = await success(b, 'GET', '/saved-replies', 200);
+  expect(result.json()).toMatchObject({
+    items: [{ id: own, shortcut: 'delivery', body: 'ঢাকায় ডেলিভারি চার্জ ৬০ টাকা।' }],
+    nextCursor: null,
+  });
+});
+
+fixture('POST /saved-replies', async () => {
+  const { a, b } = await pair();
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  const reply = { title: 'Delivery', body: 'Delivery inside Dhaka is 60 taka.', shortcut: 'dhaka' };
+  await success(a, 'POST', '/saved-replies', 201, reply);
+  const result = await success(b, 'POST', '/saved-replies', 201, reply);
+  expect(result.json()).toMatchObject(reply);
+  await success(b, 'POST', '/saved-replies', 409, reply);
+  await success(b, 'POST', '/saved-replies', 400, { ...reply, storeId: a.id });
+});
+
+fixture('PATCH /saved-replies/:savedReplyId', async () => {
+  const { a, b } = await pair();
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  const foreign = await savedReply(a, 'delivery');
+  const own = await savedReply(b, 'delivery');
+  await savedReply(b, 'returns');
+  const url = (id: string) => `/saved-replies/${id}`;
+  await hidden(b, 'PATCH', url, foreign, () => ({ shortcut: null }));
+  await success(b, 'PATCH', url(own), 409, { shortcut: 'returns' });
+  const result = await success(b, 'PATCH', url(own), 200, {
+    body: 'চার্জ ৭০ টাকা।',
+    shortcut: null,
+  });
+  expect(result.json()).toMatchObject({ id: own, body: 'চার্জ ৭০ টাকা।', shortcut: null });
+  expect(await f.row('saved_replies', foreign)).toMatchObject({ shortcut: 'delivery' });
+});
+
+fixture('DELETE /saved-replies/:savedReplyId', async () => {
+  const { a, b } = await pair();
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  const url = (id: string) => `/saved-replies/${id}`;
+  const foreign = await savedReply(a, 'delivery');
+  const own = await savedReply(b, 'delivery');
+  await hidden(b, 'DELETE', url, foreign);
+  await success(b, 'DELETE', url(own), 204);
+  expect(await f.row('saved_replies', own)).toBeUndefined();
+  expect(await f.row('saved_replies', foreign)).toMatchObject({ shortcut: 'delivery' });
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),

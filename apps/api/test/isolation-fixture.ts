@@ -227,6 +227,7 @@ export class IsolationFixture {
       'knowledge_items',
       'files',
       'sms_sender_ids',
+      'saved_replies',
       'notifications',
       'outbox_events',
       'audit_log',
