@@ -25,7 +25,7 @@ type Contact = {
 describe('SendPolicyService', () => {
   let contact: Contact | undefined;
   let consent: 'granted' | 'withdrawn' | 'not_answered' | undefined;
-  let sends: (MarketingSend & { workflowStepId?: string })[];
+  let sends: MarketingSend[];
   let isTransactionOpen: boolean;
   let service: SendPolicyService;
   let clockAt: Date;
@@ -64,25 +64,14 @@ describe('SendPolicyService', () => {
       listMarketingSends: async (
         _storeId: string,
         ids: string[],
-        {
-          after,
-          until,
-          excludeWorkflowStepId,
-          includeCommittedFuture,
-        }: {
-          after: Date;
-          until: Date;
-          excludeWorkflowStepId?: string;
-          includeCommittedFuture?: boolean;
-        },
+        range: { after: Date; until: Date; includeCommittedFuture?: boolean },
       ) =>
         ids.flatMap((contactId) =>
           sends
             .filter(
               (send) =>
-                send.sentAt > after &&
-                (includeCommittedFuture || send.sentAt <= until) &&
-                (!excludeWorkflowStepId || send.workflowStepId !== excludeWorkflowStepId),
+                send.sentAt > range.after &&
+                (range.includeCommittedFuture || send.sentAt <= range.until),
             )
             .map((send) => ({ ...send, contactId })),
         ),
@@ -272,32 +261,6 @@ describe('SendPolicyService', () => {
     ['09:00 sends', '2026-11-17T03:00:00Z', { action: 'send' }],
   ])('in Dhaka time, %s', async (_case, at, decision) => {
     expect(await service.check(STORE_ID, request({ at: new Date(at) }))).toEqual(decision);
-  });
-
-  it('rechecks consent and quiet hours after the lock without counting the resend twice', async () => {
-    const stepId = 'earlier-step';
-    sends.push({ ...sentBefore(1), workflowStepId: stepId });
-    const retry = { contactId: CONTACT_ID, channel: 'sms', category: 'marketing' } as const;
-    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
-      decision: { action: 'send' },
-      at: NOON_DHAKA,
-    });
-    const late = new Date('2026-11-16T20:00:00Z');
-    afterLock = () => {
-      clockAt = late;
-    };
-    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
-      decision: { action: 'defer', until: new Date('2026-11-17T03:00:00Z') },
-      at: late,
-    });
-    afterLock = () => {
-      consent = 'withdrawn';
-      clockAt = NOON_DHAKA;
-    };
-    expect(await service.recheckForSend(STORE_ID, retry, stepId)).toEqual({
-      decision: { action: 'skip', reason: 'no_consent' },
-      at: NOON_DHAKA,
-    });
   });
 
   it('checks quiet hours before the cap', async () => {

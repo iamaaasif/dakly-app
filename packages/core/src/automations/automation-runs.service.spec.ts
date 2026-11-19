@@ -99,8 +99,8 @@ class FakeRunsRepository {
     return this.tappedStepKeys;
   }
 
-  async findSendingStep(_storeId: string, _runId: string, stepKey: string) {
-    return this.steps.find((row) => row.stepKey === stepKey && row.outcome === 'sending');
+  async hasSendingStep(_storeId: string, _runId: string, stepKey: string) {
+    return this.steps.some((row) => row.stepKey === stepKey && row.outcome === 'sending');
   }
 
   async changeStep(_storeId: string, _runId: string, stepKey: string, change: RunStepChange) {

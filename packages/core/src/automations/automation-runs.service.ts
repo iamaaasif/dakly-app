@@ -120,7 +120,7 @@ export class AutomationRunsService {
     const step = run.graph.steps[claim.stepKey]!;
     const isSending =
       step.kind === 'send' &&
-      (await this.repository.findSendingStep(storeId, claim.runId, claim.stepKey));
+      (await this.repository.hasSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
     // A send handed to the provider by an earlier claim is not sent again; its run ends.
     if (isSending) return endWithUnknownOutcome(held ?? failed(NO_ANSWER, now));
