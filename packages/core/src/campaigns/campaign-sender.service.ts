@@ -230,7 +230,7 @@ export class CampaignSenderService {
 
   private async claimReceipt(
     storeId: string,
-    recipient: ClaimableRecipient & { providerMessageId: string; claimedAt: Date },
+    recipient: ClaimableRecipient & { status: 'sending'; providerMessageId: string },
     claimedAt: Date,
     campaign: LockedCampaign,
   ): Promise<Claim> {
