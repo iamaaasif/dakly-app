@@ -173,16 +173,16 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M9. Payments and billing
 
-| ID    | Task                                                                      | Status | Depends      | PR  | Notes                                                                                                                                                                                                                        |
-| ----- | ------------------------------------------------------------------------- | ------ | ------------ | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PAY-2 | Payment intents, events, verify job, reconciliation jobs                  | Todo   | DB-2         |     |                                                                                                                                                                                                                              |
-| PAY-3 | bKash driver (tokenized checkout)                                         | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox                                                                                                                                                                                                       |
-| PAY-4 | Nagad driver                                                              | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox                                                                                                                                                                                                       |
-| PAY-5 | City Bank card driver (hosted page)                                       | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox                                                                                                                                                                                                       |
-| PAY-6 | Shop advances: payment links from chats and orders, refunds               | Todo   | PAY-3, ORD-3 |     |                                                                                                                                                                                                                              |
-| PAY-7 | Subscriptions, renewal job, dunning, read-only guard                      | Todo   | PAY-3        |     | Q1 prices                                                                                                                                                                                                                    |
-| PAY-8 | Invoices (PDF, numbering per financial year), SMS packs, WhatsApp balance | Todo   | PAY-7        |     | Point the workflow balance-pause notice (in the app and by email) at the top-up screen, in place of `/settings`. A top-up resumes every balance pause even when it is too small; a released reservation does not resume one. |
-| PAY-9 | Web: plan and usage, payments and invoices, payment methods settings      | Todo   | PAY-7        |     |                                                                                                                                                                                                                              |
+| ID    | Task                                                                      | Status | Depends      | PR  | Notes                  |
+| ----- | ------------------------------------------------------------------------- | ------ | ------------ | --- | ---------------------- |
+| PAY-2 | Payment intents, events, verify job, reconciliation jobs                  | Todo   | DB-2         |     |                        |
+| PAY-3 | bKash driver (tokenized checkout)                                         | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
+| PAY-4 | Nagad driver                                                              | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
+| PAY-5 | City Bank card driver (hosted page)                                       | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
+| PAY-6 | Shop advances: payment links from chats and orders, refunds               | Todo   | PAY-3, ORD-3 |     |                        |
+| PAY-7 | Subscriptions, renewal job, dunning, read-only guard                      | Todo   | PAY-3        |     | Q1 prices              |
+| PAY-8 | Invoices (PDF, numbering per financial year), SMS packs, WhatsApp balance | Todo   | PAY-7        |     |                        |
+| PAY-9 | Web: plan and usage, payments and invoices, payment methods settings      | Todo   | PAY-7        |     |                        |
 
 ## M10. Content and social
 
@@ -201,7 +201,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ANA-1  | Glossary report functions and daily summary tables | In review | ORD-3, CUS-3  | #194, #207 | Daily summaries merged. Report reads in #207. Nightly reconciliation follows. |
 | ANA-2  | Attribution of orders to messages and posts        | Todo      | ANA-1, CAMP-3 |            |                                                                               |
 | ANA-3  | Web: Analytics tabs                                | Todo      | ANA-2         |            |                                                                               |
-| HOME-3 | Web: Dashboard cards                               | Todo      | ANA-1         |            |                                                                               |
+| HOME-3 | Web: Dashboard cards                               | In review | ANA-1         | #211       |                                                                               |
 | HOME-4 | Ask Dakly AI with read-only report tools           | Todo      | ANA-1, AI-2   |            |                                                                               |
 
 ## M12. Admin panel
