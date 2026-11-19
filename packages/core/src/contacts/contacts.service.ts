@@ -93,12 +93,12 @@ export class ContactsService {
     return toContactResponse(contact, access.seeFullPhone);
   }
 
-  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string> {
+  findOrCreateByIdentity(storeId: string, input: InboundIdentity) {
     return this.transaction.run(storeId, async () => {
       for (;;) {
         const existing = await this.identities.findInboundIdentity(storeId, input);
         if (existing) {
-          if (!existing.deletedAt) return existing.contactId;
+          if (!existing.deletedAt) return { id: existing.id, contactId: existing.contactId };
           await this.identities.retireInboundIdentity(storeId, existing.id);
         }
         const now = this.clock.now();
@@ -110,7 +110,7 @@ export class ContactsService {
           occurredAt: now.toISOString(),
           payload: { contactId: identity.contactId },
         });
-        return identity.contactId;
+        return identity;
       }
     });
   }
