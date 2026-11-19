@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import type {
   CreatePostInput,
@@ -39,12 +39,12 @@ function response(post: Post, targets: Target[]): PostResponse {
 @Injectable()
 export class SocialService {
   constructor(
-    private readonly repository: SocialRepository,
-    private readonly channels: ChannelConnectionsService,
-    private readonly team: TeamService,
-    private readonly transaction: StoreTransaction,
-    private readonly audit: AuditService,
-    private readonly clock: Clock,
+    @Inject(SocialRepository) private readonly repository: SocialRepository,
+    @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
+    @Inject(TeamService) private readonly team: TeamService,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   createDraft(

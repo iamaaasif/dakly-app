@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
   desc,
@@ -74,7 +74,7 @@ function groupTargets(rows: Awaited<ReturnType<typeof selectPostsWithTargets>>):
 
 @Injectable()
 export class SocialRepository {
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async findPost(storeId: string, postId: string) {
     const rows = await this.database.forStore(storeId, (tx) =>

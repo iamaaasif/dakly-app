@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Inject,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -36,7 +37,7 @@ const idempotencyKeyPipe = new ZodValidationPipe(postIdempotencyKeySchema);
 
 @Controller('posts')
 export class SocialController {
-  constructor(private readonly social: SocialService) {}
+  constructor(@Inject(SocialService) private readonly social: SocialService) {}
 
   @Post()
   @RequirePermission('social.edit')
