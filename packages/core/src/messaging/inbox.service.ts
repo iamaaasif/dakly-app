@@ -33,26 +33,13 @@ export class InboxService {
 
   async list(storeId: string, query: ConversationListQuery) {
     await this.requireChats(storeId);
-    const visible: ConversationRow[] = [];
-    let cursor = query.cursor;
-    while (visible.length <= query.limit) {
-      const rows = await this.repository.list(storeId, { ...query, cursor });
-      const last = rows.at(-1);
-      if (!last) break;
-      const active = await this.contacts.findRecipients(
-        storeId,
-        rows.map((row) => row.contactId),
-      );
-      const activeIds = new Set(active.map((contact) => contact.id));
-      visible.push(...rows.filter((row) => activeIds.has(row.contactId)));
-      if (rows.length <= query.limit) break;
-      cursor = conversationCursor(last);
-    }
-    const page = visible.slice(0, query.limit);
-    const last = page.at(-1);
+    const rows = await this.repository.list(storeId, query);
+    const items = rows.slice(0, query.limit).map(conversationResponse);
+    const last = items.at(-1);
     return {
-      items: page.map(conversationResponse),
-      nextCursor: last && visible.length > query.limit ? conversationCursor(last) : null,
+      items,
+      nextCursor:
+        last && rows.length > query.limit ? `${last.lastMessageAt ?? 'none'}_${last.id}` : null,
     };
   }
 
@@ -77,7 +64,7 @@ export class InboxService {
   }
 
   update(storeId: string, id: string, userId: string, input: UpdateConversationInput) {
-    return this.transaction.runLocked(storeId, async () => {
+    return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);
       const before = await this.find(storeId, id, 'no key update');
       if (input.assigneeUserId && !(await this.team.accessFor(storeId, input.assigneeUserId)))
@@ -95,7 +82,7 @@ export class InboxService {
   }
 
   setResponder(storeId: string, id: string, userId: string, responder: 'human' | 'ai') {
-    return this.transaction.runLocked(storeId, async () => {
+    return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);
       const before = await this.find(storeId, id, 'no key update');
       if (before.responder === responder && before.aiResumesAt === null)
@@ -155,10 +142,6 @@ export class InboxService {
       },
     });
   }
-}
-
-function conversationCursor({ lastMessageAt, id }: ConversationRow): `${string}_${string}` {
-  return `${lastMessageAt ?? 'none'}_${id}`;
 }
 
 function conversationResponse({

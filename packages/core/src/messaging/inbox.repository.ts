@@ -8,6 +8,7 @@ import type {
   conversationResponders,
 } from '@dakly/contracts/chats';
 import { conversations, messages } from '@dakly/db/schema/chats';
+import { contacts } from '@dakly/db/schema/contacts';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -69,9 +70,17 @@ export class InboxRepository {
       tx
         .select(fields)
         .from(conversations)
+        .innerJoin(
+          contacts,
+          and(
+            eq(contacts.storeId, conversations.storeId),
+            eq(contacts.id, conversations.contactId),
+          ),
+        )
         .where(
           and(
             eq(conversations.storeId, storeId),
+            isNull(contacts.deletedAt),
             beforeCursor,
             query.status ? eq(conversations.status, query.status) : undefined,
             query.responder ? eq(conversations.responder, query.responder) : undefined,
