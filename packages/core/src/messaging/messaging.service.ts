@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { chatChannels } from '@dakly/contracts/channels';
+import type { channelConnectionKinds, chatChannels } from '@dakly/contracts/channels';
 import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
@@ -18,20 +18,17 @@ import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { messagingError } from './messaging.errors';
 
 export type InboundMessageInput = {
-  connectionId: string;
+  kind: (typeof channelConnectionKinds)[number];
+  externalAccountId: string;
   externalSenderId: string;
   externalMessageId: string;
   content: string;
   sentAt: Date;
+  receivedAt: Date;
 };
 
 type ReceiveOutcome =
-  | 'stored'
-  | 'duplicate'
-  | 'unknown_account'
-  | 'deleted_contact'
-  | 'stale_delivery'
-  | 'invalid_timestamp';
+  'stored' | 'duplicate' | 'unknown_account' | 'stale_delivery' | 'invalid_timestamp';
 
 export type OutgoingMessage = {
   channel: 'sms';
@@ -60,37 +57,36 @@ export class MessagingService {
   ) {}
 
   receiveInboundMessage(storeId: string, input: InboundMessageInput): Promise<ReceiveOutcome> {
-    return this.transaction.runLocked(storeId, async () => {
-      const connection = await this.connections.findInbound(storeId, { id: input.connectionId });
+    return this.transaction.run(storeId, async () => {
+      const connection = await this.connections.findInbound(storeId, input);
       if (!connection) return 'unknown_account';
-      const now = this.clock.now();
-      const timestamp = input.sentAt.getTime();
-      // Meta and Dakly can disagree briefly at the boundary of a new delivery.
-      if (!Number.isFinite(timestamp) || timestamp > now.getTime() + MINUTE_MS)
-        return 'invalid_timestamp';
       // A former shop's message can carry a provider timestamp ahead of Dakly's clock.
-      if (timestamp <= connection.connectedAt.getTime() + MINUTE_MS) return 'stale_delivery';
-      return this.storeInbound(storeId, input, connection.channel, now);
+      if (
+        input.receivedAt < connection.connectedAt ||
+        input.sentAt.getTime() <= connection.connectedAt.getTime() + MINUTE_MS
+      )
+        return 'stale_delivery';
+      if (input.sentAt.getTime() > input.receivedAt.getTime() + MINUTE_MS)
+        return 'invalid_timestamp';
+      return this.storeInbound(storeId, input, connection, this.clock.now());
     });
   }
 
   private async storeInbound(
     storeId: string,
     input: InboundMessageInput,
-    channel: (typeof chatChannels)[number],
+    { id: connectionId, channel }: { id: string; channel: (typeof chatChannels)[number] },
     now: Date,
   ): Promise<ReceiveOutcome> {
-    const connectionId = input.connectionId;
     const externalIdentity = [connectionId, input.externalMessageId];
     const idempotencyKey = `inbound:${hashToken(JSON.stringify(externalIdentity)).toString('hex')}`;
-    if (await this.inbound.hasMessage(storeId, idempotencyKey)) return 'duplicate';
+    if (!(await this.inbound.claimMessageKey(storeId, idempotencyKey))) return 'duplicate';
 
     const contactId = await this.contactsService.findOrCreateByIdentity(storeId, {
       channel,
       connectionId,
       externalId: input.externalSenderId,
     });
-    if (!contactId) return 'deleted_contact';
     const { id: conversationId, started } = await this.inbound.getConversation(
       storeId,
       { channel, channelConnectionId: connectionId, contactId },

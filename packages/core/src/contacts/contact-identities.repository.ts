@@ -10,7 +10,6 @@ export type InboundIdentity = {
   connectionId: string;
   externalId: string;
   channel: typeof contactIdentities.$inferInsert.channel;
-  profile?: { name?: string };
 };
 
 @Injectable()
@@ -20,7 +19,11 @@ export class ContactIdentitiesRepository {
   async findInboundIdentity(storeId: string, { connectionId, externalId }: InboundIdentity) {
     const [identity] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ contactId: contactIdentities.contactId, deletedAt: contacts.deletedAt })
+        .select({
+          id: contactIdentities.id,
+          contactId: contactIdentities.contactId,
+          deletedAt: contacts.deletedAt,
+        })
         .from(contactIdentities)
         .innerJoin(
           contacts,
@@ -41,13 +44,22 @@ export class ContactIdentitiesRepository {
     return identity;
   }
 
-  createInboundIdentity(storeId: string, input: InboundIdentity, name: string | null, now: Date) {
+  async retireInboundIdentity(storeId: string, id: string) {
+    // Campaign history keeps its identity reference until the contact is purged.
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contactIdentities)
+        .set({ externalId: `deleted:${id}`, profileName: null })
+        .where(and(eq(contactIdentities.storeId, storeId), eq(contactIdentities.id, id))),
+    );
+  }
+
+  createInboundIdentity(storeId: string, input: InboundIdentity, now: Date) {
     return this.database.forStore(storeId, async (tx) => {
       const contactId = newId();
       await tx.insert(contacts).values({
         id: contactId,
         storeId,
-        name,
         source: input.channel,
         kind: 'chat_only',
         createdAt: now,
@@ -61,7 +73,6 @@ export class ContactIdentitiesRepository {
           channelConnectionId: input.connectionId,
           channel: input.channel,
           externalId: input.externalId,
-          profileName: name,
           createdAt: now,
         })
         .onConflictDoNothing({

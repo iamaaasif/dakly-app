@@ -43,6 +43,9 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   changed phone clears its WhatsApp verification, because a typed phone proves nothing.
 - `DELETE /contacts/:contactId` (`customers.edit`) soft deletes the contact: it is
   gone from the list and the profile, and its phone can be saved on another contact.
+  If the sender writes again, Dakly retires the old channel identity and makes a
+  new contact and conversation. The old identity remains linked to campaign
+  history until the purge.
 - A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`,
   on create and on edit. The error never names or links the other contact, because the
   member may not be allowed to see who has the number.

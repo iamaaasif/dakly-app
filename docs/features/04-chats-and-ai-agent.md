@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                                          |
 | Extension | Chats                                                                                                                |
 | Code      | `packages/core/src/{chats,ai-agent,ai,usage}/`, `packages/providers/src/llm/openai/`, `apps/web/src/features/chats/` |
-| Tasks     | CHAT-1 to CHAT-6, AI-1 to AI-8                                                                                       |
+| Tasks     | CHAT-1 to CHAT-7, AI-1 to AI-8                                                                                       |
 
 ## Purpose
 

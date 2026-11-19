@@ -17,8 +17,6 @@ type MetaConnection = Pick<
   | 'connectedByUserId'
 >;
 
-type InboundConnectionLookup = { id: string } | Pick<MetaConnection, 'kind' | 'externalAccountId'>;
-
 const connectionFields = {
   id: channelConnections.id,
   kind: channelConnections.kind,
@@ -71,14 +69,10 @@ export class ChannelConnectionsRepository {
     return result.rows[0]?.conflict ?? false;
   }
 
-  async findInbound(storeId: string, lookup: InboundConnectionLookup) {
-    const match =
-      'id' in lookup
-        ? eq(channelConnections.id, lookup.id)
-        : and(
-            eq(channelConnections.kind, lookup.kind),
-            eq(channelConnections.externalAccountId, lookup.externalAccountId),
-          );
+  async findInbound(
+    storeId: string,
+    { kind, externalAccountId }: Pick<MetaConnection, 'kind' | 'externalAccountId'>,
+  ) {
     const [connection] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -91,9 +85,12 @@ export class ChannelConnectionsRepository {
           and(
             eq(channelConnections.storeId, storeId),
             ne(channelConnections.status, 'disconnected'),
-            match,
+            eq(channelConnections.kind, kind),
+            eq(channelConnections.externalAccountId, externalAccountId),
           ),
-        ),
+        )
+        // Let disconnect wait for accepted deliveries without blocking other readers.
+        .for('share'),
     );
     return connection;
   }

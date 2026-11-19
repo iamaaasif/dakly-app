@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { MessagingModule } from './messaging.module';
 import { MessagingService } from './messaging.service';
@@ -66,8 +67,21 @@ async function connection(storeId: string, kind = 'facebook_page') {
   return id;
 }
 
-function inbound(connectionId: string, externalMessageId: string, content = 'দাম কত?') {
-  return { connectionId, externalMessageId, externalSenderId: 'sender-test', content, sentAt };
+function inbound(
+  externalAccountId: string,
+  externalMessageId: string,
+  content = 'দাম কত?',
+  kind: 'facebook_page' | 'whatsapp' = 'facebook_page',
+) {
+  return {
+    kind,
+    externalAccountId,
+    externalMessageId,
+    externalSenderId: 'sender-test',
+    content,
+    sentAt,
+    receivedAt: sentAt,
+  };
 }
 
 it('stores a duplicate only once and makes one contact and conversation for concurrent arrivals with Chats off', async () => {
@@ -157,7 +171,81 @@ it('preserves two Page identities for one contact and keeps the newest inbound w
   );
 });
 
-it('claims one identity even for concurrent callers outside the messaging store lock', async () => {
+it('makes a new contact and conversation when a deleted sender writes again', async () => {
+  const storeId = await store();
+  const account = await connection(storeId);
+  const contacts = app.get(ContactsService);
+  const messaging = app.get(MessagingService);
+  const first = inbound(account, 'before-delete');
+  await expect(messaging.receiveInboundMessage(storeId, first)).resolves.toBe('stored');
+  const {
+    rows: [original],
+  } = await admin.pool.query<{ id: string }>('select id from contacts where store_id = $1', [
+    storeId,
+  ]);
+  const {
+    rows: [originalIdentity],
+  } = await admin.pool.query<{ id: string }>(
+    "update contact_identities set profile_name = 'পুরনো নাম' where store_id = $1 returning id",
+    [storeId],
+  );
+  await contacts.remove(storeId, original!.id, { kind: 'system' });
+  await expect(messaging.receiveInboundMessage(storeId, first)).resolves.toBe('duplicate');
+  const outcomes = await Promise.all([
+    messaging.receiveInboundMessage(storeId, inbound(account, 'after-delete-1')),
+    messaging.receiveInboundMessage(storeId, inbound(account, 'after-delete-2')),
+  ]);
+  expect(outcomes).toEqual(['stored', 'stored']);
+
+  const { rows } = await admin.pool.query<{ id: string; deleted_at: Date | null }>(
+    'select id, deleted_at from contacts where store_id = $1',
+    [storeId],
+  );
+  expect(rows).toEqual(
+    expect.arrayContaining([
+      { id: original!.id, deleted_at: expect.any(Date) },
+      { id: expect.any(String), deleted_at: null },
+    ]),
+  );
+  expect(rows).toHaveLength(2);
+  const active = rows.find(({ deleted_at }) => deleted_at === null)!;
+  expect(await contacts.findRecipient(storeId, original!.id)).toBeUndefined();
+  expect(await contacts.findRecipient(storeId, active.id)).toMatchObject({ kind: 'chat_only' });
+  const { rows: identities } = await admin.pool.query(
+    'select id, external_id, profile_name, contact_id from contact_identities where store_id = $1',
+    [storeId],
+  );
+  expect(identities).toHaveLength(2);
+  expect(identities).toEqual(
+    expect.arrayContaining([
+      {
+        id: originalIdentity!.id,
+        external_id: `deleted:${originalIdentity!.id}`,
+        profile_name: null,
+        contact_id: original!.id,
+      },
+      {
+        id: expect.any(String),
+        external_id: first.externalSenderId,
+        profile_name: null,
+        contact_id: active.id,
+      },
+    ]),
+  );
+  const { rows: conversations } = await admin.pool.query(
+    'select contact_id, unread_count from conversations where store_id = $1',
+    [storeId],
+  );
+  expect(conversations).toHaveLength(2);
+  expect(conversations).toEqual(
+    expect.arrayContaining([
+      { contact_id: original!.id, unread_count: 1 },
+      { contact_id: active.id, unread_count: 2 },
+    ]),
+  );
+});
+
+it('claims one identity even for concurrent contact service callers', async () => {
   const storeId = await store();
   const connectionId = await connection(storeId);
   const contacts = app.get(ContactsService);
@@ -165,7 +253,6 @@ it('claims one identity even for concurrent callers outside the messaging store 
     connectionId,
     channel: 'messenger' as const,
     externalId: 'sender-test',
-    profile: { name: ' রিনা ' },
   };
   const ids = await Promise.all([
     contacts.findOrCreateByIdentity(storeId, identity),
@@ -177,7 +264,61 @@ it('claims one identity even for concurrent callers outside the messaging store 
     'select id, name, kind from contacts where store_id = $1',
     [storeId],
   );
-  expect(rows).toEqual([{ id: ids[0], name: 'রিনা', kind: 'chat_only' }]);
+  expect(rows).toEqual([{ id: ids[0], name: null, kind: 'chat_only' }]);
+});
+
+it('does not recreate a deleted contact when an in-flight message is retried', async () => {
+  const storeId = await store();
+  const account = await connection(storeId);
+  const contacts = app.get(ContactsService);
+  const messaging = app.get(MessagingService);
+  await messaging.receiveInboundMessage(storeId, inbound(account, 'first'));
+  const { rows: people } = await admin.pool.query<{ id: string }>(
+    'select id from contacts where store_id = $1',
+    [storeId],
+  );
+  const contactId = people[0]!.id;
+  const message = inbound(account, 'in-flight');
+  const saved = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = app.get(StoreTransaction).run(storeId, async () => {
+    await expect(messaging.receiveInboundMessage(storeId, message)).resolves.toBe('stored');
+    saved.resolve();
+    await release.promise;
+  });
+  let remove: Promise<void> | undefined;
+  let retry: ReturnType<MessagingService['receiveInboundMessage']> | undefined;
+  try {
+    await Promise.race([saved.promise, original]);
+    remove = contacts.remove(storeId, contactId, { kind: 'system' });
+    await vi.waitFor(async () => {
+      const { rows } = await admin.pool.query(
+        `select 1 from pg_stat_activity where datname = current_database()
+         and wait_event_type = 'Lock' and query like 'update "contacts"%'`,
+      );
+      expect(rows).toHaveLength(1);
+    });
+    retry = messaging.receiveInboundMessage(storeId, message);
+    await vi.waitFor(async () => {
+      const { rows } = await admin.pool.query(
+        `select 1 from pg_stat_activity where datname = current_database()
+         and wait_event_type = 'Lock'
+         and (query like '%from "contact_identities"%' or query like '%pg_advisory_xact_lock%')`,
+      );
+      expect(rows).toHaveLength(1);
+    });
+  } finally {
+    release.resolve();
+    await Promise.allSettled([original, remove, retry]);
+  }
+  await expect(original).resolves.toBeUndefined();
+  await expect(remove).resolves.toBeUndefined();
+  await expect(retry).resolves.toBe('duplicate');
+  const { rows } = await admin.pool.query(
+    'select id, deleted_at from contacts where store_id = $1',
+    [storeId],
+  );
+  expect(rows).toEqual([{ id: contactId, deleted_at: expect.any(Date) }]);
 });
 
 it.each([
@@ -185,13 +326,13 @@ it.each([
   ['facebook_page', 'messenger', 'বন্ধ'],
   ['whatsapp', 'whatsapp', 'STOP'],
   ['whatsapp', 'whatsapp', 'বন্ধ'],
-])(
+] as const)(
   'records a %s STOP withdrawal in the same transaction as the message',
   async (kind, channel, keyword) => {
     const storeId = await store();
     const connectionId = await connection(storeId, kind);
     const service = app.get(MessagingService);
-    const message = inbound(connectionId, 'stop-message', keyword);
+    const message = inbound(connectionId, 'stop-message', keyword, kind);
     expect(await service.receiveInboundMessage(storeId, message)).toBe('stored');
     expect(await service.receiveInboundMessage(storeId, message)).toBe('duplicate');
     const { rows } = await admin.pool.query(
@@ -211,12 +352,14 @@ it('accepts small provider clock skew and ignores an implausibly future delivery
     await service.receiveInboundMessage(storeId, {
       ...inbound(connectionId, 'minor-clock-offset'),
       sentAt: new Date(now + MINUTE_MS / 2),
+      receivedAt: new Date(now),
     }),
   ).toBe('stored');
   expect(
     await service.receiveInboundMessage(storeId, {
       ...inbound(connectionId, 'invalid-time'),
       sentAt: new Date(now + 100 * DAY_MS),
+      receivedAt: new Date(now),
     }),
   ).toBe('invalid_timestamp');
 });
