@@ -5,7 +5,7 @@ ALTER TABLE "campaign_recipients" ADD COLUMN "sms_credits" integer;--> statement
 ALTER TABLE "campaign_recipients" ADD COLUMN "send_attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "campaigns" ADD COLUMN "settlement_pending_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "campaigns" ADD COLUMN "settled_at" timestamp with time zone;--> statement-breakpoint
-CREATE INDEX "campaigns_send_work_idx" ON "campaigns" USING btree ("store_id","status","started_at","id") WHERE ("campaigns"."status" = 'sending' and "campaigns"."short_link_base" is not null) or ("campaigns"."status" = 'cancelled' and "campaigns"."settlement_pending_at" is not null);--> statement-breakpoint
+CREATE INDEX "campaigns_send_work_idx" ON "campaigns" USING btree ("store_id","started_at","id") WHERE ("campaigns"."status" = 'sending' and "campaigns"."short_link_base" is not null) or ("campaigns"."status" = 'cancelled' and "campaigns"."settlement_pending_at" is not null);--> statement-breakpoint
 -- Only IDs cross RLS. The worker reads and locks each campaign in its store.
 CREATE FUNCTION campaign_send_work_stores(as_of timestamptz, after_store uuid, store_limit integer)
   RETURNS TABLE(store_id uuid)

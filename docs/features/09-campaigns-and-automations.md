@@ -372,7 +372,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 
 ### Send gate (CAMP-9)
 
-`SendPolicyService.check(storeId, { contactId, channel, category, at })` in `packages/core/src/sending/` is the one place that decides consent, block, kind, window, quiet hours and the frequency cap (A1 in the [plan](../plans/campaigns-and-automations.md)). The sending job calls it inside the short transaction that moves a message to sending. It returns `send`, `defer` with the time quiet hours end, or `skip` with a recipient skip reason, and reads time only from `at`. CHN-2 adds the sending identity on the frozen connection. Checks run in this order and stop at the first that fails:
+`SendPolicyService.check(storeId, { contactId, channel, category, at })` in `packages/core/src/sending/` is the one place that decides consent, block, kind, window, quiet hours and the frequency cap (A1 in the [plan](../plans/campaigns-and-automations.md)). The campaign sender uses `checkForSend` inside the short transaction that moves a recipient to sending. It reads the clock after taking the contact lock. The gate returns `send`, `defer` with the time quiet hours end, or `skip` with a recipient skip reason, and uses the supplied decision time. CHN-2 adds the sending identity on the frozen connection. Checks run in this order and stop at the first that fails:
 
 1. Contact: a deleted contact is `no_address`; a blocked contact is `blocked` for every category.
 2. Marketing only: a Not a customer contact is `not_customer`; a contact past the plan's customer limit (ACC-R8) is `over_plan_limit`; a channel consent that is not `granted` in `contact_consent_current` is `no_consent`, so a withdrawal after approval skips.

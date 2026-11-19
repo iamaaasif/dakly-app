@@ -168,7 +168,7 @@ export const campaigns = pgTable(
       .on(table.storeId, table.scheduledFor, table.id)
       .where(sql`${table.status} = 'scheduled'`),
     index('campaigns_send_work_idx')
-      .on(table.storeId, table.status, table.startedAt, table.id)
+      .on(table.storeId, table.startedAt, table.id)
       .where(
         sql`(${table.status} = 'sending' and ${table.shortLinkBase} is not null) or (${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null)`,
       ),
@@ -229,6 +229,7 @@ export const campaignRecipients = pgTable(
     failedAt: timestamptz('failed_at'),
     // Credits of a message the provider took or may have taken.
     smsCredits: integer('sms_credits'),
+    // Cap retries while the provider outcome stays unresolved.
     sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },

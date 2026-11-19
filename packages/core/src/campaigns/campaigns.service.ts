@@ -257,6 +257,7 @@ export class CampaignsService {
   ): Promise<boolean> {
     const { unsettled, chargedCredits } = await this.repository.settlementTotals(storeId, id);
     if (unsettled > 0) return false;
+    if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
     const key = approvalKey(id, approvedAt);
     const reservation = await this.wallets.reservationFor(storeId, 'sms_credits', key);
     const quantity = cancelledAt ? Math.min(chargedCredits, reservation.quantity) : chargedCredits;
@@ -264,7 +265,6 @@ export class CampaignsService {
     if (quantity)
       await this.wallets.charge(storeId, { ...write, quantity, idempotencyKey: `${key}:charge` });
     else await this.wallets.release(storeId, { ...write, idempotencyKey: `${key}:release` });
-    if (cancelledAt) await this.repository.markSettled(storeId, id, cancelledAt);
     return true;
   }
 

@@ -295,12 +295,14 @@ export class CampaignsRepository {
   }
 
   async markSettled(storeId: string, campaignId: string, settledAt: Date) {
-    await this.database.inTransaction(storeId, (tx) =>
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
       tx
         .update(campaigns)
         .set({ settledAt, settlementPendingAt: null, updatedAt: sql`${campaigns.updatedAt}` })
-        .where(and(statusWhere(storeId, campaignId, 'cancelled'), isNull(campaigns.settledAt))),
+        .where(and(statusWhere(storeId, campaignId, 'cancelled'), isNull(campaigns.settledAt)))
+        .returning({ id: campaigns.id }),
     );
+    return row !== undefined;
   }
 
   async removeDraft(storeId: string, id: string): Promise<boolean> {

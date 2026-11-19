@@ -1,5 +1,5 @@
 {
-  "id": "2733a685-8ea8-4ba9-bca9-9501dbdb92f5",
+  "id": "dd759595-9daa-48df-8fec-5849ae5d654b",
   "prevId": "029fe3d8-93df-440c-9dc2-98b121ad788f",
   "version": "7",
   "dialect": "postgresql",
@@ -7790,12 +7790,6 @@
           "columns": [
             {
               "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

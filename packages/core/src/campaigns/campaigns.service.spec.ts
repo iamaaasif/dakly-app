@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
@@ -532,6 +532,17 @@ describe('CampaignsService', () => {
     expect(reserved).toEqual([2, 2]);
     expect(balance).toBe(998);
     expect(repository.recipients).toHaveLength(2);
+  });
+
+  it('keeps the reservation when the cancellation settlement is already stamped', async () => {
+    const campaign = await scheduled(6);
+    const stamp = vi.spyOn(repository, 'markSettled').mockResolvedValue(false);
+
+    await expect(service.cancel(STORE_ID, campaign.id, actor)).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+    expect(stamp).toHaveBeenCalledOnce();
+    expect(balance).toBe(998);
   });
 
   it('refuses to unschedule a campaign that is already sending', async () => {
