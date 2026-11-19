@@ -34,8 +34,75 @@ export const savedContentSchema = z
     'A model run requires AI provenance',
   );
 
+const postIdSchema = z.uuid().transform((id) => id.toLowerCase());
+const postText = z.string().refine((value) => !value.includes('\0'), 'Remove null characters');
+
 export const postTargetCaptionSchema = z.strictObject({
-  channelConnectionId: z.uuid(),
+  channelConnectionId: postIdSchema,
   // Null uses the common caption; empty text intentionally removes it for this account.
-  captionOverride: z.string().max(20_000).nullable(),
+  captionOverride: postText.max(20_000).nullable(),
 });
+
+const postDraftSchema = z.strictObject({
+  kind: z.enum(postKinds),
+  caption: postText.max(20_000).nullable(),
+  mediaFileIds: z.array(postIdSchema).max(10),
+  linkUrl: z
+    .url({ protocol: /^https?$/ })
+    .max(2_048)
+    .nullable(),
+  firstComment: postText.max(2_200).nullable(),
+  isAiWritten: z.boolean(),
+  targets: z.array(postTargetCaptionSchema).max(100),
+});
+
+function hasUniqueTargets(input: { targets?: z.infer<typeof postTargetCaptionSchema>[] }) {
+  const targets = input.targets ?? [];
+  return (
+    new Set(targets.map(({ channelConnectionId }) => channelConnectionId)).size === targets.length
+  );
+}
+
+const uniqueTargets = { path: ['targets'], message: 'Select each account once' };
+export const createPostSchema = postDraftSchema
+  .extend({
+    kind: postDraftSchema.shape.kind.default('post'),
+    caption: postDraftSchema.shape.caption.default(null),
+    mediaFileIds: postDraftSchema.shape.mediaFileIds.default([]),
+    linkUrl: postDraftSchema.shape.linkUrl.default(null),
+    firstComment: postDraftSchema.shape.firstComment.default(null),
+    isAiWritten: postDraftSchema.shape.isAiWritten.default(false),
+    targets: postDraftSchema.shape.targets.default([]),
+  })
+  .refine(hasUniqueTargets, uniqueTargets);
+
+export const editPostSchema = postDraftSchema.partial().refine(hasUniqueTargets, uniqueTargets);
+
+export const postCreateKeySchema = z.string().trim().min(1).max(200);
+export const postListQuerySchema = z.strictObject({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  drafts: z.enum(['mine', 'team']).optional(),
+});
+
+export type CreatePostInput = z.infer<typeof createPostSchema>;
+export type EditPostInput = z.infer<typeof editPostSchema>;
+export type PostListQuery = z.infer<typeof postListQuerySchema>;
+export type PostResponse = Omit<CreatePostInput, 'targets'> & {
+  id: string;
+  createdByUserId: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  targets: (z.infer<typeof postTargetCaptionSchema> & {
+    id: string;
+    status: (typeof postTargetStatuses)[number];
+    scheduledFor: string | null;
+    publishedAt: string | null;
+    externalPostId: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+  })[];
+};
+export type PostListResponse = { items: PostResponse[]; nextCursor: string | null };

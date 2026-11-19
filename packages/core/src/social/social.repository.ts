@@ -1,0 +1,221 @@
+import { Injectable } from '@nestjs/common';
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm';
+
+import type { CreatePostInput, PostListQuery } from '@dakly/contracts/social';
+import { files } from '@dakly/db/schema/platform';
+import { posts, postTargets } from '@dakly/db/schema/social';
+
+import { TenantDatabase } from '../platform/database/tenant-database';
+
+const postFields = {
+  id: posts.id,
+  kind: posts.kind,
+  caption: posts.caption,
+  mediaFileIds: posts.mediaFileIds,
+  linkUrl: posts.linkUrl,
+  firstComment: posts.firstComment,
+  isAiWritten: posts.isAiWritten,
+  createdByUserId: posts.createdByUserId,
+  approvedByUserId: posts.approvedByUserId,
+  approvedAt: posts.approvedAt,
+  createdAt: posts.createdAt,
+  updatedAt: posts.updatedAt,
+};
+
+const targetFields = {
+  id: postTargets.id,
+  postId: postTargets.postId,
+  channelConnectionId: postTargets.channelConnectionId,
+  captionOverride: postTargets.captionOverride,
+  status: postTargets.status,
+  scheduledFor: postTargets.scheduledFor,
+  publishedAt: postTargets.publishedAt,
+  externalPostId: postTargets.externalPostId,
+  errorCode: postTargets.errorCode,
+  errorMessage: postTargets.errorMessage,
+};
+
+type PostWrite = Omit<CreatePostInput, 'targets'> & { updatedAt: Date };
+
+@Injectable()
+export class SocialRepository {
+  constructor(private readonly database: TenantDatabase) {}
+
+  async findPost(storeId: string, postId: string) {
+    const [post] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select(postFields)
+        .from(posts)
+        .where(and(eq(posts.storeId, storeId), eq(posts.id, postId), isNull(posts.deletedAt))),
+    );
+    return post;
+  }
+
+  listPosts(storeId: string, query: PostListQuery, userId: string) {
+    return this.database.forStore(storeId, (tx) => {
+      const scheduled = tx
+        .select({ id: postTargets.id })
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            eq(postTargets.postId, posts.id),
+            isNotNull(postTargets.scheduledFor),
+          ),
+        );
+      const creator = eq(posts.createdByUserId, userId);
+      const visibility = {
+        mine: and(creator, notExists(scheduled)),
+        team: notExists(scheduled),
+        all: or(creator, exists(scheduled)),
+      };
+      const visible = and(eq(posts.storeId, storeId), visibility[query.drafts ?? 'all']);
+      const cursor = query.cursor
+        ? tx
+            .select({ createdAt: posts.createdAt, id: posts.id })
+            .from(posts)
+            .where(and(visible, eq(posts.id, query.cursor)))
+        : undefined;
+      return tx
+        .select(postFields)
+        .from(posts)
+        .where(
+          and(
+            visible,
+            isNull(posts.deletedAt),
+            cursor ? sql`(${posts.createdAt}, ${posts.id}) < ${cursor}` : undefined,
+          ),
+        )
+        .orderBy(desc(posts.createdAt), desc(posts.id))
+        .limit(query.limit + 1);
+    });
+  }
+
+  listTargets(storeId: string, postIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(targetFields)
+        .from(postTargets)
+        .where(and(eq(postTargets.storeId, storeId), inArray(postTargets.postId, postIds)))
+        .orderBy(postTargets.id),
+    );
+  }
+
+  listPostMedia(storeId: string, ids: string[], now: Date) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.storeId, storeId),
+            inArray(files.id, ids),
+            inArray(files.purpose, ['post_media', 'product_image']),
+            inArray(files.contentType, ['image/jpeg', 'image/png', 'image/webp']),
+            eq(files.status, 'ready'),
+            or(isNull(files.expiresAt), gt(files.expiresAt, now)),
+          ),
+        ),
+    );
+  }
+
+  async findCreateKey(storeId: string, userId: string, key: string) {
+    const [match] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: posts.id,
+          fingerprint: posts.createFingerprint,
+          deletedAt: posts.deletedAt,
+        })
+        .from(posts)
+        .where(
+          and(
+            eq(posts.storeId, storeId),
+            eq(posts.createdByUserId, userId),
+            eq(posts.createKey, key),
+          ),
+        ),
+    );
+    return match;
+  }
+
+  async insertPost(
+    storeId: string,
+    values: PostWrite & {
+      createdByUserId: string;
+      createdAt: Date;
+      createKey: string;
+      createFingerprint: string;
+    },
+  ) {
+    const [post] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(posts)
+        .values({ ...values, storeId })
+        .returning(postFields),
+    );
+    return post;
+  }
+
+  async updatePost(
+    storeId: string,
+    postId: string,
+    values: Partial<PostWrite> & {
+      approvedByUserId?: null;
+      approvedAt?: null;
+      deletedAt?: Date;
+    },
+  ) {
+    const [post] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(posts)
+        .set(values)
+        .where(and(eq(posts.storeId, storeId), eq(posts.id, postId)))
+        .returning(postFields),
+    );
+    return post;
+  }
+
+  async replaceTargets(
+    storeId: string,
+    postId: string,
+    {
+      targets,
+      status,
+      now,
+    }: {
+      targets: CreatePostInput['targets'];
+      status: 'draft' | 'waiting_approval';
+      now: Date;
+    },
+  ) {
+    await this.database.forStore(storeId, async (tx) => {
+      await tx
+        .delete(postTargets)
+        .where(and(eq(postTargets.storeId, storeId), eq(postTargets.postId, postId)));
+      if (targets.length)
+        await tx.insert(postTargets).values(
+          targets.map((target) => ({
+            ...target,
+            storeId,
+            postId,
+            status,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+    });
+  }
+}
