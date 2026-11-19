@@ -5,7 +5,7 @@ import type { AutomationStep } from '@dakly/contracts/automations/graph';
 import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
-import { LinksService, TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
+import { LinksService } from '../links/links.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -352,9 +352,7 @@ export class AutomationRunsService {
     times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
-    const standIn = isMarketing
-      ? this.links.optOutUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH))
-      : undefined;
+    const standIn = isMarketing ? this.links.sampleOptOutUrl() : undefined;
     try {
       await this.wallets.reserve(storeId, {
         wallet: 'sms_credits',
