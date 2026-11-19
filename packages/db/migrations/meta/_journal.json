@@ -330,6 +330,13 @@
       "when": 1795074536978,
       "tag": "0046_chat_return_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795078611375,
+      "tag": "0047_automation_send_retries",
+      "breakpoints": true
     }
   ]
 }
