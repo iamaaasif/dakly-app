@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
@@ -43,7 +44,7 @@ async function pair() {
 }
 async function success(
   shop: Shop,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   status: number,
   payload?: object,
@@ -2124,14 +2125,104 @@ fixture('POST /channel-connections/meta', async () => {
   await expectGrantConsumedAfterCacheFailure(a);
 });
 
-async function seedChannel(shop: Shop) {
+async function seedChannel(shop: Shop, kind: 'facebook_page' | 'instagram' = 'facebook_page') {
   const id = randomUUID();
   await f.admin.pool.query(
     `insert into channel_connections(id,store_id,kind,external_account_id,display_name,access_token_ciphertext,key_version)
-     values($1::uuid,$2,'facebook_page',$1::uuid::text,'রিনার দোকান',$3,1)`,
-    [id, shop.id, Buffer.from('encrypted-page-credential')],
+     values($1::uuid,$2,$4,$1::uuid::text,'রিনার দোকান',$3,1)`,
+    [id, shop.id, Buffer.from('encrypted-page-credential'), kind],
   );
   return id;
+}
+
+async function seedPostPhoto(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into files(id,store_id,purpose,object_key,content_type,size_bytes,status)
+     values($1::uuid,$2,'post_media',$1::text,'image/jpeg',1024,'ready')`,
+    [id, shop.id],
+  );
+  return id;
+}
+
+async function postDraft(shop: Shop, channelConnectionId: string) {
+  const result = await f.request(
+    shop.owner,
+    'POST',
+    '/posts',
+    { caption: 'নতুন পাঞ্জাবি', targets: [{ channelConnectionId, captionOverride: '' }] },
+    { 'idempotency-key': randomUUID() },
+  );
+  expect(result.statusCode, result.body).toBe(201);
+  expect(result.json().targets[0]).toMatchObject({ channelConnectionId, captionOverride: '' });
+  return result.json().id as string;
+}
+
+fixture('POST /posts', async () => {
+  const { a, b } = await pair();
+  const channel = await seedChannel(a);
+  const id = await postDraft(a, channel);
+  expect(await f.row('posts', id)).toMatchObject({ store_id: a.id });
+  for (const channelConnectionId of [channel, randomUUID()]) {
+    const result = await f.request(
+      b.owner,
+      'POST',
+      '/posts',
+      { caption: 'নতুন পাঞ্জাবি', targets: [{ channelConnectionId, captionOverride: null }] },
+      { 'idempotency-key': randomUUID() },
+    );
+    expect(result.statusCode, result.body).toBe(404);
+    expect(result.json().error.code).toBe('POST_CONNECTION_NOT_FOUND');
+  }
+});
+
+fixture('GET /posts', async () => {
+  const { a, b } = await pair();
+  for (const shop of [a, b]) {
+    const id = await postDraft(shop, await seedChannel(shop));
+    expect(
+      (await success(shop, 'GET', '/posts', 200)).json().items.map((row: { id: string }) => row.id),
+    ).toEqual([id]);
+  }
+  expect((await success(a, 'GET', '/posts', 200)).json().items).toHaveLength(1);
+  await f.admin.pool.query("update memberships set built_in_role = 'marketer' where id=$1", [
+    a.membership,
+  ]);
+  const privateList = await f.request(a.member, 'GET', '/posts');
+  expect(privateList.statusCode, privateList.body).toBe(200);
+  expect(privateList.json().items).toEqual([]);
+  expect((await f.request(a.member, 'GET', '/posts?drafts=team')).statusCode).toBe(403);
+  expect((await success(a, 'GET', '/posts?drafts=team', 200)).json().items).toHaveLength(1);
+});
+
+fixture('GET /posts/:postId', async () => {
+  const { a, b } = await pair();
+  const id = await postDraft(a, await seedChannel(a));
+  const own = await success(a, 'GET', `/posts/${id}`, 200);
+  expect(own.json()).toMatchObject({ id, targets: [{ captionOverride: '' }] });
+  await hidden(b, 'GET', (value) => `/posts/${value}`, id);
+});
+
+for (const method of ['PATCH', 'DELETE'] as const) {
+  fixture(`${method} /posts/:postId`, async () => {
+    const { a, b } = await pair();
+    const own = await postDraft(b, await seedChannel(b));
+    const foreign = await postDraft(a, await seedChannel(a));
+    const payload = method === 'PATCH' ? { caption: 'ঈদের পাঞ্জাবি' } : undefined;
+    await success(b, method, `/posts/${own}`, method === 'PATCH' ? 200 : 204, payload);
+    const changed = await f.row('posts', own);
+    if (method === 'PATCH') expect(changed.caption).toBe(payload?.caption);
+    else expect(changed.deleted_at).toBeTruthy();
+    const before = await f.row('posts', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/posts/${id}`,
+      foreign,
+      () => payload!,
+    );
+    expect(await f.row('posts', foreign)).toEqual(before);
+  });
 }
 
 fixture('GET /channel-connections', async () => {
@@ -2661,6 +2752,274 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
 });
 
+const brandProfile = {
+  voice: 'Warm',
+  audience: 'Parents',
+  preferredWords: ['made by hand'],
+  wordsToAvoid: ['cheap'],
+  callToActionBn: 'অর্ডার করুন',
+  callToActionEn: 'Send a message',
+};
+
+fixture('GET /brand-profile', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/brand-profile', 200, brandProfile);
+  expect((await success(a, 'GET', '/brand-profile', 200)).json()).toEqual(brandProfile);
+  expect((await success(b, 'GET', '/brand-profile', 200)).json()).toMatchObject({
+    voice: null,
+    wordsToAvoid: [],
+  });
+  expect((await f.request(a.member, 'GET', '/brand-profile')).statusCode).toBe(403);
+});
+
+fixture('PUT /brand-profile', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/brand-profile', 200, brandProfile);
+  await success(b, 'PUT', '/brand-profile', 200, brandProfile);
+  const change = { ...brandProfile, voice: 'Playful' };
+  expect((await success(b, 'PUT', '/brand-profile', 200, change)).json()).toEqual(change);
+  expect((await success(a, 'GET', '/brand-profile', 200)).json()).toEqual(brandProfile);
+  expect((await f.request(b.member, 'PUT', '/brand-profile', change)).statusCode).toBe(403);
+});
+
+const libraryPiece = { kind: 'sms', language: 'bn', body: 'অর্ডার করুন' };
+
+async function contentPiece(shop: Shop) {
+  const saved = await success(shop, 'POST', '/content-pieces', 201, libraryPiece);
+  expect(saved.json()).toMatchObject({ ...libraryPiece, createdByUserId: shop.owner.id });
+  return saved.json().id as string;
+}
+
+fixture('POST /content-pieces', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const copy = (sourcePieceId: string) => ({ ...libraryPiece, sourcePieceId });
+  await hidden(b, 'POST', () => '/content-pieces', id, copy);
+  expect((await f.request(a.member, 'POST', '/content-pieces', libraryPiece)).statusCode).toBe(403);
+});
+
+fixture('GET /content-pieces', async () => {
+  const { a, b } = await pair();
+  await contentPiece(a);
+  const firstId = await contentPiece(b);
+  const secondId = await contentPiece(b);
+  await f.admin.pool.query(
+    "update content_pieces set created_at='2026-01-01T00:00:00Z' where store_id=$1 and id=any($2::uuid[])",
+    [b.id, [firstId, secondId]],
+  );
+  const [older, newer] = [firstId, secondId].sort();
+  await success(b, 'POST', '/content-pieces', 201, { ...libraryPiece, language: 'en' });
+  await success(b, 'POST', '/content-pieces', 201, { ...libraryPiece, kind: 'whatsapp' });
+  const url = '/content-pieces?kind=sms&language=bn&limit=1';
+  const first = (await success(b, 'GET', url, 200)).json();
+  expect(first.items.map((piece: { id: string }) => piece.id)).toEqual([newer]);
+  expect(first.nextCursor).toEqual(expect.any(String));
+  await success(b, 'DELETE', `/content-pieces/${newer}`, 204);
+  const next = (await success(b, 'GET', `${url}&cursor=${first.nextCursor}`, 200)).json();
+  expect(next.items.map((piece: { id: string }) => piece.id)).toEqual([older]);
+  expect(next.nextCursor).toBeNull();
+  expect((await f.request(b.member, 'GET', url)).statusCode).toBe(403);
+});
+
+fixture('GET /content-pieces/:contentPieceId', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const url = (pieceId: string) => `/content-pieces/${pieceId}`;
+  expect((await success(a, 'GET', url(id), 200)).json()).toMatchObject(libraryPiece);
+  await hidden(b, 'GET', url, id);
+  expect((await f.request(a.member, 'GET', url(id))).statusCode).toBe(403);
+});
+
+fixture('PATCH /content-pieces/:contentPieceId', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const aiRunId = randomUUID();
+  await f.admin.pool.query(
+    'update content_pieces set is_ai_written=true, ai_run_id=$1 where store_id=$2 and id=$3',
+    [aiRunId, a.id, id],
+  );
+  const url = (pieceId: string) => `/content-pieces/${pieceId}`;
+  const change = { body: 'আজই অর্ডার করুন' };
+  await hidden(b, 'PATCH', url, id, () => change);
+  expect(
+    (await f.request(a.owner, 'PATCH', url(id), { ...change, isAiWritten: false })).statusCode,
+  ).toBe(400);
+  const edited = await success(a, 'PATCH', url(id), 200, change);
+  expect(edited.json()).toMatchObject({ ...change, isAiWritten: true, aiRunId });
+  const copied = await success(a, 'POST', '/content-pieces', 201, {
+    ...libraryPiece,
+    ...change,
+    sourcePieceId: id,
+  });
+  expect(copied.json()).toMatchObject({ ...change, isAiWritten: true, aiRunId });
+  expect(copied.json().id).not.toBe(id);
+  expect((await f.request(a.member, 'PATCH', url(id), change)).statusCode).toBe(403);
+});
+
+fixture('DELETE /content-pieces/:contentPieceId', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const url = (pieceId: string) => `/content-pieces/${pieceId}`;
+  await hidden(b, 'DELETE', url, id);
+  expect((await f.request(a.member, 'DELETE', url(id))).statusCode).toBe(403);
+  await success(a, 'DELETE', url(id), 204);
+  expect((await f.request(a.owner, 'GET', url(id))).statusCode).toBe(404);
+});
+
+type WriterResponse = {
+  kind: 'output';
+  output: unknown;
+  model: string;
+  responseId: string;
+  usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number };
+};
+
+function scriptWriter(write: (input: string) => string[]) {
+  const driver = app.get<{
+    respond(request: { input: string; model: string }): Promise<WriterResponse>;
+  }>(LLM_DRIVER);
+  return vi.spyOn(driver, 'respond').mockImplementation(async ({ input, model }) => ({
+    kind: 'output',
+    output: { options: write(input) },
+    model,
+    responseId: randomUUID(),
+    usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 },
+  }));
+}
+
+async function allowContentCredits(quantity = 20) {
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_content: quantity }),
+  ]);
+}
+
+async function contentCharges(shop: Shop) {
+  const result = await f.admin.pool.query<{ quantity: number }>(
+    "select quantity from usage_events where store_id=$1 and unit='ai_content' order by quantity desc",
+    [shop.id],
+  );
+  return result.rows.map(({ quantity }) => quantity);
+}
+
+fixture('POST /content-pieces/generate', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/brand-profile', 200, brandProfile);
+  const safe = ['Our cotton scarves are here', 'Pick your scarf', 'Find a scarf today'];
+  const unsafe = ['Cheap scarves', 'Pick your scarf', 'Find a scarf today'];
+  let modelOptions = unsafe;
+  const model = scriptWriter(() => modelOptions);
+  const url = '/content-pieces/generate';
+  const request = {
+    operation: 'generate',
+    kind: 'facebook_post',
+    topic: 'Cotton scarves',
+    tone: 'friendly',
+    language: 'en',
+  };
+  try {
+    const empty = await f.request(a.owner, 'POST', url, request);
+    expect(empty.statusCode, empty.body).toBe(409);
+    expect(model).not.toHaveBeenCalled();
+    await allowContentCredits(4);
+    const rejected = await f.request(a.owner, 'POST', url, request);
+    expect(rejected.statusCode, rejected.body).toBe(502);
+    expect(await contentCharges(a)).toEqual([]);
+    modelOptions = safe;
+    const generated = await success(a, 'POST', url, 200, request);
+    expect(generated.json().options).toEqual(safe);
+    const aiRunId = generated.json().aiRunId;
+    const savedInput = { kind: request.kind, language: request.language, body: safe[0], aiRunId };
+    const saved = await success(a, 'POST', '/content-pieces', 201, savedInput);
+    expect(saved.json()).toMatchObject({
+      body: safe[0],
+      isAiWritten: true,
+      aiRunId,
+    });
+    expect((await f.request(b.owner, 'POST', '/content-pieces', savedInput)).statusCode).toBe(400);
+    const {
+      rows: [failedRun],
+    } = await f.admin.pool.query<{ id: string }>(
+      "select id from ai_runs where store_id=$1 and purpose='content' and outcome='failed_check' limit 1",
+      [a.id],
+    );
+    expect(failedRun).toBeDefined();
+    const failedSave = await f.request(a.owner, 'POST', '/content-pieces', {
+      ...savedInput,
+      aiRunId: failedRun!.id,
+    });
+    expect(failedSave.json().error.code).toBe('CONTENT_DRAFT_INVALID');
+    const replyRunId = randomUUID();
+    await f.admin.pool.query(
+      `insert into ai_runs (id,store_id,purpose,tier,model,prompt_version,outcome)
+       values ($1,$2,'chat_reply','reply','test','chat-reply.v1','completed')`,
+      [replyRunId, a.id],
+    );
+    const replySave = await f.request(a.owner, 'POST', '/content-pieces', {
+      ...savedInput,
+      aiRunId: replyRunId,
+    });
+    expect(replySave.json().error.code).toBe('CONTENT_DRAFT_INVALID');
+    expect(await contentCharges(a)).toEqual([3]);
+    expect(await contentCharges(b)).toEqual([]);
+
+    model.mockClear();
+    const shortAllowance = await f.request(a.owner, 'POST', url, request);
+    expect(shortAllowance.json().error.code).toBe('CONTENT_CREDITS_UNAVAILABLE');
+    expect(model).not.toHaveBeenCalled();
+
+    modelOptions = ['Cotton scarves are here'];
+    const edited = await success(a, 'POST', url, 200, {
+      operation: 'shorten',
+      body: safe[0],
+      kind: request.kind,
+      tone: request.tone,
+      language: request.language,
+    });
+    expect(edited.json().options).toEqual(modelOptions);
+    expect(await contentCharges(a)).toEqual([3, 1]);
+    expect((await f.request(a.member, 'POST', url, request)).statusCode).toBe(403);
+  } finally {
+    model.mockRestore();
+  }
+});
+
+fixture('POST /products/:productId/write-description', async () => {
+  const { a, b } = await pair();
+  await allowContentCredits();
+  const create = async (shop: Shop, name: string) =>
+    (await success(shop, 'POST', '/products', 201, { name, pricePoisha: 125000 })).json()
+      .id as string;
+  const foreign = await create(a, 'Hidden silk scarf');
+  const own = await create(b, 'Cotton scarf');
+  const options = [
+    'A cotton scarf',
+    'A scarf for everyday wear',
+    'Finish your outfit with a scarf',
+  ];
+  const model = scriptWriter((input) => {
+    const { product: facts } = JSON.parse(input);
+    expect(facts).toEqual({
+      name: 'Cotton scarf',
+      category: null,
+      description: null,
+      variants: [{}],
+      pricePoisha: 125000,
+    });
+    return options;
+  });
+  const url = (id: string) => `/products/${id}/write-description`;
+  const request = { tone: 'friendly', language: 'en' };
+  try {
+    expect((await success(b, 'POST', url(own), 200, request)).json().options).toEqual(options);
+    await hidden(b, 'POST', url, foreign, () => request);
+    expect((await f.request(b.member, 'POST', url(own), request)).statusCode).toBe(403);
+    expect(await contentCharges(a)).toEqual([]);
+  } finally {
+    model.mockRestore();
+  }
+});
+
 let logs: ReturnType<typeof captureRequestLogs>;
 
 describe('every production shop route isolates its data', () => {
@@ -2668,6 +3027,7 @@ describe('every production shop route isolates its data', () => {
   beforeAll(async () => {
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
     vi.stubEnv('META_CHANNEL_DRIVER', 'fake');
+    vi.stubEnv('LLM_DRIVER', 'fake');
     vi.stubEnv('META_APP_SECRET', metaAppSecret);
     vi.stubEnv('META_WEBHOOK_VERIFY_TOKEN', undefined);
     vi.stubEnv('META_OAUTH_REDIRECT_URI', 'http://localhost:3000/integrations/meta');
@@ -2936,5 +3296,145 @@ describe('every production shop route isolates its data', () => {
       expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
+  it('requires one photo for a story draft even without any targets', async () => {
+    const shop = await f.shop();
+    const story = await f.request(
+      shop.owner,
+      'POST',
+      '/posts',
+      { kind: 'story' },
+      { 'idempotency-key': randomUUID() },
+    );
+    expect(story.statusCode, story.body).toBe(400);
+    expect(story.json().error.code).toBe('POST_PHOTOS_REQUIRED');
+  });
+
+  it('keeps post media in its own store on create and edit', async () => {
+    const { a, b } = await pair();
+    const foreignPhoto = await seedPostPhoto(a);
+    const ownPhoto = await seedPostPhoto(b);
+    const channelConnectionId = await seedChannel(b, 'instagram');
+    const targets = [{ channelConnectionId, captionOverride: null }];
+    const send = (mediaFileId: string) =>
+      f.request(
+        b.owner,
+        'POST',
+        '/posts',
+        { mediaFileIds: [mediaFileId], targets },
+        { 'idempotency-key': randomUUID() },
+      );
+    const own = await send(ownPhoto);
+    expect(own.statusCode, own.body).toBe(201);
+    const url = `/posts/${own.json().id}`;
+    for (const mediaFileId of [foreignPhoto, randomUUID()]) {
+      const rejectedCreate = await send(mediaFileId);
+      const rejectedEdit = await f.request(b.owner, 'PATCH', url, { mediaFileIds: [mediaFileId] });
+      for (const rejected of [rejectedCreate, rejectedEdit]) {
+        expect(rejected.statusCode, rejected.body).toBe(404);
+        expect(rejected.json().error.code).toBe('POST_MEDIA_NOT_FOUND');
+      }
+    }
+    expect((await success(b, 'GET', url, 200)).json().mediaFileIds).toEqual([ownPhoto]);
+  });
+
+  it('validates each Instagram caption and keeps AI provenance when edited', async () => {
+    const shop = await f.shop();
+    const channelConnectionId = await seedChannel(shop, 'instagram');
+    const common = {
+      caption: 'ক'.repeat(2_201),
+      mediaFileIds: [await seedPostPhoto(shop)],
+      isAiWritten: true,
+    };
+    const send = (captionOverride: string | null) =>
+      f.request(
+        shop.owner,
+        'POST',
+        '/posts',
+        { ...common, targets: [{ channelConnectionId, captionOverride }] },
+        { 'idempotency-key': randomUUID() },
+      );
+    const fallback = await send(null);
+    expect(fallback.statusCode, fallback.body).toBe(400);
+    expect(fallback.json().error.code).toBe('POST_CAPTION_TOO_LONG');
+    const hashtags = await send('#নতুন '.repeat(31));
+    expect(hashtags.statusCode, hashtags.body).toBe(400);
+    expect(hashtags.json().error.code).toBe('POST_TOO_MANY_HASHTAGS');
+    const created = await send('');
+    expect(created.statusCode, created.body).toBe(201);
+    const edited = await success(shop, 'PATCH', `/posts/${created.json().id}`, 200, {
+      caption: 'ঈদের পাঞ্জাবি',
+      isAiWritten: false,
+    });
+    expect(edited.json()).toMatchObject({
+      caption: 'ঈদের পাঞ্জাবি',
+      isAiWritten: true,
+      targets: [{ channelConnectionId, captionOverride: '', status: 'waiting_approval' }],
+    });
+  });
+
+  it('keeps another team member’s draft private and keeps team drafts read only', async () => {
+    const shop = await f.shop();
+    const id = await postDraft(shop, await seedChannel(shop));
+    const url = `/posts/${id}`;
+    await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+      shop.membership,
+    ]);
+    expect((await f.request(shop.member, 'GET', url)).statusCode).toBe(404);
+    expect((await f.request(shop.member, 'PATCH', url, { caption: 'ঈদ' })).statusCode).toBe(404);
+    await f.admin.pool.query("update memberships set built_in_role='admin' where id=$1", [
+      shop.membership,
+    ]);
+    const teamDrafts = await f.request(shop.member, 'GET', '/posts?drafts=team');
+    expect(teamDrafts.statusCode, teamDrafts.body).toBe(200);
+    expect(teamDrafts.json().items).toMatchObject([{ id }]);
+    expect((await f.request(shop.member, 'GET', url)).statusCode).toBe(200);
+    expect((await f.request(shop.member, 'DELETE', url)).statusCode).toBe(404);
+  });
+
+  it('pages drafts in order and ignores a cursor from another store', async () => {
+    const { a, b } = await pair();
+    const channel = await seedChannel(b);
+    const older = await postDraft(b, channel);
+    const newer = await postDraft(b, channel);
+    const foreign = await postDraft(a, await seedChannel(a));
+    const first = (await success(b, 'GET', '/posts?limit=1', 200)).json();
+    expect(first).toMatchObject({ items: [{ id: newer }], nextCursor: newer });
+    const next = await success(b, 'GET', `/posts?limit=1&cursor=${first.nextCursor}`, 200);
+    expect(next.json()).toMatchObject({ items: [{ id: older }], nextCursor: null });
+    expect((await success(b, 'GET', `/posts?cursor=${foreign}`, 200)).json().items).toEqual([]);
+  });
+
+  it('records one draft and audit entry for concurrent creates with the same key', async () => {
+    const shop = await f.shop();
+    const key = { 'idempotency-key': randomUUID() };
+    const send = (caption: string) => f.request(shop.owner, 'POST', '/posts', { caption }, key);
+    const [first, second] = await Promise.all([send('নতুন পাঞ্জাবি'), send('নতুন পাঞ্জাবি')]);
+    expect(first.statusCode, first.body).toBe(201);
+    expect(second.statusCode, second.body).toBe(201);
+    expect(second.json().id).toBe(first.json().id);
+    const repeated = await send('ঈদের পাঞ্জাবি');
+    expect(repeated.statusCode, repeated.body).toBe(201);
+    expect(repeated.json()).toMatchObject({ id: first.json().id, caption: 'নতুন পাঞ্জাবি' });
+    const audits = await f.admin.pool.query(
+      'select action from audit_log where store_id=$1 and entity_id=$2 order by created_at',
+      [shop.id, first.json().id],
+    );
+    expect(audits.rows).toEqual([{ action: 'post.created' }]);
+  });
+
+  it('keeps a draft create key private to its creator', async () => {
+    const shop = await f.shop();
+    await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+      shop.membership,
+    ]);
+    const key = { 'idempotency-key': randomUUID() };
+    const owner = await f.request(shop.owner, 'POST', '/posts', { caption: 'ঈদ' }, key);
+    const member = await f.request(shop.member, 'POST', '/posts', { caption: 'শাড়ি' }, key);
+    expect(owner.statusCode, owner.body).toBe(201);
+    expect(member.statusCode, member.body).toBe(201);
+    expect(member.json().id).not.toBe(owner.json().id);
+    expect(member.json().caption).toBe('শাড়ি');
+  });
+
   for (const [route, run] of fixtures) it(route, run);
 });
