@@ -264,12 +264,15 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     }
   });
 
-  it('claims a due run once even with two sweepers at the same moment', async () => {
+  it('claims a due run once even with two sweepers at the same moment', async ({ signal }) => {
     // More than one claim batch, so both sweepers loop over the same rows.
     const { runIds } = await dueRuns(wait, 150);
-    const [first, second] = [await worker(), await worker()];
+    signal.throwIfAborted();
+    const [first, second] = await Promise.all([worker(), worker()]);
+    signal.throwIfAborted();
 
     throwFirstRejection(await Promise.allSettled([first.sweep(), second.sweep()]));
+    signal.throwIfAborted();
     // A sweep takes at most 100 of one store's runs, so the rest come in the next sweep.
     await first.sweep();
 
@@ -852,7 +855,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         await blocker.query('commit');
         expect(await dispatched).toBeUndefined();
       } finally {
-        await blocker.query('rollback');
         blocker.release(true);
         await dispatched;
       }
@@ -1140,22 +1142,22 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         rows: [shop],
       } = await admin.pool.query('select settings from stores where id=$1', [storeId]);
       const writer = await admin.pool.connect();
-      const {
-        rows: [session],
-      } = await writer.query<{ pid: number }>('select pg_backend_pid() as pid');
       const setCap = (perChannelPerDay: number) =>
         writer.query('update stores set settings=$2 where id=$1', [
           storeId,
           { ...shop.settings, sending: { frequencyCap: { perChannelPerDay, perSevenDays: 3 } } },
         ]);
-      await setCap(2);
-      databaseNow = new Date();
-      clockNow = new Date(opensAt.getTime() + HOUR);
-      const firstAt = clockNow;
-      const agesOut = scenario === 'a prior send aging out during the gate';
-      const waits = scenario === 'a cap write that waits for the gate';
       let settingsWrite: ReturnType<typeof setCap> | undefined;
       try {
+        const {
+          rows: [session],
+        } = await writer.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await setCap(2);
+        databaseNow = new Date();
+        clockNow = new Date(opensAt.getTime() + HOUR);
+        const firstAt = clockNow;
+        const agesOut = scenario === 'a prior send aging out during the gate';
+        const waits = scenario === 'a cap write that waits for the gate';
         const {
           runIds: [other],
         } = await dueRuns(send('marketing'), 1, 'active', contact);
@@ -1768,25 +1770,24 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         const jobs = await runner.queue.getJobs(['waiting']);
         const job = jobs.find((job) => job.data.automationRunId === runId)!;
         const blocker = await admin.pool.connect();
-        const {
-          rows: [{ pid }],
-        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-        await blocker.query('begin');
-        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [
-          `wallet:${storeId}:sms_credits`,
-        ]);
-        let isHolding = true;
-        const pending = runner.runStep(job.data as StepJobData);
+        let pending: ReturnType<typeof runner.runStep> | undefined;
         try {
+          const {
+            rows: [{ pid }],
+          } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+          await blocker.query('begin');
+          await blocker.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [
+            `wallet:${storeId}:sms_credits`,
+          ]);
+          pending = runner.runStep(job.data as StepJobData);
+          void pending.catch(() => undefined);
           await waitForBlocker(pid);
           await remove();
           await blocker.query('commit');
-          isHolding = false;
           await pending;
         } finally {
-          if (isHolding) await blocker.query('rollback');
-          blocker.release();
-          await pending;
+          blocker.release(true);
+          await pending?.catch(() => undefined);
           await job.remove();
         }
       }
@@ -2058,29 +2059,28 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const jobs = await runner.queue.getJobs(['waiting']);
       const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
       const blocker = await admin.pool.connect();
-      const {
-        rows: [{ pid }],
-      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-      await blocker.query('begin');
-      await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
-        `send:${storeId}:${contact}`,
-      ]);
-      let isHoldingLock = true;
-      const pending = runner.runStep(job.data as StepJobData);
+      let pending: ReturnType<typeof runner.runStep> | undefined;
       try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          `send:${storeId}:${contact}`,
+        ]);
+        pending = runner.runStep(job.data as StepJobData);
+        void pending.catch(() => undefined);
         await waitForBlocker(pid);
         await admin.pool.query("update contacts set tags=array['ordered'] where id=$1", [contact]);
         await blocker.query('commit');
-        isHoldingLock = false;
         await pending;
         expect(sentFor(runId!)).toEqual([]);
         expect(await ledgerFor(runId!)).toEqual([]);
         expect(await sendStep(runId!)).toEqual([]);
         expect(await run(runId!)).toMatchObject({ status: 'exited', exit_reason: 'goal' });
       } finally {
-        if (isHoldingLock) await blocker.query('rollback');
-        blocker.release();
-        await pending;
+        blocker.release(true);
+        await pending?.catch(() => undefined);
         await job.remove();
       }
     });
@@ -2106,16 +2106,17 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         const jobs = await runner.queue.getJobs(['waiting']);
         const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
         const blocker = await admin.pool.connect();
-        const {
-          rows: [{ pid }],
-        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-        await blocker.query('begin');
-        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
-          `wallet:${storeId}:sms_credits`,
-        ]);
-        let isHoldingLock = true;
-        const pending = runner.runStep(job.data as StepJobData);
+        let pending: ReturnType<typeof runner.runStep> | undefined;
         try {
+          const {
+            rows: [{ pid }],
+          } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+          await blocker.query('begin');
+          await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+            `wallet:${storeId}:sms_credits`,
+          ]);
+          pending = runner.runStep(job.data as StepJobData);
+          void pending.catch(() => undefined);
           await waitForBlocker(pid);
           if (change === 'consent withdrawal')
             await runner.consents.record(
@@ -2139,7 +2140,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               Date.UTC(daytime.getUTCFullYear(), daytime.getUTCMonth(), daytime.getUTCDate(), 16),
             );
           await blocker.query('commit');
-          isHoldingLock = false;
           await pending;
           expect(sentFor(runId!)).toEqual([]);
           expect(await ledgerFor(runId!)).toEqual([]);
@@ -2157,9 +2157,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             );
           }
         } finally {
-          if (isHoldingLock) await blocker.query('rollback');
-          blocker.release();
-          await pending;
+          blocker.release(true);
+          await pending?.catch(() => undefined);
           await job.remove();
         }
       },
@@ -2170,9 +2169,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       async (change) => {
         const runner = await worker();
         const contacts = [await customer(true, runner), await customer(true, runner)];
-        const runs = await Promise.all(
-          contacts.map((contact) => dueRuns(send('marketing'), 1, 'active', contact)),
-        );
+        const runs = [];
+        for (const contact of contacts) {
+          runs.push(await dueRuns(send('marketing'), 1, 'active', contact));
+        }
         await runner.sweep();
         const jobs = await runner.queue.getJobs(['waiting']);
         const heldJobs = runs.map(({ runIds }) => {
@@ -2289,8 +2289,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           reclaimed = rows[0]?.reclaimed;
         } finally {
           // The sweep may find other due fixtures. Leave all claims as they were.
-          await sweep.query('rollback');
-          sweep.release();
+          sweep.release(true);
         }
         return sms.send(message);
       });
@@ -2650,8 +2649,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
           expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
         } finally {
-          await blocker.query('rollback');
-          blocker.release();
+          blocker.release(true);
           await retry?.catch(() => undefined);
           await setCredits(before);
         }
@@ -2693,8 +2691,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         ]);
         expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
       } finally {
-        await blocker.query('rollback');
-        blocker.release();
+        blocker.release(true);
         await resending?.catch(() => undefined);
       }
     });
@@ -2877,13 +2874,15 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
 
       const blocker = await admin.pool.connect();
-      const {
-        rows: [{ pid }],
-      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-      await blocker.query('begin');
-      await blocker.query('select id from automations where id=$1 for update', [automationId]);
-      const pending = creditThrough(runner, 'sms_credits', automationId);
+      let pending: ReturnType<typeof creditThrough> | undefined;
       try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query('select id from automations where id=$1 for update', [automationId]);
+        pending = creditThrough(runner, 'sms_credits', automationId);
+        void pending.catch(() => undefined);
         await waitForBlocker(pid);
         databaseNow = new Date(daytime.getTime() + 2 * MINUTE);
         await blocker.query('commit');
@@ -2894,9 +2893,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_credits' }),
         ]);
       } finally {
-        await blocker.query('rollback');
-        blocker.release();
-        await pending;
+        blocker.release(true);
+        await pending?.catch(() => undefined);
       }
     });
 
@@ -2953,9 +2951,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(await ledgerFor(id)).toEqual([]);
         expect(await run(id)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
       } finally {
-        await blocker.query('rollback');
-        blocker.release();
-        await pending;
+        blocker.release(true);
+        await pending?.catch(() => undefined);
       }
     });
 
@@ -2983,16 +2980,18 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
 
       const blocker = await admin.pool.connect();
-      const {
-        rows: [{ pid }],
-      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-      await blocker.query('begin');
-      await blocker.query(
-        'update automation_versions set is_stopped=true where id=(select version_id from automation_runs where id=$1)',
-        [id],
-      );
-      const pending = runDueStep(runner, id);
+      let pending: ReturnType<typeof runDueStep> | undefined;
       try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query(
+          'update automation_versions set is_stopped=true where id=(select version_id from automation_runs where id=$1)',
+          [id],
+        );
+        pending = runDueStep(runner, id);
+        void pending.catch(() => undefined);
         await waitForBlocker(pid);
         await blocker.query('commit');
         await pending;
@@ -3005,9 +3004,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         );
         expect(state.rows).toEqual([{ status: 'active', pause_reason: null }]);
       } finally {
-        await blocker.query('rollback');
-        blocker.release();
-        await pending;
+        blocker.release(true);
+        await pending?.catch(() => undefined);
       }
     });
 
