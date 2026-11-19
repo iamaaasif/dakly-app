@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
@@ -18,7 +19,12 @@ import { takaInputFromPoisha } from '@/lib/format-money';
 
 const resolveEdit = zodResolver(editOrderFormSchema);
 
-export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disabled: boolean }) {
+type EditOrderDialogProps = {
+  order: OrderDetail;
+  disabled: boolean;
+};
+
+export function EditOrderDialog({ order, disabled }: EditOrderDialogProps) {
   const [open, setOpen] = useState(false);
   const edit = useEditOrder();
   const form: UseFormReturn<EditOrderValues, undefined, EditOrderInput> = useForm({
@@ -32,22 +38,13 @@ export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disab
     defaultValues: orderDraft(order),
   });
 
-  const { dirtyFields, isDirty } = form.formState;
-  const submit = form.handleSubmit((input) => {
-    const body = editedFields(input, dirtyFields);
-    if (body.recipient?.isBuyer !== undefined && !body.recipient.phone) {
-      form.setError('recipient.phone', { message: 'Enter the new recipient’s phone.' });
-      return;
-    }
-    edit.mutate({ id: order.id, body }, { onSuccess: () => setOpen(false) });
-  });
-
   return (
     <SheetDialog
       title="Edit order"
       trigger={
-        <Button variant="secondary" disabled={disabled}>
-          Edit order
+        <Button variant="secondary" disabled={disabled} className="min-h-11 sm:min-h-10">
+          <Pencil size={13} aria-hidden="true" />
+          Edit
         </Button>
       }
       open={open}
@@ -59,26 +56,54 @@ export function EditOrderDialog({ order, disabled }: { order: OrderDetail; disab
       pending={edit.isPending}
       className="flex max-h-[calc(100dvh-1rem)] max-w-2xl flex-col"
     >
-      <FormProvider {...form}>
-        <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
-          <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={edit.isPending} className="space-y-3">
-              <OrderEditorFields order={order} />
-            </fieldset>
-          </div>
-          {edit.error && (
-            <p role="alert" className="text-danger">
-              {edit.error.message}
-            </p>
-          )}
-          <div className="flex shrink-0 justify-end">
-            <Button type="submit" loading={edit.isPending} disabled={!isDirty}>
-              Save order
-            </Button>
-          </div>
-        </form>
-      </FormProvider>
+      <EditOrderForm order={order} edit={edit} form={form} onSuccess={() => setOpen(false)} />
     </SheetDialog>
+  );
+}
+
+type EditOrderFormProps = {
+  order: OrderDetail;
+  edit: ReturnType<typeof useEditOrder>;
+  form: UseFormReturn<EditOrderValues, undefined, EditOrderInput>;
+  onSuccess: () => void;
+};
+
+function EditOrderForm({ order, edit, form, onSuccess }: EditOrderFormProps) {
+  const { dirtyFields, isDirty } = form.formState;
+  const submit = form.handleSubmit((input) => {
+    const body = editedFields(input, dirtyFields);
+    if (body.recipient?.isBuyer !== undefined && !body.recipient.phone) {
+      form.setError('recipient.phone', { message: 'Enter the new recipient’s phone.' });
+      return;
+    }
+    edit.mutate({ id: order.id, body }, { onSuccess });
+  });
+
+  return (
+    <FormProvider {...form}>
+      <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
+        <div className="min-h-0 overflow-y-auto px-0.5">
+          <fieldset disabled={edit.isPending} className="space-y-3">
+            <OrderEditorFields order={order} />
+          </fieldset>
+        </div>
+        {edit.error && (
+          <p role="alert" className="text-danger">
+            {edit.error.message}
+          </p>
+        )}
+        <div className="flex shrink-0 justify-end">
+          <Button
+            type="submit"
+            loading={edit.isPending}
+            disabled={!isDirty}
+            className="min-h-11 sm:min-h-10"
+          >
+            Save order
+          </Button>
+        </div>
+      </form>
+    </FormProvider>
   );
 }
 

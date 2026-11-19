@@ -95,7 +95,7 @@ function SheetHeader({ title, description }: Pick<SheetProps, 'title' | 'descrip
 
 type SheetDialogProps = {
   title: string;
-  trigger: ReactElement;
+  trigger?: ReactElement;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pending: boolean;
@@ -114,7 +114,7 @@ export function SheetDialog({
 }: SheetDialogProps) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
+      {trigger && <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>}
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-60 bg-inverse/50" />
         <DialogPrimitive.Content

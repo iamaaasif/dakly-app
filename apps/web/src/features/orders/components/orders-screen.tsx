@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type RefObject } from 'react';
 
-import { orderTabs, type OrderListQuery } from '@dakly/contracts/orders';
+import { orderTabs, type OrderListQuery, type OrderStage } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, useOrders } from '../api/orders';
@@ -37,21 +38,7 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           onSaved={(id) => router.replace(`/orders?${ordersSearch({ ...query, selected: id })}`)}
         />
         {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
-        <nav aria-label="Order stages" className="flex flex-wrap border-b border-border">
-          {orderTabs.map((stage) => (
-            <Link
-              key={stage}
-              href={`/orders?${ordersSearch({ ...query, stage, alert: undefined, cursor: undefined })}`}
-              aria-current={stage === query.stage ? 'page' : undefined}
-              className="flex min-h-10 shrink-0 items-center gap-1 border-b-2 border-transparent px-2 text-sm whitespace-nowrap hover:bg-surface-muted aria-[current=page]:border-action aria-[current=page]:font-semibold sm:min-h-12 sm:gap-2 sm:px-3 sm:text-base"
-            >
-              {orderStageLabels[stage]}
-              {orders.data ? (
-                <Badge className="tabular-nums">{orders.data.counts[stage]}</Badge>
-              ) : null}
-            </Link>
-          ))}
-        </nav>
+        <OrderStageNav query={query} counts={orders.data?.counts} />
         <OrderSearch query={query} />
         <OrderFilters query={query} />
         {orders.isPending ? <p role="status">Loading orders…</p> : null}
@@ -63,6 +50,7 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           />
         ) : null}
         {orders.data ? <OrdersList page={orders.data} query={query} /> : null}
+        <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
         {selected ? (
           <OrderDetailSheet
             key={selected}
@@ -78,29 +66,35 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
   );
 }
 
-function OrdersHeader({
-  heading,
-  onSaved,
-}: {
+type OrdersHeaderProps = {
   heading: RefObject<HTMLHeadingElement | null>;
   onSaved: (id: string) => void;
-}) {
+};
+
+function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
   const { data } = useSessionContext();
   const [open, setOpen] = useState(false);
   const canCreate = data?.currentStore?.canEditOrders;
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
+    <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1
           ref={heading}
           tabIndex={-1}
-          className="text-xl font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="text-2xl font-bold tracking-tight text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
           Orders
         </h1>
-        <p className="mt-1 text-text-muted">Follow each order from confirmation to delivery.</p>
+        <p className="mt-1 text-sm text-text-muted">
+          Every order from Messenger, Instagram, WhatsApp and calls — from first question to money
+          in hand.
+        </p>
       </div>
-      {canCreate && <Button onClick={() => setOpen(true)}>New order</Button>}
+      {canCreate && (
+        <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
+          <span aria-hidden="true">+ </span>New order
+        </Button>
+      )}
       {open && (
         <NewOrderDialog
           onClose={() => setOpen(false)}
@@ -120,5 +114,44 @@ function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | und
     heading
       ?.closest('main')
       ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${orderId}"]`) ?? heading
+  );
+}
+
+type OrderStageNavProps = {
+  query: OrderListQuery;
+  counts?: Record<OrderStage, number>;
+};
+
+function OrderStageNav({ query, counts }: OrderStageNavProps) {
+  return (
+    <nav
+      aria-label="Order stages"
+      className="flex overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {orderTabs.map((stage) => {
+        const isCurrent = stage === query.stage;
+        return (
+          <Link
+            key={stage}
+            href={`/orders?${ordersSearch({ ...query, stage, alert: undefined, cursor: undefined })}`}
+            aria-current={isCurrent ? 'page' : undefined}
+            className="flex min-h-11 shrink-0 items-center gap-1 border-b-2 border-transparent px-2 text-sm whitespace-nowrap hover:bg-surface-muted aria-[current=page]:border-action aria-[current=page]:font-semibold aria-[current=page]:text-text sm:min-h-12 sm:gap-2 sm:px-3 sm:text-base"
+          >
+            {orderStageLabels[stage]}
+            {counts ? (
+              <Badge
+                variant="neutral"
+                className={cn(
+                  'ml-1 rounded-full px-2 py-0.5 text-xs tabular-nums',
+                  isCurrent && 'bg-primary font-semibold text-on-primary',
+                )}
+              >
+                {counts[stage]}
+              </Badge>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
