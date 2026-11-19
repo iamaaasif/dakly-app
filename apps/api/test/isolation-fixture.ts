@@ -218,6 +218,7 @@ export class IsolationFixture {
       'messages',
       'conversations',
       'posts',
+      'contact_identities',
       'channel_connections',
       'contacts',
       'stock_movements',

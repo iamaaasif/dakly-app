@@ -51,10 +51,11 @@ export class ContactsController {
   @RequirePermission('customers.view')
   list(
     @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
     @CurrentAccess() access: StoreAccess,
     @Query(new ZodValidationPipe(contactListQuerySchema)) query: ContactListQuery,
   ): Promise<ContactListResponse> {
-    return this.contactsService.list(storeId, query, access);
+    return this.contactsService.list(storeId, query, access, { kind: 'user', userId });
   }
 
   @Get(':contactId')

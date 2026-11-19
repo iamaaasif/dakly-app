@@ -93,11 +93,10 @@ export class MessagingService {
     now: Date,
   ): Promise<ReceiveOutcome> {
     const { id: connectionId, channel, idempotencyKey } = delivery;
-    const contactId = await this.contactsService.findOrCreateByIdentity(storeId, {
-      channel,
-      connectionId,
-      externalId: input.externalSenderId,
-    });
+    const { id: senderIdentityId, contactId } = await this.contactsService.findOrCreateByIdentity(
+      storeId,
+      { channel, connectionId, externalId: input.externalSenderId },
+    );
     const conversation = await this.inbound.getConversation(
       storeId,
       { channel, channelConnectionId: connectionId, contactId },
@@ -108,6 +107,7 @@ export class MessagingService {
       {
         conversationId: conversation.id,
         idempotencyKey,
+        senderIdentityId,
         externalMessageId: input.externalMessageId,
         text: input.content,
         sentAt: input.sentAt,
