@@ -55,7 +55,7 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
   );
 }
 
-const newCampaignSubtitle = 'AI campaign builder · nothing is sent until you approve';
+const newCampaignSubtitle = 'Nothing is sent until you approve.';
 
 function NewCampaignBuilder() {
   const [step, setStep] = useState<'start' | 'details' | 'channels'>('start');

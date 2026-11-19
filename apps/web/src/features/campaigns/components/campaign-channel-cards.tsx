@@ -1,4 +1,4 @@
-import { Instagram, MessageCircle, MessageSquare, MessagesSquare } from 'lucide-react';
+import { Facebook, Instagram, MessageCircle, MessageSquare } from 'lucide-react';
 
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
@@ -16,7 +16,7 @@ const channels = [
   },
   {
     name: 'Facebook Messenger',
-    icon: MessagesSquare,
+    icon: Facebook,
     description:
       'Send a photo, message and buttons to people who opted in to updates from your Page.',
   },
