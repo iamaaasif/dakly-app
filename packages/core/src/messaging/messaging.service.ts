@@ -15,7 +15,7 @@ export type OutgoingMessage = {
   body: string;
   operationKey: string;
   destination?: string | null;
-  beforeSubmit?: (destination: string) => Promise<void>;
+  beforeSubmit?: (destination: string | null) => Promise<string | void>;
 };
 
 export type PreparedSmsSender = { storeId: string; name: string | undefined };
@@ -38,11 +38,13 @@ export class MessagingService {
     preparedSender?: PreparedSmsSender,
   ): Promise<SentMessage> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
-    const { to, parts, sender } = await this.prepareSend(storeId, message, preparedSender);
-    if (message.beforeSubmit) await message.beforeSubmit(to);
+    const { to, sender } = await this.prepareSend(storeId, message, preparedSender);
+    const body = (await message.beforeSubmit?.(to)) ?? message.body;
+    if (!to) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
+    const parts = countSmsParts(body);
     const { providerMessageId } = await this.smsService.send({
       to,
-      text: message.body,
+      text: body,
       idempotencyKey: message.operationKey,
       sender,
     });
@@ -73,8 +75,7 @@ export class MessagingService {
       const phone = await this.contactsService.getPhoneForSend(storeId, message.contactId);
       if (message.destination !== undefined && phone !== message.destination)
         throw messagingError('MESSAGING_DESTINATION_CHANGED');
-      if (!phone) throw messagingError('MESSAGING_CONTACT_HAS_NO_PHONE');
-      return { to: phone, parts: countSmsParts(message.body), sender };
+      return { to: phone, sender };
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw messagingError('MESSAGING_PREPARATION_FAILED');

@@ -110,7 +110,7 @@ function workflowSends(tx: Transaction, window: SendWindow) {
         isNotNull(automationRunSteps.channel),
         excludeWorkflowStepId ? ne(automationRunSteps.id, excludeWorkflowStepId) : undefined,
         eq(automationRunSteps.category, 'marketing'),
-        inArray(automationRunSteps.outcome, ['preparing', 'sending', 'sent', 'unconfirmed']),
+        inArray(automationRunSteps.outcome, ['sending', 'sent', 'unconfirmed']),
       ),
     );
 }

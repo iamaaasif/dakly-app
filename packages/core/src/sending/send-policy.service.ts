@@ -92,20 +92,6 @@ export class SendPolicyService {
     return { decision, at };
   }
 
-  async checkRecipientForSubmission(
-    storeId: string,
-    request: Omit<SendRequest, 'at'>,
-    preparedPhone: string,
-  ) {
-    if (!(await this.lockForDispatch(storeId, request.contactId)))
-      return { skipReason: 'no_address' as const, phoneMatches: false };
-    const skipReason = await this.recipientReason(storeId, request);
-    const phone = skipReason
-      ? null
-      : await this.contacts.getPhoneForSend(storeId, request.contactId);
-    return { skipReason, phoneMatches: phone === preparedPhone };
-  }
-
   private async lockForDispatch(storeId: string, contactId: string) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, contactId);
@@ -137,7 +123,7 @@ export class SendPolicyService {
 
   private async recipientReason(
     storeId: string,
-    request: Omit<SendRequest, 'at'>,
+    request: SendRequest,
   ): Promise<SkipReason | undefined> {
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =

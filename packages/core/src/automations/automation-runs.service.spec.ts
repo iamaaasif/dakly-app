@@ -128,6 +128,7 @@ describe('AutomationRunsService', () => {
   let sent: OutgoingMessage[];
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
+  let preparationError: Error | undefined;
   let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
   let submissionChecked: boolean;
   let submissionCommitted: boolean;
@@ -175,6 +176,7 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     sent = [];
     providerError = undefined;
+    preparationError = undefined;
     schedulerUnavailable = undefined;
     submissionChecked = false;
     submissionCommitted = false;
@@ -235,15 +237,10 @@ describe('AutomationRunsService', () => {
     };
     const sendPolicy = {
       check: async () => decision,
-      checkRecipientForSubmission: async () => {
+      checkForSend: async () => {
         submissionChecked = true;
-        return { phoneMatches: true };
+        return { decision, destination: '01711000201', at: clockNow };
       },
-      checkForSend: async () => ({
-        decision,
-        destination: '01711000201',
-        at: clockNow,
-      }),
     };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
@@ -253,11 +250,12 @@ describe('AutomationRunsService', () => {
         return { storeId, name: undefined };
       },
       send: async (_storeId: string, message: OutgoingMessage) => {
+        if (preparationError) throw preparationError;
         const { beforeSubmit, ...submitted } = message;
-        await beforeSubmit?.('01711000201');
+        const body = (await beforeSubmit?.('01711000201')) ?? submitted.body;
         if (providerError) throw providerError;
         if (!sent.some((earlier) => earlier.operationKey === submitted.operationKey))
-          sent.push(submitted);
+          sent.push({ ...submitted, body, destination: '01711000201' });
         return { providerMessageId: 'sms-1', parts: 1, credits: 1 };
       },
     };
@@ -502,11 +500,11 @@ describe('AutomationRunsService', () => {
 
       await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
       expect(sent).toEqual([]);
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'preparing' })]);
-      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+      expect(repository.steps).toEqual([]);
+      expect(ledger).toEqual([]);
     });
 
-    it('releases a recovered reservation when the provider boundary was never reached', async () => {
+    it('lets the replacement worker reserve once after an authorization failure', async () => {
       schedulerUnavailable = 'during submission';
       await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
       schedulerUnavailable = undefined;
@@ -516,9 +514,9 @@ describe('AutomationRunsService', () => {
         { runId: RUN_ID, stepKey: 'first', claimedAt: now },
         { kind: 'system' },
       );
-      expect(sent).toEqual([]);
-      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'failed' })]);
-      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'release']);
+      expect(sent).toHaveLength(1);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
     });
 
     it('sends a transactional SMS without an opt-out link', async () => {
@@ -617,7 +615,7 @@ describe('AutomationRunsService', () => {
     });
 
     it('fails the run with the message of a refused send', async () => {
-      providerError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+      preparationError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
         status: 422,
         message: 'This contact has no phone number',
       });
@@ -644,16 +642,26 @@ describe('AutomationRunsService', () => {
       expect(balance).toBe(9);
     });
 
-    it('releases the credits when the send fails', async () => {
-      providerError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+    it('releases the credits when the provider definitively refuses', async () => {
+      providerError = new AppError('SMS_SEND_REFUSED', {
         status: 422,
-        message: 'This contact has no phone number',
+        message: 'The provider refused the message',
       });
 
       await start(send);
 
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'release']);
       expect(balance).toBe(10);
+    });
+
+    it('retains an authorized send when an unexpected AppError follows authorization', async () => {
+      providerError = new AppError('MESSAGING_PREPARATION_FAILED', {
+        status: 500,
+        message: 'The provider response was incomplete',
+      });
+      await start(send);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
 
     // The first try may have reached the provider, so these end the step and keep the credits.

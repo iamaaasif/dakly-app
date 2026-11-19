@@ -49,7 +49,7 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
-  | { outcome: 'late' }
+  | { outcome: 'late' | 'destination_changed' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: SendDecision }
   | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
@@ -89,6 +89,35 @@ export function scheduleWait(
     },
     step: { stepKey, kind: 'wait', outcome: 'scheduled' },
   };
+}
+
+export function firstSendStop(
+  claim: RunClaim,
+  step: SendStep,
+  started: Exclude<GateResult, 'not_live' | { body: string }>,
+): StepResult | undefined {
+  const at = claim.claimedAt;
+  const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
+  if ('exitReason' in started) return { ...exited(started.exitReason, at), claim };
+  if ('outcome' in started) {
+    if (started.outcome === 'late')
+      return { ...goOn(step.next, at), claim, step: { ...row, outcome: 'late' } };
+    return {
+      ...failed("The contact's phone changed during SMS preparation", at),
+      claim,
+      step: { ...row, outcome: 'failed' },
+    };
+  }
+  const { decision } = started;
+  if (decision.action === 'defer')
+    return { claim, run: { status: 'waiting', wakeAt: decision.until } };
+  if (decision.action === 'skip')
+    return {
+      ...ifNotReachable(step, at),
+      claim,
+      step: { ...row, outcome: 'skipped', skipReason: decision.reason },
+    };
+  return undefined;
 }
 
 export function messageBody(step: SendStep, optOutUrl: string | undefined): string {

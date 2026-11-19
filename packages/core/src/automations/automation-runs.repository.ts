@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 
 import type {
   AutomationExitReason,
@@ -67,11 +67,10 @@ export type RunStepChange = {
   sentAt?: Date;
   firstTriedAt?: Date;
 };
-// A send that has reserved credits and has not settled.
+// A send handed to the provider whose outcome is not known yet.
 export type SendingStep = {
   id: string;
   firstTriedAt: Date | null;
-  preparing?: true;
   latestDispatchAt: Date | null;
   optOutUrl: string | null;
   destinationHash: string | null;
@@ -167,7 +166,6 @@ export class AutomationRunsRepository {
       const query = tx
         .select({
           id: automationRunSteps.id,
-          outcome: automationRunSteps.outcome,
           firstTriedAt: automationRunSteps.firstTriedAt,
           sentAt: automationRunSteps.sentAt,
           optOutUrl: automationRunSteps.optOutUrl,
@@ -179,7 +177,7 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.storeId, storeId),
             eq(automationRunSteps.runId, runId),
             eq(automationRunSteps.stepKey, stepKey),
-            inArray(automationRunSteps.outcome, ['preparing', 'sending']),
+            eq(automationRunSteps.outcome, 'sending'),
           ),
         )
         .limit(1);
@@ -188,8 +186,7 @@ export class AutomationRunsRepository {
     if (!row) return undefined;
     return {
       id: row.id,
-      ...(row.outcome === 'preparing' && { preparing: true as const }),
-      firstTriedAt: row.outcome === 'preparing' ? null : (row.firstTriedAt ?? row.sentAt),
+      firstTriedAt: row.firstTriedAt ?? row.sentAt,
       latestDispatchAt: row.sentAt ?? row.firstTriedAt,
       optOutUrl: row.optOutUrl,
       destinationHash: row.destinationHash,
@@ -233,13 +230,19 @@ export class AutomationRunsRepository {
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read
   // in the same statement so a pause or stop that committed first is seen.
-  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+  async moveRunIfLive(
+    storeId: string,
+    claim: RunClaim,
+    change: RunChange,
+    gate?: 'dispatch',
+  ): Promise<boolean> {
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
-        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped}
+      ${gate ? sql`for share of ${automations}, ${automationVersions}` : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

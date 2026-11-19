@@ -14,10 +14,10 @@ import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-drive
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
-import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { AppError } from '../platform/errors/app-error';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
@@ -837,16 +837,18 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(sentFor(runId!)).toEqual([]);
         if (reclaim) {
           expect(await run(runId!)).toMatchObject({ status: 'running' });
-          expect(await sendStep(runId!)).toEqual([
-            expect.objectContaining({ outcome: 'preparing' }),
-          ]);
-          expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-        } else {
-          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+          expect(await sendStep(runId!)).toEqual([]);
+          expect(await ledgerFor(runId!)).toEqual([]);
+          await runDueStep(runner, runId!);
+          expect(sentFor(runId!)).toHaveLength(1);
           expect(await ledgerFor(runId!)).toEqual([
             { kind: 'reserve', delta: -1 },
             { kind: 'release', delta: 1 },
+            { kind: 'charge', delta: -1 },
           ]);
+        } else {
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+          expect(await ledgerFor(runId!)).toEqual([]);
         }
       },
     );
@@ -890,37 +892,93 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           expect(await sendStep(runId!)).toEqual([
             expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_consent' }),
           ]);
-          expect(await ledgerFor(runId!)).toEqual([
-            { kind: 'reserve', delta: -1 },
-            { kind: 'release', delta: 1 },
-          ]);
+          expect(await ledgerFor(runId!)).toEqual([]);
         }
       },
     );
 
-    it('releases credits and leaves the cap free when the final contact lookup fails', async () => {
+    it.each(['quiet hours start', 'the workflow pauses'] as const)(
+      'does not reserve or send when %s during message preparation',
+      async (change) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        clockNow = new Date(opensAt.getTime() + 11 * HOUR);
+        const {
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            if (change === 'the workflow pauses')
+              await admin.pool.query("update automations set status='paused' where id=$1", [
+                automationId,
+              ]);
+            else clockNow = new Date(opensAt.getTime() + 12 * HOUR);
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({
+          status: 'waiting',
+          current_step_key: 'first',
+        });
+        if (change === 'quiet hours start')
+          expect((await run(runId!)).wake_at).toEqual(
+            new Date(opensAt.getTime() + 24 * HOUR - 30 * MINUTE),
+          );
+      },
+    );
+
+    it('releases credits and leaves the cap free when the provider refuses delivery', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
-      const hook = vi
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(
+        new AppError('SMS_SEND_REFUSED', {
+          status: 422,
+          message: 'The provider refused the message',
+        }),
+      );
+      await runDueStep(runner, first.runIds[0]!);
+      expect(sentFor(first.runIds[0]!)).toEqual([]);
+      expect(await sendStep(first.runIds[0]!)).toEqual([
+        expect.objectContaining({ outcome: 'failed' }),
+      ]);
+      expect(await ledgerFor(first.runIds[0]!)).toEqual([
+        { kind: 'reserve', delta: -1 },
+        { kind: 'release', delta: 1 },
+      ]);
+      const second = await dueRuns(send('marketing'), 1, 'active', contact);
+      await runDueStep(runner, second.runIds[0]!);
+      expect(sentFor(second.runIds[0]!)).toHaveLength(1);
+    });
+
+    it('never reserves when the preparation phone lookup fails', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const phone = vi
         .spyOn(ContactsService.prototype, 'getPhoneForSend')
         .mockRejectedValueOnce(new Error('database unavailable'));
       try {
-        await runDueStep(runner, first.runIds[0]!);
-        expect(sentFor(first.runIds[0]!)).toEqual([]);
-        expect(await sendStep(first.runIds[0]!)).toEqual([
-          expect.objectContaining({ outcome: 'failed' }),
-        ]);
-        expect(await ledgerFor(first.runIds[0]!)).toEqual([
-          { kind: 'reserve', delta: -1 },
-          { kind: 'release', delta: 1 },
-        ]);
-        const second = await dueRuns(send('marketing'), 1, 'active', contact);
-        await runDueStep(runner, second.runIds[0]!);
-        expect(sentFor(second.runIds[0]!)).toHaveLength(1);
+        await runDueStep(runner, runId!);
       } finally {
-        hook.mockRestore();
+        phone.mockRestore();
       }
+      expect(sentFor(runId!)).toEqual([]);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(await ledgerFor(runId!)).toEqual([]);
     });
 
     it.each([
@@ -1502,56 +1560,39 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await ledgerFor(first.runIds[0]!)).toEqual([{ kind: 'reserve', delta: -1 }]);
     });
 
-    it.each(['after eligibility read', 'after gate commit'] as const)(
-      'refuses a replaced phone %s without sending or keeping credits',
-      async (when) => {
-        const runner = await worker();
-        const contact = await customer(true, runner);
+    it('refuses a replaced phone while the final dispatch gate waits', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const blocker = await admin.pool.connect();
+      await blocker.query('begin');
+      try {
         const {
-          runIds: [runId],
-        } = await dueRuns(send('marketing'), 1, 'active', contact);
-        const replacePhone = () =>
-          admin.pool.query('update contacts set phone=$1 where id=$2', [
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('select id from stores where id=$1 for no key update', [storeId]);
+        const running = runDueStep(runner, runId!);
+        try {
+          await waitForBlocker(pid);
+          await blocker.query('update contacts set phone=$1 where id=$2', [
             `0191100${String(++phone).padStart(4, '0')}`,
             contact,
           ]);
-        const originalRead = ContactsService.prototype.findRecipients;
-        const originalSend = MessagingService.prototype.send;
-        let replacement: ReturnType<typeof replacePhone> | undefined;
-        const readHook =
-          when === 'after eligibility read'
-            ? vi
-                .spyOn(ContactsService.prototype, 'findRecipients')
-                .mockImplementationOnce(async function (store, ids) {
-                  const rows = await originalRead.call(this, store, ids);
-                  replacement = replacePhone().then(async (result) => {
-                    expect(await sendStep(runId!)).toHaveLength(1);
-                    return result;
-                  });
-                  return rows;
-                })
-            : undefined;
-        const hook = vi
-          .spyOn(MessagingService.prototype, 'send')
-          .mockImplementationOnce(async function (store, message, prepared) {
-            if (when === 'after gate commit') replacement = replacePhone();
-            await replacement;
-            return originalSend.call(this, store, message, prepared);
-          });
-        try {
-          await runDueStep(runner, runId!);
-          expect(sentFor(runId!)).toEqual([]);
-          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
-          expect(await ledgerFor(runId!)).toEqual([
-            { kind: 'reserve', delta: -1 },
-            { kind: 'release', delta: 1 },
-          ]);
+          await blocker.query('commit');
+          await running;
         } finally {
-          hook.mockRestore();
-          readHook?.mockRestore();
+          await blocker.query('rollback');
+          await running.catch(() => undefined);
         }
-      },
-    );
+      } finally {
+        blocker.release();
+      }
+      expect(sentFor(runId!)).toEqual([]);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+      expect(await ledgerFor(runId!)).toEqual([]);
+    });
 
     it('enforces the cap when an earlier-started run reaches the lock second', async () => {
       const runner = await worker();

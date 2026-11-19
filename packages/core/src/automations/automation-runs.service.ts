@@ -27,10 +27,10 @@ import {
   exited,
   type GateResult,
   failed,
+  firstSendStop,
   goOn,
   holdOrEnd,
   holdsClaim,
-  ifNotReachable,
   isLateSend,
   messageBody,
   noCredits,
@@ -44,11 +44,7 @@ import {
   type StepResult,
   workflowDestinationHash,
 } from './automation-step-rules';
-import {
-  authorizeFirstSubmission,
-  recoverUnsubmittedSms,
-  WorkflowSubmissionStopped,
-} from './automation-submit-guard';
+import { WORKFLOW_LEASE_MS, WorkflowSubmissionStopped } from './automation-submit-guard';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
@@ -124,7 +120,6 @@ export class AutomationRunsService {
       step.kind === 'send' &&
       (await this.repository.findSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
-    if (isSending && isSending.preparing) return recoverUnsubmittedSms(held, now);
     // A send handed to the provider by an earlier claim is not sent again; its run ends.
     if (isSending) return endWithUnknownOutcome(held ?? failed(NO_ANSWER, now));
     if (held) return held;
@@ -185,7 +180,7 @@ export class AutomationRunsService {
         // Versions published before the guard still fail instead of sending without review.
         if (step.reviewBeforeSending)
           return failed('Review before sending is not available yet', now);
-        return this.startSend(claim, step, facts, now);
+        return this.startSend(claim, step, facts);
       case 'action':
         return runAction(stepKey, step, now);
       case 'exit':
@@ -199,90 +194,85 @@ export class AutomationRunsService {
   // The gate decides, the opt-out link is made and the send row is written in one short
   // transaction that also renews the claim, so the frequency cap counts this send before another
   // check for the contact can run.
-  private async startSend(
+  private async startSend(claim: RunClaim, step: SendStep, facts: RunFacts) {
+    const checkedAt = await this.repository.schedulerTime(facts.storeId);
+    if (!step.channels.includes('sms') || isLateSend(facts.wakeAt, checkedAt)) {
+      const planned = await this.authorizeFirstSend(claim, step, facts, null);
+      return 'stop' in planned ? planned.stop : undefined;
+    }
+    return this.deliver(claim, step, facts);
+  }
+
+  private async authorizeFirstSend(
     claim: RunClaim,
     step: SendStep,
     facts: RunFacts,
-    now: Date,
-  ): Promise<StepResult | undefined> {
-    const { storeId, contactId } = facts;
-    const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
+    preparedPhone: string | null,
+  ) {
+    const { storeId } = facts;
     let renewed = claim;
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
-      const renewal = { status: 'running', claimedAt: now } as const;
-      if (!(await this.repository.moveRunIfLive(storeId, claim, renewal))) return 'not_live';
-      renewed = { ...claim, claimedAt: now };
+      // Settings edits can take the store row before touching a contact.
+      if (step.category === 'marketing') await this.stores.sendingSettings(storeId, 'share');
+      const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
+      if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return 'not_live';
       const checkedAt = await this.repository.schedulerTime(storeId);
       const result = isLateSend(facts.wakeAt, checkedAt)
         ? ({ outcome: 'late' } as const)
-        : await this.gateSend(renewed, step, facts);
+        : await this.gateSend(claim, step, facts, preparedPhone);
       const claimedAt = await this.repository.schedulerTime(storeId);
       // Renew on the sweep's Postgres clock so it cannot retake a fresh lease early.
-      await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
+      await this.repository.moveRun(storeId, claim, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
       return result;
     });
-    // A pause, stop or archive, or another claim, came first: nothing was reserved.
     if (started === 'not_live') {
       const run = await this.repository.findRun(storeId, claim.runId);
-      if (!run || !holdsClaim(run, renewed)) return undefined;
+      if (!run || !holdsClaim(run, renewed)) return { stop: undefined };
       const held = holdOrEnd(run, await this.repository.schedulerTime(storeId));
-      return held && { ...held, claim: renewed };
+      return { stop: held && { ...held, claim: renewed } };
     }
-    const gatedAt = renewed.claimedAt;
-    if ('exitReason' in started) return { ...exited(started.exitReason, gatedAt), claim: renewed };
-    if ('outcome' in started)
-      return { ...goOn(step.next, gatedAt), claim: renewed, step: { ...row, outcome: 'late' } };
-    const { decision } = started;
-    if ('body' in started)
-      return this.deliver(
-        {
-          storeId,
-          claim: renewed,
-          contactId,
-          step,
-          body: started.body,
-          preparedSender: facts.preparedSender,
-          destination: started.destination,
-        },
-        started.at,
-        facts.wakeAt,
-      );
-    if (decision.action === 'defer')
-      return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
-    if (decision.action === 'skip')
-      return {
-        ...ifNotReachable(step, gatedAt),
-        claim: renewed,
-        step: { ...row, outcome: 'skipped', skipReason: decision.reason },
-      };
-    return undefined;
+    if ('body' in started) return { claim: renewed, body: started.body, at: started.at };
+    return { stop: firstSendStop(renewed, step, started) };
   }
 
-  private async gateSend(claim: RunClaim, step: SendStep, facts: RunFacts): Promise<GateResult> {
+  private async gateSend(
+    claim: RunClaim,
+    step: SendStep,
+    facts: RunFacts,
+    preparedPhone: string | null,
+  ): Promise<GateResult> {
     const { storeId, contactId } = facts;
     // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
     if (!step.channels.includes('sms'))
       return { decision: { action: 'skip', reason: 'window_closed' } };
     await this.wallets.lockForReservation(storeId, 'sms_credits');
+    if (
+      !(await this.repository.moveRunIfLive(
+        storeId,
+        claim,
+        { status: 'running', claimedAt: claim.claimedAt },
+        'dispatch',
+      ))
+    )
+      return 'not_live';
     const { decision, destination, at } = await this.sendPolicy.checkForSend(storeId, {
       contactId,
       channel: 'sms',
       category: step.category,
     });
-    if (
-      !(await this.repository.moveRunIfLive(storeId, claim, {
-        status: 'running',
-        claimedAt: claim.claimedAt,
-      }))
-    )
-      return 'not_live';
     const exitReason = await this.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
-    const checkedAt = await this.repository.schedulerTime(storeId);
-    if (isLateSend(facts.wakeAt, checkedAt)) return { outcome: 'late' };
+    const firstTriedAt = await this.repository.schedulerTime(storeId);
+    if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
     if (decision.action !== 'send') return { decision };
-    const body = await this.writeSend({ storeId, claim, contactId, step, destination }, at);
+    if (destination !== preparedPhone) return { outcome: 'destination_changed' };
+    if (firstTriedAt.getTime() - claim.claimedAt.getTime() >= WORKFLOW_LEASE_MS)
+      return { decision: { action: 'defer', until: firstTriedAt } };
+    const body = await this.writeSend(
+      { storeId, claim, contactId, step, destination },
+      { sentAt: at, firstTriedAt },
+    );
     if (body === undefined) return { decision: noCredits };
     return { decision, body, destination, at };
   }
@@ -302,7 +292,7 @@ export class AutomationRunsService {
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
     { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body'>,
-    sentAt: Date,
+    times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing
@@ -333,9 +323,9 @@ export class AutomationRunsService {
       kind: 'send',
       category: step.category,
       id,
-      outcome: 'preparing',
+      outcome: 'sending',
       channel: 'sms',
-      sentAt,
+      ...times,
       destinationHash: workflowDestinationHash(storeId, destination),
       optOutUrl: optOut?.url,
     });
@@ -361,63 +351,72 @@ export class AutomationRunsService {
       });
   }
 
-  // Called with no transaction open, with the operation key the provider deduplicates on.
   private async deliver(
-    { storeId, claim, contactId, step, body, destination, preparedSender }: Delivery,
-    sentAt: Date,
-    wakeAt: Date | null,
+    claim: RunClaim,
+    step: SendStep,
+    facts: RunFacts,
   ): Promise<StepResult | undefined> {
-    let submittingClaim: RunClaim | undefined;
+    const { storeId, contactId, preparedSender } = facts;
+    let authorized: { claim: RunClaim; at: Date } | undefined;
     const message = {
       channel: 'sms',
       contactId,
-      body,
+      body: step.message.text,
       operationKey: operationKey(claim),
-      destination,
-      beforeSubmit: async (preparedPhone: string) => {
-        submittingClaim = await authorizeFirstSubmission({
-          transaction: this.transaction,
-          repository: this.repository,
-          facts: { storeId, wakeAt },
-          claim,
-          step,
-          checkRecipient: () =>
-            this.sendPolicy.checkRecipientForSubmission(
-              storeId,
-              { contactId, channel: 'sms', category: step.category },
-              preparedPhone,
-            ),
-        });
+      beforeSubmit: async (phone: string | null) => {
+        const planned = await this.authorizeFirstSend(claim, step, facts, phone);
+        if ('stop' in planned) throw new WorkflowSubmissionStopped(planned.stop);
+        authorized = planned;
+        return planned.body;
       },
     } as const;
     const attempt = await this.messaging.send(storeId, message, preparedSender).then(
       (receipt) => ({ receipt }),
       (error: unknown) => ({ error }),
     );
-    if ('error' in attempt) {
-      if (attempt.error instanceof WorkflowSubmissionStopped) return attempt.error.result;
-      if (!submittingClaim && !(attempt.error instanceof AppError)) throw attempt.error;
+    if ('error' in attempt && attempt.error instanceof WorkflowSubmissionStopped)
+      return attempt.error.result;
+    if (!authorized) {
+      if ('error' in attempt && attempt.error instanceof AppError)
+        return this.failedSmsPreparation(claim, step, facts, attempt.error);
+      if ('error' in attempt) throw attempt.error;
+      throw new Error('The SMS provider was called without workflow authorization');
     }
-    const currentClaim = submittingClaim ?? claim;
     const now = await this.repository.schedulerTime(storeId);
     if ('receipt' in attempt) {
       const { providerMessageId, credits } = attempt.receipt;
       return {
         ...goOn(step.next, now),
-        claim: currentClaim,
-        stepChange: { outcome: 'sent', providerMessageId, sentAt },
+        claim: authorized.claim,
+        stepChange: { outcome: 'sent', providerMessageId, sentAt: authorized.at },
         credits: { settle: 'charge', quantity: credits },
       };
     }
-    // MessagingService refuses before it calls the provider, so a refusal never reached it.
-    if (attempt.error instanceof AppError)
+    if (attempt.error instanceof AppError && attempt.error.code === 'SMS_SEND_REFUSED')
       return {
         ...failed(attempt.error.message, now),
-        claim: currentClaim,
+        claim: authorized.claim,
         stepChange: { outcome: 'failed' },
         credits: { settle: 'release' },
       };
-    // Any other error may come after the provider took the message.
-    return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim: currentClaim });
+    return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim: authorized.claim });
+  }
+
+  private async failedSmsPreparation(
+    claim: RunClaim,
+    step: SendStep,
+    facts: RunFacts,
+    error: AppError,
+  ): Promise<StepResult | undefined> {
+    if (error.code === 'CONTACT_NOT_FOUND') {
+      const planned = await this.authorizeFirstSend(claim, step, facts, null);
+      return 'stop' in planned ? planned.stop : undefined;
+    }
+    const at = await this.repository.schedulerTime(facts.storeId);
+    return {
+      ...failed(error.message, at),
+      claim,
+      step: { stepKey: claim.stepKey, kind: 'send', category: step.category, outcome: 'failed' },
+    };
   }
 }

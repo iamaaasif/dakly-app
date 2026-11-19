@@ -10,7 +10,7 @@ import {
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { SMS_DRIVER } from './sms-provider';
 
-// Well under the five-minute workflow lease; a timeout is an unknown outcome the caller resends.
+// Well under the five-minute workflow lease; a timeout leaves the caller with an unknown outcome.
 const SEND_TIMEOUT_MS = 30_000;
 
 @Injectable()
