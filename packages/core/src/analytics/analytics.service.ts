@@ -19,9 +19,12 @@ export class AnalyticsService {
 
   async periods(storeId: string, days: 7 | 30 | 90) {
     const timeZone = await this.stores.timeZone(storeId);
-    const through = reportDay(this.clock.now(), timeZone);
+    const now = this.clock.now();
+    const through = reportDay(now, timeZone);
     const from = shiftReportDay(through, 1 - days);
     return {
+      asOf: now.toISOString(),
+      timeZone,
       current: { from, through },
       previous: {
         from: shiftReportDay(from, -days),
