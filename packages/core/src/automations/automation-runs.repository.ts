@@ -17,6 +17,7 @@ import {
 } from '@dakly/db/schema/automations';
 
 import { DATABASE } from '../platform/database/database.tokens';
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
 
@@ -162,7 +163,7 @@ export class AutomationRunsRepository {
     stepKey: string,
     lock = false,
   ): Promise<SendingStep | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) => {
+    const read = (tx: Transaction) => {
       const query = tx
         .select({
           id: automationRunSteps.id,
@@ -182,7 +183,10 @@ export class AutomationRunsRepository {
         )
         .limit(1);
       return lock ? query.for('update') : query;
-    });
+    };
+    const [row] = lock
+      ? await this.database.inTransaction(storeId, read)
+      : await this.database.forStore(storeId, read);
     if (!row) return undefined;
     return {
       id: row.id,

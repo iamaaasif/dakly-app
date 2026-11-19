@@ -124,6 +124,12 @@ describe('automation filters without RLS assistance', () => {
     } as const;
     await runs.insertStep(f.a, runId, contactId, sending);
     expect(await runs.findSendingStep(f.b, runId, 'offer')).toBeUndefined();
+    await expect(runs.findSendingStep(f.a, runId, 'offer', true)).rejects.toThrow(
+      'requires an active store transaction',
+    );
+    expect(
+      await f.tenant.forStore(f.a, () => runs.findSendingStep(f.a, runId, 'offer', true)),
+    ).toMatchObject({ id: stepId });
     await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
     expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
       id: stepId,
