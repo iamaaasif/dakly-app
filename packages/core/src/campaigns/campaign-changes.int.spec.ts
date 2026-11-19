@@ -247,6 +247,57 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     expect(await recipientRows(id)).toEqual([]);
   });
 
+  it.each([1, 4])(
+    'keeps a confirmed send with %i credits and caps its charge at the reservation',
+    async (credits) => {
+      const before = await wallets.balance(storeId, 'sms_credits');
+      const id = await approvedCampaign(null);
+      const [recipient] = await recipientRows(id);
+      await admin.pool.query(
+        "update campaign_recipients set status='sent', sms_credits=$3 where campaign_id=$1 and contact_id=$2",
+        [id, recipient.contact_id, credits],
+      );
+
+      expect((await service.cancel(storeId, id, actor)).status).toBe('cancelled');
+
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - Math.min(credits, 3));
+      expect((await recipientRows(id)).map((row) => row.status)).toEqual([
+        'sent',
+        'cancelled',
+        'cancelled',
+      ]);
+      const { rows } = await admin.pool.query(
+        'select settled_at, settlement_pending_at from campaigns where id=$1',
+        [id],
+      );
+      expect(rows).toEqual([{ settled_at: clockNow, settlement_pending_at: null }]);
+    },
+  );
+
+  it('keeps a claimed send and its reservation for the settlement sweep', async () => {
+    const id = await approvedCampaign(null);
+    const balance = await wallets.balance(storeId, 'sms_credits');
+    const [recipient] = await recipientRows(id);
+    await admin.pool.query(
+      "update campaign_recipients set status='sending' where campaign_id=$1 and contact_id=$2",
+      [id, recipient.contact_id],
+    );
+
+    expect((await service.cancel(storeId, id, actor)).status).toBe('cancelled');
+
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(balance);
+    expect((await recipientRows(id)).map((row) => row.status)).toEqual([
+      'sending',
+      'cancelled',
+      'cancelled',
+    ]);
+    const { rows } = await admin.pool.query(
+      'select settled_at, settlement_pending_at from campaigns where id=$1',
+      [id],
+    );
+    expect(rows).toEqual([{ settled_at: null, settlement_pending_at: clockNow }]);
+  });
+
   it('refuses to resume by hand a campaign paused for its balance', async () => {
     const id = await approvedCampaign(null);
     await admin.pool.query(

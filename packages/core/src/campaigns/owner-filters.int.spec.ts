@@ -145,6 +145,14 @@ describe('campaign filters without RLS assistance', () => {
         status: 'scheduled',
       },
     );
+    expect(await f.tenant.forStore(f.b, () => repository.settlementTotals(f.b, a.id))).toEqual({
+      unsettled: 0,
+      chargedCredits: 0,
+    });
+    expect(await f.tenant.forStore(f.a, () => repository.settlementTotals(f.a, a.id))).toEqual({
+      unsettled: 1,
+      chargedCredits: 0,
+    });
     expect(
       await repository.changeStatus(
         f.b,

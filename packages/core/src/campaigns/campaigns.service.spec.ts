@@ -39,7 +39,8 @@ const now = new Date('2026-11-16T05:00:00Z');
 class FakeCampaignsRepository {
   readonly rows = new Map<
     string,
-    Campaign & Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'>
+    Campaign &
+      Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'> & { approvedAt?: Date | null }
   >();
 
   add(
@@ -107,6 +108,11 @@ class FakeCampaignsRepository {
     return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
   }
 
+  async lockCancellable(_storeId: string, id: string) {
+    const row = this.rows.get(id);
+    if (row && !['cancelled', 'sent', 'failed'].includes(row.status)) return row;
+  }
+
   async changeStatus(
     _storeId: string,
     id: string,
@@ -129,6 +135,19 @@ class FakeCampaignsRepository {
     for (const recipient of this.recipients)
       if (recipient.campaignId === campaignId && recipient.status === 'queued')
         Object.assign(recipient, { status: 'cancelled' });
+  }
+
+  async settlementTotals(_storeId: string, campaignId: string) {
+    return {
+      unsettled: this.recipients.filter(
+        (row) => row.campaignId === campaignId && row.status === 'queued',
+      ).length,
+      chargedCredits: 0,
+    };
+  }
+
+  async markSettled() {
+    return true;
   }
 
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
@@ -212,6 +231,11 @@ describe('CampaignsService', () => {
       findByIdempotencyKey: async (_storeId: string, key: string) => {
         const reservation = reservations.get(key);
         return reservation && { entryId: reservation.entryId, balanceQuantity: balance };
+      },
+      reservationFor: async (_storeId: string, _wallet: string, key: string) => {
+        const reservation = reservations.get(key);
+        if (!reservation) throw new Error('Test reservation not found');
+        return { entryId: reservation.entryId, quantity: reservation.quantity };
       },
       release: async (_storeId: string, input: { reservationId: string }) => {
         const reservation = [...reservations.values()].find(
@@ -463,22 +487,19 @@ describe('CampaignsService', () => {
     return campaign;
   }
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s 4 minutes before the send and keeps the credits reserved',
-    async (change) => {
-      const campaign = await scheduled(4);
+  it('refuses to unschedule 4 minutes before the send and keeps the credits reserved', async () => {
+    const campaign = await scheduled(4);
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_CHANGE_TOO_LATE',
-        status: 409,
-      });
-      expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
-      expect(balance).toBe(998);
-      expect(repository.recipients).toHaveLength(2);
-    },
-  );
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_CHANGE_TOO_LATE',
+      status: 409,
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
+    expect(balance).toBe(998);
+    expect(repository.recipients).toHaveLength(2);
+  });
 
-  it.each([6, 5])(
+  it.each([6, 5, 4])(
     'cancels %i minutes before the send, cancels the queued recipients and releases the credits',
     async (beforeSend) => {
       const campaign = await scheduled(beforeSend);
@@ -514,18 +535,30 @@ describe('CampaignsService', () => {
     expect(repository.recipients).toHaveLength(2);
   });
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s a campaign that is not scheduled',
-    async (change) => {
-      const campaign = repository.add('sending');
+  it('refuses to unschedule a campaign that is already sending', async () => {
+    const campaign = repository.add('sending');
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_NOT_SCHEDULED',
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_SCHEDULED',
+    });
+    await expect(service.unschedule(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_FOUND',
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+  });
+
+  it.each(['cancelled', 'sent', 'failed'] as const)(
+    'refuses to cancel a %s campaign',
+    async (status) => {
+      const campaign = repository.add(status);
+
+      await expect(service.cancel(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_CANCELLABLE',
       });
-      await expect(service[change](STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      await expect(service.cancel(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_FOUND',
       });
-      expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+      expect(repository.rows.get(campaign.id)?.status).toBe(status);
     },
   );
 

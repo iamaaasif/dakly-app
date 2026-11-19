@@ -201,12 +201,40 @@ export class CampaignsService {
         storeId,
         campaignId,
         { status: campaign.status },
-        { status: 'cancelled', pauseReason: null, finishedAt: now, updatedAt: now },
+        {
+          status: 'cancelled',
+          pauseReason: null,
+          finishedAt: now,
+          settlementPendingAt: campaign.approvedAt ? now : null,
+          updatedAt: now,
+        },
       );
       if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
-      if (campaign.approvedAt) await this.releaseCredits(storeId, campaign, actor);
+      if (campaign.approvedAt)
+        await this.settleCancellation(storeId, campaignId, campaign.approvedAt, now, actor);
       return toCampaignResponse(cancelled);
     });
+  }
+
+  private async settleCancellation(
+    storeId: string,
+    campaignId: string,
+    approvedAt: Date,
+    now: Date,
+    actor: Actor,
+  ): Promise<void> {
+    const { unsettled, chargedCredits } = await this.repository.settlementTotals(
+      storeId,
+      campaignId,
+    );
+    if (unsettled > 0 || !(await this.repository.markSettled(storeId, campaignId, now))) return;
+    const key = approvalKey(campaignId, approvedAt);
+    const reservation = await this.wallets.reservationFor(storeId, 'sms_credits', key);
+    const input = { reservationId: reservation.entryId, actor };
+    const quantity = Math.min(chargedCredits, reservation.quantity);
+    if (quantity)
+      await this.wallets.charge(storeId, { ...input, quantity, idempotencyKey: `${key}:charge` });
+    else await this.wallets.release(storeId, { ...input, idempotencyKey: `${key}:release` });
   }
 
   // Only the status moves until the sender (CAMP-3) reads it.
