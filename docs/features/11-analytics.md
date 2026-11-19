@@ -222,7 +222,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 
 Each `buyer_activity` row records one buyer and day, with the first non-cancelled order day as its value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
 
-The ANA-1 reports follow-up adds nightly lifecycle snapshots and reconciliation.
+Nightly reconciliation repairs up to 31 order days or 100 buyers per job and prunes expired report rows in pages of 5,000. A contact deletion removes that buyer’s activity. The completed nightly contact stats repair schedules one bulk job per store and local day. The job counts the six lifecycle stages when it runs and replaces the snapshot for the event’s local date.
 
 Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
 

@@ -28,7 +28,7 @@ describe('ContactsService', () => {
     list: vi.fn(),
     findIdentities: vi.fn(),
     update: vi.fn(),
-    softDelete: vi.fn(),
+    softDeleteAll: vi.fn(),
     lockForConsent: vi.fn(),
   };
   const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
@@ -41,7 +41,7 @@ describe('ContactsService', () => {
       repository as unknown as ContactsRepository,
       {} as ContactIdentitiesRepository,
       transaction as unknown as StoreTransaction,
-      { publish: vi.fn() } as unknown as OutboxService,
+      { publish: vi.fn(), publishAll: vi.fn() } as unknown as OutboxService,
       { now: () => new Date('2026-11-16T04:30:00Z') } as Clock,
       {
         findByPhones: vi.fn(),
@@ -175,7 +175,7 @@ describe('ContactsService', () => {
 
   it('returns 404 when editing or deleting a contact that is not in this store', async () => {
     repository.update.mockResolvedValue(undefined);
-    repository.softDelete.mockResolvedValue(false);
+    repository.softDeleteAll.mockResolvedValue([]);
 
     await expect(
       service.editDetails(

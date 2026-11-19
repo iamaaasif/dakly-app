@@ -109,6 +109,8 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 | `purge-contact`            | Sweep `due_contact_purges`               | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots                                                                                                                            |
 | sweep `fail-stuck-imports` | Every 30 seconds                         | none                                                          | `stores_with_stuck_imports`, then a guarded update on `last_progress_at` and `requeue_count`: queue again up to 4 times, then fail                                                                                                                            |
 
+`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000. The final contact stats rank page publishes `contact_stats.repaired`. Bulk jobs share an id per store and local date. Each counts the stages when it runs and replaces the snapshot for the event’s date, even after midnight.
+
 ## payments
 
 | Job                    | Started by                                    | Payload                      | Makes a rerun harmless                                                |
@@ -141,7 +143,7 @@ Clear empties memory, sets `cleared_at`, increments the contact-memory version a
 
 ## Metrics and attribution
 
-Order, payment, return and send/tap outbox events schedule bounded summary work that becomes visible within five minutes. Nightly reconciliation recomputes affected days from retained source evidence; it is a repair path, not the only refresh. Late returns and corrections restate the original store-local metric day as defined by ANA-1 and refresh affected totals. Each dashboard exposes summary age. The definitions and handlers remain planned.
+Order, payment, return and send/tap outbox events schedule bounded summary work that becomes visible within five minutes. Nightly reconciliation recomputes affected days from retained source evidence; it is a repair path, not the only refresh. Late returns and corrections restate the original store-local metric day as defined by ANA-1 and refresh affected totals. ANA-1 implements the order summary handlers and nightly report repair. Marketing attribution handlers follow ANA-2.
 
 Attribution rebuilds cover 365 days plus the maximum seven-day lookback. They read individual `tracked_link_visits`, kept 13 months with exact times ([growth.md](growth.md#link-visits-without-personal-data)). Retain workflow steps for 372 days after their run finishes, never from step creation while the run is active. Campaign eligibility keeps equivalent evidence. A redirect creates one `event_key`; retrying its write reuses the key, while another actual visit gets a new key. First/last tap counters on the link do not replace the visits or the daily rows. See [ADR 0008](../adr/0008-retain-attribution-evidence.md).
 
@@ -158,11 +160,13 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 
 ## Events in M2 and M3
 
-The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
+The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids, enum values and the repair day when a job needs it. They contain no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
 | Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
 | ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `contact.deleted`         | `ContactsService.remove` and `removeAll`                         | `contactId`                                                             | ANA-1 buyer activity cleanup                                 |
+| `contact_stats.repaired`  | Nightly contact stats repair, after the store’s last page        | `day`                                                                   | ANA-1 nightly lifecycle snapshot                             |
 | `order.created`           | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
 | `order.edited`            | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
 | `order.stage_changed`     | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |

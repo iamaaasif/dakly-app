@@ -323,8 +323,7 @@ export class ContactsService {
   }
 
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
-    if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
-      throw contactError('CONTACT_NOT_FOUND');
+    if (!(await this.removeContacts(storeId, [id])).length) throw contactError('CONTACT_NOT_FOUND');
   }
 
   // The contacts an import added that nobody has edited since, locked until the caller's
@@ -337,8 +336,20 @@ export class ContactsService {
     return this.contactsRepository.lockUneditedByImport(storeId, importId, page);
   }
 
-  removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
-    return this.contactsRepository.softDeleteAll(storeId, ids, this.clock.now());
+  async removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
+    await this.removeContacts(storeId, ids);
+  }
+
+  private removeContacts(storeId: string, ids: string[]) {
+    return this.transaction.run(storeId, async () => {
+      const now = this.clock.now();
+      const removed = await this.contactsRepository.softDeleteAll(storeId, ids, now);
+      const event = { type: 'contact.deleted', storeId, occurredAt: now.toISOString() } as const;
+      await this.outbox.publishAll(
+        removed.map((contactId) => ({ ...event, payload: { contactId } })),
+      );
+      return removed;
+    });
   }
 
   // A deleted contact reads as undefined.

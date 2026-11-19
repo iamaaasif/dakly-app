@@ -9,6 +9,8 @@ import {
 import {
   consentChangedEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   importStartedEventSchema,
   importUndoRequestedEventSchema,
@@ -40,6 +42,8 @@ import {
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   productUpdatedEventSchema,
   stockChangedEventSchema,

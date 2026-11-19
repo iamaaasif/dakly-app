@@ -64,6 +64,10 @@ export class ContactStatsService {
     return batch.length === BATCH_SIZE ? (batch.at(-1)?.id ?? null) : null;
   }
 
+  lifecycleCounts(storeId: string) {
+    return this.repository.countLifecycleStages(storeId);
+  }
+
   bestSpendCutoff(storeId: string) {
     return this.repository.bestSpendCutoff(storeId);
   }
