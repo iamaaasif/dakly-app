@@ -64,11 +64,12 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                                       | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | ------------------------------------------------ | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Consent grant or tag added for an active trigger | `storeId`, `automationId` and the event details      | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
-| `continue-automation-run` | The sweep, or the step before it                 | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                          | Started by                                                 | Payload                                              | Makes a rerun harmless                                                                             |
+| ---------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `start-automation-run`       | Consent grant, tag added or birthday for an active trigger | `storeId`, `automationId` and the event details      | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
+| `sweep-automation-birthdays` | Daily                                                      | none (sweep)                                         | Store and contact pages. One outbox event per contact and local date                               |
+| `continue-automation-run`    | The sweep, or the step before it                           | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`        | Every minute                                               | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
 
 ## sync
 
@@ -161,6 +162,7 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
 | `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
 | `contact.tag_added`       | CAMP-11, `ContactsService.changeTag`                             | `contactId`, `tag`                                                      | Tag-added workflow trigger                                   |
+| `contact.birthday`        | CAMP-11 birthday sweep                                           | `contactId`, local `day`                                                | Birthday workflow trigger                                    |
 | `segment.saved`           | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
 | `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
 | `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |

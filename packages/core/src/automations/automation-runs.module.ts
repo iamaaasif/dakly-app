@@ -5,11 +5,13 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { ClockModule } from '../platform/clock.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { QUEUES } from '../platform/queue/queues';
 import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
@@ -22,6 +24,7 @@ import { AutomationRunsService } from './automation-runs.service';
     BullModule.registerQueue({ name: QUEUES.workflow }),
     ClockModule,
     ContactsModule,
+    OutboxModule,
     LinksModule,
     MessagingModule,
     SegmentsModule,
@@ -35,7 +38,8 @@ import { AutomationRunsService } from './automation-runs.service';
     AutomationRunsService,
     AutomationEntryRepository,
     AutomationEntryService,
+    AutomationBirthdaysService,
   ],
-  exports: [AutomationRunsService, AutomationEntryService],
+  exports: [AutomationRunsService, AutomationEntryService, AutomationBirthdaysService],
 })
 export class AutomationRunsModule {}

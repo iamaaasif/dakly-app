@@ -14,6 +14,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS } from '../platform/time';
+import { SegmentsModule } from '../segments/segments.module';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 
@@ -74,7 +75,7 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     class TestModule {}
     Module({
-      imports: [DatabaseModule, ContactsModule],
+      imports: [DatabaseModule, ContactsModule, SegmentsModule],
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,

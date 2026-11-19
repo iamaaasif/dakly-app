@@ -255,6 +255,31 @@ export class ContactsRepository {
     return Boolean(changed);
   }
 
+  birthdayContactIds(
+    storeId: string,
+    birthday: { month: number; day: number },
+    after: string | null,
+    limit: number,
+  ) {
+    return this.database.forStore(storeId, async (tx) => {
+      const rows = await tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.birthdayMonth, birthday.month),
+            eq(contacts.birthdayDay, birthday.day),
+            isNull(contacts.deletedAt),
+            after ? gt(contacts.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(contacts.id))
+        .limit(limit);
+      return rows.map(({ id }) => id);
+    });
+  }
+
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx

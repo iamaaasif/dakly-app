@@ -14,9 +14,11 @@ import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notic
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { StartAutomationRunJob } from '@dakly/core/automations/jobs/start-automation-run.job';
+import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
@@ -71,7 +73,9 @@ import { JobSchedulers } from './job-schedulers';
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
+    StartAutomationOnBirthday,
     StartAutomationOnConsent,
+    SweepAutomationBirthdaysJob,
     StartAutomationOnTagAdded,
     StartAutomationRunJob,
     StartDueCampaignsJob,
