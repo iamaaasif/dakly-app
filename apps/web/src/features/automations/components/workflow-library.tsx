@@ -1,7 +1,5 @@
 'use client';
 
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import type { CreateAutomationInput } from '@dakly/contracts/automations';
@@ -21,6 +19,7 @@ import {
   workflowTemplates,
   type WorkflowTemplateCard,
 } from '../workflow-library';
+import { WorkflowPageHeader } from './workflow-page-header';
 import { TemplateCard } from './workflow-template-card';
 
 const groups = [
@@ -85,10 +84,15 @@ export function WorkflowLibrary() {
   }
   return (
     <main className="min-h-screen bg-surface-muted">
-      <LibraryHeader
-        pending={action.isPending}
-        onCreate={() => create({ name: 'Untitled workflow', graph: emptyWorkflow })}
-      />
+      <WorkflowPageHeader title="Create workflow">
+        <Button
+          variant="secondary"
+          disabled={action.isPending}
+          onClick={() => create({ name: 'Untitled workflow', graph: emptyWorkflow })}
+        >
+          Create from scratch
+        </Button>
+      </WorkflowPageHeader>
       <div className="mx-auto grid max-w-7xl gap-6 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-8">
         <LibraryFilters selected={selected} choose={choose} />
         <div className="space-y-4">
@@ -108,26 +112,6 @@ export function WorkflowLibrary() {
         </div>
       </div>
     </main>
-  );
-}
-
-function LibraryHeader({ pending, onCreate }: { pending: boolean; onCreate: () => void }) {
-  return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/automations"
-          aria-label="Back to Automations"
-          className="grid size-10 place-items-center rounded-md border border-input-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-        </Link>
-        <h1 className="font-bold">Create workflow</h1>
-      </div>
-      <Button variant="secondary" disabled={pending} onClick={onCreate}>
-        Create from scratch
-      </Button>
-    </header>
   );
 }
 
