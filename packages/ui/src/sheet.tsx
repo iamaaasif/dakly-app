@@ -112,16 +112,6 @@ export function SheetDialog({
   className,
   children,
 }: SheetDialogProps) {
-  const triggerRef = useRef<HTMLElement | null>(
-    typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null,
-  );
-  const prevOpenRef = useRef(false);
-
-  if (typeof document !== 'undefined' && open && !prevOpenRef.current) {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-  }
-  prevOpenRef.current = open;
-
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
       {trigger && <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>}
@@ -129,12 +119,6 @@ export function SheetDialog({
         <DialogPrimitive.Overlay className="fixed inset-0 z-60 bg-inverse/50" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          onCloseAutoFocus={(event) => {
-            if (!trigger && triggerRef.current) {
-              event.preventDefault();
-              triggerRef.current.focus();
-            }
-          }}
           className={cn(
             'fixed inset-0 z-70 m-auto h-fit max-h-dvh w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text shadow-overlay',
             className,

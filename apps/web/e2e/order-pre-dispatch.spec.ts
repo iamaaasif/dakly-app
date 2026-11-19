@@ -103,7 +103,7 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });
     await capture(page, 'cancel');
     await cancel.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(cancelButton).toBeFocused();
+    await expect(stage).toBeFocused();
     await cancelButton.click();
     await expect(cancel.getByLabel('Reason')).toHaveValue('');
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });

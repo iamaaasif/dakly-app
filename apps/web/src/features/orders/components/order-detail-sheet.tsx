@@ -179,6 +179,32 @@ function PrimaryStageButton({ action, disabled, onAction }: PrimaryStageButtonPr
   );
 }
 
+type OrderTransitionErrorProps = {
+  error?: { message: string } | null;
+};
+
+function OrderTransitionError({ error }: OrderTransitionErrorProps) {
+  if (!error) return null;
+  return (
+    <p role="alert" className="w-full text-danger">
+      {error.message}
+    </p>
+  );
+}
+
+type ConfirmOrderButtonProps = {
+  disabled: boolean;
+  onClick: () => void;
+};
+
+function ConfirmOrderButton({ disabled, onClick }: ConfirmOrderButtonProps) {
+  return (
+    <Button className="min-h-11 sm:min-h-10" disabled={disabled} onClick={onClick}>
+      Confirm
+    </Button>
+  );
+}
+
 type OrderStageFooterProps = {
   order: OrderDetail;
   transition: ReturnType<typeof useOrderStage>;
@@ -191,47 +217,45 @@ type OrderStageFooterProps = {
 function OrderStageFooter(props: OrderStageFooterProps) {
   const { order, transition, stage, canConfirm, actions, editable } = props;
   const [activeDialog, setActiveDialog] = useState<StageFormAction | null>(null);
-
-  const cancelAction = actions.find((a): a is 'cancelled' => a === 'cancelled');
-  const otherActions = actions.filter((a) => a !== 'cancelled');
-  const secondaryActions = canConfirm ? otherActions : otherActions.slice(1);
+  const cancel = actions.find((a): a is 'cancelled' => a === 'cancelled');
+  const other = actions.filter((a) => a !== 'cancelled');
+  const secondary = canConfirm ? other : other.slice(1);
   const mutate = changeStage(transition, order.id, stage);
 
   const handleAction = (a: StageAction) =>
     a === 'to_confirm' || a === 'delivered' ? mutate({ to: a }) : setActiveDialog(a);
 
+  const closeDialog = (open: boolean) => {
+    if (open) return;
+    setActiveDialog(null);
+    requestAnimationFrame(() => stage.current?.focus());
+  };
+
   return (
     <div className="flex w-full flex-col gap-2">
-      {transition.error && (
-        <p role="alert" className="w-full text-danger">
-          {transition.error.message}
-        </p>
-      )}
+      <OrderTransitionError error={transition.error} />
       <div className="flex items-center justify-between gap-2">
-        {cancelAction && (
+        {cancel && (
           <CancelOrderButton
             disabled={transition.isPending}
-            onClick={() => setActiveDialog(cancelAction)}
+            onClick={() => setActiveDialog(cancel)}
           />
         )}
         <div className="flex items-center gap-2">
           <SecondaryActionsMenu
-            actions={secondaryActions}
+            actions={secondary}
             disabled={transition.isPending}
             onSelectAction={handleAction}
           />
           {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
           {canConfirm && (
-            <Button
-              className="min-h-11 sm:min-h-10"
+            <ConfirmOrderButton
               disabled={transition.isPending}
               onClick={() => mutate({ to: 'to_pack' })}
-            >
-              Confirm
-            </Button>
+            />
           )}
           <PrimaryStageButton
-            action={canConfirm ? null : otherActions[0]}
+            action={canConfirm ? null : other[0]}
             disabled={transition.isPending}
             onAction={handleAction}
           />
@@ -244,7 +268,7 @@ function OrderStageFooter(props: OrderStageFooterProps) {
           action={activeDialog}
           stage={stage}
           open
-          onOpenChange={(open) => !open && setActiveDialog(null)}
+          onOpenChange={closeDialog}
         />
       )}
     </div>
