@@ -15,7 +15,7 @@ import {
 } from '@dakly/ui/dropdown-menu';
 
 import { useAutomationAction } from '../api/automation-actions';
-import { channelLabels, triggerLabels } from '../automation-labels';
+import { channelLabels, statusLabels, triggerLabels } from '../automation-labels';
 
 export function AutomationRow({
   workflow,
@@ -26,12 +26,6 @@ export function AutomationRow({
 }) {
   const active = workflow.status === 'active';
   const draft = workflow.status === 'draft';
-  const statusLabels = {
-    active: 'Active',
-    draft: 'Draft',
-    paused: 'Disabled',
-    archived: 'Archived',
-  };
   const channels = workflow.channels.map((channel) => channelLabels[channel]).join(', ');
   const description = [
     `When ${triggerLabels[workflow.trigger]}`,

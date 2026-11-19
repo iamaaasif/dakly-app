@@ -62,6 +62,13 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     );
     await page.goto('/automations');
     await expect(page.getByRole('tab', { name: 'All 4' })).toHaveAttribute('aria-selected', 'true');
+    expect(
+      await page
+        .getByRole('tab')
+        .evaluateAll((tabs) =>
+          tabs.every((tab) => document.getElementById(tab.getAttribute('aria-controls') ?? '')),
+        ),
+    ).toBe(true);
     const welcome = page.getByRole('listitem').filter({ hasText: active.name });
     await expect(welcome.locator('dd').first()).toHaveText('1');
     const evidence = process.env.CAMP12_LIST_EVIDENCE;

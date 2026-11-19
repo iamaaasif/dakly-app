@@ -1,3 +1,4 @@
+import type { AutomationStatus } from '@dakly/contracts/automations';
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { CampaignChannel } from '@dakly/contracts/campaigns';
 
@@ -31,4 +32,11 @@ export const triggerLabels: Record<TriggerKey, string> = {
   cart_abandoned: 'customers leave items in their cart',
   checkout_abandoned: 'customers start checkout without finishing',
   product_viewed: 'customers view a product',
+};
+
+export const statusLabels: Record<AutomationStatus, string> = {
+  active: 'Active',
+  draft: 'Draft',
+  paused: 'Disabled',
+  archived: 'Archived',
 };
