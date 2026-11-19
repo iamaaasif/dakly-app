@@ -49,13 +49,12 @@ export function OrderDetailSheet({ id, onClose, restoreFocusTo }: OrderDetailShe
   );
 }
 
-function OrderDetailContent({
-  query,
-  stage,
-}: {
+type OrderDetailContentProps = {
   query: ReturnType<typeof useOrder>;
   stage: RefObject<HTMLSpanElement | null>;
-}) {
+};
+
+function OrderDetailContent({ query, stage }: OrderDetailContentProps) {
   return (
     <>
       {query.isPending ? <p role="status">Loading order…</p> : null}
@@ -97,6 +96,7 @@ type OrderStageFooterProps = {
 
 function OrderStageFooter(props: OrderStageFooterProps) {
   const { order, transition, stage, canConfirm, actions, editable } = props;
+
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
     const drawer = button.closest('[role="dialog"]');
     transition.mutate(
@@ -112,43 +112,46 @@ function OrderStageFooter(props: OrderStageFooterProps) {
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex w-full flex-col gap-2">
       {transition.error && (
         <p role="alert" className="w-full text-danger">
           {transition.error.message}
         </p>
       )}
-      {canConfirm && (
-        <Button
-          className="w-full"
-          disabled={transition.isPending}
-          onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
-        >
-          Mark confirmed
-        </Button>
-      )}
-      {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
-      {actions.map((action, index) =>
-        action === 'to_confirm' || action === 'delivered' ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {canConfirm && (
           <Button
-            key={action}
-            variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
+            className="min-h-11 w-full sm:min-h-10"
             disabled={transition.isPending}
-            onClick={(event) => changeStage({ to: action }, event.currentTarget)}
+            onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
           >
-            {stageActionLabels[action]}
+            Mark confirmed
           </Button>
-        ) : (
-          <OrderStageDialog
-            key={action}
-            order={order}
-            action={action}
-            stage={stage}
-            primary={!canConfirm && index === 0}
-            disabled={transition.isPending}
-          />
-        ),
-      )}
+        )}
+        {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
+        {actions.map((action, index) =>
+          action === 'to_confirm' || action === 'delivered' ? (
+            <Button
+              key={action}
+              variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
+              disabled={transition.isPending}
+              className="min-h-11 sm:min-h-10"
+              onClick={(event) => changeStage({ to: action }, event.currentTarget)}
+            >
+              {stageActionLabels[action]}
+            </Button>
+          ) : (
+            <OrderStageDialog
+              key={action}
+              order={order}
+              action={action}
+              stage={stage}
+              primary={!canConfirm && index === 0}
+              disabled={transition.isPending}
+            />
+          ),
+        )}
+      </div>
     </div>
   );
 }
