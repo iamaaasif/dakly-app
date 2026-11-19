@@ -179,9 +179,10 @@ approval requirement.
 Owners, Admins and Marketers can approve an AI-written draft. Scheduling it can
 also record their approval. Editing the draft clears an earlier approval.
 People can pick a future time or queue each target in the store's time zone.
-The default slots are 12:30 and 20:30 daily. A queue slot must be at least
-15 minutes away, and one account can use a slot once. Scheduling records
-`post.scheduled` for each target.
+Each connection can save weekly posting slots. An account without saved slots
+uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
+one account can use a slot once. Scheduling records `post.scheduled` for each
+target.
 
 Publishing (SOC-2), insights (SOC-3), AI captions (SOC-4) and the web screens
 (SOC-5) are separate tasks.

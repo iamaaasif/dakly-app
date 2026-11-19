@@ -7,6 +7,7 @@ const errors = {
     status: 403,
     message: 'An Owner, Admin or Marketer must approve this caption',
   },
+  POST_CONTENT_REQUIRED: { status: 400, message: 'Add a caption, photo or link for this account' },
   POST_TARGET_REQUIRED: { status: 400, message: 'Select an account for this post' },
   POST_TIME_IN_PAST: { status: 400, message: 'Pick a time in the future' },
   POST_NO_SLOTS: { status: 409, message: 'Set a posting slot for this account' },

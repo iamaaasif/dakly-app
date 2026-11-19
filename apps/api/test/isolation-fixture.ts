@@ -28,7 +28,7 @@ export class IsolationFixture {
   constructor(readonly app: NestFastifyApplication) {}
   request(
     actor: Actor | string,
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     url: string,
     payload?: object,
     headers?: Record<string, string>,

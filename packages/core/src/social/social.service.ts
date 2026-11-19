@@ -20,18 +20,17 @@ import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
-import { nextPostingSlot } from './next-posting-slot';
+import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
-
-const recommendedSlots = Array.from({ length: 7 }, (_, weekday) =>
-  ['12:30', '20:30'].map((time) => ({ weekday, time })),
-).flat();
 
 type UserActor = { kind: 'user'; userId: string };
 type Editor = { actor: UserActor; access: StoreAccess };
 type Post = NonNullable<Awaited<ReturnType<SocialRepository['findPost']>>>['post'];
 type Target = Awaited<ReturnType<SocialRepository['listTargets']>>[number];
+type PostingConnection = Awaited<
+  ReturnType<ChannelConnectionsService['postingConnections']>
+>[number];
 
 function response(post: Post, targets: Target[]): PostResponse {
   return {
@@ -212,8 +211,12 @@ export class SocialService {
     editor: Editor,
   ): Promise<PostResponse> {
     return this.transaction.runLocked(storeId, async () => {
-      const { post, targets, now } = await this.draftForScheduling(storeId, postId, editor);
-      const times = await this.chooseTimes(storeId, targets, input, now);
+      const { post, targets, now, connections } = await this.draftForScheduling(
+        storeId,
+        postId,
+        editor,
+      );
+      const times = await this.chooseTimes(storeId, { targets, input, now, connections });
       const reviewed = await this.approveOnSchedule(storeId, post, editor, now);
       const scheduled = await this.repository.scheduleTargets(storeId, postId, times, now);
       await this.audit.record(storeId, {
@@ -237,9 +240,17 @@ export class SocialService {
 
   private async chooseTimes(
     storeId: string,
-    targets: Target[],
-    input: SchedulePostInput,
-    now: Date,
+    {
+      targets,
+      input,
+      now,
+      connections,
+    }: {
+      targets: Target[];
+      input: SchedulePostInput;
+      now: Date;
+      connections: Map<string, PostingConnection>;
+    },
   ) {
     const ids = targets.map(({ channelConnectionId }) => channelConnectionId);
     if ('scheduledFor' in input) {
@@ -264,7 +275,7 @@ export class SocialService {
     }
     return targets.map(({ id, channelConnectionId }) => {
       const scheduledFor = nextPostingSlot(
-        recommendedSlots,
+        connections.get(channelConnectionId)?.postingSlots ?? recommendedPostingSlots,
         now,
         timeZone,
         byConnection.get(channelConnectionId) ?? new Set(),
@@ -282,8 +293,14 @@ export class SocialService {
     if (!targets.length) throw socialError('POST_TARGET_REQUIRED');
     const now = this.clock.now();
     await this.validatePostMedia(storeId, post.mediaFileIds, now);
-    await this.validateTargets(storeId, { ...post, targets }, []);
-    return { post, targets, now };
+    const connections = await this.validateTargets(storeId, { ...post, targets }, []);
+    if (
+      !post.mediaFileIds.length &&
+      !post.linkUrl &&
+      targets.some(({ captionOverride }) => !(captionOverride ?? post.caption)?.trim())
+    )
+      throw socialError('POST_CONTENT_REQUIRED');
+    return { post, targets, now, connections };
   }
 
   private approveOnSchedule(storeId: string, post: Post, { actor, access }: Editor, now: Date) {
@@ -359,6 +376,7 @@ export class SocialService {
           input.mediaFileIds.length,
         );
     }
+    return connections;
   }
 
   private validateInstagram(caption: string, photoCount: number) {

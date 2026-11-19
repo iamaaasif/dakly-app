@@ -1,6 +1,10 @@
+import type { PostingSlot } from '@dakly/contracts/social';
+
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 
-type PostingSlot = { weekday: number; time: string };
+export const recommendedPostingSlots = Array.from({ length: 7 }, (_, weekday) =>
+  ['12:30', '20:30'].map((time) => ({ weekday, time })),
+).flat();
 
 export function nextPostingSlot(
   slots: PostingSlot[],

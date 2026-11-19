@@ -122,8 +122,20 @@ export type PostResponse = Omit<CreatePostInput, 'targets'> & {
 export type PostListResponse = { items: PostResponse[]; nextCursor: string | null };
 
 export const schedulePostSchema = z.union([
-  z.strictObject({ scheduledFor: z.iso.datetime({ offset: true }) }),
+  z.strictObject({
+    scheduledFor: z.iso
+      .datetime({ offset: true })
+      .transform((time) => new Date(time).toJSON())
+      .pipe(z.iso.datetime()),
+  }),
   z.strictObject({ nextSlot: z.literal(true) }),
 ]);
 
 export type SchedulePostInput = z.infer<typeof schedulePostSchema>;
+
+export const postingSlotsQuerySchema = z.strictObject({ channelConnectionId: postIdSchema });
+export const savePostingSlotsSchema = postingSlotsQuerySchema.extend({ slots: postingSlotsSchema });
+
+export type PostingSlotsQuery = z.infer<typeof postingSlotsQuerySchema>;
+export type SavePostingSlotsInput = z.infer<typeof savePostingSlotsSchema>;
+export type PostingSlotsResponse = SavePostingSlotsInput & { timeZone: string };
