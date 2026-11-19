@@ -79,7 +79,7 @@ export class InboxService {
   update(storeId: string, id: string, userId: string, input: UpdateConversationInput) {
     return this.transaction.runLocked(storeId, async () => {
       await this.requireChats(storeId);
-      const before = await this.find(storeId, id);
+      const before = await this.find(storeId, id, 'no key update');
       if (input.assigneeUserId && !(await this.team.accessFor(storeId, input.assigneeUserId)))
         throw messagingError('CONVERSATION_ASSIGNEE_INVALID');
       const status = input.status ?? before.status;
@@ -87,12 +87,7 @@ export class InboxService {
         input.assigneeUserId === undefined ? before.assigneeUserId : input.assigneeUserId;
       if (status === before.status && assigneeUserId === before.assigneeUserId)
         return conversationResponse(before);
-      const after = await this.repository.update(
-        storeId,
-        id,
-        { status, assigneeUserId },
-        this.clock.now(),
-      );
+      const after = await this.repository.update(storeId, id, input, this.clock.now());
       if (!after) throw messagingError('CONVERSATION_NOT_FOUND');
       await this.recordChange(storeId, userId, before, after);
       return conversationResponse(after);
@@ -102,7 +97,7 @@ export class InboxService {
   setResponder(storeId: string, id: string, userId: string, responder: 'human' | 'ai') {
     return this.transaction.runLocked(storeId, async () => {
       await this.requireChats(storeId);
-      const before = await this.find(storeId, id);
+      const before = await this.find(storeId, id, 'no key update');
       if (before.responder === responder && before.aiResumesAt === null)
         return conversationResponse(before);
       const after = await this.repository.update(
@@ -117,8 +112,8 @@ export class InboxService {
     });
   }
 
-  private async find(storeId: string, id: string) {
-    const row = await this.repository.find(storeId, id);
+  private async find(storeId: string, id: string, lock?: 'no key update') {
+    const row = await this.repository.find(storeId, id, lock);
     if (!row || !(await this.contacts.findRecipient(storeId, row.contactId)))
       throw messagingError('CONVERSATION_NOT_FOUND');
     return row;

@@ -86,13 +86,14 @@ export class InboxRepository {
     );
   }
 
-  async find(storeId: string, id: string) {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
+  async find(storeId: string, id: string, lock?: 'no key update') {
+    const [row] = await this.database.forStore(storeId, (tx) => {
+      const query = tx
         .select(fields)
         .from(conversations)
-        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id))),
-    );
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id)));
+      return lock ? query.for(lock) : query;
+    });
     return row;
   }
 

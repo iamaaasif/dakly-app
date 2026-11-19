@@ -54,7 +54,9 @@ export const smsMessagePurposes = [
 ] as const;
 export const smsMessageStatuses = ['queued', 'sent', 'delivered', 'failed'] as const;
 
-const messageCursorSchema = z.templateLiteral([z.iso.datetime(), '_', z.uuid()]);
+const messageCursorSchema = z
+  .templateLiteral([z.iso.datetime(), '_', z.uuid()])
+  .refine((cursor) => !cursor.startsWith('0000-'), 'Invalid cursor timestamp');
 
 export const conversationMessageListQuerySchema = z.strictObject({
   cursor: messageCursorSchema.optional(),

@@ -1928,6 +1928,7 @@ fixture('GET /conversations', async () => {
   const own = await seedConversation(b);
   expect((await f.request(b.owner, 'GET', '/conversations')).statusCode).toBe(403);
   await enableChats(b);
+  await success(b, 'GET', `/conversations?cursor=0000-01-01T00:00:00Z_${own}`, 400);
   const result = await success(b, 'GET', '/conversations', 200);
   expect(result.json()).toMatchObject({ items: [{ id: own }], nextCursor: null });
   const second = await seedConversation(b);
@@ -1980,6 +1981,7 @@ fixture('GET /conversations/:conversationId/messages', async () => {
   await hidden(b, 'GET', url, await seedConversation(a));
   const own = await seedConversation(b);
   const [newest, older] = [randomUUID(), randomUUID()].sort();
+  await success(b, 'GET', `${url(own)}?cursor=0000-01-01T00:00:00Z_${newest}`, 400);
   await f.admin.pool.query(
     `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at)
      values($1,$2,$3,'in','customer','text','দাম কত?','received','2026-11-18T10:00:00.123456Z'),
@@ -2046,6 +2048,37 @@ fixture('PATCH /conversations/:conversationId', async () => {
   expect((await success(b, 'PATCH', url(own), 200, { assigneeUserId: null })).json()).toMatchObject(
     { assigneeUserId: null },
   );
+  const locker = await f.admin.pool.connect();
+  let assignment: ReturnType<typeof f.request> | undefined;
+  try {
+    await locker.query('begin');
+    await locker.query('select id from conversations where id = $1 for no key update', [own]);
+    const {
+      rows: [backend],
+    } = await locker.query<{ pid: number }>('select pg_backend_pid() as pid');
+    assignment = f.request(b.owner, 'PATCH', url(own), { assigneeUserId: b.member.id });
+    await vi.waitFor(async () => {
+      const { rows } = await f.admin.pool.query(
+        'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+        [backend!.pid],
+      );
+      expect(rows).toHaveLength(1);
+    });
+    await locker.query(
+      "update conversations set status = 'open', version = version + 1 where id = $1",
+      [own],
+    );
+    await locker.query('commit');
+  } catch (error) {
+    await locker.query('rollback');
+    await assignment;
+    throw error;
+  } finally {
+    locker.release();
+  }
+  const assigned = await assignment;
+  expect(assigned.statusCode, assigned.body).toBe(200);
+  expect(assigned.json()).toMatchObject({ status: 'open', assigneeUserId: b.member.id });
 });
 
 for (const [path, responder] of [
