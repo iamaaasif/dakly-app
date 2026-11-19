@@ -20,6 +20,8 @@ import { PaymentsRepository } from './payments.repository';
 
 const paymentCheckMinutes = [4, 10, 45, ...Array<number>(12).fill(360)];
 
+type PaidStatus = Extract<PaymentStatus, { status: 'paid' }>;
+
 type Intent = NonNullable<Awaited<ReturnType<PaymentsRepository['find']>>>;
 
 @Injectable()
