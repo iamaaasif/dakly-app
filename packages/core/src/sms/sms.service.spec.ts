@@ -56,28 +56,40 @@ describe('shared SMS delivery', () => {
     vi.restoreAllMocks();
   });
 
-  it('gives up on a provider that does not answer within 30 seconds', async () => {
-    vi.useFakeTimers();
-    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-    try {
-      const cancelled = vi.fn();
-      const driver: SmsDriver = {
-        send: (_message, signal) => {
-          signal?.addEventListener('abort', cancelled, { once: true });
-          return new Promise(() => {});
-        },
-      };
-      const sending = new SmsService(driver).send({ to: '01712345678', text: 'অর্ডার নিশ্চিত' });
-      const outcome = expect(sending).rejects.toMatchObject({
-        code: 'SMS_SEND_TIMEOUT',
-        message: 'The SMS provider did not answer in time',
-      });
-      await vi.advanceTimersByTimeAsync(30_000);
-      await outcome;
-      expect(cancelled).toHaveBeenCalledTimes(1);
-    } finally {
-      log.mockRestore();
-      vi.useRealTimers();
-    }
-  });
+  it.each([
+    { label: 'never answers', refusesOnAbort: false },
+    { label: 'rejects as refused when aborted', refusesOnAbort: true },
+  ])(
+    'reports an unknown outcome after 30 seconds when the provider $label',
+    async ({ refusesOnAbort }) => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      try {
+        const cancelled = vi.fn();
+        const driver: SmsDriver = {
+          send: (_message, signal) =>
+            new Promise((_resolve, reject) => {
+              signal?.addEventListener(
+                'abort',
+                () => {
+                  cancelled();
+                  if (refusesOnAbort) reject(new SmsSendRefused());
+                },
+                { once: true },
+              );
+            }),
+        };
+        const sending = new SmsService(driver).send({ to: '01712345678', text: 'অর্ডার নিশ্চিত' });
+        const outcome = expect(sending).rejects.toMatchObject({
+          code: 'SMS_SEND_TIMEOUT',
+          message: 'The SMS provider did not answer in time',
+        });
+        await Promise.all([outcome, vi.advanceTimersByTimeAsync(30_000)]);
+        expect(cancelled).toHaveBeenCalledTimes(1);
+      } finally {
+        log.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 });

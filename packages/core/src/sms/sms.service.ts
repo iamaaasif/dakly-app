@@ -27,8 +27,8 @@ export class SmsService {
       const timedOut = new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           const error = new SmsSendTimeout();
-          controller.abort(error);
           reject(error);
+          controller.abort(error);
         }, SEND_TIMEOUT_MS);
       });
       try {
