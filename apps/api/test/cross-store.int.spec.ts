@@ -13,7 +13,8 @@ import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
 import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
-import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
+import { registerSessionCookies, SESSION_COOKIE } from '@dakly/core/platform/http/session-cookie';
+import { SessionsService } from '@dakly/core/sessions/sessions.service';
 import { SmsService } from '@dakly/core/sms/sms.service';
 
 import { AppModule } from '../src/app.module';
@@ -676,12 +677,17 @@ async function metaGrant(shop: Shop, actor = shop.owner) {
   return { state: url.searchParams.get('state'), code: url.searchParams.get('code') };
 }
 
-function metaCacheKey(shop: Shop, actor: Actor, kind: 'state' | 'selection', key: string) {
-  return `meta-auth:${shop.id}:${actor.id}:${kind}:${createHash('sha256').update(key).digest('hex')}`;
+async function metaCacheKey(shop: Shop, actor: Actor, kind: 'state' | 'selection', key: string) {
+  const session = await app
+    .get(SessionsService)
+    .resolve(actor.cookie.slice(SESSION_COOKIE.length + 1));
+  expect(session).toBeDefined();
+  const hash = createHash('sha256').update(key).digest('hex');
+  return `meta-auth:${shop.id}:${actor.id}:${session!.id}:${kind}:${hash}`;
 }
 
 async function expectMetaCredentialEncrypted(shop: Shop, selectionId: string, actor = shop.owner) {
-  const key = metaCacheKey(shop, actor, 'selection', selectionId);
+  const key = await metaCacheKey(shop, actor, 'selection', selectionId);
   const redis = app.get(ValkeyClient).connection;
   const packed = await redis.get(key);
   expect(packed).toBeTruthy();
@@ -709,7 +715,7 @@ fixture('POST /channel-connections/meta/start', async () => {
   expect(own.state).toMatch(/^[a-zA-Z0-9_-]{43}$/);
   expect(own.state).not.toBe(foreign.state);
   const redis = app.get(ValkeyClient).connection;
-  const key = metaCacheKey(b, b.owner, 'state', own.state!);
+  const key = await metaCacheKey(b, b.owner, 'state', own.state!);
   expect(await redis.get(key)).toBe('1');
   const ttl = await redis.ttl(key);
   expect(ttl).toBeGreaterThan(0);
@@ -726,7 +732,7 @@ fixture('POST /channel-connections/meta/start', async () => {
   expect(adminAccounts.statusCode).toBe(201);
   await expectMetaCredentialEncrypted(b, adminAccounts.json().selectionId, b.member);
   const expired = await metaGrant(b);
-  await redis.expire(metaCacheKey(b, b.owner, 'state', expired.state!), 0);
+  await redis.expire(await metaCacheKey(b, b.owner, 'state', expired.state!), 0);
   expect((await f.request(b.owner, 'POST', metaAccounts, expired)).statusCode).toBe(404);
   const aAccounts = await success(a, 'POST', metaAccounts, 201, foreign);
   await expectMetaCredentialEncrypted(a, aAccounts.json().selectionId);
@@ -786,6 +792,13 @@ fixture('POST /channel-connections/meta/accounts', async () => {
   expect([wrongStore.statusCode, missing.statusCode]).toEqual([404, 404]);
   expect(wrongStore.json()).toEqual(missing.json());
   expect(await denyMetaStateOutsideItsShop(a, b, foreign)).toEqual(missing.json());
+  const other = await app.get(SessionsService).create(b.owner.id, { isRemembered: false });
+  const otherCookie = `${SESSION_COOKIE}=${other.token}`;
+  const selected = await f.request(otherCookie, 'POST', '/me/active-store', { storeId: b.id });
+  expect(selected.statusCode).toBe(204);
+  const wrongSession = await f.request(otherCookie, 'POST', metaAccounts, own);
+  expect(wrongSession.statusCode).toBe(404);
+  expect(wrongSession.json()).toEqual(missing.json());
   await denyCustomMetaRole(b, own);
   await f.admin.pool.query(
     "update memberships set built_in_role='admin',role_id=null where id=$1",
