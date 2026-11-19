@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 import { Clock } from '../platform/clock';
@@ -21,10 +21,11 @@ const jobOptions = {
 @Injectable()
 export class PaymentJobsService {
   constructor(
-    private readonly callbacks: PaymentCallbacksRepository,
+    @Inject(PaymentCallbacksRepository) private readonly callbacks: PaymentCallbacksRepository,
+    @Inject(PaymentSettlementsRepository)
     private readonly settlements: PaymentSettlementsRepository,
-    private readonly stores: StoresService,
-    private readonly clock: Clock,
+    @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(Clock) private readonly clock: Clock,
     @InjectQueue(QUEUES.payments) private readonly queue: Queue,
   ) {}
 

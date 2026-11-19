@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 
 import { gatewaySettlementLines, paymentIntents } from '@dakly/db/schema/payments';
@@ -9,7 +9,7 @@ const lines = gatewaySettlementLines;
 
 @Injectable()
 export class PaymentSettlementsRepository {
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   candidates(storeId: string, after: string | null, limit: number) {
     return this.database.forStore(storeId, (tx) =>

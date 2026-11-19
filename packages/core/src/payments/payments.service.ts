@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import type { CreatePaymentIntent } from '@dakly/contracts/payments';
 import type {
@@ -30,8 +30,8 @@ export class PaymentsService {
     private readonly repository: PaymentsRepository,
     private readonly transaction: StoreTransaction,
     private readonly clock: Clock,
-    private readonly outbox: OutboxService,
-    private readonly notifications: NotificationsService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   create(storeId: string, input: CreatePaymentIntent) {

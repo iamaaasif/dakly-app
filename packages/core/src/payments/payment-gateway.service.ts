@@ -16,10 +16,10 @@ type Intent = NonNullable<Awaited<ReturnType<PaymentsRepository['find']>>>;
 @Injectable()
 export class PaymentGatewayService {
   constructor(
-    private readonly payments: PaymentsService,
-    private readonly repository: PaymentsRepository,
-    private readonly clock: Clock,
-    private readonly encryption: EnvelopeEncryption,
+    @Inject(PaymentsService) private readonly payments: PaymentsService,
+    @Inject(PaymentsRepository) private readonly repository: PaymentsRepository,
+    @Inject(Clock) private readonly clock: Clock,
+    @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(PAYMENT_DRIVERS) private readonly drivers: readonly PaymentDriver[],
   ) {}
 
