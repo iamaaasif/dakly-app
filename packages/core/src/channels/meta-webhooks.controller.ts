@@ -9,7 +9,6 @@ import {
   Res,
   type RawBodyRequest,
 } from '@nestjs/common';
-import { RouteConfig } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import {
@@ -39,7 +38,6 @@ export class MetaWebhooksController {
 
   @Post()
   @ProviderCallback()
-  @RouteConfig({ rawJson: true })
   @HttpCode(200)
   receive(@Req() request: RawBodyRequest<FastifyRequest>) {
     const signature = request.headers['x-hub-signature-256'];

@@ -19,13 +19,10 @@ export function verifyMetaWebhookSignature(
 
 export function readMetaWebhookDelivery(rawBody: Buffer): Record<string, unknown> | undefined {
   try {
-    const payload: unknown = JSON.parse(rawBody.toString('utf8'), (key, value: unknown) => {
-      if (key === '__proto__' || key === 'constructor') throw new SyntaxError('Unsafe JSON key');
-      return value;
-    });
+    const payload: unknown = JSON.parse(rawBody.toString('utf8'));
     return deliverySchema.safeParse(payload).data;
   } catch (error) {
-    if (error instanceof SyntaxError || error instanceof RangeError) return undefined;
+    if (error instanceof SyntaxError) return undefined;
     throw error;
   }
 }

@@ -1,11 +1,10 @@
-// Only the API queues inbound work until CHN-4 adds its worker.
-export const INBOUND_QUEUE = 'inbound';
-
-export const QUEUES = {
+const workerQueues = {
   bulk: 'bulk',
   campaign: 'campaign',
   transactional: 'transactional',
   workflow: 'workflow',
 } as const;
 
-export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
+export const QUEUES = { ...workerQueues, inbound: 'inbound' } as const;
+export const WORKER_QUEUES = Object.values(workerQueues);
+export type QueueName = (typeof workerQueues)[keyof typeof workerQueues];

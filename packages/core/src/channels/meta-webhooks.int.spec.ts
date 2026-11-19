@@ -156,9 +156,9 @@ describe('Meta webhook intake', () => {
     expect(await stored(payload)).toEqual([]);
   });
 
-  it('checks the signature before decoding malformed JSON', async () => {
+  it('refuses malformed JSON at the transport boundary', async () => {
     const malformed = '{"object":';
-    expect((await post(malformed, 'sha256=invalid')).statusCode).toBe(401);
+    expect((await post(malformed, 'sha256=invalid')).statusCode).toBe(400);
     expect((await post(malformed)).statusCode).toBe(400);
     expect(await stored(malformed)).toEqual([]);
   });
@@ -178,35 +178,42 @@ describe('Meta webhook intake', () => {
     }
   });
 
-  it('leaves the row ready to retry while the queue is reconnecting', async () => {
+  it('leaves the row ready to retry while the queue is disconnected', async () => {
     const payload = delivery();
     const client = await queue.waitUntilReady();
-    const status = client.status;
-    const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
-    try {
-      client.status = 'reconnecting';
-      expect((await post(payload)).statusCode).toBe(503);
-      expect(await stored(payload)).toHaveLength(1);
-      expect(enqueue).not.toHaveBeenCalled();
-    } finally {
-      client.status = status;
-      enqueue.mockRestore();
-    }
+    await new Promise<void>((resolve) => {
+      client.once('end', resolve);
+      client.disconnect();
+    });
+
+    expect((await post(payload)).statusCode).toBe(503);
+    const rows = await stored(payload);
+    expect(rows).toHaveLength(1);
+
+    await client.connect();
     expect((await post(payload)).statusCode).toBe(200);
+    expect(await stored(payload)).toEqual(rows);
+    expect((await queue.getJob(rows[0]!.id))?.data).toEqual({ webhookEventId: rows[0]!.id });
   });
 
-  it('returns a retryable response if the queue does not respond', async () => {
+  it('returns a retryable response if the queue connection stops responding', async () => {
     const payload = delivery();
-    const enqueue = vi.spyOn(queue, 'add').mockImplementationOnce(() => new Promise(() => {}));
-    try {
-      expect((await post(payload)).statusCode).toBe(503);
-      expect(await stored(payload)).toHaveLength(1);
-      expect((await post(payload)).statusCode).toBe(200);
-      const [event] = await stored(payload);
-      expect((await queue.getJob(event!.id))?.data).toEqual({ webhookEventId: event!.id });
-    } finally {
-      enqueue.mockRestore();
-    }
+    const client = await queue.waitUntilReady();
+    const reconnected = new Promise<void>((resolve) => client.once('ready', resolve));
+    // BLPOP blocks only this connection, so other test traffic can keep using Valkey.
+    const blocked = client
+      .runCommand('blpop', [queue.toKey('blocked-test'), 3])
+      .catch(() => undefined);
+
+    expect((await post(payload)).statusCode).toBe(503);
+    const rows = await stored(payload);
+    expect(rows).toHaveLength(1);
+
+    await blocked;
+    await reconnected;
+    expect((await post(payload)).statusCode).toBe(200);
+    expect(await stored(payload)).toEqual(rows);
+    expect((await queue.getJob(rows[0]!.id))?.data).toEqual({ webhookEventId: rows[0]!.id });
   });
 
   it('refuses a 2 MiB delivery before saving it', async () => {
@@ -219,7 +226,7 @@ describe('Meta webhook intake', () => {
     const payload = delivery();
     const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
     try {
-      expect((await post(payload)).statusCode).toBe(500);
+      expect((await post(payload)).statusCode).toBe(503);
       const rows = await stored(payload);
       expect(rows).toHaveLength(1);
       expect(await queue.getJob(rows[0]!.id)).toBeUndefined();
