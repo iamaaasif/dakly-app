@@ -27,6 +27,7 @@ describe('inbox filters without RLS assistance', () => {
     const connectionId = randomUUID();
     const id = randomUUID();
     const messageId = randomUUID();
+    const senderIdentityId = randomUUID();
     await f.connection.pool.query(
       "insert into contacts (id, store_id, source, kind) values ($1, $2, 'messenger', 'chat_only')",
       [contactId, storeId],
@@ -42,11 +43,16 @@ describe('inbox filters without RLS assistance', () => {
       [id, storeId, contactId, connectionId],
     );
     await f.connection.pool.query(
-      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, status)
-       values ($1, $2, $3, 'in', 'customer', 'text', 'received')`,
-      [messageId, storeId, id],
+      `insert into contact_identities (id, store_id, contact_id, channel_connection_id, channel, external_id)
+       values ($1::uuid, $2, $3, $4, 'messenger', $1::text)`,
+      [senderIdentityId, storeId, contactId, connectionId],
     );
-    return { id, messageId, contactId, connectionId };
+    await f.connection.pool.query(
+      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, status, sender_identity_id)
+       values ($1, $2, $3, 'in', 'customer', 'text', 'received', $4)`,
+      [messageId, storeId, id, senderIdentityId],
+    );
+    return { id, messageId, contactId, connectionId, senderIdentityId };
   }
 
   it('lists, reads and updates only conversations and messages in the selected store', async () => {
@@ -93,5 +99,20 @@ describe('inbox filters without RLS assistance', () => {
     await expect(
       pool.query("update messages set send_category = 'unexpected' where id = $1", [own.messageId]),
     ).rejects.toMatchObject({ code: '23514', constraint: 'messages_send_category' });
+  });
+
+  it('requires each inbound message to identify a sender in its own store', async () => {
+    const own = await conversation(f.a);
+    const foreign = await conversation(f.b);
+    const { pool } = f.connection;
+    await expect(
+      pool.query('update messages set sender_identity_id = $1 where id = $2', [
+        foreign.senderIdentityId,
+        own.messageId,
+      ]),
+    ).rejects.toMatchObject({ code: '23503', constraint: 'messages_sender_identity_store_fk' });
+    await expect(
+      pool.query('update messages set sender_identity_id = null where id = $1', [own.messageId]),
+    ).rejects.toMatchObject({ code: '23514', constraint: 'messages_inbound_sender' });
   });
 });

@@ -1,5 +1,5 @@
 {
-  "id": "c7077b53-c110-4db7-a70d-bf1ee68b8261",
+  "id": "ec0e09f8-16ed-435d-89cc-2aa741c8c50f",
   "prevId": "576afb87-c1bc-4529-ab30-51f2e797e07d",
   "version": "7",
   "dialect": "postgresql",
@@ -9768,6 +9768,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sender_identity_id": {
+          "name": "sender_identity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "recipient_identity_id": {
           "name": "recipient_identity_id",
           "type": "uuid",
@@ -10013,6 +10019,28 @@
           "method": "btree",
           "with": {}
         },
+        "messages_sender_identity_idx": {
+          "name": "messages_sender_identity_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sender_identity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"messages\".\"sender_identity_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "messages_recipient_identity_idx": {
           "name": "messages_recipient_identity_idx",
           "columns": [
@@ -10119,6 +10147,21 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "messages_sender_identity_store_fk": {
+          "name": "messages_sender_identity_store_fk",
+          "tableFrom": "messages",
+          "tableTo": "contact_identities",
+          "columnsFrom": [
+            "store_id",
+            "sender_identity_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "messages_recipient_identity_store_fk": {
           "name": "messages_recipient_identity_store_fk",
           "tableFrom": "messages",
@@ -10142,6 +10185,10 @@
         "messages_direction": {
           "name": "messages_direction",
           "value": "\"messages\".\"direction\" in ('in', 'out')"
+        },
+        "messages_inbound_sender": {
+          "name": "messages_inbound_sender",
+          "value": "\"messages\".\"direction\" <> 'in' or \"messages\".\"sender_identity_id\" is not null"
         },
         "messages_author_type": {
           "name": "messages_author_type",
@@ -15143,27 +15190,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "attributed_touch_id": {
-          "name": "attributed_touch_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "attributed_touch_at": {
           "name": "attributed_touch_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_amount_poisha": {
-          "name": "attributed_amount_poisha",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_window_days": {
-          "name": "attributed_window_days",
-          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },
