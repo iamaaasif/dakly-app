@@ -104,7 +104,7 @@ export class ContactIdentitiesRepository {
         .onConflictDoNothing({
           target: [contactIdentities.channelConnectionId, contactIdentities.externalId],
         })
-        .returning({ contactId: contactIdentities.contactId });
+        .returning({ id: contactIdentities.id, contactId: contactIdentities.contactId });
       // The store never sees the transient contact if another webhook claimed the identity.
       if (!identity)
         await tx

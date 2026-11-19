@@ -1,5 +1,5 @@
 {
-  "id": "d8a4d146-dbe7-43c5-a9ad-6bb47c02b720",
+  "id": "ec0e09f8-16ed-435d-89cc-2aa741c8c50f",
   "prevId": "576afb87-c1bc-4529-ab30-51f2e797e07d",
   "version": "7",
   "dialect": "postgresql",
@@ -7148,25 +7148,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sms_credits": {
-          "name": "sms_credits",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "send_attempts": {
-          "name": "send_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7527,12 +7508,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "short_link_base": {
-          "name": "short_link_base",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "started_at": {
           "name": "started_at",
           "type": "timestamp with time zone",
@@ -7757,34 +7732,6 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'scheduled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_sending_idx": {
-          "name": "campaigns_sending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "started_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9821,6 +9768,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "sender_identity_id": {
+          "name": "sender_identity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "recipient_identity_id": {
           "name": "recipient_identity_id",
           "type": "uuid",
@@ -10066,6 +10019,28 @@
           "method": "btree",
           "with": {}
         },
+        "messages_sender_identity_idx": {
+          "name": "messages_sender_identity_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sender_identity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"messages\".\"sender_identity_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "messages_recipient_identity_idx": {
           "name": "messages_recipient_identity_idx",
           "columns": [
@@ -10172,6 +10147,21 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "messages_sender_identity_store_fk": {
+          "name": "messages_sender_identity_store_fk",
+          "tableFrom": "messages",
+          "tableTo": "contact_identities",
+          "columnsFrom": [
+            "store_id",
+            "sender_identity_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "messages_recipient_identity_store_fk": {
           "name": "messages_recipient_identity_store_fk",
           "tableFrom": "messages",
@@ -10195,6 +10185,10 @@
         "messages_direction": {
           "name": "messages_direction",
           "value": "\"messages\".\"direction\" in ('in', 'out')"
+        },
+        "messages_inbound_sender": {
+          "name": "messages_inbound_sender",
+          "value": "\"messages\".\"direction\" <> 'in' or \"messages\".\"sender_identity_id\" is not null"
         },
         "messages_author_type": {
           "name": "messages_author_type",

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0054_snapshot.json`: **95 tables, 1271 columns, 386 explicit indexes and 299 foreign keys**.
+Built from `packages/db/migrations/meta/0054_snapshot.json`: **95 tables, 1268 columns, 386 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -443,6 +443,7 @@ erDiagram
     users |o..o{ messages : "author_user_id"
     users |o..o{ messages : "rated_by_user_id"
     conversations ||..o{ messages : "store_id, conversation_id"
+    contact_identities |o..o{ messages : "store_id, sender_identity_id"
     contact_identities |o..o{ messages : "store_id, recipient_identity_id"
     stores ||..o{ social_comments : "store_id"
     channel_connections ||..o{ social_comments : "channel_connection_id"
@@ -706,6 +707,7 @@ erDiagram
         text media_text "NULL; text"
         text external_id "NULL; text"
         text idempotency_key "NULL; text"
+        uuid sender_identity_id FK "NULL; uuid"
         uuid recipient_identity_id FK "NULL; uuid"
         text send_category "NULL; text"
         text status "NOT NULL; text"
@@ -1384,7 +1386,6 @@ erDiagram
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
-        text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
@@ -1419,9 +1420,6 @@ erDiagram
         timestamp_with_time_zone read_at "NULL; timestamp with time zone"
         timestamp_with_time_zone tapped_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
-        integer sms_credits "NULL; integer"
-        integer send_attempts "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     tracked_links {
@@ -1961,6 +1959,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `messages_author_user_id_users_id_fk`                                | `messages(author_user_id)`                                | `users(id)`                                 | no action |
 | `messages_rated_by_user_id_users_id_fk`                              | `messages(rated_by_user_id)`                              | `users(id)`                                 | no action |
 | `messages_conversation_id_store_fk`                                  | `messages(store_id, conversation_id)`                     | `conversations(store_id, id)`               | no action |
+| `messages_sender_identity_store_fk`                                  | `messages(store_id, sender_identity_id)`                  | `contact_identities(store_id, id)`          | no action |
 | `messages_recipient_identity_store_fk`                               | `messages(store_id, recipient_identity_id)`               | `contact_identities(store_id, id)`          | no action |
 | `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
 | `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
