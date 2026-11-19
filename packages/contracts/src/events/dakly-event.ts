@@ -8,6 +8,7 @@ import {
 } from './channels';
 import {
   consentChangedEventSchema,
+  contactBirthdayEventSchema,
   contactCreatedEventSchema,
   contactTagAddedEventSchema,
   importStartedEventSchema,
@@ -41,6 +42,7 @@ import {
 } from './products';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
+  contactBirthdayEventSchema,
   contactCreatedEventSchema,
   contactTagAddedEventSchema,
   productUpdatedEventSchema,

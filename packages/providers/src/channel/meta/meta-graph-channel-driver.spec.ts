@@ -14,7 +14,7 @@ const messengerReply = {
   channel: 'messenger',
   externalConversationId: '999',
   text: 'জি, পণ্যটি আছে।',
-  operationKey: '2ec0ca9c-2253-48f6-944c-1a54438fae45',
+  operationKey: 'message-operation-1',
 } as const;
 
 describe('MetaGraphChannelDriver', () => {

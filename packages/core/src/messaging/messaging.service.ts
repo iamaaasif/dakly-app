@@ -243,9 +243,7 @@ export class MessagingService {
     await this.recordChannelOutcome(
       storeId,
       pending,
-      sent
-        ? { ...sent, preview: pending.body.slice(0, 160) }
-        : { errorCode: 'connection_unavailable' },
+      { ...sent, preview: pending.body.slice(0, 160) },
       'attempted',
     );
   }
@@ -271,8 +269,17 @@ export class MessagingService {
       identityId,
     });
     if (!identity) return this.refuseChannelDispatch(storeId, message, 'no_address');
-    const credential = await this.connections.prepareMetaSend(storeId, connectionId, channel);
-    if (!credential) return this.refuseChannelDispatch(storeId, message, 'connection_unavailable');
+    let credential;
+    try {
+      credential = await this.connections.prepareMetaSend(storeId, connectionId, channel);
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        ['CHANNEL_NOT_CONNECTED', 'META_CHANNEL_NOT_CONFIGURED'].includes(error.code)
+      )
+        return this.refuseChannelDispatch(storeId, message, error.code.toLowerCase());
+      throw error;
+    }
     if (!(await this.outbound.markAttempt(storeId, message.id))) return;
     return {
       ...message,

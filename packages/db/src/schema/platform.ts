@@ -87,6 +87,12 @@ export const outboxEvents = pgTable(
       .on(table.id)
       .where(sql`${table.publishedAt} is null`),
     index('outbox_events_published_at_idx').on(table.publishedAt),
+    index('outbox_events_automation_preview_idx')
+      .on(table.storeId, table.type, table.occurredAt.desc(), table.id.desc())
+      .where(sql`type in ('consent.changed', 'contact.tag_added', 'contact.birthday')`),
+    uniqueIndex('outbox_events_birthday_contact_day_key')
+      .on(table.storeId, sql`(payload->>'contactId')`, sql`(payload->>'day')`)
+      .where(sql`type = 'contact.birthday'`),
   ],
 );
 

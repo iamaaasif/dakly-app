@@ -19,3 +19,17 @@ description = "Prose false positive in a review document"
 condition = "AND"
 commits = ["674ab62c4fdf70e771aa4f8873addb5ed2b87ce2"]
 paths = ['''^docs/reviews/features-08-13\.md$''']
+
+# The removed operationKeyHash value was a synthetic test fixture.
+[[allowlists]]
+description = "Removed operationKeyHash test fixture"
+condition = "AND"
+commits = ["bb4d1eb77672194f3fdcdd6c19149914d6402018"]
+paths = ['''^packages/core/src/platform/logging/error-reporter\.spec\.ts$''']
+
+# This commit used a synthetic message operation key in the provider test.
+[[allowlists]]
+description = "Synthetic Meta message operation key"
+condition = "AND"
+commits = ["0d5a412f27e04a5872163c4c26ede75597428552"]
+paths = ['''^packages/providers/src/channel/meta/meta-graph-channel-driver\.spec\.ts$''']

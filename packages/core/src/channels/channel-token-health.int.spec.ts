@@ -313,10 +313,20 @@ it('queues stores beyond the first bounded lookup page', async () => {
   }
 });
 
+it('reports a missing or mismatched Meta connection', async () => {
+  const connectionId = await connection('wrong-kind-fixture', null);
+  const connections = app.get(ChannelConnectionsService);
+  for (const id of [randomUUID(), connectionId]) {
+    await expect(connections.prepareMetaSend(storeId, id, 'instagram')).rejects.toMatchObject({
+      code: 'CHANNEL_NOT_CONNECTED',
+    });
+  }
+});
+
 it('marks a rejected send credential and tells the owner', async () => {
   const connectionId = await connection('revoked-send-token', null);
   const connections = app.get(ChannelConnectionsService);
-  const prepared = (await connections.prepareMetaSend(storeId, connectionId, 'messenger'))!;
+  const prepared = await connections.prepareMetaSend(storeId, connectionId, 'messenger');
   const message = {
     channel: 'messenger',
     externalConversationId: 'recipient-test',

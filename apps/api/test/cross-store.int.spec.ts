@@ -5,7 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { META_AUTHORIZATION_DRIVER } from '@dakly/core/channels/meta-authorization.service';
+import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -1145,6 +1145,52 @@ fixture('GET /automations/:automationId', async () => {
   expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
 });
+fixture('GET /automations/:automationId/trigger-preview', async () => {
+  const { a, b } = await pair();
+  const addGrants = async (shop: Shop) => {
+    const contactId = randomUUID();
+    const eventIds = Array.from({ length: 12 }, () => randomUUID());
+    const now = Date.now();
+    for (const [index, id] of eventIds.entries()) {
+      await f.admin.pool.query(
+        `insert into outbox_events(id,store_id,type,payload,occurred_at)
+         values($1,$2,'consent.changed',$3,$4)`,
+        [
+          id,
+          shop.id,
+          { contactId, channel: 'sms', status: 'granted', source: 'manual' },
+          new Date(now - index * 1000),
+        ],
+      );
+    }
+    await f.admin.pool.query(
+      `insert into outbox_events(id,store_id,type,payload,occurred_at)
+       values($1,$2,'consent.changed',$3,$4)`,
+      [
+        randomUUID(),
+        shop.id,
+        { contactId, channel: 'sms', status: 'granted', source: 'import' },
+        new Date(now),
+      ],
+    );
+    return eventIds.slice(0, 10);
+  };
+  const [aId, bId, aEvents, bEvents] = await Promise.all([
+    automation(a),
+    automation(b),
+    addGrants(a),
+    addGrants(b),
+  ]);
+  const path = (id: string) => `/automations/${id}/trigger-preview`;
+  for (const [shop, id, ids] of [
+    [a, aId, aEvents],
+    [b, bId, bEvents],
+  ] as const) {
+    const response = await success(shop, 'GET', path(id), 200);
+    expect(response.json().items.map((item: { id: string }) => item.id)).toEqual(ids);
+  }
+  await hidden(b, 'GET', path, aId);
+});
 // Each action runs on a workflow in the status it starts from.
 for (const [method, action, status, start, expected] of [
   ['PATCH', '', 200, 'draft', { name: 'নতুন নাম' }],
@@ -1828,7 +1874,7 @@ async function expectSavedMetaCredential(shop: Shop, id: string, kind: string) {
 
 function metaSubscriptionDriver() {
   return app.get<{ subscribePage(pageId: string, token: string): Promise<void> }>(
-    META_AUTHORIZATION_DRIVER,
+    META_CHANNEL_DRIVER,
   );
 }
 

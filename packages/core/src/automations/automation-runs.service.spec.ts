@@ -12,6 +12,8 @@ import type {
 import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import type { ErrorReporter } from '../platform/logging/error-reporter';
+import { runWithJobContext } from '../platform/logging/job-context';
 import type { SegmentsService } from '../segments/segments.service';
 import type { SendDecision, SendPolicyService } from '../sending/send-policy.service';
 import type { StoresService } from '../stores/stores.service';
@@ -26,6 +28,7 @@ import type {
   RunStepChange,
 } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 
 const STORE_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a01';
 const RUN_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a02';
@@ -120,6 +123,7 @@ const send: AutomationStep = {
 const optOutUrl = 'https://links.dakly.test/s/Ab3dE6gH';
 
 describe('AutomationRunsService', () => {
+  const reportJob = vi.fn();
   let repository: FakeRunsRepository;
   let tags: string[];
   let segmentMembers: string[];
@@ -159,6 +163,7 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
+    reportJob.mockClear();
     vi.spyOn(env, 'loadEnv').mockReturnValue({
       CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
     } as env.Env);
@@ -282,6 +287,12 @@ describe('AutomationRunsService', () => {
       messaging as unknown as MessagingService,
       links as unknown as LinksService,
       wallets as unknown as WalletService,
+      new AutomationSmsDeliveryService(
+        messaging as unknown as MessagingService,
+        wallets as unknown as WalletService,
+        { reportJob } as unknown as ErrorReporter,
+        repository as unknown as AutomationRunsRepository,
+      ),
       new AutomationConditionsService(
         segments as unknown as SegmentsService,
         sendPolicy as unknown as SendPolicyService,
@@ -595,12 +606,41 @@ describe('AutomationRunsService', () => {
 
     it('fails the run when the provider gives no answer', async () => {
       providerError = new Error('connection reset');
-      await start(send);
+      await runWithJobContext(() => start(send), 'workflow-job-lease-1');
 
+      expect(reportJob).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
+        'workflow-job-lease-1',
+        { runId: RUN_ID, stepKey: 'first' },
+      );
       expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
       expect(repository.run.lastError).toContain('The SMS provider did not answer');
       expect(repository.run.lastError).toContain('credits stay reserved');
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+    });
+
+    it('reports an uncertain response even when the settlement clock is unavailable', async () => {
+      providerError = new Error('connection reset');
+      schedulerUnavailable = 'after authorization';
+
+      await expect(runWithJobContext(() => start(send), 'workflow-job-lease-1')).rejects.toThrow(
+        'Scheduler clock unavailable before provider dispatch',
+      );
+
+      expect(reportJob).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
+        'workflow-job-lease-1',
+        { runId: RUN_ID, stepKey: 'first' },
+      );
+    });
+
+    it('rejects an uncertain response report without a worker job id', async () => {
+      providerError = new Error('connection reset');
+
+      await expect(start(send)).rejects.toThrow('Workflow SMS reporting requires a worker job ID');
+
+      expect(reportJob).not.toHaveBeenCalled();
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
     });
 
     it('does not send again a step that an earlier claim handed to the provider', async () => {
@@ -661,7 +701,7 @@ describe('AutomationRunsService', () => {
         status: 500,
         message: 'The provider response was incomplete',
       });
-      await start(send);
+      await runWithJobContext(() => start(send));
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
@@ -700,7 +740,7 @@ describe('AutomationRunsService', () => {
     it('keeps the credits reserved when the provider gives no answer', async () => {
       providerError = new Error('connection reset');
 
-      await start(send);
+      await runWithJobContext(() => start(send));
 
       expect(repository.run.status).toBe('failed');
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);

@@ -18,7 +18,7 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { TeamService } from '../team/team.service';
 import { CHANNEL_CONNECTION_ERRORS } from './channel-connections.errors';
 import { ChannelConnectionsRepository } from './channel-connections.repository';
-import { META_AUTHORIZATION_DRIVER } from './meta-authorization.service';
+import { META_CHANNEL_DRIVER } from './meta-authorization.service';
 
 function connectionError(code: keyof typeof CHANNEL_CONNECTION_ERRORS) {
   return new AppError(code, CHANNEL_CONNECTION_ERRORS[code]);
@@ -45,7 +45,7 @@ export class ChannelConnectionsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
-    @Inject(META_AUTHORIZATION_DRIVER) private readonly driver: Pick<ChannelDriver, 'send'> | null,
+    @Inject(META_CHANNEL_DRIVER) private readonly driver: Pick<ChannelDriver, 'send'> | null,
   ) {}
 
   async list(
@@ -79,11 +79,12 @@ export class ChannelConnectionsService {
     storeId: string,
     connectionId: string,
     channel: OutboundMessage['channel'],
-  ) {
+  ): Promise<PreparedMetaSend> {
+    if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
     const credential = await this.repository.activeMetaToken(storeId, connectionId);
     const kind = channel === 'messenger' ? 'facebook_page' : 'instagram';
     if (!credential?.ciphertext || credential.keyVersion === null || credential.kind !== kind)
-      return;
+      throw connectionError('CHANNEL_NOT_CONNECTED');
     const { ciphertext, externalAccountId, keyVersion } = credential;
     return { storeId, connectionId, channel, ciphertext, externalAccountId, keyVersion };
   }
@@ -95,13 +96,13 @@ export class ChannelConnectionsService {
     prepared: PreparedMetaSend,
   ) {
     if (this.transaction.isOpen()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
-    if (!this.driver) return;
+    if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
     if (
       prepared.storeId !== storeId ||
       prepared.connectionId !== connectionId ||
       prepared.channel !== message.channel
     )
-      throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
+      throw connectionError('CHANNEL_NOT_CONNECTED');
     const { ciphertext, externalAccountId, keyVersion } = prepared;
     const token = this.encryption.decrypt(
       { owner: 'store', storeId, purpose: 'channel-access-token' },
