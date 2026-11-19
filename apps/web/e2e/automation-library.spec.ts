@@ -24,7 +24,8 @@ test('filters the template library and copies a ready workflow into a draft', as
   const existing = new Set(before.items.map(({ id }) => id));
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
   try {
-    await page.goto('/automations/new');
+    await page.goto('/automations');
+    await page.getByRole('link', { name: 'Create workflow' }).click();
     await expect(page.getByRole('heading', { name: 'Pick a ready-made workflow' })).toBeVisible();
     const followUp = page.getByRole('article').filter({ hasText: 'Chat follow-up' });
     await expect(followUp.getByText(/Needs a connected channel/)).toBeVisible();
