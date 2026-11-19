@@ -175,7 +175,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 | ID    | Task                                                                      | Status | Depends      | PR  | Notes                  |
 | ----- | ------------------------------------------------------------------------- | ------ | ------------ | --- | ---------------------- |
-| PAY-2 | Payment intents, events, verify job, reconciliation jobs                  | Todo   | DB-2         |     |                        |
+| PAY-2 | Payment intents, events, verify job, reconciliation jobs                  | In progress | DB-2         |     |                        |
 | PAY-3 | bKash driver (tokenized checkout)                                         | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
 | PAY-4 | Nagad driver                                                              | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
 | PAY-5 | City Bank card driver (hosted page)                                       | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
