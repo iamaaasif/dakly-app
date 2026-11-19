@@ -1,5 +1,5 @@
 {
-  "id": "fcfb8339-603b-412e-b71e-5c5815471d0a",
+  "id": "576afb87-c1bc-4529-ab30-51f2e797e07d",
   "prevId": "163772fa-b1a1-4cea-a2f0-0b04a5de22d6",
   "version": "7",
   "dialect": "postgresql",
@@ -16102,18 +16102,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "gateway": {
-          "name": "gateway",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gateway_event_id": {
-          "name": "gateway_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "event_payload": {
           "name": "event_payload",
           "type": "jsonb",
@@ -16129,27 +16117,6 @@
         }
       },
       "indexes": {
-        "payment_events_gateway_event_key": {
-          "name": "payment_events_gateway_event_key",
-          "columns": [
-            {
-              "expression": "gateway",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "gateway_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "payment_events_intent_idx": {
           "name": "payment_events_intent_idx",
           "columns": [
@@ -18297,6 +18264,39 @@
           "columns": [
             {
               "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "webhook_events_recovery_idx": {
+          "name": "webhook_events_recovery_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

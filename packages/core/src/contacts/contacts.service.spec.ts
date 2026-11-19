@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AuditService } from '../audit/audit.service';
+import type { RateLimiter } from '../platform/cache/rate-limiter';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import type { ContactIdentitiesRepository } from './contact-identities.repository';
+import { ContactPhoneAccessService } from './contact-phone-access.service';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import type { ImportContactsRepository } from './import-contacts.repository';
@@ -55,6 +58,11 @@ describe('ContactsService', () => {
       } as unknown as ImportContactsRepository,
       {} as OrderContactsRepository,
       new ContactDeletionService(contacts, storeTransaction, outbox, clock),
+      new ContactPhoneAccessService(
+        { consume: async () => ({ allowed: true, retryAfter: 0 }) } as RateLimiter,
+        {} as AuditService,
+        storeTransaction,
+      ),
     );
   });
 
@@ -222,9 +230,9 @@ describe('ContactsService', () => {
         .slice(0, filter.limit + 1);
     };
     const search = async (term: string, seeFullPhone: boolean) =>
-      (await service.list(STORE_ID, { limit: 50, search: term }, { seeFullPhone })).items.map(
-        (item) => [item.name, item.phone],
-      );
+      (
+        await service.list(STORE_ID, { limit: 50, search: term }, { seeFullPhone }, actor)
+      ).items.map((item) => [item.name, item.phone]);
 
     beforeEach(() => {
       repository.list.mockImplementation(fakeList);
@@ -253,7 +261,7 @@ describe('ContactsService', () => {
     });
 
     it('returns a cursor only while more contacts follow', async () => {
-      const first = await service.list(STORE_ID, { limit: 2 }, { seeFullPhone: true });
+      const first = await service.list(STORE_ID, { limit: 2 }, { seeFullPhone: true }, actor);
       expect(first.items.map((item) => item.id)).toEqual([people[0]!.id, people[1]!.id]);
       expect(first.nextCursor).toBe(people[1]!.id);
 
@@ -261,6 +269,7 @@ describe('ContactsService', () => {
         STORE_ID,
         { limit: 2, cursor: first.nextCursor! },
         { seeFullPhone: true },
+        actor,
       );
       expect(second.items.map((item) => item.id)).toEqual([people[2]!.id]);
       expect(second.nextCursor).toBeNull();
