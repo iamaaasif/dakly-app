@@ -6,7 +6,7 @@ import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
-import { afterAll, afterEach, aroundEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, aroundEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { countSmsParts } from '@dakly/contracts/sms';
@@ -49,6 +49,7 @@ type RunnerFixture = {
   signal: AbortSignal;
   applications: Promise<INestApplicationContext>[];
   pending: Set<Promise<unknown>>;
+  cleanups: (() => Promise<void>)[];
   closing: boolean;
 };
 const fixtures = new AsyncLocalStorage<RunnerFixture>();
@@ -266,15 +267,22 @@ describe('Workflow runner (Postgres and Valkey)', () => {
   });
 
   aroundEach(async (runTest, { signal }) => {
-    const fixture: RunnerFixture = { signal, applications: [], pending: new Set(), closing: false };
+    const fixture: RunnerFixture = {
+      signal,
+      applications: [],
+      pending: new Set(),
+      cleanups: [],
+      closing: false,
+    };
     try {
       await fixtures.run(fixture, runTest);
     } finally {
       await drainFixture(fixture);
+      const cleaned = await Promise.allSettled(fixture.cleanups.map((cleanup) => cleanup()));
       const closed = await Promise.allSettled(
         fixture.applications.map(async (started) => (await started).close()),
       );
-      throwFirstRejection(closed);
+      throwFirstRejection([...cleaned, ...closed]);
     }
   });
 
@@ -777,8 +785,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
     });
 
-    afterEach(async () => {
-      await drainFixture(fixtures.getStore()!);
+    beforeEach(() => {
       clockNow = daytime;
       databaseNow = undefined;
       vi.mocked(MailpitSmsDriver.prototype.send)
@@ -2483,6 +2490,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const jobs = await runner.queue.getJobs(['waiting']);
       const firstJob = jobs.find((job) => job.data.automationRunId === first.runIds[0])!;
       const secondJob = jobs.find((job) => job.data.automationRunId === second.runIds[0])!;
+      const fixture = fixtures.getStore()!;
+      checkFixture(fixture);
+      fixture.cleanups.push(async () => {
+        throwFirstRejection(await Promise.allSettled([firstJob.remove(), secondJob.remove()]));
+      });
       let reached!: () => void;
       let release!: () => void;
       const blocked = new Promise<void>((resolve) => {
@@ -2523,8 +2535,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         release();
         await pending.catch(() => undefined);
         hook.mockRestore();
-        await firstJob.remove();
-        await secondJob.remove();
       }
     });
 
