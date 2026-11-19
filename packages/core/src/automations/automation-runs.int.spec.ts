@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Queue } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import { afterAll, aroundEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
@@ -101,6 +101,7 @@ async function worker() {
   const entries = application.get(AutomationEntryService);
   const consents = application.get(ConsentService);
   const wallets = application.get(WalletService);
+  const queue = application.get<Queue>(getQueueToken(QUEUES.workflow));
   return {
     sweep: () => run(() => application.get(WakeDueRunsJob).handle({})),
     runStep: (data: StepJobData) =>
@@ -116,7 +117,8 @@ async function worker() {
     wallets: {
       credit: (...args: Parameters<typeof wallets.credit>) => run(() => wallets.credit(...args)),
     },
-    queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
+    queue,
+    waitingJobs: () => run(() => queue.getJobs(['waiting'])),
   };
 }
 
@@ -135,12 +137,24 @@ function throwFirstRejection(results: PromiseSettledResult<unknown>[]) {
   if (failure) throw failure.reason;
 }
 
-async function queuedSteps(queue: Queue): Promise<StepJobData[]> {
-  return (await queue.getJobs(['waiting'])).map((job) => job.data as StepJobData);
+function removeJobsBeforeClose(...jobs: Job[]) {
+  const fixture = fixtures.getStore()!;
+  checkFixture(fixture);
+  let removal: Promise<void> | undefined;
+  const remove = () =>
+    (removal ??= Promise.allSettled(jobs.map((job) => job.remove())).then(throwFirstRejection));
+  fixture.cleanups.push(remove);
+  return remove;
 }
 
-async function queuedStep(queue: Queue, runId: string) {
-  const step = (await queuedSteps(queue)).find((data) => data.automationRunId === runId);
+type Worker = Awaited<ReturnType<typeof worker>>;
+
+async function queuedSteps(worker: Worker): Promise<StepJobData[]> {
+  return (await worker.waitingJobs()).map((job) => job.data as StepJobData);
+}
+
+async function queuedStep(worker: Worker, runId: string) {
+  const step = (await queuedSteps(worker)).find((data) => data.automationRunId === runId);
   expect(step).toBeDefined();
   return step!;
 }
@@ -319,10 +333,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     // A sweep takes at most 100 of one store's runs, so the rest come in the next sweep.
     await first.sweep();
 
-    const queued = [
-      ...(await queuedSteps(first.queue)),
-      ...(await queuedSteps(second.queue)),
-    ].filter((step) => runIds.includes(step.automationRunId));
+    const queued = [...(await queuedSteps(first)), ...(await queuedSteps(second))].filter((step) =>
+      runIds.includes(step.automationRunId),
+    );
     expect(queued.map((step) => step.automationRunId).sort()).toEqual([...runIds].sort());
     // Each job carries the run's one claim, and a sweep does not count attempts.
     const claims = await admin.pool.query(
@@ -348,10 +361,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       "update automation_runs set claimed_at=claimed_at - interval '6 minutes' where id=$1 returning claimed_at",
       [runId],
     );
-    const staleStep = { ...(await queuedStep(first.queue, runId!)) };
+    const staleStep = { ...(await queuedStep(first, runId!)) };
     staleStep.claimedAt = stale.rows[0].claimed_at.toISOString();
     await second.sweep();
-    const current = await queuedStep(second.queue, runId!);
+    const current = await queuedStep(second, runId!);
 
     await first.runStep(staleStep);
 
@@ -380,16 +393,14 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     await runner.sweep();
     const before = Date.now();
 
-    await runner.runStep(await queuedStep(runner.queue, runId!));
+    await runner.runStep(await queuedStep(runner, runId!));
 
     const { wake_at: wakeAt } = await run(runId!);
     expect(wakeAt.getTime()).toBeGreaterThanOrEqual(before + 120 * MINUTE);
     expect(wakeAt.getTime()).toBeLessThanOrEqual(Date.now() + 120 * MINUTE);
     const again = await worker();
     await again.sweep();
-    expect((await queuedSteps(again.queue)).map((step) => step.automationRunId)).not.toContain(
-      runId,
-    );
+    expect((await queuedSteps(again)).map((step) => step.automationRunId)).not.toContain(runId);
   });
 
   it('picks the same random path when the step runs again', async () => {
@@ -405,11 +416,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     } = await dueRuns(split);
     const runner = await worker();
     await runner.sweep();
-    await runner.runStep(await queuedStep(runner.queue, runId!));
+    await runner.runStep(await queuedStep(runner, runId!));
     const { current_step_key: path } = await run(runId!);
     expect(['yes', 'no']).toContain(path);
     // The next step went straight to the queue under the run's new claim.
-    const next = (await queuedSteps(runner.queue)).find(
+    const next = (await queuedSteps(runner)).find(
       (step) => step.automationRunId === runId && step.stepKey === path,
     );
     expect(new Date(next!.claimedAt)).toEqual((await run(runId!)).claimed_at);
@@ -438,16 +449,14 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const runner = await worker();
 
     await runner.sweep();
-    expect((await queuedSteps(runner.queue)).map((step) => step.automationRunId)).not.toContain(
-      runId,
-    );
+    expect((await queuedSteps(runner)).map((step) => step.automationRunId)).not.toContain(runId);
 
     await admin.pool.query(
       "update automations set status='active', pause_reason=null where id=$1",
       [automationId],
     );
     await runner.sweep();
-    expect(await queuedStep(runner.queue, runId!)).toMatchObject({ stepKey: 'first' });
+    expect(await queuedStep(runner, runId!)).toMatchObject({ stepKey: 'first' });
   });
 
   it('queues a step claimed again under one queue prefix while the first job is still queued', async () => {
@@ -463,9 +472,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     await runner.sweep();
 
-    const claims = (await queuedSteps(runner.queue)).filter(
-      (step) => step.automationRunId === runId,
-    );
+    const claims = (await queuedSteps(runner)).filter((step) => step.automationRunId === runId);
     expect(claims).toHaveLength(2);
     const { claimed_at: claimedAt } = await run(runId!);
     const current = claims.find(
@@ -490,7 +497,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const runner = await worker();
 
     await runner.sweep();
-    for (const step of await queuedSteps(runner.queue))
+    for (const step of await queuedSteps(runner))
       if (runIds.includes(step.automationRunId)) await runner.runStep(step);
 
     const finished = await admin.pool.query(
@@ -507,7 +514,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const [scheduled] = await startRuns(automationId, before);
     const runner = await worker();
     await runner.sweep();
-    await runner.runStep(await queuedStep(runner.queue, scheduled!));
+    await runner.runStep(await queuedStep(runner, scheduled!));
     const { wake_at: scheduledWake } = await run(scheduled!);
 
     const shorter: AutomationStep = {
@@ -520,8 +527,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const [waitingOnOld] = await startRuns(automationId, before);
     const startedAt = Date.now();
     await runner.sweep();
-    await runner.runStep(await queuedStep(runner.queue, entered!));
-    await runner.runStep(await queuedStep(runner.queue, waitingOnOld!));
+    await runner.runStep(await queuedStep(runner, entered!));
+    await runner.runStep(await queuedStep(runner, waitingOnOld!));
 
     expect((await run(scheduled!)).wake_at).toEqual(scheduledWake);
     const newWake = (await run(entered!)).wake_at.getTime();
@@ -551,8 +558,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const runner = await worker();
     await runner.sweep();
 
-    await runner.runStep(await queuedStep(runner.queue, runId!));
-    const next = (await queuedSteps(runner.queue)).find(
+    await runner.runStep(await queuedStep(runner, runId!));
+    const next = (await queuedSteps(runner)).find(
       (step) => step.automationRunId === runId && step.stepKey === 'check',
     );
     await runner.runStep(next!);
@@ -579,7 +586,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await runner.sweep();
     }
     const { claimed_at: claimedAt } = await run(runId!);
-    const current = (await queuedSteps(runner.queue)).find(
+    const current = (await queuedSteps(runner)).find(
       (step) =>
         step.automationRunId === runId &&
         new Date(step.claimedAt).getTime() === claimedAt.getTime(),
@@ -622,7 +629,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     try {
       await runner.sweep();
 
-      const queued = (await queuedSteps(runner.queue)).map((step) => step.automationRunId);
+      const queued = (await queuedSteps(runner)).map((step) => step.automationRunId);
       expect(queued).toContain(other.rows[0]!.id);
       expect(queued.filter((runId) => backlog.includes(runId))).toHaveLength(100);
     } finally {
@@ -683,10 +690,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     // Sweeps the run's step and runs its job, then removes the job as a finished one would be.
     async function runDueStep(runner: Awaited<ReturnType<typeof worker>>, runId: string) {
       await runner.sweep();
-      const jobs = await runner.queue.getJobs(['waiting']);
+      const jobs = await runner.waitingJobs();
       const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
+      const removeJob = removeJobsBeforeClose(job);
       await runner.runStep(job.data as StepJobData);
-      await job.remove();
+      await removeJob();
     }
 
     async function wakeNow(runId: string) {
@@ -887,8 +895,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const resumedAt = new Date(wakeAt.getTime() + 23 * HOUR);
       await admin.pool.query('update automation_runs set wake_at=$1 where id=$2', [wakeAt, runId]);
       await runner.sweep();
-      const jobs = await runner.queue.getJobs(['waiting']);
+      const jobs = await runner.waitingJobs();
       const first = jobs.find((job) => job.data.automationRunId === runId)!;
+      const removeJob = removeJobsBeforeClose(first);
       const blocker = await admin.pool.connect();
       let dispatched: Promise<unknown> | undefined;
       try {
@@ -909,7 +918,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         blocker.release(true);
         await dispatched;
       }
-      await first.remove();
+      await removeJob();
 
       expect(await run(runId!)).toMatchObject({ status: 'waiting', wake_at: wakeAt });
       expect(await ledgerFor(runId!)).toEqual([]);
@@ -1030,7 +1039,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } = await dueRuns(send('marketing', 'exit'), 1, 'active', contact);
 
       await runDueStep(runner, skipped!);
-      await runner.runStep(await queuedStep(runner.queue, exited!));
+      await runner.runStep(await queuedStep(runner, exited!));
 
       expect(await run(skipped!)).toMatchObject({ status: 'running', current_step_key: 'end' });
       expect(await run(exited!)).toMatchObject({ status: 'exited', current_step_key: 'first' });
@@ -1082,9 +1091,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         runIds: [runId],
       } = await dueRuns(send('marketing'), 1, 'paused', contact);
       await runner.sweep();
-      expect((await queuedSteps(runner.queue)).map((step) => step.automationRunId)).not.toContain(
-        runId,
-      );
+      expect((await queuedSteps(runner)).map((step) => step.automationRunId)).not.toContain(runId);
 
       clockNow = new Date(daytime.getTime() + 25 * HOUR);
       await admin.pool.query(
@@ -1521,10 +1528,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
           [runId],
         );
-        const oldJob = (await runner.queue.getJobs(['waiting'])).find(
+        const oldJob = (await runner.waitingJobs()).find(
           (job) => job.data.automationRunId === runId,
         );
-        await oldJob?.remove();
+        if (oldJob) await removeJobsBeforeClose(oldJob)();
         await runDueStep(runner, runId!);
         expect(sentFor(runId!)).toHaveLength(1);
         expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
@@ -1657,10 +1664,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
           [runId],
         );
-        const oldJob = (await runner.queue.getJobs(['waiting'])).find(
+        const oldJob = (await runner.waitingJobs()).find(
           (job) => job.data.automationRunId === runId,
         );
-        await oldJob?.remove();
+        if (oldJob) await removeJobsBeforeClose(oldJob)();
         await runDueStep(runner, runId!);
         expect(sentFor(runId!)).toEqual([]);
         expect(await sendStep(runId!)).toEqual([
@@ -1710,7 +1717,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             if (boundary === 'a reclaimed run') {
               await runner.sweep();
               replacementClaim = (await run(runId!)).claimed_at.toISOString();
-              const queued = (await queuedSteps(runner.queue)).filter(
+              const queued = (await queuedSteps(runner)).filter(
                 (job) => job.automationRunId === runId,
               );
               expect(queued).toHaveLength(2);
@@ -1818,8 +1825,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         await runDueStep(runner, runId!);
       } else {
         await runner.sweep();
-        const jobs = await runner.queue.getJobs(['waiting']);
+        const jobs = await runner.waitingJobs();
         const job = jobs.find((job) => job.data.automationRunId === runId)!;
+        const removeJob = removeJobsBeforeClose(job);
         const blocker = await admin.pool.connect();
         let pending: ReturnType<typeof runner.runStep> | undefined;
         try {
@@ -1839,7 +1847,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         } finally {
           blocker.release(true);
           await pending?.catch(() => undefined);
-          await job.remove();
+          await removeJob();
         }
       }
       expect(sentFor(runId!)).toEqual([]);
@@ -2107,8 +2115,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const versionId = await publish(automationId, 1, graph);
       const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
       await runner.sweep();
-      const jobs = await runner.queue.getJobs(['waiting']);
+      const jobs = await runner.waitingJobs();
       const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
+      const removeJob = removeJobsBeforeClose(job);
       const blocker = await admin.pool.connect();
       let pending: ReturnType<typeof runner.runStep> | undefined;
       try {
@@ -2132,7 +2141,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } finally {
         blocker.release(true);
         await pending?.catch(() => undefined);
-        await job.remove();
+        await removeJob();
       }
     });
 
@@ -2154,8 +2163,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             new Date(daytime.getTime() - 24 * HOUR + MINUTE),
           ]);
         await runner.sweep();
-        const jobs = await runner.queue.getJobs(['waiting']);
+        const jobs = await runner.waitingJobs();
         const job = jobs.find((queued) => queued.data.automationRunId === runId)!;
+        const removeJob = removeJobsBeforeClose(job);
         const blocker = await admin.pool.connect();
         let pending: ReturnType<typeof runner.runStep> | undefined;
         try {
@@ -2210,7 +2220,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         } finally {
           blocker.release(true);
           await pending?.catch(() => undefined);
-          await job.remove();
+          await removeJob();
         }
       },
     );
@@ -2225,12 +2235,13 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           runs.push(await dueRuns(send('marketing'), 1, 'active', contact));
         }
         await runner.sweep();
-        const jobs = await runner.queue.getJobs(['waiting']);
+        const jobs = await runner.waitingJobs();
         const heldJobs = runs.map(({ runIds }) => {
           const job = jobs.find((entry) => entry.data.automationRunId === runIds[0]);
           expect(job).toBeDefined();
           return job!;
         });
+        const removeJobs = removeJobsBeforeClose(...heldJobs);
         const blocker = await admin.pool.connect();
         let pending: Promise<PromiseSettledResult<unknown>[]> | undefined;
         try {
@@ -2277,7 +2288,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           // Discarding the client also releases the advisory lock if setup or the test failed.
           blocker.release(true);
           await pending;
-          throwFirstRejection(await Promise.allSettled(heldJobs.map((job) => job.remove())));
+          await removeJobs();
         }
       },
     );
@@ -2487,14 +2498,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
       const second = await dueRuns(send('marketing'), 1, 'active', contact);
       await runner.sweep();
-      const jobs = await runner.queue.getJobs(['waiting']);
+      const jobs = await runner.waitingJobs();
       const firstJob = jobs.find((job) => job.data.automationRunId === first.runIds[0])!;
       const secondJob = jobs.find((job) => job.data.automationRunId === second.runIds[0])!;
-      const fixture = fixtures.getStore()!;
-      checkFixture(fixture);
-      fixture.cleanups.push(async () => {
-        throwFirstRejection(await Promise.allSettled([firstJob.remove(), secondJob.remove()]));
-      });
+      removeJobsBeforeClose(firstJob, secondJob);
       let reached!: () => void;
       let release!: () => void;
       const blocked = new Promise<void>((resolve) => {
@@ -2837,12 +2844,12 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } = await dueRuns(send('transactional'), 2, 'active', contact);
       // Both runs reach the gate at the same moment.
       await runner.sweep();
-      const recentStep = await queuedStep(runner.queue, recent!);
-      const oldStep = await queuedStep(runner.queue, old!);
+      const recentStep = await queuedStep(runner, recent!);
+      const oldStep = await queuedStep(runner, old!);
       throwFirstRejection(
         await Promise.allSettled([runner.runStep(recentStep), runner.runStep(oldStep)]),
       );
-      for (const job of await runner.queue.getJobs(['waiting'])) await job.remove();
+      await removeJobsBeforeClose(...(await runner.waitingJobs()))();
 
       for (const runId of [recent!, old!])
         expect(await run(runId)).toMatchObject({
