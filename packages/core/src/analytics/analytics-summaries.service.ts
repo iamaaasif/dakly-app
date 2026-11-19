@@ -53,9 +53,9 @@ export class AnalyticsSummariesService {
     return { from: from ?? through, through };
   }
 
-  async finishReconciliation(storeId: string) {
+  async pruneEventMarkers(storeId: string) {
     const day = this.clock.now().toISOString().slice(0, 10);
-    await this.summaries.pruneEventMarkers(storeId, shiftReportDay(day, -7));
+    return this.summaries.pruneEventMarkers(storeId, shiftReportDay(day, -7));
   }
 
   async reconcileOrderRange(storeId: string, period: ReportPeriod) {

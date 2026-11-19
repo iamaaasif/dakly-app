@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { Clock } from '../platform/clock';
 import { QUEUES } from '../platform/queue/queues';
-import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
+import { DAY_MS, JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { shiftReportDay } from './report-period';
@@ -20,6 +20,8 @@ export const analyticsReconciliationPayload = z.strictObject({
       period: z.strictObject({ from: z.iso.date(), through: z.iso.date() }).nullable(),
     }),
     z.strictObject({ kind: z.literal('buyers'), after: z.uuid().nullable() }),
+    z.strictObject({ kind: z.literal('lifecycle'), minute: z.int().nonnegative() }),
+    z.strictObject({ kind: z.literal('markers'), batch: z.int().nonnegative() }),
   ]),
 });
 type Repair = z.infer<typeof analyticsReconciliationPayload>;
@@ -48,16 +50,42 @@ export class AnalyticsReconciliationService {
     }
   }
 
+  async scheduleLifecycle(storeId: string) {
+    const now = this.clock.now().getTime();
+    const minute = Math.floor(now / MINUTE_MS) + 1;
+    const dueAt = minute * MINUTE_MS;
+    const day = new Date(dueAt).toISOString().slice(0, 10);
+    const job = reconciliationJob({ storeId, day, page: { kind: 'lifecycle', minute } });
+    // Read at the end of the minute so one snapshot includes the store's recent changes.
+    await this.queue.add(job.name, job.data, { ...job.opts, delay: dueAt - now });
+  }
+
   async reconcile(repair: Repair) {
     const { day, storeId, page } = repair;
     if (day !== this.clock.now().toISOString().slice(0, 10)) return;
+    if (page.kind === 'lifecycle') {
+      await this.summaries.refreshLifecycle(storeId);
+      return;
+    }
+    if (page.kind === 'markers') {
+      if (await this.summaries.pruneEventMarkers(storeId))
+        await this.queue.addBulk([
+          reconciliationJob({ ...repair, page: { kind: 'markers', batch: page.batch + 1 } }),
+        ]);
+      return;
+    }
     if (page.kind === 'buyers') {
       const after = await this.summaries.reconcileBuyerPage(storeId, page.after);
       if (after)
         await this.queue.addBulk([
           reconciliationJob({ ...repair, page: { kind: 'buyers', after } }),
         ]);
-      else await this.summaries.finishReconciliation(storeId);
+      else {
+        await this.summaries.refreshLifecycle(storeId);
+        await this.queue.addBulk([
+          reconciliationJob({ ...repair, page: { kind: 'markers', batch: 0 } }),
+        ]);
+      }
       return;
     }
 
@@ -76,7 +104,8 @@ export class AnalyticsReconciliationService {
 }
 
 function reconciliationJob(data: Repair) {
-  const cursor = data.page.kind === 'orders' ? data.page.period?.from : data.page.after;
+  const { page } = data;
+  const cursor = page.kind === 'orders' ? page.period?.from : repairCursor(page);
   return {
     name: RECONCILE_ANALYTICS,
     data,
@@ -88,4 +117,9 @@ function reconciliationJob(data: Repair) {
       removeOnFail: 100,
     },
   };
+}
+
+function repairCursor(page: Exclude<Repair['page'], { kind: 'orders' }>) {
+  if (page.kind === 'buyers') return page.after;
+  return page.kind === 'lifecycle' ? page.minute : page.batch;
 }

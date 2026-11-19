@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, gte, lt, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, lte, notInArray, sql } from 'drizzle-orm';
 
 import { storeDailyMetrics } from '@dakly/db/schema/analytics';
 
@@ -88,17 +88,23 @@ export class AnalyticsRepository {
   }
 
   async pruneEventMarkers(storeId: string, before: string) {
-    await this.database.forStore(storeId, (tx) =>
-      tx
-        .delete(storeDailyMetrics)
-        .where(
-          and(
-            eq(storeDailyMetrics.storeId, storeId),
-            eq(storeDailyMetrics.metric, 'order_event'),
-            lt(storeDailyMetrics.day, before),
-          ),
-        ),
+    const limit = 5000;
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ count: number }>(sql`
+        with removed as (
+          delete from store_daily_metrics
+          where store_id = ${storeId} and metric = 'order_event'
+            and (day, dimension) in (
+              select day, dimension from store_daily_metrics
+              where store_id = ${storeId} and metric = 'order_event' and day < ${before}::date
+              order by day, dimension limit ${limit}
+            )
+          returning 1
+        )
+        select count(*)::int from removed
+      `),
     );
+    return rows[0]?.count === limit;
   }
 
   async readLifecycle(storeId: string, period: ReportPeriod) {

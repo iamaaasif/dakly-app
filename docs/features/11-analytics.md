@@ -227,7 +227,7 @@ The order event ID is recorded in the same transaction as its summary rows. Orde
 
 Reports use the current and previous ranges of store-local calendar days. A returning buyer is counted once across the full period. The daily points count that same group on each day it ordered. Lifecycle counts read the latest snapshot inside the period.
 
-Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It reads the original creation dates and clears stale buyer activity for removed or excluded buyers. The last page removes old event markers. Full design: [docs/data](../data/README.md).
+Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It reads the original creation dates and clears stale buyer activity for removed or excluded buyers. The worker also refreshes lifecycle counts and removes expired order event markers in pages of 5,000. Lifecycle events for a store share one refresh at the end of the minute. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

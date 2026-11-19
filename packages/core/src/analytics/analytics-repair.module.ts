@@ -6,6 +6,7 @@ import { QUEUES } from '../platform/queue/queues';
 import { StoresModule } from '../stores/stores.module';
 import { AnalyticsReconciliationService } from './analytics-reconciliation.service';
 import { AnalyticsModule } from './analytics.module';
+import { QueueLifecycleSnapshot } from './jobs/queue-lifecycle-snapshot.job';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
 
@@ -16,6 +17,11 @@ import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
     StoresModule,
     BullModule.registerQueue({ name: QUEUES.sync }),
   ],
-  providers: [AnalyticsReconciliationService, ReconcileAnalyticsJob, SweepAnalyticsJob],
+  providers: [
+    AnalyticsReconciliationService,
+    QueueLifecycleSnapshot,
+    ReconcileAnalyticsJob,
+    SweepAnalyticsJob,
+  ],
 })
 export class AnalyticsRepairModule {}
