@@ -7,7 +7,7 @@ import type { TagChange } from '../contacts/contacts.service';
 import type { PreparedSmsSender } from '../messaging/messaging.service';
 import { loadEnv } from '../platform/config/env';
 import { hashCode } from '../platform/crypto/code-hash';
-import { DAY_MS } from '../platform/time';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
@@ -20,6 +20,9 @@ import { wakeTime } from './automation-waits';
 
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
+
+// Matches the lease compared by due_automation_runs in Postgres.
+export const WORKFLOW_LEASE_MS = 5 * MINUTE_MS;
 
 export type Condition = AutomationGraph['workflowFilters'][number];
 export type PathChoice = { outcome: string; next: string };
@@ -52,7 +55,17 @@ export type GateResult =
   | { outcome: 'late' | 'destination_changed' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: Exclude<SendDecision, { action: 'send' }> }
-  | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
+  | {
+      decision: { action: 'send' };
+      body: string;
+      destination: string | null;
+      at: Date;
+      firstTriedAt: Date;
+    };
+export function holdOwnedClaim(run: ClaimedRun | undefined, claim: RunClaim, now: Date) {
+  return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
+}
+
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -163,7 +176,7 @@ export function ifNotReachable(step: SendStep, now: Date) {
 // The step was handed to the provider and no answer came; it may have been sent. Its credits stay
 // reserved until a reconciliation settles it (ACC-14 brings provider status reports), and it is
 // not sent again.
-const UNKNOWN_OUTCOME =
+export const UNKNOWN_OUTCOME =
   'The SMS provider did not confirm this message, so its credits stay reserved until it is checked';
 
 export function endWithUnknownOutcome(held: StepResult): StepResult {

@@ -3,8 +3,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 
+import { ContactsService } from '../contacts/contacts.service';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
+import { AutomationRunsRepository } from './automation-runs.repository';
 import {
   type Condition,
   hasHappened,
@@ -18,6 +20,8 @@ export class AutomationConditionsService {
   constructor(
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
+    @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
   ) {}
 
   // Checked before every step (feature 09): the goal, the exit conditions, then the workflow
@@ -33,6 +37,13 @@ export class AutomationConditionsService {
     for (const filter of workflowFilters)
       if (!(await this.holds(filter, facts, at))) return 'workflow_filter';
     return undefined;
+  }
+
+  async refreshExitReason(facts: RunFacts, at: Date) {
+    const { storeId, contactId, runId } = facts;
+    const tags = await this.contacts.findTags(storeId, contactId);
+    const tappedStepKeys = await this.repository.listTappedStepKeys(storeId, runId);
+    return this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
   }
 
   async firstHoldingPath(
