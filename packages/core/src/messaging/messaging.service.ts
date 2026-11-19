@@ -15,6 +15,7 @@ export type OutgoingMessage = {
   body: string;
   operationKey: string;
   destination?: string | null;
+  beforeSubmit?: (destination: string) => Promise<void>;
 };
 
 export type PreparedSmsSender = { storeId: string; name: string | undefined };
@@ -38,6 +39,7 @@ export class MessagingService {
   ): Promise<SentMessage> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
     const { to, parts, sender } = await this.prepareSend(storeId, message, preparedSender);
+    if (message.beforeSubmit) await message.beforeSubmit(to);
     const { providerMessageId } = await this.smsService.send({
       to,
       text: message.body,

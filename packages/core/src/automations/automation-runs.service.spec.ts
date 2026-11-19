@@ -125,8 +125,9 @@ describe('AutomationRunsService', () => {
   let sent: OutgoingMessage[];
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
-  let clockFailsAfterGate: boolean;
-  let gateCommitted: boolean;
+  let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
+  let submissionChecked: boolean;
+  let submissionCommitted: boolean;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
   let service: AutomationRunsService;
@@ -158,7 +159,9 @@ describe('AutomationRunsService', () => {
       CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
     } as env.Env);
     repository = new FakeRunsRepository(async () => {
-      if (clockFailsAfterGate && gateCommitted && !sent.length)
+      const during = schedulerUnavailable === 'during submission' && submissionChecked;
+      const after = schedulerUnavailable === 'after authorization' && submissionCommitted;
+      if ((during || after) && !sent.length)
         throw new Error('Scheduler clock unavailable before provider dispatch');
       return databaseNow ?? clockNow;
     });
@@ -169,8 +172,9 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     sent = [];
     providerError = undefined;
-    clockFailsAfterGate = false;
-    gateCommitted = false;
+    schedulerUnavailable = undefined;
+    submissionChecked = false;
+    submissionCommitted = false;
     senderLookupError = undefined;
     balance = 10;
     ledger = [];
@@ -212,6 +216,11 @@ describe('AutomationRunsService', () => {
       },
     };
     const contacts = {
+      lockForConsent: async () => {
+        submissionChecked = true;
+        return [];
+      },
+      getPhoneForSend: async () => '01711000201',
       findTags: async () => tags,
       changeTag: async (
         _storeId: string,
@@ -241,9 +250,11 @@ describe('AutomationRunsService', () => {
         return { storeId, name: undefined };
       },
       send: async (_storeId: string, message: OutgoingMessage) => {
+        const { beforeSubmit, ...submitted } = message;
+        await beforeSubmit?.('01711000201');
         if (providerError) throw providerError;
-        if (!sent.some((earlier) => earlier.operationKey === message.operationKey))
-          sent.push(message);
+        if (!sent.some((earlier) => earlier.operationKey === submitted.operationKey))
+          sent.push(submitted);
         return { providerMessageId: 'sms-1', parts: 1, credits: 1 };
       },
     };
@@ -255,7 +266,7 @@ describe('AutomationRunsService', () => {
     const transaction = {
       run: async (_storeId: string, work: () => Promise<unknown>) => {
         const result = await work();
-        if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
+        if (submissionChecked) submissionCommitted = true;
         return result;
       },
     };
@@ -472,14 +483,24 @@ describe('AutomationRunsService', () => {
       ]);
     });
 
-    it('dispatches without another clock read after reserving the send', async () => {
-      clockFailsAfterGate = true;
+    it('dispatches without another clock read after authorizing submission', async () => {
+      schedulerUnavailable = 'after authorization';
 
       await start(send);
 
+      expect(submissionCommitted).toBe(true);
       expect(sent).toHaveLength(1);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
+    });
+
+    it('does not call the provider if the final authorization clock read fails', async () => {
+      schedulerUnavailable = 'during submission';
+
+      await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
+      expect(sent).toEqual([]);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
 
     it('sends a transactional SMS without an opt-out link', async () => {

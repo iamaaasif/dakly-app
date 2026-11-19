@@ -44,6 +44,7 @@ import {
   type StepResult,
   workflowDestinationHash,
 } from './automation-step-rules';
+import { authorizeFirstSubmission, WorkflowSubmissionStopped } from './automation-submit-guard';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
@@ -240,6 +241,7 @@ export class AutomationRunsService {
           destination: started.destination,
         },
         started.at,
+        facts.wakeAt,
       );
     if (decision.action === 'defer')
       return { claim: renewed, run: { status: 'waiting', wakeAt: decision.until } };
@@ -364,24 +366,44 @@ export class AutomationRunsService {
   private async deliver(
     { storeId, claim, contactId, step, body, destination, preparedSender }: Delivery,
     sentAt: Date,
-  ): Promise<StepResult> {
+    wakeAt: Date | null,
+  ): Promise<StepResult | undefined> {
+    let submittingClaim: RunClaim | undefined;
     const message = {
       channel: 'sms',
       contactId,
       body,
       operationKey: operationKey(claim),
       destination,
+      beforeSubmit: async (preparedPhone: string) => {
+        submittingClaim = await authorizeFirstSubmission({
+          transaction: this.transaction,
+          repository: this.repository,
+          facts: { storeId, wakeAt },
+          claim,
+          step,
+          checkPhone: async () => {
+            await this.contacts.lockForConsent(storeId, [contactId]);
+            return (await this.contacts.getPhoneForSend(storeId, contactId)) === preparedPhone;
+          },
+        });
+      },
     } as const;
     const attempt = await this.messaging.send(storeId, message, preparedSender).then(
       (receipt) => ({ receipt }),
       (error: unknown) => ({ error }),
     );
+    if ('error' in attempt) {
+      if (attempt.error instanceof WorkflowSubmissionStopped) return attempt.error.result;
+      if (!submittingClaim && !(attempt.error instanceof AppError)) throw attempt.error;
+    }
+    const currentClaim = submittingClaim ?? claim;
     const now = await this.repository.schedulerTime(storeId);
     if ('receipt' in attempt) {
       const { providerMessageId, credits } = attempt.receipt;
       return {
         ...goOn(step.next, now),
-        claim,
+        claim: currentClaim,
         stepChange: { outcome: 'sent', providerMessageId, sentAt },
         credits: { settle: 'charge', quantity: credits },
       };
@@ -390,11 +412,11 @@ export class AutomationRunsService {
     if (attempt.error instanceof AppError)
       return {
         ...failed(attempt.error.message, now),
-        claim,
+        claim: currentClaim,
         stepChange: { outcome: 'failed' },
         credits: { settle: 'release' },
       };
     // Any other error may come after the provider took the message.
-    return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim });
+    return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim: currentClaim });
   }
 }

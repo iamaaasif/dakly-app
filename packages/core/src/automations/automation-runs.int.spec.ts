@@ -801,6 +801,54 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
     });
 
+    it.each(['a new worker claims the run', 'the contact changes phone'] as const)(
+      'does not submit the first SMS if %s during provider preparation',
+      async (change) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const reclaim = change === 'a new worker claims the run';
+        databaseNow = new Date(Date.now() - (reclaim ? 6 * MINUTE : 0));
+        const {
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const read = ContactsService.prototype.getPhoneForSend;
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async function (shop, person) {
+            const value = await read.call(this, shop, person);
+            if (reclaim) {
+              const oldClaim = (await run(runId!)).claimed_at;
+              databaseNow = new Date();
+              await runner.sweep();
+              expect((await run(runId!)).claimed_at).not.toEqual(oldClaim);
+            } else {
+              await admin.pool.query('update contacts set phone=$2 where id=$1', [
+                contact,
+                '01712000998',
+              ]);
+            }
+            return value;
+          });
+        try {
+          await runDueStep(runner, runId!);
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        if (reclaim) {
+          expect(await run(runId!)).toMatchObject({ status: 'running' });
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+          expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+        } else {
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
+          expect(await ledgerFor(runId!)).toEqual([
+            { kind: 'reserve', delta: -1 },
+            { kind: 'release', delta: 1 },
+          ]);
+        }
+      },
+    );
+
     it('releases credits and leaves the cap free when the final contact lookup fails', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
