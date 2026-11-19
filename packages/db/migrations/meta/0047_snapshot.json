@@ -1,5 +1,5 @@
 {
-  "id": "534b6839-32fd-4cac-bc05-439031503a14",
+  "id": "d481f05d-6177-4bf9-b132-ff652ae07f57",
   "prevId": "367230af-928b-4ea1-ab0c-6c4822554515",
   "version": "7",
   "dialect": "postgresql",
@@ -4340,6 +4340,24 @@
         "category": {
           "name": "category",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opt_out_url": {
+          "name": "opt_out_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destination_hash": {
+          "name": "destination_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_tried_at": {
+          "name": "first_tried_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -12570,40 +12588,6 @@
         }
       },
       "indexes": {
-        "contacts_birthday_idx": {
-          "name": "contacts_birthday_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "birthday_month",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "birthday_day",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"contacts\".\"deleted_at\" is null and \"contacts\".\"birthday_month\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "contacts_store_id_id_key": {
           "name": "contacts_store_id_id_key",
           "columns": [
@@ -17944,68 +17928,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "outbox_events_automation_preview_idx": {
-          "name": "outbox_events_automation_preview_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "occurred_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "type in ('consent.changed', 'contact.tag_added', 'contact.birthday')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "outbox_events_birthday_contact_day_key": {
-          "name": "outbox_events_birthday_contact_day_key",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "(payload->>'contactId')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "(payload->>'day')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "type = 'contact.birthday'",
           "concurrently": false,
           "method": "btree",
           "with": {}

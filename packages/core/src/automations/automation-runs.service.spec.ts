@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
-import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
+import type {
+  MessagingService,
+  OutgoingMessage,
+  PreparedSms,
+} from '../messaging/messaging.service';
+import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { SegmentsService } from '../segments/segments.service';
@@ -124,8 +129,9 @@ describe('AutomationRunsService', () => {
   let sent: OutgoingMessage[];
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
-  let clockFailsAfterGate: boolean;
-  let gateCommitted: boolean;
+  let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
+  let submissionChecked: boolean;
+  let submissionCommitted: boolean;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
   let service: AutomationRunsService;
@@ -153,8 +159,13 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(env, 'loadEnv').mockReturnValue({
+      CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
+    } as env.Env);
     repository = new FakeRunsRepository(async () => {
-      if (clockFailsAfterGate && gateCommitted && !sent.length)
+      const during = schedulerUnavailable === 'during submission' && submissionChecked;
+      const after = schedulerUnavailable === 'after authorization' && submissionCommitted;
+      if ((during || after) && !sent.length)
         throw new Error('Scheduler clock unavailable before provider dispatch');
       return databaseNow ?? clockNow;
     });
@@ -165,8 +176,9 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     sent = [];
     providerError = undefined;
-    clockFailsAfterGate = false;
-    gateCommitted = false;
+    schedulerUnavailable = undefined;
+    submissionChecked = false;
+    submissionCommitted = false;
     senderLookupError = undefined;
     balance = 10;
     ledger = [];
@@ -208,6 +220,7 @@ describe('AutomationRunsService', () => {
       },
     };
     const contacts = {
+      getPhoneForSend: async () => '01711000201',
       findTags: async () => tags,
       changeTag: async (
         _storeId: string,
@@ -223,11 +236,10 @@ describe('AutomationRunsService', () => {
     };
     const sendPolicy = {
       check: async () => decision,
-      checkForSend: async () => ({
-        decision,
-        destination: '01711000201',
-        at: clockNow,
-      }),
+      checkForSend: async () => {
+        submissionChecked = true;
+        return { decision, destination: '01711000201', at: clockNow };
+      },
     };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
@@ -236,10 +248,16 @@ describe('AutomationRunsService', () => {
         if (senderLookupError) throw senderLookupError;
         return { storeId, name: undefined };
       },
-      send: async (_storeId: string, message: OutgoingMessage) => {
+      prepareSms: async (storeId: string, contactId: string) => ({
+        storeId,
+        contactId,
+        to: '01711000201',
+        sender: undefined,
+      }),
+      send: async (_storeId: string, message: OutgoingMessage, prepared: PreparedSms) => {
         if (providerError) throw providerError;
         if (!sent.some((earlier) => earlier.operationKey === message.operationKey))
-          sent.push(message);
+          sent.push({ ...message, destination: prepared.to });
         return { providerMessageId: 'sms-1', parts: 1, credits: 1 };
       },
     };
@@ -251,7 +269,7 @@ describe('AutomationRunsService', () => {
     const transaction = {
       run: async (_storeId: string, work: () => Promise<unknown>) => {
         const result = await work();
-        if (repository.steps.some((step) => step.outcome === 'sending')) gateCommitted = true;
+        if (submissionChecked) submissionCommitted = true;
         return result;
       },
     };
@@ -270,6 +288,8 @@ describe('AutomationRunsService', () => {
       ),
     );
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it.each([
     [{ until: 'duration', minutes: 90 }, '2026-11-16T06:30:00.000Z'],
@@ -466,11 +486,36 @@ describe('AutomationRunsService', () => {
       ]);
     });
 
-    it('dispatches without another clock read after reserving the send', async () => {
-      clockFailsAfterGate = true;
+    it('dispatches without another clock read after authorizing submission', async () => {
+      schedulerUnavailable = 'after authorization';
 
       await start(send);
 
+      expect(submissionCommitted).toBe(true);
+      expect(sent).toHaveLength(1);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
+    });
+
+    it('does not call the provider if the final authorization clock read fails', async () => {
+      schedulerUnavailable = 'during submission';
+
+      await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
+      expect(sent).toEqual([]);
+      expect(repository.steps).toEqual([]);
+      expect(ledger).toEqual([]);
+    });
+
+    it('lets the replacement worker reserve once after an authorization failure', async () => {
+      schedulerUnavailable = 'during submission';
+      await expect(start(send)).rejects.toThrow('Scheduler clock unavailable');
+      schedulerUnavailable = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
       expect(sent).toHaveLength(1);
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
@@ -572,16 +617,16 @@ describe('AutomationRunsService', () => {
     });
 
     it('fails the run with the message of a refused send', async () => {
-      providerError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+      providerError = new AppError('SMS_SEND_REFUSED', {
         status: 422,
-        message: 'This contact has no phone number',
+        message: 'The SMS provider refused the message',
       });
 
       await start(send);
 
       expect(repository.run).toMatchObject({
         status: 'failed',
-        lastError: 'This contact has no phone number',
+        lastError: 'The SMS provider refused the message',
       });
     });
   });
@@ -599,16 +644,26 @@ describe('AutomationRunsService', () => {
       expect(balance).toBe(9);
     });
 
-    it('releases the credits when the send fails', async () => {
-      providerError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+    it('releases the credits when the provider definitively refuses', async () => {
+      providerError = new AppError('SMS_SEND_REFUSED', {
         status: 422,
-        message: 'This contact has no phone number',
+        message: 'The provider refused the message',
       });
 
       await start(send);
 
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'release']);
       expect(balance).toBe(10);
+    });
+
+    it('retains an authorized send when an unexpected AppError follows authorization', async () => {
+      providerError = new AppError('MESSAGING_PREPARATION_FAILED', {
+        status: 500,
+        message: 'The provider response was incomplete',
+      });
+      await start(send);
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
 
     // The first try may have reached the provider, so these end the step and keep the credits.

@@ -9,6 +9,7 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { HOUR_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
@@ -33,8 +34,6 @@ type CapReadOptions = { includeCommittedFuture?: boolean };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
-
-const HOUR = 60 * 60 * 1000;
 
 const SEND: SendDecision = { action: 'send' };
 
@@ -167,7 +166,7 @@ export class SendPolicyService {
     capRead?: CapReadOptions,
   ) {
     return this.repository.listMarketingSends(storeId, contactIds, {
-      after: new Date(at.getTime() - 7 * 24 * HOUR),
+      after: new Date(at.getTime() - 7 * 24 * HOUR_MS),
       until: at,
       ...capRead,
     });
@@ -201,7 +200,7 @@ function capReached(
   { channel, at }: Pick<SendRequest, 'channel' | 'at'>,
   { perChannelPerDay, perSevenDays }: SendingSettings['frequencyCap'],
 ): boolean {
-  const dayStart = new Date(at.getTime() - 24 * HOUR);
+  const dayStart = new Date(at.getTime() - 24 * HOUR_MS);
   const onChannelToday = sends.filter(
     (send) => send.channel === channel && send.sentAt > dayStart,
   ).length;
@@ -218,7 +217,7 @@ function quietHoursEnd(
   if (local.hour >= endHour && local.hour < startHour) return undefined;
   const hoursToEnd = (endHour - local.hour + 24) % 24;
   const intoHour = (local.minute * 60 + local.second) * 1000 + at.getUTCMilliseconds();
-  return new Date(at.getTime() + hoursToEnd * HOUR - intoHour);
+  return new Date(at.getTime() + hoursToEnd * HOUR_MS - intoHour);
 }
 
 function localClock(at: Date, timeZone: string) {
