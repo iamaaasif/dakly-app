@@ -86,6 +86,12 @@ The daily token sweep makes one Meta call per active connection with no fixed ex
 
 ## bulk
 
+`sweep-contact-stats` runs daily and pages through `maintenance_store_ids`. It queues
+`reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contacts
+and queues the next cursor. The last totals page measures the Best customers cutoff.
+Ranking pages check contacts whose stage differs from the cutoff before writing a new stage.
+Page IDs deduplicate retries.
+
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `IndexKnowledgeJob`        | `knowledge.index_requested` outbox event | `storeId`, `knowledgeItemId`                                  | Replaces chunks only for the processing revision the job read                                                                                                                                                                                                 |

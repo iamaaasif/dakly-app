@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 
 import { contacts, contactStats } from '@dakly/db/schema/contacts';
 
@@ -10,9 +10,71 @@ export type ContactStatsWrite = Omit<
   'storeId' | 'contactId' | 'favouriteCategory' | 'netSpendPoisha'
 > & { netSpendPoisha: bigint };
 
+export type BestSpendCutoff = { contactId: string; netSpendPoisha: string };
+
 @Injectable()
 export class ContactStatsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+
+  contactIds(storeId: string, after: string | null, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(and(eq(contacts.storeId, storeId), after ? gt(contacts.id, after) : undefined))
+        .orderBy(asc(contacts.id))
+        .limit(limit),
+    );
+  }
+
+  contactsWithChangedRank(
+    storeId: string,
+    after: string | null,
+    { cutoff, minimum, limit }: { cutoff: BestSpendCutoff | null; minimum: bigint; limit: number },
+  ) {
+    const qualifies = cutoff
+      ? sql`${contactStats.lifecycleStage} not in ('none', 'stopped_buying')
+            and ${contactStats.netSpendPoisha} > ${minimum.toString()}::bigint
+            and (${contactStats.netSpendPoisha}, ${contactStats.contactId}) >=
+                (${cutoff.netSpendPoisha}::bigint, ${cutoff.contactId}::uuid)`
+      : sql`false`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .innerJoin(
+          contactStats,
+          and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contacts.id)),
+        )
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            after ? gt(contacts.id, after) : undefined,
+            sql`(${contactStats.lifecycleStage} = 'best') <> (${qualifies})`,
+          ),
+        )
+        .orderBy(asc(contacts.id))
+        .limit(limit),
+    );
+  }
+
+  async bestSpendCutoff(storeId: string) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<BestSpendCutoff>(sql`
+        with customers as not materialized (
+          select s.contact_id, s.net_spend_poisha
+          from contact_stats s join contacts c on c.store_id = s.store_id and c.id = s.contact_id
+          where s.store_id = ${storeId} and s.lifecycle_stage <> 'none'
+            and c.deleted_at is null and not c.is_blocked and c.kind <> 'not_customer'
+        ), quota as (select count(*) / 10 as best from customers)
+        select contact_id as "contactId", net_spend_poisha::text as "netSpendPoisha"
+        from customers
+        where (select best from quota) > 0
+        order by net_spend_poisha desc, contact_id desc
+        offset (select greatest(best - 1, 0) from quota) limit 1`),
+    );
+    return rows[0] ?? null;
+  }
 
   async lockContact(storeId: string, contactId: string) {
     const [contact] = await this.database.forStore(storeId, (tx) =>
