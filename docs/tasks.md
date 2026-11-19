@@ -194,13 +194,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M11. Analytics and insights
 
-| ID     | Task                                               | Status | Depends       | PR  | Notes |
-| ------ | -------------------------------------------------- | ------ | ------------- | --- | ----- |
-| ANA-1  | Glossary report functions and daily summary tables | Todo   | ORD-3         |     |       |
-| ANA-2  | Attribution of orders to messages and posts        | Todo   | ANA-1, CAMP-3 |     |       |
-| ANA-3  | Web: Analytics tabs                                | Todo   | ANA-2         |     |       |
-| HOME-3 | Web: Dashboard cards                               | Todo   | ANA-1         |     |       |
-| HOME-4 | Ask Dakly AI with read-only report tools           | Todo   | ANA-1, AI-2   |     |       |
+| ID     | Task                                               | Status      | Depends       | PR  | Notes |
+| ------ | -------------------------------------------------- | ----------- | ------------- | --- | ----- |
+| ANA-1  | Glossary report functions and daily summary tables | In progress | ORD-3, CUS-3  |     |       |
+| ANA-2  | Attribution of orders to messages and posts        | Todo        | ANA-1, CAMP-3 |     |       |
+| ANA-3  | Web: Analytics tabs                                | Todo        | ANA-2         |     |       |
+| HOME-3 | Web: Dashboard cards                               | Todo        | ANA-1         |     |       |
+| HOME-4 | Ask Dakly AI with read-only report tools           | Todo        | ANA-1, AI-2   |     |       |
 
 ## M12. Admin panel
 
