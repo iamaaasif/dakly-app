@@ -17,7 +17,7 @@ test('filters the template library and copies a ready workflow into a draft', as
     { name: 'dakly_session', value: token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
   const { contextTag } = await (await context.request.get('/api/me/context')).json();
-  const headers = { 'X-Session-Context': contextTag };
+  const headers = { Origin: baseURL!, 'X-Session-Context': contextTag };
   const before: AutomationListResponse = await (
     await context.request.get('/api/automations', { headers })
   ).json();
@@ -72,7 +72,18 @@ test('filters the template library and copies a ready workflow into a draft', as
         status: 'draft',
         graph: automationTemplates.welcome_new_subscriber.graph,
       });
+    const copied: AutomationListResponse = await (
+      await context.request.get('/api/automations', { headers })
+    ).json();
+    const template = copied.items.find(({ id }) => !existing.has(id))!;
+    const publish = await context.request.post(`/api/automations/${template.id}/publish`, {
+      headers,
+    });
+    expect(publish.ok()).toBe(true);
     await page.goto('/automations/new');
+    await expect(
+      page.getByRole('article').filter({ hasText: template.name }).getByText('In use'),
+    ).toBeVisible();
     await page.getByRole('button', { name: 'Create from scratch' }).click();
     await expect
       .poll(async () => {
@@ -93,9 +104,15 @@ test('filters the template library and copies a ready workflow into a draft', as
         !existing.has(item.id) &&
         (item.templateKey === 'welcome_new_subscriber' || item.name === 'Untitled workflow'),
     );
-    await db.pool.query('delete from automations where id=any($1::uuid[])', [
-      added.map(({ id }) => id),
+    const addedIds = added.map(({ id }) => id);
+    await db.pool.query(
+      'update automations set published_version_id=null where id=any($1::uuid[])',
+      [addedIds],
+    );
+    await db.pool.query('delete from automation_versions where automation_id=any($1::uuid[])', [
+      addedIds,
     ]);
+    await db.pool.query('delete from automations where id=any($1::uuid[])', [addedIds]);
     await db.pool.end();
   }
 });
