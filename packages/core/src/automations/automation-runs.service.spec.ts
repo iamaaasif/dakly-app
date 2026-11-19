@@ -4,7 +4,11 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
-import type { MessagingService, OutgoingMessage } from '../messaging/messaging.service';
+import type {
+  MessagingService,
+  OutgoingMessage,
+  PreparedSms,
+} from '../messaging/messaging.service';
 import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -244,12 +248,16 @@ describe('AutomationRunsService', () => {
         if (senderLookupError) throw senderLookupError;
         return { storeId, name: undefined };
       },
-      send: async (_storeId: string, message: OutgoingMessage) => {
-        const { beforeSubmit, ...submitted } = message;
-        const body = (await beforeSubmit?.('01711000201')) ?? submitted.body;
+      prepareSms: async (storeId: string, contactId: string) => ({
+        storeId,
+        contactId,
+        to: '01711000201',
+        sender: undefined,
+      }),
+      send: async (_storeId: string, message: OutgoingMessage, prepared: PreparedSms) => {
         if (providerError) throw providerError;
-        if (!sent.some((earlier) => earlier.operationKey === submitted.operationKey))
-          sent.push({ ...submitted, body, destination: '01711000201' });
+        if (!sent.some((earlier) => earlier.operationKey === message.operationKey))
+          sent.push({ ...message, destination: prepared.to });
         return { providerMessageId: 'sms-1', parts: 1, credits: 1 };
       },
     };

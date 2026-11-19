@@ -6,10 +6,11 @@ import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService, TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
-import { MessagingService } from '../messaging/messaging.service';
+import { MessagingService, type PreparedSms } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -44,12 +45,13 @@ import {
   type StepResult,
   workflowDestinationHash,
 } from './automation-step-rules';
-import { WORKFLOW_LEASE_MS, WorkflowSubmissionStopped } from './automation-submit-guard';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
 // And at most this many of one store's runs, so a backlog cannot hold back other stores.
 const CLAIMS_PER_STORE = 100;
+// Matches the lease compared by due_automation_runs in Postgres.
+const WORKFLOW_LEASE_MS = 5 * MINUTE_MS;
 const system = { kind: 'system' } as const;
 
 const NO_ANSWER = 'The SMS provider did not answer';
@@ -190,12 +192,20 @@ export class AutomationRunsService {
   // transaction that also renews the claim, so the frequency cap counts this send before another
   // check for the contact can run.
   private async startSend(claim: RunClaim, step: SendStep, facts: RunFacts) {
-    const checkedAt = await this.repository.schedulerTime(facts.storeId);
-    if (!step.channels.includes('sms') || isLateSend(facts.wakeAt, checkedAt)) {
-      const planned = await this.authorizeFirstSend(claim, step, facts, null);
-      return 'stop' in planned ? planned.stop : undefined;
-    }
-    return this.deliver(claim, step, facts);
+    const { storeId, contactId, preparedSender } = facts;
+    const checkedAt = await this.repository.schedulerTime(storeId);
+    const prepared =
+      step.channels.includes('sms') && !isLateSend(facts.wakeAt, checkedAt)
+        ? await this.messaging
+            .prepareSms(storeId, contactId, preparedSender)
+            .catch((error: unknown) => {
+              if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return undefined;
+              throw error;
+            })
+        : undefined;
+    const planned = await this.authorizeFirstSend(claim, step, facts, prepared?.to ?? null);
+    if ('stop' in planned) return planned.stop;
+    if (prepared) return this.deliver(storeId, step, prepared, planned);
   }
 
   private async authorizeFirstSend(
@@ -342,36 +352,21 @@ export class AutomationRunsService {
   }
 
   private async deliver(
-    claim: RunClaim,
+    storeId: string,
     step: SendStep,
-    facts: RunFacts,
+    prepared: PreparedSms,
+    authorized: { claim: RunClaim; at: Date; body: string },
   ): Promise<StepResult | undefined> {
-    const { storeId, contactId, preparedSender } = facts;
-    let authorized: { claim: RunClaim; at: Date } | undefined;
     const message = {
       channel: 'sms',
-      contactId,
-      body: step.message.text,
-      operationKey: operationKey(claim),
-      beforeSubmit: async (phone: string | null) => {
-        const planned = await this.authorizeFirstSend(claim, step, facts, phone);
-        if ('stop' in planned) throw new WorkflowSubmissionStopped(planned.stop);
-        authorized = planned;
-        return planned.body;
-      },
+      contactId: prepared.contactId,
+      body: authorized.body,
+      operationKey: operationKey(authorized.claim),
     } as const;
-    const attempt = await this.messaging.send(storeId, message, preparedSender).then(
+    const attempt = await this.messaging.send(storeId, message, prepared).then(
       (receipt) => ({ receipt }),
       (error: unknown) => ({ error }),
     );
-    if ('error' in attempt && attempt.error instanceof WorkflowSubmissionStopped)
-      return attempt.error.result;
-    if (!authorized) {
-      if ('error' in attempt && attempt.error instanceof AppError)
-        return this.failedSmsPreparation(claim, step, facts, attempt.error);
-      if ('error' in attempt) throw attempt.error;
-      throw new Error('The SMS provider was called without workflow authorization');
-    }
     const now = await this.repository.schedulerTime(storeId);
     if ('receipt' in attempt) {
       const { providerMessageId, credits } = attempt.receipt;
@@ -390,18 +385,5 @@ export class AutomationRunsService {
         credits: { settle: 'release' },
       };
     return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim: authorized.claim });
-  }
-
-  private async failedSmsPreparation(
-    claim: RunClaim,
-    step: SendStep,
-    facts: RunFacts,
-    error: AppError,
-  ): Promise<StepResult | undefined> {
-    if (error.code === 'CONTACT_NOT_FOUND') {
-      const planned = await this.authorizeFirstSend(claim, step, facts, null);
-      return 'stop' in planned ? planned.stop : undefined;
-    }
-    throw error;
   }
 }
