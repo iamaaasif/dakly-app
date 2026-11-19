@@ -394,8 +394,11 @@ describe('Meta webhook intake', () => {
         delivery: { mids: ['mid.reconciled'] },
       };
       const earlyReceiptId = await enqueueEvent(earlyReceipt, lateDelivery);
-      await expect(handler.handle({ webhookEventId: earlyReceiptId }, false)).rejects.toThrow(
-        'Meta receipt is awaiting a send result',
+      await expect(handler.handle({ webhookEventId: earlyReceiptId }, false)).rejects.toMatchObject(
+        {
+          code: 'META_RECEIPT_PENDING',
+          message: 'Meta receipt is awaiting a send result',
+        },
       );
       const delivered = await admin.pool.query('select delivered_at from messages where id = $1', [
         sent,

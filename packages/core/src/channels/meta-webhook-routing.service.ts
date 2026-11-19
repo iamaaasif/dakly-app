@@ -10,6 +10,8 @@ import { ChannelReceiptsService } from '../messaging/channel-receipts.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
+import { AppError } from '../platform/errors/app-error';
+import { META_WEBHOOK_ERRORS } from './meta-webhooks.errors';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
 
 export const META_WEBHOOK_DRIVER = Symbol('META_WEBHOOK_DRIVER');
@@ -83,7 +85,7 @@ export class MetaWebhookRoutingService {
       );
     }
     if (outcomes.includes('receipt_pending'))
-      throw new Error('Meta receipt is awaiting a send result');
+      throw new AppError('META_RECEIPT_PENDING', META_WEBHOOK_ERRORS.META_RECEIPT_PENDING);
     const processed = outcomes.some((outcome) => ['stored', 'duplicate'].includes(outcome));
     const reason = outcomes.at(-1) ?? 'unknown_account';
     await this.repository.finish(
