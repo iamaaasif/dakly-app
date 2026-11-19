@@ -77,7 +77,7 @@ describe('Meta channel configuration', () => {
       META_LOGIN_CONFIG_ID: '456',
       META_OAUTH_REDIRECT_URI: 'https://shop.example.test/integrations/meta',
     };
-    expect(loadEnv(graph).META_CHANNEL_DRIVER).toBe('graph');
+    expect(loadEnv(graph).metaChannel).toMatchObject({ driver: 'graph', appId: '123' });
     expect(() =>
       loadEnv({ ...graph, META_OAUTH_REDIRECT_URI: 'http://shop.example.test/integrations/meta' }),
     ).toThrow('Meta Graph requires an HTTPS redirect URI');

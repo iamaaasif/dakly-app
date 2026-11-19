@@ -79,7 +79,20 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
 });
 
-export type Env = z.infer<typeof envSchema> & { encryption: EncryptionConfiguration | undefined };
+type MetaChannelConfiguration =
+  | { driver: 'fake'; redirectUri: string }
+  | {
+      driver: 'graph';
+      appId: string;
+      appSecret: string;
+      loginConfigId: string;
+      redirectUri: string;
+    };
+
+export type Env = z.infer<typeof envSchema> & {
+  encryption: EncryptionConfiguration | undefined;
+  metaChannel: MetaChannelConfiguration | undefined;
+};
 
 let cachedEnv: Env | undefined;
 let cachedStaffEnv: Env | undefined;
@@ -100,7 +113,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 function parseEnv(source: NodeJS.ProcessEnv): Env {
   const env = envSchema.parse(source);
   assertLlmEnv(env);
-  assertMetaEnv(env);
   if (env.NODE_ENV === 'production' && env.SMS_DRIVER === 'mailpit') {
     throw new Error('SMS_DRIVER=mailpit is not allowed in production');
   }
@@ -112,6 +124,7 @@ function parseEnv(source: NodeJS.ProcessEnv): Env {
     throw new Error('Development Access keys are not allowed in production');
   return {
     ...env,
+    metaChannel: parseMetaChannel(env),
     encryption: parseEncryptionConfiguration(
       source.ENCRYPTION_CURRENT_KEY_VERSION,
       source.ENCRYPTION_MASTER_KEYS,
@@ -119,23 +132,26 @@ function parseEnv(source: NodeJS.ProcessEnv): Env {
   };
 }
 
-function assertMetaEnv(env: z.infer<typeof envSchema>): void {
-  if (env.META_CHANNEL_DRIVER === 'fake') {
+function parseMetaChannel(env: z.infer<typeof envSchema>): MetaChannelConfiguration | undefined {
+  const driver = env.META_CHANNEL_DRIVER;
+  const redirectUri = env.META_OAUTH_REDIRECT_URI;
+  if (driver === 'fake') {
     if (env.NODE_ENV === 'production')
       throw new Error('Fake Meta channel driver is not allowed in production');
-    if (!env.META_OAUTH_REDIRECT_URI) throw new Error('Meta redirect URI is required');
+    if (!redirectUri) throw new Error('Meta redirect URI is required');
+    return { driver, redirectUri };
   }
-  if (env.META_CHANNEL_DRIVER !== 'graph') return;
-  if (
-    !env.META_APP_ID ||
-    !env.META_APP_SECRET ||
-    !env.META_LOGIN_CONFIG_ID ||
-    !env.META_OAUTH_REDIRECT_URI
-  ) {
+  if (driver !== 'graph') return undefined;
+  const {
+    META_APP_ID: appId,
+    META_APP_SECRET: appSecret,
+    META_LOGIN_CONFIG_ID: loginConfigId,
+  } = env;
+  if (!appId || !appSecret || !loginConfigId || !redirectUri)
     throw new Error('Meta app id, secret, login configuration and redirect URI are required');
-  }
-  if (new URL(env.META_OAUTH_REDIRECT_URI).protocol !== 'https:')
+  if (new URL(redirectUri).protocol !== 'https:')
     throw new Error('Meta Graph requires an HTTPS redirect URI');
+  return { driver, appId, appSecret, loginConfigId, redirectUri };
 }
 
 function assertLlmEnv(env: z.infer<typeof envSchema>): void {

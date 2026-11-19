@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { randomBytes, randomUUID, randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, randomInt } from 'node:crypto';
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -9,7 +9,8 @@ import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
 import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
-import { loadEnv } from '@dakly/core/platform/config/env';
+import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
+import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies } from '@dakly/core/platform/http/session-cookie';
@@ -663,6 +664,97 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('delivery_zones', foreignId)).toEqual(before);
   });
+const metaStart = '/channel-connections/meta/start';
+const metaAccounts = '/channel-connections/meta/accounts';
+
+async function metaGrant(shop: Shop) {
+  const { authorizationUrl } = (await success(shop, 'POST', metaStart, 201)).json();
+  const url = new URL(authorizationUrl);
+  return { state: url.searchParams.get('state'), code: url.searchParams.get('code') };
+}
+
+function metaCacheKey(shop: Shop, kind: 'state' | 'selection', key: string) {
+  return `meta-auth:${shop.id}:${shop.owner.id}:${kind}:${createHash('sha256').update(key).digest('hex')}`;
+}
+
+async function expectMetaCredentialEncrypted(shop: Shop, selectionId: string) {
+  const key = metaCacheKey(shop, 'selection', selectionId);
+  const redis = app.get(ValkeyClient).connection;
+  const packed = await redis.get(key);
+  expect(packed).toBeTruthy();
+  expect(packed).not.toContain('fake-meta-user-credential');
+  const ttl = await redis.ttl(key);
+  expect(ttl).toBeGreaterThan(0);
+  expect(ttl).toBeLessThanOrEqual(600);
+  const { keyVersion, ciphertext } = JSON.parse(packed!);
+  const plaintext = app
+    .get(EnvelopeEncryption)
+    .decrypt(
+      { owner: 'store', storeId: shop.id, purpose: 'meta-selection-token' },
+      { keyVersion, ciphertext: Buffer.from(ciphertext, 'base64') },
+    );
+  expect(plaintext.toString()).toBe('fake-meta-user-credential');
+  await redis.del(key);
+}
+
+fixture('POST /channel-connections/meta/start', async () => {
+  const { a, b } = await pair();
+  const foreign = await metaGrant(a);
+  const own = await metaGrant(b);
+  expect(foreign.state).toMatch(/^[a-zA-Z0-9_-]{43}$/);
+  expect(own.state).toMatch(/^[a-zA-Z0-9_-]{43}$/);
+  expect(own.state).not.toBe(foreign.state);
+  const redis = app.get(ValkeyClient).connection;
+  const key = metaCacheKey(b, 'state', own.state!);
+  expect(await redis.get(key)).toBe('1');
+  const ttl = await redis.ttl(key);
+  expect(ttl).toBeGreaterThan(0);
+  expect(ttl).toBeLessThanOrEqual(600);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'POST', metaStart)).statusCode).toBe(403);
+  await f.admin.pool.query("update memberships set built_in_role='admin' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'POST', metaStart)).statusCode).toBe(201);
+  const aAccounts = await success(a, 'POST', metaAccounts, 201, foreign);
+  await expectMetaCredentialEncrypted(a, aAccounts.json().selectionId);
+  const bAccounts = await success(b, 'POST', metaAccounts, 201, own);
+  await expectMetaCredentialEncrypted(b, bAccounts.json().selectionId);
+  expect(await redis.get(key)).toBeNull();
+});
+
+fixture('POST /channel-connections/meta/accounts', async () => {
+  const { a, b } = await pair();
+  const foreign = await metaGrant(a);
+  const own = await metaGrant(b);
+  const wrongStore = await f.request(b.owner, 'POST', metaAccounts, foreign);
+  const missing = await f.request(b.owner, 'POST', metaAccounts, { ...own, state: 'a'.repeat(43) });
+  expect([wrongStore.statusCode, missing.statusCode]).toEqual([404, 404]);
+  expect(wrongStore.json()).toEqual(missing.json());
+  expect((await f.request(b.member, 'POST', metaAccounts, own)).statusCode).toBe(403);
+  await f.admin.pool.query("update memberships set built_in_role='admin' where id=$1", [
+    b.membership,
+  ]);
+  const wrongUser = await f.request(b.member, 'POST', metaAccounts, own);
+  expect(wrongUser.statusCode).toBe(404);
+  expect(wrongUser.json()).toEqual(missing.json());
+
+  const authorized = await success(b, 'POST', metaAccounts, 201, own);
+  expect(authorized.json()).toEqual({
+    selectionId: expect.stringMatching(/^[a-zA-Z0-9_-]{43}$/),
+    pages: [
+      { id: '1001001', name: 'রিনার দোকান', instagram: { id: '1002001', name: 'rinas_shop' } },
+      { id: '1001002', name: 'করিমের দোকান', instagram: null },
+    ],
+  });
+  await expectMetaCredentialEncrypted(b, authorized.json().selectionId);
+  expect((await f.request(b.owner, 'POST', metaAccounts, own)).statusCode).toBe(404);
+  const aAccounts = await success(a, 'POST', metaAccounts, 201, foreign);
+  await expectMetaCredentialEncrypted(a, aAccounts.json().selectionId);
+});
+
 fixture('GET /areas', async () => {
   const { a, b } = await pair();
   const own = (await success(a, 'GET', '/areas?parentId=3', 200)).json();
@@ -1690,6 +1782,9 @@ describe('every production shop route isolates its data', () => {
   beforeEach(() => logs.beginTest());
   beforeAll(async () => {
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
+    vi.stubEnv('META_CHANNEL_DRIVER', 'fake');
+    vi.stubEnv('META_OAUTH_REDIRECT_URI', 'http://localhost:3000/integrations/meta');
+    resetEnvForTests();
     const adapter = new FastifyAdapter(createHttpServer(loadEnv().API_TRUSTED_PROXIES));
     adapter.getInstance().addHook('onRoute', (route) => {
       inventory.record(route);
@@ -1716,6 +1811,7 @@ describe('every production shop route isolates its data', () => {
       await app?.close();
       vi.restoreAllMocks();
       vi.unstubAllEnvs();
+      resetEnvForTests();
     }
   });
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {

@@ -125,8 +125,9 @@ The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embe
 
 Messenger and Instagram
 
-1. Facebook Login for Business returns a user token. Dakly lists the user's Pages and linked Instagram accounts.
-2. The owner picks which to connect. Dakly stores the long-lived Page token (encrypted) and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
+1. `POST /channel-connections/meta/start` returns the Facebook Login for Business URL. An Owner or Admin can start this flow. The login state can be used once and expires after 10 minutes.
+2. The Integrations screen passes the returned code and state to `POST /channel-connections/meta/accounts`. The API exchanges them and lists Pages the member can manage and their linked Instagram accounts. The response includes an opaque selection id. The credential stays encrypted in Valkey for up to 10 minutes, bound to the same store and member.
+3. The second CHN-2 PR adds selection. The owner picks which accounts to connect. Dakly stores the encrypted long-lived Page token and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
 
 WhatsApp
 
