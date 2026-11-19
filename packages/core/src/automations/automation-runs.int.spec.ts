@@ -44,7 +44,11 @@ const staffUserId = randomUUID();
 const ownerEmail = `owner-${ownerId}@example.test`;
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
-const applications: Promise<INestApplicationContext>[] = [];
+type WorkerContext = {
+  started: Promise<INestApplicationContext>;
+  closing?: Promise<void>;
+};
+const applications = new Set<WorkerContext>();
 
 type StepJobData = {
   storeId: string;
@@ -70,7 +74,7 @@ async function worker() {
     providers: [WakeDueRunsJob, ContinueAutomationRunJob, ResumeWorkflowsOnWalletCredited],
   })(TestModule);
   const started = NestFactory.createApplicationContext(TestModule, { logger: false });
-  applications.push(started);
+  applications.add({ started });
   const application = await started;
   return {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
@@ -91,7 +95,14 @@ function throwFirstRejection(results: PromiseSettledResult<unknown>[]) {
 }
 
 async function closeWorkers() {
-  const closing = applications.splice(0).map(async (started) => (await started).close());
+  const closing = [...applications].map((context) => {
+    context.closing ??= context.started
+      .then((application) => application.close())
+      .finally(() => {
+        applications.delete(context);
+      });
+    return context.closing;
+  });
   throwFirstRejection(await Promise.allSettled(closing));
 }
 
@@ -2164,22 +2175,24 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         );
         await runner.sweep();
         const jobs = await runner.queue.getJobs(['waiting']);
-        const heldJobs = runs.map(({ runIds }) =>
-          jobs.find((job) => job.data.automationRunId === runIds[0])!,
-        );
+        const heldJobs = runs.map(({ runIds }) => {
+          const job = jobs.find((entry) => entry.data.automationRunId === runIds[0]);
+          expect(job).toBeDefined();
+          return job!;
+        });
         const blocker = await admin.pool.connect();
-        const {
-          rows: [{ pid }],
-        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-        await blocker.query('begin');
-        await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
-          `wallet:${storeId}:sms_credits`,
-        ]);
-        let isHoldingLock = true;
-        const pending = Promise.allSettled(
-          heldJobs.map((job) => runner.runStep(job.data as StepJobData)),
-        );
+        let pending: Promise<PromiseSettledResult<unknown>[]> | undefined;
         try {
+          const {
+            rows: [{ pid }],
+          } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+          await blocker.query('begin');
+          await blocker.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
+            `wallet:${storeId}:sms_credits`,
+          ]);
+          pending = Promise.allSettled(
+            heldJobs.map(async (job) => runner.runStep(job.data as StepJobData)),
+          );
           await waitForBlocker(pid, 2);
           const ids = runs.map((run) => run.automationId);
           if (change === 'version stopped')
@@ -2193,7 +2206,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               [change, ids],
             );
           await blocker.query('commit');
-          isHoldingLock = false;
           throwFirstRejection(await pending);
           for (const {
             runIds: [runId],
@@ -2211,8 +2223,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             );
           }
         } finally {
-          if (isHoldingLock) await blocker.query('rollback');
-          blocker.release();
+          // Discarding the client also releases the advisory lock if setup or the test failed.
+          blocker.release(true);
           await pending;
           throwFirstRejection(await Promise.allSettled(heldJobs.map((job) => job.remove())));
         }
