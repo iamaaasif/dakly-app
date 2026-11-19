@@ -11,7 +11,7 @@ import type {
 
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { AppError } from '../platform/errors/app-error';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { MINUTE_MS } from '../platform/time';
 import { PAYMENT_ERRORS } from './payments.errors';
 import { PaymentsRepository } from './payments.repository';
@@ -50,6 +50,7 @@ export class PaymentsService {
         createdAt: now,
         updatedAt: now,
       });
+      if (!intent) throw new AppError('INTERNAL_ERROR', PLATFORM_ERRORS.INTERNAL_ERROR);
       await this.repository.appendEvent(storeId, {
         paymentIntentId: intent.id,
         kind: 'created',

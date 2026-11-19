@@ -41,7 +41,7 @@ export class PaymentCallbacksService {
       intent.store_id,
       intent.payment_intent_id,
       gateway,
-      callback,
+      callback.data,
     );
   }
 }
