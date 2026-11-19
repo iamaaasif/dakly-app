@@ -1,7 +1,6 @@
 'use client';
 
 import { Ellipsis, Zap } from 'lucide-react';
-import Link from 'next/link';
 import { useState } from 'react';
 
 import type { AutomationListItem } from '@dakly/contracts/automations';
@@ -87,12 +86,9 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
             {active ? 'Disable' : 'Enable'}
           </Button>
         )}
-        <Link
-          href={`/automations/${workflow.id}`}
-          className="inline-flex min-h-10 items-center rounded-md border border-input-border px-3 font-medium hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-        >
+        <Button variant="secondary" disabled>
           Edit
-        </Link>
+        </Button>
 
         <WorkflowMenu
           workflow={workflow}
