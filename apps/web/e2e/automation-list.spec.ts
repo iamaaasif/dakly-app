@@ -90,6 +90,35 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     await page.getByRole('tab', { name: 'Disabled 2' }).click();
     await welcome.getByRole('button', { name: 'Enable' }).click();
     await expect(page.getByRole('tab', { name: 'Disabled 1' })).toBeVisible();
+    await page.getByRole('tab', { name: 'All 4' }).click();
+    let releaseCopy!: () => void;
+    const copyGate = new Promise<void>((resolve) => {
+      releaseCopy = resolve;
+    });
+    await page.route('**/api/automations', async (route) => {
+      if (route.request().method() === 'POST') await copyGate;
+      await route.continue();
+    });
+    const copied = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/automations') && response.request().method() === 'POST',
+    );
+    await welcome.getByRole('button', { name: `Actions for ${active.name}` }).click();
+    try {
+      await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+      const disable = welcome.getByRole('button', { name: 'Disable' });
+      await expect(disable).toBeDisabled();
+      await expect(disable).not.toHaveAttribute('aria-busy', 'true');
+    } finally {
+      releaseCopy();
+    }
+    const copy: AutomationResponse = await (await copied).json();
+    ids.push(copy.id);
+    await page.getByRole('tab', { name: 'Draft 2' }).click();
+    await page.getByRole('button', { name: `Actions for ${copy.name}` }).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete workflow' }).click();
+    await expect(page.getByRole('tab', { name: 'Draft 1' })).toBeVisible();
   } finally {
     await db.pool.query('delete from automation_runs where automation_id=any($1::uuid[])', [ids]);
     await db.pool.query(
