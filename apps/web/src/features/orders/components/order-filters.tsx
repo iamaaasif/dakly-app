@@ -22,7 +22,9 @@ const filterFormSchema = orderListQuerySchema.safeExtend({ onlyCancelled: z.bool
 type FilterFormValues = z.input<typeof filterFormSchema>;
 type FilterFormInput = z.output<typeof filterFormSchema>;
 
-export function OrderFilters({ query }: { query: OrderListQuery }) {
+export type OrderFiltersProps = { query: OrderListQuery };
+
+export function OrderFilters({ query }: OrderFiltersProps) {
   const summary = useRef<HTMLElement>(null);
   const applied = hasOrderFilters(query);
 
@@ -31,7 +33,7 @@ export function OrderFilters({ query }: { query: OrderListQuery }) {
       className="rounded-md border border-border bg-surface px-3"
       open={applied || undefined}
     >
-      <summary ref={summary} className="min-h-10 w-fit cursor-pointer py-2 font-medium">
+      <summary ref={summary} className="min-h-11 w-fit cursor-pointer py-2 font-medium sm:min-h-10">
         Filters
       </summary>
       <FilterForm query={query} applied={applied} focusSummary={() => summary.current?.focus()} />
@@ -86,11 +88,21 @@ function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
       <form className="space-y-3 pb-3" onSubmit={submit}>
         <FilterFields />
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" aria-busy={pending} aria-disabled={pending}>
+          <Button
+            type="submit"
+            aria-busy={pending}
+            aria-disabled={pending}
+            className="min-h-11 sm:min-h-10"
+          >
             {pending ? 'Applying filters…' : 'Apply filters'}
           </Button>
           {applied && (
-            <Button variant="secondary" disabled={pending} onClick={() => navigate(base)}>
+            <Button
+              variant="secondary"
+              disabled={pending}
+              className="min-h-11 sm:min-h-10"
+              onClick={() => navigate(base)}
+            >
               Clear filters
             </Button>
           )}
@@ -159,15 +171,13 @@ function emptyAsUndefined(value: string) {
   return value || undefined;
 }
 
-function OrderFilterSelect({
-  name,
-  label,
-  children,
-}: {
+type OrderFilterSelectProps = {
   name: 'source' | 'courier';
   label: string;
   children: ReactNode;
-}) {
+};
+
+function OrderFilterSelect({ name, label, children }: OrderFilterSelectProps) {
   const { register } = useFormContext<FilterFormValues>();
   return (
     <FormField name={name} label={label}>
@@ -175,7 +185,7 @@ function OrderFilterSelect({
         <select
           {...props}
           {...register(name, { setValueAs: emptyAsUndefined })}
-          className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-invalid:border-danger"
+          className="min-h-11 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-invalid:border-danger sm:min-h-10"
         >
           <option value="">All</option>
           {children}

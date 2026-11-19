@@ -222,6 +222,11 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
   },
 };
 
+export function isTriggerReadyBeforeChannels(key: TriggerKey): boolean {
+  const trigger = automationTriggers[key];
+  return trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source);
+}
+
 export const actionKinds = [
   'add_tag',
   'remove_tag',

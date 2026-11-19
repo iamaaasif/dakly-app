@@ -144,7 +144,10 @@ describe('AutomationEntryService (Postgres)', () => {
 
   it('starts nothing for a disabled workflow', async () => {
     const id = await workflow();
-    await admin.pool.query("update automations set status='paused' where id=$1", [id]);
+    await admin.pool.query(
+      "update automations set status='paused', pause_reason='manual' where id=$1",
+      [id],
+    );
     await start(id);
     expect(await runs(id)).toEqual([]);
   });

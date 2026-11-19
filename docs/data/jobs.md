@@ -66,10 +66,11 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `continue-automation-run` | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                               | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
+| --------------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `continue-automation-run`         | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`             | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| `ResumeWorkflowsOnWalletCredited` | `wallet.credited` outbox event   | the event (`storeId`, `wallet`, `entryId`)           | Moves only workflows still paused for balance to active; an `sms_credits` credit only              |
 
 ## sync
 
@@ -193,6 +194,7 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `channel.disconnected`     | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
 | `channel.needs_reconnect`  | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
 | `notification.created`     | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| `wallet.credited`          | PAY-11, `WalletService.credit`                                   | `wallet`, `entryId`                                                     | CAMP-5 `ResumeWorkflowsOnWalletCredited` (workflow)          |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 
