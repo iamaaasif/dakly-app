@@ -1,0 +1,1 @@
+CREATE INDEX "campaigns_store_id_created_at_id_idx" ON "campaigns" USING btree ("store_id","created_at","id");
