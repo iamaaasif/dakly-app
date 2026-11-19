@@ -112,9 +112,7 @@ export class AnalyticsSummariesService {
       this.orders.reportBuyerIds(storeId, after, { timeZone, since, limit: BUYER_PAGE_SIZE }),
       this.summaries.reportedBuyerIds(storeId, after, BUYER_PAGE_SIZE),
     ]);
-    const ids = Array.from(new Set([...current, ...summarized]))
-      .sort()
-      .slice(0, BUYER_PAGE_SIZE);
+    const ids = [...new Set([...current, ...summarized])].sort().slice(0, BUYER_PAGE_SIZE);
     for (const id of ids) {
       await this.transaction.run(storeId, async () => {
         await this.summaries.lockSummaries(storeId, id);

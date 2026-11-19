@@ -8,6 +8,7 @@ import { Worker, type Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { ContactStatsService } from '../contacts/contact-stats.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -108,27 +109,48 @@ describe('Analytics reconciliation', () => {
         }),
       ).toHaveLength(1);
       clock.mockReturnValue(new Date('2026-11-19T01:15:00Z'));
+      const stats = app.get(ContactStatsService);
+      const countStages = stats.lifecycleCounts.bind(stats);
+      let sampled = false;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const counts = vi.spyOn(stats, 'lifecycleCounts').mockImplementationOnce(async (storeId) => {
+        const rows = await countStages(storeId);
+        sampled = true;
+        await held;
+        return rows;
+      });
       const handler = app.get(ReconcileAnalyticsJob);
       const worker = new Worker(QUEUES.bulk, ({ data }) => handler.handle(data), {
         connection: toRedisConnection(loadEnv().REDIS_URL),
         prefix: queue.opts.prefix,
       });
-      const jobId = `${RECONCILE_ANALYTICS}-${fixture.a}-2026-11-18-lifecycle-start`;
       try {
-        await vi.waitFor(async () => {
-          expect((await snapshot()).rows).toEqual([{ dimension: 'regulars', value: '1' }]);
-          expect(Boolean(await queue.getJob(jobId))).toBe(false);
-        });
+        await vi.waitFor(() => expect(sampled).toBe(true));
         await fixture.connection.pool.query(
           "update contact_stats set lifecycle_stage='best' where store_id=$1 and contact_id=$2",
           [fixture.a, eligible],
         );
         await listener.handle({ ...event, id: randomUUID() });
+        release();
         await vi.waitFor(async () => {
           expect((await snapshot()).rows).toEqual([{ dimension: 'best', value: '1' }]);
+          expect(await queue.getActiveCount()).toBe(0);
+        });
+        await fixture.connection.pool.query(
+          "update contact_stats set lifecycle_stage='new' where store_id=$1 and contact_id=$2",
+          [fixture.a, eligible],
+        );
+        await listener.handle({ ...event, id: randomUUID() });
+        await vi.waitFor(async () => {
+          expect((await snapshot()).rows).toEqual([{ dimension: 'new', value: '1' }]);
         });
       } finally {
+        release();
         await worker.close();
+        counts.mockRestore();
       }
     } finally {
       clock.mockReturnValue(now);

@@ -93,15 +93,18 @@ function reconciliationJob(data: Repair) {
   if (page.kind === 'orders') cursor = page.period?.from;
   else if (page.kind === 'buyers') cursor = page.after;
   else if (page.kind === 'retention') cursor = page.batch;
+  const key = `${RECONCILE_ANALYTICS}-${storeId}-${day}-${page.kind}-${cursor ?? 'start'}`;
+  const lifecycle = page.kind === 'lifecycle';
   return {
     name: RECONCILE_ANALYTICS,
     data,
     opts: {
       attempts: 3,
       backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
-      removeOnComplete: page.kind === 'lifecycle' || { age: DAY_MS / 1000 },
+      removeOnComplete: { age: DAY_MS / 1000 },
       removeOnFail: 100,
-      jobId: `${RECONCILE_ANALYTICS}-${storeId}-${day}-${page.kind}-${cursor ?? 'start'}`,
+      jobId: lifecycle ? undefined : key,
+      deduplication: lifecycle ? { id: key, keepLastIfActive: true } : undefined,
     },
   };
 }
