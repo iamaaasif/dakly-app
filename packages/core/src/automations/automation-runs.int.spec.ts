@@ -2231,6 +2231,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           blocker.release(true);
           await pending?.catch(() => undefined);
           await removeJob();
+          if (change === 'quiet hours')
+            await admin.pool.query('delete from automation_runs where store_id=$1 and id=$2', [
+              storeId,
+              runId,
+            ]);
         }
       },
     );
