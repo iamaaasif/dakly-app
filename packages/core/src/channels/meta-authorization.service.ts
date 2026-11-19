@@ -9,8 +9,11 @@ import type {
   MetaSelectionInput,
 } from '@dakly/contracts/channels';
 import type { StoreAccess } from '@dakly/contracts/team';
-import type { MetaAuthorizationDriver, MetaPage } from '@dakly/providers/channel/channel-driver';
-import { MetaRequestError } from '@dakly/providers/channel/meta/meta-graph-channel-driver';
+import {
+  MetaRequestError,
+  type MetaAuthorizationDriver,
+  type MetaPage,
+} from '@dakly/providers/channel/channel-driver';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';

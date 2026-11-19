@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { MetaAuthorizationDriver, MetaPage } from '../channel-driver';
+import { MetaRequestError, type MetaAuthorizationDriver, type MetaPage } from '../channel-driver';
 
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
@@ -56,13 +56,6 @@ type MetaApp = {
   loginConfigId: string;
   redirectUri: string;
 };
-
-export class MetaRequestError extends Error {
-  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
-    super('Meta request failed');
-    this.name = 'MetaRequestError';
-  }
-}
 
 export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
   constructor(private readonly app: MetaApp) {}
