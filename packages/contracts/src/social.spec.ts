@@ -27,6 +27,7 @@ describe('post drafts', () => {
 
   it('rejects null characters in text saved to a post', () => {
     expect(createPostSchema.safeParse({ caption: 'new\0post' }).success).toBe(false);
+    expect(createPostSchema.safeParse({ linkUrl: 'https://example.test/\0' }).success).toBe(false);
     expect(editPostSchema.safeParse({ firstComment: 'new\0comment' }).success).toBe(false);
   });
 

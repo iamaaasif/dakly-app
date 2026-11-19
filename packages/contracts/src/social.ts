@@ -47,9 +47,9 @@ const postDraftSchema = z.strictObject({
   kind: z.enum(postKinds),
   caption: postText.max(20_000).nullable(),
   mediaFileIds: z.array(postIdSchema).max(10),
-  linkUrl: z
-    .url({ protocol: /^https?$/ })
+  linkUrl: postText
     .max(2_048)
+    .pipe(z.url({ protocol: /^https?$/ }))
     .nullable(),
   firstComment: postText.max(2_200).nullable(),
   isAiWritten: z.boolean(),
