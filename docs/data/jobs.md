@@ -40,6 +40,7 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 | `send-invoice-email`          | Invoice paid                               | `storeId`, `invoiceId`                            | Sender idempotency key = invoice id                                                                        |
 | `relay-outbox`                | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
 | `wake-snoozed-notifications`  | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
+| `start-automation-run`        | Consent grant or tag added                 | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
 
 Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
 Order creation, stage changes and COD collection give the order ID, which the service uses to find
@@ -66,7 +67,6 @@ Per-store cap: one running campaign batch per store.
 
 | Job                       | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
 | ------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Consent grant or tag added       | the event, including `storeId`                       | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
 | `continue-automation-run` | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
 | sweep `wake-due-runs`     | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
 
