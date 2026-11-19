@@ -31,15 +31,15 @@ describe('campaign list query', () => {
         search: ' ঈদের অফার ',
         status: 'scheduled',
         channel: 'sms',
-        createdFrom: '2026-11-01T00:00:00.000Z',
-        createdBefore: '2026-12-01T00:00:00.000Z',
+        createdFrom: '2026-11-01',
+        createdThrough: '2026-11-30',
       }),
     ).toEqual({
       search: 'ঈদের অফার',
       status: 'scheduled',
       channel: 'sms',
-      createdFrom: '2026-11-01T00:00:00.000Z',
-      createdBefore: '2026-12-01T00:00:00.000Z',
+      createdFrom: '2026-11-01',
+      createdThrough: '2026-11-30',
       limit: 50,
     });
   });
@@ -50,10 +50,10 @@ describe('campaign list query', () => {
     { search: 'before\u0000after' },
     { status: 'unknown' },
     { channel: 'email' },
-    { createdBefore: '2026-02-30T00:00:00.000Z' },
-    { createdFrom: '0000-01-01T00:00:00Z' },
-    { createdBefore: '2026-11-20T00:00:00.0001Z' },
-    { createdFrom: '2026-11-20T00:00:00.000Z', createdBefore: '2026-11-19T00:00:00.000Z' },
+    { createdThrough: '2026-02-30' },
+    { createdFrom: '0000-01-01' },
+    { createdThrough: '2026-11-20T00:00:00Z' },
+    { createdFrom: '2026-11-20', createdThrough: '2026-11-19' },
   ])('rejects an invalid filter %o', (query) => {
     expect(campaignListQuerySchema.safeParse(query).success).toBe(false);
   });
@@ -61,8 +61,8 @@ describe('campaign list query', () => {
   it('accepts second- and millisecond-precision date boundaries', () => {
     expect(
       campaignListQuerySchema.safeParse({
-        createdFrom: '2026-11-20T00:00:00Z',
-        createdBefore: '2026-11-20T00:00:00.001Z',
+        createdFrom: '2026-11-20',
+        createdThrough: '2026-11-20',
       }).success,
     ).toBe(true);
   });

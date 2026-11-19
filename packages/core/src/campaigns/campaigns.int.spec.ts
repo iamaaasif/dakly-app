@@ -29,7 +29,10 @@ function draft(name: string) {
 
 describe('CampaignsService drafts (Postgres)', () => {
   beforeAll(async () => {
-    await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
+    await admin.pool.query(
+      "insert into stores(id,name,time_zone) values($1,'রিনার দোকান','Asia/Karachi')",
+      [storeId],
+    );
     await admin.pool.query(
       "insert into users(id,name,email) values($1::uuid,'রিনা',$1::text || '@example.test')",
       [userId],
@@ -91,22 +94,22 @@ describe('CampaignsService drafts (Postgres)', () => {
     expect(third.nextCursor).toBeNull();
   });
 
-  it('filters names literally, includes the start date and excludes the end date', async () => {
+  it('filters names literally, includes both calendar dates in the store time zone', async () => {
     const matching = await draft('VIP 20%');
     const earlier = await draft('VIP 20% earlier');
     const later = await draft('VIP 20% later');
     const wildcard = await draft('VIP 200');
     const otherStatus = await draft('VIP 20% sent');
     await admin.pool.query('update campaigns set created_at=$1 where id=any($2::uuid[])', [
-      '2026-11-18T00:00:00.000Z',
+      '2026-11-17T19:00:00.000Z',
       [matching.id, wildcard.id, otherStatus.id],
     ]);
     await admin.pool.query('update campaigns set created_at=$1 where id=$2', [
-      '2026-11-17T23:59:59.999Z',
+      '2026-11-17T18:59:59.999Z',
       earlier.id,
     ]);
     await admin.pool.query('update campaigns set created_at=$1 where id=$2', [
-      '2026-11-19T00:00:00.000Z',
+      '2026-11-18T19:00:00.000Z',
       later.id,
     ]);
     await admin.pool.query("update campaigns set status='sent' where id=$1", [otherStatus.id]);
@@ -115,8 +118,8 @@ describe('CampaignsService drafts (Postgres)', () => {
       search: 'vip 20%',
       status: 'draft',
       channel: 'sms',
-      createdFrom: '2026-11-18T00:00:00.000Z',
-      createdBefore: '2026-11-19T00:00:00.000Z',
+      createdFrom: '2026-11-18',
+      createdThrough: '2026-11-18',
     });
     const result = await service.list(storeId, query);
     expect(result.items.map(({ id }) => id)).toEqual([matching.id]);

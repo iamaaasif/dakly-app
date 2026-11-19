@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, ilike, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, sql } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -83,7 +83,10 @@ const campaignColumns = {
 export class CampaignsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async list(storeId: string, query: CampaignListQuery): Promise<Campaign[]> {
+  async list(
+    storeId: string,
+    query: CampaignListQuery & { timeZone?: string | null },
+  ): Promise<Campaign[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select(campaignColumns)
@@ -98,9 +101,11 @@ export class CampaignsRepository {
             query.search ? ilike(campaigns.name, `%${escapeLike(query.search)}%`) : undefined,
             query.status ? eq(campaigns.status, query.status) : undefined,
             query.channel ? eq(campaigns.channel, query.channel) : undefined,
-            query.createdFrom ? gte(campaigns.createdAt, new Date(query.createdFrom)) : undefined,
-            query.createdBefore
-              ? lt(campaigns.createdAt, new Date(query.createdBefore))
+            query.createdFrom
+              ? sql`${campaigns.createdAt} >= ${query.createdFrom}::date::timestamp at time zone ${query.timeZone}`
+              : undefined,
+            query.createdThrough
+              ? sql`${campaigns.createdAt} < (${query.createdThrough}::date + 1)::timestamp at time zone ${query.timeZone}`
               : undefined,
           ),
         )

@@ -157,11 +157,13 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `message.failed`       | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
 | `message.tapped`       | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
 | `message.opted_out`    | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
+| `channel.connected`    | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.disconnected` | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
 | `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 
-[Feature 02](../features/02-channel-connections.md) lists `channel.connected`, `channel.needs_reconnect` and `channel.disconnected`. No M2 or M3 task emits them yet, so they are not in the catalogue.
+`channel.needs_reconnect` joins the catalogue with token health in CHN-4. See [feature 02](../features/02-channel-connections.md).
 
 ## Send-time and financial gates
 

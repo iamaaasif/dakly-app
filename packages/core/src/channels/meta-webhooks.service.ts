@@ -31,7 +31,11 @@ export class MetaWebhooksService {
 
   verifySubscription(input: MetaWebhookVerification): string {
     const token = this.env.META_WEBHOOK_VERIFY_TOKEN;
-    if (!token || !timingSafeEqual(hashToken(input['hub.verify_token']), hashToken(token))) {
+    if (
+      !this.env.META_APP_SECRET ||
+      !token ||
+      !timingSafeEqual(hashToken(input['hub.verify_token']), hashToken(token))
+    ) {
       throw new AppError(
         'META_WEBHOOK_VERIFICATION_REJECTED',
         META_WEBHOOK_ERRORS.META_WEBHOOK_VERIFICATION_REJECTED,
@@ -42,7 +46,12 @@ export class MetaWebhooksService {
 
   async receiveDelivery(rawBody: Buffer | undefined, signature: string): Promise<void> {
     const secret = this.env.META_APP_SECRET;
-    if (!secret || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, secret)) {
+    if (
+      !secret ||
+      !this.env.META_WEBHOOK_VERIFY_TOKEN ||
+      !rawBody ||
+      !verifyMetaWebhookSignature(rawBody, signature, secret)
+    ) {
       this.logger.warn({ event: 'security', provider: 'meta' }, 'Meta webhook signature rejected');
       throw new AppError(
         'META_WEBHOOK_SIGNATURE_REJECTED',

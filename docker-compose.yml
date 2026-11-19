@@ -17,6 +17,10 @@ services:
       - '6379:6379'
   mailpit:
     image: axllent/mailpit:v1.30.7
+    environment:
+      MP_IGNORE_DUPLICATE_IDS: 'true'
+      MP_MAX_MESSAGES: '0'
+      MP_MAX_AGE: 7d
     ports:
       - '127.0.0.1:1025:1025'
       - '127.0.0.1:8025:8025'

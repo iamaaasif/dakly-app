@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
+import { calendarDate } from './calendar-date';
 import { bdMobileSchema } from './phone';
+import { searchText } from './search-text';
 
 export const campaignChannels = ['whatsapp', 'sms', 'messenger'] as const;
 export const messageCategories = ['marketing', 'utility', 'authentication'] as const;
@@ -131,34 +133,20 @@ export const changeCampaignSchema = z
     (input) => Object.values(input).some((value) => value !== undefined),
     'Nothing to change',
   );
-const campaignListTime = z.iso
-  .datetime()
-  .refine((value) => !value.startsWith('0000-'), 'Enter a year after 0000')
-  .refine(
-    (value) => !/\.\d{4,}/u.test(value),
-    'Use no more than three digits for fractional seconds',
-  );
-
 export const campaignListQuerySchema = z
   .strictObject({
     cursor: z.uuid().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
-    search: z
-      .string()
-      .trim()
-      .min(1)
-      .max(100)
-      .refine((text) => !text.includes('\u0000'), 'Remove the null character')
-      .optional(),
+    search: searchText.max(100).optional(),
     status: z.enum(campaignStatuses).optional(),
     channel: z.enum(campaignChannels).optional(),
-    createdFrom: campaignListTime.optional(),
-    createdBefore: campaignListTime.optional(),
+    createdFrom: calendarDate.optional(),
+    createdThrough: calendarDate.optional(),
   })
   .refine(
-    ({ createdFrom, createdBefore }) =>
-      !createdFrom || !createdBefore || Date.parse(createdFrom) < Date.parse(createdBefore),
-    { path: ['createdBefore'], message: 'End must be after start' },
+    ({ createdFrom, createdThrough }) =>
+      !createdFrom || !createdThrough || createdFrom <= createdThrough,
+    { path: ['createdThrough'], message: 'End date must be on or after the start date' },
   );
 
 export type CampaignChannel = (typeof campaignChannels)[number];

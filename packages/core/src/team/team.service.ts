@@ -16,6 +16,7 @@ import {
   canApproveSupport,
   canChangeExtensions,
   canDo,
+  hasStoreAdminRole,
 } from './permissions';
 import { TeamRepository } from './team.repository';
 
@@ -41,6 +42,10 @@ export class TeamService {
 
   canChangeExtensions(access: StoreAccess): boolean {
     return canChangeExtensions(access);
+  }
+
+  canManageChannelConnections(access: StoreAccess): boolean {
+    return hasStoreAdminRole(access);
   }
 
   async accessFor(storeId: string, userId: string): Promise<StoreAccess | undefined> {
