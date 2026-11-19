@@ -40,6 +40,6 @@ import { CampaignsService } from './campaigns.service';
     CampaignsService,
     CampaignSenderService,
   ],
-  exports: [CampaignSenderService, CampaignsService],
+  exports: [CampaignSenderService],
 })
 export class CampaignsModule {}
