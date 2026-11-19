@@ -85,6 +85,12 @@ export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = 
   cancelled: [],
 };
 
+export const editableOrderStages: readonly OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
+export const editablePaymentStatuses: readonly (typeof orderPaymentStatuses)[number][] = [
+  'cod_pending',
+  'advance_paid',
+];
+
 export const orderTabs = [
   'to_confirm',
   'to_pack',
@@ -177,6 +183,14 @@ export type OrderCatalogueProduct = Pick<ProductResponse, 'id' | 'name' | 'isSto
 };
 export type OrderCataloguePage = { items: OrderCatalogueProduct[]; nextCursor: string | null };
 
+export const orderCatalogueStockQuerySchema = z.strictObject({
+  variantIds: z
+    .string()
+    .transform((value) => value.split(','))
+    .pipe(z.array(z.uuid()).min(1).max(100)),
+});
+export type OrderCatalogueStock = { variantId: string; available: number }[];
+
 export type OrderItem = {
   id: string;
   variantId: string;
@@ -202,6 +216,7 @@ export type OrderStageHistoryEntry = {
 };
 
 export type OrderDetail = OrderSummary & {
+  updatedAt: string;
   buyerContactId: string | null;
   isRecipientBuyer: boolean;
   hasRecipientPhoneMatch: boolean;
@@ -347,15 +362,32 @@ export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
-export const editOrderSchema = z.strictObject({
-  items: orderLines,
-  recipient: recipientSchema
-    .omit({ isBuyer: true })
-    .partial()
-    .extend({ isBuyer: z.boolean().optional() })
-    .optional(),
-  deliveryChargePoisha: money.optional(),
-  orderDiscountPoisha: money.optional(),
-  advancePaidPoisha: money.optional(),
-});
+export const editOrderSchema = z
+  .strictObject({
+    expectedUpdatedAt: z.iso.datetime({ precision: 3 }).optional(),
+    items: orderLines.optional(),
+    recipient: recipientSchema
+      .omit({ isBuyer: true })
+      .partial()
+      .extend({ isBuyer: z.boolean().optional() })
+      .optional(),
+    deliveryChargePoisha: money.optional(),
+    orderDiscountPoisha: money.optional(),
+    advancePaidPoisha: money.optional(),
+  })
+  .refine(
+    ({ expectedUpdatedAt: _expectedUpdatedAt, recipient, ...changes }) =>
+      Object.values(changes).some((value) => value !== undefined) ||
+      Object.values(recipient ?? {}).some((value) => value !== undefined),
+    'Change at least one order field',
+  );
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
+export const editOrderFormSchema = z.strictObject({
+  ...editOrderSchema.shape,
+  deliveryChargePoisha: takaInput.optional(),
+  orderDiscountPoisha: takaInput.default(0),
+  advancePaidPoisha: takaInput.optional(),
+});
+
+export type EditOrderValues = z.input<typeof editOrderFormSchema>;
+export type OrderEditorValues = CreateOrderValues | EditOrderValues;

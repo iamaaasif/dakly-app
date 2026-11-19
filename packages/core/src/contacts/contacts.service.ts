@@ -330,6 +330,8 @@ export class ContactsService {
   }
 }
 
+export type { TagChange } from './contacts.repository';
+
 // A partial number is a prefix search only for members who see full phones. Anyone may find a
 // contact by its exact full number; the result stays masked without the flag.
 function searchFilter(
