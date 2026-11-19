@@ -325,7 +325,7 @@ describe('Campaign sender (Postgres)', () => {
     expect(driver.messages).toHaveLength(2);
     expect(await campaignRow(id)).toMatchObject({ status: 'sending' });
 
-    clockNow = new Date(noon.getTime() + 6 * MINUTE);
+    clockNow = new Date(noon.getTime() + 24 * 60 * MINUTE);
     expect(await sender.sendBatch(storeId, id)).toBeNull();
 
     expect(driver.messages.map((message) => message.to).sort()).toEqual(phones);
@@ -335,11 +335,69 @@ describe('Campaign sender (Postgres)', () => {
     expect((await recipients(id)).map((row) => row.status)).toEqual(['sent', 'sent']);
     // Each provider call counts toward the ceiling, the resend included.
     expect((await sendAttempts(id)).sort()).toEqual([1, 2]);
+    const [retried] = (
+      await admin.pool.query(
+        'select dispatch_started_at, sent_at from campaign_recipients where campaign_id=$1 and send_attempts=2',
+        [id],
+      )
+    ).rows;
+    expect(retried).toEqual({ dispatch_started_at: clockNow, sent_at: clockNow });
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 2 },
       { kind: 'charge', quantity_delta: -2 },
     ]);
   });
+
+  it.each(['sending', 'cancelled'] as const)(
+    'recovers the stored provider receipt in a %s campaign without resending',
+    async (status) => {
+      const { id } = await sendingCampaign(1);
+      const change = CampaignSendingRepository.prototype.changeRecipient;
+      const crash = vi
+        .spyOn(CampaignSendingRepository.prototype, 'changeRecipient')
+        .mockImplementation(function (this: CampaignSendingRepository, ...args) {
+          if (args[3].status === 'sent') throw new Error('worker stopped after saving receipt');
+          return change.apply(this, args);
+        });
+      try {
+        await expect(sender.sendBatch(storeId, id)).rejects.toThrow(
+          'worker stopped after saving receipt',
+        );
+      } finally {
+        crash.mockRestore();
+      }
+      const [pending] = (
+        await admin.pool.query(
+          'select status, provider_message_id from campaign_recipients where campaign_id=$1',
+          [id],
+        )
+      ).rows;
+      expect(pending).toEqual({ status: 'sending', provider_message_id: expect.any(String) });
+      if (status === 'cancelled') await campaigns.cancel(storeId, id, actor);
+      clockNow = new Date(noon.getTime() + 24 * 60 * MINUTE);
+      const receipt = vi
+        .spyOn(MailpitSmsDriver.prototype, 'receiptStatus')
+        .mockResolvedValue('sent');
+      try {
+        expect(await sender.sendBatch(storeId, id)).toBeNull();
+        expect(receipt).toHaveBeenCalledExactlyOnceWith({
+          providerMessageId: pending.provider_message_id,
+          idempotencyKey: calls[0]?.idempotencyKey,
+        });
+        expect(calls).toHaveLength(1);
+        expect((await recipients(id)).map((row) => row.status)).toEqual(['sent']);
+        const [delivered] = (
+          await admin.pool.query(
+            'select dispatch_started_at, sent_at from campaign_recipients where campaign_id=$1',
+            [id],
+          )
+        ).rows;
+        expect(delivered).toEqual({ dispatch_started_at: noon, sent_at: noon });
+      } finally {
+        receipt.mockRestore();
+      }
+    },
+  );
 
   it('records the provider answer of a worker whose claim was taken meanwhile', async () => {
     const { id, phones } = await sendingCampaign(1);

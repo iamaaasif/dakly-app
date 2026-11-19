@@ -259,7 +259,6 @@ export class CampaignSenderService {
         ? {
             status: 'sent',
             claimedAt: null,
-            providerMessageId,
             smsCredits: credits,
             sentAt: receipt.dispatchStartedAt,
           }
@@ -318,16 +317,20 @@ export class CampaignSenderService {
       if (retry && error.code === 'SMS_SEND_REFUSED') throw error;
       return;
     }
+    const { providerMessageId, credits } = receipt;
+    const claim = { status: 'sending', claimedAt } as const;
+    const knownReceipt = { status: 'sending', providerMessageId } as const;
+    await this.repository.changeRecipient(storeId, recipientId, claim, knownReceipt);
     // A late acceptance also replaces an uncertain outcome that kept the credits.
     await this.repository.changeRecipient(
       storeId,
       recipientId,
-      { status: 'sending', uncertainReceipt: receipt.providerMessageId },
+      { status: 'sending', uncertainReceipt: providerMessageId },
       {
         status: 'sent',
-        providerMessageId: receipt.providerMessageId,
-        smsCredits: receipt.credits,
-        sentAt: this.clock.now(),
+        providerMessageId,
+        smsCredits: credits,
+        sentAt: claimedAt,
         claimedAt: null,
         errorCode: null,
         failedAt: null,

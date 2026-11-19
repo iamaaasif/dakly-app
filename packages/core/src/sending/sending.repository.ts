@@ -60,15 +60,8 @@ export class SendingRepository {
 }
 
 function campaignSends(tx: Transaction, window: SendWindow) {
-  const {
-    storeId,
-    contactIds,
-    after,
-    until,
-    dispatch,
-    excludeCampaignRecipientId,
-    includeCommittedFuture,
-  } = window;
+  const { storeId, contactIds, after, until } = window;
+  const { dispatch, excludeCampaignRecipientId, includeCommittedFuture } = window;
   const live = dispatch || includeCommittedFuture;
   const pending = eq(campaignRecipients.status, 'sending');
   const uncertain = and(

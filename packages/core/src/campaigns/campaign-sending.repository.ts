@@ -146,18 +146,13 @@ export class CampaignSendingRepository {
     change: RecipientChange,
   ): Promise<boolean> {
     const { status, claimedAt, uncertainReceipt } = from;
-    const sameStatus = eq(campaignRecipients.status, status);
+    const { status: currentStatus, errorCode, providerMessageId } = campaignRecipients;
+    const sameStatus = eq(currentStatus, status);
+    const unknown = and(eq(currentStatus, 'failed'), eq(errorCode, 'outcome_unknown'));
     const guardedStatus = uncertainReceipt
-      ? or(
-          sameStatus,
-          and(
-            eq(campaignRecipients.status, 'failed'),
-            eq(campaignRecipients.errorCode, 'outcome_unknown'),
-            or(
-              isNull(campaignRecipients.providerMessageId),
-              eq(campaignRecipients.providerMessageId, uncertainReceipt),
-            ),
-          ),
+      ? and(
+          or(sameStatus, unknown),
+          or(isNull(providerMessageId), eq(providerMessageId, uncertainReceipt)),
         )
       : sameStatus;
     const [row] = await this.database.forStore(storeId, (tx) =>
