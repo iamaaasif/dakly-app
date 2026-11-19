@@ -8,7 +8,6 @@ import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { VERIFY_PAYMENT } from './jobs/verify-payment.job';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
-import { PaymentCallbacksService } from './payment-callbacks.service';
 import { PaymentSettlementsRepository } from './payment-settlements.repository';
 
 const PAGE_SIZE = 100;
@@ -23,7 +22,6 @@ const jobOptions = {
 export class PaymentJobsService {
   constructor(
     @Inject(PaymentCallbacksRepository) private readonly callbacks: PaymentCallbacksRepository,
-    @Inject(PaymentCallbacksService) private readonly intake: PaymentCallbacksService,
     @Inject(PaymentSettlementsRepository)
     private readonly settlements: PaymentSettlementsRepository,
     @Inject(StoresService) private readonly stores: StoresService,
@@ -45,7 +43,6 @@ export class PaymentJobsService {
         },
       })),
     );
-    await this.intake.recoverPending();
   }
 
   async scheduleSettlements() {

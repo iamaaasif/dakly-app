@@ -384,7 +384,7 @@ gateway integration and can only request a server-to-server check.
 The payments worker opens checkout and checks due intents through the saved
 merchant. It decrypts shop credentials only for those calls. A new callback
 queues verification through the outbox. The due sweep recovers verification
-after a missing callback or a lost queue entry. The sweep also requeues signed
+after a missing callback or a lost queue entry. A separate sweep requeues signed
 delivery attempts that are still waiting and clears any left after seven days.
 The outbox records verified live successes and failures. An amount mismatch
 also creates an in-app notice.

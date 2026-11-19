@@ -131,7 +131,8 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 | Job                             | Started by                                | Payload                      | Makes a rerun harmless                                                 |
 | ------------------------------- | ----------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
 | `verify-payment`                | Callback or gateway webhook               | `storeId`, `paymentIntentId` | Status only moves forward; unique `(gateway, gateway_transaction_id)`  |
-| `sweep-payment-checks`          | Every 30 seconds                          | none                         | Finds due intents and restores missing payment callback jobs           |
+| `sweep-payment-checks`          | Every 30 seconds                          | none                         | Finds due intents and queues `verify-payment`                          |
+| `recover-payment-callbacks`     | Every minute                              | none                         | Restores missing callback jobs by receipt and signature                |
 | `sweep-payment-settlements`     | Midnight in Asia/Dhaka                    | none                         | Queues one reconciliation per store and day                            |
 | `reconcile-payment-settlements` | Settlement sweep                          | `storeId`, `day`, `after`    | Matches billing lines once by gateway, transaction and verified amount |
 | `send-refund`                   | Refund requested                          | `storeId`, `refundId`        | Unique `refunds (store_id, idempotency_key)` sent to the gateway       |

@@ -70,8 +70,10 @@ describe('Worker job schedulers', () => {
       scheduler('queue-conversation-returns', 60000),
     ]);
     expect(payments.schedulers).toEqual([
+      scheduler('recover-payment-callbacks', 60000),
       scheduler('sweep-payment-checks'),
       scheduler('sweep-payment-settlements', { pattern: '0 0 * * *', tz: 'Asia/Dhaka' }),
+      scheduler('recover-payment-callbacks', 60000),
       scheduler('sweep-payment-checks'),
     ]);
     expect(workflow.schedulers).toEqual([

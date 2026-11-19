@@ -209,7 +209,7 @@ async function processReceipt(payload: string) {
   await verifier.process(job.webhookEventId, job.attemptId, false);
 }
 
-async function shopCredential(storeId: string, key: string) {
+async function shopCredential(storeId: string, key: string, mode: 'live' | 'sandbox' = 'live') {
   const protectedKey = encryption.encrypt(
     { owner: 'store', storeId, purpose: 'payment-gateway-credentials' },
     Buffer.from(key),
@@ -220,7 +220,7 @@ async function shopCredential(storeId: string, key: string) {
       ...protectedKey,
       storeId,
       gateway: 'bkash',
-      mode: 'live',
+      mode,
       accountLabel: 'Shop merchant',
     })
     .returning({ id: paymentGatewayCredentials.id });
@@ -484,25 +484,12 @@ describe('Payment intents (Postgres)', () => {
   });
 
   it('uses the shop credential and refuses to use it from another store', async () => {
-    const credentials = encryption.encrypt(
-      { owner: 'store', storeId: storeA, purpose: 'payment-gateway-credentials' },
-      Buffer.from('first-shop-merchant'),
-    );
-    const [credential] = await admin.db
-      .insert(paymentGatewayCredentials)
-      .values({
-        ...credentials,
-        storeId: storeA,
-        gateway: 'bkash',
-        mode: 'live',
-        accountLabel: 'Shop merchant',
-      })
-      .returning({ id: paymentGatewayCredentials.id });
+    const credentialId = await shopCredential(storeA, 'first-shop-merchant', 'sandbox');
     const input = {
       flow: 'shop',
       gateway: 'bkash',
       purpose: 'order_advance',
-      credentialId: credential!.id,
+      credentialId,
       amountPoisha: 12000,
       expiresAt: new Date('2026-11-19T04:00:00.000Z'),
     } as const;
@@ -514,7 +501,11 @@ describe('Payment intents (Postgres)', () => {
       {
         ...driver,
         async createPayment(checkout, merchant) {
-          if (merchant.flow !== 'shop' || merchant.credentials.toString() !== 'first-shop-merchant')
+          if (
+            merchant.flow !== 'shop' ||
+            merchant.mode !== 'sandbox' ||
+            merchant.credentials.toString() !== 'first-shop-merchant'
+          )
             throw new Error('Wrong merchant account');
           return driver.createPayment(checkout, merchant);
         },
@@ -546,7 +537,6 @@ describe('Payment intents (Postgres)', () => {
     ]);
     const jobs = new PaymentJobsService(
       callbackRepository,
-      callbacks,
       new PaymentSettlementsRepository(database),
       {} as StoresService,
       clock,
