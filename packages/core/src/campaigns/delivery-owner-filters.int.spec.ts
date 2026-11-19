@@ -33,6 +33,18 @@ describe('campaign sending filters without RLS assistance', () => {
   });
   afterAll(() => f.close());
 
+  it('requires an active store transaction before taking campaign or recipient locks', async () => {
+    await expect(repository.lockSending(f.a, campaignA)).rejects.toThrow(
+      'active store transaction',
+    );
+    await expect(repository.lockForFinish(f.a, campaignA)).rejects.toThrow(
+      'active store transaction',
+    );
+    await expect(repository.lockNextRecipient(f.a, campaignA, now)).rejects.toThrow(
+      'active store transaction',
+    );
+  });
+
   it('starts, locks, claims and settles only the selected store’s campaigns', async () => {
     const before = await f.row('campaigns', campaignA);
     const recipientBefore = await f.row('campaign_recipients', recipientA);
@@ -55,29 +67,42 @@ describe('campaign sending filters without RLS assistance', () => {
     expect(await repository.firstSending(f.a)).toBe(campaignA);
     expect(await repository.firstSending(f.b)).toBeUndefined();
 
-    expect(await repository.lockSending(f.b, campaignA)).toBeUndefined();
-    expect(await repository.lockForFinish(f.b, campaignA)).toBeUndefined();
-    expect(await repository.lockNextRecipient(f.b, campaignA, now)).toBeUndefined();
-    expect(await repository.settlement(f.b, campaignA)).toEqual({
-      unsettled: 0,
-      chargedCredits: 0,
+    await f.tenant.forStore(f.b, async () => {
+      expect(await repository.lockSending(f.b, campaignA)).toBeUndefined();
+      expect(await repository.lockForFinish(f.b, campaignA)).toBeUndefined();
+      expect(await repository.lockNextRecipient(f.b, campaignA, now)).toBeUndefined();
+      expect(await repository.settlement(f.b, campaignA)).toEqual({
+        unsettled: 0,
+        chargedCredits: 0,
+      });
+      expect(
+        await repository.changeRecipient(
+          f.b,
+          recipientA,
+          { status: 'queued' },
+          { status: 'skipped', skipReason: 'blocked' },
+        ),
+      ).toBe(false);
     });
-    await repository.changeRecipient(
-      f.b,
-      recipientA,
-      { status: 'queued' },
-      { status: 'skipped', skipReason: 'blocked' },
-    );
     expect(await f.row('campaign_recipients', recipientA)).toEqual(recipientBefore);
 
-    expect(await repository.lockSending(f.a, campaignA)).toMatchObject({ id: campaignA });
-    expect(await repository.lockNextRecipient(f.a, campaignA, now)).toMatchObject({
-      id: recipientA,
-      status: 'queued',
-    });
-    expect(await repository.settlement(f.a, campaignA)).toEqual({
-      unsettled: 1,
-      chargedCredits: 0,
+    await f.tenant.forStore(f.a, async () => {
+      expect(await repository.lockSending(f.a, campaignA)).toMatchObject({ id: campaignA });
+      expect(await repository.lockNextRecipient(f.a, campaignA, now)).toMatchObject({
+        id: recipientA,
+        status: 'queued',
+      });
+      expect(await repository.settlement(f.a, campaignA)).toEqual({
+        unsettled: 1,
+        chargedCredits: 0,
+      });
+      const claim = { status: 'sending', claimedAt: now, sendAttempts: 1 } as const;
+      expect(await repository.changeRecipient(f.a, recipientA, { status: 'queued' }, claim)).toBe(
+        true,
+      );
+      expect(await repository.changeRecipient(f.a, recipientA, { status: 'queued' }, claim)).toBe(
+        false,
+      );
     });
   });
 });

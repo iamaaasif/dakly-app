@@ -116,7 +116,7 @@ export class CampaignSendingRepository {
   // A share lock: a pause, cancel or finish waits until this claim commits, and the claim after
   // it sees the new status.
   async lockSending(storeId: string, id: string): Promise<SendingCampaign | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
       tx
         .select(sendingColumns)
         .from(campaigns)
@@ -132,7 +132,7 @@ export class CampaignSendingRepository {
     campaignId: string,
     claimedBefore: Date,
   ): Promise<ClaimableRecipient | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
       tx
         .select({
           id: campaignRecipients.id,
@@ -166,8 +166,8 @@ export class CampaignSendingRepository {
     id: string,
     from: { status: RecipientStatus; claimedAt?: Date },
     change: RecipientChange,
-  ): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
+  ): Promise<boolean> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(campaignRecipients)
         .set(change)
@@ -178,12 +178,14 @@ export class CampaignSendingRepository {
             eq(campaignRecipients.status, from.status),
             from.claimedAt ? eq(campaignRecipients.claimedAt, from.claimedAt) : undefined,
           ),
-        ),
+        )
+        .returning({ id: campaignRecipients.id }),
     );
+    return row !== undefined;
   }
 
   async lockForFinish(storeId: string, id: string): Promise<SendingCampaign | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
       tx
         .select(sendingColumns)
         .from(campaigns)
