@@ -159,7 +159,7 @@ export class InboxRepository {
         })
         .returning(messageFields),
     );
-    return row;
+    return row!;
   }
 
   async update(

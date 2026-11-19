@@ -76,7 +76,6 @@ export class InboxService {
         { ...input, authorUserId: actor.userId },
         this.clock.now(),
       );
-      if (!note) throw messagingError('MESSAGING_PREPARATION_FAILED');
       return messageResponse(note);
     });
   }
