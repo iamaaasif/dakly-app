@@ -1,33 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  dhakaDateBoundary,
-  dhakaDateField,
-  formatDate,
-  formatDateTime,
-  formatRelativeTime,
-  formatTime,
-} from './format-date';
-
-describe('Dhaka date filters', () => {
-  it.each([
-    ['2026-11-01', false, '2026-10-31T18:00:00.000Z'],
-    ['2009-06-21', false, '2009-06-20T17:00:00.000Z'],
-    ['2009-06-21', true, '2009-06-21T17:00:00.000Z'],
-  ])('round trips %s with an exclusive end of %s', (day, exclusiveEnd, instant) => {
-    expect(dhakaDateBoundary(day, exclusiveEnd)).toBe(instant);
-    expect(dhakaDateField(instant, exclusiveEnd)).toBe(day);
-  });
-
-  it('keeps the year padded for early dates', () => {
-    expect(dhakaDateField('0999-12-31T00:00:00Z')).toBe('0999-12-31');
-  });
-
-  it('keeps dates within the bounds of the date field and query', () => {
-    expect(dhakaDateBoundary('0001-01-01')).toBe('0001-01-01T00:00:00.000Z');
-    expect(dhakaDateField('9999-12-31T23:59:59Z')).toBe('9999-12-31');
-  });
-});
+import { formatDate, formatDateTime, formatRelativeTime, formatTime } from './format-date';
 
 describe('formatDate', () => {
   it.each([

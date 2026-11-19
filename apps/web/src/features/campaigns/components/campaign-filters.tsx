@@ -12,17 +12,16 @@ import { Input } from '@dakly/ui/input';
 
 import { campaignListHref } from '../api/campaigns';
 import { campaignChannelLabels, campaignStatusLabels } from '../campaign-labels';
-import { dhakaDateBoundary, dhakaDateField } from '@/lib/format-date';
 
 const { search, status, channel } = campaignListQuerySchema.shape;
 const empty = z.literal('');
-const dateField = z.iso.date().or(empty).optional();
+const dateField = z.string().optional();
 const filterFields = z.strictObject({
   search: search.or(empty),
   status: status.or(empty),
   channel: channel.or(empty),
   createdFrom: dateField,
-  createdBefore: dateField,
+  createdThrough: dateField,
 });
 type FiltersInput = z.input<typeof filterFields>;
 
@@ -30,52 +29,46 @@ const optional = { setValueAs: (value: string) => value.trim() || undefined };
 const selectClass =
   'min-h-10 w-full rounded-md border border-input-border bg-surface px-3 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
-function campaignFilterSchema(
-  query: CampaignListQuery,
-  initialFrom?: string,
-  initialBefore?: string,
-) {
-  return filterFields
-    .transform(
-      ({ createdFrom, createdBefore, ...filters }): z.input<typeof campaignListQuerySchema> => ({
-        search: filters.search || undefined,
-        status: filters.status || undefined,
-        channel: filters.channel || undefined,
-        createdFrom:
-          createdFrom === initialFrom ? query.createdFrom : dhakaDateBoundary(createdFrom ?? ''),
-        createdBefore:
-          createdBefore === initialBefore
-            ? query.createdBefore
-            : dhakaDateBoundary(createdBefore ?? '', true),
-      }),
-    )
-    .pipe(campaignListQuerySchema);
-}
+const campaignFilterSchema = filterFields
+  .transform((filters): z.input<typeof campaignListQuerySchema> => ({
+    search: filters.search || undefined,
+    status: filters.status || undefined,
+    channel: filters.channel || undefined,
+    createdFrom: filters.createdFrom || undefined,
+    createdThrough: filters.createdThrough || undefined,
+  }))
+  .pipe(campaignListQuerySchema);
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const router = useRouter();
-  const initialFrom = query.createdFrom ? dhakaDateField(query.createdFrom) : undefined;
-  const initialBefore = query.createdBefore ? dhakaDateField(query.createdBefore, true) : undefined;
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
-    resolver: zodResolver(campaignFilterSchema(query, initialFrom, initialBefore)),
+    resolver: zodResolver(campaignFilterSchema),
     defaultValues: {
       search: query.search ?? '',
       status: query.status ?? '',
       channel: query.channel ?? '',
-      createdFrom: initialFrom ?? '',
-      createdBefore: initialBefore ?? '',
+      createdFrom: query.createdFrom ?? '',
+      createdThrough: query.createdThrough ?? '',
     },
   });
-  const apply = form.handleSubmit((filters) =>
-    router.push(campaignListHref({ ...filters, limit: query.limit })),
-  );
+  const visit = (filters: CampaignListQuery) =>
+    router.push(campaignListHref({ ...filters, limit: query.limit }));
+  const apply = form.handleSubmit(visit);
+  function applyFilter() {
+    const parsed = campaignFilterSchema.safeParse({
+      ...form.getValues(),
+      search: query.search ?? '',
+    });
+    if (parsed.success) visit(parsed.data);
+    else void form.trigger();
+  }
   function clear() {
     form.reset({
       search: '',
       status: '',
       channel: '',
       createdFrom: '',
-      createdBefore: '',
+      createdThrough: '',
     });
     router.push('/campaigns');
   }
@@ -85,13 +78,10 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
       <form
         aria-label="Filter campaigns"
         onSubmit={apply}
-        className="space-y-3 rounded-lg border border-border bg-surface p-4"
+        className="grid grid-cols-2 items-start gap-3 xl:flex"
       >
-        <FilterFields />
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="secondary">
-            Apply filters
-          </Button>
+        <FilterFields applyFilter={applyFilter} />
+        <div className="flex items-end xl:self-end">
           <button
             type="button"
             onClick={clear}
@@ -105,19 +95,24 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   );
 }
 
-function FilterFields() {
+function FilterFields({ applyFilter }: { applyFilter: () => void }) {
   const { register } = useFormContext<FiltersInput>();
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-      <div className="col-span-2 min-w-0 lg:col-span-1">
+    <>
+      <div className="col-span-2 min-w-0 xl:flex-1">
         <FormField name="search" label="Search">
           {(control) => (
-            <Input
-              {...control}
-              {...register('search', optional)}
-              type="search"
-              placeholder="Campaign name"
-            />
+            <div className="flex gap-2">
+              <Input
+                {...control}
+                {...register('search', optional)}
+                type="search"
+                placeholder="Campaign name"
+              />
+              <Button type="submit" variant="secondary">
+                Search
+              </Button>
+            </div>
           )}
         </FormField>
       </div>
@@ -126,24 +121,38 @@ function FilterFields() {
         label="Status"
         empty="All statuses"
         options={campaignStatusLabels}
+        applyFilter={applyFilter}
       />
       <FilterSelect
         name="channel"
         label="Channel"
         empty="All channels"
         options={campaignChannelLabels}
+        applyFilter={applyFilter}
       />
       <div className="min-w-0">
         <FormField name="createdFrom" label="Created from">
-          {(control) => <Input {...control} {...register('createdFrom', optional)} type="date" />}
+          {(control) => (
+            <Input
+              {...control}
+              {...register('createdFrom', { ...optional, onChange: applyFilter })}
+              type="date"
+            />
+          )}
         </FormField>
       </div>
       <div className="min-w-0">
-        <FormField name="createdBefore" label="Created through">
-          {(control) => <Input {...control} {...register('createdBefore', optional)} type="date" />}
+        <FormField name="createdThrough" label="Created through">
+          {(control) => (
+            <Input
+              {...control}
+              {...register('createdThrough', { ...optional, onChange: applyFilter })}
+              type="date"
+            />
+          )}
         </FormField>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -152,18 +161,24 @@ function FilterSelect({
   label,
   empty,
   options,
+  applyFilter,
 }: {
   name: 'status' | 'channel';
   label: string;
   empty: string;
   options: Record<string, string>;
+  applyFilter: () => void;
 }) {
   const { register } = useFormContext<FiltersInput>();
   return (
     <div className="min-w-0">
       <FormField name={name} label={label}>
         {(control) => (
-          <select {...control} {...register(name, optional)} className={selectClass}>
+          <select
+            {...control}
+            {...register(name, { ...optional, onChange: applyFilter })}
+            className={selectClass}
+          >
             <option value="">{empty}</option>
             {Object.entries(options).map(([id, text]) => (
               <option key={id} value={id}>

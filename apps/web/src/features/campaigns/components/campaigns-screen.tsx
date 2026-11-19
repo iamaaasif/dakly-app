@@ -2,8 +2,6 @@
 
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 import type { CampaignListQuery } from '@dakly/contracts/campaigns';
 import { Button } from '@dakly/ui/button';
@@ -15,30 +13,17 @@ import { CampaignTable } from './campaign-table';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
 
-export function CampaignsScreen({
-  query: requested,
-  cursorShop,
-}: {
-  query: CampaignListQuery;
-  cursorShop?: string;
-}) {
-  const router = useRouter();
+export function CampaignsScreen({ query }: { query: CampaignListQuery }) {
   const { data: session } = useSessionContext();
-  const shopId = session?.currentStore?.storeId;
-  const staleCursor = Boolean(requested.cursor && cursorShop !== shopId);
-  const query = staleCursor ? { ...requested, cursor: undefined } : requested;
   const campaigns = useCampaigns(query);
   const filters = campaignListHref({ ...query, cursor: undefined });
-  useEffect(() => {
-    if (shopId && staleCursor) router.replace(filters);
-  }, [filters, router, shopId, staleCursor]);
   return (
     <StorePage permission="canViewCampaigns">
       <main className="space-y-6 p-6 md:p-8">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold">Campaigns</h1>
-            <p className="mt-2 text-text-muted">Send a message to a group of customers.</p>
+            <p className="mt-2 text-text-muted">Messages you send to a group of customers.</p>
           </div>
           {session?.currentStore?.canEditCampaigns && (
             <Link
@@ -50,7 +35,7 @@ export function CampaignsScreen({
           )}
         </header>
         <CampaignFilters key={`${session?.contextTag ?? ''}/${filters}`} query={query} />
-        <CampaignListState query={query} campaigns={campaigns} shopId={shopId} />
+        <CampaignListState query={query} campaigns={campaigns} />
       </main>
     </StorePage>
   );
@@ -59,11 +44,9 @@ export function CampaignsScreen({
 function CampaignListState({
   query,
   campaigns,
-  shopId,
 }: {
   query: CampaignListQuery;
   campaigns: ReturnType<typeof useCampaigns>;
-  shopId?: string;
 }) {
   if (campaigns.isPending)
     return (
@@ -93,9 +76,7 @@ function CampaignListState({
             : 'No campaigns match these filters.'}
         </p>
       )}
-      {(query.cursor || nextCursor) && (
-        <CampaignPages query={query} nextCursor={nextCursor} shopId={shopId} />
-      )}
+      {(query.cursor || nextCursor) && <CampaignPages query={query} nextCursor={nextCursor} />}
     </section>
   );
 }
@@ -103,11 +84,9 @@ function CampaignListState({
 function CampaignPages({
   query,
   nextCursor,
-  shopId,
 }: {
   query: CampaignListQuery;
   nextCursor: string | null;
-  shopId?: string;
 }) {
   return (
     <nav aria-label="Campaign pages" className="flex justify-between gap-4">
@@ -122,7 +101,7 @@ function CampaignPages({
       {nextCursor && (
         <Link
           className="ml-auto min-h-10 text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          href={campaignListHref({ ...query, cursor: nextCursor }, shopId)}
+          href={campaignListHref({ ...query, cursor: nextCursor })}
         >
           Next page
         </Link>

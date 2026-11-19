@@ -108,33 +108,41 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     const createdFrom = page.getByLabel('Created from', { exact: true });
     const createdThrough = page.getByLabel('Created through', { exact: true });
     const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
-    const apply = page.getByRole('button', { name: 'Apply filters', exact: true });
+    const submitSearch = page.getByRole('button', { name: 'Search', exact: true });
     await search.fill('Unapplied name');
     await status.selectOption('sent');
+    await expect(page).toHaveURL(/status=sent/);
+    await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
     await channel.selectOption('sms');
+    await expect(page).toHaveURL(/channel=sms/);
     await createdFrom.fill('2026-11-01');
+    await expect(page).toHaveURL(/createdFrom=2026-11-01/);
     await createdThrough.fill('2026-11-30');
+    await expect(page).toHaveURL(/createdThrough=2026-11-30/);
     await clear.click();
     await expect(search).toHaveValue('');
     for (const filter of [status, channel, createdFrom, createdThrough])
       await expect(filter).toHaveValue('');
 
     const bounds = {
-      createdFrom: '2020-01-01T03:00:00Z',
-      createdBefore: '2099-12-31T06:00:00Z',
+      createdFrom: '2020-01-01',
+      createdThrough: '2099-12-31',
     };
     await page.goto(`/campaigns?${new URLSearchParams(bounds)}`);
     await expect(createdFrom).toHaveValue('2020-01-01');
     await expect(createdThrough).toHaveValue('2099-12-31');
-    await apply.click();
+    await submitSearch.click();
     await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
     for (const [name, value] of Object.entries(bounds))
       expect(new URL(page.url()).searchParams.get(name)).toBe(value);
     await clear.click();
     await expect(page).toHaveURL(/\/campaigns$/);
-    await page.getByLabel('Search', { exact: true }).fill('Puja');
-    await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('sent');
-    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await status.selectOption('sent');
+    await expect(page).toHaveURL(/status=sent/);
+    await search.fill('Puja');
+    await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
+    await submitSearch.click();
+    await expect(page).toHaveURL(/search=Puja/);
     const sentRow = page.getByRole('row', { name: /Puja winback/ });
     const sentLink = sentRow.getByRole('link', { name: 'Puja winback', exact: true });
     await expect(sentLink).toBeVisible();
@@ -163,20 +171,20 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await page.goto('/campaigns?limit=1');
     await page.getByRole('link', { name: 'Next page' }).click();
     await expect(page.getByRole('link', { name: 'First page' })).toBeVisible();
+    const listStatus = page.getByRole('region', { name: 'Campaign list' }).getByRole('status');
     await page.getByRole('combobox', { name: 'Current shop' }).selectOption(otherStoreId);
+    await expect(listStatus).toContainText('This page has no campaigns.');
+    await expect(page.getByRole('link', { name: 'Sylhet new collection' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'First page' }).click();
     await expect(page.getByRole('link', { name: 'Sylhet new collection' })).toBeVisible();
     await expect(page).toHaveURL(/\/campaigns\?limit=1$/);
     await expect(page.getByRole('link', { name: 'First page' })).toHaveCount(0);
     await page.getByRole('combobox', { name: 'Current shop' }).selectOption(storeId);
     await expect(page.getByRole('link', { name: longName })).toBeVisible();
-    await page.goto(`/campaigns?limit=1&cursor=${draft}`);
-    await expect(page).toHaveURL(/\/campaigns\?limit=1$/);
-    await expect(page.getByRole('link', { name: longName })).toBeVisible();
-    await page.goto(`/campaigns?limit=1&cursor=${otherCampaign}&pageShop=${storeId}`);
-    await expect(page.getByRole('status')).toContainText('This page has no campaigns.');
+    await page.goto(`/campaigns?limit=1&cursor=${otherCampaign}`);
+    await expect(listStatus).toContainText('This page has no campaigns.');
     await page.getByRole('link', { name: 'First page' }).click();
     await expect(page.getByRole('link', { name: longName })).toBeVisible();
-
     const changed = await database.pool.query(
       "update memberships set built_in_role='support_agent' where store_id=$1 and built_in_role='marketer'",
       [otherStoreId],
@@ -188,8 +196,9 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect(
       page.getByText('You do not have access to this action in the current shop.'),
     ).toBeVisible();
-    await expect(page).toHaveURL(/\/campaigns\?limit=1$/);
+    await expect(page).toHaveURL(/cursor=/);
     await page.getByRole('combobox', { name: 'Current shop' }).selectOption(storeId);
+    await page.getByRole('link', { name: 'First page' }).click();
     await expect(page.getByRole('link', { name: longName })).toBeVisible();
   } finally {
     try {
