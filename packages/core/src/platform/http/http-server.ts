@@ -1,7 +1,8 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import { isIP } from 'node:net';
 
-import fastify from 'fastify';
+import { UnsupportedMediaTypeException, type RawBodyRequest } from '@nestjs/common';
+import fastify, { type FastifyRequest } from 'fastify';
 
 import type { ErrorResponse } from '@dakly/contracts/errors';
 
@@ -35,6 +36,13 @@ function validForwarding(headers: IncomingHttpHeaders): boolean {
   );
 }
 
+const rawJsonMediaType = 'application/vnd.dakly.raw-json';
+
+function expectsRawJson(request: FastifyRequest): boolean {
+  const { config } = request.routeOptions;
+  return 'rawJson' in config && config.rawJson === true;
+}
+
 export function createHttpServer(trustedProxies: string[]) {
   const trust = compileProxyTrust(trustedProxies);
   const server = fastify({ trustProxy: trust });
@@ -58,6 +66,30 @@ export function createHttpServer(trustedProxies: string[]) {
     const protocol = headers['x-forwarded-proto'];
     if (typeof host === 'string')
       headers['x-forwarded-host'] = new URL(`${protocol ?? 'http'}://${host}`).host;
+  });
+  // Fastify still enforces the body limit before handing the exact bytes to signed callbacks.
+  server.addContentTypeParser<Buffer>(
+    rawJsonMediaType,
+    { parseAs: 'buffer' },
+    (request, body, done) => {
+      if (!expectsRawJson(request)) {
+        done(new UnsupportedMediaTypeException());
+        return;
+      }
+      (request as RawBodyRequest<FastifyRequest>).rawBody = body;
+      done(null, undefined);
+    },
+  );
+  server.addHook('preParsing', (request, _reply, payload, done) => {
+    if (expectsRawJson(request)) {
+      const mediaType = request.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase();
+      if (mediaType !== 'application/json') {
+        done(new UnsupportedMediaTypeException());
+        return;
+      }
+      request.headers['content-type'] = rawJsonMediaType;
+    }
+    done(null, payload);
   });
   return server;
 }

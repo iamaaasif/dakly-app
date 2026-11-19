@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
 
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { INBOUND_QUEUE } from '../platform/queue/queues';
 import { META_WEBHOOK_ERRORS } from './meta-webhooks.errors';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
+
+const QUEUE_WRITE_TIMEOUT_MS = 1000;
 
 @Injectable()
 export class MetaWebhooksService {
@@ -40,11 +43,7 @@ export class MetaWebhooksService {
     return input['hub.challenge'];
   }
 
-  async receiveDelivery(
-    rawBody: Buffer | undefined,
-    signature: string,
-    input: unknown,
-  ): Promise<void> {
+  async receiveDelivery(rawBody: Buffer | undefined, signature: string): Promise<void> {
     const secret = this.env.META_APP_SECRET;
     if (!secret || !rawBody || !verifyMetaWebhookSignature(rawBody, signature, secret)) {
       this.logger.warn({ event: 'security', provider: 'meta' }, 'Meta webhook signature rejected');
@@ -54,7 +53,7 @@ export class MetaWebhooksService {
       );
     }
 
-    const payload = readMetaWebhookDelivery(input);
+    const payload = readMetaWebhookDelivery(rawBody);
     if (!payload)
       throw new AppError(
         'META_WEBHOOK_DELIVERY_INVALID',
@@ -66,17 +65,35 @@ export class MetaWebhooksService {
     if (!event) throw new AppError('INTERNAL_ERROR', PLATFORM_ERRORS.INTERNAL_ERROR);
     if (event.status !== 'received') return;
 
-    // A provider retry can restore a job if the original queue write failed.
-    await this.queue.add(
-      'process-webhook-event',
-      { webhookEventId: event.id },
-      {
-        jobId: event.id,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 },
-        removeOnComplete: { age: 60 * 60 },
-        removeOnFail: 100,
+    await this.enqueueDelivery(event.id);
+  }
+
+  private async enqueueDelivery(webhookEventId: string): Promise<void> {
+    const timer = new AbortController();
+    const deadline = setTimeout(QUEUE_WRITE_TIMEOUT_MS, undefined, { signal: timer.signal }).then(
+      () => {
+        throw new AppError(
+          'META_WEBHOOK_QUEUE_UNAVAILABLE',
+          META_WEBHOOK_ERRORS.META_WEBHOOK_QUEUE_UNAVAILABLE,
+        );
       },
     );
+    try {
+      // A provider retry uses the same job id even if Valkey accepts the first write late.
+      const queued = this.queue.add(
+        'process-webhook-event',
+        { webhookEventId },
+        {
+          jobId: webhookEventId,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: { age: 60 * 60 },
+          removeOnFail: 100,
+        },
+      );
+      await Promise.race([queued, deadline]);
+    } finally {
+      timer.abort();
+    }
   }
 }

@@ -17,6 +17,15 @@ export function verifyMetaWebhookSignature(
   return timingSafeEqual(expected, Buffer.from(signature.slice(7), 'hex'));
 }
 
-export function readMetaWebhookDelivery(payload: unknown): Record<string, unknown> | undefined {
-  return deliverySchema.safeParse(payload).data;
+export function readMetaWebhookDelivery(rawBody: Buffer): Record<string, unknown> | undefined {
+  try {
+    const payload: unknown = JSON.parse(rawBody.toString('utf8'), (key, value: unknown) => {
+      if (key === '__proto__' || key === 'constructor') throw new SyntaxError('Unsafe JSON key');
+      return value;
+    });
+    return deliverySchema.safeParse(payload).data;
+  } catch (error) {
+    if (error instanceof SyntaxError || error instanceof RangeError) return undefined;
+    throw error;
+  }
 }

@@ -16,7 +16,14 @@ import { MetaWebhooksService } from './meta-webhooks.service';
       name: INBOUND_QUEUE,
       useFactory: () => {
         const env = loadEnv();
-        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+        return {
+          connection: {
+            ...toRedisConnection(env.REDIS_URL),
+            enableOfflineQueue: false,
+            commandTimeout: 1000,
+          },
+          prefix: env.QUEUE_PREFIX,
+        };
       },
     }),
   ],

@@ -2,7 +2,7 @@
 
 Planned release 1 background jobs: its queue, what starts it, its payload and what makes a second run harmless. The rules are in [jobs.md](../rules/jobs.md); the queues are the nine in [architecture.md](../architecture.md#queues). These contracts guide feature implementation; the schema PR does not implement the handlers. Every payload has `storeId` unless the row says "sweep", and is parsed with a zod schema in the job file.
 
-A job that loses its Valkey entry is found again by a sweep: each sweep calls a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
+A store job that loses its Valkey entry is found again by a sweep. Store sweeps call a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
 
 ## inbound
 

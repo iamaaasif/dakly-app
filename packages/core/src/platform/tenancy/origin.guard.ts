@@ -19,14 +19,10 @@ export class OriginGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (
-      rule?.kind === 'public' &&
-      this.reflector.get<boolean>(PROVIDER_CALLBACK, context.getHandler())
-    )
-      return true;
     const request = context
       .switchToHttp()
       .getRequest<{ method: string; headers: { origin?: string } }>();
+    if (this.permitsProviderCallback(rule, context, request.headers.origin)) return true;
     if (
       ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
       !this.allowedOrigins(rule, context).includes(request.headers.origin ?? '')
@@ -34,6 +30,18 @@ export class OriginGuard implements CanActivate {
       throw new AppError('ORIGIN_REJECTED', PLATFORM_ERRORS.ORIGIN_REJECTED);
     }
     return true;
+  }
+
+  private permitsProviderCallback(
+    rule: AccessRule | undefined,
+    context: ExecutionContext,
+    origin: string | undefined,
+  ): boolean {
+    return (
+      origin === undefined &&
+      rule?.kind === 'public' &&
+      this.reflector.get<boolean>(PROVIDER_CALLBACK, context.getHandler()) === true
+    );
   }
 
   private allowedOrigins(rule: AccessRule | undefined, context: ExecutionContext): string[] {

@@ -13,8 +13,10 @@ import { createDatabase } from '@dakly/db/client';
 import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { SessionsModule } from '../sessions/sessions.module';
+import { SessionsService } from '../sessions/sessions.service';
 import { MetaWebhooksModule } from './meta-webhooks.module';
 
 class TestModule {}
@@ -39,7 +41,11 @@ function post(payload: string, signed = signature(payload)) {
   return app.inject({
     url: webhookPath,
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-hub-signature-256': signed },
+    headers: {
+      'content-type': 'application/json',
+      'x-hub-signature-256': signed,
+      cookie: 'dakly_session=untrusted-cookie',
+    },
     payload,
   });
 }
@@ -59,7 +65,10 @@ function verify(mode: string, token: string) {
     'hub.verify_token': token,
     'hub.challenge': '001158201444',
   });
-  return app.inject(`${webhookPath}?${query}`);
+  return app.inject({
+    url: `${webhookPath}?${query}`,
+    headers: { cookie: 'dakly_session=untrusted-cookie' },
+  });
 }
 
 describe('Meta webhook intake', () => {
@@ -67,10 +76,14 @@ describe('Meta webhook intake', () => {
     vi.stubEnv('META_APP_SECRET', appSecret);
     vi.stubEnv('META_WEBHOOK_VERIFY_TOKEN', verifyToken);
     resetEnvForTests();
-    app = await NestFactory.create<NestFastifyApplication>(TestModule, new FastifyAdapter(), {
-      rawBody: true,
-      logger: false,
-    });
+    app = await NestFactory.create<NestFastifyApplication>(
+      TestModule,
+      new FastifyAdapter(createHttpServer([])),
+      {
+        rawBody: true,
+        logger: false,
+      },
+    );
     await registerSessionCookies(app);
     app.useGlobalFilters(new AppErrorFilter());
     await app.init();
@@ -140,6 +153,42 @@ describe('Meta webhook intake', () => {
     expect((await post(payload, 'sha256=invalid')).statusCode).toBe(401);
     expect((await post(payload)).statusCode).toBe(400);
     expect(await stored(payload)).toEqual([]);
+  });
+
+  it('checks the signature before decoding malformed JSON', async () => {
+    const malformed = '{"object":';
+    expect((await post(malformed, 'sha256=invalid')).statusCode).toBe(401);
+    expect((await post(malformed)).statusCode).toBe(400);
+    expect(await stored(malformed)).toEqual([]);
+  });
+
+  it('ignores browser sessions on both provider routes', async () => {
+    const lookup = vi
+      .spyOn(app.get(SessionsService), 'resolve')
+      .mockRejectedValue(new Error('Provider intake must not resolve shop sessions'));
+    try {
+      for (const response of [await verify('subscribe', verifyToken), await post(delivery())]) {
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['set-cookie']).toBeUndefined();
+        expect(response.headers['x-session-context']).toBeUndefined();
+      }
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  it('returns a retryable response if the queue does not respond', async () => {
+    const payload = delivery();
+    const enqueue = vi.spyOn(queue, 'add').mockImplementationOnce(() => new Promise(() => {}));
+    try {
+      expect((await post(payload)).statusCode).toBe(503);
+      expect(await stored(payload)).toHaveLength(1);
+      expect((await post(payload)).statusCode).toBe(200);
+      const [event] = await stored(payload);
+      expect((await queue.getJob(event!.id))?.data).toEqual({ webhookEventId: event!.id });
+    } finally {
+      enqueue.mockRestore();
+    }
   });
 
   it('refuses a 2 MiB delivery before saving it', async () => {

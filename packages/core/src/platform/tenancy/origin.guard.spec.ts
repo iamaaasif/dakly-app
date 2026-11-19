@@ -57,6 +57,9 @@ describe('OriginGuard', () => {
     Public()(callback, 'receive', { value: callback });
     ProviderCallback()(callback, 'receive', { value: callback });
     expect(originGuard.canActivate(context('POST', undefined, callback))).toBe(true);
+    expect(() => originGuard.canActivate(context('POST', 'https://other.test', callback))).toThrow(
+      expect.objectContaining({ code: 'ORIGIN_REJECTED' }),
+    );
 
     RequireUser()(callback, 'receive', { value: callback });
     expect(() => originGuard.canActivate(context('POST', undefined, callback))).toThrow(
