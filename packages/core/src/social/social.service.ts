@@ -16,6 +16,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
@@ -263,7 +264,10 @@ export class SocialService {
     }
 
     const timeZone = await this.stores.timeZone(storeId);
-    const reserved = await this.repository.reservedTimes(storeId, ids, { from: now });
+    // A reservation before now can occupy the second occurrence of a repeated local time.
+    const reserved = await this.repository.reservedTimes(storeId, ids, {
+      from: new Date(now.getTime() - DAY_MS),
+    });
     const byConnection = new Map<string, Set<number>>();
     for (const { channelConnectionId, scheduledFor } of reserved) {
       if (!scheduledFor) continue;

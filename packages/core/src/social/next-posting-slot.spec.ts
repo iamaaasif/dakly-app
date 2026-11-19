@@ -28,4 +28,30 @@ describe('nextPostingSlot', () => {
     );
     expect(picked?.toISOString()).toBe('2026-11-27T14:15:00.000Z');
   });
+
+  it('compares available slots by UTC time when local times repeat', () => {
+    const picked = nextPostingSlot(
+      [
+        { weekday: 0, time: '01:10' },
+        { weekday: 0, time: '01:30' },
+      ],
+      new Date('2026-11-01T05:05:00.000Z'),
+      'America/New_York',
+      new Set(),
+    );
+    expect(picked?.toISOString()).toBe('2026-11-01T05:30:00.000Z');
+  });
+
+  it('keeps a reserved local slot occupied when the clock repeats its time', () => {
+    const slots = [{ weekday: 0, time: '01:30' }];
+    const now = new Date('2026-11-01T06:04:00.000Z');
+    const earlier = Date.parse('2026-11-01T05:30:00Z');
+    const timeZone = 'America/New_York';
+    expect(nextPostingSlot(slots, now, timeZone, new Set())?.toISOString()).toBe(
+      '2026-11-01T06:30:00.000Z',
+    );
+    expect(nextPostingSlot(slots, now, timeZone, new Set([earlier]))?.toISOString()).toBe(
+      '2026-11-08T06:30:00.000Z',
+    );
+  });
 });

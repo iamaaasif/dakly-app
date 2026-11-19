@@ -20,22 +20,26 @@ export function nextPostingSlot(
     timeStyle: 'medium',
   });
   const firstDay = formatter.format(new Date(earliest)).slice(0, 10);
-  const ordered = [...slots].sort((left, right) => left.time.localeCompare(right.time));
   for (let day = Date.parse(firstDay); ; day += DAY_MS) {
     const date = new Date(day);
     const localDay = date.toISOString().slice(0, 10);
-    for (const slot of ordered) {
+    let next = Infinity;
+    for (const slot of slots) {
       if (slot.weekday !== date.getUTCDay()) continue;
-      const selected = slotInstant(formatter, `${localDay} ${slot.time}:00`);
-      if (selected >= earliest && !reserved.has(selected)) return new Date(selected);
+      const instants = slotInstants(formatter, `${localDay} ${slot.time}:00`);
+      // Both occurrences share the same local slot when the clock goes back.
+      if (instants.some((instant) => reserved.has(instant))) continue;
+      for (const instant of instants) {
+        if (instant >= earliest) next = Math.min(next, instant);
+      }
     }
+    if (Number.isFinite(next)) return new Date(next);
   }
 }
 
-function slotInstant(formatter: Intl.DateTimeFormat, localTime: string): number {
+function slotInstants(formatter: Intl.DateTimeFormat, localTime: string): number[] {
   const nominal = Date.parse(`${localTime.replace(' ', 'T')}Z`);
-  // Use the earlier instant when a clock change repeats a local time. Skip times that never occur.
-  const valid = [-DAY_MS, DAY_MS]
+  return [-DAY_MS, DAY_MS]
     .map((shift) => {
       const reference = nominal + shift;
       const localReference = formatter.format(new Date(reference));
@@ -43,5 +47,4 @@ function slotInstant(formatter: Intl.DateTimeFormat, localTime: string): number 
       return nominal - offset;
     })
     .filter((instant) => formatter.format(new Date(instant)) === localTime);
-  return valid.length ? Math.min(...valid) : Number.NaN;
 }
