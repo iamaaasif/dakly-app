@@ -372,6 +372,10 @@ in-process.
 
 `chats.view`, `chats.edit` (reply, take over, assign). AI agent settings: Owner and Admin.
 
+The inbox routes require the Chats extension. Staff with view access can list conversations by newest activity and read messages by newest creation time. Both lists use cursors. The conversation list can filter by status, responder, channel and assignee. Deleting a contact hides their conversations and messages from the inbox.
+
+Staff with edit access can set status, assign an active member or clear the assignment, take over and hand back to AI. Each change bumps the conversation version and records the names of the changed fields in the audit log. Changing the responder leaves status and assignment alone. An inbound message newer than the previous one reopens a Done or Later conversation and keeps its responder and assignee. If staff change the conversation while the message is being saved, their change wins.
+
 ### Events
 
 Emits `message.received`, `message.sent`, `conversation.handed_over`, `ai.reply_sent`. Listens to `order.created` to link the order to the chat.
