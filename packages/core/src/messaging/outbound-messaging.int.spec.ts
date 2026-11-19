@@ -149,6 +149,18 @@ async function chatsEnabled(enabled: boolean) {
   ]);
 }
 
+async function waitForBlockedStoreOperation(pid: number) {
+  await vi.waitFor(async () => {
+    const {
+      rows: [lock],
+    } = await f.connection.pool.query<{ blocked: boolean }>(
+      'select exists(select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))) as blocked',
+      [pid],
+    );
+    expect(lock?.blocked).toBe(true);
+  });
+}
+
 it('submits a queued reply once outside the database transaction', async () => {
   const { messageId } = await queuedReply();
   const calls: { inside: boolean; operationKey: string }[] = [];
@@ -211,14 +223,34 @@ it('can retry a credential lookup failure before making a provider attempt', asy
   expect(await f.row('messages', messageId)).toMatchObject({ status: 'sent' });
 });
 
-it('records an inactive connection without making a provider attempt', async () => {
-  const { connectionId, messageId } = await queuedReply();
-  await f.connection.pool.query(
-    "update channel_connections set status = 'needs_reconnect' where id = $1",
-    [connectionId],
-  );
+it('orders a transactional send after a concurrent channel disconnect', async () => {
+  const { connectionId, messageId } = await queuedReply({ kind: 'system' }, 'transactional');
   const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
-  await dispatch.sendQueuedMessage(f.a, messageId);
+  const { pool } = f.connection;
+  const blocker = await pool.connect();
+  try {
+    await blocker.query('begin');
+    const {
+      rows: [connection],
+    } = await blocker.query<{ pid: number }>(
+      'select pg_backend_pid() as pid from stores where id = $1 for no key update',
+      [f.a],
+    );
+    await Promise.all([
+      dispatch.sendQueuedMessage(f.a, messageId),
+      (async () => {
+        await waitForBlockedStoreOperation(connection!.pid);
+        await blocker.query(
+          "update channel_connections set status = 'disconnected' where id = $1",
+          [connectionId],
+        );
+        await blocker.query('commit');
+      })(),
+    ]);
+  } finally {
+    await blocker.query('rollback');
+    blocker.release();
+  }
   expect(await f.row('messages', messageId)).toMatchObject({
     status: 'failed',
     error_code: 'channel_not_connected',
@@ -343,6 +375,23 @@ it('fails an older outbound row without its chosen recipient', async () => {
     status: 'failed',
     error_code: 'send_intent_missing',
   });
+});
+
+it('refuses an identity from another conversation in the same store', async () => {
+  const { messageId } = await queuedReply();
+  const other = await queuedReply();
+  const recipient = await f.row('messages', other.messageId);
+  await f.connection.pool.query('update messages set recipient_identity_id = $1 where id = $2', [
+    recipient.recipient_identity_id,
+    messageId,
+  ]);
+  const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
+  await dispatch.sendQueuedMessage(f.a, messageId);
+  expect(await f.row('messages', messageId)).toMatchObject({
+    status: 'failed',
+    error_code: 'no_address',
+  });
+  expect(provider).not.toHaveBeenCalled();
 });
 
 it('refuses queued inbox replies when Chats is disabled and sends core transactional messages', async () => {

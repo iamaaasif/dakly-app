@@ -20,11 +20,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import {
-  ContactIdentitiesRepository,
-  type InboundIdentity,
-  type OutboundIdentity,
-} from './contact-identities.repository';
+import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -118,10 +114,6 @@ export class ContactsService {
         return identity.contactId;
       }
     });
-  }
-
-  findOutboundIdentity(storeId: string, input: OutboundIdentity) {
-    return this.identities.findOutboundIdentity(storeId, input);
   }
 
   async list(

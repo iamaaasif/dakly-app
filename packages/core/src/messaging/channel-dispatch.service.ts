@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
-import { ContactsService } from '../contacts/contacts.service';
+import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -38,7 +38,7 @@ function humanAgentDeadline(
 @Injectable()
 export class ChannelDispatchService {
   constructor(
-    @Inject(ContactsService) private readonly contactsService: ContactsService,
+    @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(ChannelConnectionsService) private readonly connections: ChannelConnectionsService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
@@ -86,7 +86,7 @@ export class ChannelDispatchService {
   }
 
   private prepareChannelDispatch(storeId: string, messageId: string) {
-    return this.transaction.run(storeId, async () => {
+    return this.transaction.runLocked(storeId, async () => {
       const row = await this.outbound.findForDispatch(storeId, messageId);
       if (!row || row.channel === 'whatsapp') return;
       const { identityId, category, body, channel } = row;
@@ -96,13 +96,12 @@ export class ChannelDispatchService {
       if (category === 'marketing')
         return this.recordChannelOutcome(storeId, message, 'send_category_unsupported');
       const intent = { ...message, identityId, category, body };
-      if (category !== 'staff_reply') return this.claimChannelDispatch(storeId, intent);
-      return this.transaction.runLocked(storeId, async () => {
-        const { extensions } = await this.stores.settings(storeId);
-        return extensions.includes('chats')
-          ? this.claimChannelDispatch(storeId, intent)
-          : this.recordChannelOutcome(storeId, intent, 'chats_disabled');
-      });
+      if (
+        category === 'staff_reply' &&
+        !(await this.stores.settings(storeId)).extensions.includes('chats')
+      )
+        return this.recordChannelOutcome(storeId, intent, 'chats_disabled');
+      return this.claimChannelDispatch(storeId, intent);
     });
   }
 
@@ -116,7 +115,7 @@ export class ChannelDispatchService {
         message,
         gate.decision.action === 'skip' ? gate.decision.reason : 'quiet_hours',
       );
-    const identity = await this.contactsService.findOutboundIdentity(storeId, message);
+    const identity = await this.identities.findOutboundIdentity(storeId, message);
     if (!identity) return this.recordChannelOutcome(storeId, message, 'no_address');
     let credential;
     try {

@@ -11,6 +11,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
@@ -95,7 +96,7 @@ export class ChannelConnectionsService {
     message: OutboundMessage,
     prepared: PreparedMetaSend,
   ) {
-    if (this.transaction.isOpen()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
+    if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
     if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
     if (
       prepared.storeId !== storeId ||

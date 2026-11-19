@@ -5,6 +5,7 @@ import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ConsentService } from '../consents/consent.service';
+import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { hashToken } from '../platform/crypto/token-hash';
@@ -65,6 +66,7 @@ export type SentMessage = { providerMessageId: string; parts: number; credits: n
 export class MessagingService {
   constructor(
     @Inject(ContactsService) private readonly contactsService: ContactsService,
+    @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
     @Inject(SmsService) private readonly smsService: SmsService,
     @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -194,7 +196,7 @@ export class MessagingService {
   private queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
     return this.transaction.run(storeId, async () => {
       const conversation = await this.outbound.findConversation(storeId, input);
-      if (!conversation || !(await this.contactsService.findOutboundIdentity(storeId, input)))
+      if (!conversation || !(await this.identities.findOutboundIdentity(storeId, input)))
         throw messagingError('CONVERSATION_NOT_FOUND');
       const idempotencyKey = `outbound:${hashToken(input.operationKey).toString('hex')}`;
       const now = this.clock.now();

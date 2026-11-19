@@ -16,6 +16,7 @@ import {
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
@@ -337,6 +338,11 @@ it('marks a rejected send credential and tells the owner', async () => {
     app
       .get(StoreTransaction)
       .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message, prepared)),
+  ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
+  await expect(
+    app
+      .get(AccountTransaction)
+      .run(userId, () => connections.sendMetaMessage(storeId, connectionId, message, prepared)),
   ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
   const failedRecord = vi
     .spyOn(connections, 'recordRejectedToken')
