@@ -121,12 +121,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M4. Chats inbox (people only)
 
-| ID     | Task                                                     | Status | Depends       | PR  | Notes |
-| ------ | -------------------------------------------------------- | ------ | ------------- | --- | ----- |
-| CHAT-3 | Status, responder, assignment, take over, internal notes | Todo   | CHAT-1        |     |       |
-| CHAT-4 | Saved replies                                            | Todo   | CHAT-1        |     |       |
-| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo   | CHAT-3, WEB-2 |     |       |
-| CHAT-6 | Comments: receive, reply publicly and privately, hide    | Todo   | CHAT-2        |     |       |
+| ID     | Task                                                     | Status      | Depends       | PR  | Notes |
+| ------ | -------------------------------------------------------- | ----------- | ------------- | --- | ----- |
+| CHAT-3 | Status, responder, assignment, take over, internal notes | In progress | CHAT-1        |     |       |
+| CHAT-4 | Saved replies                                            | Todo        | CHAT-1        |     |       |
+| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo        | CHAT-3, WEB-2 |     |       |
+| CHAT-6 | Comments: receive, reply publicly and privately, hide    | Todo        | CHAT-2        |     |       |
 
 ## M5. Products
 
