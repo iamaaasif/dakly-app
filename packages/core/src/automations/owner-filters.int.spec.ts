@@ -114,18 +114,40 @@ describe('automation filters without RLS assistance', () => {
       attempts: 1,
       graph,
     });
+    const stepId = randomUUID();
     const sending = {
+      id: stepId,
       stepKey: 'offer',
       kind: 'send',
       outcome: 'sending',
       sentAt: claimedAt,
     } as const;
     await runs.insertStep(f.a, runId, contactId, sending);
-    expect(await runs.hasSendingStep(f.b, runId, 'offer')).toBe(false);
+    expect(await runs.findSendingStep(f.b, runId, 'offer')).toBeUndefined();
     await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
-    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(true);
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
+      id: stepId,
+      firstTriedAt: claimedAt,
+      latestDispatchAt: claimedAt,
+      optOutUrl: null,
+      destinationHash: null,
+    });
+    const incompleteId = randomUUID();
+    await runs.insertStep(f.a, runId, contactId, {
+      id: incompleteId,
+      stepKey: 'older-send',
+      kind: 'send',
+      outcome: 'sending',
+    });
+    expect(await runs.findSendingStep(f.a, runId, 'older-send')).toEqual({
+      id: incompleteId,
+      firstTriedAt: null,
+      latestDispatchAt: null,
+      optOutUrl: null,
+      destinationHash: null,
+    });
     await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
-    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(false);
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toBeUndefined();
     expect(await runs.moveRun(f.a, claim, { status: 'done' })).toBe(true);
   });
 });

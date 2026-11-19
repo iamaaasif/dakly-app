@@ -309,6 +309,13 @@
       "when": 1795059739050,
       "tag": "0043_campaign_list_order",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795062627949,
+      "tag": "0044_automation_send_retries",
+      "breakpoints": true
     }
   ]
 }
