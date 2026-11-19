@@ -20,7 +20,9 @@ export const automationTriggerEvent = z.discriminatedUnion('type', [
   automationConsentEvent,
   automationTagEvent,
 ]);
-type TriggerEvent = z.infer<typeof automationTriggerEvent>;
+export type TriggerEvent =
+  | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
+  | Omit<z.infer<typeof automationTagEvent>, 'storeId'>;
 
 @Injectable()
 export class AutomationEntryService {
@@ -31,18 +33,15 @@ export class AutomationEntryService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async startMatching(event: TriggerEvent): Promise<void> {
+  async startMatching(storeId: string, event: TriggerEvent): Promise<void> {
     const key = triggerFor(event);
     if (!key) return;
-    const workflows = await this.repository.activeWorkflows(event.storeId, key);
-    for (const { id } of workflows) await this.start(id, event);
+    const workflows = await this.repository.activeWorkflows(storeId, key);
+    for (const { id } of workflows) await this.start(storeId, id, event);
   }
 
-  async start(automationId: string, event: TriggerEvent): Promise<void> {
-    const {
-      storeId,
-      payload: { contactId },
-    } = event;
+  async start(storeId: string, automationId: string, event: TriggerEvent): Promise<void> {
+    const { contactId } = event.payload;
     await this.transaction.run(storeId, async () => {
       try {
         await this.contacts.lockForConsent(storeId, [contactId]);

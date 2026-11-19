@@ -11,6 +11,7 @@ export class StartAutomationRunJob implements JobHandler {
   constructor(@Inject(AutomationEntryService) private readonly entries: AutomationEntryService) {}
 
   async handle(data: unknown) {
-    await this.entries.startMatching(automationTriggerEvent.parse(data));
+    const { storeId, ...event } = automationTriggerEvent.parse(data);
+    await this.entries.startMatching(storeId, event);
   }
 }

@@ -11,6 +11,7 @@ export class StartAutomationOnTagAdded implements JobHandler {
   constructor(@Inject(AutomationTriggerQueue) private readonly triggers: AutomationTriggerQueue) {}
 
   async handle(data: unknown) {
-    await this.triggers.enqueue(automationTagEvent.parse(data));
+    const { storeId, ...event } = automationTagEvent.parse(data);
+    await this.triggers.enqueue(storeId, event);
   }
 }

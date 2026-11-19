@@ -11,6 +11,7 @@ export class StartAutomationOnConsent implements JobHandler {
   constructor(@Inject(AutomationTriggerQueue) private readonly triggers: AutomationTriggerQueue) {}
 
   async handle(data: unknown) {
-    await this.triggers.enqueue(automationConsentEvent.parse(data));
+    const { storeId, ...event } = automationConsentEvent.parse(data);
+    await this.triggers.enqueue(storeId, event);
   }
 }
