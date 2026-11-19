@@ -11,6 +11,7 @@ export const buttonVariants = cva(
         primary: 'bg-action text-on-primary hover:bg-action-hover',
         secondary: 'border border-input-border bg-surface text-text hover:bg-surface-muted',
         danger: 'bg-danger text-on-primary hover:bg-danger-hover',
+        link: 'px-0 text-action hover:underline',
       },
     },
     defaultVariants: { variant: 'primary' },

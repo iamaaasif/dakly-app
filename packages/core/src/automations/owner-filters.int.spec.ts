@@ -49,7 +49,11 @@ describe('automation filters without RLS assistance', () => {
     expect(await repository.listVersions(f.b, a.automation.id)).toEqual([]);
 
     expect(
-      await repository.change(f.b, a.automation.id, visible, { name: 'চুরি', updatedAt: now }),
+      await repository.change(
+        f.b,
+        { id: a.automation.id, from: visible },
+        { name: 'চুরি', updatedAt: now },
+      ),
     ).toBeUndefined();
     expect(await repository.stopVersion(f.b, a.automation.id, a.version.id)).toBe(false);
     const fromStoreB = { graph, publishedByUserId: f.userB, publishedAt: now };
@@ -72,6 +76,44 @@ describe('automation filters without RLS assistance', () => {
       expect.objectContaining({ id: a.version.id, isStopped: false }),
     ]);
     expect(await repository.find(f.a, a.automation.id)).toMatchObject({ name: a.automation.name });
+  });
+
+  it('pauses and resumes for balance only in the selected store', async () => {
+    const a = await published(f.a, f.userA);
+    const b = await published(f.b, f.userB);
+    await f.connection.pool.query("update automations set status='active' where id=$1", [
+      a.automation.id,
+    ]);
+    expect(await repository.pauseForBalance(f.b, a.automation.id, 1, now)).toBeUndefined();
+    expect(await f.row('automations', a.automation.id)).toMatchObject({
+      status: 'active',
+      balance_pause_revision: null,
+    });
+    for (const { automation } of [a, b])
+      await f.connection.pool.query(
+        "update automations set status='paused', pause_reason='balance', balance_pause_revision=1 where id=$1",
+        [automation.id],
+      );
+    const toActive = { status: 'active', pauseReason: null, updatedAt: now } as const;
+    const pausedWorkflow = { id: a.automation.id, from: ['paused'] } as const;
+
+    expect(await repository.change(f.b, pausedWorkflow, toActive)).toBeUndefined();
+    expect(await repository.change(f.a, pausedWorkflow, toActive, 'balance')).toBeUndefined();
+    await f.tenant.forStore(f.b, async () => {
+      const ids = await repository.lockBalancePaused(f.b, 2);
+      expect(ids).toEqual([b.automation.id]);
+      await repository.resumeBalancePaused(f.b, [...ids, a.automation.id], now);
+    });
+
+    expect(await f.row('automations', a.automation.id)).toMatchObject({
+      status: 'paused',
+      pause_reason: 'balance',
+      balance_resumed_at: null,
+    });
+    expect(await f.row('automations', b.automation.id)).toMatchObject({
+      status: 'active',
+      pause_reason: null,
+    });
   });
 
   it('reads, moves and records runs only in the selected store', async () => {
