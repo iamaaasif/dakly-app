@@ -352,11 +352,12 @@ outcome in `ai_runs`. A schema mismatch gets one retry within the 20-second
 model budget. The service returns the parsed output, tool calls or a typed
 failure.
 
-Content Studio and Ask Dakly supply a usage reference. The service consumes
-one unit after a schema-valid result, and the same reference makes a retry
-free. Chats checks its allowance before any model work and consumes the
-conversation unit when it saves the outgoing AI reply, using the contact and
-window as the reference.
+Content Studio and Ask Dakly supply a usage reference. The service charges
+after a schema-valid result, and using the same reference makes a retry free.
+Content Studio passes the quantity, 3 for a generation and 1 for an edit.
+Ask Dakly uses 1 unit. Chats checks its allowance before any model work and
+consumes the conversation unit when it saves the outgoing AI reply, using the
+contact and window as the reference.
 
 The allowance check reads the current plan period and leaves the balance available until an AI reply is saved. AI-5 adds consumption and the rolling contact window.
 
