@@ -130,6 +130,27 @@ describe('MetaGraphChannelDriver', () => {
     expect(request!.headers.get('authorization')).toBe('Bearer test-page-credential');
   });
 
+  it('distinguishes an invalid Page token from an app authentication failure', async () => {
+    const responses = [
+      Response.json({ data: { is_valid: false } }),
+      Response.json(
+        { error: { code: 190, message: 'private app credential details' } },
+        { status: 401 },
+      ),
+    ];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      expect(url.hostname).toBe('graph.facebook.com');
+      expect(url.pathname).toMatch(/\/debug_token$/);
+      expect(url.searchParams.get('input_token')).toBe('test-page-credential');
+      expect(new Headers(init.headers).get('authorization')).toBe('Bearer 123456|test-app-secret');
+      return responses.shift()!;
+    });
+    await expect(driver.isTokenValid('test-page-credential')).resolves.toBe(false);
+    await expect(driver.isTokenValid('test-page-credential')).rejects.toMatchObject({
+      code: 'auth_error',
+    });
+  });
+
   it('treats a Meta Page permission denial as an authorization error', async () => {
     vi.stubGlobal('fetch', async () =>
       Response.json(
