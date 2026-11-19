@@ -1,3 +1,7 @@
+import { z } from 'zod';
+
+import { chatChannels } from './channels';
+
 export const conversationStatuses = ['open', 'needs_you', 'later', 'done'] as const;
 export const conversationResponders = ['ai', 'human', 'paused'] as const;
 export const handoverReasons = [
@@ -49,3 +53,58 @@ export const smsMessagePurposes = [
   'manual',
 ] as const;
 export const smsMessageStatuses = ['queued', 'sent', 'delivered', 'failed'] as const;
+
+const messageCursorSchema = z.templateLiteral([z.iso.datetime(), '_', z.uuid()]);
+
+export const conversationMessageListQuerySchema = z.strictObject({
+  cursor: messageCursorSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const conversationListQuerySchema = conversationMessageListQuerySchema.extend({
+  cursor: z.union([messageCursorSchema, z.templateLiteral(['none_', z.uuid()])]).optional(),
+  status: z.enum(conversationStatuses).optional(),
+  responder: z.enum(conversationResponders).optional(),
+  channel: z.enum(chatChannels).optional(),
+  assigneeUserId: z.uuid().optional(),
+});
+
+export const updateConversationSchema = z
+  .strictObject({
+    status: z.enum(conversationStatuses).optional(),
+    assigneeUserId: z.uuid().toLowerCase().nullable().optional(),
+  })
+  .refine((change) => Object.keys(change).length > 0, 'Change at least one field');
+
+export type ConversationListQuery = z.infer<typeof conversationListQuerySchema>;
+export type ConversationMessageListQuery = z.infer<typeof conversationMessageListQuerySchema>;
+export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
+
+export type ConversationResponse = {
+  id: string;
+  contactId: string;
+  channel: (typeof chatChannels)[number];
+  status: (typeof conversationStatuses)[number];
+  responder: (typeof conversationResponders)[number];
+  assigneeUserId: string | null;
+  handoverReason: (typeof handoverReasons)[number] | null;
+  handedOverAt: string | null;
+  aiResumesAt: string | null;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  windowExpiresAt: string | null;
+  unreadCount: number;
+};
+
+export type ConversationMessageResponse = {
+  id: string;
+  kind: (typeof messageKinds)[number];
+  direction: (typeof messageDirections)[number];
+  body: string | null;
+  authorType: (typeof messageAuthorTypes)[number];
+  authorUserId: string | null;
+  status: (typeof messageStatuses)[number];
+  sourceType: (typeof messageSourceTypes)[number];
+  createdAt: string;
+  sentAt: string | null;
+};

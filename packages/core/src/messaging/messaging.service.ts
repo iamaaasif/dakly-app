@@ -87,7 +87,13 @@ export class MessagingService {
       connectionId,
       externalId: input.externalSenderId,
     });
-    const { id: conversationId, started } = await this.inbound.getConversation(
+    const {
+      id: conversationId,
+      started,
+      status,
+      lastInboundAt,
+      version,
+    } = await this.inbound.getConversation(
       storeId,
       { channel, channelConnectionId: connectionId, contactId },
       now,
@@ -104,6 +110,8 @@ export class MessagingService {
       now,
     );
     if (!message) return 'duplicate';
+    const reopen =
+      (status === 'done' || status === 'later') && (!lastInboundAt || input.sentAt > lastInboundAt);
     await this.inbound.advanceConversation(
       storeId,
       {
@@ -111,6 +119,7 @@ export class MessagingService {
         at: input.sentAt,
         expiry: new Date(input.sentAt.getTime() + DAY_MS),
         preview: input.content.slice(0, 160),
+        reopenVersion: reopen ? version : undefined,
       },
       now,
     );
