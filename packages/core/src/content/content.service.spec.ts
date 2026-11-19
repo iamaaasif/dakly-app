@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import type { AiService } from '../ai/ai.service';
 import type { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { ProductsService } from '../products/products.service';
+import type { UsageService } from '../usage/usage.service';
 import type { ContentRepository } from './content.repository';
 import { ContentService } from './content.service';
 
@@ -17,6 +20,9 @@ function serviceWith(repository: Partial<ContentRepository>) {
     new Clock(),
     transaction as unknown as StoreTransaction,
     { record: async () => undefined } as unknown as AuditService,
+    {} as AiService,
+    {} as ProductsService,
+    {} as UsageService,
   );
 }
 
