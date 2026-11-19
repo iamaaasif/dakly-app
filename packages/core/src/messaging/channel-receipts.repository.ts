@@ -36,10 +36,6 @@ export class ChannelReceiptsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async hasPendingDispatch(storeId: string, thread: Thread, receipt: Receipt) {
-    const through =
-      'through' in receipt && receipt.through < receipt.occurredAt
-        ? receipt.through
-        : receipt.occurredAt;
     const [pending] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: messages.id })
@@ -49,7 +45,12 @@ export class ChannelReceiptsRepository {
             addressedTo(storeId, thread),
             eq(messages.status, 'queued'),
             eq(messages.errorCode, SEND_UNCONFIRMED),
-            lte(messages.createdAt, through),
+            'through' in receipt
+              ? and(
+                  lte(messages.createdAt, receipt.through),
+                  lte(messages.createdAt, receipt.occurredAt),
+                )
+              : undefined,
           ),
         )
         .limit(1),

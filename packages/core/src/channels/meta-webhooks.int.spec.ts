@@ -358,6 +358,11 @@ describe('Meta webhook intake', () => {
         [storeId, sent, pending, new Date(eventTime), account, racing],
       );
 
+      await admin.pool.query('update messages set created_at = $1 where id = any($2::uuid[])', [
+        new Date(eventTime + 850),
+        [pending, racing],
+      ]);
+
       const read = {
         sender,
         recipient,
