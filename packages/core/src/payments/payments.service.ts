@@ -9,9 +9,11 @@ import type {
   PaymentStatus,
 } from '@dakly/providers/payment/payment-driver';
 
+import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { AppError } from '../platform/errors/app-error';
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { MINUTE_MS } from '../platform/time';
 import { PAYMENT_ERRORS } from './payments.errors';
 import { PaymentsRepository } from './payments.repository';
@@ -26,6 +28,8 @@ export class PaymentsService {
     private readonly repository: PaymentsRepository,
     private readonly transaction: StoreTransaction,
     private readonly clock: Clock,
+    private readonly outbox: OutboxService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   create(storeId: string, input: CreatePaymentIntent) {
@@ -51,6 +55,7 @@ export class PaymentsService {
         createdAt: now,
         updatedAt: now,
       });
+      if (!intent) throw new AppError('INTERNAL_ERROR', PLATFORM_ERRORS.INTERNAL_ERROR);
       await this.repository.appendEvent(storeId, {
         paymentIntentId: intent.id,
         kind: 'created',
@@ -107,6 +112,12 @@ export class PaymentsService {
           nextCheckAt: now,
           updatedAt: now,
         });
+        await this.outbox.publish({
+          type: 'payment.verification_requested',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { paymentIntentId: intent.id },
+        });
       }
     });
   }
@@ -126,8 +137,10 @@ export class PaymentsService {
       const now = this.clock.now();
       const change = this.verifiedChange(intent, result, now);
       if (change) {
-<<<<<<< HEAD
-        await this.transition(storeId, intent, change, now);
+        await this.transition(storeId, intent, change, {
+          now,
+          verified: result.status === 'paid' ? result : undefined,
+        });
       } else if (checkedAt && checkedAt.getTime() === intent.nextCheckAt?.getTime()) {
         await this.advanceCheck(storeId, intent, now);
       }
@@ -143,13 +156,6 @@ export class PaymentsService {
       nextCheckAt:
         intent.status === 'pending' ? new Date(Math.min(next, intent.expiresAt.getTime())) : null,
       updatedAt: now,
-=======
-        await this.transition(storeId, intent, change, {
-          now,
-          verified: result.status === 'paid' ? result : undefined,
-        });
-      }
->>>>>>> feat/pay-2-payment-intents
     });
   }
 
@@ -217,5 +223,31 @@ export class PaymentsService {
       },
       createdAt: now,
     });
+    await this.publishTransition(storeId, intent, change, now);
+  }
+
+  private async publishTransition(
+    storeId: string,
+    intent: Intent,
+    change: Pick<Intent, 'status'> & { reviewReason?: Intent['reviewReason'] },
+    now: Date,
+  ) {
+    if (!intent.isSandbox && (change.status === 'succeeded' || change.status === 'failed')) {
+      await this.outbox.publish({
+        type: change.status === 'succeeded' ? 'payment.succeeded' : 'payment.failed',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { paymentIntentId: intent.id },
+      });
+    }
+    if (change.reviewReason === 'amount_mismatch') {
+      await this.notifications.notify(storeId, {
+        type: 'payment.amount_mismatch',
+        category: 'billing',
+        dedupeKey: `payment-amount-mismatch-${intent.id}`,
+        recipientPermission: intent.flow === 'shop' ? 'orders.edit' : 'billing.view',
+        title: 'A payment amount needs review',
+      });
+    }
   }
 }

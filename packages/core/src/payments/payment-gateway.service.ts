@@ -4,6 +4,7 @@ import type { PaymentDriver, PaymentMerchant } from '@dakly/providers/payment/pa
 
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
+import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
 import { AppError } from '../platform/errors/app-error';
 import { PAYMENT_DRIVERS } from './payment-callbacks.service';
 import { PAYMENT_ERRORS } from './payments.errors';
@@ -62,6 +63,8 @@ export class PaymentGatewayService {
     intent: Intent,
     use: (driver: PaymentDriver, merchant: PaymentMerchant) => Promise<T>,
   ) {
+    if (hasDatabaseTransactionScope())
+      throw new AppError('PAYMENT_INSIDE_TRANSACTION', PAYMENT_ERRORS.PAYMENT_INSIDE_TRANSACTION);
     const driver = this.drivers.find((candidate) => candidate.gateway === intent.gateway);
     if (!driver)
       throw new AppError('PAYMENT_GATEWAY_UNAVAILABLE', PAYMENT_ERRORS.PAYMENT_GATEWAY_UNAVAILABLE);

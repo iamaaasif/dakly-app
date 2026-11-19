@@ -11,13 +11,17 @@ import {
   paymentGatewayCredentials,
   paymentIntents,
 } from '@dakly/db/schema/payments';
+import { outboxEvents } from '@dakly/db/schema/platform';
 import { stores } from '@dakly/db/schema/stores';
 import type { PaymentDriver } from '@dakly/providers/payment/payment-driver';
 
+import type { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { OutboxRepository } from '../platform/outbox/outbox.repository';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
 import { VerifyPaymentJob } from './jobs/verify-payment.job';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
@@ -35,7 +39,11 @@ const clock = new Clock();
 const now = new Date('2026-11-19T03:00:00.000Z');
 clock.now = () => now;
 const repository = new PaymentsRepository(database);
-const payments = new PaymentsService(repository, new StoreTransaction(database), clock);
+const transaction = new StoreTransaction(database);
+const outbox = new OutboxService(new OutboxRepository(app.db, database), transaction);
+const payments = new PaymentsService(repository, transaction, clock, outbox, {
+  notify: async () => {},
+} as NotificationsService);
 const signingKey = 'test-payment-callback-signing-key';
 const driver: PaymentDriver = {
   gateway: 'bkash',
@@ -85,6 +93,7 @@ afterAll(async () => {
           .where(inArray(paymentIntents.storeId, [storeA, storeB])),
       ),
     );
+    await admin.db.delete(outboxEvents).where(inArray(outboxEvents.storeId, [storeA, storeB]));
     await admin.db.delete(paymentEvents).where(inArray(paymentEvents.storeId, [storeA, storeB]));
     await admin.db.delete(paymentIntents).where(inArray(paymentIntents.storeId, [storeA, storeB]));
     await admin.db
@@ -151,6 +160,14 @@ describe('Payment intents (Postgres)', () => {
         and(eq(paymentEvents.paymentIntentId, intent.id), eq(paymentEvents.toStatus, 'succeeded')),
       );
     expect(changes).toHaveLength(1);
+    const published = await admin.db
+      .select({ type: outboxEvents.type })
+      .from(outboxEvents)
+      .where(eq(outboxEvents.storeId, storeA));
+    expect(published.map(({ type }) => type).sort()).toEqual([
+      'payment.succeeded',
+      'payment.verification_requested',
+    ]);
   });
 
   it('refuses a verified payment with a different amount', async () => {

@@ -8,6 +8,7 @@ import { StoresModule } from '../stores/stores.module';
 import { ReconcilePaymentSettlementsJob } from './jobs/reconcile-payment-settlements.job';
 import { SweepPaymentChecksJob } from './jobs/sweep-payment-checks.job';
 import { SweepPaymentSettlementsJob } from './jobs/sweep-payment-settlements.job';
+import { VerifyPaymentOnCallback } from './jobs/verify-payment-on-callback.job';
 import { VerifyPaymentJob } from './jobs/verify-payment.job';
 import { PaymentGatewayService } from './payment-gateway.service';
 import { PaymentJobsService } from './payment-jobs.service';
@@ -30,6 +31,7 @@ import { PaymentsModule } from './payments.module';
     SweepPaymentChecksJob,
     SweepPaymentSettlementsJob,
     VerifyPaymentJob,
+    VerifyPaymentOnCallback,
   ],
   exports: [PaymentGatewayService],
 })

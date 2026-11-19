@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ClockModule } from '../platform/clock.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { PaymentCallbacksController } from './payment-callbacks.controller';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PAYMENT_DRIVERS, PaymentCallbacksService } from './payment-callbacks.service';
@@ -8,7 +10,7 @@ import { PaymentsRepository } from './payments.repository';
 import { PaymentsService } from './payments.service';
 
 @Module({
-  imports: [ClockModule],
+  imports: [ClockModule, NotificationsModule, OutboxModule],
   controllers: [PaymentCallbacksController],
   providers: [
     { provide: PAYMENT_DRIVERS, useValue: [] },
