@@ -165,6 +165,9 @@ it('queues an outbound reply once per store and operation key with Chats off', a
   await expect(
     messaging.send(storeId, { ...input, content: 'A different reply' }),
   ).rejects.toMatchObject({ code: 'MESSAGE_OPERATION_CONFLICT' });
+  await expect(
+    messaging.send(storeId, { ...input, actor: { kind: 'ai', aiRunId: randomUUID() } }),
+  ).rejects.toMatchObject({ code: 'MESSAGE_OPERATION_CONFLICT' });
 });
 
 it.each(['done', 'later'])('reopens a %s conversation only for a new message', async (status) => {

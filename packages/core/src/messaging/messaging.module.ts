@@ -8,6 +8,7 @@ import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SendingModule } from '../sending/sending.module';
 import { SmsModule } from '../sms/sms.module';
 import { SmsSendersModule } from '../sms-senders/sms-senders.module';
+import { StoresModule } from '../stores/stores.module';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { MessagingService } from './messaging.service';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
@@ -19,6 +20,7 @@ import { OutboundMessagingRepository } from './outbound-messaging.repository';
     ClockModule,
     OutboxModule,
     SendingModule,
+    StoresModule,
     MetaAuthorizationModule,
     SmsModule,
     SmsSendersModule,

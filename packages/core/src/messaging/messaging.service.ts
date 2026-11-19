@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { channelConnectionKinds, chatChannels } from '@dakly/contracts/channels';
-import type { messageAuthorTypes } from '@dakly/contracts/chats';
 import { countSmsParts } from '@dakly/contracts/sms';
 import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 
@@ -17,6 +16,7 @@ import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { type SendCategory, SendPolicyService } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
+import { StoresService } from '../stores/stores.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { messagingError } from './messaging.errors';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
@@ -69,6 +69,10 @@ type ChannelMessage = {
   contactId: string;
   channel: OutgoingChannelMessage['channel'];
 };
+type DispatchRow = NonNullable<
+  Awaited<ReturnType<OutboundMessagingRepository['findForDispatch']>>
+> &
+  Pick<ChannelMessage, 'channel'>;
 
 @Injectable()
 export class MessagingService {
@@ -84,6 +88,7 @@ export class MessagingService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
+    @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
   receiveInboundMessage(storeId: string, input: InboundMessageInput): Promise<ReceiveOutcome> {
@@ -207,14 +212,28 @@ export class MessagingService {
     if (!pending) return;
     let sent;
     try {
-      sent = await this.connections.sendMetaMessage(storeId, pending.connectionId, {
-        channel: pending.channel,
-        externalConversationId: pending.externalId,
-        text: pending.body,
-        operationKey: messageId,
-        humanAgent: pending.humanAgent,
-      });
+      sent = await this.connections.sendMetaMessage(
+        storeId,
+        pending.connectionId,
+        {
+          channel: pending.channel,
+          externalConversationId: pending.externalId,
+          text: pending.body,
+          operationKey: messageId,
+          humanAgent: pending.humanAgent,
+        },
+        pending.credential,
+      );
     } catch (error) {
+      if (error instanceof AppError && error.code === 'DECRYPTION_FAILED') {
+        await this.recordChannelOutcome(
+          storeId,
+          pending,
+          { errorCode: 'connection_unavailable' },
+          'attempted',
+        );
+        return;
+      }
       if (!(error instanceof MetaRequestError)) throw error;
       if (error.code === 'auth_error' || error.code === 'rejected')
         await this.recordChannelOutcome(storeId, pending, { errorCode: error.code }, 'attempted');
@@ -236,41 +255,44 @@ export class MessagingService {
       const row = await this.outbound.findForDispatch(storeId, messageId);
       if (!row || row.channel === 'whatsapp') return;
       const message = { ...row, channel: row.channel };
-      const { identityId, category, body } = message;
-      if (!identityId || !category || body === null)
-        return this.refuseChannelDispatch(storeId, message, 'send_intent_missing');
-      const { decision, humanAgent } = await this.checkChannelDispatch(storeId, message, category);
-      if (decision.action !== 'send')
-        return this.refuseChannelDispatch(
-          storeId,
-          message,
-          decision.action === 'skip' ? decision.reason : 'quiet_hours',
-        );
-      const identity = await this.contactsService.findOutboundIdentity(storeId, {
-        ...message,
-        identityId,
-      });
-      if (!identity) return this.refuseChannelDispatch(storeId, message, 'no_address');
-      if (!(await this.outbound.markAttempt(storeId, messageId))) return;
-      return {
-        ...message,
-        body,
-        externalId: identity.externalId,
-        humanAgent,
-      };
+      const claim = () => this.claimChannelDispatch(storeId, message);
+      return row.category === 'staff_reply' ? this.transaction.runLocked(storeId, claim) : claim();
     });
+  }
+
+  private async claimChannelDispatch(storeId: string, message: DispatchRow) {
+    const { identityId, category, body, connectionId, channel } = message;
+    if (!identityId || !category || body === null)
+      return this.refuseChannelDispatch(storeId, message, 'send_intent_missing');
+    const gate = await this.checkChannelDispatch(storeId, message, category);
+    if (!gate.allowed) return this.refuseChannelDispatch(storeId, message, gate.reason);
+    const identity = await this.contactsService.findOutboundIdentity(storeId, {
+      ...message,
+      identityId,
+    });
+    if (!identity) return this.refuseChannelDispatch(storeId, message, 'no_address');
+    const credential = await this.connections.prepareMetaSend(storeId, connectionId, channel);
+    if (!credential) return this.refuseChannelDispatch(storeId, message, 'connection_unavailable');
+    if (!(await this.outbound.markAttempt(storeId, message.id))) return;
+    return {
+      ...message,
+      body,
+      externalId: identity.externalId,
+      humanAgent: gate.humanAgent,
+      credential,
+    };
   }
 
   private async checkChannelDispatch(
     storeId: string,
-    message: Pick<ChannelMessage, 'contactId' | 'channel'> & {
-      authorType: (typeof messageAuthorTypes)[number];
-      lastInboundAt: Date | null;
-      windowExpiresAt: Date | null;
-    },
+    message: DispatchRow,
     category: SendCategory,
-  ) {
+  ): Promise<{ allowed: true; humanAgent: boolean } | { allowed: false; reason: string }> {
     const { authorType, channel, contactId, lastInboundAt, windowExpiresAt } = message;
+    if (category === 'staff_reply') {
+      const { extensions } = await this.stores.settings(storeId);
+      if (!extensions.includes('chats')) return { allowed: false, reason: 'chats_disabled' };
+    }
     const humanWindow =
       authorType === 'user' && category === 'staff_reply' && lastInboundAt
         ? new Date(lastInboundAt.getTime() + 7 * DAY_MS)
@@ -282,7 +304,9 @@ export class MessagingService {
       windowClosesAt: humanWindow ?? windowExpiresAt,
     });
     const humanAgent = humanWindow !== null && (!windowExpiresAt || at >= windowExpiresAt);
-    return { decision, humanAgent };
+    return decision.action === 'send'
+      ? { allowed: true, humanAgent }
+      : { allowed: false, reason: decision.action === 'skip' ? decision.reason : 'quiet_hours' };
   }
 
   private async refuseChannelDispatch(storeId: string, message: ChannelMessage, errorCode: string) {
@@ -338,14 +362,7 @@ export class MessagingService {
         { ...input, conversationId: conversation.id, idempotencyKey },
         now,
       );
-      if (!message) throw messagingError('MESSAGING_PREPARATION_FAILED');
-      if (
-        message.conversationId !== conversation.id ||
-        message.body !== input.content ||
-        message.identityId !== input.identityId ||
-        message.category !== input.category
-      )
-        throw messagingError('MESSAGE_OPERATION_CONFLICT');
+      if (!message) throw messagingError('MESSAGE_OPERATION_CONFLICT');
       if (created)
         await this.outbox.publish({
           type: 'message.send_requested',

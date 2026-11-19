@@ -11,6 +11,7 @@ import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 import { FakeMetaChannelDriver } from '@dakly/providers/channel/meta/fake-meta-channel-driver';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
@@ -37,6 +38,7 @@ beforeAll(async () => {
   vi.stubEnv('META_OAUTH_REDIRECT_URI', 'http://localhost:3000/integrations/meta');
   resetEnvForTests();
   await f.setup();
+  await chatsEnabled(true);
   await f.connection.pool.query("update memberships set built_in_role = 'owner' where id = $1", [
     f.memberA,
   ]);
@@ -83,6 +85,7 @@ afterAll(async () => {
 
 async function queuedReply(
   actor: OutgoingChannelMessage['actor'] = { kind: 'ai', aiRunId: randomUUID() },
+  category: OutgoingChannelMessage['category'] = 'staff_reply',
 ) {
   const storeId = f.a;
   vi.spyOn(app.get(Clock), 'now').mockReturnValue(now);
@@ -128,12 +131,19 @@ async function queuedReply(
     connectionId,
     identityId: identity!.id,
     contactId: identity!.contact_id,
-    category: 'staff_reply',
+    category,
     content: 'জি, পণ্যটি আছে।',
     operationKey: randomUUID(),
     actor,
   });
   return { connectionId, messageId };
+}
+
+async function chatsEnabled(enabled: boolean) {
+  await f.connection.pool.query('update stores set extensions = $1 where id = $2', [
+    enabled ? ['chats'] : [],
+    f.a,
+  ]);
 }
 
 it('submits a queued reply once outside the database transaction', async () => {
@@ -176,6 +186,26 @@ it('never submits twice if the worker lost its result after provider acceptance'
     status: 'queued',
     error_code: 'send_unconfirmed',
   });
+});
+
+it('can retry a credential lookup failure before making a provider attempt', async () => {
+  const { messageId } = await queuedReply();
+  vi.spyOn(app.get(ChannelConnectionsService), 'prepareMetaSend').mockRejectedValueOnce(
+    new Error('Credential lookup unavailable'),
+  );
+  const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockResolvedValue({
+    externalMessageId: `fake-${messageId}`,
+  });
+  await expect(messaging.sendQueuedMessage(f.a, messageId)).rejects.toThrow(
+    'Credential lookup unavailable',
+  );
+  expect(await f.row('messages', messageId)).toMatchObject({
+    status: 'queued',
+    error_code: null,
+  });
+  await messaging.sendQueuedMessage(f.a, messageId);
+  expect(provider).toHaveBeenCalledTimes(1);
+  expect(await f.row('messages', messageId)).toMatchObject({ status: 'sent' });
 });
 
 it('keeps an uncertain send pending across a worker retry', async () => {
@@ -246,4 +276,25 @@ it('fails an older outbound row without its chosen recipient', async () => {
     status: 'failed',
     error_code: 'send_intent_missing',
   });
+});
+
+it('refuses queued inbox replies when Chats is disabled and sends core transactional messages', async () => {
+  const reply = await queuedReply();
+  const transactional = await queuedReply({ kind: 'system' }, 'transactional');
+  const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockResolvedValue({
+    externalMessageId: 'meta-test-transactional',
+  });
+  await chatsEnabled(false);
+  try {
+    await messaging.sendQueuedMessage(f.a, reply.messageId);
+    await messaging.sendQueuedMessage(f.a, transactional.messageId);
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(await f.row('messages', reply.messageId)).toMatchObject({
+      status: 'failed',
+      error_code: 'chats_disabled',
+    });
+    expect(await f.row('messages', transactional.messageId)).toMatchObject({ status: 'sent' });
+  } finally {
+    await chatsEnabled(true);
+  }
 });

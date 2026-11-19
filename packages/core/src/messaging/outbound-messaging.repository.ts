@@ -58,6 +58,8 @@ export class OutboundMessagingRepository {
   ) {
     return this.database.forStore(storeId, async (tx) => {
       const { actor, content, conversationId, idempotencyKey } = input;
+      const authorUserId = actor.kind === 'user' ? actor.userId : null;
+      const aiRunId = actor.kind === 'ai' ? actor.aiRunId : null;
       const [inserted] = await tx
         .insert(messages)
         .values({
@@ -68,24 +70,31 @@ export class OutboundMessagingRepository {
           sendCategory: input.category,
           body: content,
           authorType: actor.kind,
-          authorUserId: actor.kind === 'user' ? actor.userId : null,
-          aiRunId: actor.kind === 'ai' ? actor.aiRunId : null,
+          authorUserId,
+          aiRunId,
           direction: 'out',
           kind: 'text',
           status: 'queued',
           createdAt: now,
         })
         .onConflictDoNothing()
-        .returning(queuedFields);
+        .returning({ id: messages.id });
       if (inserted) return { message: inserted, created: true };
       const [existing] = await tx
-        .select(queuedFields)
+        .select({ id: messages.id })
         .from(messages)
         .where(
           and(
             eq(messages.storeId, storeId),
             eq(messages.idempotencyKey, idempotencyKey),
             eq(messages.direction, 'out'),
+            eq(messages.conversationId, conversationId),
+            eq(messages.recipientIdentityId, input.identityId),
+            eq(messages.sendCategory, input.category),
+            eq(messages.body, content),
+            eq(messages.authorType, actor.kind),
+            sql`${messages.authorUserId} is not distinct from ${authorUserId}::uuid`,
+            sql`${messages.aiRunId} is not distinct from ${aiRunId}::uuid`,
           ),
         );
       return { message: existing, created: false };

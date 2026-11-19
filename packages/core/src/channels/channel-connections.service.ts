@@ -24,6 +24,15 @@ function connectionError(code: keyof typeof CHANNEL_CONNECTION_ERRORS) {
   return new AppError(code, CHANNEL_CONNECTION_ERRORS[code]);
 }
 
+type PreparedMetaSend = {
+  storeId: string;
+  connectionId: string;
+  channel: OutboundMessage['channel'];
+  ciphertext: Buffer;
+  keyVersion: number;
+  externalAccountId: string;
+};
+
 @Injectable()
 export class ChannelConnectionsService {
   private readonly logger = new Logger(ChannelConnectionsService.name);
@@ -66,14 +75,34 @@ export class ChannelConnectionsService {
     return { id: connection.id, channel, connectedAt: connection.connectedAt } as const;
   }
 
-  async sendMetaMessage(storeId: string, connectionId: string, message: OutboundMessage) {
-    if (this.transaction.isOpen()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
-    if (!this.driver) return;
+  async prepareMetaSend(
+    storeId: string,
+    connectionId: string,
+    channel: OutboundMessage['channel'],
+  ) {
     const credential = await this.repository.activeMetaToken(storeId, connectionId);
-    const kind = message.channel === 'messenger' ? 'facebook_page' : 'instagram';
+    const kind = channel === 'messenger' ? 'facebook_page' : 'instagram';
     if (!credential?.ciphertext || credential.keyVersion === null || credential.kind !== kind)
       return;
     const { ciphertext, externalAccountId, keyVersion } = credential;
+    return { storeId, connectionId, channel, ciphertext, externalAccountId, keyVersion };
+  }
+
+  async sendMetaMessage(
+    storeId: string,
+    connectionId: string,
+    message: OutboundMessage,
+    prepared: PreparedMetaSend,
+  ) {
+    if (this.transaction.isOpen()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
+    if (!this.driver) return;
+    if (
+      prepared.storeId !== storeId ||
+      prepared.connectionId !== connectionId ||
+      prepared.channel !== message.channel
+    )
+      throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
+    const { ciphertext, externalAccountId, keyVersion } = prepared;
     const token = this.encryption.decrypt(
       { owner: 'store', storeId, purpose: 'channel-access-token' },
       { ciphertext, keyVersion },
