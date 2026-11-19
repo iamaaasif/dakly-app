@@ -145,11 +145,7 @@ function WorkflowMenu({
         >
           Duplicate
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => {
-            onDelete();
-          }}
-        >
+        <DropdownMenuItem disabled={action.isPending} onSelect={onDelete}>
           Delete
         </DropdownMenuItem>
       </DropdownMenuContent>
