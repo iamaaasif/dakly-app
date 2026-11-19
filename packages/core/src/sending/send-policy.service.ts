@@ -127,8 +127,7 @@ export class SendPolicyService {
     }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
   ) {
     this.requireTransaction();
-    const readAt = this.clock.now();
-    const sends = await this.listWeekOfSends(storeId, [contactId], readAt, {
+    const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
       includeCommittedFuture: true,
     });
@@ -136,8 +135,6 @@ export class SendPolicyService {
       const at = this.clock.now();
       const until = quietHoursEnd(at, quietHours, timeZone);
       if (until) return { decision: { action: 'defer', until }, at };
-      // The loaded window may omit sends if the clock moved back during the query.
-      if (at < readAt) return { decision: { action: 'defer' as const, until: readAt }, at };
       const weekStart = new Date(at.getTime() - WEEK_MS);
       const counted = sends.filter((send) => send.sentAt > weekStart);
       const reached = capReached(counted, { channel: 'sms', at }, frequencyCap);
