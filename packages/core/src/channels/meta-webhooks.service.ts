@@ -15,6 +15,7 @@ import { loadEnv } from '../platform/config/env';
 import { hashToken } from '../platform/crypto/token-hash';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { QUEUES } from '../platform/queue/queues';
+import { PROCESS_WEBHOOK_EVENT } from './jobs/process-webhook-event.job';
 import { META_WEBHOOK_ERRORS } from './meta-webhooks.errors';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
 
@@ -78,7 +79,7 @@ export class MetaWebhooksService {
     try {
       // Meta retries with the same row id if the connection drops after receiving the write.
       await this.queue.add(
-        'process-webhook-event',
+        PROCESS_WEBHOOK_EVENT,
         { webhookEventId },
         {
           jobId: webhookEventId,

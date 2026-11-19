@@ -6,6 +6,7 @@ export type ChannelKind = 'messenger' | 'instagram' | 'whatsapp';
 
 export type InboundMessage = {
   channel: ChannelKind;
+  accountExternalId: string;
   externalConversationId: string;
   externalMessageId: string;
   senderExternalId: string;
