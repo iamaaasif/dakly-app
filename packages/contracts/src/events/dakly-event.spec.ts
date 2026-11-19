@@ -117,6 +117,12 @@ const examples: DaklyEvent[] = [
     occurredAt,
     payload: { conversationId, contactId, connectionId, channel: 'instagram' },
   },
+  {
+    type: 'conversation.handed_over',
+    storeId,
+    occurredAt,
+    payload: { conversationId, reason: 'asked_for_person' },
+  },
   { type: 'message.received', storeId, occurredAt, payload: message },
   { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
   { type: 'message.sent', storeId, occurredAt, payload: message },
@@ -134,6 +140,12 @@ const examples: DaklyEvent[] = [
       userId: '019c01ea-cf15-7d31-a7f5-d73d66007ade',
       category: 'fix_now',
     },
+  },
+  {
+    type: 'wallet.credited',
+    storeId,
+    occurredAt,
+    payload: { wallet: 'sms_credits', entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0' },
   },
 ];
 

@@ -5,10 +5,12 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { NotificationsService } from '../notifications/notifications.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { StoresService } from '../stores/stores.service';
 import type { TeamService } from '../team/team.service';
+import type { WalletService } from '../wallets/wallet.service';
 import type { Automation, AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
 
@@ -45,8 +47,7 @@ class FakeAutomationsRepository {
 
   async change(
     _storeId: string,
-    _id: string,
-    from: readonly AutomationStatus[],
+    { from }: { from: readonly AutomationStatus[] },
     change: Partial<Automation>,
   ) {
     if (!this.automation || !from.includes(this.automation.status)) return undefined;
@@ -61,6 +62,8 @@ function serviceFor(graph: AutomationGraph) {
     id: AUTOMATION_ID,
     name: 'স্বাগতম',
     status: 'draft',
+    pauseReason: null,
+    templateKey: null,
     graph,
     publishedVersionId: null,
     createdAt: now,
@@ -74,7 +77,11 @@ function serviceFor(graph: AutomationGraph) {
     {
       sendingSettings: async () => ({ onlyOwnersAndAdminsApprove: true }),
     } as unknown as StoresService,
-    { canApproveSends: () => true } as unknown as TeamService,
+    {
+      canApproveSends: () => true,
+    } as unknown as TeamService,
+    { notify: async () => undefined } as unknown as NotificationsService,
+    {} as WalletService,
   );
 }
 

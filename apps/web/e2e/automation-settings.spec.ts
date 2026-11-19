@@ -1,0 +1,115 @@
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+import { expect, test } from '@playwright/test';
+
+import type { AutomationDetailResponse } from '@dakly/contracts/automations';
+import { createDatabase } from '@dakly/db/client';
+
+test('publishes ready settings and keeps a refused draft saved', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { token } = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string };
+  await context.addCookies([
+    { name: 'dakly_session', value: token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
+  ]);
+  const { contextTag } = await (await context.request.get('/api/me/context')).json();
+  const headers = { Origin: baseURL!, 'X-Session-Context': contextTag };
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const ids: string[] = [];
+  try {
+    await page.goto('/automations/new');
+    await page.getByRole('button', { name: 'Use workflow Welcome new subscribers' }).click();
+    await expect(page).toHaveURL(/\/automations\/[\da-f-]{36}$/);
+    const id = new URL(page.url()).pathname.split('/').at(-1)!;
+    ids.push(id);
+    await expect(page.getByRole('heading', { name: 'Welcome new subscribers' })).toBeVisible();
+    const delay = page.getByRole('spinbutton', { name: 'Delay' });
+    const unit = page.getByRole('combobox', { name: 'Delay unit' });
+    await expect(delay).toHaveValue('2');
+    await expect(unit).toHaveText('Days');
+    const evidence = process.env.CAMP12_SETTINGS_EVIDENCE;
+    if (evidence) await mkdir(evidence, { recursive: true });
+    for (const [width, height] of [
+      [1440, 900],
+      [360, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      if (evidence)
+        await page.screenshot({ path: resolve(evidence, `workflow-settings-${width}.png`) });
+    }
+    await unit.click();
+    await page.getByRole('option', { name: 'Minutes' }).click();
+    await delay.fill('90');
+    await page.getByRole('combobox', { name: 'Re-entry' }).click();
+    await page.getByRole('option', { name: 'Once every few days' }).click();
+    await page.getByLabel('Days between entries').fill('15');
+    await page.getByRole('button', { name: 'Add tag exit rule' }).click();
+    await page.getByLabel('Exit tag').fill('vip');
+    await page.getByRole('button', { name: 'Move SMS up' }).click();
+    await page.getByRole('button', { name: 'Move SMS up' }).click();
+    await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
+    await expect(
+      page.getByRole('dialog').getByText('0 people are in this workflow now.'),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Publish workflow', exact: true }).click();
+    await expect(page).toHaveURL(/\/automations\?tab=active$/);
+    const row = page.getByRole('listitem').filter({ hasText: 'Welcome new subscribers' });
+    await expect(row.getByText('Active', { exact: true })).toBeVisible();
+    const response = await context.request.get(`/api/automations/${id}`, { headers });
+    expect(response.ok()).toBe(true);
+    const workflow: AutomationDetailResponse = await response.json();
+    expect(workflow.graph).toMatchObject({
+      reEntry: { rule: 'every_days', days: 15 },
+      exitConditions: [{ kind: 'got_tag', tag: 'vip' }],
+      steps: {
+        wait: { wait: { minutes: 90 } },
+        welcome: { channels: ['sms', 'whatsapp', 'messenger'] },
+      },
+    });
+    const unready = await context.request.post('/api/automations', {
+      headers,
+      data: { name: 'Chat follow-up draft', templateKey: 'chat_follow_up' },
+    });
+    expect(unready.status()).toBe(201);
+    const { id: draftId } = (await unready.json()) as { id: string };
+    ids.push(draftId);
+    await page.goto(`/automations/${draftId}`);
+    await expect(unit).toHaveText('Hours');
+    await delay.fill('1.5');
+    const savedDelay = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/automations/${draftId}`) &&
+        response.request().method() === 'PATCH',
+    );
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    expect(await (await savedDelay).json()).toMatchObject({
+      graph: { steps: { wait: { wait: { minutes: 90 } } } },
+    });
+    await delay.fill('3');
+    await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Publish workflow' }).click();
+    await expect(dialog.getByRole('alert')).toHaveText('The store does not have this trigger yet');
+    const saved = await context.request.get(`/api/automations/${draftId}`, { headers });
+    expect(await saved.json()).toMatchObject({
+      status: 'draft',
+      graph: { steps: { wait: { wait: { minutes: 180 } } } },
+    });
+  } finally {
+    await db.pool.query(
+      'update automations set published_version_id=null where id=any($1::uuid[])',
+      [ids],
+    );
+    await db.pool.query('delete from automation_versions where automation_id=any($1::uuid[])', [
+      ids,
+    ]);
+    await db.pool.query('delete from automations where id=any($1::uuid[])', [ids]);
+    await db.pool.end();
+  }
+});

@@ -1,0 +1,4 @@
+ALTER TABLE "messages" ADD COLUMN "sender_identity_id" uuid;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_sender_identity_store_fk" FOREIGN KEY ("store_id","sender_identity_id") REFERENCES "public"."contact_identities"("store_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "messages_sender_identity_idx" ON "messages" USING btree ("store_id","sender_identity_id") WHERE "messages"."sender_identity_id" is not null;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_inbound_sender" CHECK ("messages"."direction" <> 'in' or "messages"."sender_identity_id" is not null);

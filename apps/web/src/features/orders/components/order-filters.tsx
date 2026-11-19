@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { SlidersHorizontal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useRef, useTransition, type ReactNode } from 'react';
+import { useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import { Controller, FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -17,6 +18,7 @@ import { Input } from '@dakly/ui/input';
 
 import { ordersSearch } from '../api/orders';
 import { courierLabels, orderSourceLabels } from '../order-labels';
+import { OrderSearch } from './order-search';
 
 const filterFormSchema = orderListQuerySchema.safeExtend({ onlyCancelled: z.boolean() });
 type FilterFormValues = z.input<typeof filterFormSchema>;
@@ -25,19 +27,41 @@ type FilterFormInput = z.output<typeof filterFormSchema>;
 export type OrderFiltersProps = { query: OrderListQuery };
 
 export function OrderFilters({ query }: OrderFiltersProps) {
-  const summary = useRef<HTMLElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const applied = hasOrderFilters(query);
+  const [panel, setPanel] = useState({ applied, expanded: applied });
+  if (panel.applied !== applied) setPanel({ applied, expanded: applied });
+  const { expanded } = panel;
+
+  function closeFilters() {
+    setPanel({ applied, expanded: false });
+    trigger.current?.focus();
+  }
 
   return (
-    <details
-      className="rounded-md border border-border bg-surface px-3"
-      open={applied || undefined}
-    >
-      <summary ref={summary} className="min-h-11 w-fit cursor-pointer py-2 font-medium sm:min-h-10">
-        Filters
-      </summary>
-      <FilterForm query={query} applied={applied} focusSummary={() => summary.current?.focus()} />
-    </details>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <OrderSearch query={query} />
+        <Button
+          ref={trigger}
+          variant="secondary"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={() => setPanel({ applied, expanded: !expanded })}
+        >
+          <SlidersHorizontal aria-hidden="true" size={16} strokeWidth={1.75} />
+          Filters
+        </Button>
+      </div>
+      <div
+        hidden={!expanded}
+        id={panelId}
+        className="rounded-lg border border-border bg-surface p-3"
+      >
+        <FilterForm query={query} applied={applied} closeFilters={closeFilters} />
+      </div>
+    </div>
   );
 }
 
@@ -48,10 +72,10 @@ function hasOrderFilters({ source, courier, createdFrom, createdThrough, stage }
 type FilterFormProps = {
   query: OrderListQuery;
   applied: boolean;
-  focusSummary: () => void;
+  closeFilters: () => void;
 };
 
-function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
+function FilterForm({ query, applied, closeFilters }: FilterFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { source, courier, createdFrom, createdThrough, ...other } = query;
@@ -66,7 +90,7 @@ function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
     values: { source, courier, createdFrom, createdThrough, onlyCancelled },
   });
   const navigate = (next: OrderListQuery) => {
-    if (applied && !hasOrderFilters(next)) focusSummary();
+    if (applied && !hasOrderFilters(next)) closeFilters();
     startTransition(() => router.push(`/orders?${ordersSearch(next)}`));
   };
   const submit = form.handleSubmit(
@@ -85,7 +109,7 @@ function FilterForm({ query, applied, focusSummary }: FilterFormProps) {
 
   return (
     <FormProvider {...form}>
-      <form className="space-y-3 pb-3" onSubmit={submit}>
+      <form className="space-y-3" onSubmit={submit}>
         <FilterFields />
         <div className="flex flex-wrap gap-2">
           <Button

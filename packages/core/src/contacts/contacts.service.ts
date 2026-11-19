@@ -22,6 +22,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
+import { ContactPhoneAccessService } from './contact-phone-access.service';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -39,7 +40,6 @@ import {
 import { OrderContactsRepository } from './order-contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
-// Writes take the actor (services.md); nothing records it for contacts yet.
 type Actor = AuditEntry['actor'];
 
 export type ImportedContact = {
@@ -69,14 +69,11 @@ export class ContactsService {
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
     @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
+    @Inject(ContactPhoneAccessService) private readonly phoneAccess: ContactPhoneAccessService,
   ) {}
 
-  async create(
-    storeId: string,
-    input: CreateContactInput,
-    access: Access,
-    _actor: Actor,
-  ): Promise<ContactResponse> {
+  async create(storeId: string, input: CreateContactInput, access: Access, actor: Actor) {
+    await this.phoneAccess.checkLimit(storeId, 'write', access.seeFullPhone, actor);
     const contact = await this.transaction.run(storeId, async () => {
       // A staff add is an intentional customer under the glossary, whatever its orders.
       const created = await this.contactsRepository.insert(storeId, {
@@ -96,12 +93,12 @@ export class ContactsService {
     return toContactResponse(contact, access.seeFullPhone);
   }
 
-  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string> {
+  findOrCreateByIdentity(storeId: string, input: InboundIdentity) {
     return this.transaction.run(storeId, async () => {
       for (;;) {
         const existing = await this.identities.findInboundIdentity(storeId, input);
         if (existing) {
-          if (!existing.deletedAt) return existing.contactId;
+          if (!existing.deletedAt) return { id: existing.id, contactId: existing.contactId };
           await this.identities.retireInboundIdentity(storeId, existing.id);
         }
         const now = this.clock.now();
@@ -113,7 +110,7 @@ export class ContactsService {
           occurredAt: now.toISOString(),
           payload: { contactId: identity.contactId },
         });
-        return identity.contactId;
+        return identity;
       }
     });
   }
@@ -121,16 +118,16 @@ export class ContactsService {
   async list(
     storeId: string,
     query: ContactListQuery,
-    access: Access,
+    { seeFullPhone }: Access,
+    actor: Extract<Actor, { kind: 'user' }>,
   ): Promise<ContactListResponse> {
     const { search, ...filter } = query;
-    const rows = await this.contactsRepository.list(storeId, {
-      ...filter,
-      ...searchFilter(search, access.seeFullPhone),
-    });
+    const match = searchFilter(search, seeFullPhone);
+    if (match.phone) await this.phoneAccess.checkLimit(storeId, 'lookup', seeFullPhone, actor);
+    const rows = await this.contactsRepository.list(storeId, { ...filter, ...match });
     const items = rows
       .slice(0, query.limit)
-      .map((contact) => toContactResponse(contact, access.seeFullPhone));
+      .map((contact) => toContactResponse(contact, seeFullPhone));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -228,6 +225,9 @@ export class ContactsService {
     change: UpdateContactInput,
     editor: { access: Access; actor: Actor },
   ): Promise<ContactResponse> {
+    const { access, actor } = editor;
+    if (change.phone)
+      await this.phoneAccess.checkLimit(storeId, 'write', access.seeFullPhone, actor);
     // A typed phone proves nothing, so an edited phone is no longer the verified WhatsApp sender.
     const updated = await this.contactsRepository.update(storeId, id, {
       ...change,
@@ -235,7 +235,7 @@ export class ContactsService {
     });
     if (updated === 'phone_taken') throw contactError('CONTACT_PHONE_TAKEN');
     if (!updated) throw contactError('CONTACT_NOT_FOUND');
-    return toContactResponse(updated, editor.access.seeFullPhone);
+    return toContactResponse(updated, access.seeFullPhone);
   }
 
   findTags(storeId: string, contactId: string): Promise<string[]> {

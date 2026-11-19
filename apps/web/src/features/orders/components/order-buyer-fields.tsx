@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useFormContext, useWatch, type UseFormReturn } from 'react-hook-form';
 
 import type { ContactResponse } from '@dakly/contracts/contacts';
 import type { CreateOrderValues } from '@dakly/contracts/orders';
@@ -15,7 +15,6 @@ import { useSessionContext } from '@/lib/session-context';
 export function OrderBuyerFields() {
   const [search, setSearch] = useState('');
   const form = useFormContext<CreateOrderValues>();
-  const { data } = useSessionContext();
   const [isBuyer, buyer] = useWatch({
     control: form.control,
     name: ['recipient.isBuyer', 'buyer'],
@@ -40,39 +39,45 @@ export function OrderBuyerFields() {
     if (form.getValues('recipient.isBuyer')) populateRecipient(contact);
   }
 
+  function chooseRecipient(different: boolean) {
+    form.setValue('recipient.isBuyer', !different);
+    if (!different) return populateRecipient(selected ?? null);
+    keepTypedBuyer(form);
+    form.setValue('recipient.name', '');
+    form.setValue('recipient.phone', '');
+  }
+
   return (
     <>
-      {selectedId ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-muted p-2">
-          <span>Buyer {selected?.name ?? 'Unnamed customer'}</span>
-          <Button variant="secondary" onClick={() => choose(null)}>
-            Change buyer
-          </Button>
+      <div className="flex flex-wrap items-start gap-2">
+        {selectedId ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-surface-muted p-2">
+            <span>Buyer {selected?.name ?? 'Unnamed customer'}</span>
+            <Button variant="secondary" onClick={() => choose(null)}>
+              Change buyer
+            </Button>
+          </div>
+        ) : (
+          <BuyerSearch {...{ search, setSearch, customers }} onChoose={choose} />
+        )}
+        <div className="flex min-h-10 items-center gap-3 pl-2">
+          <Checkbox
+            id="different-recipient"
+            checked={!isBuyer}
+            onCheckedChange={(different) => chooseRecipient(different === true)}
+          />
+          <label htmlFor="different-recipient">Deliver to someone else</label>
         </div>
-      ) : (
-        <>
-          {data?.currentStore?.canViewCustomers && (
-            <BuyerSearch {...{ search, setSearch, customers }} onChoose={choose} />
-          )}
-          <BuyerEntry />
-        </>
-      )}
-      <div className="flex min-h-10 items-center gap-3 pl-2">
-        <Checkbox
-          id="different-recipient"
-          checked={!isBuyer}
-          onCheckedChange={(different) => {
-            form.setValue('recipient.isBuyer', different !== true);
-            if (different) {
-              form.setValue('recipient.name', '');
-              form.setValue('recipient.phone', '');
-            } else populateRecipient(selected ?? null);
-          }}
-        />
-        <label htmlFor="different-recipient">Deliver to someone else</label>
       </div>
+      {!selectedId && isBuyer === false && <BuyerEntry />}
     </>
   );
+}
+
+function keepTypedBuyer(form: UseFormReturn<CreateOrderValues>) {
+  const { buyer, recipient } = form.getValues();
+  if ('contactId' in buyer) return;
+  form.setValue('buyer', { name: recipient.name, phone: recipient.phone || undefined });
 }
 
 type BuyerSearchProps = {
@@ -83,10 +88,15 @@ type BuyerSearchProps = {
 };
 
 function BuyerSearch({ search, setSearch, customers, onChoose }: BuyerSearchProps) {
+  const { data } = useSessionContext();
+  if (!data?.currentStore?.canViewCustomers) return null;
   return (
-    <>
-      <label className="block">
+    <details className="space-y-2">
+      <summary className="min-h-10 w-fit min-w-10 cursor-pointer leading-10 text-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
         Find a customer
+      </summary>
+      <label className="block">
+        Customer name or phone
         <Input value={search} maxLength={120} onChange={(event) => setSearch(event.target.value)} />
       </label>
       {customers.data && (
@@ -109,27 +119,16 @@ function BuyerSearch({ search, setSearch, customers, onChoose }: BuyerSearchProp
           {customers.error.message}
         </p>
       )}
-    </>
+    </details>
   );
 }
 
 function BuyerEntry() {
-  const { getValues, register, setValue } = useFormContext<CreateOrderValues>();
+  const { register } = useFormContext<CreateOrderValues>();
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       <FormField name="buyer.name" label="Buyer name">
-        {(props) => (
-          <Input
-            {...props}
-            {...register('buyer.name', {
-              onBlur: (event) => {
-                const recipient = getValues('recipient');
-                if (recipient.isBuyer && !recipient.name)
-                  setValue('recipient.name', event.target.value);
-              },
-            })}
-          />
-        )}
+        {(props) => <Input {...props} {...register('buyer.name')} />}
       </FormField>
       <FormField name="buyer.phone" label="Buyer phone (optional)">
         {(props) => (
@@ -142,11 +141,6 @@ function BuyerEntry() {
               type="tel"
               {...register('buyer.phone', {
                 setValueAs: (value: string) => value.trim() || undefined,
-                onBlur: (event) => {
-                  const recipient = getValues('recipient');
-                  if (recipient.isBuyer && !recipient.phone)
-                    setValue('recipient.phone', event.target.value);
-                },
               })}
             />
           </div>

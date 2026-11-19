@@ -11,17 +11,22 @@ import type { Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
+import type { ChannelDriver } from '@dakly/providers/channel/channel-driver';
 
+import { Clock } from '../platform/clock';
 import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
+import { DAY_MS } from '../platform/time';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProcessWebhookEventJob } from './jobs/process-webhook-event.job';
 import { MetaWebhookRoutingModule } from './meta-webhook-routing.module';
+import { META_WEBHOOK_DRIVER } from './meta-webhook-routing.service';
 import { MetaWebhooksModule } from './meta-webhooks.module';
+import { MetaWebhooksService } from './meta-webhooks.service';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, SessionsModule, MetaWebhooksModule, MetaWebhookRoutingModule] })(
@@ -155,6 +160,52 @@ describe('Meta webhook intake', () => {
       backoff: { type: 'exponential', delay: 2000 },
     });
     expect(await job?.getState()).toBe('waiting');
+  });
+
+  it('keeps exhausted deliveries out of recovery and purges them after seven days', async () => {
+    const now = new Date('2000-01-10T09:00:00Z');
+    const clock = vi
+      .spyOn(app.get(Clock), 'now')
+      .mockReturnValue(new Date(now.getTime() - 8 * DAY_MS));
+    const driver = app.get<Pick<ChannelDriver, 'parseWebhook'>>(META_WEBHOOK_DRIVER);
+    const parse = vi.spyOn(driver, 'parseWebhook').mockImplementation(() => {
+      throw new Error('Local parser failure');
+    });
+    try {
+      const payload = delivery();
+      expect((await post(payload)).statusCode).toBe(200);
+      const [received] = await stored(payload);
+      const webhookEventId = received!.id;
+      const handler = app.get(ProcessWebhookEventJob);
+      clock.mockReturnValue(now);
+
+      await expect(handler.handle({ webhookEventId }, false)).rejects.toThrow(
+        'Local parser failure',
+      );
+      expect(await stored(payload)).toMatchObject([{ status: 'received', processedAt: null }]);
+
+      await expect(handler.handle({ webhookEventId }, true)).rejects.toThrow(
+        'Local parser failure',
+      );
+      expect(await stored(payload)).toMatchObject([
+        {
+          status: 'failed',
+          payload: JSON.parse(payload),
+          error: 'processing_failed',
+          processedAt: now,
+        },
+      ]);
+
+      await queue.remove(webhookEventId);
+      const webhooks = app.get(MetaWebhooksService);
+      await webhooks.recoverDeliveries();
+      expect(await queue.getJob(webhookEventId)).toBeUndefined();
+      await webhooks.purgeDeliveries();
+      expect(await stored(payload)).toEqual([]);
+    } finally {
+      parse.mockRestore();
+      clock.mockRestore();
+    }
   });
 
   it.each(['unknown', 'disconnected', 'active'] as const)(

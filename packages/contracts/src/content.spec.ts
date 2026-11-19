@@ -16,6 +16,21 @@ describe('content library input', () => {
     );
   });
 
+  it('explains how to fix blank text and null characters', () => {
+    for (const body of ['', ' \n ']) {
+      expect(createContentPieceSchema.safeParse({ ...piece, body })).toMatchObject({
+        success: false,
+        error: { issues: [{ path: ['body'], message: 'Enter some text' }] },
+      });
+    }
+    expect(createContentPieceSchema.safeParse({ ...piece, body: 'অর্ডার\u0000 করুন' })).toMatchObject(
+      {
+        success: false,
+        error: { issues: [{ path: ['body'], message: 'Remove the null character' }] },
+      },
+    );
+  });
+
   it('rejects attempts to set the creator or provenance', () => {
     expect(createContentPieceSchema.safeParse({ ...piece, createdByUserId: null }).success).toBe(
       false,

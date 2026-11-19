@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNull, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import type {
   ConversationListQuery,
   ConversationMessageListQuery,
   UpdateConversationInput,
   conversationResponders,
+  handoverReasons,
 } from '@dakly/contracts/chats';
 import type { Database } from '@dakly/db/client';
 import { conversations, messages } from '@dakly/db/schema/chats';
@@ -49,8 +50,8 @@ const messageFields = {
 type ConversationChange = UpdateConversationInput & {
   responder?: (typeof conversationResponders)[number];
   aiResumesAt?: Date | null;
-  handoverReason?: null;
-  handedOverAt?: null;
+  handoverReason?: (typeof handoverReasons)[number] | null;
+  handedOverAt?: Date | null;
 };
 
 @Injectable()
@@ -116,6 +117,54 @@ export class InboxRepository {
       return lock ? query.for(lock) : query;
     });
     return row;
+  }
+
+  aiReplyTurn(storeId: string, id: string, lock: boolean) {
+    return this.database.forStore(storeId, async (tx) => {
+      const query = tx
+        .select({
+          contactId: conversations.contactId,
+          channel: conversations.channel,
+          connectionId: conversations.channelConnectionId,
+          version: conversations.version,
+          windowExpiresAt: conversations.windowExpiresAt,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.storeId, storeId),
+            eq(conversations.id, id),
+            eq(conversations.responder, 'ai'),
+          ),
+        );
+      const [conversation] = await (lock ? query.for('no key update') : query);
+      if (!conversation) return undefined;
+      const inbound = await tx
+        .select({
+          id: messages.id,
+          senderIdentityId: messages.senderIdentityId,
+          body: messages.body,
+          createdAt: messages.createdAt,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.conversationId, id),
+            eq(messages.direction, 'in'),
+            ne(messages.kind, 'note'),
+          ),
+        )
+        .orderBy(desc(messages.createdAt), desc(messages.id))
+        .limit(20);
+      const latest = inbound[0];
+      if (latest?.senderIdentityId == null) return undefined;
+      return {
+        ...conversation,
+        latest: { ...latest, senderIdentityId: latest.senderIdentityId },
+        inbound,
+      };
+    });
   }
 
   messages(storeId: string, conversationId: string, query: ConversationMessageListQuery) {

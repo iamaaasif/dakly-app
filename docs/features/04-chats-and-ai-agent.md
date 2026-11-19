@@ -62,7 +62,7 @@ Facebook sellers lose orders because nobody answers "price koto?" at 11 pm. Chat
 
 **AI reply pipeline** (target: first reply within 10 seconds)
 
-1. **Batch:** wait 4 seconds for more messages from the same person, then treat them as one turn (customers often send 3 short messages).
+1. **Batch:** wait for more messages from the same person, then treat them as one turn. The store's debounce defaults to 8 seconds.
 2. **Classify intent** into one of: greeting, price, size or stock, delivery, payment, order (sharing name, phone or address), yes or confirm, where's my order, exchange, complaint, photo, special request, other. Also detect language (Bangla script, Banglish, English).
 3. **Hand-over check:** complaint (damaged, wrong, fake, refund words) → hand over if "Damaged, wrong or fake" is on; exchange or return → hand over if "Refunds and exchanges" is on; custom or bulk order → hand over if "Special requests" is on; the customer asks for a person; or the AI's confidence is low. On hand-over Dakly sends a holding reply ("একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।"), moves the chat to Needs you, records the reason and notifies the assignee or Owner.
 4. **Retrieve facts:** the product the customer means (from text, a product card they tapped, the post they came from, or a photo matched against product images), its price, sale price, sizes and live stock; shop rules; taught answers; facts learned from files and links; the customer's orders and courier status.
@@ -174,7 +174,7 @@ From the help centres of AiPraktor, Nabik, Intercom Fin, Gorgias, respond.io and
 #### Replying
 
 - **Wait before answering.** Customers split one question into several messages. AiPraktor waits 0–15 seconds per channel (default about 15 s on Messenger) before replying. **Dakly:** wait 8 seconds by default on Messenger, Instagram and WhatsApp (editable 0–20 s), resetting on each new customer message, so one reply answers the whole thought.
-- **Saved replies that answer automatically, free of AI cost.** AiPraktor matches customer phrasings and keyword pairs ("delivery + charge"), ignores punctuation, emojis and greetings ("bhai", "apu"), fills placeholders from records, and won't fire when several replies match, the message has several questions, or a person holds the chat. **Dakly:** same, and it suggests phrasings from the last 14 days of chats. Saved-reply answers don't count as AI conversations.
+- **Saved replies that answer automatically, free of AI cost.** AiPraktor matches customer phrasings and keyword pairs ("delivery + charge"), ignores punctuation, emojis and greetings ("bhai", "apu"), fills placeholders from records, and won't fire when several replies match, the message has several questions, or a person holds the chat. **Dakly:** staff choose saved replies by hand in release 1. The AI agent handles automatic answers (D43).
 - **Comments.** Reply publicly using the customer's name, never with phone, address or price details; send the details by private reply. Meta allows one private reply per comment, within 7 days of the comment. Delete clear spam or abuse automatically; hide uncertain ones for the team.
 - **Follow-ups and Messenger broadcasts inside the window.** AiPraktor sends one follow-up per hot or warm lead within 24 hours of the last message, and broadcasts only to people who messaged in the last 23 hours, skipping anyone broadcast to in the last 24 hours. **Dakly:** same limits for Messenger and Instagram; anything outside the window uses approved templates only.
 
@@ -296,9 +296,11 @@ Inbound
 2. Voice notes are transcribed and images described; both are saved on the message so staff and the AI read the same text.
 3. The AI listener schedules an `ai-reply` job keyed by conversation id with the store's debounce (default 8 s). Each new message resets it, so one reply answers a burst.
 
+Inbound messages keep the exact sender identity in the same store. A reply can address the account that sent the message even when one contact has several identities.
+
 AI reply pipeline (`AiAgentService.reply`)
 
-1. Gates, no model call: AI switched on, contact is not Not a customer, responder is `ai`, window open, allowance left, no saved reply matches (a match is sent free).
+1. Gates, no model call: AI switched on, contact is not Not a customer, responder is `ai`, window open, allowance left.
 2. Classify with the fast tier: intent, language, sentiment, asks for a person, hand-over category.
 3. Hand-over rules in code on that output plus keyword lists (refund, damaged, fake, ফেরত). A match sends the holding reply and stops. Hand-over always wins.
 4. Build context: platform rules, store settings, delivery zones (stable, first, so the prompt cache hits), then the customer card, the customer memory (CHAT-R11), a summary plus the last 20 messages, and product candidates.
@@ -306,7 +308,9 @@ AI reply pipeline (`AiAgentService.reply`)
 6. Check the draft in code: every ৳ amount and stock number must appear in this run's tool results; no phone but the shop's; no link but Dakly's; under 600 characters. A failed check hands over instead of sending.
 7. Send through the outbox, save the AI run id and sources on the message, consume one AI conversation unit.
 
-No database transaction or row lock is held during a model call (pending review must-fix). Before sending, the service re-reads `responder` and drops the AI reply if a person took over meanwhile.
+AI-4 runs the first three steps for Messenger and Instagram. Each delayed job reads the current chat, checks consent and classifies the new messages from the latest sender. Internal notes stay outside the model input. If hand-over is needed, Dakly saves the reason, queues a fixed holding reply to that sender and notifies the assignee or Owner. A normal classification ends the job. AI-5 adds generated replies and the rest of the pipeline.
+
+The model call runs outside the transaction. Before a hand-over, the service checks the responder, conversation version, latest inbound message and current send eligibility again. The hand-over, queued holding reply and notification are saved together. Holding replies are free.
 
 Agent tools take no store id, contact id or price; those come from the job. Tools: `search_products`, `get_product`, `get_delivery_charge`, `search_knowledge`, `get_my_orders`, `get_order_status`, `draft_order`, `confirm_order`, `create_payment_link`, `send_product_card`, `add_to_restock_list`, `hand_over`.
 
@@ -354,6 +358,8 @@ Content Studio passes the quantity, 3 for a generation and 1 for an edit.
 Ask Dakly uses 1 unit. Chats checks its allowance before any model work and
 consumes the conversation unit when it saves the outgoing AI reply, using the
 contact and window as the reference.
+
+The allowance check reads the current plan period and leaves the balance available until an AI reply is saved. AI-5 adds consumption and the rolling contact window.
 
 Valkey allows up to three calls at a time per store. Three provider errors
 within one minute pause new calls for two minutes across stores. Customer
