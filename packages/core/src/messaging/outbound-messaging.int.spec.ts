@@ -25,8 +25,9 @@ import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { ChannelDispatchService } from './channel-dispatch.service';
 import { SendMessageJob } from './jobs/send-message.job';
 import { MessagingModule } from './messaging.module';
-import { MessagingService, type OutgoingChannelMessage } from './messaging.service';
+import { MessagingService } from './messaging.service';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
+import type { OutgoingChannelMessage } from './outgoing-channel-message';
 
 const f = new OwnerIsolationFixture();
 const now = new Date('2026-11-19T03:00:00Z');
@@ -129,7 +130,7 @@ async function queuedReply(
     'select id, contact_id from contact_identities where store_id = $1 and channel_connection_id = $2',
     [storeId, connectionId],
   );
-  const { messageId } = await messaging.send(storeId, {
+  const { messageId } = await messaging.queueChannelMessage(storeId, {
     channel: 'messenger',
     connectionId,
     identityId: identity!.id,
