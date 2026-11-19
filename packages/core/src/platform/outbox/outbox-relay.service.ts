@@ -37,6 +37,7 @@ export class OutboxRelayService implements OnModuleInit {
     @Inject(DiscoveryService) private readonly discovery: DiscoveryService,
     @Inject(Reflector) private readonly reflector: Reflector,
     @InjectQueue(QUEUES.inbound) inbound: Queue,
+    @InjectQueue(QUEUES.aiReply) aiReply: Queue,
     @InjectQueue(QUEUES.outbound) outbound: Queue,
     @InjectQueue(QUEUES.sync) sync: Queue,
     @InjectQueue(QUEUES.transactional) transactional: Queue,
@@ -45,7 +46,17 @@ export class OutboxRelayService implements OnModuleInit {
     @InjectQueue(QUEUES.campaign) campaign: Queue,
     @InjectQueue(QUEUES.payments) payments: Queue,
   ) {
-    this.queues = { inbound, outbound, sync, transactional, bulk, workflow, campaign, payments };
+    this.queues = {
+      inbound,
+      'ai-reply': aiReply,
+      outbound,
+      sync,
+      transactional,
+      bulk,
+      workflow,
+      campaign,
+      payments,
+    };
   }
 
   onModuleInit() {
@@ -67,6 +78,7 @@ export class OutboxRelayService implements OnModuleInit {
     if (events.length === 0) return;
     const jobs: Record<QueueName, SubscriberJob[]> = {
       inbound: [],
+      'ai-reply': [],
       outbound: [],
       sync: [],
       transactional: [],

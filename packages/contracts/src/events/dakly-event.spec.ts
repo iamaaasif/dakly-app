@@ -121,6 +121,12 @@ const examples: DaklyEvent[] = [
     occurredAt,
     payload: { conversationId, contactId, connectionId, channel: 'instagram' },
   },
+  {
+    type: 'conversation.handed_over',
+    storeId,
+    occurredAt,
+    payload: { conversationId, reason: 'asked_for_person' },
+  },
   { type: 'message.received', storeId, occurredAt, payload: message },
   { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
   { type: 'message.sent', storeId, occurredAt, payload: message },

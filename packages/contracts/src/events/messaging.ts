@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { trackedLinkSourceTypes } from '../campaigns';
 import { chatChannels } from '../channels';
+import { handoverReasons } from '../chats';
 
 const messagePayloadSchema = z.strictObject({
   messageId: z.uuid(),
@@ -27,6 +28,13 @@ export const messageReceivedEventSchema = z.strictObject({
   storeId: z.uuid(),
   occurredAt: z.iso.datetime(),
   payload: messagePayloadSchema,
+});
+
+export const conversationHandedOverEventSchema = z.strictObject({
+  type: z.literal('conversation.handed_over'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ conversationId: z.uuid(), reason: z.enum(handoverReasons) }),
 });
 
 export const messageSendRequestedEventSchema = z.strictObject({

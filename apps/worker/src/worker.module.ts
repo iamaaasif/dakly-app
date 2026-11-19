@@ -9,6 +9,7 @@ import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-mai
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
+import { AiAgentModule } from '@dakly/core/ai-agent/ai-agent.module';
 import { AnalyticsModule } from '@dakly/core/analytics/analytics.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
@@ -48,6 +49,7 @@ import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { RelayOutboxJob } from '@dakly/core/platform/outbox/jobs/relay-outbox.job';
 import { OutboxRelayModule } from '@dakly/core/platform/outbox/outbox-relay.module';
 import {
+  AiReplyJobDispatcher,
   BulkJobDispatcher,
   CampaignJobDispatcher,
   InboundJobDispatcher,
@@ -64,6 +66,7 @@ import { JobSchedulers } from './job-schedulers';
 
 @Module({
   providers: [
+    AiReplyJobDispatcher,
     BulkJobDispatcher,
     CampaignJobDispatcher,
     InboundJobDispatcher,
@@ -103,6 +106,7 @@ import { JobSchedulers } from './job-schedulers';
     StaffHistoryModule,
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.inbound }),
+    BullModule.registerQueue({ name: QUEUES.aiReply }),
     BullModule.registerQueue({ name: QUEUES.outbound }),
     BullModule.registerQueue({ name: QUEUES.sync }),
     BullModule.registerQueue({ name: QUEUES.transactional }),
@@ -128,6 +132,7 @@ import { JobSchedulers } from './job-schedulers';
     AnalyticsModule,
     PaymentJobsModule,
     KnowledgeIndexModule,
+    AiAgentModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();

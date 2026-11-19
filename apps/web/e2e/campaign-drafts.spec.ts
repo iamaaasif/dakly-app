@@ -62,10 +62,21 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
 
     await page.goto('/campaigns/new');
     await expect(page.getByRole('heading', { name: 'New campaign' })).toBeVisible();
+    for (const channel of ['WhatsApp', 'SMS', 'Facebook Messenger', 'Instagram DM']) {
+      await expect(page.getByRole('heading', { name: channel, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText('Connect first', { exact: true })).toHaveCount(3);
+    await expect(page.getByLabel('Campaign name')).toBeHidden();
     await capture(page, 'new');
+    await page.getByRole('button', { name: 'Create SMS', exact: true }).click();
+    await expect(page.getByLabel('Campaign name')).toBeFocused();
+    await page.getByRole('button', { name: 'Back to channels' }).click();
+    await expect(page.getByLabel('Campaign name')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Create SMS', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Create SMS', exact: true }).click();
     const name = page.getByLabel('Campaign name');
     await name.fill('   ');
-    await page.getByRole('button', { name: 'Create SMS draft' }).click();
+    await page.getByRole('button', { name: 'Save draft' }).click();
     await expect(name).toHaveAttribute('aria-invalid', 'true');
     await expect(name).toHaveAccessibleDescription('Enter a campaign name.');
     await page.getByLabel('Campaign name').fill('New Kurti collection');
@@ -91,7 +102,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
         result.request().method() === 'POST' &&
         result.status() === 201,
     );
-    const create = page.getByRole('button', { name: 'Create SMS draft' });
+    const create = page.getByRole('button', { name: 'Save draft' });
     await create.click();
     const draft: CampaignResponse = await (await response).json();
     ids.push(draft.id);

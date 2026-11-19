@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
-import { UnrecoverableError, type Job } from 'bullmq';
+import { DelayedError, UnrecoverableError, type Job } from 'bullmq';
 
 import { ErrorReporter } from '../logging/error-reporter';
 import { runWithJobContext } from '../logging/job-context';
@@ -11,6 +11,7 @@ import { QUEUES, type QueueName } from './queues';
 
 // Overlapping transactional runs are safe: each job claims its notice or alert under a lease first.
 const TRANSACTIONAL_JOBS_AT_ONCE = 5;
+const AI_REPLY_JOBS_AT_ONCE = 5;
 const BULK_JOBS_AT_ONCE = 1;
 // Each step job guards its writes with the run's claim, so steps of many runs run side by side.
 const WORKFLOW_JOBS_AT_ONCE = 5;
@@ -18,6 +19,7 @@ const WORKFLOW_JOBS_AT_ONCE = 5;
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
   inbound: TRANSACTIONAL_JOBS_AT_ONCE,
+  'ai-reply': AI_REPLY_JOBS_AT_ONCE,
   outbound: TRANSACTIONAL_JOBS_AT_ONCE,
   sync: 1,
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
@@ -55,17 +57,24 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
     this.worker.run().catch(() => this.logger.error({ queue: this.queue }, 'Queue worker stopped'));
   }
 
-  async process(job: Job) {
+  async process(job: Job, token?: string) {
     const { id: jobId } = job;
     if (!jobId) throw new UnrecoverableError('Cannot dispatch a job without an ID');
     const handler = this.handlers.get(job.name);
     if (!handler)
       throw new UnrecoverableError(`No handler for job ${job.name} on queue ${this.queue}`);
     const failure = `${job.name.charAt(0).toUpperCase()}${job.name.slice(1).replaceAll('-', ' ')} job failed`;
-    return runWithJobContext(async () => {
+    const delayed = await runWithJobContext(async () => {
       let failed = false;
       try {
-        await handler.handle(job.data, job.attemptsMade + 1 >= (job.opts.attempts ?? 1));
+        const result = await handler.handle(
+          job.data,
+          job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+        );
+        if (result) {
+          await job.moveToDelayed(result.delayUntil, token);
+          return true;
+        }
         await job.updateProgress(100);
       } catch (error) {
         this.reporter.reportJob(serializeError(error), jobId);
@@ -74,7 +83,9 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
       }
       // BullMQ persists failures; only the sanitized reporter receives the original error.
       if (failed) throw new Error(failure);
+      return false;
     }, jobId);
+    if (delayed) throw new DelayedError();
   }
 }
 
@@ -85,6 +96,16 @@ export class TransactionalJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.transactional, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.aiReply, { concurrency: concurrency['ai-reply'], autorun: false })
+export class AiReplyJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.aiReply, discovery, reporter);
   }
 }
 

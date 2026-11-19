@@ -12,6 +12,7 @@ import { loadEnv } from '../config/env';
 import { ErrorReporter } from '../logging/error-reporter';
 import { jobLogBindings } from '../logging/job-context';
 import {
+  AiReplyJobDispatcher,
   BulkJobDispatcher,
   CampaignJobDispatcher,
   InboundJobDispatcher,
@@ -28,16 +29,18 @@ import { toRedisConnection } from './redis-connection';
 
 const SCHEDULED = 'scheduled-test-job';
 const runs: string[] = [];
-let work: () => Promise<void> = async () => {};
+let work: () => ReturnType<JobHandler['handle']> = async () => {};
 
 class TransactionalScheduledHandler implements JobHandler {
   async handle() {
     runs.push(jobLogBindings().jobId!);
-    await work();
+    return work();
   }
 }
 
 class InboundScheduledHandler extends TransactionalScheduledHandler {}
+
+class AiReplyScheduledHandler extends TransactionalScheduledHandler {}
 
 class OutboundScheduledHandler extends TransactionalScheduledHandler {}
 
@@ -52,6 +55,7 @@ class WorkflowScheduledHandler extends TransactionalScheduledHandler {}
 class PaymentsScheduledHandler extends TransactionalScheduledHandler {}
 
 HandlesJob({ queue: QUEUES.inbound, name: SCHEDULED })(InboundScheduledHandler);
+HandlesJob({ queue: QUEUES.aiReply, name: SCHEDULED })(AiReplyScheduledHandler);
 HandlesJob({ queue: QUEUES.outbound, name: SCHEDULED })(OutboundScheduledHandler);
 HandlesJob({ queue: QUEUES.sync, name: SCHEDULED })(SyncScheduledHandler);
 HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalScheduledHandler);
@@ -62,6 +66,7 @@ HandlesJob({ queue: QUEUES.payments, name: SCHEDULED })(PaymentsScheduledHandler
 
 const setups = {
   inbound: [InboundScheduledHandler, InboundJobDispatcher],
+  'ai-reply': [AiReplyScheduledHandler, AiReplyJobDispatcher],
   outbound: [OutboundScheduledHandler, OutboundJobDispatcher],
   sync: [SyncScheduledHandler, SyncJobDispatcher],
   transactional: [TransactionalScheduledHandler, TransactionalJobDispatcher],
@@ -205,6 +210,20 @@ describe.each(WORKER_QUEUES)('Scheduled job on %s', (queueName) => {
     expect(report.mock.calls.map(([, reportedId]) => reportedId)).toEqual([jobId, jobId, jobId]);
     expect(JSON.stringify(report.mock.calls)).not.toContain('private-scheduled-failure');
   });
+});
+
+it('delays an AI reply without counting a failed attempt', async () => {
+  const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
+  const { queue } = await start(QUEUES.aiReply, prefix);
+  work = async () => {
+    if (runs.length === 1) return { delayUntil: Date.now() + 30_000 };
+  };
+  const job = await queue.add(SCHEDULED, {}, { attempts: 1 });
+  await until(async () => (await job.getState()) === 'delayed');
+  expect(await queue.getJob(job.id!)).toMatchObject({ attemptsMade: 0 });
+  await job.promote();
+  await until(async () => (await job.getState()) === 'completed');
+  expect(runs).toEqual([job.id, job.id]);
 });
 
 describe('Calendar schedules', () => {
