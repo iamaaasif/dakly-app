@@ -9,7 +9,7 @@ import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 
-import { useAutomationAction } from '../api/automation-actions';
+import { useCreateAutomation } from '../api/automation-actions';
 import { useAutomations } from '../api/automations';
 import { channelLabels } from '../automation-labels';
 import {
@@ -66,7 +66,7 @@ function selectedFacet(value: string | null, facet: Facet) {
 export function WorkflowLibrary() {
   const router = useRouter();
   const search = useSearchParams();
-  const action = useAutomationAction();
+  const action = useCreateAutomation();
   const workflows = useAutomations();
   const selected: Selected = (facet) => selectedFacet(search.get(facet), facet);
   const activeTemplates = new Set(
@@ -81,7 +81,7 @@ export function WorkflowLibrary() {
     window.history.pushState(null, '', query.size ? `?${query}` : '/automations/new');
   }
   function create(draft: CreateAutomationInput) {
-    action.mutate({ draft }, { onSuccess: () => router.push('/automations?tab=draft') });
+    action.mutate(draft, { onSuccess: () => router.push('/automations?tab=draft') });
   }
   return (
     <main className="min-h-screen bg-surface-muted">
