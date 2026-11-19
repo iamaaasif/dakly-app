@@ -8,8 +8,10 @@ import type {
   MetaAuthorizationStart,
 } from '@dakly/contracts/channels';
 import type { StoreAccess } from '@dakly/contracts/team';
-import type { MetaAuthorizationDriver } from '@dakly/providers/channel/channel-driver';
-import { MetaRequestError } from '@dakly/providers/channel/meta/meta-graph-channel-driver';
+import {
+  MetaRequestError,
+  type MetaAuthorizationDriver,
+} from '@dakly/providers/channel/channel-driver';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';

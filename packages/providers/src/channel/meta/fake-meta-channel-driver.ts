@@ -1,5 +1,4 @@
-import type { MetaAuthorizationDriver, MetaPage } from '../channel-driver';
-import { MetaRequestError } from './meta-graph-channel-driver';
+import { MetaRequestError, type MetaAuthorizationDriver, type MetaPage } from '../channel-driver';
 
 const authorizationCode = 'dakly-local-meta-code';
 const userToken = 'fake-meta-user-credential';

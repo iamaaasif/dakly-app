@@ -47,3 +47,10 @@ export type MetaAuthorizationDriver = {
   exchangeAuthorizationCode(code: string): Promise<string>;
   listAccounts(userToken: string): Promise<MetaPage[]>;
 };
+
+export class MetaRequestError extends Error {
+  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
+    super('Meta request failed');
+    this.name = 'MetaRequestError';
+  }
+}
