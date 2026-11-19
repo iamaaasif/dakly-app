@@ -69,21 +69,7 @@ export class MailpitSmsDriver implements SmsDriver {
     messageId?: string,
     signal?: AbortSignal,
   ): Promise<SmsSendResult> {
-    if (signal?.aborted) throw new SmsSendTimeout();
-    let response = '';
-    try {
-      ({ response } = await this.transport(signal).sendMail({
-        // The store's sender shows as the From name; the shared sender has none.
-        from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
-        to: `${message.to}@sms.test`,
-        subject: 'SMS',
-        text: message.text,
-        messageId: messageId ? `<${messageId}>` : undefined,
-      }));
-    } catch (error) {
-      if (signal?.aborted) throw new SmsSendTimeout();
-      if (isSmtpRefusal(error)) throw new SmsSendRefused();
-    }
+    const response = await this.smtpResponse(message, messageId, signal);
     // Mailpit can store a message without returning a queue id, including on a lost reply.
     const providerMessageId =
       /queued as ([\w-]+)$/u.exec(response)?.[1] ??
@@ -93,6 +79,25 @@ export class MailpitSmsDriver implements SmsDriver {
       throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
     }
     return { providerMessageId };
+  }
+
+  private async smtpResponse(message: SmsMessage, messageId?: string, signal?: AbortSignal) {
+    if (signal?.aborted) throw new SmsSendTimeout();
+    try {
+      const { response } = await this.transport(signal).sendMail({
+        // The store's sender shows as the From name; the shared sender has none.
+        from: message.sender ? { name: message.sender, address: SHARED_FROM } : SHARED_FROM,
+        to: `${message.to}@sms.test`,
+        subject: 'SMS',
+        text: message.text,
+        messageId: messageId ? `<${messageId}>` : undefined,
+      });
+      return response;
+    } catch (error) {
+      if (signal?.aborted) throw new SmsSendTimeout();
+      if (isSmtpRefusal(error)) throw new SmsSendRefused();
+      return '';
+    }
   }
 
   private transport(signal?: AbortSignal) {

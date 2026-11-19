@@ -18,7 +18,6 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { AppError } from '../platform/errors/app-error';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
