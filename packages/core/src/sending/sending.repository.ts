@@ -70,12 +70,13 @@ function campaignSends(tx: Transaction, window: SendWindow) {
   );
   const claimed = or(uncertain, live ? undefined : pending);
   const dispatchStartedAt = sql<Date>`coalesce(${campaignRecipients.dispatchStartedAt}, ${campaignRecipients.claimedAt})`;
+  const acceptedAt = sql<Date>`greatest(${campaignRecipients.sentAt}, ${campaignRecipients.dispatchStartedAt})`;
   return tx
     .select({
       contactId: campaignRecipients.contactId,
       channel: campaigns.channel,
       sentAt:
-        sql<Date | null>`case when ${claimed} then ${dispatchStartedAt} else ${campaignRecipients.sentAt} end`.mapWith(
+        sql<Date | null>`case when ${claimed} then ${dispatchStartedAt} else ${acceptedAt} end`.mapWith(
           campaignRecipients.sentAt,
         ),
     })
@@ -103,8 +104,8 @@ function campaignSends(tx: Transaction, window: SendWindow) {
           ),
           and(
             inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
-            gt(campaignRecipients.sentAt, after),
-            includeCommittedFuture ? undefined : lte(campaignRecipients.sentAt, until),
+            gt(acceptedAt, after),
+            includeCommittedFuture ? undefined : lte(acceptedAt, until),
           ),
         ),
         eq(campaigns.category, 'marketing'),

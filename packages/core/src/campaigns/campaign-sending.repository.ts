@@ -137,24 +137,51 @@ export class CampaignSendingRepository {
     return row;
   }
 
+  async isCurrentClaim(storeId: string, id: string, claimedAt: Date) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.storeId, storeId),
+            eq(campaignRecipients.id, id),
+            eq(campaignRecipients.status, 'sending'),
+            eq(campaignRecipients.claimedAt, claimedAt),
+            isNull(campaignRecipients.providerMessageId),
+          ),
+        ),
+    );
+    return row !== undefined;
+  }
+
   // Guarded on the status, and on the claim when one is given, so a stale worker cannot overwrite
   // a newer claim.
   async changeRecipient(
     storeId: string,
     id: string,
-    from: { status: RecipientStatus; claimedAt?: Date; uncertainReceipt?: string },
+    from: {
+      status: RecipientStatus;
+      claimedAt?: Date;
+      uncertainReceipt?: string | null;
+      providerMessageId?: string;
+    },
     change: RecipientChange,
   ): Promise<boolean> {
     const { status, claimedAt, uncertainReceipt } = from;
     const { status: currentStatus, errorCode, providerMessageId } = campaignRecipients;
     const sameStatus = eq(currentStatus, status);
     const unknown = and(eq(currentStatus, 'failed'), eq(errorCode, 'outcome_unknown'));
-    const guardedStatus = uncertainReceipt
-      ? and(
-          or(sameStatus, unknown),
-          or(isNull(providerMessageId), eq(providerMessageId, uncertainReceipt)),
-        )
-      : sameStatus;
+    const guardedStatus =
+      uncertainReceipt !== undefined
+        ? and(
+            or(sameStatus, unknown),
+            or(
+              isNull(providerMessageId),
+              uncertainReceipt ? eq(providerMessageId, uncertainReceipt) : undefined,
+            ),
+          )
+        : sameStatus;
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(campaignRecipients)
@@ -164,6 +191,7 @@ export class CampaignSendingRepository {
             eq(campaignRecipients.storeId, storeId),
             eq(campaignRecipients.id, id),
             guardedStatus,
+            from.providerMessageId ? eq(providerMessageId, from.providerMessageId) : undefined,
             claimedAt ? eq(campaignRecipients.claimedAt, claimedAt) : undefined,
           ),
         )
