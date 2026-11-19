@@ -45,7 +45,7 @@ export class ContactStatsService {
     return this.refreshFromOrders(storeId, contactId);
   }
 
-  async reconcilePage(storeId: string, after: string | null, phase: RepairPhase) {
+  async reconcilePage(storeId: string, after: string | null, phase: RepairPhase, day: string) {
     const batch =
       phase.kind === 'totals'
         ? await this.repository.contactIds(storeId, after, BATCH_SIZE)
@@ -55,7 +55,11 @@ export class ContactStatsService {
             limit: BATCH_SIZE,
           });
     for (const { id } of batch) {
-      await this.refreshFromOrders(storeId, id, phase.kind === 'rank' ? phase.cutoff : undefined);
+      await this.refreshFromOrders(
+        storeId,
+        id,
+        phase.kind === 'rank' ? { cutoff: phase.cutoff, day } : undefined,
+      );
     }
     return batch.length === BATCH_SIZE ? (batch.at(-1)?.id ?? null) : null;
   }
@@ -67,20 +71,20 @@ export class ContactStatsService {
   private async refreshFromOrders(
     storeId: string,
     contactId: string,
-    cutoff?: BestSpendCutoff | null,
+    rank?: { cutoff: BestSpendCutoff | null; day: string },
   ) {
     await this.transaction.run(storeId, async () => {
       const contact = await this.repository.lockContact(storeId, contactId);
-      if (!contact) return;
+      const now = this.clock.now();
+      if (!contact || (rank && rank.day !== now.toISOString().slice(0, 10))) return;
       const timeZone = await this.stores.timeZone(storeId);
       const totals = await this.orders.contactOrderTotals(storeId, contactId, timeZone);
-      const now = this.clock.now();
       const lifecycleStage = await this.lifecycleStage(storeId, contactId, {
         contact,
         totals,
         now,
         timeZone,
-        cutoff,
+        cutoff: rank?.cutoff,
       });
       await this.repository.save(storeId, contactId, {
         ...totals,

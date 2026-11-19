@@ -56,16 +56,20 @@ export class ContactStatsSweepService {
   }
 
   async reconcile(repair: Repair) {
-    const { storeId, after, ranking } = repair;
-    const next = await this.stats.reconcilePage(storeId, after, ranking);
+    const { storeId, after, ranking, day } = repair;
+    if (day !== this.clock.now().toISOString().slice(0, 10)) return;
+    const next = await this.stats.reconcilePage(storeId, after, ranking, day);
     if (next) {
       await this.bulk.addBulk([repairJob({ ...repair, after: next })]);
     } else if (ranking.kind === 'totals') {
-      // Wait until all spend totals are repaired before taking a store-wide ranking.
+      const firstRankPage = {
+        ...repair,
+        after: null,
+        ranking: { kind: 'rank', cutoff: null },
+      } as const;
+      if (await this.bulk.getJob(repairJobId(firstRankPage))) return;
       const cutoff = await this.stats.bestSpendCutoff(storeId);
-      await this.bulk.addBulk([
-        repairJob({ ...repair, after: null, ranking: { kind: 'rank', cutoff } }),
-      ]);
+      await this.bulk.addBulk([repairJob({ ...firstRankPage, ranking: { kind: 'rank', cutoff } })]);
     }
   }
 }
@@ -75,11 +79,15 @@ function repairJob(data: Repair) {
     name: RECONCILE_CONTACT_STATS,
     data,
     opts: {
-      jobId: `${RECONCILE_CONTACT_STATS}-${data.storeId}-${data.day}-${data.ranking.kind}-${data.after ?? 'start'}`,
+      jobId: repairJobId(data),
       attempts: 3,
       backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
       removeOnComplete: { age: DAY_MS / 1000 },
       removeOnFail: 100,
     },
   };
+}
+
+function repairJobId(data: Repair): string {
+  return `${RECONCILE_CONTACT_STATS}-${data.storeId}-${data.day}-${data.ranking.kind}-${data.after ?? 'start'}`;
 }

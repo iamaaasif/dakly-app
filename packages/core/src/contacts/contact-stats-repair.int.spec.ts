@@ -13,7 +13,8 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
-import { ContactStatsModule } from './contact-stats.module';
+import { ContactStatsRepairModule } from './contact-stats-repair.module';
+import { ContactStatsService } from './contact-stats.service';
 import {
   RECONCILE_CONTACT_STATS,
   ReconcileContactStatsJob,
@@ -23,7 +24,7 @@ class TestModule {}
 Module({
   imports: [
     DatabaseModule,
-    ContactStatsModule,
+    ContactStatsRepairModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
@@ -135,5 +136,18 @@ describe('Nightly contact stats repair', () => {
     });
     await worker.handle(rank?.data);
     expect(await stored(secondId!)).toMatchObject({ lifecycle_stage: 'best' });
+
+    await fixture.connection.pool.query(
+      "update orders set stage='delivered', return_reason=null where id=$1",
+      [firstOrder],
+    );
+    await app.get(ContactStatsService).refresh(fixture.b, firstId!);
+    expect(await stored(firstId!)).toMatchObject({
+      lifecycle_stage: 'new',
+      net_spend_poisha: '2500000',
+    });
+    vi.mocked(app.get(Clock).now).mockReturnValue(new Date('2026-11-20T06:00:00Z'));
+    await worker.handle(rank?.data);
+    expect(await stored(firstId!)).toMatchObject({ lifecycle_stage: 'new' });
   });
 });

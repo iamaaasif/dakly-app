@@ -90,7 +90,7 @@ The daily token sweep makes one Meta call per active connection with no fixed ex
 `reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contacts
 and queues the next cursor. The last totals page measures the Best customers cutoff.
 Ranking pages check contacts whose stage differs from the cutoff before writing a new stage.
-Page IDs deduplicate retries.
+Page IDs deduplicate retries. An older sweep day cannot write rankings after the next day starts.
 
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

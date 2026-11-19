@@ -27,35 +27,33 @@ export class ContactStatsRepository {
     );
   }
 
-  contactsWithChangedRank(
+  async contactsWithChangedRank(
     storeId: string,
     after: string | null,
     { cutoff, minimum, limit }: { cutoff: BestSpendCutoff | null; minimum: bigint; limit: number },
   ) {
+    const cursor = after ? sql`and contact_id > ${after}::uuid` : sql``;
     const qualifies = cutoff
-      ? sql`${contactStats.lifecycleStage} not in ('none', 'stopped_buying')
-            and ${contactStats.netSpendPoisha} > ${minimum.toString()}::bigint
-            and (${contactStats.netSpendPoisha}, ${contactStats.contactId}) >=
+      ? sql`net_spend_poisha > ${minimum.toString()}::bigint
+            and net_spend_poisha >= ${cutoff.netSpendPoisha}::bigint
+            and (net_spend_poisha, contact_id) >=
                 (${cutoff.netSpendPoisha}::bigint, ${cutoff.contactId}::uuid)`
       : sql`false`;
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: contacts.id })
-        .from(contacts)
-        .innerJoin(
-          contactStats,
-          and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contacts.id)),
-        )
-        .where(
-          and(
-            eq(contacts.storeId, storeId),
-            after ? gt(contacts.id, after) : undefined,
-            sql`(${contactStats.lifecycleStage} = 'best') <> (${qualifies})`,
-          ),
-        )
-        .orderBy(asc(contacts.id))
-        .limit(limit),
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ id: string }>(sql`
+        select id from (
+          (select contact_id as id from contact_stats
+           where store_id = ${storeId} and lifecycle_stage = 'best' ${cursor}
+             and not (${qualifies})
+           order by contact_id limit ${limit})
+          union all
+          (select contact_id as id from contact_stats
+           where store_id = ${storeId} and lifecycle_stage not in ('none', 'stopped_buying', 'best')
+             ${cursor} and (${qualifies})
+           order by contact_id limit ${limit})
+        ) candidates order by id limit ${limit}`),
     );
+    return rows;
   }
 
   async bestSpendCutoff(storeId: string) {
