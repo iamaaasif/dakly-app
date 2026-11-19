@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
@@ -16,6 +16,7 @@ import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-sta
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { QUEUE_CONVERSATION_RETURNS } from '@dakly/core/messaging/jobs/queue-conversation-returns.job';
 import { WAKE_SNOOZED_NOTIFICATIONS } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
+import { loadEnv } from '@dakly/core/platform/config/env';
 import {
   RELAY_OUTBOX,
   RELAY_OUTBOX_INTERVAL_MS,
@@ -23,9 +24,10 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
+import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
 @Injectable()
-export class JobSchedulers implements OnApplicationBootstrap {
+export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
   constructor(
     @InjectQueue(QUEUES.transactional) private readonly transactional: Queue,
     @InjectQueue(QUEUES.bulk) private readonly bulk: Queue,
@@ -33,6 +35,11 @@ export class JobSchedulers implements OnApplicationBootstrap {
     @InjectQueue(QUEUES.workflow) private readonly workflow: Queue,
     @InjectQueue(QUEUES.campaign) private readonly campaign: Queue,
   ) {}
+
+  async onModuleInit() {
+    // A persisted scheduler could otherwise enqueue jobs with no handler after Meta is disabled.
+    if (!loadEnv().metaChannel) await this.sync.removeJobScheduler(RECOVER_POST_TARGETS);
+  }
 
   async onApplicationBootstrap() {
     await Promise.all([

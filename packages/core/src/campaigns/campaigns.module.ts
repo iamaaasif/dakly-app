@@ -18,6 +18,7 @@ import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
+import { CampaignSweepService } from './campaign-sweep.service';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsRepository } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
@@ -46,8 +47,15 @@ import { CampaignsService } from './campaigns.service';
     CampaignSendingRepository,
     CampaignsService,
     CampaignSenderService,
+    CampaignSweepService,
     CampaignFundingService,
   ],
-  exports: [CampaignCountsService, CampaignFundingService, CampaignSenderService, CampaignsService],
+  exports: [
+    CampaignCountsService,
+    CampaignFundingService,
+    CampaignSenderService,
+    CampaignSweepService,
+    CampaignsService,
+  ],
 })
 export class CampaignsModule {}

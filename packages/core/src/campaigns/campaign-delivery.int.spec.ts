@@ -22,6 +22,8 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SegmentsService } from '../segments/segments.service';
+import { SendPolicyService } from '../sending/send-policy.service';
+import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
@@ -715,6 +717,193 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
+  it('releases a late definite refusal if cancellation settlement is still open', async () => {
+    const { id } = await sendingCampaign(1);
+    const contacted = Promise.withResolvers<void>();
+    const reply = Promise.withResolvers<{ providerMessageId: string }>();
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+      calls.push({ ...message });
+      contacted.resolve();
+      return reply.promise;
+    });
+    const batch = sender.sendBatch(storeId, id);
+    void batch.catch(() => undefined);
+    try {
+      await Promise.race([
+        contacted.promise,
+        batch.then(() => {
+          throw new Error('The batch ended before contacting the provider');
+        }),
+      ]);
+      await campaigns.cancel(storeId, id, actor);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      const settle = vi
+        .spyOn(campaigns, 'settleReservation')
+        .mockRejectedValueOnce(new Error('worker stopped before settlement'));
+      try {
+        await expect(sender.sendBatch(storeId, id)).rejects.toThrow(
+          'worker stopped before settlement',
+        );
+      } finally {
+        settle.mockRestore();
+      }
+      expect((await recipients(id)).map((row) => [row.status, row.sms_credits])).toEqual([
+        ['failed', 1],
+      ]);
+      expect(await settlementRows(id)).toEqual([]);
+
+      reply.reject(new SmsSendRefused());
+      await batch;
+      expect((await recipients(id)).map((row) => [row.status, row.sms_credits])).toEqual([
+        ['failed', null],
+      ]);
+      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+      expect(calls).toHaveLength(1);
+    } finally {
+      reply.resolve({ providerMessageId: 'unused-late-refusal-receipt' });
+      await batch.catch(() => undefined);
+    }
+  });
+
+  it('releases a late definite refusal while the other recipient is still outstanding', async () => {
+    const { id } = await sendingCampaign(2);
+    const contacted = Promise.withResolvers<void>();
+    const reply = Promise.withResolvers<{ providerMessageId: string }>();
+    vi.mocked(MailpitSmsDriver.prototype.send)
+      .mockImplementationOnce(async (message) => {
+        calls.push({ ...message });
+        contacted.resolve();
+        return reply.promise;
+      })
+      .mockRejectedValueOnce(new Error('second recipient timed out'));
+    const first = sender.sendBatch(storeId, id);
+    void first.catch(() => undefined);
+    try {
+      await Promise.race([
+        contacted.promise,
+        first.then(() => {
+          throw new Error('The batch ended before contacting the provider');
+        }),
+      ]);
+      const phone = calls[0]!.to;
+      await admin.pool.query('update contacts set is_blocked=true where store_id=$1 and phone=$2', [
+        storeId,
+        phone,
+      ]);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      await expect(sender.sendBatch(storeId, id)).rejects.toThrow('second recipient timed out');
+      expect(await settlementRows(id)).toEqual([]);
+      expect((await recipients(id)).find((row) => row.phone === phone)).toMatchObject({
+        status: 'failed',
+        sms_credits: 1,
+      });
+
+      reply.reject(new SmsSendRefused());
+      await first;
+      expect((await recipients(id)).find((row) => row.phone === phone)).toMatchObject({
+        status: 'failed',
+        sms_credits: null,
+      });
+      clockNow = new Date(noon.getTime() + 12 * MINUTE);
+      await sender.sendBatch(storeId, id);
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 2 },
+        { kind: 'charge', quantity_delta: -1 },
+      ]);
+    } finally {
+      reply.resolve({ providerMessageId: 'unused-late-refusal-receipt' });
+      await first.catch(() => undefined);
+    }
+  });
+
+  it.each([false, true])(
+    'uses only a live claim when cancellation has committed (expired: %s)',
+    async (expired) => {
+      const { id } = await sendingCampaign(1);
+      const waiting = Promise.withResolvers<void>();
+      const proceed = Promise.withResolvers<void>();
+      const repository = app.get(CampaignSendingRepository);
+      const current = repository.isCurrentClaim.bind(repository);
+      const gate = vi
+        .spyOn(repository, 'isCurrentClaim')
+        .mockImplementationOnce(async (...args) => {
+          expect(app.get(StoreTransaction).isOpen()).toBe(false);
+          waiting.resolve();
+          await proceed.promise;
+          return current(...args);
+        });
+      const first = sender.sendBatch(storeId, id);
+      void first.catch(() => undefined);
+      try {
+        await Promise.race([
+          waiting.promise,
+          first.then(() => {
+            throw new Error('The batch ended before checking the claim');
+          }),
+        ]);
+        await campaigns.cancel(storeId, id, actor);
+        if (expired) {
+          clockNow = new Date(noon.getTime() + 6 * MINUTE);
+          await sender.sendBatch(storeId, id);
+        }
+        proceed.resolve();
+        await first;
+        expect(calls).toHaveLength(expired ? 0 : 1);
+        expect((await recipients(id)).map((row) => row.status)).toEqual([
+          expired ? 'failed' : 'sent',
+        ]);
+      } finally {
+        proceed.resolve();
+        gate.mockRestore();
+        await first.catch(() => undefined);
+      }
+    },
+  );
+
+  it('checks quiet hours again after preparing the opt-out link', async () => {
+    clockNow = new Date(noon.getTime() + 9 * 60 * MINUTE - MINUTE);
+    const { id } = await sendingCampaign(1);
+    const links = app.get(LinksService);
+    const create = links.create.bind(links);
+    const waits = vi.spyOn(links, 'create').mockImplementationOnce(async (...args) => {
+      const saved = await create(...args);
+      clockNow = new Date(noon.getTime() + 9 * 60 * MINUTE);
+      return saved;
+    });
+    try {
+      const open = new Date(noon.getTime() + 21 * 60 * MINUTE);
+      expect(await sender.sendBatch(storeId, id)).toEqual(open);
+      expect(calls).toHaveLength(0);
+      expect((await recipients(id)).map((row) => row.status)).toEqual(['queued']);
+
+      clockNow = open;
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls).toHaveLength(1);
+      expect(waits).toHaveBeenCalledTimes(1);
+    } finally {
+      waits.mockRestore();
+    }
+  });
+
+  it('locks the store settings before it locks the recipient for dispatch', async () => {
+    const { id } = await sendingCampaign(1);
+    const policy = app.get(SendPolicyService);
+    const lockForDispatch = policy.lockForDispatch.bind(policy);
+    const settings = vi.spyOn(app.get(StoresService), 'sendingSettings');
+    const contact = vi.spyOn(policy, 'lockForDispatch').mockImplementationOnce(async (...args) => {
+      expect(settings).toHaveBeenCalledWith(storeId, 'share');
+      return lockForDispatch(...args);
+    });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(contact).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(1);
+    } finally {
+      contact.mockRestore();
+      settings.mockRestore();
+    }
+  });
+
   it('skips a recipient whose phone changed after approval and releases its credit', async () => {
     const { id, phones } = await sendingCampaign(2);
     await admin.pool.query(
@@ -896,6 +1085,63 @@ describe('Campaign sender (Postgres)', () => {
         { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
       ]);
       expect(await settlementRows(id)).toEqual(charged);
+    });
+
+    it('uses a late definite receipt result before the cancellation settles', async () => {
+      const { id } = await unknownFirstSend();
+      await admin.pool.query(
+        "update campaign_recipients set provider_message_id='late-known-receipt' where campaign_id=$1",
+        [id],
+      );
+      await campaigns.cancel(storeId, id, actor);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      const started = Promise.withResolvers<void>();
+      const result = Promise.withResolvers<'not_sent'>();
+      const lookup = vi
+        .spyOn(MailpitSmsDriver.prototype, 'receiptStatus')
+        .mockImplementationOnce(async () => {
+          started.resolve();
+          return result.promise;
+        })
+        .mockResolvedValueOnce('unknown');
+      const first = sender.sendBatch(storeId, id);
+      void first.catch(() => undefined);
+      try {
+        await Promise.race([
+          started.promise,
+          first.then(() => {
+            throw new Error('The worker ended before checking the receipt');
+          }),
+        ]);
+        clockNow = new Date(noon.getTime() + 12 * MINUTE);
+        const settle = vi
+          .spyOn(campaigns, 'settleReservation')
+          .mockRejectedValueOnce(new Error('worker stopped before settlement'));
+        try {
+          await expect(sender.sendBatch(storeId, id)).rejects.toThrow(
+            'worker stopped before settlement',
+          );
+        } finally {
+          settle.mockRestore();
+        }
+        expect(await outcome(id)).toEqual([
+          { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+        ]);
+        expect(await settlementRows(id)).toEqual([]);
+
+        result.resolve('not_sent');
+        await first;
+        expect(await outcome(id)).toEqual([
+          { status: 'failed', error_code: 'provider_confirmed_not_sent', sms_credits: null },
+        ]);
+        expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+        expect(calls).toHaveLength(1);
+        expect(lookup).toHaveBeenCalledTimes(2);
+      } finally {
+        result.resolve('not_sent');
+        await first.catch(() => undefined);
+        lookup.mockRestore();
+      }
     });
 
     it.each([
@@ -1105,7 +1351,7 @@ describe('Campaign sender (Postgres)', () => {
       expect(await settlementRows(id)).toEqual(charged);
     });
 
-    it('never queues a resend again when messaging refuses it', async () => {
+    it('keeps the unknown outcome without resending after the frozen phone changes', async () => {
       const { id, phones } = await unknownFirstSend();
       await admin.pool.query(
         "update contacts set phone='01999000002' where store_id=$1 and phone=$2",
@@ -1116,6 +1362,24 @@ describe('Campaign sender (Postgres)', () => {
       expect(await sender.sendBatch(storeId, id)).toBeNull();
 
       expect(calls).toHaveLength(1);
+      expect(await outcome(id)).toEqual([
+        { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+      ]);
+      expect(await settlementRows(id)).toEqual(charged);
+    });
+
+    it('does not queue another attempt when the provider refuses an expired claim’s retry', async () => {
+      const { id } = await unknownFirstSend();
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        calls.push({ ...message });
+        throw new SmsSendRefused();
+      });
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.idempotencyKey).toBe(calls[0]?.idempotencyKey);
       expect(await outcome(id)).toEqual([
         { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
       ]);

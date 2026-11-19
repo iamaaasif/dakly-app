@@ -144,12 +144,19 @@ export class SendPolicyService {
     {
       contactId,
       workflowStepId,
+      campaignRecipientId,
       settings: { quietHours, timeZone, frequencyCap },
-    }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
+    }: {
+      contactId: string;
+      workflowStepId?: string;
+      campaignRecipientId?: string;
+      settings: StoreSendingSettings;
+    },
   ) {
     this.requireTransaction();
     const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
+      excludeCampaignRecipientId: campaignRecipientId,
       includeCommittedFuture: true,
     });
     return (): { decision: SendDecision; at: Date } => {

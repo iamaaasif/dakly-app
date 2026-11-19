@@ -184,13 +184,18 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
-Instagram targets require JPEG photos when saved, approved and published. The
-publishing service handles one target at a time and records `post.published` or
-`post.failed`. Instagram waits for its media container to finish. A successful
-target stays published when another target fails. A suspended store cannot
-publish. Its target fails if the store is still suspended on the last attempt.
-A first comment goes to Instagram only. The next SOC-2 change connects this service to scheduled jobs,
-day-ahead checks and Fix now notifications.
+With Meta publishing configured, the worker queues a publish job for each target. Instagram waits for its media
+container to finish. A successful target stays published when another target
+fails. Each target gets three retries over 30 minutes and a Fix now notification
+if it fails. A check 24 hours before publishing flags an account that needs
+reconnecting or a photo that is missing. Instagram targets require JPEG photos
+when saved, approved and published. A suspended store cannot publish. Its
+target fails if the store is still suspended on the last attempt. A first
+comment goes to Instagram only. A recovery job runs each minute and restores
+missing or failed jobs for targets due within 24 hours. The window for a missed
+or failed publication ends 30 minutes after the scheduled time, including time
+with Meta publishing disabled. After that, recovery records a saved receipt or
+marks the target failed.
 
 If Meta receives a publish request without returning a result, Dakly checks the
 Instagram container for confirmation. A confirmed container can be marked

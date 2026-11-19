@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
 import { JOB_POLL_INTERVAL_MS } from '../../platform/time';
-import { CampaignSenderService, type CampaignBatch } from '../campaign-sender.service';
+import { CampaignSweepService, type CampaignBatch } from '../campaign-sweep.service';
 import { SEND_CAMPAIGN_BATCH } from './send-campaign-batch.job';
 
 export const START_DUE_CAMPAIGNS = 'start-due-campaigns';
@@ -16,13 +16,13 @@ const payload = z.strictObject({});
 @HandlesJob({ queue: QUEUES.campaign, name: START_DUE_CAMPAIGNS })
 export class StartDueCampaignsJob implements JobHandler {
   constructor(
-    @Inject(CampaignSenderService) private readonly sender: CampaignSenderService,
+    @Inject(CampaignSweepService) private readonly sweep: CampaignSweepService,
     @InjectQueue(QUEUES.campaign) private readonly queue: Queue<Omit<CampaignBatch, 'lane'>>,
   ) {}
 
   async handle(data: unknown) {
     payload.parse(data);
-    await this.sender.startDue(await this.queue.getWaitingCount(), async (batches) => {
+    await this.sweep.startDue(await this.queue.getWaitingCount(), async (batches) => {
       if (!batches.length) return;
       await this.queue.addBulk(
         batches.map(({ lane, ...data }) => ({
