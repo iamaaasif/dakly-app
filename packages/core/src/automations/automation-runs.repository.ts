@@ -17,6 +17,7 @@ import {
 } from '@dakly/db/schema/automations';
 
 import { DATABASE } from '../platform/database/database.tokens';
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
 
@@ -60,7 +61,22 @@ export type NewRunStep = {
   sentAt?: Date;
   firstTriedAt?: Date;
 };
-export type RunStepChange = { outcome: string; providerMessageId?: string; sentAt?: Date };
+export type RunStepChange = {
+  outcome: string;
+  providerMessageId?: string;
+  skipReason?: SkipReason;
+  sentAt?: Date;
+  firstTriedAt?: Date;
+};
+// A send handed to the provider whose outcome is not known yet.
+export type SendingStep = {
+  id: string;
+  firstTriedAt: Date | null;
+  latestDispatchAt: Date | null;
+  optOutUrl: string | null;
+  destinationHash: string | null;
+  providerMessageId: string | null;
+};
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -142,11 +158,22 @@ export class AutomationRunsRepository {
     return rows.map((row) => row.stepKey);
   }
 
-  // A send handed to the provider whose outcome is not known yet.
-  async hasSendingStep(storeId: string, runId: string, stepKey: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: automationRunSteps.id })
+  async findSendingStep(
+    storeId: string,
+    runId: string,
+    stepKey: string,
+    lock = false,
+  ): Promise<SendingStep | undefined> {
+    const read = (tx: Transaction) => {
+      const query = tx
+        .select({
+          id: automationRunSteps.id,
+          firstTriedAt: automationRunSteps.firstTriedAt,
+          latestDispatchAt: automationRunSteps.sentAt,
+          optOutUrl: automationRunSteps.optOutUrl,
+          destinationHash: automationRunSteps.destinationHash,
+          providerMessageId: automationRunSteps.providerMessageId,
+        })
         .from(automationRunSteps)
         .where(
           and(
@@ -156,9 +183,13 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.outcome, 'sending'),
           ),
         )
-        .limit(1),
-    );
-    return rows.length > 0;
+        .limit(1);
+      return lock ? query.for('update') : query;
+    };
+    const [row] = lock
+      ? await this.database.inTransaction(storeId, read)
+      : await this.database.forStore(storeId, read);
+    return row;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {

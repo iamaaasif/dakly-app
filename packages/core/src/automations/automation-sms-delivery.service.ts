@@ -7,6 +7,7 @@ import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationRunsRepository, type RunClaim } from './automation-runs.repository';
+import { retryAfterError } from './automation-send-retry.service';
 import {
   type CreditSettlement,
   endWithUnknownOutcome,
@@ -18,11 +19,15 @@ import {
   type StepResult,
 } from './automation-step-rules';
 
-export const SMS_NO_ANSWER = 'The SMS provider did not answer';
-
 const system = { kind: 'system' } as const;
 
-type AuthorizedSubmission = { claim: RunClaim; at: Date; body: string };
+type AuthorizedSubmission = {
+  claim: RunClaim;
+  at: Date;
+  firstTriedAt: Date;
+  previousDispatchAt?: Date;
+  body: string;
+};
 
 @Injectable()
 export class AutomationSmsDeliveryService {
@@ -50,7 +55,7 @@ export class AutomationSmsDeliveryService {
   async deliver(
     { storeId, contactId, step }: { storeId: string; contactId: string; step: SendStep },
     prepared: PreparedSms,
-    { claim, at, body }: AuthorizedSubmission,
+    { claim, at, firstTriedAt, previousDispatchAt, body }: AuthorizedSubmission,
   ): Promise<StepResult> {
     const attempt = await this.messaging
       .send(
@@ -84,14 +89,17 @@ export class AutomationSmsDeliveryService {
         credits: { settle: 'charge', quantity: credits },
       };
     }
-    if (refusal)
-      return {
-        ...failed(refusal.message, now),
-        claim,
-        stepChange: { outcome: 'failed' },
-        credits: { settle: 'release' },
-      };
-    return endWithUnknownOutcome({ ...failed(SMS_NO_ANSWER, now), claim });
+    if (refusal) {
+      const result = { ...failed(refusal.message, now), claim };
+      // Only the earlier attempt might have sent. Restore its original place in the cap.
+      if (previousDispatchAt)
+        return {
+          ...endWithUnknownOutcome(result),
+          stepChange: { outcome: 'unconfirmed', sentAt: previousDispatchAt },
+        };
+      return { ...result, stepChange: { outcome: 'failed' }, credits: { settle: 'release' } };
+    }
+    return retryAfterError(claim, firstTriedAt, now);
   }
 
   async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
