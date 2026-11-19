@@ -20,7 +20,7 @@ export const analyticsReconciliationPayload = z.strictObject({
       period: z.strictObject({ from: z.iso.date(), through: z.iso.date() }).nullable(),
     }),
     z.strictObject({ kind: z.literal('buyers'), after: z.uuid().nullable() }),
-    z.strictObject({ kind: z.literal('lifecycle'), minute: z.int().nonnegative() }),
+    z.strictObject({ kind: z.literal('lifecycle') }),
     z.strictObject({ kind: z.literal('retention'), batch: z.int().nonnegative() }),
   ]),
 });
@@ -55,18 +55,18 @@ export class AnalyticsReconciliationService {
     const minute = Math.floor(now / MINUTE_MS) + 1;
     const dueAt = minute * MINUTE_MS;
     const day = new Date(dueAt).toISOString().slice(0, 10);
-    const job = reconciliationJob({ storeId, day, page: { kind: 'lifecycle', minute } });
+    const job = reconciliationJob({ storeId, day, page: { kind: 'lifecycle' } });
     // Read at the end of the minute so one snapshot includes the store's recent changes.
     await this.queue.add(job.name, job.data, { ...job.opts, delay: dueAt - now });
   }
 
   async reconcile(repair: Repair) {
     const { day, storeId, page } = repair;
-    if (day !== this.clock.now().toISOString().slice(0, 10)) return;
     if (page.kind === 'lifecycle') {
       await this.summaries.refreshLifecycle(storeId);
       return;
     }
+    if (day !== this.clock.now().toISOString().slice(0, 10)) return;
     if (page.kind === 'retention') {
       if (await this.summaries.pruneExpiredRows(storeId))
         await this.queue.addBulk([
@@ -91,7 +91,7 @@ export class AnalyticsReconciliationService {
 
     const { from, through } = page.period ?? (await this.summaries.reconciliationRange(storeId));
     const lastDay = shiftReportDay(from, 30);
-    await this.summaries.reconcileOrderRange(storeId, {
+    await this.summaries.refreshOrderDays(storeId, {
       from,
       through: lastDay < through ? lastDay : through,
     });
@@ -104,22 +104,33 @@ export class AnalyticsReconciliationService {
 }
 
 function reconciliationJob(data: Repair) {
-  const { page } = data;
-  const cursor = page.kind === 'orders' ? page.period?.from : repairCursor(page);
+  const { page, storeId, day } = data;
+  const opts = {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
+    removeOnComplete: { age: DAY_MS / 1000 },
+    removeOnFail: 100,
+  };
+  if (page.kind === 'lifecycle') {
+    return {
+      name: RECONCILE_ANALYTICS,
+      data,
+      opts: {
+        ...opts,
+        deduplication: { id: `analytics-lifecycle-${storeId}`, keepLastIfActive: true },
+      },
+    };
+  }
+  let cursor: string | number | undefined | null;
+  if (page.kind === 'orders') cursor = page.period?.from;
+  else if (page.kind === 'buyers') cursor = page.after;
+  else cursor = page.batch;
   return {
     name: RECONCILE_ANALYTICS,
     data,
     opts: {
-      jobId: `${RECONCILE_ANALYTICS}-${data.storeId}-${data.day}-${data.page.kind}-${cursor ?? 'start'}`,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
-      removeOnComplete: { age: DAY_MS / 1000 },
-      removeOnFail: 100,
+      ...opts,
+      jobId: `${RECONCILE_ANALYTICS}-${storeId}-${day}-${page.kind}-${cursor ?? 'start'}`,
     },
   };
-}
-
-function repairCursor(page: Exclude<Repair['page'], { kind: 'orders' }>) {
-  if (page.kind === 'buyers') return page.after;
-  return page.kind === 'lifecycle' ? page.minute : page.batch;
 }

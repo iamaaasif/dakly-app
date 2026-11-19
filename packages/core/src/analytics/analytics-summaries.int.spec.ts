@@ -1,26 +1,48 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { Worker, type Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { ContactStatsService } from '../contacts/contact-stats.service';
+import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
-import { AnalyticsSummariesService } from './analytics-summaries.service';
+import { QUEUES } from '../platform/queue/queues';
+import { toRedisConnection } from '../platform/queue/redis-connection';
+import { AnalyticsSummariesService, BUILD_ORDER_SUMMARY } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, AnalyticsModule] })(TestModule);
+Module({
+  imports: [
+    DatabaseModule,
+    AnalyticsModule,
+    BullModule.forRootAsync({
+      useFactory: () => {
+        const env = loadEnv();
+        return {
+          connection: toRedisConnection(env.REDIS_URL),
+          prefix: `${env.QUEUE_PREFIX}:order-summaries`,
+        };
+      },
+    }),
+  ],
+})(TestModule);
 
 describe('Daily order summaries', () => {
   const fixture = new OwnerIsolationFixture();
   let app: INestApplicationContext;
+  let queue: Queue;
   const now = new Date('2026-11-19T06:00:00Z');
   let number = 1000;
 
@@ -30,6 +52,7 @@ describe('Daily order summaries', () => {
       fixture.b,
     ]);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
+    queue = app.get(getQueueToken(QUEUES.sync));
     vi.spyOn(app.get(Clock), 'now').mockReturnValue(now);
   });
 
@@ -68,6 +91,13 @@ describe('Daily order summaries', () => {
     return { id: randomUUID(), storeId, occurredAt: now.toISOString(), payload: { orderId } };
   }
 
+  async function finishOrderDay(storeId: string, day: string) {
+    const jobs = await queue.getDelayed();
+    const job = jobs.find(({ data }) => data.storeId === storeId && data.day === day);
+    await app.get(BuildOrderSummaryJob).handle(job?.data);
+    await job?.remove();
+  }
+
   it('uses the creation day in each store’s time zone', async () => {
     const beforeMidnight = await order(fixture.a, '2026-11-08T17:59:59Z');
     const atMidnight = await order(fixture.a, '2026-11-08T18:00:00Z');
@@ -81,11 +111,182 @@ describe('Daily order summaries', () => {
     ] as const) {
       await handler.handle({ ...event(storeId, orderId), type: 'order.created' });
     }
+    await finishOrderDay(fixture.a, '2026-11-08');
+    await finishOrderDay(fixture.a, '2026-11-09');
+    await finishOrderDay(fixture.b, '2026-11-08');
     expect(await ordersFor(fixture.a)).toMatchObject([
       { day: '2026-11-08', value: '1' },
       { day: '2026-11-09', value: '1' },
     ]);
     expect(await ordersFor(fixture.b)).toMatchObject([{ day: '2026-11-08', value: '1' }]);
+  });
+
+  it('queues one refresh for two order events on the same store day', async () => {
+    const first = await order(fixture.a, '2026-10-26T05:00:00Z');
+    const second = await order(fixture.a, '2026-10-26T06:00:00Z');
+    const handler = app.get(SummarizeOrderCreated);
+    for (const orderId of [first, second]) {
+      await handler.handle({ ...event(fixture.a, orderId), type: 'order.created' });
+    }
+    const jobs = await queue.getDelayed();
+    expect(jobs.map(({ data, opts }) => ({ ...data, delay: opts.delay }))).toEqual([
+      { storeId: fixture.a, day: '2026-10-26', delay: 60000 },
+    ]);
+    await finishOrderDay(fixture.a, '2026-10-26');
+    expect(await ordersFor(fixture.a)).toContainEqual(
+      expect.objectContaining({ day: '2026-10-26', value: '2' }),
+    );
+  });
+
+  it('runs another refresh when an order commits while its day is being written', async () => {
+    const day = '2026-10-27';
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValue(new Date('2026-11-19T06:00:59.990Z'));
+    const env = loadEnv();
+    const release = Promise.withResolvers<void>();
+    const summary = app.get(BuildOrderSummaryJob);
+    const worker = new Worker(
+      QUEUES.sync,
+      async (job) => {
+        await summary.handle(job.data);
+        await release.promise;
+      },
+      {
+        connection: toRedisConnection(env.REDIS_URL),
+        prefix: `${env.QUEUE_PREFIX}:order-summaries`,
+      },
+    );
+    const handler = app.get(SummarizeOrderCreated);
+    try {
+      const first = await order(fixture.a, `${day}T05:00:00Z`);
+      await handler.handle({ ...event(fixture.a, first), type: 'order.created' });
+      await expect
+        .poll(() => ordersFor(fixture.a))
+        .toContainEqual(expect.objectContaining({ day, value: '1' }));
+      const second = await order(fixture.a, `${day}T06:00:00Z`);
+      await handler.handle({ ...event(fixture.a, second), type: 'order.created' });
+      release.resolve();
+      await expect
+        .poll(() => ordersFor(fixture.a))
+        .toContainEqual(expect.objectContaining({ day, value: '2' }));
+    } finally {
+      release.resolve();
+      await worker.close();
+      clock.mockReturnValue(now);
+    }
+  });
+
+  it('does not restore a day that aged out while its refresh was queued', async () => {
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValue(new Date('2026-11-19T17:59:59Z'));
+    try {
+      const orderId = await order(fixture.a, '2024-11-19T05:00:00Z');
+      await app.get(SummarizeOrderCreated).handle({
+        ...event(fixture.a, orderId),
+        type: 'order.created',
+      });
+      clock.mockReturnValue(new Date('2026-11-19T18:00:00Z'));
+      await finishOrderDay(fixture.a, '2024-11-19');
+      expect(await ordersFor(fixture.a)).not.toContainEqual(
+        expect.objectContaining({ day: '2024-11-19' }),
+      );
+    } finally {
+      clock.mockReturnValue(now);
+    }
+  });
+
+  it('retries the source event when the day could not be queued', async () => {
+    const orderId = await order(fixture.a, '2026-11-04T05:00:00Z');
+    const data = { ...event(fixture.a, orderId), type: 'order.created' };
+    const handler = app.get(SummarizeOrderCreated);
+    const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
+    try {
+      await expect(handler.handle(data)).rejects.toThrow('Queue unavailable');
+      await handler.handle(data);
+      await finishOrderDay(fixture.a, '2026-11-04');
+      expect(await ordersFor(fixture.a)).toContainEqual(
+        expect.objectContaining({ day: '2026-11-04', value: '1' }),
+      );
+    } finally {
+      enqueue.mockRestore();
+    }
+  });
+
+  it('reschedules a missing refresh when the source event already has a marker', async () => {
+    const day = '2026-11-05';
+    const orderId = await order(fixture.a, `${day}T05:00:00Z`);
+    const data = { ...event(fixture.a, orderId), type: 'order.created' };
+    const handler = app.get(SummarizeOrderCreated);
+    await handler.handle(data);
+    const [evicted] = await queue.getDelayed();
+    await evicted?.remove();
+    await handler.handle(data);
+    await finishOrderDay(fixture.a, day);
+    expect(await ordersFor(fixture.a)).toContainEqual(expect.objectContaining({ day, value: '1' }));
+  });
+
+  it('can recover a pending day using its store and date alone', async () => {
+    const day = '2026-11-06';
+    const storeId = fixture.a;
+    const orderId = await order(storeId, `${day}T05:00:00Z`);
+    await app
+      .get(SummarizeOrderCreated)
+      .handle({ ...event(storeId, orderId), type: 'order.created' });
+    const [evicted] = await queue.getDelayed();
+    await evicted?.remove();
+    const pendingDays = () =>
+      fixture.connection.pool.query(
+        "select day::text from store_daily_metrics where store_id=$1 and metric='order_refresh_pending'",
+        [storeId],
+      );
+    expect((await pendingDays()).rows).toContainEqual({ day });
+    const job = await queue.add(
+      BUILD_ORDER_SUMMARY,
+      { storeId, day },
+      {
+        deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
+      },
+    );
+    await app.get(BuildOrderSummaryJob).handle(job.data);
+    await job.remove();
+    expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '1' }));
+    expect((await pendingDays()).rows).not.toContainEqual({ day });
+  });
+
+  it('leaves a newer invalidation pending when an older read finishes', async () => {
+    const day = '2026-10-28';
+    const storeId = fixture.a;
+    const first = await order(storeId, `${day}T05:00:00Z`);
+    const handler = app.get(SummarizeOrderCreated);
+    await handler.handle({ ...event(storeId, first), type: 'order.created' });
+    const [queued] = await queue.getDelayed();
+    const reports = app.get(OrderReportingService);
+    const read = reports.dailyOrderMetrics.bind(reports);
+    const sampled = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const probe = vi.spyOn(reports, 'dailyOrderMetrics').mockImplementationOnce(async (...args) => {
+      const rows = await read(...args);
+      sampled.resolve();
+      await release.promise;
+      return rows;
+    });
+    const refreshing = app.get(BuildOrderSummaryJob).handle(queued?.data);
+    try {
+      await sampled.promise;
+      const second = await order(storeId, `${day}T06:00:00Z`);
+      const invalidated = { ...event(storeId, second), type: 'order.created' };
+      await handler.handle(invalidated);
+      release.resolve();
+      await refreshing;
+      await queued?.remove();
+      expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '1' }));
+      await handler.handle(invalidated);
+      await finishOrderDay(storeId, day);
+      expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '2' }));
+    } finally {
+      release.resolve();
+      probe.mockRestore();
+    }
   });
 
   it('restates the original day after cancellation and leaves replay unchanged', async () => {
@@ -94,6 +295,7 @@ describe('Daily order summaries', () => {
       ...event(fixture.a, orderId),
       type: 'order.created',
     });
+    await finishOrderDay(fixture.a, '2026-11-01');
     await fixture.connection.pool.query(
       "update orders set stage='cancelled', cancel_reason='customer_cancelled' where id=$1",
       [orderId],
@@ -105,10 +307,10 @@ describe('Daily order summaries', () => {
       payload: { orderId, from: 'to_confirm', to: 'cancelled' },
     };
     await handler.handle(change);
+    await finishOrderDay(fixture.a, '2026-11-01');
     const restated = await ordersFor(fixture.a);
     expect(restated).toContainEqual(expect.objectContaining({ day: '2026-11-01', value: '0' }));
     expect(restated.some(({ day }) => day === '2026-11-19')).toBe(false);
-    vi.mocked(app.get(Clock).now).mockReturnValueOnce(new Date('2026-11-19T06:01:00Z'));
     await handler.handle(change);
     expect(await ordersFor(fixture.a)).toEqual(restated);
   });
@@ -125,6 +327,7 @@ describe('Daily order summaries', () => {
       type: 'order.stage_changed',
       payload: { orderId, from: 'with_courier', to: 'delivered' },
     });
+    await finishOrderDay(fixture.a, '2026-10-21');
     const metrics = async () =>
       (
         await fixture.connection.pool.query(
@@ -143,6 +346,7 @@ describe('Daily order summaries', () => {
       ...event(fixture.a, orderId),
       type: 'order.cod_collected',
     });
+    await finishOrderDay(fixture.a, '2026-10-21');
     expect(await metrics()).toEqual([
       { day: '2026-10-21', metric: 'delivered_orders', value: '1' },
       { day: '2026-10-21', metric: 'net_spend', value: '124500' },
@@ -157,6 +361,7 @@ describe('Daily order summaries', () => {
       payload: { orderId, from: 'delivered', to: 'returned' },
     };
     await handler.handle(returned);
+    await finishOrderDay(fixture.a, '2026-10-21');
     const restated = await metrics();
     expect(restated).toEqual([
       { day: '2026-10-21', metric: 'delivered_orders', value: '0' },
@@ -172,9 +377,11 @@ describe('Daily order summaries', () => {
     const created = { ...event(fixture.a, orderId), type: 'order.created' };
     const handler = app.get(SummarizeOrderCreated);
     await handler.handle(created);
+    await finishOrderDay(fixture.a, '2026-11-02');
     const before = await ordersFor(fixture.a);
     await order(fixture.a, '2026-11-02T12:30:00Z');
     await handler.handle(created);
+    expect(await queue.getDelayed()).toEqual([]);
     expect(await ordersFor(fixture.a)).toEqual(before);
   });
 
@@ -220,12 +427,13 @@ describe('Daily order summaries', () => {
     const cancelled = await order(fixture.a, '2026-11-14T06:00:00Z');
     const worker = app.get(SummarizeOrderCreated);
     await worker.handle({ ...event(fixture.a, cancelled), type: 'order.created' });
+    await finishOrderDay(fixture.a, '2026-11-14');
     await fixture.connection.pool.query(
       "update orders set stage='cancelled', cancel_reason='other' where id=$1",
       [cancelled],
     );
     const summaries = app.get(AnalyticsSummariesService);
-    await summaries.reconcileOrderRange(fixture.a, { from: '2026-11-13', through: '2026-11-14' });
+    await summaries.refreshOrderDays(fixture.a, { from: '2026-11-13', through: '2026-11-14' });
     const rows = (await ordersFor(fixture.a)).filter(({ day }) =>
       ['2026-11-13', '2026-11-14'].includes(day),
     );
