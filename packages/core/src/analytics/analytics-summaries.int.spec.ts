@@ -6,8 +6,10 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { ContactStatsService } from '../contacts/contact-stats.service';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
+import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
@@ -32,7 +34,7 @@ describe('Daily order summaries', () => {
 
   afterAll(async () => {
     await app?.close();
-    for (const table of ['orders', 'store_daily_metrics']) {
+    for (const table of ['orders', 'store_daily_metrics', 'outbox_events']) {
       await fixture.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [fixture.a, fixture.b],
       ]);
@@ -156,5 +158,36 @@ describe('Daily order summaries', () => {
       payload: { orderId: first, from: 'to_confirm', to: 'cancelled' },
     });
     expect(await activities()).toEqual([{ day: '2026-11-10', first_day: '2026-11-10' }]);
+  });
+
+  it('publishes a changed lifecycle and snapshots eligible customers', async () => {
+    const eligible = randomUUID();
+    const blocked = randomUUID();
+    const foreign = randomUUID();
+    await fixture.connection.pool.query(
+      `insert into contacts(id,store_id,name,source,kind,is_blocked,created_at) values
+         ($1,$4,'রিনা','manual','customer',false,'2026-11-01T12:00:00Z'),
+         ($2,$4,'সুমন','manual','customer',true,'2026-11-01T12:00:00Z'),
+         ($3,$5,'করিম','manual','customer',false,'2026-11-01T12:00:00Z')`,
+      [eligible, blocked, foreign, fixture.a, fixture.b],
+    );
+    await fixture.connection.pool.query(
+      "insert into contact_stats (contact_id,store_id,lifecycle_stage) values ($1,$3,'new'),($2,$4,'regulars')",
+      [blocked, foreign, fixture.a, fixture.b],
+    );
+    const stats = app.get(ContactStatsService);
+    await stats.refresh(fixture.a, eligible);
+    await stats.refresh(fixture.a, eligible);
+    const events = await fixture.connection.pool.query(
+      "select payload from outbox_events where store_id=$1 and type='contact.lifecycle_changed'",
+      [fixture.a],
+    );
+    expect(events.rows).toEqual([{ payload: { contactId: eligible } }]);
+    await app.get(AnalyticsSummariesService).refreshLifecycle(fixture.a);
+    const { rows } = await fixture.connection.pool.query(
+      "select dimension, value from store_daily_metrics where store_id=$1 and day='2026-11-19' and metric='lifecycle' and value<>0",
+      [fixture.a],
+    );
+    expect(rows).toEqual([{ dimension: 'bought_once', value: '1' }]);
   });
 });

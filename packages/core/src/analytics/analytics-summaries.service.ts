@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { lifecycleStages } from '@dakly/contracts/contacts';
+
+import { ContactStatsService } from '../contacts/contact-stats.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
@@ -11,6 +14,7 @@ import { AnalyticsRepository } from './analytics.repository';
 export class AnalyticsSummariesService {
   constructor(
     @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(ContactStatsService) private readonly contactStats: ContactStatsService,
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(AnalyticsRepository) private readonly summaries: AnalyticsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -32,6 +36,26 @@ export class AnalyticsSummariesService {
         await this.summaries.save(storeId, [{ day, metric: 'orders', value: BigInt(count) }], now);
       }
       if (buyerContactId) await this.refreshBuyer(storeId, buyerContactId, timeZone, now);
+    });
+  }
+
+  async refreshLifecycle(storeId: string) {
+    await this.transaction.run(storeId, async () => {
+      await this.summaries.lockSummaries(storeId);
+      const now = this.clock.now();
+      const timeZone = await this.stores.timeZone(storeId);
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone }).format(now);
+      const rows = await this.contactStats.lifecycleCounts(storeId);
+      const counts = new Map(rows.map(({ stage, count }) => [stage, count]));
+      const metrics = lifecycleStages
+        .filter((stage) => stage !== 'none')
+        .map((stage) => ({
+          day,
+          metric: 'lifecycle',
+          dimension: stage,
+          value: BigInt(counts.get(stage) ?? 0),
+        }));
+      await this.summaries.save(storeId, metrics, now);
     });
   }
 
