@@ -382,8 +382,7 @@ export class CampaignSenderService {
       if (!campaign?.approvedAt) return;
       const now = this.clock.now();
       if (!canProcess(campaign)) {
-        if (processed && ['cancelled', 'paused'].includes(campaign.status))
-          await this.counts.refresh(storeId, id, 'force');
+        if (processed) await this.counts.refresh(storeId, id, 'batch');
         return;
       }
       const cancelledAt = campaign.status === 'cancelled' ? now : undefined;

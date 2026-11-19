@@ -18,7 +18,8 @@ export class CampaignCountsService {
     await this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
       if (!campaign) return;
-      if (mode === 'batch' && !['sending', 'paused', 'cancelled'].includes(campaign.status)) return;
+      if (mode === 'batch' && !['sending', 'paused', 'cancelled', 'sent'].includes(campaign.status))
+        return;
       const now = await this.counts.currentTime(storeId);
       const previous = campaign.countsAt?.getTime() ?? -Infinity;
       if (mode === 'batch' && campaign.status === 'sending' && now - previous < REFRESH_MS) return;

@@ -685,6 +685,59 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
+  it.each([false, true])(
+    'updates completed campaign counts for a late acceptance after yielding: %s',
+    async (yieldAfterReceipt) => {
+      const { id } = await sendingCampaign(1);
+      const contacted = Promise.withResolvers<void>();
+      const reply = Promise.withResolvers<{ providerMessageId: string }>();
+      const elapsed = vi.spyOn(performance, 'now').mockReturnValue(0);
+      const receipt = { providerMessageId: 'late-completed-campaign-receipt' };
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        calls.push({ ...message });
+        contacted.resolve();
+        return reply.promise;
+      });
+      const batch = sender.sendBatch(storeId, id);
+      void batch.catch(() => undefined);
+      try {
+        await Promise.race([
+          contacted.promise,
+          batch.then(() => {
+            throw new Error('The batch ended before contacting the provider');
+          }),
+        ]);
+        await admin.pool.query(
+          'update contacts set is_blocked=true where store_id=$1 and phone=$2',
+          [storeId, calls[0]!.to],
+        );
+        clockNow = new Date(noon.getTime() + 6 * MINUTE);
+        await sender.sendBatch(storeId, id);
+        expect(await campaigns.get(storeId, id)).toMatchObject({
+          status: 'sent',
+          counts: { sent: 0, failed: 1 },
+        });
+
+        if (yieldAfterReceipt) elapsed.mockReturnValue(16 * 1000);
+        reply.resolve(receipt);
+        expect(await batch).toEqual(yieldAfterReceipt ? clockNow : null);
+        expect(await campaigns.get(storeId, id)).toMatchObject({
+          status: 'sent',
+          counts: { sent: 1, failed: 0 },
+        });
+        expect(calls).toHaveLength(1);
+        expect(await settlementRows(id)).toEqual([
+          { kind: 'release', quantity_delta: 1 },
+          { kind: 'charge', quantity_delta: -1 },
+        ]);
+      } finally {
+        reply.resolve(receipt);
+        await batch.catch(() => undefined);
+        elapsed.mockRestore();
+      }
+    },
+  );
+
   it('settles a cancelled in-flight refusal without requeueing the recipient', async () => {
     const { id } = await sendingCampaign(1);
     const contacted = Promise.withResolvers<void>();
