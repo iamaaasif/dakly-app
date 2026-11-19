@@ -38,6 +38,10 @@ export const createAutomationSchema = z.strictObject({
 export const changeAutomationSchema = createAutomationSchema
   .partial()
   .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
+export type AutomationTriggerPreview = {
+  items: { id: string; contactId: string; occurredAt: string }[];
+};
+
 export const automationListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),

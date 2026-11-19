@@ -255,6 +255,31 @@ export class ContactsRepository {
     return Boolean(changed);
   }
 
+  birthdayContactIds(
+    storeId: string,
+    birthday: { month: number; days: number[] },
+    after: string | null,
+    limit: number,
+  ) {
+    return this.database.forStore(storeId, async (tx) => {
+      const rows = await tx
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            eq(contacts.birthdayMonth, birthday.month),
+            inArray(contacts.birthdayDay, birthday.days),
+            isNull(contacts.deletedAt),
+            after ? gt(contacts.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(contacts.id))
+        .limit(limit);
+      return rows.map(({ id }) => id);
+    });
+  }
+
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -338,14 +363,18 @@ export class ContactsRepository {
   async listIdsMatching(
     storeId: string,
     rules: SegmentRules,
-    page: { cursor?: string; limit: number },
+    page: { cursor?: string; limit: number; contactIds?: string[] },
   ): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: contacts.id })
         .from(contacts)
         .where(
-          and(matching(storeId, rules), page.cursor ? gt(contacts.id, page.cursor) : undefined),
+          and(
+            matching(storeId, rules),
+            page.cursor ? gt(contacts.id, page.cursor) : undefined,
+            page.contactIds ? inArray(contacts.id, page.contactIds) : undefined,
+          ),
         )
         .orderBy(asc(contacts.id))
         .limit(page.limit),

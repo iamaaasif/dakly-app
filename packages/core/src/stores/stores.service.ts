@@ -56,6 +56,10 @@ export class StoresService {
     return this.maintenance.maintenanceStoreIds(after, limit);
   }
 
+  maintenanceStores(after: string | null, limit: number) {
+    return this.maintenance.maintenanceStores(after, limit);
+  }
+
   async customerInactivityDays(storeId: string) {
     const days = await this.repository.customerInactivityDays(storeId);
     if (days === undefined) throw storeError('STORE_NOT_FOUND');
