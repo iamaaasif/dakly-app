@@ -80,7 +80,10 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
             variant="secondary"
             loading={status.isPending}
             disabled={duplicate.isPending}
-            onClick={() => status.mutate({ id: workflow.id, action: active ? 'pause' : 'enable' })}
+            onClick={() => {
+              duplicate.reset();
+              status.mutate({ id: workflow.id, action: active ? 'pause' : 'enable' });
+            }}
           >
             {active ? 'Disable' : 'Enable'}
           </Button>
@@ -91,9 +94,16 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
 
         <WorkflowMenu
           workflow={workflow}
-          duplicate={duplicate}
           disabled={status.isPending || duplicate.isPending}
-          onDelete={() => setConfirm(true)}
+          onDuplicate={() => {
+            status.reset();
+            duplicate.mutate(workflow);
+          }}
+          onDelete={() => {
+            status.reset();
+            duplicate.reset();
+            setConfirm(true);
+          }}
         />
       </div>
       {error && (
@@ -108,13 +118,13 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
 
 function WorkflowMenu({
   workflow,
-  duplicate,
   disabled,
+  onDuplicate,
   onDelete,
 }: {
   workflow: AutomationListItem;
-  duplicate: ReturnType<typeof useDuplicateAutomation>;
   disabled: boolean;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -129,7 +139,7 @@ function WorkflowMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem disabled={disabled} onSelect={() => duplicate.mutate(workflow)}>
+        <DropdownMenuItem disabled={disabled} onSelect={onDuplicate}>
           Duplicate
         </DropdownMenuItem>
         <DropdownMenuItem disabled={disabled} onSelect={onDelete}>
