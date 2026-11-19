@@ -64,6 +64,7 @@ function campaignSends(tx: Transaction, window: SendWindow) {
   const { dispatch, excludeCampaignRecipientId, includeCommittedFuture } = window;
   const live = dispatch || includeCommittedFuture;
   const pending = eq(campaignRecipients.status, 'sending');
+  const liveClaim = live ? pending : undefined;
   const uncertain = and(
     eq(campaignRecipients.status, 'failed'),
     eq(campaignRecipients.errorCode, 'outcome_unknown'),
@@ -75,10 +76,10 @@ function campaignSends(tx: Transaction, window: SendWindow) {
     .select({
       contactId: campaignRecipients.contactId,
       channel: campaigns.channel,
-      sentAt:
-        sql<Date | null>`case when ${claimed} then ${dispatchStartedAt} else ${acceptedAt} end`.mapWith(
-          campaignRecipients.sentAt,
-        ),
+      sentAt: sql<Date | null>`case when ${liveClaim ?? sql`false`} then null
+          when ${claimed} then ${dispatchStartedAt} else ${acceptedAt} end`.mapWith(
+        campaignRecipients.sentAt,
+      ),
     })
     .from(campaignRecipients)
     .innerJoin(
@@ -96,7 +97,7 @@ function campaignSends(tx: Transaction, window: SendWindow) {
           ? ne(campaignRecipients.id, excludeCampaignRecipientId)
           : undefined,
         or(
-          live ? pending : undefined,
+          liveClaim,
           and(
             claimed,
             gt(dispatchStartedAt, after),

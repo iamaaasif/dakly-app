@@ -1257,7 +1257,7 @@ describe('Campaign sender (Postgres)', () => {
       expect(await settlementRows(id)).toEqual(charged);
     });
 
-    it('never queues a resend again when messaging refuses it', async () => {
+    it('keeps the unknown outcome without resending after the frozen phone changes', async () => {
       const { id, phones } = await unknownFirstSend();
       await admin.pool.query(
         "update contacts set phone='01999000002' where store_id=$1 and phone=$2",
@@ -1268,6 +1268,24 @@ describe('Campaign sender (Postgres)', () => {
       expect(await sender.sendBatch(storeId, id)).toBeNull();
 
       expect(calls).toHaveLength(1);
+      expect(await outcome(id)).toEqual([
+        { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+      ]);
+      expect(await settlementRows(id)).toEqual(charged);
+    });
+
+    it('does not queue another attempt when the provider refuses an expired claim’s retry', async () => {
+      const { id } = await unknownFirstSend();
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        calls.push({ ...message });
+        throw new SmsSendRefused();
+      });
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+      expect(calls).toHaveLength(2);
+      expect(calls[1]?.idempotencyKey).toBe(calls[0]?.idempotencyKey);
       expect(await outcome(id)).toEqual([
         { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
       ]);

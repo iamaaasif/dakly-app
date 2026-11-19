@@ -79,7 +79,7 @@ async function campaignSend(
   const campaignId = await campaign(storeId, category);
   const recipientId = randomUUID();
   await admin.pool.query(
-    'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,claimed_at) values($1,$2,$3,$4,$5,$6,$7)',
+    'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,claimed_at,dispatch_started_at) values($1,$2,$3,$4,$5,$6,$7,$7)',
     [recipientId, storeId, campaignId, contactId, status, sentAt, claimedAt],
   );
   return recipientId;
@@ -320,6 +320,13 @@ describe('SendPolicyService (Postgres)', () => {
   it('counts a recipient still in sending as a send now', async () => {
     const contactId = await consentedContact(storeA);
     await campaignSend(storeA, contactId, null, { status: 'sending' });
+
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+  });
+
+  it('reserves a live cap slot for a campaign claim older than a day', async () => {
+    const contactId = await consentedContact(storeA);
+    await campaignSend(storeA, contactId, null, { status: 'sending', claimedAt: hoursBefore(48) });
 
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
   });
