@@ -21,12 +21,14 @@ export type NotifyInput = {
   type: string;
   category: NotificationCategory;
   dedupeKey: string;
-  recipientPermission: Permission;
   title: string;
   body?: string;
   actionUrl?: string;
   priority?: number;
-};
+} & (
+  | { recipientPermission: Permission; assigneeUserId?: never }
+  | { recipientPermission?: never; assigneeUserId: string | null }
+);
 
 type StatusChange = 'seen' | 'done' | 'snoozed';
 
@@ -50,9 +52,17 @@ export class NotificationsService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async notify(storeId: string, { recipientPermission, ...notification }: NotifyInput) {
+  async notify(
+    storeId: string,
+    { recipientPermission, assigneeUserId, ...notification }: NotifyInput,
+  ) {
     await this.transaction.run(storeId, async () => {
-      const userIds = await this.team.userIdsWithPermission(storeId, recipientPermission);
+      const userIds =
+        recipientPermission !== undefined
+          ? await this.team.userIdsWithPermission(storeId, recipientPermission)
+          : [await this.team.inboxNotificationRecipient(storeId, assigneeUserId)].filter(
+              (id) => id != null,
+            );
       if (!userIds.length) return;
       const created = await this.repository.insertForUsers(storeId, userIds, notification);
       const occurredAt = this.clock.now().toISOString();
