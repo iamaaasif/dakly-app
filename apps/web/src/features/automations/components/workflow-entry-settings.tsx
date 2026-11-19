@@ -9,13 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { removesOwnTag, type SettingsInput } from '../workflow-settings-form';
 
 const exitLabels = {
-  placed_order: 'Customer places an order',
-  order_confirmed: 'Order is confirmed',
-  order_paid: 'Order is paid',
-  order_cancelled: 'Order is cancelled',
+  placed_order: 'Customer places an order (needs order exits)',
+  order_confirmed: 'Order is confirmed (needs order exits)',
+  order_paid: 'Order is paid (needs order exits)',
+  order_cancelled: 'Order is cancelled (needs order exits)',
   got_tag: 'Customer receives a tag',
   tapped_link: 'Link tapped (needs workflow link tracking)',
-  replied: 'Customer replies',
+  replied: 'Customer replies (needs chat exits)',
 } satisfies Record<AutomationGraph['exitConditions'][number]['kind'], string>;
 
 const reEntryLabels = {
@@ -24,7 +24,6 @@ const reEntryLabels = {
   every_time: 'Every time',
 } satisfies Record<AutomationGraph['reEntry']['rule'], string>;
 
-type ExitKind = AutomationGraph['exitConditions'][number]['kind'];
 type ReEntryRule = AutomationGraph['reEntry']['rule'];
 
 function RuleSelect<Value extends string>({
@@ -36,7 +35,7 @@ function RuleSelect<Value extends string>({
 }: {
   name: FieldPath<SettingsInput>;
   label: string;
-  value: Value | '';
+  value: Value;
   labels: Record<Value, string>;
   onChange: (value: Value) => void;
 }) {
@@ -45,7 +44,7 @@ function RuleSelect<Value extends string>({
       {(field) => (
         <Select value={value} onValueChange={onChange}>
           <SelectTrigger {...field}>
-            <SelectValue placeholder="Choose a rule" />
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {Object.entries<string>(labels).map(([key, label]) => (
@@ -126,13 +125,9 @@ function ExitRules() {
         </div>
       ))}
       {fields.length < MAX_EXIT_CONDITIONS && (
-        <RuleSelect
-          name="graph.exitConditions"
-          label="Add an exit rule"
-          value=""
-          labels={exitLabels}
-          onChange={(kind: ExitKind) => append(kind === 'got_tag' ? { kind, tag: '' } : { kind })}
-        />
+        <Button variant="secondary" onClick={() => append({ kind: 'got_tag', tag: '' })}>
+          Add tag exit rule
+        </Button>
       )}
     </div>
   );

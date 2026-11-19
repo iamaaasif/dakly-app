@@ -13,49 +13,78 @@ import { Textarea } from '@dakly/ui/textarea';
 import { channelLabels } from '../automation-labels';
 import type { SettingsInput } from '../workflow-settings-form';
 
-const delayField = {
-  duration: 'minutes',
-  event: 'timeoutMinutes',
-  window_closing: 'minutesBefore',
-  weekday: 'time',
-  time_of_day: 'time',
-} as const;
+type WaitStep = Extract<AutomationStep, { kind: 'wait' }>;
+type SendStep = Extract<AutomationStep, { kind: 'send' }>;
+type UpdateStep = (step: AutomationStep) => void;
 
-type Wait = Extract<AutomationStep, { kind: 'wait' }>['wait'];
+function delayValue(wait: WaitStep['wait']) {
+  if ('time' in wait) return { field: 'time', value: wait.time };
+  if (wait.until === 'duration') return { field: 'minutes', value: wait.minutes };
+  if (wait.until === 'event') return { field: 'timeoutMinutes', value: wait.timeoutMinutes };
+  return { field: 'minutesBefore', value: wait.minutesBefore };
+}
 
-function DelayFields({ stepKey, wait }: { stepKey: string; wait: Wait }) {
-  const { register } = useFormContext<SettingsInput>();
-  const field = delayField[wait.until];
-  const name = `graph.steps.${stepKey}.wait.${field}` as const;
+function DelayFields({
+  stepKey,
+  step,
+  update,
+}: {
+  stepKey: string;
+  step: WaitStep;
+  update: UpdateStep;
+}) {
+  const { field, value } = delayValue(step.wait);
   const isTime = field === 'time';
   return (
-    <FormField name={name} label={isTime ? 'Time of day' : 'Delay in minutes'}>
+    <FormField
+      name={`graph.steps.${stepKey}.wait.${field}`}
+      label={isTime ? 'Time of day' : 'Delay in minutes'}
+    >
       {(control) => (
         <Input
           {...control}
           type={isTime ? 'time' : 'number'}
-          {...register(name, { valueAsNumber: !isTime })}
+          value={Number.isNaN(value) ? '' : value}
+          onChange={({ target }) =>
+            update({
+              ...step,
+              wait: { ...step.wait, [field]: isTime ? target.value : target.valueAsNumber },
+            })
+          }
         />
       )}
     </FormField>
   );
 }
 
-type SendStep = Extract<AutomationStep, { kind: 'send' }>;
-
-function MessageFields({ stepKey, step }: { stepKey: string; step: SendStep }) {
-  const { register, setValue } = useFormContext<SettingsInput>();
-  const text = `graph.steps.${stepKey}.message.text` as const;
+function MessageFields({
+  stepKey,
+  step,
+  update,
+}: {
+  stepKey: string;
+  step: SendStep;
+  update: UpdateStep;
+}) {
   function moveUp(channel: SendStep['channels'][number], index: number) {
     const channels = [...step.channels];
     channels.splice(index, 1);
-    channels.splice(index - 1, 0, channel!);
-    setValue(`graph.steps.${stepKey}.channels`, channels, { shouldDirty: true });
+    channels.splice(index - 1, 0, channel);
+    update({ ...step, channels });
   }
   return (
     <div className="space-y-3">
-      <FormField name={text} label="Message text">
-        {(control) => <Textarea {...control} {...register(text)} rows={3} />}
+      <FormField name={`graph.steps.${stepKey}.message.text`} label="Message text">
+        {(control) => (
+          <Textarea
+            {...control}
+            value={step.message.text}
+            rows={3}
+            onChange={({ target }) =>
+              update({ ...step, message: { ...step.message, text: target.value } })
+            }
+          />
+        )}
       </FormField>
       <fieldset>
         <legend className="text-sm font-medium">Channel order</legend>
@@ -78,9 +107,9 @@ function MessageFields({ stepKey, step }: { stepKey: string; step: SendStep }) {
 
 function orderedEditableSteps(graph: Pick<AutomationGraph, 'firstStepKey' | 'steps'>) {
   const seen = new Set<string>();
-  const steps: [string, AutomationStep][] = [];
+  const steps: [string, WaitStep | SendStep][] = [];
   function visit(key: string) {
-    if (seen.has(key)) return;
+    if (seen.has(key) || !Object.hasOwn(graph.steps, key)) return;
     seen.add(key);
     const step = graph.steps[key]!;
     if (step.kind === 'wait' || step.kind === 'send') steps.push([key, step]);
@@ -91,10 +120,22 @@ function orderedEditableSteps(graph: Pick<AutomationGraph, 'firstStepKey' | 'ste
 }
 
 export function WorkflowStepSettings() {
-  const { control } = useFormContext<SettingsInput>();
+  const { control, getValues, setValue, formState } = useFormContext<SettingsInput>();
   const graph = useWatch({ control, name: 'graph' });
   const steps = orderedEditableSteps(graph);
   if (!steps.length) return null;
+
+  function update(key: string, step: AutomationStep) {
+    // Step keys belong to the graph, including keys React Hook Form reserves in field paths.
+    setValue(
+      'graph.steps',
+      { ...getValues('graph.steps'), [key]: step },
+      {
+        shouldDirty: true,
+        shouldValidate: formState.isSubmitted,
+      },
+    );
+  }
   return (
     <section className="space-y-4" aria-label="Workflow steps">
       {steps.map(([key, step], index) => (
@@ -102,8 +143,11 @@ export function WorkflowStepSettings() {
           <h2 className="font-semibold">
             {index + 1}. {step.kind === 'wait' ? 'Wait' : 'Send a message'}
           </h2>
-          {step.kind === 'wait' && <DelayFields stepKey={key} wait={step.wait} />}
-          {step.kind === 'send' && <MessageFields stepKey={key} step={step} />}
+          {step.kind === 'wait' ? (
+            <DelayFields stepKey={key} step={step} update={(value) => update(key, value)} />
+          ) : (
+            <MessageFields stepKey={key} step={step} update={(value) => update(key, value)} />
+          )}
         </div>
       ))}
     </section>

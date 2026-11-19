@@ -44,8 +44,7 @@ test('changes a ready template delay and publishes the workflow', async ({
     await page.getByRole('combobox', { name: 'Re-entry' }).click();
     await page.getByRole('option', { name: 'Once every few days' }).click();
     await page.getByLabel('Days between entries').fill('15');
-    await page.getByRole('combobox', { name: 'Add an exit rule' }).click();
-    await page.getByRole('option', { name: 'Customer receives a tag' }).click();
+    await page.getByRole('button', { name: 'Add tag exit rule' }).click();
     await page.getByLabel('Exit tag').fill('vip');
     await page.getByRole('button', { name: 'Move SMS up' }).click();
     await page.getByRole('button', { name: 'Move SMS up' }).click();
