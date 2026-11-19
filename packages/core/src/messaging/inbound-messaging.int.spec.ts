@@ -257,15 +257,16 @@ it('preserves two Page identities for one contact and keeps the newest inbound w
     sentAt: newest,
   });
   const [firstIdentity] = (
-    await admin.pool.query<{ contact_id: string }>(
-      'select contact_id from contact_identities where store_id = $1 and channel_connection_id = $2',
+    await admin.pool.query<{ id: string; contact_id: string }>(
+      'select id, contact_id from contact_identities where store_id = $1 and channel_connection_id = $2',
       [storeId, firstPage],
     )
   ).rows;
+  const secondIdentityId = randomUUID();
   await admin.pool.query(
     `insert into contact_identities (id, store_id, contact_id, channel_connection_id, channel, external_id)
      values ($1, $2, $3, $4, 'messenger', 'sender-test')`,
-    [randomUUID(), storeId, firstIdentity?.contact_id, secondPage],
+    [secondIdentityId, storeId, firstIdentity?.contact_id, secondPage],
   );
   const outboundAt = new Date(newest.getTime() + MINUTE_MS);
   await admin.pool.query(
@@ -298,6 +299,15 @@ it('preserves two Page identities for one contact and keeps the newest inbound w
   expect(identities.rows.map(({ channel_connection_id }) => channel_connection_id).sort()).toEqual(
     [firstPage, secondPage].sort(),
   );
+  const inboundMessages = await admin.pool.query(
+    'select body, sender_identity_id from messages where store_id = $1 order by body collate "C"',
+    [storeId],
+  );
+  expect(inboundMessages.rows).toEqual([
+    { body: 'newest', sender_identity_id: firstIdentity?.id },
+    { body: 'old', sender_identity_id: firstIdentity?.id },
+    { body: 'দাম কত?', sender_identity_id: secondIdentityId },
+  ]);
 });
 
 it('makes a new contact and conversation when a deleted sender writes again', async () => {
@@ -372,6 +382,16 @@ it('makes a new contact and conversation when a deleted sender writes again', as
       { contact_id: active.id, unread_count: 2 },
     ]),
   );
+  const replacement = identities.find(({ contact_id }) => contact_id === active.id);
+  const stored = await admin.pool.query(
+    'select external_id, sender_identity_id from messages where store_id = $1 order by external_id',
+    [storeId],
+  );
+  expect(stored.rows).toEqual([
+    { external_id: 'after-delete-1', sender_identity_id: replacement?.id },
+    { external_id: 'after-delete-2', sender_identity_id: replacement?.id },
+    { external_id: 'before-delete', sender_identity_id: originalIdentity!.id },
+  ]);
 });
 
 it('claims one identity even for concurrent contact service callers', async () => {
@@ -387,13 +407,13 @@ it('claims one identity even for concurrent contact service callers', async () =
     contacts.findOrCreateByIdentity(storeId, identity),
     contacts.findOrCreateByIdentity(storeId, identity),
   ]);
-  expect(ids[0]).toEqual(expect.any(String));
-  expect(ids[1]).toBe(ids[0]);
+  expect(ids[0]).toEqual({ id: expect.any(String), contactId: expect.any(String) });
+  expect(ids[1]).toEqual(ids[0]);
   const { rows } = await admin.pool.query(
     'select id, name, kind from contacts where store_id = $1',
     [storeId],
   );
-  expect(rows).toEqual([{ id: ids[0], name: null, kind: 'chat_only' }]);
+  expect(rows).toEqual([{ id: ids[0].contactId, name: null, kind: 'chat_only' }]);
 });
 
 it('does not recreate a deleted contact when an in-flight message is retried', async () => {

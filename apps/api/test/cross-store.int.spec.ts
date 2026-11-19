@@ -2251,11 +2251,18 @@ fixture('GET /conversations/:conversationId/messages', async () => {
   const own = await seedConversation(b);
   const [newest, older] = [randomUUID(), randomUUID()].sort();
   await success(b, 'GET', `${url(own)}?cursor=0000-01-01T00:00:00Z_${newest}`, 400);
+  const senderIdentity = randomUUID();
   await f.admin.pool.query(
-    `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at)
-     values($1,$2,$3,'in','customer','text','দাম কত?','received','2026-11-18T10:00:00.123456Z'),
-     ($4,$2,$3,'in','customer','text','সাইজ কত?','received','2026-11-18T10:00:00.123123Z')`,
-    [newest, b.id, own, older],
+    `insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id)
+     select $1::uuid,store_id,contact_id,channel_connection_id,channel,$1::text
+     from conversations where store_id=$2 and id=$3`,
+    [senderIdentity, b.id, own],
+  );
+  await f.admin.pool.query(
+    `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at,sender_identity_id)
+     values($1,$2,$3,'in','customer','text','দাম কত?','received','2026-11-18T10:00:00.123456Z',$5),
+     ($4,$2,$3,'in','customer','text','সাইজ কত?','received','2026-11-18T10:00:00.123123Z',$5)`,
+    [newest, b.id, own, older, senderIdentity],
   );
   const page = (await success(b, 'GET', `${url(own)}?limit=1`, 200)).json();
   expect(page.items).toMatchObject([

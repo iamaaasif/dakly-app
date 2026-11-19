@@ -156,6 +156,7 @@ export const messages = pgTable(
     mediaText: text('media_text'),
     externalId: text('external_id'),
     idempotencyKey: text('idempotency_key'),
+    senderIdentityId: uuid('sender_identity_id'),
     recipientIdentityId: uuid('recipient_identity_id'),
     sendCategory: text('send_category', { enum: messageSendCategories }),
     status: text('status', { enum: messageStatuses }).notNull(),
@@ -182,6 +183,14 @@ export const messages = pgTable(
       foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
     }),
     foreignKey({
+      name: 'messages_sender_identity_store_fk',
+      columns: [table.storeId, table.senderIdentityId],
+      foreignColumns: [contactIdentities.storeId, contactIdentities.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
+    foreignKey({
       name: 'messages_recipient_identity_store_fk',
       columns: [table.storeId, table.recipientIdentityId],
       foreignColumns: [contactIdentities.storeId, contactIdentities.id] as [
@@ -205,11 +214,18 @@ export const messages = pgTable(
       .on(table.storeId, table.ratedAt)
       .where(sql`${table.aiRating} is not null`),
     index('messages_author_user_id_idx').on(table.authorUserId),
+    index('messages_sender_identity_idx')
+      .on(table.storeId, table.senderIdentityId)
+      .where(sql`${table.senderIdentityId} is not null`),
     index('messages_recipient_identity_idx')
       .on(table.storeId, table.recipientIdentityId)
       .where(sql`${table.recipientIdentityId} is not null`),
     index('messages_rated_by_user_id_idx').on(table.ratedByUserId),
     check('messages_direction', isOneOf(table.direction, messageDirections)),
+    check(
+      'messages_inbound_sender',
+      sql`${table.direction} <> 'in' or ${table.senderIdentityId} is not null`,
+    ),
     check('messages_author_type', isOneOf(table.authorType, messageAuthorTypes)),
     check('messages_kind', isOneOf(table.kind, messageKinds)),
     check('messages_status', isOneOf(table.status, messageStatuses)),
