@@ -73,10 +73,11 @@ export class PaymentCallbacksService {
     let page = await this.repository.listReceivedBefore(before);
     while (page.length) {
       for (const { id, receivedAt, attemptIds } of page) {
+        const expired = receivedAt.getTime() < expiredBefore;
         for (const attemptId of attemptIds) {
-          if (receivedAt.getTime() < expiredBefore)
-            await this.repository.finish(id, attemptId, 'failed', now);
-          else await this.enqueue(id, attemptId);
+          await (expired
+            ? this.repository.finish(id, attemptId, 'failed', now)
+            : this.enqueue(id, attemptId));
         }
       }
       page = await this.repository.listReceivedBefore(before, page.at(-1)?.id);
