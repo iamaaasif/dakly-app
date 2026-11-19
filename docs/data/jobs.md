@@ -64,11 +64,11 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                                       | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | ------------------------------------------------ | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Consent grant or tag added for an active trigger | `storeId`, `automationId` and the event details      | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
-| `continue-automation-run` | The sweep, or the step before it                 | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                       | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
+| ------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `start-automation-run`    | Consent grant or tag added       | the event, including `storeId`                       | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
+| `continue-automation-run` | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`     | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
 
 ## sync
 

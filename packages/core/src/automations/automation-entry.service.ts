@@ -1,6 +1,4 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { z } from 'zod';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
@@ -13,19 +11,16 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { QUEUES } from '../platform/queue/queues';
-import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
+import { DAY_MS } from '../platform/time';
 import { AutomationEntryRepository } from './automation-entry.repository';
 
-export const START_AUTOMATION_RUN = 'start-automation-run';
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
-type TriggerEvent = z.infer<typeof automationConsentEvent | typeof automationTagEvent>;
-
-export const startAutomationRunPayload = z.discriminatedUnion('type', [
-  automationConsentEvent.extend({ automationId: z.uuid() }),
-  automationTagEvent.extend({ automationId: z.uuid() }),
+export const automationTriggerEvent = z.discriminatedUnion('type', [
+  automationConsentEvent,
+  automationTagEvent,
 ]);
+type TriggerEvent = z.infer<typeof automationTriggerEvent>;
 
 @Injectable()
 export class AutomationEntryService {
@@ -34,26 +29,13 @@ export class AutomationEntryService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(Clock) private readonly clock: Clock,
-    @InjectQueue(QUEUES.workflow) private readonly queue: Queue,
   ) {}
 
-  async enqueue(event: TriggerEvent) {
+  async startMatching(event: TriggerEvent): Promise<void> {
     const key = triggerFor(event);
     if (!key) return;
     const workflows = await this.repository.activeWorkflows(event.storeId, key);
-    await this.queue.addBulk(
-      workflows.map(({ id: automationId }) => ({
-        name: START_AUTOMATION_RUN,
-        data: { ...event, automationId },
-        opts: {
-          jobId: `${START_AUTOMATION_RUN}-${automationId}-${event.id}`,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
-          removeOnComplete: { age: DAY_MS / 1000 },
-          removeOnFail: 100,
-        },
-      })),
-    );
+    for (const { id } of workflows) await this.start(id, event);
   }
 
   async start(automationId: string, event: TriggerEvent): Promise<void> {
@@ -93,7 +75,7 @@ export class AutomationEntryService {
   }
 }
 
-function triggerFor(event: TriggerEvent) {
+export function triggerFor(event: TriggerEvent) {
   if (event.type === 'contact.tag_added') return 'tag_added';
   if (event.payload.status === 'granted' && event.payload.source !== 'import')
     return 'consent_given';

@@ -17,6 +17,7 @@ import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS } from '../platform/time';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
+import { AutomationTriggerQueue } from './automation-trigger-queue.service';
 import { StartAutomationOnTagAdded } from './jobs/start-automation-on-tag-added.job';
 import { StartAutomationRunJob } from './jobs/start-automation-run.job';
 
@@ -87,10 +88,11 @@ describe('AutomationEntryService (Postgres)', () => {
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
+        AutomationTriggerQueue,
         { provide: Clock, useValue: { now: () => now } },
         {
-          provide: getQueueToken(QUEUES.workflow),
-          useValue: { addBulk: async (jobs: { data: unknown }[]) => queued.push(...jobs) },
+          provide: getQueueToken(QUEUES.transactional),
+          useValue: { add: async (_name: string, data: unknown) => queued.push({ data }) },
         },
       ],
     })(TestModule);
@@ -188,7 +190,7 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     expect(rows).toHaveLength(1);
     const [event] = rows;
-    await new StartAutomationOnTagAdded(entries).handle({
+    await new StartAutomationOnTagAdded(app.get(AutomationTriggerQueue)).handle({
       ...event,
       occurredAt: event.occurredAt.toISOString(),
     });
