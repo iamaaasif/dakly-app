@@ -10,15 +10,3 @@ export const postScheduledEventSchema = z.strictObject({
     scheduledFor: z.iso.datetime(),
   }),
 });
-
-const postResult = z.strictObject({ postId: z.uuid(), postTargetId: z.uuid() });
-
-export const postPublishedEventSchema = postScheduledEventSchema.extend({
-  type: z.literal('post.published'),
-  payload: postResult.extend({ externalPostId: z.string().min(1).nullable() }),
-});
-
-export const postFailedEventSchema = postScheduledEventSchema.extend({
-  type: z.literal('post.failed'),
-  payload: postResult.extend({ errorCode: z.string().min(1) }),
-});

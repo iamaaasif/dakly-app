@@ -22,6 +22,7 @@ export type MetaPublishingDriver = {
 };
 
 const messages = {
+  auth_error: 'Meta rejected the account token',
   rejected: 'Meta rejected the request',
   retryable: 'Meta asked to retry the request',
   unavailable: 'Meta did not confirm the result',

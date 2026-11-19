@@ -86,10 +86,22 @@ describe('MetaGraphPublishingDriver', () => {
     },
   );
 
+  it.each([
+    [400, 190],
+    [400, 459],
+    [401, null],
+  ])('reports a token rejection from HTTP %s and Graph code %s', async (status, code) => {
+    const body = code === null ? {} : { error: { code } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body, { status })));
+    await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+      code: 'auth_error',
+    });
+  });
+
   it('distinguishes a confirmed rejection from an unknown publishing result', async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ error: { code: 190 } }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ error: { code: 100 } }, { status: 400 }))
       .mockResolvedValueOnce(Response.json({ error: { code: 32 } }, { status: 400 }))
       .mockResolvedValueOnce(
         Response.json({ error: { code: 2, is_transient: true } }, { status: 408 }),

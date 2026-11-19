@@ -64,26 +64,6 @@ const examples: DaklyEvent[] = [
     },
   },
   {
-    type: 'post.published',
-    storeId,
-    occurredAt,
-    payload: {
-      postId: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
-      postTargetId: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
-      externalPostId: 'meta-post',
-    },
-  },
-  {
-    type: 'post.failed',
-    storeId,
-    occurredAt,
-    payload: {
-      postId: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
-      postTargetId: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
-      errorCode: 'POST_PROVIDER_REJECTED',
-    },
-  },
-  {
     type: 'stock.changed',
     storeId,
     occurredAt,

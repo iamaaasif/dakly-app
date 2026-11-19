@@ -29,6 +29,8 @@ const containerResult = z.object({
 
 function responseError(status: number, payload: unknown) {
   const error = errorResult.safeParse(payload).data?.error;
+  if (status === 401 || [190, 459].includes(error?.code ?? 0))
+    return new MetaPublishingError('auth_error');
   if (!error || status < 400 || status === 408 || status >= 500)
     return new MetaPublishingError('unavailable');
   const retryable = status === 429 || error.is_transient || retryableCodes.includes(error.code);
