@@ -1236,6 +1236,14 @@ for (const [method, action, status, start, expected] of [
       foreign = await prepare(a);
     const draft = { name: 'নতুন নাম', graph: { ...welcome, reEntry: { rule: 'every_time' } } };
     const payload = method === 'PATCH' || action === '/publish' ? draft : undefined;
+    if (action === '/publish') {
+      const previous = await f.row('automations', own);
+      await success(b, 'POST', `/automations/${own}/publish`, 409, {
+        name: 'Unready chat template',
+        graph: automationTemplates.chat_follow_up.graph,
+      });
+      expect(await f.row('automations', own)).toEqual(previous);
+    }
     const response = await success(b, method, `/automations/${own}${action}`, status, payload);
     if (action === '/publish') {
       const version = await f.row('automation_versions', response.json().publishedVersionId);
