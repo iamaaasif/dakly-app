@@ -20,6 +20,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
@@ -67,6 +68,7 @@ export class ContactsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
+    @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
   ) {}
 
   async create(
@@ -332,7 +334,8 @@ export class ContactsService {
   }
 
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
-    if (!(await this.removeContacts(storeId, [id])).length) throw contactError('CONTACT_NOT_FOUND');
+    if (!(await this.deletion.remove(storeId, [id])).length)
+      throw contactError('CONTACT_NOT_FOUND');
   }
 
   // The contacts an import added that nobody has edited since, locked until the caller's
@@ -346,19 +349,7 @@ export class ContactsService {
   }
 
   async removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
-    await this.removeContacts(storeId, ids);
-  }
-
-  private removeContacts(storeId: string, ids: string[]) {
-    return this.transaction.run(storeId, async () => {
-      const now = this.clock.now();
-      const removed = await this.contactsRepository.softDeleteAll(storeId, ids, now);
-      const event = { type: 'contact.deleted', storeId, occurredAt: now.toISOString() } as const;
-      await this.outbox.publishAll(
-        removed.map((contactId) => ({ ...event, payload: { contactId } })),
-      );
-      return removed;
-    });
+    await this.deletion.remove(storeId, ids);
   }
 
   // A deleted contact reads as undefined.
