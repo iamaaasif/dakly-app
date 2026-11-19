@@ -42,6 +42,19 @@ describe('campaign sending filters without RLS assistance', () => {
     await repository.startDueInStore(f.a, now);
     expect((await f.row('campaigns', campaignA)).status).toBe('sending');
 
+    const laterCampaign = randomUUID();
+    await f.connection.pool.query(
+      `insert into campaigns(id,store_id,name,channel,content,status,started_at)
+       values($1,$2,'পরের অফার','sms','{"text":"অফার"}','sending',$3)`,
+      [laterCampaign, f.a, new Date(now.getTime() + 1000)],
+    );
+    const routes = await f.connection.pool.query('select * from campaign_sending_stores(null,100)');
+    expect(routes.rows).toContainEqual({ store_id: f.a });
+    expect(routes.fields.map(({ name }) => name)).toEqual(['store_id']);
+    expect(await repository.listSendingStores(null, 100)).toContain(f.a);
+    expect(await repository.firstSending(f.a)).toBe(campaignA);
+    expect(await repository.firstSending(f.b)).toBeUndefined();
+
     expect(await repository.lockSending(f.b, campaignA)).toBeUndefined();
     expect(await repository.lockForFinish(f.b, campaignA)).toBeUndefined();
     expect(await repository.lockNextRecipient(f.b, campaignA, now)).toBeUndefined();

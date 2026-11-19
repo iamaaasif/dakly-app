@@ -9,7 +9,6 @@ import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { type Campaign, recipientsWhere, statusWhere } from './campaigns.repository';
 
-export type CampaignRef = { storeId: string; campaignId: string };
 export type SendingCampaign = Pick<Campaign, 'id' | 'content'> & {
   approvedAt: Date | null;
   shortLinkBase: string | null;
@@ -95,12 +94,23 @@ export class CampaignSendingRepository {
     });
   }
 
-  async listSending(after: string | null, limit: number): Promise<CampaignRef[]> {
-    const result = await this.global.execute<CampaignRef>(
-      sql`select store_id as "storeId", campaign_id as "campaignId"
-          from sending_campaigns(${after}::uuid, ${limit}::integer)`,
+  async listSendingStores(after: string | null, limit: number): Promise<string[]> {
+    const result = await this.global.execute<{ storeId: string }>(
+      sql`select store_id as "storeId" from campaign_sending_stores(${after}::uuid, ${limit}::integer)`,
     );
-    return result.rows;
+    return result.rows.map(({ storeId }) => storeId);
+  }
+
+  async firstSending(storeId: string): Promise<string | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(and(eq(campaigns.storeId, storeId), sql`${campaigns.status} = 'sending'`))
+        .orderBy(asc(campaigns.startedAt), asc(campaigns.id))
+        .limit(1),
+    );
+    return row?.id;
   }
 
   // A share lock: a pause, cancel or finish waits until this claim commits, and the claim after

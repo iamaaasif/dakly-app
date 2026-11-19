@@ -7,17 +7,18 @@ CREATE INDEX "campaigns_sending_idx" ON "campaigns" USING btree ("store_id","sta
 -- orders every store's campaigns by when they started.
 UPDATE campaigns SET started_at = approved_at
   WHERE status IN ('sending', 'paused', 'sent') AND started_at IS NULL;--> statement-breakpoint
--- The batch scheduler sees one sending campaign per store. Work is done under store RLS.
-CREATE FUNCTION sending_campaigns(after_store uuid, store_limit integer)
-  RETURNS TABLE(store_id uuid, campaign_id uuid)
+-- The batch scheduler sees only store IDs. Each campaign read runs under store RLS.
+CREATE FUNCTION campaign_sending_stores(after_store uuid, store_limit integer)
+  RETURNS TABLE(store_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
-  SELECT DISTINCT ON (c.store_id) c.store_id, c.id
+  SELECT c.store_id
   FROM public.campaigns c
   WHERE c.status = 'sending'
     AND (after_store IS NULL OR c.store_id > after_store)
-  ORDER BY c.store_id, c.started_at, c.id
+  GROUP BY c.store_id
+  ORDER BY c.store_id
   LIMIT greatest(0, least(coalesce(store_limit, 0), 100))
 $$;--> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION sending_campaigns(uuid, integer) FROM PUBLIC;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION sending_campaigns(uuid, integer) TO dakly_app;
+REVOKE EXECUTE ON FUNCTION campaign_sending_stores(uuid, integer) FROM PUBLIC;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION campaign_sending_stores(uuid, integer) TO dakly_app;
