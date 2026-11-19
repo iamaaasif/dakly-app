@@ -85,11 +85,14 @@ export class LinksService {
     actor: AuditEntry['actor'],
     base = this.shortLinkBase(),
   ): Promise<TrackedLink> {
-    const existing = await this.repository.findOptOutLinkFor(storeId, link);
-    if (existing)
-      return { id: existing.id, code: existing.code, url: this.optOutUrl(existing.code, base) };
-    const [created] = await this.create(storeId, [{ ...link, kind: 'sms_opt_out' }], actor, base);
-    return created!;
+    return this.transaction.run(storeId, async () => {
+      await this.repository.lockOptOutSource(storeId, link);
+      const existing = await this.repository.findOptOutLinkFor(storeId, link);
+      if (existing)
+        return { id: existing.id, code: existing.code, url: this.optOutUrl(existing.code, base) };
+      const [created] = await this.create(storeId, [{ ...link, kind: 'sms_opt_out' }], actor, base);
+      return created!;
+    });
   }
 
   optOutUrl(code: string, base = this.shortLinkBase()): string {

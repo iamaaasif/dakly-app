@@ -199,6 +199,22 @@ describe('tracked links over Fastify', () => {
     expect(await visits(stop.id)).toEqual([]);
   });
 
+  it('reuses one opt-out link when campaign attempts overlap', async () => {
+    const contactId = await contact(storeA);
+    const source = { sourceType: 'campaign', sourceId: campaignId, contactId } as const;
+    const created = await Promise.all(
+      Array.from({ length: 5 }, () => links.optOutLink(storeA, source, system)),
+    );
+
+    expect(new Set(created.map(({ url }) => url)).size).toBe(1);
+    expect(await links.optOutLink(storeA, source, system)).toEqual(created[0]);
+    const linksForContact = await admin.pool.query(
+      "select id from tracked_links where store_id=$1 and contact_id=$2 and kind='sms_opt_out'",
+      [storeA, contactId],
+    );
+    expect(linksForContact.rows).toEqual([{ id: created[0]!.id }]);
+  });
+
   it.each(['granted', 'not_answered'] as const)(
     'withdraws SMS consent once from %s when the opt-out is tapped twice',
     async (status) => {

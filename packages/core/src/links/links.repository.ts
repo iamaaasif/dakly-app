@@ -98,6 +98,13 @@ export class LinksRepository {
     return link;
   }
 
+  async lockOptOutSource(storeId: string, { sourceType, sourceId, contactId }: OptOutLink) {
+    const key = `opt-out:${storeId}:${sourceType}:${sourceId}:${contactId}`;
+    await this.tenant.inTransaction(storeId, (tx) =>
+      tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`),
+    );
+  }
+
   async findOptOutLinkFor(
     storeId: string,
     { sourceType, sourceId, contactId }: OptOutLink,
