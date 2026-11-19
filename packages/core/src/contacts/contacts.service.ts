@@ -13,7 +13,7 @@ import type {
 } from '@dakly/contracts/contacts';
 import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
-import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
+import { maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -22,11 +22,11 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
+import { ContactPhoneAccess } from './contact-phone-access.service';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
   type Contact,
-  type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
   type TagChange,
@@ -39,7 +39,6 @@ import {
 import { OrderContactsRepository } from './order-contacts.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
-// Writes take the actor (services.md); nothing records it for contacts yet.
 type Actor = AuditEntry['actor'];
 
 export type ImportedContact = {
@@ -69,14 +68,16 @@ export class ContactsService {
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
     @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
+    @Inject(ContactPhoneAccess) private readonly phoneAccess: ContactPhoneAccess,
   ) {}
 
   async create(
     storeId: string,
     input: CreateContactInput,
     access: Access,
-    _actor: Actor,
+    actor: Actor,
   ): Promise<ContactResponse> {
+    await this.phoneAccess.checkLimit(storeId, 'write', access.seeFullPhone, actor);
     const contact = await this.transaction.run(storeId, async () => {
       // A staff add is an intentional customer under the glossary, whatever its orders.
       const created = await this.contactsRepository.insert(storeId, {
@@ -122,12 +123,12 @@ export class ContactsService {
     storeId: string,
     query: ContactListQuery,
     access: Access,
+    actor: Extract<Actor, { kind: 'user' }>,
   ): Promise<ContactListResponse> {
     const { search, ...filter } = query;
-    const rows = await this.contactsRepository.list(storeId, {
-      ...filter,
-      ...searchFilter(search, access.seeFullPhone),
-    });
+    const match = await this.phoneAccess.searchFilter(storeId, search, access.seeFullPhone, actor);
+    if (!match) return { items: [], nextCursor: null };
+    const rows = await this.contactsRepository.list(storeId, { ...filter, ...match });
     const items = rows
       .slice(0, query.limit)
       .map((contact) => toContactResponse(contact, access.seeFullPhone));
@@ -228,6 +229,9 @@ export class ContactsService {
     change: UpdateContactInput,
     editor: { access: Access; actor: Actor },
   ): Promise<ContactResponse> {
+    const { access, actor } = editor;
+    if (change.phone)
+      await this.phoneAccess.checkLimit(storeId, 'write', access.seeFullPhone, actor);
     // A typed phone proves nothing, so an edited phone is no longer the verified WhatsApp sender.
     const updated = await this.contactsRepository.update(storeId, id, {
       ...change,
@@ -235,7 +239,7 @@ export class ContactsService {
     });
     if (updated === 'phone_taken') throw contactError('CONTACT_PHONE_TAKEN');
     if (!updated) throw contactError('CONTACT_NOT_FOUND');
-    return toContactResponse(updated, editor.access.seeFullPhone);
+    return toContactResponse(updated, access.seeFullPhone);
   }
 
   findTags(storeId: string, contactId: string): Promise<string[]> {
@@ -380,21 +384,6 @@ export class ContactsService {
 }
 
 export type { TagChange } from './contacts.repository';
-
-// A partial number is a prefix search only for members who see full phones. Anyone may find a
-// contact by its exact full number; the result stays masked without the flag.
-function searchFilter(
-  search: string | undefined,
-  seeFullPhone: boolean,
-): Pick<ContactFilter, 'name' | 'phone' | 'phonePrefix'> {
-  if (!search) return {};
-  const fullPhone = bdMobileSchema.safeParse(search);
-  if (fullPhone.success) return { phone: fullPhone.data };
-  if (/^\d+$/.test(search)) return seeFullPhone ? { phonePrefix: search } : { phone: search };
-  // The trigram name index cannot narrow a search shorter than one trigram.
-  if (search.length < 3) throw contactError('CONTACT_SEARCH_TOO_SHORT');
-  return { name: search };
-}
 
 function importOutcome(
   contact: ImportMatch,

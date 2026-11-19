@@ -2691,6 +2691,45 @@ describe('every production shop route isolates its data', () => {
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
   });
+  it('returns the phone limit error to a masked member on contact search, create and edit', async () => {
+    const shop = await f.shop();
+    await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+      shop.membership,
+    ]);
+    const number = phone();
+    const input = { name: 'রিনা', phone: number };
+    const { id } = (await success(shop, 'POST', '/contacts', 201, input)).json();
+    const search = `/contacts?search=${number}`;
+    const cache = app.get(ValkeyClient).connection;
+    const lookup = `contacts:phone-lookup:${shop.id}:${shop.member.id}`;
+    const write = `contacts:phone-write:${shop.id}:${shop.member.id}`;
+    const ownerLookup = `contacts:phone-lookup:${shop.id}:${shop.owner.id}`;
+    try {
+      await Promise.all([
+        cache.set(lookup, 30, 'EX', 3600),
+        cache.set(write, 10, 'EX', 3600),
+        cache.set(ownerLookup, 30, 'EX', 3600),
+      ]);
+      for (const response of [
+        await f.request(shop.member, 'GET', search),
+        await f.request(shop.member, 'POST', '/contacts', input),
+        await f.request(shop.member, 'PATCH', `/contacts/${id}`, { phone: phone() }),
+      ]) {
+        expect(response.statusCode, response.body).toBe(429);
+        expect(response.json()).toEqual({
+          error: {
+            code: 'CONTACT_PHONE_RATE_LIMITED',
+            message: 'Too many phone searches or changes. Try again later',
+          },
+        });
+      }
+      expect((await success(shop, 'GET', search, 200)).json().items).toEqual([
+        expect.objectContaining({ id, phone: number }),
+      ]);
+    } finally {
+      await cache.del(lookup, write, ownerLookup);
+    }
+  });
   it('quotes Savar, another Dhaka upazila and an outside upazila from the defaults', async () => {
     const shop = await f.shop();
     const zones = await success(shop, 'POST', '/delivery-zones/initialize-defaults', 201);

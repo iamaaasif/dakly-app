@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { randomInt, randomUUID } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
 
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -7,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 
+import { ValkeyClient } from '../platform/cache/valkey-client';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { ContactsModule } from './contacts.module';
@@ -26,27 +28,147 @@ describe('ContactsService (Postgres)', () => {
   let app: INestApplicationContext;
   let service: ContactsService;
   let transaction: StoreTransaction;
+  let valkey: ValkeyClient;
   const storeId = randomUUID();
+  const otherStoreId = randomUUID();
   const actor = { kind: 'user', userId: randomUUID() } as const;
+  const limitedActor = { kind: 'user', userId: randomUUID() } as const;
+  const lookupKey = `contacts:phone-lookup:${storeId}:${limitedActor.userId}`;
+  const writeKey = `contacts:phone-write:${storeId}:${limitedActor.userId}`;
 
   beforeAll(async () => {
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ContactsService);
     transaction = app.get(StoreTransaction);
-    await admin.pool.query("insert into stores(id,name) values($1,'রিনার দোকান')", [storeId]);
+    valkey = app.get(ValkeyClient);
+    await admin.pool.query(
+      "insert into stores(id,name) values($1,'রিনার দোকান'),($2,'সুমির দোকান')",
+      [storeId, otherStoreId],
+    );
+    await admin.pool.query('insert into users(id,name,phone) values($1,$2,$3)', [
+      limitedActor.userId,
+      'করিম',
+      phone(),
+    ]);
   });
 
   afterAll(async () => {
-    for (const table of ['outbox_events', 'contacts', 'channel_connections'])
-      await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
-    await admin.pool.query('delete from stores where id=$1', [storeId]);
+    for (const table of ['audit_log', 'outbox_events', 'contacts', 'channel_connections'])
+      await admin.pool.query(`delete from ${table} where store_id=any($1)`, [
+        [storeId, otherStoreId],
+      ]);
+    await admin.pool.query('delete from stores where id=any($1)', [[storeId, otherStoreId]]);
+    await admin.pool.query('delete from users where id=$1', [limitedActor.userId]);
+    await valkey.connection.del(
+      lookupKey,
+      writeKey,
+      `contacts:phone-lookup:${storeId}:${actor.userId}`,
+      `contacts:phone-lookup:${otherStoreId}:${limitedActor.userId}`,
+      `contacts:phone-write:${otherStoreId}:${limitedActor.userId}`,
+    );
     await Promise.all([admin.pool.end(), app.close()]);
   });
 
   const add = (number = phone()) =>
     service.create(storeId, { name: 'সুমি আক্তার', phone: number }, full, actor);
   const search = (term: string, access = masked) =>
-    service.list(storeId, { limit: 50, search: term }, access);
+    service.list(storeId, { limit: 50, search: term }, access, actor);
+
+  const refusals = async (action: string) =>
+    (
+      await admin.pool.query(
+        'select actor_user_id, entity_type, entity_id, before, after, reason from audit_log where store_id=$1 and action=$2',
+        [storeId, action],
+      )
+    ).rows;
+
+  const refusal = {
+    actor_user_id: limitedActor.userId,
+    entity_type: 'store',
+    entity_id: storeId,
+    before: null,
+    after: null,
+    reason: null,
+  };
+
+  it('limits exact searches by a masked member and opens a new window after expiry', async () => {
+    const number = phone();
+    const { id } = await add(number);
+    const find = (term: string, access = masked, store = storeId, member = limitedActor) =>
+      service.list(store, { limit: 50, search: term }, access, member);
+
+    expect((await find(`+88${number}`)).items.map((item) => item.id)).toEqual([id]);
+    const missing = phone();
+    for (let attempt = 1; attempt < 30; attempt++) expect((await find(missing)).items).toEqual([]);
+
+    for (const term of [number, missing])
+      await expect(find(term)).rejects.toMatchObject({
+        code: 'CONTACT_PHONE_RATE_LIMITED',
+        status: 429,
+      });
+    expect(await refusals('contact.phone_lookup_rate_limited')).toEqual([refusal, refusal]);
+    expect((await find(number, full)).items[0]?.phone).toBe(number);
+    expect((await find(number, masked, otherStoreId)).items).toEqual([]);
+    expect((await find(number, masked, storeId, actor)).items[0]?.id).toBe(id);
+    expect((await find('সুমি')).items.map((item) => item.id)).toContain(id);
+    expect((await find(number.slice(0, 5))).items).toEqual([]);
+
+    const lookupTtl = await valkey.connection.ttl(lookupKey);
+    expect(lookupTtl).toBeGreaterThan(3500);
+    expect(lookupTtl).toBeLessThanOrEqual(3600);
+    await valkey.connection.pexpire(lookupKey, 1);
+    await setTimeout(10);
+    expect((await find(number)).items[0]?.id).toBe(id);
+  });
+
+  it('shares the masked phone-write limit between creation and edits without changing refused contacts', async () => {
+    const original = phone();
+    const { id } = await add(original);
+    const editor = { access: masked, actor: limitedActor };
+    const create = (number: string, store = storeId, access = masked) =>
+      service.create(store, { name: 'করিম', phone: number }, access, limitedActor);
+    const edit = (number: string, access = masked) =>
+      service.editDetails(storeId, id, { phone: number }, { ...editor, access });
+
+    for (let attempt = 0; attempt < 9; attempt++)
+      await expect(create(original)).rejects.toMatchObject({ code: 'CONTACT_PHONE_TAKEN' });
+    const edited = phone();
+    await edit(edited);
+    const createdEvents = () =>
+      admin.pool.query(
+        "select id from outbox_events where store_id=$1 and type='contact.created'",
+        [storeId],
+      );
+    const before = await createdEvents();
+    const refused = phone();
+    const refusedEdit = () =>
+      service.editDetails(storeId, id, { phone: refused, name: 'করিম' }, editor);
+    for (const write of [() => create(refused), refusedEdit])
+      await expect(write()).rejects.toMatchObject({
+        code: 'CONTACT_PHONE_RATE_LIMITED',
+        status: 429,
+      });
+
+    expect(await service.getById(storeId, id, full)).toMatchObject({
+      name: 'সুমি আক্তার',
+      phone: edited,
+    });
+    expect((await search(refused, full)).items).toEqual([]);
+    expect((await createdEvents()).rowCount).toBe(before.rowCount);
+    expect(await refusals('contact.phone_write_rate_limited')).toEqual([refusal, refusal]);
+    await expect(service.editDetails(storeId, id, { name: 'সুমি' }, editor)).resolves.toMatchObject({
+      name: 'সুমি',
+    });
+    await expect(create(refused, otherStoreId)).resolves.toMatchObject({ name: 'করিম' });
+    await expect(edit(refused, full)).resolves.toMatchObject({ phone: refused });
+
+    const writeTtl = await valkey.connection.ttl(writeKey);
+    expect(writeTtl).toBeGreaterThan(3500);
+    expect(writeTtl).toBeLessThanOrEqual(3600);
+    await valkey.connection.pexpire(writeKey, 1);
+    await setTimeout(10);
+    await expect(edit(edited)).resolves.toMatchObject({ id });
+  });
 
   it('marks the buyer as changed when an order links to them', async () => {
     const buyer = await add();
