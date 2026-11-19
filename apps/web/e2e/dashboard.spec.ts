@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { expect, test } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
@@ -22,15 +24,15 @@ test('changes the report period and keeps cards scoped to the selected shop', as
          from generate_series(0,59) as age
        )
        insert into store_daily_metrics (store_id,day,metric,dimension,value)
-       select $1::uuid,day,'orders','',15 + (59-age)/3 + (age*7)%13 from days
+       select $1::uuid,day,'orders','',15 + (59-age)/3 + round(sin(age/3.0)*4)::int from days
        union all
-       select $1,day,'sales','manual',500000 + (59-age)*15000 + (age*7)%13*40000 from days
+       select $1,day,'sales','manual',630000 + (59-age)*17000 + round(sin(age/4.0)*1400)::int*100 from days
        union all
        select $1,day,'buyer_activity',gen_random_uuid()::text,day-date '1970-01-01' from days
-       cross join lateral generate_series(1,3+(59-age)/12+(age*3)%4)
+       cross join lateral generate_series(1,4+(59-age)/12+round(sin(age/5.0)*2)::int)
        union all
        select $1,day,'buyer_activity',gen_random_uuid()::text,day-date '1970-01-01'-120 from days
-       cross join lateral generate_series(1,4+(59-age)/11+(age*7)%5)`,
+       cross join lateral generate_series(1,6+(59-age)/11+round(cos(age/4.0)*2)::int)`,
       [ownerShop],
     );
     await database.pool.query(
@@ -58,10 +60,15 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     for (const title of ['Sales', 'Customers who came back', 'New customers', 'Orders']) {
       await expect(figures.getByRole('heading', { name: title, exact: true })).toBeVisible();
     }
+    await expect(figures.getByRole('img', { name: 'Up', exact: true })).toHaveCount(4);
     const lifecycle = page.getByRole('region', { name: 'Your customers at a glance' });
     await expect(lifecycle.getByText('2,486 customers', { exact: true })).toBeVisible();
+    await page.evaluate(async () => document.fonts.ready);
+    const repeatTitle = figures.getByRole('heading', { name: 'Customers who came back' });
+    expect(await repeatTitle.evaluate((title) => title.scrollWidth <= title.clientWidth)).toBe(
+      true,
+    );
     if (process.env.DASHBOARD_EVIDENCE) {
-      await page.evaluate(async () => document.fonts.ready);
       await page.screenshot({ path: testInfo.outputPath('dashboard-1440x900.png') });
     }
     await page.setViewportSize({ width: 360, height: 800 });
@@ -89,6 +96,10 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     await expect(figures.getByText('vs previous 30 days')).toHaveCount(4);
 
     await page.setViewportSize({ width: 1440, height: 900 });
+    const saleAmount = figures.getByText(/^৳[0-9,]+$/);
+    expect(
+      await saleAmount.evaluate((amount) => amount.getBoundingClientRect().height),
+    ).toBeLessThan(48);
     await page.getByRole('combobox', { name: 'Current shop' }).selectOption(marketerShop);
     await expect(lifecycle.getByText('12 customers', { exact: true })).toBeVisible();
     await expect(
@@ -98,6 +109,10 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     await expect(figures.getByRole('heading', { name: 'Orders', exact: true })).toHaveCount(0);
   } finally {
     await scrubPage(page);
+    await database.pool.query('update sessions set active_store_id=$1 where token_hash=$2', [
+      ownerShop,
+      createHash('sha256').update(fixture.token).digest(),
+    ]);
     await database.pool.query('delete from store_daily_metrics where store_id=any($1::uuid[])', [
       fixture.storeIds,
     ]);

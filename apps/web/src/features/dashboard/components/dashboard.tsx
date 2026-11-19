@@ -20,11 +20,10 @@ export function Dashboard({ period }: DashboardQuery) {
   const { data, error, isPending, refetch } = useDashboard(period, Boolean(session?.currentStore));
   if (!session?.currentStore) return null;
 
-  const available = data ? hasReports(data) : true;
   const firstName = session.user.name.trim().split(/\s+/)[0];
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
-      <DashboardHeader data={data} name={firstName} period={period} available={available} />
+      <DashboardHeader data={data} name={firstName} period={period} />
       {isPending && (
         <div role="status" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <span className="sr-only">Loading dashboard reports</span>
@@ -45,9 +44,9 @@ export function Dashboard({ period }: DashboardQuery) {
   );
 }
 
-type HeaderProps = DashboardQuery & { data?: DashboardResponse; name?: string; available: boolean };
+type HeaderProps = DashboardQuery & { data?: DashboardResponse; name?: string };
 
-function DashboardHeader({ data, name, period, available }: HeaderProps) {
+function DashboardHeader({ data, name, period }: HeaderProps) {
   return (
     <Card className="flex flex-col justify-between gap-4 bg-linear-to-b from-primary-soft to-surface md:flex-row md:items-end md:p-8">
       <div>
@@ -63,7 +62,7 @@ function DashboardHeader({ data, name, period, available }: HeaderProps) {
           </p>
         )}
       </div>
-      {available && (
+      {(!data || hasReports(data)) && (
         <nav
           aria-label="Reporting period"
           className="flex w-fit max-w-full flex-wrap gap-1 rounded-md border border-border bg-surface p-1"

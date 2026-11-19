@@ -1,4 +1,4 @@
-import { ChartNoAxesCombined, Repeat2, ShoppingBag, UserRoundPlus } from 'lucide-react';
+import { Repeat2, ShoppingBag, TrendingDown, TrendingUp, UserRoundPlus } from 'lucide-react';
 
 import type { DashboardResponse } from '@dakly/contracts/dashboard';
 import { Badge } from '@dakly/ui/badge';
@@ -35,7 +35,7 @@ const metrics = [
   {
     id: 'orders',
     title: 'Orders',
-    icon: ChartNoAxesCombined,
+    icon: TrendingUp,
     color: 'text-text',
     fill: 'bg-surface-muted',
     description: 'Orders from all sources, excluding cancelled orders.',
@@ -45,7 +45,6 @@ const metrics = [
 type MetricsProps = { cards: DashboardResponse['cards']; period: number };
 
 export function DashboardMetrics({ cards, period }: MetricsProps) {
-  if (!Object.values(cards).some(Boolean)) return null;
   return (
     <section aria-label="Key figures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {metrics.map(({ id, title, icon: Icon, color, fill, description }) => {
@@ -57,14 +56,14 @@ export function DashboardMetrics({ cards, period }: MetricsProps) {
         const points = sales ? card.pointsPoisha : card.points;
         return (
           <Card key={id} className="flex min-w-0 flex-col gap-3 p-4">
-            <h2 className="flex items-center gap-2 text-md font-semibold xl:min-h-12">
-              <span className={cn('rounded-md p-2', color, fill)}>
+            <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight xl:whitespace-nowrap">
+              <span className={cn('shrink-0 rounded-md p-2 xl:p-1', color, fill)}>
                 <Icon aria-hidden className="size-4" strokeWidth={1.75} />
               </span>
               {title}
             </h2>
-            <div className="grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)] items-end gap-2">
-              <p className="min-w-0 text-2xl font-bold wrap-anywhere tabular-nums">
+            <div className="flex flex-wrap items-end gap-2">
+              <p className="max-w-full text-2xl font-bold wrap-anywhere tabular-nums">
                 {sales ? formatMoney(total) : formatCount(total)}
               </p>
               <Sparkline points={points} className={color} />
@@ -85,9 +84,13 @@ type Comparison = { total: bigint; previous: bigint; period: number };
 function ReportChange({ total, previous, period }: Comparison) {
   let variant: 'neutral' | 'success' | 'danger' = 'neutral';
   if (previous > 0n && total !== previous) variant = total > previous ? 'success' : 'danger';
+  const Trend = variant === 'success' ? TrendingUp : TrendingDown;
+  const label = variant === 'success' ? 'Up' : 'Down';
+  const icon = <Trend role="img" aria-label={label} size={16} strokeWidth={1.75} />;
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-muted">
-      <Badge variant={variant} className="rounded-full tabular-nums">
+      <Badge variant={variant} className="gap-1 rounded-full tabular-nums">
+        {variant !== 'neutral' && icon}
         {change(total, previous)}
       </Badge>
       <span>vs previous {period} days</span>
@@ -115,7 +118,7 @@ function Sparkline({ points, className }: { points: string[]; className: string 
       aria-hidden
       viewBox="0 0 80 30"
       preserveAspectRatio="none"
-      className={cn('mb-1 h-8 w-full max-w-20 justify-self-end', className)}
+      className={cn('mb-1 ml-auto h-8 w-0 max-w-20 min-w-6 flex-1', className)}
     >
       <polygon points={`0,30 ${trend} 80,30`} fill="currentColor" opacity="0.1" />
       <polyline
