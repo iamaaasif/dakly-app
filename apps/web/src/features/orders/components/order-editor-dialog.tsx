@@ -1,6 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRef, type FormEvent } from 'react';
-import { FormProvider, useFieldArray, useForm, useFormContext, useWatch } from 'react-hook-form';
+import { useRef, useState, type FormEvent } from 'react';
+import {
+  FormProvider,
+  useFieldArray,
+  useForm,
+  useFormContext,
+  useWatch,
+  type Resolver,
+} from 'react-hook-form';
 
 import {
   createOrderFormSchema,
@@ -13,6 +20,7 @@ import {
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { QueryError } from '@dakly/ui/query-error';
@@ -35,13 +43,26 @@ const newOrderDefaults: CreateOrderValues = {
   recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
   items: [newLine],
 };
+const parseNewOrder = zodResolver(createOrderFormSchema);
+const resolveNewOrder: Resolver<CreateOrderValues, undefined, CreateOrderInput> = (
+  values,
+  context,
+  options,
+) =>
+  parseNewOrder(
+    values.recipient.isBuyer && 'name' in values.buyer
+      ? { ...values, buyer: { name: values.recipient.name } }
+      : values,
+    context,
+    options,
+  );
 
 type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
 
 export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
   const create = useCreateOrder();
   const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
-    resolver: zodResolver(createOrderFormSchema),
+    resolver: resolveNewOrder,
     defaultValues: newOrderDefaults,
   });
   const busy = create.isPending || create.mustRetry;
@@ -60,7 +81,7 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
       open
       onClose={onClose}
       closeDisabled={busy}
-      className="max-h-[calc(100dvh-1rem)] max-w-2xl open:flex open:flex-col"
+      className="max-h-[calc(100dvh-1rem)] max-w-160 p-4 open:flex open:flex-col sm:p-6"
     >
       <FormProvider {...form}>
         <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
@@ -105,7 +126,7 @@ function NewOrderActions({
   onSaveConfirmed,
 }: NewOrderActionsProps) {
   return (
-    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+    <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-3">
       <Button
         variant="secondary"
         onClick={onClose}
@@ -144,6 +165,7 @@ type ItemsAndAmountsProps = { order?: OrderDetail };
 
 function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
   const productIds = useRef<Record<string, string>>({});
+  const [pickedVariants, setPickedVariants] = useState<Record<string, VariantChoice>>({});
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
   const items = useWatch({ control, name: 'items' }) ?? [];
@@ -154,7 +176,9 @@ function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
   const selectedProducts = useOrderCatalogueProducts([
     ...new Set(items.flatMap(({ variantId }) => productIds.current[variantId] ?? [])),
   ]).flatMap(({ data }) => data ?? []);
-  const variants = draftVariantChoices(selectedProducts, order, stock.data);
+  const variants = order
+    ? draftVariantChoices(selectedProducts, order, stock.data)
+    : pickedVariants;
 
   return (
     <>
@@ -162,11 +186,13 @@ function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
         fields={fields}
         ids={items.map(({ variantId }) => variantId)}
         variants={variants}
+        isNew={!order}
         register={register}
         onAdd={() => append(newLine)}
         onRemove={remove}
         onChoose={(index, id, variant) => {
-          if (variant?.productId) productIds.current[id] = variant.productId;
+          if (order && variant?.productId) productIds.current[id] = variant.productId;
+          if (!order && variant) setPickedVariants((previous) => ({ ...previous, [id]: variant }));
           const savedLine = order?.items.find((item) => item.variantId === id);
           setValue(`items.${index}.lineDiscountPoisha`, savedLine?.lineDiscountPoisha ?? 0, {
             shouldDirty: true,
@@ -189,7 +215,7 @@ function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
           Choose a different variant for each line and enter a positive quantity.
         </p>
       )}
-      <OrderAmountFields hasAdvance={Boolean(order?.advancePaidPoisha)} />
+      <OrderAmountFields hasAdvance={Boolean(order?.advancePaidPoisha)} isNew={!order} />
       <OrderPreview variants={variants} order={order} />
     </>
   );
@@ -212,9 +238,9 @@ function draftVariantChoices(
   return variants;
 }
 
-type OrderAmountFieldsProps = { hasAdvance: boolean };
+type OrderAmountFieldsProps = { hasAdvance: boolean; isNew: boolean };
 
-function OrderAmountFields({ hasAdvance }: OrderAmountFieldsProps) {
+function OrderAmountFields({ hasAdvance, isNew }: OrderAmountFieldsProps) {
   const { register } = useFormContext<OrderEditorValues>();
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -229,6 +255,7 @@ function OrderAmountFields({ hasAdvance }: OrderAmountFieldsProps) {
             <Input
               {...props}
               inputMode="decimal"
+              placeholder={isNew ? '0' : undefined}
               readOnly={name === 'advancePaidPoisha' && hasAdvance}
               {...register(name, { setValueAs: (value: string) => value.trim() || undefined })}
             />
@@ -279,16 +306,23 @@ function OrderPreview({ variants, order }: OrderPreviewProps) {
   if (charge === undefined || paid === undefined) return null;
   const total = subtotal - orderDiscount + charge;
   if (!Number.isSafeInteger(total)) return null;
+  return <OrderPreviewTotals total={total} cod={Math.max(0, total - paid)} isNew={!order} />;
+}
+
+function OrderPreviewTotals({ total, cod, isNew }: { total: number; cod: number; isNew: boolean }) {
   return (
-    <p className="flex flex-wrap items-center justify-between rounded-lg bg-surface-muted p-3 text-sm tabular-nums">
+    <p
+      className={cn(
+        'flex flex-wrap items-center rounded-lg bg-surface-muted p-3 text-sm tabular-nums',
+        isNew ? 'gap-x-3' : 'justify-between',
+      )}
+    >
       <span>
         Total <strong className="font-semibold text-text">{formatMoney(total)}</strong>
       </span>
+      {isNew && <span aria-hidden="true">·</span>}
       <span>
-        Cash on delivery{' '}
-        <strong className="font-semibold text-text">
-          {formatMoney(Math.max(0, total - paid))}
-        </strong>
+        Cash on delivery <strong className="font-semibold text-text">{formatMoney(cod)}</strong>
       </span>
     </p>
   );
