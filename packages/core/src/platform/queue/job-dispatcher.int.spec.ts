@@ -5,7 +5,7 @@ import { setTimeout } from 'node:timers/promises';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Logger, Module, type INestApplicationContext } from '@nestjs/common';
 import { DiscoveryModule, NestFactory } from '@nestjs/core';
-import type { Job, JobsOptions, Queue } from 'bullmq';
+import { Job, type JobsOptions, type Queue } from 'bullmq';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadEnv } from '../config/env';
@@ -118,6 +118,17 @@ describe('Job dispatcher (Valkey)', () => {
     expect(job.failedReason).toBe('No handler for job missing-test-job on queue transactional');
     expect(received.first).toEqual([]);
     expect(report).not.toHaveBeenCalled();
+  });
+
+  it('rejects a job without an ID before running its handler', async () => {
+    const queue = await start([FirstHandler]);
+    const job = new Job(queue, 'first-test-job', {});
+
+    await expect(application!.get(TransactionalJobDispatcher).process(job)).rejects.toThrow(
+      'Cannot dispatch a job without an ID',
+    );
+
+    expect(received.first).toEqual([]);
   });
 
   it('reports a handler error once and retries the job', async () => {
