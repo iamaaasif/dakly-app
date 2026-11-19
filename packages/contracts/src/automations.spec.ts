@@ -16,6 +16,16 @@ describe('createAutomationSchema', () => {
     expect(createAutomationSchema.safeParse({ name: 'স্বাগতম', graph }).success).toBe(false);
   });
 
+  it('requires either a graph or a template key', () => {
+    const name = 'Welcome';
+    const templateKey = 'welcome_new_subscriber';
+    expect(createAutomationSchema.safeParse({ name, templateKey }).success).toBe(true);
+    expect(createAutomationSchema.safeParse({ name, templateKey, graph: welcome }).success).toBe(
+      false,
+    );
+    expect(createAutomationSchema.safeParse({ name }).success).toBe(false);
+  });
+
   it('accepts a template graph', () => {
     expect(createAutomationSchema.safeParse({ name: 'স্বাগতম', graph: welcome }).success).toBe(true);
   });

@@ -114,8 +114,9 @@ export class AutomationSendRetryService {
       const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
       // Check and lock the claim first so a stale job cannot lock the workflow or version.
       if (!(await repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
-      if (!(await repository.moveRunIfLive(storeId, claim, unchanged, 'dispatch')))
-        return undefined;
+      const runLockedAt = await repository.schedulerTime(storeId);
+      const lockedContactExists = await this.sendPolicy.lockForDispatch(storeId, facts.contactId);
+      if (!(await repository.moveRunIfLive(storeId, claim, unchanged, 'retry'))) return undefined;
       const locked = await repository.findSendingStep(storeId, claim.runId, claim.stepKey, true);
       if (!locked) return undefined;
       const checkedAt = await repository.schedulerTime(storeId);
@@ -129,12 +130,14 @@ export class AutomationSendRetryService {
       const { firstTriedAt, latestDispatchAt } = locked;
       const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
       if (early) return finishWithoutSubmission(() => early);
-      const finalize = await this.prepareCheck({ ...facts, preparedPhone }, step, locked, settings);
+      const prepared = { ...facts, preparedPhone, lockedContactExists };
+      const finalize = await this.prepareCheck(prepared, step, locked, settings);
       const claimedAt = await repository.schedulerTime(storeId);
       const checked = finalize(claimedAt);
       const ended = endExpiredRetry(step, firstTriedAt, wakeAt, claimedAt);
       const result = retryOutcome(checked.result, ended);
-      const leaseRecovery = retryAfterLostLease(claim, claimedAt, result, wakeAt);
+      const leaseTimes = { runLockedAt, afterChecks: claimedAt };
+      const leaseRecovery = retryAfterLostLease(claim, leaseTimes, result, wakeAt);
       if (leaseRecovery) return { result: leaseRecovery, claim, at: checked.at };
       // A slower worker must not age out a previously submitted message early.
       const sentAt = new Date(Math.max(checked.at.getTime(), latestDispatchAt.getTime()));
@@ -154,17 +157,17 @@ export class AutomationSendRetryService {
   }
 
   private async prepareCheck(
-    facts: RunFacts & { preparedPhone: string | null },
+    facts: RunFacts & { preparedPhone: string | null; lockedContactExists: boolean },
     step: SendStep,
     { id, firstTriedAt, destinationHash }: RetryableSend,
     settings: StoreSendingSettings | undefined,
   ): Promise<RetryCheck> {
-    const { storeId, contactId, wakeAt, preparedPhone } = facts;
-    const gate = await this.sendPolicy.recheckRetryRecipient(storeId, {
-      contactId,
-      channel: 'sms',
-      category: step.category,
-    });
+    const { storeId, contactId, wakeAt, preparedPhone, lockedContactExists } = facts;
+    const gate = await this.sendPolicy.recheckRetryRecipient(
+      storeId,
+      { contactId, channel: 'sms', category: step.category },
+      lockedContactExists,
+    );
     const { decision, at } = gate;
     const exit = await this.conditions.refreshExitReason(facts, at);
     const now = await this.repository.schedulerTime(storeId);
@@ -203,13 +206,16 @@ export class AutomationSendRetryService {
 
 function retryAfterLostLease(
   claim: RunClaim,
-  now: Date,
+  { runLockedAt, afterChecks }: { runLockedAt: Date; afterChecks: Date },
   result: StepResult | undefined,
   wakeAt: Date | null,
 ): StepResult | undefined {
   if (result && result.run.status !== 'waiting') return undefined;
-  if (now.getTime() - claim.claimedAt.getTime() < WORKFLOW_LEASE_MS) return undefined;
-  return { run: { status: 'waiting', wakeAt: wakeAt ?? now } };
+  // A current claim can record a defer after locking the run. Only a submission needs a
+  // current lease at the final clock sample because it continues outside the transaction.
+  const checkedAt = result ? runLockedAt : afterChecks;
+  if (checkedAt.getTime() - claim.claimedAt.getTime() < WORKFLOW_LEASE_MS) return undefined;
+  return { run: { status: 'waiting', wakeAt: wakeAt ?? afterChecks } };
 }
 
 function retryOutcome(result: StepResult | undefined, ended: StepResult | undefined) {

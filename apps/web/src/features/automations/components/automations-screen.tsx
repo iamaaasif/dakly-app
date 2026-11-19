@@ -1,9 +1,10 @@
 'use client';
 
 import { Plus } from 'lucide-react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
@@ -84,9 +85,9 @@ function WorkflowHeader({ canEdit }: { canEdit: boolean }) {
         </p>
       </div>
       {canEdit && (
-        <Button disabled>
+        <Link href="/automations/new" className={buttonVariants()}>
           <Plus size={16} aria-hidden="true" /> Create workflow
-        </Button>
+        </Link>
       )}
     </header>
   );

@@ -8,13 +8,19 @@ import { createDatabase } from '@dakly/db/client';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AppError } from '../platform/errors/app-error';
+import { OutboxRepository } from '../platform/outbox/outbox.repository';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { WalletLedgerRepository } from './wallet-ledger.repository';
 import { WalletService } from './wallet.service';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const app = createDatabase(process.env.DATABASE_URL!);
 const tenant = new TenantDatabase(app.db);
-const wallets = new WalletService(new WalletLedgerRepository(tenant), new StoreTransaction(tenant));
+const wallets = new WalletService(
+  new WalletLedgerRepository(tenant),
+  new StoreTransaction(tenant),
+  new OutboxService(new OutboxRepository(app.db, tenant), new StoreTransaction(tenant)),
+);
 const system = { kind: 'system' } as const;
 const storeIds: string[] = [];
 const staffIds: string[] = [];
@@ -66,6 +72,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await admin.pool.query('delete from outbox_events where store_id=any($1::uuid[])', [storeIds]);
   await admin.pool.query('delete from wallet_ledger where store_id=any($1::uuid[])', [storeIds]);
   await admin.pool.query('delete from stores where id=any($1::uuid[])', [storeIds]);
   await admin.pool.query('delete from staff_users where id=any($1::uuid[])', [staffIds]);
@@ -303,6 +310,14 @@ describe('WalletService (Postgres)', () => {
         reference_type: 'staff_audit',
         reference_id: staffAuditId,
       },
+    ]);
+    // A new credit tells the workflows that wait for one; the replay writes no event.
+    const events = await admin.pool.query(
+      "select payload from outbox_events where store_id=$1 and type='wallet.credited'",
+      [storeId],
+    );
+    expect(events.rows).toEqual([
+      { payload: { wallet: 'whatsapp_poisha', entryId: credit.entryId } },
     ]);
   });
 
