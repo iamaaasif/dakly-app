@@ -445,9 +445,9 @@ A consent grant or a workflow's tag action can start an active workflow. Adding 
 
 Link tapped waits for CAMP-10 to record taps on workflow messages.
 
-An hourly sweep queues one birthday job per store and local date. That job records one event per contact and date. A birthday workflow can limit entry to a saved segment. A 29 February birthday matches on 29 February.
+An hourly sweep queues one birthday job per store and local date. That job records one event per contact and date. A birthday workflow can limit entry to a saved segment. A 29 February birthday matches on 28 February in years without a leap day.
 
-`GET /automations/:automationId/trigger-preview` uses the draft trigger and returns up to 10 matching events still in the outbox, newest first. It checks current segment membership for birthdays. It needs `automations.view`.
+`GET /automations/:automationId/trigger-preview` uses the draft trigger and returns up to 10 matching events still in the outbox, newest first. It checks current segment membership for up to 1,000 birthday events. It needs `automations.view`.
 
 Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Running claims are leases: the sweep also reclaims expired `claimed_at` values, including a crash between claiming and queueing. A worker guards writes with its claim generation/time, and provider sends use a stable `(run, step)` operation key; an uncertain provider result must be reconciled before resending. A stale worker cannot advance a newly claimed run. No row lock spans a provider call. Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept until 372 days after the run finishes (365-day rebuild plus 7-day lookback), for per-step numbers, attribution and the per-person history. Active runs retain their evidence.
 

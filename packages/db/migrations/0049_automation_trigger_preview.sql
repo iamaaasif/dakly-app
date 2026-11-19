@@ -31,3 +31,17 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.automation_trigger_preview(text, text[], text[], text, timestamptz, uuid, integer) FROM PUBLIC;
 --> statement-breakpoint
 GRANT EXECUTE ON FUNCTION public.automation_trigger_preview(text, text[], text[], text, timestamptz, uuid, integer) TO dakly_app;
+--> statement-breakpoint
+CREATE FUNCTION public.maintenance_stores(p_after uuid, p_limit integer)
+RETURNS TABLE(store_id uuid, time_zone text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
+AS $$
+  SELECT page.store_id, s.time_zone
+  FROM public.maintenance_store_ids(p_after, p_limit) page
+  JOIN public.stores s ON s.id = page.store_id
+  ORDER BY page.store_id
+$$;
+--> statement-breakpoint
+REVOKE EXECUTE ON FUNCTION public.maintenance_stores(uuid, integer) FROM PUBLIC;
+--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION public.maintenance_stores(uuid, integer) TO dakly_app;

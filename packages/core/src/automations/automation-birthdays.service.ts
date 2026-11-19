@@ -15,12 +15,16 @@ export class AutomationBirthdaysService {
   ) {}
 
   async recordBirthdays(storeId: string, { day, occurredAt }: { day: string; occurredAt: string }) {
-    const birthday = { month: Number(day.slice(5, 7)), day: Number(day.slice(8)) };
+    const month = Number(day.slice(5, 7));
+    const date = Number(day.slice(8));
+    const year = Number(day.slice(0, 4));
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = month === 2 && date === 28 && !leapYear ? [28, 29] : [date];
     let after: string | null = null;
     for (;;) {
       const ids = await this.contacts.birthdayContactIds(
         storeId,
-        birthday,
+        { month, days },
         after,
         CONTACT_PAGE_SIZE,
       );

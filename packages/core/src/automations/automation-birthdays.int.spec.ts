@@ -107,4 +107,23 @@ describe('AutomationBirthdaysService (Postgres)', () => {
       { store_id: dhaka, payload: { contactId: dhakaContact, day: '2026-11-20' } },
     ]);
   });
+
+  it('uses 28 February for a leap-day birthday only in years without 29 February', async () => {
+    const contactId = randomUUID();
+    await admin.pool.query(
+      `insert into contacts(id,store_id,name,source,kind,birthday_month,birthday_day)
+       values($1,$2,'নুসরাত জাহান','manual','customer',2,29)`,
+      [contactId, dhaka],
+    );
+    const recorder = new RecordAutomationBirthdaysJob(app.get(AutomationBirthdaysService));
+    for (const day of ['2026-02-28', '2028-02-28', '2028-02-29']) {
+      await recorder.handle({ storeId: dhaka, day, occurredAt: `${day}T00:00:00.000Z` });
+    }
+    const { rows } = await admin.pool.query(
+      `select payload->>'day' as day from outbox_events
+       where store_id=$1 and type='contact.birthday' and payload->>'contactId'=$2 order by occurred_at`,
+      [dhaka, contactId],
+    );
+    expect(rows).toEqual([{ day: '2026-02-28' }, { day: '2028-02-29' }]);
+  });
 });

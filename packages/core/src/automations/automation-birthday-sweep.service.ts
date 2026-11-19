@@ -23,10 +23,9 @@ export class AutomationBirthdaySweepService {
     const occurredAt = at.toISOString();
     let after: string | null = null;
     for (;;) {
-      const ids = await this.stores.maintenanceStoreIds(after, STORE_PAGE_SIZE);
+      const stores = await this.stores.maintenanceStores(after, STORE_PAGE_SIZE);
       const jobs = [];
-      for (const storeId of ids) {
-        const timeZone = await this.stores.timeZone(storeId);
+      for (const { storeId, timeZone } of stores) {
         const day = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' }).format(at);
         const jobId = `${RECORD_AUTOMATION_BIRTHDAYS}-${storeId}-${day}`;
         const previous = await this.bulk.getJob(jobId);
@@ -48,8 +47,8 @@ export class AutomationBirthdaySweepService {
         });
       }
       if (jobs.length > 0) await this.bulk.addBulk(jobs);
-      if (ids.length < STORE_PAGE_SIZE) return;
-      after = ids.at(-1) ?? null;
+      if (stores.length < STORE_PAGE_SIZE) return;
+      after = stores.at(-1)?.storeId ?? null;
     }
   }
 }

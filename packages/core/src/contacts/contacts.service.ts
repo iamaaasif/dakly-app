@@ -261,7 +261,7 @@ export class ContactsService {
 
   birthdayContactIds(
     storeId: string,
-    birthday: { month: number; day: number },
+    birthday: { month: number; days: number[] },
     after: string | null,
     limit: number,
   ) {

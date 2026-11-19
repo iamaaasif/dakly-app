@@ -13,6 +13,7 @@ import { automationError } from './automations.errors';
 import { AutomationsRepository } from './automations.repository';
 
 const PREVIEW_LIMIT = 10;
+const MAX_PREVIEW_PAGES = 10;
 
 @Injectable()
 export class AutomationPreviewService {
@@ -33,11 +34,12 @@ export class AutomationPreviewService {
     const segment = trigger.filters.find((filter) => filter.field === 'segment');
     const items: AutomationTriggerPreview['items'] = [];
     let rows: AutomationTriggerPreview['items'] = [];
-    do {
+    for (let page = 0; page < MAX_PREVIEW_PAGES; page += 1) {
       rows = await this.repository.list(storeId, selection, rows.at(-1));
       const matches = segment ? await this.inSegment(storeId, segment.segmentId, rows) : rows;
       items.push(...matches.slice(0, PREVIEW_LIMIT - items.length));
-    } while (rows.length === TRIGGER_PREVIEW_PAGE_SIZE && items.length < PREVIEW_LIMIT);
+      if (rows.length < TRIGGER_PREVIEW_PAGE_SIZE || items.length === PREVIEW_LIMIT) break;
+    }
     return { items };
   }
 

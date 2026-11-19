@@ -257,7 +257,7 @@ export class ContactsRepository {
 
   birthdayContactIds(
     storeId: string,
-    birthday: { month: number; day: number },
+    birthday: { month: number; days: number[] },
     after: string | null,
     limit: number,
   ) {
@@ -269,7 +269,7 @@ export class ContactsRepository {
           and(
             eq(contacts.storeId, storeId),
             eq(contacts.birthdayMonth, birthday.month),
-            eq(contacts.birthdayDay, birthday.day),
+            inArray(contacts.birthdayDay, birthday.days),
             isNull(contacts.deletedAt),
             after ? gt(contacts.id, after) : undefined,
           ),
