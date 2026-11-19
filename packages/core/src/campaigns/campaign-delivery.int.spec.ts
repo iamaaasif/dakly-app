@@ -766,6 +766,63 @@ describe('Campaign sender (Postgres)', () => {
       expect(await settlementRows(id)).toEqual(charged);
     });
 
+    it('uses a late definite receipt result before the cancellation settles', async () => {
+      const { id } = await unknownFirstSend();
+      await admin.pool.query(
+        "update campaign_recipients set provider_message_id='late-known-receipt' where campaign_id=$1",
+        [id],
+      );
+      await campaigns.cancel(storeId, id, actor);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      const started = Promise.withResolvers<void>();
+      const result = Promise.withResolvers<'not_sent'>();
+      const lookup = vi
+        .spyOn(MailpitSmsDriver.prototype, 'receiptStatus')
+        .mockImplementationOnce(async () => {
+          started.resolve();
+          return result.promise;
+        })
+        .mockResolvedValueOnce('unknown');
+      const first = sender.sendBatch(storeId, id);
+      void first.catch(() => undefined);
+      try {
+        await Promise.race([
+          started.promise,
+          first.then(() => {
+            throw new Error('The worker ended before checking the receipt');
+          }),
+        ]);
+        clockNow = new Date(noon.getTime() + 12 * MINUTE);
+        const settle = vi
+          .spyOn(campaigns, 'settleReservation')
+          .mockRejectedValueOnce(new Error('worker stopped before settlement'));
+        try {
+          await expect(sender.sendBatch(storeId, id)).rejects.toThrow(
+            'worker stopped before settlement',
+          );
+        } finally {
+          settle.mockRestore();
+        }
+        expect(await outcome(id)).toEqual([
+          { status: 'failed', error_code: 'outcome_unknown', sms_credits: 1 },
+        ]);
+        expect(await settlementRows(id)).toEqual([]);
+
+        result.resolve('not_sent');
+        await first;
+        expect(await outcome(id)).toEqual([
+          { status: 'failed', error_code: 'provider_confirmed_not_sent', sms_credits: null },
+        ]);
+        expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+        expect(calls).toHaveLength(1);
+        expect(lookup).toHaveBeenCalledTimes(2);
+      } finally {
+        result.resolve('not_sent');
+        await first.catch(() => undefined);
+        lookup.mockRestore();
+      }
+    });
+
     it.each([
       { state: 'sending', result: 'sent', expected: 'sent', error: null },
       {
