@@ -45,7 +45,6 @@ type StatusChange = { from: CampaignStatusGuard; to: CampaignStatus; refused: Ca
 // others when their cause clears (CAMP-3, CHN-3).
 const STATUS_CHANGES = {
   unschedule: { from: { status: 'scheduled' }, to: 'draft', refused: 'CAMPAIGN_NOT_SCHEDULED' },
-  cancel: { from: { status: 'scheduled' }, to: 'cancelled', refused: 'CAMPAIGN_NOT_SCHEDULED' },
   pause: { from: { status: 'sending' }, to: 'paused', refused: 'CAMPAIGN_NOT_SENDING' },
   resume: {
     from: { status: 'paused', pauseReason: 'manual' },
@@ -55,7 +54,7 @@ const STATUS_CHANGES = {
 } as const satisfies Record<string, StatusChange>;
 // Approval runs in one request until CAMP-13 makes it a job; this bounds that work.
 export const MAX_CAMPAIGN_AUDIENCE = 20_000;
-// CAMP-R7: a scheduled campaign can be edited or cancelled until 5 minutes before it sends.
+// CAMP-R7: a scheduled campaign can be edited until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
 @Injectable()
@@ -194,14 +193,27 @@ export class CampaignsService {
 
   async cancel(storeId: string, campaignId: string, actor: Actor): Promise<CampaignResponse> {
     return this.transaction.run(storeId, async () => {
-      const campaign = await this.lockBeforeSend(storeId, campaignId);
+      const campaign = await this.repository.lockForCancellation(storeId, campaignId);
+      if (!campaign) throw campaignError('CAMPAIGN_NOT_FOUND');
+      if (campaign.status === 'draft' || campaign.status === 'waiting_approval')
+        throw campaignError('CAMPAIGN_NOT_SCHEDULED');
+      if (
+        campaign.status === 'sent' ||
+        campaign.status === 'failed' ||
+        campaign.status === 'cancelled'
+      )
+        throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
       await this.repository.cancelQueuedRecipients(storeId, campaignId);
-      // Starts the 372-day recipient retention (growth.md).
-      const cancelled = await this.changeStatus(storeId, campaignId, 'cancel', {
-        finishedAt: this.clock.now(),
-      });
-      await this.releaseCredits(storeId, campaign, actor);
-      return cancelled;
+      const now = this.clock.now();
+      const cancelled = await this.repository.changeStatus(
+        storeId,
+        campaignId,
+        { status: campaign.status },
+        { status: 'cancelled', pauseReason: null, finishedAt: now, updatedAt: now },
+      );
+      if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
+      if (campaign.approvedAt) await this.releaseCredits(storeId, campaign, actor);
+      return toCampaignResponse(cancelled);
     });
   }
 

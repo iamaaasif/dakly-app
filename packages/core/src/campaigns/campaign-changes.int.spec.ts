@@ -117,14 +117,11 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     }
   });
 
-  it('refuses to cancel 4 minutes before the send and keeps the reservation', async () => {
+  it('refuses to return to draft 4 minutes before the send and keeps the reservation', async () => {
     const id = await approvedCampaign(sendAt);
     const balance = await wallets.balance(storeId, 'sms_credits');
     clockNow = new Date(sendAt.getTime() - 4 * MINUTE);
 
-    await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_CHANGE_TOO_LATE',
-    });
     await expect(service.unschedule(storeId, id, actor)).rejects.toMatchObject({
       code: 'CAMPAIGN_CHANGE_TOO_LATE',
     });
@@ -134,26 +131,29 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     expect((await recipientRows(id)).every((row) => row.status === 'queued')).toBe(true);
   });
 
-  it('cancels 6 minutes before the send and gives the credits back', async () => {
-    const before = await wallets.balance(storeId, 'sms_credits');
-    const id = await approvedCampaign(sendAt);
-    expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
-    clockNow = new Date(sendAt.getTime() - 6 * MINUTE);
+  it.each([6, 4, 0])(
+    'cancels %i minutes before the send and gives the credits back',
+    async (beforeSend) => {
+      const before = await wallets.balance(storeId, 'sms_credits');
+      const id = await approvedCampaign(sendAt);
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
+      clockNow = new Date(sendAt.getTime() - beforeSend * MINUTE);
 
-    expect((await service.cancel(storeId, id, actor)).status).toBe('cancelled');
+      expect((await service.cancel(storeId, id, actor)).status).toBe('cancelled');
 
-    expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
-    const rows = await recipientRows(id);
-    expect(rows).toHaveLength(3);
-    expect(rows.every((row) => row.status === 'cancelled')).toBe(true);
-    const [cancelled] = (
-      await admin.pool.query('select finished_at from campaigns where id=$1', [id])
-    ).rows;
-    expect(cancelled.finished_at).toEqual(clockNow);
-    await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_NOT_SCHEDULED',
-    });
-  });
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
+      const rows = await recipientRows(id);
+      expect(rows).toHaveLength(3);
+      expect(rows.every((row) => row.status === 'cancelled')).toBe(true);
+      const [cancelled] = (
+        await admin.pool.query('select finished_at from campaigns where id=$1', [id])
+      ).rows;
+      expect(cancelled.finished_at).toEqual(clockNow);
+      await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_CANCELLABLE',
+      });
+    },
+  );
 
   it('returns a scheduled campaign to draft, then approves it again', async () => {
     const before = await wallets.balance(storeId, 'sms_credits');
@@ -202,16 +202,63 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     await expect(service.pause(storeId, id, actor)).rejects.toMatchObject({
       code: 'CAMPAIGN_NOT_SENDING',
     });
-    await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
-      code: 'CAMPAIGN_NOT_SCHEDULED',
-    });
-
     expect((await service.resume(storeId, id, actor)).status).toBe('sending');
     const [resumed] = (
       await admin.pool.query('select status, pause_reason from campaigns where id=$1', [id])
     ).rows;
     expect(resumed).toEqual({ status: 'sending', pause_reason: null });
   });
+
+  it.each(['sending', 'paused'] as const)(
+    'cancels a %s campaign and releases credits for its queued recipients',
+    async (status) => {
+      const before = await wallets.balance(storeId, 'sms_credits');
+      const id = await approvedCampaign(null);
+      if (status === 'paused') await service.pause(storeId, id, actor);
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
+
+      const cancelled = await service.cancel(storeId, id, actor);
+
+      expect(cancelled.status).toBe('cancelled');
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
+      expect(await recipientRows(id)).toEqual(
+        Array.from({ length: 3 }, () => expect.objectContaining({ status: 'cancelled' })),
+      );
+      const { rows } = await admin.pool.query(
+        'select finished_at, pause_reason from campaigns where id=$1',
+        [id],
+      );
+      expect(rows).toEqual([{ finished_at: clockNow, pause_reason: null }]);
+      await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_CANCELLABLE',
+      });
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
+    },
+  );
+
+  it.each(['draft', 'waiting_approval'] as const)(
+    'keeps a %s campaign and its wallet balance when cancellation is refused',
+    async (status) => {
+      const before = await wallets.balance(storeId, 'sms_credits');
+      const { id } = await service.create(
+        storeId,
+        createCampaignSchema.parse({
+          name: 'শীতের অফার',
+          channel: 'sms',
+          content: { text: 'ছাড়' },
+        }),
+        actor,
+      );
+
+      await admin.pool.query('update campaigns set status=$2 where id=$1', [id, status]);
+      await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_SCHEDULED',
+      });
+      expect((await service.get(storeId, id)).status).toBe(status);
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
+      expect(await recipientRows(id)).toEqual([]);
+    },
+  );
 
   it('refuses to resume by hand a campaign paused for its balance', async () => {
     const id = await approvedCampaign(null);
