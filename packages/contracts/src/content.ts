@@ -25,9 +25,12 @@ const pieceSchema = z.strictObject({
     .refine((body) => !body.includes('\u0000'), 'Remove the null character'),
 });
 
-export const createContentPieceSchema = pieceSchema.extend({
-  sourcePieceId: z.uuid().optional(),
-});
+export const createContentPieceSchema = pieceSchema
+  .extend({
+    sourcePieceId: z.uuid().optional(),
+    aiRunId: z.uuid().optional(),
+  })
+  .refine((input) => !input.sourcePieceId || !input.aiRunId, 'Choose one source');
 export const updateContentPieceSchema = pieceSchema
   .partial()
   .refine((input) => Object.keys(input).length > 0, 'Change at least one field');
