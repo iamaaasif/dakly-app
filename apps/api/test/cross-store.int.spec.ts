@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { META_AUTHORIZATION_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
@@ -1610,6 +1611,59 @@ async function notification(shop: Shop) {
   );
   return result.rows[0].id as string;
 }
+fixture('GET /dashboard', async () => {
+  const { a, b } = await pair();
+  const reports = app.get(AnalyticsService);
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 7],
+  ] as const) {
+    const { current, previous } = await reports.periods(shop.id, 7);
+    await f.admin.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+       ($1,$2,'orders','',$4),($1,$3,'orders','',1),
+       ($1,$2,'buyer_activity',$5,$2::date - date '1970-01-01'),
+       ($1,$2,'buyer_activity',$6,$3::date - date '1970-01-01'),
+       ($1,$2,'lifecycle','new',$4)`,
+      [shop.id, current.through, previous.through, count, randomUUID(), randomUUID()],
+    );
+    const result = await success(shop, 'GET', '/dashboard?period=7', 200);
+    const { cards, lifecycle } = result.json();
+    for (const key of ['orders', 'newCustomers', 'customersWhoCameBack'] as const) {
+      const now = await reports[key](shop.id, current);
+      const before = await reports[key](shop.id, previous);
+      expect(cards[key]).toEqual({
+        total: now.total.toString(),
+        previous: before.total.toString(),
+        points: now.points.map(({ value }) => value.toString()),
+      });
+    }
+    expect(cards.orders.total).toBe(String(count));
+    expect(lifecycle).toEqual(await reports.lifecycleCounts(shop.id, current));
+    expect(lifecycle.new).toBe(count);
+  }
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    a.membership,
+  ]);
+  const restricted = await f.request(a.member, 'GET', '/dashboard?period=7');
+  expect(restricted.statusCode, restricted.body).toBe(200);
+  expect(Object.keys(restricted.json().cards)).toEqual(['newCustomers', 'customersWhoCameBack']);
+  expect(restricted.json().lifecycle.new).toBe(2);
+  const ordersOnly = await success(b, 'POST', '/roles', 201, {
+    name: 'Order reader',
+    permissions: { ...permissions, areas: { orders: 'view' } },
+  });
+  await success(b, 'PATCH', `/members/${b.membership}`, 200, { roleId: ordersOnly.json().id });
+  const ordersDashboard = await f.request(b.member, 'GET', '/dashboard');
+  expect(ordersDashboard.statusCode, ordersDashboard.body).toBe(200);
+  expect(ordersDashboard.json()).not.toHaveProperty('lifecycle');
+  expect(ordersDashboard.json().cards).not.toHaveProperty('newCustomers');
+  expect(ordersDashboard.json().cards).not.toHaveProperty('customersWhoCameBack');
+  expect(ordersDashboard.json().cards.orders.points).toHaveLength(30);
+  expect((await f.request(a.owner, 'GET', `/dashboard?storeId=${b.id}`)).statusCode).toBe(400);
+  expect((await f.request(a.owner, 'GET', '/dashboard?period=8')).statusCode).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),
