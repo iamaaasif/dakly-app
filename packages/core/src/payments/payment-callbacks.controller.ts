@@ -1,4 +1,12 @@
-import { Controller, HttpCode, Param, Post, Req, type RawBodyRequest } from '@nestjs/common';
+import {
+  Controller,
+  HttpCode,
+  Inject,
+  Param,
+  Post,
+  Req,
+  type RawBodyRequest,
+} from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 import { paymentGatewaySchema } from '@dakly/contracts/payments';
@@ -11,7 +19,9 @@ import { PaymentCallbacksService } from './payment-callbacks.service';
 @Controller('webhooks/payments')
 @Public()
 export class PaymentCallbacksController {
-  constructor(private readonly callbacks: PaymentCallbacksService) {}
+  constructor(
+    @Inject(PaymentCallbacksService) private readonly callbacks: PaymentCallbacksService,
+  ) {}
 
   @Post(':gateway')
   @ProviderCallback()
