@@ -2,15 +2,17 @@
 
 Planned release 1 background jobs: its queue, what starts it, its payload and what makes a second run harmless. The rules are in [jobs.md](../rules/jobs.md); the queues are the nine in [architecture.md](../architecture.md#queues). These contracts guide feature implementation; the schema PR does not implement the handlers. Every payload has `storeId` unless the row says "sweep", and is parsed with a zod schema in the job file.
 
-A job that loses its Valkey entry is found again by a sweep: each sweep calls a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
+A store job that loses its Valkey entry is found again by a sweep. Store sweeps call a `SECURITY DEFINER` function from [isolation-and-access.md](isolation-and-access.md) that returns `(store_id, id)` of due work, then queues one job per row. Sweeps run on a BullMQ repeatable schedule in the `sync` queue (or `payments`, `campaign` and `workflow` where marked) and carry no `storeId` themselves.
 
 ## inbound
 
-| Job                      | Started by                          | Payload                     | Makes a rerun harmless                                                               |
-| ------------------------ | ----------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
-| `process-webhook-event`  | Webhook intake after saving the row | `storeId`, `webhookEventId` | `webhook_events.status` is checked; unique `messages (conversation_id, external_id)` |
-| `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                                            |
-| `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)`                |
+| Job                      | Started by                          | Payload                     | Makes a rerun harmless                                                |
+| ------------------------ | ----------------------------------- | --------------------------- | --------------------------------------------------------------------- |
+| `process-webhook-event`  | Webhook intake after saving the row | `webhookEventId`            | Job id is the webhook row id. The worker checks the event status.     |
+| `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                             |
+| `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)` |
+
+`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`.
 
 ## ai-reply
 

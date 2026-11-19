@@ -125,8 +125,10 @@ The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embe
 
 Messenger and Instagram
 
-1. Facebook Login for Business returns a user token. Dakly lists the user's Pages and linked Instagram accounts.
-2. The owner picks which to connect. Dakly stores the long-lived Page token (encrypted) and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
+1. `POST /channel-connections/meta/start` returns the Facebook Login for Business URL. An Owner or Admin can start this flow. The login state can be used once in the same store and session, within 10 minutes.
+2. The Integrations screen passes the returned code and state to `POST /channel-connections/meta/accounts`. The API exchanges them and lists Pages the member can manage and their linked Instagram accounts. The response includes an opaque selection id. The credential stays encrypted in Valkey for up to 10 minutes, bound to the same store, member and session.
+3. Graph login uses a User access token configuration with `pages_show_list`, `pages_manage_metadata`, `instagram_basic` and `pages_read_engagement`. Add `business_management` for Pages linked to a Meta business account. The member must have a role on that business. Meta lists `ads_read` or `ads_management` for Instagram user fields when the Page role was granted through Business Manager. Credentials for Graph login alone leave webhook intake disabled. [Page discovery requirements](https://developers.facebook.com/docs/graph-api/changelog/non-versioned-changes/nvc-2023#september-15-2023) · [Instagram user requirements](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/v21.0/)
+4. The second CHN-2 PR adds selection. The owner picks which accounts to connect. Dakly stores the encrypted long-lived Page token and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
 
 WhatsApp
 
@@ -137,9 +139,12 @@ Every connection is a `channel_connections` row: kind, external account id, encr
 
 Webhook intake
 
-1. `POST /webhooks/meta` checks `X-Hub-Signature-256` against `request.rawBody` with `timingSafeEqual`. A bad signature returns 401 and logs a security event.
-2. The handler saves the raw payload to `webhook_events` (unique on provider and external event id), enqueues `process-webhook-event`, and returns 200. Nothing else runs in the request.
-3. The job parses with the driver, finds the store with the `store_id_for_channel_account(kind, externalId)` database function, and calls `ChatsService.receiveInboundMessage(storeId, ...)` or `SocialService.receiveComment(storeId, ...)`. A duplicate hits the unique key and is skipped.
+1. `GET /webhooks/meta` returns the challenge as plain text when the subscription token matches `META_WEBHOOK_VERIFY_TOKEN`.
+2. `POST /webhooks/meta` checks `X-Hub-Signature-256` against the exact request bytes using `META_APP_SECRET`. A bad signature on a valid JSON request returns 401 and logs a security event. Fastify refuses malformed JSON and bodies over 1 MiB.
+3. The handler saves one payload per signed delivery in `webhook_events`. Its external id is the SHA-256 hex digest of the verified bytes. The handler queues one `process-webhook-event` job by row id and returns 200. An identical retry restores a missing job for an unprocessed row.
+4. CHN-4 adds the worker. It parses with the driver and finds each store through `store_id_for_channel_account(kind, externalId)`. CHAT-1 and CHAT-2 handle individual message and receipt deduplication.
+
+Enable live intake after the worker can clear processed payloads and recover acknowledged deliveries if their Valkey jobs are lost. Run the seven-day webhook purge before enabling live intake.
 
 Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
 
