@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import type { CreatePaymentIntent } from '@dakly/contracts/payments';
 import type {
@@ -23,9 +23,9 @@ type Intent = NonNullable<Awaited<ReturnType<PaymentsRepository['find']>>>;
 @Injectable()
 export class PaymentsService {
   constructor(
-    private readonly repository: PaymentsRepository,
-    private readonly transaction: StoreTransaction,
-    private readonly clock: Clock,
+    @Inject(PaymentsRepository) private readonly repository: PaymentsRepository,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   create(storeId: string, input: CreatePaymentIntent) {

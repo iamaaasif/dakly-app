@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 
 import {
@@ -49,7 +49,7 @@ const intentColumns = {
 
 @Injectable()
 export class PaymentsRepository {
-  constructor(private readonly database: TenantDatabase) {}
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async insert(storeId: string, values: Omit<IntentInsert, 'storeId'>) {
     const intents = await this.database.forStore(storeId, (tx) =>

@@ -15,8 +15,8 @@ export class PaymentCallbacksService {
   private readonly logger = new Logger(PaymentCallbacksService.name);
 
   constructor(
-    private readonly repository: PaymentCallbacksRepository,
-    private readonly payments: PaymentsService,
+    @Inject(PaymentCallbacksRepository) private readonly repository: PaymentCallbacksRepository,
+    @Inject(PaymentsService) private readonly payments: PaymentsService,
     @Inject(PAYMENT_DRIVERS) private readonly drivers: readonly PaymentDriver[],
   ) {}
 

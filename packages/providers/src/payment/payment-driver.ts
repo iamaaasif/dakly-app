@@ -29,6 +29,7 @@ export type PaymentCallback = {
   merchantReference: string;
 };
 
+// Each shop connects its own merchant account. Dakly never holds shop money.
 export type PaymentMerchant =
   { flow: 'billing' } | { flow: 'shop'; credentials: Buffer; mode: 'live' | 'sandbox' };
 
