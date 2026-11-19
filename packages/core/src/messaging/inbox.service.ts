@@ -129,7 +129,8 @@ export class InboxService {
   }
 
   async returnDue(storeId: string, id: string, actor: { kind: 'system' }) {
-    await this.transaction.run(storeId, async () => {
+    // A return and a change to the Chats extension must take effect in order.
+    await this.transaction.runLocked(storeId, async () => {
       const before = await this.repository.find(storeId, id, 'no key update');
       const now = this.clock.now();
       if (!before?.aiResumesAt || before.aiResumesAt > now) return;

@@ -151,9 +151,25 @@ it('keeps a deadline when Chats is disabled after a return was queued', async ()
   expect(queued?.data).toEqual({ storeId: f.a, conversationId: due });
   const before = await f.row('conversations', due);
   const { pool } = f.connection;
-  await pool.query('update stores set extensions = array[]::text[] where id = $1', [f.a]);
+  const connection = await pool.connect();
+  const handler = app.get(ReturnConversationToAiJob);
   try {
-    await app.get(ReturnConversationToAiJob).handle(queued!.data);
+    await connection.query('begin');
+    const { rows } = await connection.query<{ pid: number }>('select pg_backend_pid() as pid');
+    await connection.query('update stores set extensions = array[]::text[] where id = $1', [f.a]);
+    const attempted = handler.handle(queued!.data);
+    try {
+      await vi.waitFor(async () => {
+        const { rows: blocked } = await pool.query<{ blocked: boolean }>(
+          'select exists(select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))) as blocked',
+          [rows[0]!.pid],
+        );
+        expect(blocked[0]?.blocked).toBe(true);
+      });
+    } finally {
+      await connection.query('commit');
+      await attempted;
+    }
     expect(await f.row('conversations', due)).toMatchObject({
       responder: 'human',
       ai_resumes_at: before.ai_resumes_at,
@@ -162,11 +178,12 @@ it('keeps a deadline when Chats is disabled after a return was queued', async ()
     await sweep.handle({});
     expect((await queue.getWaiting()).some(({ data }) => data.conversationId === due)).toBe(false);
   } finally {
+    connection.release(true);
     await pool.query("update stores set extensions = array['chats'] where id = $1", [f.a]);
   }
   await sweep.handle({});
   const resumed = (await queue.getWaiting()).find(({ data }) => data.conversationId === due);
   expect(resumed?.data).toEqual({ storeId: f.a, conversationId: due });
-  await app.get(ReturnConversationToAiJob).handle(resumed!.data);
+  await handler.handle(resumed!.data);
   expect(await f.row('conversations', due)).toMatchObject({ responder: 'ai', ai_resumes_at: null });
 });
