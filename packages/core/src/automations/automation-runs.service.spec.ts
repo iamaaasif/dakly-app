@@ -613,6 +613,21 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
     });
 
+    it('reports an uncertain response even when the settlement clock is unavailable', async () => {
+      providerError = new Error('connection reset');
+      schedulerUnavailable = 'after authorization';
+
+      await expect(runWithJobContext(() => start(send), 'workflow-job-lease-1')).rejects.toThrow(
+        'Scheduler clock unavailable before provider dispatch',
+      );
+
+      expect(reportJob).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
+        'workflow-job-lease-1',
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+      );
+    });
+
     it('does not send again a step that an earlier claim handed to the provider', async () => {
       repository.steps = [
         { stepKey: 'first', kind: 'send', outcome: 'sending', sentAt: claimedAt },

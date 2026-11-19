@@ -63,21 +63,27 @@ export async function deliverAutomationSms(
       (receipt) => ({ receipt }),
       (error: unknown) => ({ error }),
     );
+  const refusal =
+    'error' in attempt &&
+    attempt.error instanceof AppError &&
+    attempt.error.code === 'SMS_SEND_REFUSED'
+      ? attempt.error
+      : undefined;
+  if ('error' in attempt && !refusal)
+    reporter.reportJob(
+      serializeError(attempt.error),
+      jobLogBindings().jobId,
+      workflowOperationHash(storeId, key),
+    );
   const now = await repository.schedulerTime(storeId);
   if ('receipt' in attempt) return acceptedSend(step, submitted, attempt.receipt, now);
-  const { error } = attempt;
-  if (error instanceof AppError && error.code === 'SMS_SEND_REFUSED')
+  if (refusal)
     return {
-      ...failed(error.message, now),
+      ...failed(refusal.message, now),
       claim: submitted.claim,
       stepChange: { outcome: 'failed' },
       credits: { settle: 'release' },
     };
-  reporter.reportJob(
-    serializeError(error),
-    jobLogBindings().jobId,
-    workflowOperationHash(storeId, key),
-  );
   return endWithUnknownOutcome({ ...failed(SMS_NO_ANSWER, now), claim: submitted.claim });
 }
 
