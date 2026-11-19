@@ -369,8 +369,15 @@
     {
       "idx": 52,
       "version": "7",
-      "when": 1795098479390,
-      "tag": "0052_inbound_message_sender",
+      "when": 1795096855397,
+      "tag": "0052_automation_balance_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1795105226997,
+      "tag": "0053_inbound_message_sender",
       "breakpoints": true
     }
   ]

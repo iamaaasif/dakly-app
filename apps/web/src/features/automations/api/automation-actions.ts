@@ -4,6 +4,7 @@ import {
   AUTOMATION_NAME_MAX,
   type AutomationListItem,
   type AutomationResponse,
+  type CreateAutomationInput,
 } from '@dakly/contracts/automations';
 
 import { automationKeys } from './automations';
@@ -30,6 +31,16 @@ export function useDuplicateAutomation() {
         body: { name: name.slice(0, AUTOMATION_NAME_MAX - suffix.length) + suffix, graph },
       });
     },
+    onSuccess: () => client.invalidateQueries({ queryKey: automationKeys.all(contextTag) }),
+  });
+}
+
+export function useCreateAutomation() {
+  const { contextTag, request } = useStoreRequest();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (draft: CreateAutomationInput) =>
+      request<AutomationResponse>('/automations', { method: 'POST', body: draft }),
     onSuccess: () => client.invalidateQueries({ queryKey: automationKeys.all(contextTag) }),
   });
 }

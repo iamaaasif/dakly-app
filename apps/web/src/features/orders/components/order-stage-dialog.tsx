@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState, type RefObject } from 'react';
+import { type FormEvent, type RefObject } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -56,68 +56,86 @@ type OrderStageDialogProps = {
   order: OrderDetail;
   action: StageFormAction;
   stage: RefObject<HTMLSpanElement | null>;
-  primary: boolean;
-  disabled: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
 export function OrderStageDialog({
   order,
   action,
   stage,
-  primary,
-  disabled,
+  open,
+  onOpenChange,
 }: OrderStageDialogProps) {
-  const [open, setOpen] = useState(false);
   const form = useForm<ActionValues, undefined, ActionInput>({
     resolver: zodResolver(actionSchema(order.items)),
     defaultValues: defaultFields(action, order),
   });
   const { submit, pending, error, reset } = useStageSubmission(order.id, () => {
-    setOpen(false);
+    onOpenChange(false);
     requestAnimationFrame(() => stage.current?.focus());
   });
   const label = stageActionLabels[action];
   const title = action === 'cancelled' ? `Cancel order #${order.number}?` : label;
+
   return (
     <SheetDialog
       title={title}
-      trigger={
-        <Button variant={primary ? 'primary' : 'secondary'} disabled={disabled}>
-          {label}
-        </Button>
-      }
       open={open}
       onOpenChange={(next) => {
         if (!next) {
           form.reset(defaultFields(action, order));
           reset();
         }
-        setOpen(next);
+        onOpenChange(next);
       }}
       pending={pending}
     >
       <FormProvider {...form}>
-        <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
-          <fieldset disabled={pending} className="min-w-0 space-y-3 wrap-anywhere">
-            <StageFields action={action} order={order} />
-          </fieldset>
-          {error && (
-            <p role="alert" className="text-danger">
-              {error.message}
-            </p>
-          )}
-          <div className="flex justify-end">
-            <Button
-              type="submit"
-              loading={pending}
-              variant={action === 'cancelled' ? 'danger' : 'primary'}
-            >
-              {label}
-            </Button>
-          </div>
-        </form>
+        <StageDialogForm
+          action={action}
+          order={order}
+          pending={pending}
+          error={error}
+          label={label}
+          onSubmit={form.handleSubmit(submit)}
+        />
       </FormProvider>
     </SheetDialog>
+  );
+}
+
+type StageDialogFormProps = {
+  action: StageFormAction;
+  order: OrderDetail;
+  pending: boolean;
+  error?: { message: string } | null;
+  label: string;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+};
+
+function StageDialogForm({ action, order, pending, error, label, onSubmit }: StageDialogFormProps) {
+  return (
+    <form className="space-y-3" onSubmit={onSubmit}>
+      <fieldset disabled={pending} className="min-w-0 space-y-3 wrap-anywhere">
+        <StageFields action={action} order={order} />
+      </fieldset>
+      {error && (
+        <p role="alert" className="text-danger">
+          {error.message}
+        </p>
+      )}
+      <div className="flex justify-end">
+        <Button
+          type="submit"
+          loading={pending}
+          variant={action === 'cancelled' ? 'danger' : 'primary'}
+          className="min-h-11 sm:min-h-10"
+        >
+          {label}
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -148,7 +166,9 @@ function useStageSubmission(id: string, onSaved: () => void) {
   };
 }
 
-function StageFields({ action, order }: Pick<OrderStageDialogProps, 'action' | 'order'>) {
+type StageFieldsProps = Pick<OrderStageDialogProps, 'action' | 'order'>;
+
+function StageFields({ action, order }: StageFieldsProps) {
   switch (action) {
     case 'with_courier':
       return <CourierFields />;
@@ -164,7 +184,9 @@ function StageFields({ action, order }: Pick<OrderStageDialogProps, 'action' | '
   }
 }
 
-function StageReasonFields({ action }: { action: 'on_hold' | 'cancelled' }) {
+type StageReasonFieldsProps = { action: 'on_hold' | 'cancelled' };
+
+function StageReasonFields({ action }: StageReasonFieldsProps) {
   const labelMap = action === 'on_hold' ? onHoldReasonLabels : cancelReasonLabels;
   return (
     <>
@@ -187,7 +209,7 @@ function ReturnFields() {
   return (
     <>
       <StageInput name="reason" label="Return reason" maxLength={200} />
-      <div className="flex min-h-10 items-center gap-3 pl-2">
+      <div className="flex min-h-11 items-center gap-3 pl-2 sm:min-h-10">
         <Checkbox
           id="damaged-items"
           checked={damaged ?? false}
@@ -221,7 +243,9 @@ function CourierFields() {
   );
 }
 
-function PartialFields({ items }: { items: OrderDetail['items'] }) {
+type PartialFieldsProps = { items: OrderDetail['items'] };
+
+function PartialFields({ items }: PartialFieldsProps) {
   const { register } = useFormContext<ActionValues>();
   return (
     <>
@@ -295,7 +319,7 @@ function StageSelect({ name, label, placeholder, options, onChange }: StageSelec
       {(props) => (
         <select
           {...props}
-          className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-invalid:border-danger"
+          className="min-h-11 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus aria-invalid:border-danger sm:min-h-10"
           value={value ?? ''}
           {...register(name, {
             setValueAs: (value: string) => value || undefined,

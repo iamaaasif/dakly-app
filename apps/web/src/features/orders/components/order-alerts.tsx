@@ -2,51 +2,65 @@ import { Clock, PackageCheck, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 import type { OrderAlerts as Alerts } from '@dakly/contracts/orders';
+import { cn } from '@dakly/ui/cn';
 
 import { formatMoney } from '@/lib/format-money';
 
-export function OrderAlerts({ alerts }: { alerts: Alerts }) {
+type OrderAlertsProps = { alerts: Alerts };
+
+export function OrderAlerts({ alerts }: OrderAlertsProps) {
   const cards = [
     {
       show: alerts.waiting > 0,
       icon: Clock,
-      className: 'bg-warning-soft text-warning',
+      className: 'border-warning/20 bg-warning-soft text-warning',
       title: `${orderCount(alerts.waiting)} waiting over 12 hours`,
       href: '/orders?alert=waiting',
-      detail: 'These orders still need confirmation.',
+      detail: 'Unconfirmed orders are the ones most likely to be fake or forgotten.',
+      actionLabel: 'Confirm now ›',
     },
     {
       show: alerts.highRisk > 0,
       icon: ShieldAlert,
-      className: 'bg-danger-soft text-danger',
+      className: 'border-danger/20 bg-danger-soft text-danger',
       title: `${alerts.highRisk} high-risk ${alerts.highRisk === 1 ? 'order' : 'orders'}`,
       href: '/orders?alert=risk',
-      detail: 'These orders have no advance recorded.',
+      detail: 'These customers returned most past parcels. Ask for a small advance first.',
+      actionLabel: 'Review ›',
     },
     {
       show: alerts.codAwaitingOrders > 0,
       icon: PackageCheck,
-      className: 'bg-info-soft text-info',
+      className: 'border-info/20 bg-info-soft text-info',
       title: `${formatMoney(BigInt(alerts.codAwaitingPoisha))} COD still with couriers`,
       href: '/orders?alert=cod',
-      detail: `${orderCount(alerts.codAwaitingOrders)} awaiting COD collection.`,
+      detail: `${alerts.codAwaitingOrders} delivered ${alerts.codAwaitingOrders === 1 ? 'order hasn’t' : 'orders haven’t'} been paid to you yet.`,
+      actionLabel: 'Check ›',
     },
   ].filter((card) => card.show);
 
   if (!cards.length) return null;
   return (
     <section aria-label="Order alerts" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {cards.map(({ icon: Icon, className, title, detail, href }) => (
+      {cards.map(({ icon: Icon, className, title, detail, actionLabel, href }) => (
         <Link
           key={href}
           href={href}
-          className={`flex min-h-10 items-start gap-3 rounded-lg p-4 ${className}`}
+          className={cn(
+            'rounded-xl hover:shadow-xs flex min-h-11 flex-col justify-between border p-4 transition-colors',
+            className,
+          )}
         >
-          <Icon className="mt-0.5 shrink-0" size={16} strokeWidth={1.75} aria-hidden="true" />
           <div>
-            <p className="font-semibold underline">{title}</p>
-            <p className="mt-1 text-text">{detail}</p>
+            <div className="flex items-center gap-2">
+              <Icon className="shrink-0" size={16} strokeWidth={2} aria-hidden="true" />
+              <span className="text-sm font-semibold underline decoration-transparent hover:decoration-current">
+                {title}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-text">{detail}</p>
           </div>
+          <span className="mt-3 text-xs font-semibold">{actionLabel}</span>
         </Link>
       ))}
     </section>
