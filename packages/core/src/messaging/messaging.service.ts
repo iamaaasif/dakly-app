@@ -96,6 +96,7 @@ export class MessagingService {
       storeId,
       { channel, connectionId, externalId: input.externalSenderId },
     );
+    // Sample receipt time after the contact lock so a waiting webhook cannot backdate the burst.
     const now = this.clock.now();
     const conversation = await this.inbound.getConversation(
       storeId,

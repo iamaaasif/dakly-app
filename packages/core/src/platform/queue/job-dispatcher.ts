@@ -11,6 +11,7 @@ import { QUEUES, type QueueName } from './queues';
 
 // Overlapping transactional runs are safe: each job claims its notice or alert under a lease first.
 const TRANSACTIONAL_JOBS_AT_ONCE = 5;
+const AI_REPLY_JOBS_AT_ONCE = 5;
 const BULK_JOBS_AT_ONCE = 1;
 // Each step job guards its writes with the run's claim, so steps of many runs run side by side.
 const WORKFLOW_JOBS_AT_ONCE = 5;
@@ -18,7 +19,7 @@ const WORKFLOW_JOBS_AT_ONCE = 5;
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
   inbound: TRANSACTIONAL_JOBS_AT_ONCE,
-  'ai-reply': 5,
+  'ai-reply': AI_REPLY_JOBS_AT_ONCE,
   outbound: TRANSACTIONAL_JOBS_AT_ONCE,
   sync: 1,
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,

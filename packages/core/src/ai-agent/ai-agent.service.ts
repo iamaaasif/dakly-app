@@ -30,6 +30,16 @@ export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 const HOLDING_REPLY = 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।';
 type Reason = (typeof handoverReasons)[number];
 type Turn = NonNullable<Awaited<ReturnType<InboxService['aiReplyTurn']>>>;
+type EligibleTurn = {
+  turn: Turn;
+  target: {
+    contactId: string;
+    channel: Exclude<Turn['channel'], 'whatsapp'>;
+    connectionId: string;
+    identityId: string;
+  };
+  debounceSeconds: number;
+};
 
 @Injectable()
 export class AiAgentService {
@@ -92,7 +102,11 @@ export class AiAgentService {
     if (reason) await this.handOver(storeId, conversationId, candidate, reason);
   }
 
-  private async eligibleTurn(storeId: string, id: string, lock = false) {
+  private async eligibleTurn(
+    storeId: string,
+    id: string,
+    lock = false,
+  ): Promise<EligibleTurn | undefined> {
     const settings = await this.enabledSettings(storeId);
     if (!settings) return;
     const turn = await this.inbox.aiReplyTurn(storeId, id, lock);
@@ -130,7 +144,7 @@ export class AiAgentService {
   private async handOver(
     storeId: string,
     conversationId: string,
-    before: NonNullable<Awaited<ReturnType<AiAgentService['eligibleTurn']>>>,
+    before: EligibleTurn,
     reason: Reason,
   ) {
     await this.transaction.runLocked(storeId, async () => {
