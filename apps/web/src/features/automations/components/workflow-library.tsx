@@ -49,18 +49,29 @@ function matches(template: WorkflowTemplateCard, facet: Facet, value: string) {
   return template.channels.some((channel) => channel === value);
 }
 
+type Selected = (facet: Facet) => string;
+type Create = (draft: CreateAutomationInput) => void;
+
+function filteredTemplates(selected: Selected, except?: Facet) {
+  return workflowTemplates.filter((item) =>
+    groups.every(({ key }) => key === except || matches(item, key, selected(key))),
+  );
+}
+
 export function WorkflowLibrary() {
   const router = useRouter();
   const search = useSearchParams();
   const action = useAutomationAction();
   const workflows = useAutomations();
-  const selected = (facet: Facet) => {
+  const selected: Selected = (facet) => {
     const value = search.get(facet);
     const group = groups.find(({ key }) => key === facet);
-    return group?.options.some(({ value: option }) => option === value) ? value! : 'all';
+    return value && group?.options.some((option) => option.value === value) ? value : 'all';
   };
-  const results = workflowTemplates.filter((item) =>
-    groups.every(({ key }) => matches(item, key, selected(key))),
+  const activeTemplates = new Set(
+    workflows.data?.items
+      .filter(({ status }) => status === 'active')
+      .map(({ templateKey }) => templateKey),
   );
   function choose(facet: Facet, value: string) {
     const query = new URLSearchParams(search);
@@ -80,98 +91,130 @@ export function WorkflowLibrary() {
   }
   return (
     <main className="min-h-screen bg-surface-muted">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/automations"
-            aria-label="Back to Automations"
-            className="grid size-10 place-items-center rounded-md border border-input-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            <ArrowLeft size={16} aria-hidden="true" />
-          </Link>
-          <h1 className="font-bold">Create workflow</h1>
-        </div>
-        <Button
-          variant="secondary"
-          disabled={action.isPending}
-          onClick={() => create({ name: 'Untitled workflow', graph: emptyWorkflow })}
-        >
-          Create from scratch
-        </Button>
-      </header>
-      <div className="mx-auto grid max-w-6xl gap-6 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-8">
-        <aside aria-label="Template filters" className="flex flex-wrap gap-4 md:flex-col">
-          {groups.map(({ key, name, options }) => {
-            const candidates = workflowTemplates.filter((item) =>
-              groups.every(
-                (group) => group.key === key || matches(item, group.key, selected(group.key)),
-              ),
-            );
-            return (
-              <section key={key} className="min-w-36 space-y-1" aria-label={name}>
-                <h2 className="px-2 text-xs font-semibold tracking-wide text-text-muted uppercase">
-                  {name}
-                </h2>
-                {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => (
-                  <Button
-                    key={value}
-                    variant="secondary"
-                    aria-pressed={selected(key) === value}
-                    className={cn(
-                      'w-full justify-between border-0 px-2',
-                      selected(key) === value ? 'bg-primary-soft text-action' : 'bg-transparent',
-                    )}
-                    onClick={() => choose(key, value)}
-                  >
-                    {label}
-                    <span className="text-xs tabular-nums">
-                      {candidates.filter((item) => matches(item, key, value)).length}
-                    </span>
-                  </Button>
-                ))}
-              </section>
-            );
-          })}
-        </aside>
-        <section aria-label="Ready-made workflows" className="space-y-4">
-          <div>
-            <h2 className="text-xl font-bold">Pick a ready-made workflow</h2>
-            <p className="text-sm text-text-muted">
-              Each one comes with the trigger, timing, exit conditions and messages set up. You can
-              change anything before you start it.
-            </p>
-          </div>
-          {action.isError && (
-            <p role="alert" className="text-danger">
-              {action.error.message}
-            </p>
-          )}
-          <p className="text-sm">
-            {results.length} {results.length === 1 ? 'workflow' : 'workflows'}
-          </p>
-          {results.length === 0 && (
-            <p className="text-text-muted">Choose different filters to see workflows.</p>
-          )}
-          <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            {results.map((template) => (
-              <TemplateCard
-                key={template.key}
-                template={template}
-                inUse={
-                  workflows.data?.items.some(
-                    (workflow) =>
-                      workflow.templateKey === template.key && workflow.status === 'active',
-                  ) === true
-                }
-                pending={action.isPending}
-                onUse={() =>
-                  create({ name: template.name, graph: template.graph, templateKey: template.key })
-                }
-              />
-            ))}
-          </div>
-        </section>
+      <LibraryHeader
+        pending={action.isPending}
+        onCreate={() => create({ name: 'Untitled workflow', graph: emptyWorkflow })}
+      />
+      <div className="mx-auto grid max-w-7xl gap-6 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-8">
+        <LibraryFilters selected={selected} choose={choose} />
+        <LibraryResults
+          results={filteredTemplates(selected)}
+          activeTemplates={activeTemplates}
+          pending={action.isPending}
+          error={action.error?.message}
+          create={create}
+        />
       </div>
     </main>
+  );
+}
+
+function LibraryHeader({ pending, onCreate }: { pending: boolean; onCreate: () => void }) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
+      <div className="flex items-center gap-3">
+        <Link
+          href="/automations"
+          aria-label="Back to Automations"
+          className="grid size-10 place-items-center rounded-md border border-input-border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          <ArrowLeft size={16} aria-hidden="true" />
+        </Link>
+        <h1 className="font-bold">Create workflow</h1>
+      </div>
+      <Button variant="secondary" disabled={pending} onClick={onCreate}>
+        Create from scratch
+      </Button>
+    </header>
+  );
+}
+
+function LibraryFilters({
+  selected,
+  choose,
+}: {
+  selected: Selected;
+  choose: (facet: Facet, value: string) => void;
+}) {
+  return (
+    <aside aria-label="Template filters" className="flex flex-wrap gap-4 md:flex-col">
+      {groups.map(({ key, name, options }) => {
+        const candidates = filteredTemplates(selected, key);
+        return (
+          <section key={key} className="min-w-36 space-y-1" aria-label={name}>
+            <h2 className="px-2 text-xs font-semibold tracking-wide text-text-muted uppercase">
+              {name}
+            </h2>
+            {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => (
+              <Button
+                key={value}
+                variant="secondary"
+                aria-pressed={selected(key) === value}
+                className={cn(
+                  'w-full justify-between border-0 px-2',
+                  selected(key) === value ? 'bg-primary-soft text-action' : 'bg-transparent',
+                )}
+                onClick={() => choose(key, value)}
+              >
+                {label}
+                <span className="text-xs tabular-nums">
+                  {candidates.filter((item) => matches(item, key, value)).length}
+                </span>
+              </Button>
+            ))}
+          </section>
+        );
+      })}
+    </aside>
+  );
+}
+
+function LibraryResults({
+  results,
+  activeTemplates,
+  pending,
+  error,
+  create,
+}: {
+  results: WorkflowTemplateCard[];
+  activeTemplates: Set<string | null>;
+  pending: boolean;
+  error?: string;
+  create: Create;
+}) {
+  return (
+    <section aria-label="Ready-made workflows" className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold">Pick a ready-made workflow</h2>
+        <p className="text-sm text-text-muted">
+          Each one comes with the trigger, timing, exit conditions and messages set up. You can
+          change anything before you start it.
+        </p>
+      </div>
+      {error && (
+        <p role="alert" className="text-danger">
+          {error}
+        </p>
+      )}
+      <p className="text-sm">
+        {results.length} {results.length === 1 ? 'workflow' : 'workflows'}
+      </p>
+      {results.length === 0 && (
+        <p className="text-text-muted">Choose different filters to see workflows.</p>
+      )}
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        {results.map((template) => (
+          <TemplateCard
+            key={template.key}
+            template={template}
+            inUse={activeTemplates.has(template.key)}
+            pending={pending}
+            onUse={() =>
+              create({ name: template.name, graph: template.graph, templateKey: template.key })
+            }
+          />
+        ))}
+      </div>
+    </section>
   );
 }

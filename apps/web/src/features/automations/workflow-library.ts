@@ -22,18 +22,18 @@ export const templateGoalLabels = {
 
 export function stepLabel(step: AutomationStep): string {
   if (step.kind === 'send') return step.channels.map((key) => channelLabels[key]).join(' / ');
-  if (step.kind === 'wait' && step.wait.until === 'duration') {
-    const { minutes } = step.wait;
-    if (minutes % 1440 === 0) return `Wait ${minutes / 1440}d`;
-    if (minutes % 60 === 0) return `Wait ${minutes / 60}h`;
-    return `Wait ${minutes} min`;
-  }
-  if (step.kind === 'wait' && step.wait.until === 'time_of_day')
-    return `Wait until ${step.wait.time}`;
-  if (step.kind === 'wait') return 'Wait';
+  if (step.kind === 'wait') return waitLabel(step.wait);
   if (step.kind === 'condition' || step.kind === 'random_split') return 'Split';
   if (step.kind === 'action') return 'Action';
   return 'Exit';
+}
+
+function waitLabel(wait: Extract<AutomationStep, { kind: 'wait' }>['wait']) {
+  if (wait.until === 'time_of_day') return `Wait until ${wait.time}`;
+  if (wait.until !== 'duration') return 'Wait';
+  if (wait.minutes % 1440 === 0) return `Wait ${wait.minutes / 1440}d`;
+  if (wait.minutes % 60 === 0) return `Wait ${wait.minutes / 60}h`;
+  return `Wait ${wait.minutes} min`;
 }
 
 export const workflowTemplates = (Object.keys(automationTemplates) as TemplateKey[]).map((key) => {
@@ -46,7 +46,6 @@ export const workflowTemplates = (Object.keys(automationTemplates) as TemplateKe
   return {
     ...template,
     key,
-    steps,
     channels,
     available: trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source),
   };
