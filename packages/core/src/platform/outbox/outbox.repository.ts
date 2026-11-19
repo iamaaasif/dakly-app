@@ -7,7 +7,7 @@ import { outboxEvents } from '@dakly/db/schema/platform';
 import { DATABASE } from '../database/database.tokens';
 import { TenantDatabase } from '../database/tenant-database';
 
-type NewOutboxEvent = { id?: string; type: string; payload: unknown; occurredAt: Date };
+type NewOutboxEvent = { type: string; payload: unknown; occurredAt: Date };
 
 type ClaimedOutboxEvent = {
   id: string;
@@ -28,10 +28,9 @@ export class OutboxRepository {
   ) {}
 
   async insert(storeId: string, events: NewOutboxEvent[]) {
-    await this.tenant.inTransaction(storeId, (tx) => {
-      const insert = tx.insert(outboxEvents).values(events.map((event) => ({ storeId, ...event })));
-      return events.some(({ id }) => id) ? insert.onConflictDoNothing() : insert;
-    });
+    await this.tenant.inTransaction(storeId, (tx) =>
+      tx.insert(outboxEvents).values(events.map((event) => ({ storeId, ...event }))),
+    );
   }
 
   // One autocommit statement, so the claim's row locks end before the relay talks to Valkey.

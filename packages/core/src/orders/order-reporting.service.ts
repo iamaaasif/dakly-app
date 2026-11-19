@@ -20,18 +20,6 @@ export class OrderReportingService {
     return this.orders.reportingAnchor(storeId, orderId, timeZone);
   }
 
-  reportBuyerIds(
-    storeId: string,
-    after: string | null,
-    range: { timeZone: string; since: string; limit: number },
-  ) {
-    return this.orders.reportBuyerIds(storeId, after, range);
-  }
-
-  oldestRetainedOrderDay(storeId: string, timeZone: string, since: string) {
-    return this.orders.oldestRetainedOrderDay(storeId, timeZone, since);
-  }
-
   buyerActivityDays(storeId: string, contactId: string, timeZone: string, since: string) {
     return this.orders.buyerActivityDays(storeId, contactId, timeZone, since);
   }

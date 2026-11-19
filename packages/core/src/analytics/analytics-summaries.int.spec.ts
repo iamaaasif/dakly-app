@@ -8,16 +8,13 @@ import { Worker, type Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
-import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
-import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
-import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
@@ -97,55 +94,6 @@ describe('Daily order summaries', () => {
     await app.get(BuildOrderSummaryJob).handle(job?.data);
     await job?.remove();
   }
-
-  it('removes buyer activity for exactly the contacts deleted in the selected store', async () => {
-    const manual = randomUUID();
-    const imported = randomUUID();
-    const other = randomUUID();
-    await fixture.connection.pool.query(
-      `insert into contacts(id,store_id,name,source,kind) values
-       ($1,$4,'রিনা','manual','customer'),($2,$4,'নাবিলা','import','customer'),
-       ($3,$5,'করিম','manual','customer')`,
-      [manual, imported, other, fixture.a, fixture.b],
-    );
-    await fixture.connection.pool.query(
-      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
-       ($1,'2026-11-19','buyer_activity',$3,20776),
-       ($1,'2026-11-19','buyer_activity',$4,20776),
-       ($2,'2026-11-19','buyer_activity',$3,20776)`,
-      [fixture.a, fixture.b, manual, imported],
-    );
-    const contacts = app.get(ContactsService);
-    const actor = { kind: 'system' } as const;
-    await contacts.remove(fixture.a, manual, actor);
-    await contacts.removeAll(fixture.a, [imported, imported, manual, other], actor);
-    await expect(contacts.remove(fixture.a, other, actor)).rejects.toMatchObject({
-      code: 'CONTACT_NOT_FOUND',
-    });
-    const { rows } = await fixture.connection.pool.query(
-      `select id, payload from outbox_events where store_id=$1 and type='contact.deleted'`,
-      [fixture.a],
-    );
-    expect(rows.map(({ payload }) => payload)).toEqual(
-      expect.arrayContaining([{ contactId: manual }, { contactId: imported }]),
-    );
-    expect(rows).toHaveLength(2);
-    const filter = app.get(RemoveDeletedBuyer);
-    for (const { id, payload } of [...rows, ...rows]) {
-      await filter.handle({
-        id,
-        payload,
-        type: 'contact.deleted',
-        storeId: fixture.a,
-        occurredAt: now.toISOString(),
-      });
-    }
-    const { rows: remaining } = await fixture.connection.pool.query(
-      "select store_id, dimension from store_daily_metrics where dimension=any($1::text[]) and metric='buyer_activity'",
-      [[manual, imported]],
-    );
-    expect(remaining).toEqual([{ store_id: fixture.b, dimension: manual }]);
-  });
 
   it('uses the creation day in each store’s time zone', async () => {
     const beforeMidnight = await order(fixture.a, '2026-11-08T17:59:59Z');
@@ -462,49 +410,5 @@ describe('Daily order summaries', () => {
       payload: { orderId: first, from: 'to_confirm', to: 'cancelled' },
     });
     expect(await activities()).toEqual([{ day: '2026-11-10', first_day: '2026-11-10' }]);
-  });
-  it('rebuilds a date range from orders, including an old missing cancellation', async () => {
-    await order(fixture.a, '2026-11-13T06:00:00Z');
-    const cancelled = await order(fixture.a, '2026-11-14T06:00:00Z');
-    const worker = app.get(SummarizeOrderCreated);
-    await worker.handle({ ...event(fixture.a, cancelled), type: 'order.created' });
-    await finishOrderDay(fixture.a, '2026-11-14');
-    await fixture.connection.pool.query(
-      "update orders set stage='cancelled', cancel_reason='other' where id=$1",
-      [cancelled],
-    );
-    const summaries = app.get(AnalyticsSummariesService);
-    await summaries.refreshOrderDays(fixture.a, { from: '2026-11-13', through: '2026-11-14' });
-    const rows = (await ordersFor(fixture.a)).filter(({ day }) =>
-      ['2026-11-13', '2026-11-14'].includes(day),
-    );
-    expect(rows).toMatchObject([
-      { day: '2026-11-13', value: '1' },
-      { day: '2026-11-14', value: '0' },
-    ]);
-  });
-
-  it('repairs a missing buyer day and removes activity for an excluded buyer', async () => {
-    const contactId = randomUUID();
-    await fixture.connection.pool.query(
-      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'সুমন','manual','customer')",
-      [contactId, fixture.a],
-    );
-    await order(fixture.a, '2026-11-15T12:00:00Z', contactId);
-    const repairs = app.get(AnalyticsSummariesService);
-    const activity = async () =>
-      (
-        await fixture.connection.pool.query(
-          "select day::text from store_daily_metrics where store_id=$1 and metric='buyer_activity' and dimension=$2",
-          [fixture.a, contactId],
-        )
-      ).rows;
-    await repairs.reconcileBuyerPage(fixture.a, null);
-    expect(await activity()).toEqual([{ day: '2026-11-15' }]);
-    await fixture.connection.pool.query('update contacts set is_blocked=true where id=$1', [
-      contactId,
-    ]);
-    await repairs.reconcileBuyerPage(fixture.a, null);
-    expect(await activity()).toEqual([]);
   });
 });
