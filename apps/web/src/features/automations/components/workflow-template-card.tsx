@@ -2,6 +2,7 @@ import { ArrowRight, Zap } from 'lucide-react';
 
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 
 import { channelLabels, triggerLabels } from '../automation-labels';
 import {
@@ -46,12 +47,17 @@ export function TemplateCard({
             </li>
           ))}
       </ol>
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-        <p className="text-xs text-text-muted">
+      <div
+        className={cn(
+          'mt-auto border-t border-border pt-3',
+          template.available ? 'flex items-center justify-between gap-2' : 'space-y-2',
+        )}
+      >
+        <p className="min-w-0 text-xs text-text-muted">
           {template.channels.map((key) => channelLabels[key]).join(' · ')}
         </p>
         {template.available ? (
-          <Button disabled={pending} onClick={onUse}>
+          <Button className="shrink-0" disabled={pending} onClick={onUse}>
             Use workflow<span className="sr-only"> {template.name}</span>
           </Button>
         ) : (

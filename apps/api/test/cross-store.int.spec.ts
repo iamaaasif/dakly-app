@@ -1142,7 +1142,6 @@ fixture('POST /automations', async () => {
   const response = await success(b, 'POST', '/automations', 201, {
     name: 'Birthday template',
     templateKey: 'birthday',
-    graph: welcome,
   });
   expect(response.json()).toMatchObject({
     templateKey: 'birthday',

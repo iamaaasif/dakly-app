@@ -34,14 +34,18 @@ export const AUTOMATION_NAME_MAX = 80;
 
 const automationNameSchema = z.string().trim().min(1).max(AUTOMATION_NAME_MAX);
 
-const automationFieldsSchema = z.strictObject({
+const automationDraftSchema = z.strictObject({
   name: automationNameSchema,
   graph: automationGraphSchema,
 });
-export const createAutomationSchema = automationFieldsSchema.extend({
-  templateKey: z.enum(Object.keys(automationTemplates) as TemplateKey[]).optional(),
-});
-export const changeAutomationSchema = automationFieldsSchema
+export const createAutomationSchema = z.union([
+  automationDraftSchema,
+  z.strictObject({
+    name: automationNameSchema,
+    templateKey: z.enum(Object.keys(automationTemplates) as TemplateKey[]),
+  }),
+]);
+export const changeAutomationSchema = automationDraftSchema
   .partial()
   .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
 export type AutomationTriggerPreview = {

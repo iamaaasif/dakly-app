@@ -105,12 +105,14 @@ export class AutomationsService {
         MAX_AUTOMATIONS_PER_STORE
       )
         throw automationError('AUTOMATION_LIMIT_REACHED');
-      const graph = input.templateKey ? automationTemplates[input.templateKey].graph : input.graph;
+      const draft =
+        'templateKey' in input
+          ? { ...input, graph: automationTemplates[input.templateKey].graph }
+          : input;
       // The live trigger starts as the first draft's; only Publish changes it after that.
       const automation = await this.repository.insert(storeId, {
-        ...input,
-        graph,
-        triggerType: graph.trigger.key,
+        ...draft,
+        triggerType: draft.graph.trigger.key,
         createdByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       return toAutomationResponse(automation);
