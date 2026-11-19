@@ -151,7 +151,7 @@ For Instagram messaging, add `instagram_manage_messages` to the Facebook Login c
 
 A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
 
-CHN-9 adds recovery for acknowledged deliveries whose Valkey jobs are lost and the seven-day webhook payload purge. Complete CHN-9 before enabling live intake.
+Every minute, the worker checks Meta deliveries received more than one minute ago that still need processing. If a delivery’s Valkey job is missing, the worker queues it again with the same row id as its job id.
 
 The daily token sweep queues one job per store with an active Meta connection that has no fixed expiry or expires within seven days. The worker checks Meta outside the database transaction. A valid credential with a known expiry gets one warning for that expiry date. An invalid credential moves to `needs_reconnect` and notifies members with permission to edit store settings once per connection and UTC day.
 
@@ -170,7 +170,7 @@ SMS sender name (CHN-6)
 2. Connecting and disconnecting needs Owner or Admin.
 3. Disconnecting keeps all chats and messages.
 4. Webhook handlers never do work inline; Meta retries if we answer slowly.
-5. Raw webhook payloads are kept 7 days, then deleted. Each payload is cleared as soon as its event is processed (D39).
+5. The worker clears each webhook payload as soon as it processes or ignores the delivery. The daily purge deletes finished webhook rows received more than seven days ago in batches. Rows still waiting for processing stay available for recovery (D39).
 
 ### Events
 

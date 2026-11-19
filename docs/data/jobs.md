@@ -43,6 +43,12 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 | `StartAutomationOnConsent`, `StartAutomationOnTagAdded` | Consent grant or tag added                 | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
 | `StartAutomationOnBirthday`                             | Birthday                                   | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
 
+`recover-webhook-events` runs every minute with an empty payload. It checks global Meta deliveries
+still marked `received` more than one minute after arrival, in pages of 100. If the inbound job is
+missing, it queues `process-webhook-event` under the same row id. BullMQ deduplicates overlapping
+adds. The recovery query uses `webhook_events_recovery_idx`. If Valkey loses its scheduler data,
+restart the worker to register the schedules again.
+
 Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
 Order creation, stage changes and COD collection give the order ID, which the service uses to find
 the buyer. The subscriber recomputes the contact's row from current orders.
@@ -90,6 +96,11 @@ The ANA-1 reconciliation follow-up repairs missed day refreshes nightly.
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
 ## bulk
+
+`purge-webhook-events` runs at 00:00 UTC daily with an empty payload. It deletes global webhook
+rows received more than seven days ago in batches of 5,000, skipping locked rows and keeping rows
+still marked `received`. It calls `purge_webhook_events` through the existing `dakly_app` grant
+and uses `webhook_events_received_at_idx`.
 
 `sweep-contact-stats` runs at 00:00 UTC daily and pages through `maintenance_store_ids`. It queues
 `reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contacts
@@ -158,7 +169,7 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 2. For each finished Asia/Dhaka day after a rollup's `maintenance_watermarks` row, page through `maintenance_store_ids(after, limit)` from a null cursor to an empty page. It includes active, suspended and closing stores; a store remains eligible until permanently purged. Process each store inside `forStore`: link visits into `tracked_link_visit_days`, AI run cost, tokens and counts by purpose into `store_daily_metrics`. Do not use `active_store_ids()` for retention. Upserts make retries safe. Advance the global watermark only after every page and store has finished the day, including stores with no source rows. A failed or unfinished store keeps the watermark unchanged; restart the day's scan from a null cursor on retry. Serialize runs for the same rollup so a stale run cannot overwrite newer progress.
 3. `drop_expired_partitions()`: drop AI run and link visit months older than 13 months. It skips any month past the watermark, so a failed step 2 delays deletion instead of losing data.
 4. Archive: export each `audit_log` month older than 24 months to R2 as gzipped JSON lines, check the row count, then drop it as the owner role. Export messages older than 12 months the same way, grouped by conversation and month, whether or not the chat is still active, then delete them in batches. Archives stay in R2 for the life of the store; the store purge deletes them, and a customer's deletion request removes or anonymises that customer's archived messages (D39, [growth.md](growth.md#r2-archives)).
-5. Purge in batches of 5,000: published outbox events and webhook events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, `store_daily_metrics` rows after 24 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
+5. Purge in batches of 5,000: published outbox events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, `store_daily_metrics` rows after 24 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
 6. Account history: as the owner, call `SELECT public.purge_account_security_events(1000)` in separate short transactions until it returns zero. The SQL exists in migration 0016; the daily runner remains DB-7. It deletes rows strictly older than two years and rejects limits outside 1–1,000. Retrying cannot remove newer events; it needs no store scan. No R2 archive is required for account events.
 
 ## Events in M2 and M3

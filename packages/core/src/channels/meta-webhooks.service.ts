@@ -15,6 +15,7 @@ import { loadEnv } from '../platform/config/env';
 import { hashToken } from '../platform/crypto/token-hash';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { QUEUES } from '../platform/queue/queues';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { PROCESS_WEBHOOK_EVENT } from './jobs/process-webhook-event.job';
 import { META_WEBHOOK_ERRORS } from './meta-webhooks.errors';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
@@ -75,9 +76,30 @@ export class MetaWebhooksService {
     await this.enqueueDelivery(event.id);
   }
 
+  async recoverDeliveries(): Promise<void> {
+    const before = new Date(this.clock.now().getTime() - MINUTE_MS);
+    let page = await this.repository.listReceivedBefore(before);
+    while (page.length) {
+      await Promise.all(
+        page.map(async ({ id }) => {
+          if (!(await this.queue.getJob(id))) await this.enqueueDelivery(id);
+        }),
+      );
+      page = await this.repository.listReceivedBefore(before, page.at(-1));
+    }
+  }
+
+  async purgeDeliveries(): Promise<void> {
+    const before = new Date(this.clock.now().getTime() - 7 * DAY_MS);
+    let deleted: boolean;
+    do {
+      deleted = await this.repository.purgeFinishedBefore(before);
+    } while (deleted);
+  }
+
   private async enqueueDelivery(webhookEventId: string): Promise<void> {
     try {
-      // Meta retries with the same row id if the connection drops after receiving the write.
+      // BullMQ also uses this id to deduplicate concurrent recovery and intake.
       await this.queue.add(
         PROCESS_WEBHOOK_EVENT,
         { webhookEventId },
