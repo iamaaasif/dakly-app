@@ -88,7 +88,9 @@ function CampaignListState({
         <CampaignTable campaigns={items} />
       ) : (
         <p role="status" className="rounded-lg border border-border bg-surface p-4">
-          No campaigns match these filters.
+          {query.cursor
+            ? 'This page has no campaigns. Return to the first page to see current results.'
+            : 'No campaigns match these filters.'}
         </p>
       )}
       {(query.cursor || nextCursor) && (

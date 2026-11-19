@@ -172,6 +172,10 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await page.goto(`/campaigns?limit=1&cursor=${draft}`);
     await expect(page).toHaveURL(/\/campaigns\?limit=1$/);
     await expect(page.getByRole('link', { name: longName })).toBeVisible();
+    await page.goto(`/campaigns?limit=1&cursor=${otherCampaign}&pageShop=${storeId}`);
+    await expect(page.getByRole('status')).toContainText('This page has no campaigns.');
+    await page.getByRole('link', { name: 'First page' }).click();
+    await expect(page.getByRole('link', { name: longName })).toBeVisible();
 
     const changed = await database.pool.query(
       "update memberships set built_in_role='support_agent' where store_id=$1 and built_in_role='marketer'",
