@@ -1744,22 +1744,39 @@ fixture('DELETE /saved-replies/:savedReplyId', async () => {
 fixture('GET /dashboard', async () => {
   const { a, b } = await pair();
   const reports = app.get(AnalyticsService);
-  for (const [shop, count] of [
-    [a, 2],
-    [b, 7],
-  ] as const) {
-    const { current, previous } = await reports.periods(shop.id, 7);
+  const shops = await Promise.all(
+    (
+      [
+        [a, 2],
+        [b, 7],
+      ] as const
+    ).map(async ([shop, count]) => ({ shop, count, ...(await reports.periods(shop.id, 7)) })),
+  );
+  for (const { shop, count, current, previous } of shops) {
     await f.admin.pool.query(
       `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
-       ($1,$2,'orders','',$4),($1,$3,'orders','',1),
-       ($1,$2,'buyer_activity',$5,$2::date - date '1970-01-01'),
-       ($1,$2,'buyer_activity',$6,$3::date - date '1970-01-01'),
+       ($1,$2,'orders','',$4),($1,$3,'orders','',$4::bigint + 1),
        ($1,$2,'lifecycle','new',$4),
        ($1,$2,'sales','manual',$4::bigint * 10000),
        ($1,$2,'sales','order_link',$4::bigint * 5000),
-       ($1,$3,'sales','manual',12500)`,
-      [shop.id, current.through, previous.through, count, randomUUID(), randomUUID()],
+       ($1,$3,'sales','manual',$4::bigint * 10000)`,
+      [shop.id, current.through, previous.through, count],
     );
+    await f.admin.pool.query(
+      `with repeat_buyers as (
+         select gen_random_uuid()::text as id from generate_series(1, 8 - $4::integer)
+       )
+       insert into store_daily_metrics (store_id,day,metric,dimension,value)
+       select $1::uuid,$2::date,'buyer_activity',gen_random_uuid()::text,$2::date-date '1970-01-01'
+       from generate_series(1,$4::integer)
+       union all
+       select $1,$2,'buyer_activity',id,$3::date-date '1970-01-01' from repeat_buyers
+       union all
+       select $1,$3,'buyer_activity',id,$3::date-date '1970-01-01' from repeat_buyers`,
+      [shop.id, current.through, previous.through, count],
+    );
+  }
+  for (const { shop, count, current, previous } of shops) {
     const result = await success(shop, 'GET', '/dashboard?period=7', 200);
     const { cards, lifecycle } = result.json();
     for (const key of ['orders', 'newCustomers', 'customersWhoCameBack'] as const) {
@@ -1778,8 +1795,13 @@ fixture('GET /dashboard', async () => {
       previousPoisha: previousSales.total.toString(),
       pointsPoisha: sales.points.map(({ value }) => value.toString()),
     });
-    expect(cards.sales.totalPoisha).toBe(String(count * 15000));
-    expect(cards.orders.total).toBe(String(count));
+    expect(cards.sales).toMatchObject({
+      totalPoisha: String(count * 15000),
+      previousPoisha: String(count * 10000),
+    });
+    expect(cards.orders).toMatchObject({ total: String(count), previous: String(count + 1) });
+    expect(cards.newCustomers).toMatchObject({ total: String(count), previous: String(8 - count) });
+    expect(cards.customersWhoCameBack).toMatchObject({ total: String(8 - count), previous: '0' });
     expect(lifecycle).toEqual(await reports.lifecycleCounts(shop.id, current));
     expect(lifecycle.new).toBe(count);
   }

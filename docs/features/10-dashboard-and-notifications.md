@@ -238,7 +238,7 @@ Setup banner, greeting with the Ask box, a 3-step getting started card, KPI card
 
 ### How it works
 
-The dashboard reads `GET /dashboard` once per period. The `period` query accepts 7, 30 or 90 days and defaults to 30. The API uses the same report functions as Analytics for both periods and the daily points. Orders and Sales require Orders access. New customers, Customers who came back and lifecycle groups require Customers access.
+The dashboard reads `GET /dashboard` once per period. The `period` query accepts 7, 30 or 90 days and defaults to 30. The API uses the same report functions as Analytics for both periods and the daily points. Orders and Sales require Orders access. New customers, Customers who came back and lifecycle groups require Customers access. The lifecycle groups use the latest snapshot in the selected period.
 
 Notifications
 
