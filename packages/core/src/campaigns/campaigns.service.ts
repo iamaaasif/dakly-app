@@ -268,7 +268,7 @@ export class CampaignsService {
       'sms_credits',
       adjusted ? replacement : key,
     );
-    const quantity = cancelledAt ? Math.min(chargedCredits, reservation.quantity) : chargedCredits;
+    const quantity = Math.min(chargedCredits, reservation.quantity);
     const write = { reservationId: reservation.entryId, actor };
     if (quantity)
       await this.wallets.charge(storeId, { ...write, quantity, idempotencyKey: `${key}:charge` });
