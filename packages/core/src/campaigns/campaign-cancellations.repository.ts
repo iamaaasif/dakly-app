@@ -63,9 +63,7 @@ export class CampaignCancellationsRepository {
   async expireUnknown(
     storeId: string,
     campaignId: string,
-    before: Date,
-    now: Date,
-    smsCredits: number,
+    { before, now, smsCredits }: { before: Date; now: Date; smsCredits: number },
   ) {
     await this.tenant.inTransaction(storeId, (tx) =>
       tx

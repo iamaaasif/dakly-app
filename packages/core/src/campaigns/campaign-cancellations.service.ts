@@ -84,10 +84,18 @@ export class CampaignCancellationsService {
       const before = new Date(now.getTime() - LEASE_MS);
       const url = this.links.sampleOptOutUrl(campaign.shortLinkBase ?? undefined);
       const credits = countSmsParts(marketingSmsText(campaign.content.text, url));
-      await this.repository.expireUnknown(storeId, campaignId, before, now, credits);
+      await this.repository.expireUnknown(storeId, campaignId, {
+        before,
+        now,
+        smsCredits: credits,
+      });
       const claim = await this.repository.claimReceipt(storeId, campaignId, before, now);
       if (claim) return { claim, credits };
-      await this.campaigns.settleCancellation(storeId, campaignId, campaign.approvedAt, now, ACTOR);
+      await this.campaigns.settleCancellation(storeId, campaignId, {
+        approvedAt: campaign.approvedAt,
+        now,
+        actor: ACTOR,
+      });
     });
     if (!pendingReceipt) return;
 
@@ -114,7 +122,11 @@ export class CampaignCancellationsService {
               smsCredits: outcome === 'not_sent' ? null : credits,
             },
       );
-      await this.campaigns.settleCancellation(storeId, campaignId, campaign.approvedAt, now, ACTOR);
+      await this.campaigns.settleCancellation(storeId, campaignId, {
+        approvedAt: campaign.approvedAt,
+        now,
+        actor: ACTOR,
+      });
     });
   }
 }

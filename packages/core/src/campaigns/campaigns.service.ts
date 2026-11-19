@@ -211,7 +211,11 @@ export class CampaignsService {
       );
       if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
       if (campaign.approvedAt)
-        await this.settleCancellation(storeId, campaignId, campaign.approvedAt, now, actor);
+        await this.settleCancellation(storeId, campaignId, {
+          approvedAt: campaign.approvedAt,
+          now,
+          actor,
+        });
       return toCampaignResponse(cancelled);
     });
   }
@@ -220,9 +224,7 @@ export class CampaignsService {
   async settleCancellation(
     storeId: string,
     campaignId: string,
-    approvedAt: Date,
-    now: Date,
-    actor: Actor,
+    { approvedAt, now, actor }: { approvedAt: Date; now: Date; actor: Actor },
   ): Promise<void> {
     const { unsettled, chargedCredits } = await this.repository.settlementTotals(
       storeId,

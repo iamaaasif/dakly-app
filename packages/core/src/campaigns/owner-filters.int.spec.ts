@@ -234,7 +234,7 @@ describe('campaign filters without RLS assistance', () => {
     await f.tenant.forStore(f.b, async () => {
       expect(await cancellations.lockPending(f.b, campaign.id)).toBeUndefined();
       expect(await cancellations.claimReceipt(f.b, campaign.id, before, now)).toBeUndefined();
-      await cancellations.expireUnknown(f.b, campaign.id, before, now, 1);
+      await cancellations.expireUnknown(f.b, campaign.id, { before, now, smsCredits: 1 });
       await cancellations.recordReceipt(
         f.b,
         campaign.id,
