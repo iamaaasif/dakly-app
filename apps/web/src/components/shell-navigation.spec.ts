@@ -90,6 +90,7 @@ describe('navigationGroups', () => {
       'Workspace',
       'Customers',
       'Sales',
+      'Marketing',
       'Store information',
       'Configuration',
     ]);
