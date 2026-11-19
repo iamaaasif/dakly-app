@@ -1,5 +1,5 @@
 {
-  "id": "1f0802e3-08ab-4f84-9e01-326635ff764c",
+  "id": "51f33e7a-77ee-4815-a5d4-51255eb640f1",
   "prevId": "ec0e09f8-16ed-435d-89cc-2aa741c8c50f",
   "version": "7",
   "dialect": "postgresql",
@@ -15190,27 +15190,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "attributed_touch_id": {
-          "name": "attributed_touch_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "attributed_touch_at": {
           "name": "attributed_touch_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_amount_poisha": {
-          "name": "attributed_amount_poisha",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_window_days": {
-          "name": "attributed_window_days",
-          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },
@@ -20272,6 +20254,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "approved_by_user_id": {
           "name": "approved_by_user_id",
           "type": "uuid",
@@ -20327,6 +20315,34 @@
           "method": "btree",
           "with": {}
         },
+        "posts_store_creator_idempotency_key": {
+          "name": "posts_store_creator_idempotency_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"posts\".\"idempotency_key\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "posts_store_id_created_at_idx": {
           "name": "posts_store_id_created_at_idx",
           "columns": [
@@ -20338,6 +20354,12 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

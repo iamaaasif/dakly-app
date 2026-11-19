@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0055_snapshot.json`: **95 tables, 1271 columns, 386 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0056_snapshot.json`: **95 tables, 1272 columns, 387 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1325,6 +1325,7 @@ erDiagram
         boolean is_ai_written "NOT NULL; boolean"
         uuid ai_run_id "NULL; uuid"
         uuid created_by_user_id FK "NULL; uuid"
+        text idempotency_key "NULL; text"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
         timestamp_with_time_zone deleted_at "NULL; timestamp with time zone"

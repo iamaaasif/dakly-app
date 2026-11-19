@@ -63,6 +63,10 @@ export function hasStoreAdminRole(access: StoreAccess): boolean {
   return access.role === 'owner' || access.role === 'admin';
 }
 
+export function canReviewSocialPosts(access: StoreAccess, action: 'view' | 'approve'): boolean {
+  return hasStoreAdminRole(access) || (action === 'approve' && access.role === 'marketer');
+}
+
 export function canChangeExtensions(access: StoreAccess): boolean {
   return hasStoreAdminRole(access);
 }

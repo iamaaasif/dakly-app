@@ -3,7 +3,7 @@
 |           |                                                                                  |
 | --------- | -------------------------------------------------------------------------------- |
 | Release   | 1                                                                                |
-| Status    | Not started                                                                      |
+| Status    | In progress                                                                      |
 | Extension | Core (Content Studio), Social Auto Post                                          |
 | Code      | `packages/core/src/{content,social}/`, `apps/web/src/features/{content,social}/` |
 | Tasks     | SOC-1 to SOC-6                                                                   |
@@ -169,6 +169,17 @@ The post composer and scheduling are well thought out. But the design can't deci
 
 ## Engineering
 
+### Posts and targets
+
+The posts API saves, reads, edits and deletes drafts. Each target names a connected
+Facebook Page or Instagram account in the store. Drafts belong to their creator.
+Owners and Admins can read team drafts. Editing an AI-written draft keeps its
+approval requirement. Reusing a create key returns the creator's saved draft.
+
+This change covers drafts and targets. Posting slots, scheduling and approval are
+the rest of SOC-1. Publishing (SOC-2), insights (SOC-3), AI captions (SOC-4) and the
+web screens (SOC-5) are separate tasks.
+
 ### Screens in release 1
 
 ![Social hub](../design/screenshots/social-hub.webp)
@@ -188,7 +199,8 @@ TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagra
 7. Content Studio generates 3 captions per request from the brand profile and counts against `ai_content` (3 per generation, 1 per edit).
 8. Save to library stores the edited text, format, language, creator and AI provenance in `content_pieces`. Formats are Facebook post, Instagram caption, WhatsApp, SMS and product description; languages are Bangla, English and Banglish. Copying or editing an AI piece keeps its AI-written approval provenance. Library filters use kind and language, ordered by `(created_at, id)`.
 9. Each `(post, connection)` has one target. A null caption override uses the post caption; an empty override intentionally has no caption. Resolve this effective text before validating each selected network's format and limits at save, approval and publish. The storage ceiling is not proof that a provider accepts the caption.
-10. Brand audience, preferred words and Bangla/English calls to action have dedicated fields. Brand voice remains the writing style; it does not carry unrelated values.
+10. Brand audience, preferred words and Bangla/English calls to action have dedicated fields. Brand voice remains the writing style; it does not carry unrelated values. A store with no saved profile starts with empty fields.
+11. Library pages show the newest pieces first. Editing keeps the creator and AI provenance. A copy uses the current member as its creator and keeps the source's AI provenance.
 
 ### Rules
 
