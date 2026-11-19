@@ -24,6 +24,7 @@ const concurrency = {
   bulk: BULK_JOBS_AT_ONCE,
   workflow: WORKFLOW_JOBS_AT_ONCE,
   campaign: CAMPAIGN_JOBS_AT_ONCE,
+  payments: 5,
 } satisfies Record<QueueName, number>;
 
 // BullMQ gives every job on a queue to that queue's one worker, so the worker routes by job name.
@@ -144,5 +145,15 @@ export class OutboundJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.outbound, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.payments, { concurrency: concurrency.payments, autorun: false })
+export class PaymentsJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.payments, discovery, reporter);
   }
 }

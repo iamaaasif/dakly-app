@@ -17,6 +17,7 @@ import { OutboxRepository } from './outbox.repository';
     BullModule.registerQueue({ name: QUEUES.bulk }),
     BullModule.registerQueue({ name: QUEUES.workflow }),
     BullModule.registerQueue({ name: QUEUES.campaign }),
+    BullModule.registerQueue({ name: QUEUES.payments }),
   ],
   providers: [OutboxRepository, OutboxRelayService],
   exports: [OutboxRelayService],

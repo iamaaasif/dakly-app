@@ -13,6 +13,8 @@ import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-sta
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { QUEUE_CONVERSATION_RETURNS } from '@dakly/core/messaging/jobs/queue-conversation-returns.job';
 import { WAKE_SNOOZED_NOTIFICATIONS } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
+import { SWEEP_PAYMENT_CHECKS } from '@dakly/core/payments/jobs/sweep-payment-checks.job';
+import { SWEEP_PAYMENT_SETTLEMENTS } from '@dakly/core/payments/jobs/sweep-payment-settlements.job';
 import {
   RELAY_OUTBOX,
   RELAY_OUTBOX_INTERVAL_MS,
@@ -27,6 +29,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
     @InjectQueue(QUEUES.transactional) private readonly transactional: Queue,
     @InjectQueue(QUEUES.bulk) private readonly bulk: Queue,
     @InjectQueue(QUEUES.sync) private readonly sync: Queue,
+    @InjectQueue(QUEUES.payments) private readonly payments: Queue,
     @InjectQueue(QUEUES.workflow) private readonly workflow: Queue,
   ) {}
 
@@ -43,6 +46,11 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.bulk, SWEEP_AUTOMATION_BIRTHDAYS, { pattern: '0 * * * *', tz: 'UTC' }),
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
       scheduleJob(this.sync, QUEUE_CONVERSATION_RETURNS, MINUTE_MS),
+      scheduleJob(this.payments, SWEEP_PAYMENT_CHECKS),
+      scheduleJob(this.payments, SWEEP_PAYMENT_SETTLEMENTS, {
+        pattern: '0 0 * * *',
+        tz: 'Asia/Dhaka',
+      }),
       scheduleJob(this.bulk, SWEEP_ANALYTICS, { pattern: '0 0 * * *', tz: 'UTC' }),
     ]);
   }

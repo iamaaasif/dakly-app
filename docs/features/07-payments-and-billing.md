@@ -374,6 +374,14 @@ A server-to-server result must match the reference, currency and amount.
 An amount or currency mismatch, duplicate transaction or late success goes
 to `needs_review` and leaves the intent unpaid.
 
+The payments worker opens checkout and checks due intents through the saved
+merchant. It decrypts shop credentials only for those calls. The due sweep
+recovers verification after a missing callback or a lost queue entry.
+Nightly reconciliation matches loaded settlement lines for Dakly billing by
+gateway, transaction id and verified gross amount. A match updates the line and
+the intent together. Unmatched lines remain available for staff review. Shop and
+sandbox payments are excluded from this settlement match.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:

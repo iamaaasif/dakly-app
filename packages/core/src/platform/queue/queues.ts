@@ -6,6 +6,7 @@ export const QUEUES = {
   campaign: 'campaign',
   transactional: 'transactional',
   workflow: 'workflow',
+  payments: 'payments',
 } as const;
 
 export const WORKER_QUEUES = Object.values(QUEUES);

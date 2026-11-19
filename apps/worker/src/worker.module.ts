@@ -36,6 +36,7 @@ import { MessagingModule } from '@dakly/core/messaging/messaging.module';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
+import { PaymentJobsModule } from '@dakly/core/payments/payment-jobs.module';
 import { ClockModule } from '@dakly/core/platform/clock.module';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
@@ -48,6 +49,7 @@ import {
   CampaignJobDispatcher,
   InboundJobDispatcher,
   OutboundJobDispatcher,
+  PaymentsJobDispatcher,
   SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
@@ -63,6 +65,7 @@ import { JobSchedulers } from './job-schedulers';
     CampaignJobDispatcher,
     InboundJobDispatcher,
     OutboundJobDispatcher,
+    PaymentsJobDispatcher,
     SyncJobDispatcher,
     TransactionalJobDispatcher,
     WorkflowJobDispatcher,
@@ -102,6 +105,7 @@ import { JobSchedulers } from './job-schedulers';
     BullModule.registerQueue({ name: QUEUES.bulk }),
     BullModule.registerQueue({ name: QUEUES.workflow }),
     BullModule.registerQueue({ name: QUEUES.campaign }),
+    BullModule.registerQueue({ name: QUEUES.payments }),
     DatabaseModule,
     SecurityNoticesModule,
     OutboxRelayModule,
@@ -116,6 +120,7 @@ import { JobSchedulers } from './job-schedulers';
     ImportsModule,
     ContactStatsRepairModule,
     AnalyticsModule,
+    PaymentJobsModule,
     KnowledgeIndexModule,
     BullModule.forRootAsync({
       useFactory: () => {

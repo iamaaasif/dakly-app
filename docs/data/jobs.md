@@ -116,13 +116,15 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 
 ## payments
 
-| Job                    | Started by                                    | Payload                      | Makes a rerun harmless                                                |
-| ---------------------- | --------------------------------------------- | ---------------------------- | --------------------------------------------------------------------- |
-| `verify-payment`       | Callback or gateway webhook                   | `storeId`, `paymentIntentId` | Status only moves forward; unique `(gateway, gateway_transaction_id)` |
-| `check-payment-status` | Sweep `due_payment_checks` (every 15 minutes) | `storeId`, `paymentIntentId` | Same as above; `next_check_at` moves on                               |
-| `send-refund`          | Refund requested                              | `storeId`, `refundId`        | Unique `refunds (store_id, idempotency_key)` sent to the gateway      |
-| `renew-subscription`   | Sweep `due_subscription_renewals`, hourly     | `storeId`, `subscriptionId`  | Unique `wallet_ledger (store_id, idempotency_key)` per period         |
-| `remind-trial-ending`  | Sweep `trials_ending_before`, daily           | `storeId`, `subscriptionId`  | Notification dedupe key per trial                                     |
+| Job                             | Started by                                | Payload                      | Makes a rerun harmless                                                 |
+| ------------------------------- | ----------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| `verify-payment`                | Callback or gateway webhook               | `storeId`, `paymentIntentId` | Status only moves forward; unique `(gateway, gateway_transaction_id)`  |
+| `sweep-payment-checks`          | Every 30 seconds                          | none                         | Finds due intents and queues `verify-payment`                          |
+| `sweep-payment-settlements`     | Midnight in Asia/Dhaka                    | none                         | Queues one reconciliation per store and day                            |
+| `reconcile-payment-settlements` | Settlement sweep                          | `storeId`, `day`, `after`    | Matches billing lines once by gateway, transaction and verified amount |
+| `send-refund`                   | Refund requested                          | `storeId`, `refundId`        | Unique `refunds (store_id, idempotency_key)` sent to the gateway       |
+| `renew-subscription`            | Sweep `due_subscription_renewals`, hourly | `storeId`, `subscriptionId`  | Unique `wallet_ledger (store_id, idempotency_key)` per period          |
+| `remind-trial-ending`           | Sweep `trials_ending_before`, daily       | `storeId`, `subscriptionId`  | Notification dedupe key per trial                                      |
 
 No job holds a database transaction while it calls the AI model or a vendor: read in one short transaction, call outside, write in a second.
 

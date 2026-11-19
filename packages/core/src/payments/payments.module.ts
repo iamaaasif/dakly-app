@@ -17,6 +17,6 @@ import { PaymentsService } from './payments.service';
     PaymentsRepository,
     PaymentsService,
   ],
-  exports: [PaymentsService, PAYMENT_DRIVERS],
+  exports: [PaymentsService, PaymentsRepository, PaymentCallbacksRepository, PAYMENT_DRIVERS],
 })
 export class PaymentsModule {}

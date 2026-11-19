@@ -16,6 +16,8 @@ import { MINUTE_MS } from '../platform/time';
 import { PAYMENT_ERRORS } from './payments.errors';
 import { PaymentsRepository } from './payments.repository';
 
+const paymentCheckMinutes = [4, 10, 45, ...Array<number>(12).fill(360)];
+
 type Intent = NonNullable<Awaited<ReturnType<PaymentsRepository['find']>>>;
 
 @Injectable()
@@ -45,6 +47,7 @@ export class PaymentsService {
         merchantReference: `DK-${randomUUID()}`,
         shortCode: input.flow === 'shop' ? randomUUID() : null,
         isSandbox: credential?.mode === 'sandbox',
+        nextCheckAt: input.expiresAt,
         createdAt: now,
         updatedAt: now,
       });
@@ -61,13 +64,13 @@ export class PaymentsService {
   redirected(storeId: string, intentId: string, gatewayPaymentId: string) {
     return this.transaction.run(storeId, async () => {
       const intent = await this.lockIntent(storeId, intentId);
-      if (intent.status !== 'created') return;
+      if (intent.status !== 'created') return false;
       const now = this.clock.now();
-      if (intent.expiresAt <= now || intent.voidedAt) return;
+      if (intent.expiresAt <= now || intent.voidedAt) return false;
       await this.repository.update(storeId, intent.id, intent.status, {
         status: 'pending',
         gatewayPaymentId,
-        nextCheckAt: new Date(now.getTime() + MINUTE_MS),
+        nextCheckAt: new Date(Math.min(now.getTime() + MINUTE_MS, intent.expiresAt.getTime())),
         updatedAt: now,
       });
       await this.repository.appendEvent(storeId, {
@@ -77,6 +80,7 @@ export class PaymentsService {
         toStatus: 'pending',
         createdAt: now,
       });
+      return true;
     });
   }
 
@@ -116,12 +120,28 @@ export class PaymentsService {
     });
   }
 
-  applyStatus(storeId: string, intentId: string, result: PaymentStatus) {
+  applyStatus(storeId: string, intentId: string, result: PaymentStatus, checkedAt?: Date) {
     return this.transaction.run(storeId, async () => {
       const intent = await this.lockIntent(storeId, intentId);
       const now = this.clock.now();
       const change = this.verifiedChange(intent, result, now);
-      if (change) await this.transition(storeId, intent, change, now);
+      if (change) {
+        await this.transition(storeId, intent, change, now);
+      } else if (checkedAt && checkedAt.getTime() === intent.nextCheckAt?.getTime()) {
+        await this.advanceCheck(storeId, intent, now);
+      }
+    });
+  }
+
+  private async advanceCheck(storeId: string, intent: Intent, now: Date) {
+    const delay = paymentCheckMinutes[intent.checkCount];
+    const next =
+      delay === undefined ? intent.expiresAt.getTime() : now.getTime() + delay * MINUTE_MS;
+    await this.repository.update(storeId, intent.id, intent.status, {
+      checkCount: intent.checkCount + 1,
+      nextCheckAt:
+        intent.status === 'pending' ? new Date(Math.min(next, intent.expiresAt.getTime())) : null,
+      updatedAt: now,
     });
   }
 

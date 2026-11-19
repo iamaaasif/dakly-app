@@ -15,4 +15,11 @@ export class PaymentCallbacksRepository {
     );
     return rows[0];
   }
+
+  async dueChecks(limit: number) {
+    const { rows } = await this.database.execute<{ store_id: string; payment_intent_id: string }>(
+      sql`select store_id, payment_intent_id from due_payment_checks(${limit})`,
+    );
+    return rows;
+  }
 }
