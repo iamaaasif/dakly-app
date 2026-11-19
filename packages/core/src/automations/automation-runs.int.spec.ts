@@ -2164,6 +2164,12 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           Date.UTC(real.getUTCFullYear(), real.getUTCMonth(), real.getUTCDate() - 1, 15),
         );
         if (change === 'quiet hours') {
+          fixtures.getStore()!.cleanups.push(async () => {
+            await admin.pool.query('delete from automation_runs where store_id=$1 and id=$2', [
+              storeId,
+              runId,
+            ]);
+          });
           // Use a past wake time so the database sweep can claim it at any time of day.
           clockNow = new Date(quietHoursStart.getTime() - MINUTE);
           await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
@@ -2231,11 +2237,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           blocker.release(true);
           await pending?.catch(() => undefined);
           await removeJob();
-          if (change === 'quiet hours')
-            await admin.pool.query('delete from automation_runs where store_id=$1 and id=$2', [
-              storeId,
-              runId,
-            ]);
         }
       },
     );
