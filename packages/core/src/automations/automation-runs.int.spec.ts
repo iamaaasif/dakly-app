@@ -2160,7 +2160,23 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         } as const;
         const versionId = await publish(automationId, 1, graph);
         const [runId] = await startRuns(automationId, versionId, { count: 1, forContact: contact });
-        if (change === 'late cutoff')
+        const quietHoursStart = new Date(
+          Date.UTC(real.getUTCFullYear(), real.getUTCMonth(), real.getUTCDate() - 1, 15),
+        );
+        if (change === 'quiet hours') {
+          fixtures.getStore()!.cleanups.push(async () => {
+            await admin.pool.query('delete from automation_runs where store_id=$1 and id=$2', [
+              storeId,
+              runId,
+            ]);
+          });
+          // Use a past wake time so the database sweep can claim it at any time of day.
+          clockNow = new Date(quietHoursStart.getTime() - MINUTE);
+          await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+            runId,
+            clockNow,
+          ]);
+        } else if (change === 'late cutoff')
           await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
             runId,
             new Date(daytime.getTime() - 24 * HOUR + MINUTE),
@@ -2199,10 +2215,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               contact,
             ]);
           else if (change === 'late cutoff') clockNow = new Date(daytime.getTime() + 2 * MINUTE);
-          else
-            clockNow = new Date(
-              Date.UTC(daytime.getUTCFullYear(), daytime.getUTCMonth(), daytime.getUTCDate(), 16),
-            );
+          else clockNow = quietHoursStart;
           await blocker.query('commit');
           await pending;
           expect(sentFor(runId!)).toEqual([]);
