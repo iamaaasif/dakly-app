@@ -1,5 +1,9 @@
+import 'reflect-metadata';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { Module } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -11,6 +15,8 @@ import type { PaymentDriver } from '@dakly/providers/payment/payment-driver';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { PaymentCallbacksController } from './payment-callbacks.controller';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PaymentCallbacksService } from './payment-callbacks.service';
 import { PaymentsRepository } from './payments.repository';
@@ -39,16 +45,30 @@ const driver: PaymentDriver = {
     if (typeof header !== 'string') return;
     const signature = Buffer.from(header, 'hex');
     if (signature.length !== digest.length || !timingSafeEqual(signature, digest)) return;
-    return { eventId: 'callback-replay', merchantReference: rawBody.toString() };
+    const merchantReference = JSON.parse(rawBody.toString()) as string;
+    return { eventId: 'callback-' + merchantReference, merchantReference };
   },
 };
 const callbacks = new PaymentCallbacksService(new PaymentCallbacksRepository(app.db), payments, [
   driver,
 ]);
+class PaymentTestModule {}
+Module({
+  controllers: [PaymentCallbacksController],
+  providers: [{ provide: PaymentCallbacksService, useValue: callbacks }],
+})(PaymentTestModule);
+let http: NestFastifyApplication;
+
 let storeA: string;
 let storeB: string;
 
 beforeAll(async () => {
+  http = await NestFactory.create<NestFastifyApplication>(PaymentTestModule, new FastifyAdapter(), {
+    rawBody: true,
+    logger: false,
+  });
+  http.useGlobalFilters(new AppErrorFilter());
+  await http.init();
   const created = await admin.db
     .insert(stores)
     .values([{ name: 'Payments A' }, { name: 'Payments B' }])
@@ -58,6 +78,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await http?.close();
   if (storeA && storeB) {
     await admin.db.delete(paymentEvents).where(inArray(paymentEvents.storeId, [storeA, storeB]));
     await admin.db.delete(paymentIntents).where(inArray(paymentIntents.storeId, [storeA, storeB]));
@@ -95,17 +116,23 @@ function paid(merchantReference: string, amountPoisha = 12000) {
 describe('Payment intents (Postgres)', () => {
   it('writes one callback event when the same delivery races itself', async () => {
     const intent = await pendingIntent();
-    const rawBody = Buffer.from(intent.merchantReference);
-    const headers = {
-      'x-test-signature': createHmac('sha256', signingKey).update(rawBody).digest('hex'),
-    };
-    await expect(
-      callbacks.receive('bkash', Buffer.from(intent.merchantReference + ' '), headers),
-    ).rejects.toMatchObject({ code: 'PAYMENT_SIGNATURE_INVALID' });
-    await Promise.all([
-      callbacks.receive('bkash', rawBody, headers),
-      callbacks.receive('bkash', rawBody, headers),
+    const original = JSON.stringify(intent.merchantReference);
+    const request = {
+      method: 'POST',
+      url: '/webhooks/payments/bkash',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-signature': createHmac('sha256', signingKey).update(original).digest('hex'),
+      },
+    } as const;
+    const invalid = await http.inject({ ...request, payload: original + ' ' });
+    expect(invalid.statusCode).toBe(403);
+    expect(invalid.json()).toMatchObject({ error: { code: 'PAYMENT_SIGNATURE_INVALID' } });
+    const deliveries = await Promise.all([
+      http.inject({ ...request, payload: original }),
+      http.inject({ ...request, payload: original }),
     ]);
+    expect(deliveries.map(({ statusCode }) => statusCode)).toEqual([204, 204]);
     const rows = await admin.db
       .select()
       .from(paymentEvents)
