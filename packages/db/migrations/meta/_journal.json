@@ -369,8 +369,15 @@
     {
       "idx": 52,
       "version": "7",
-      "when": 1795098967678,
-      "tag": "0052_payment_callback_deduplication",
+      "when": 1795096855397,
+      "tag": "0052_automation_balance_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1795106765922,
+      "tag": "0053_payment_callback_deduplication",
       "breakpoints": true
     }
   ]

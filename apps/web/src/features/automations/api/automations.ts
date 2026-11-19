@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import {
+  type AutomationDetailResponse,
   type AutomationListResponse,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
@@ -20,6 +21,15 @@ export function useAutomations() {
       request<AutomationListResponse>(`/automations?limit=${MAX_AUTOMATIONS_PER_STORE}`, {
         signal,
       }),
+    enabled: Boolean(contextTag),
+  });
+}
+
+export function useAutomation(id: string) {
+  const { request, contextTag } = useStoreRequest();
+  return useQuery({
+    queryKey: [...automationKeys.all(contextTag), id],
+    queryFn: ({ signal }) => request<AutomationDetailResponse>(`/automations/${id}`, { signal }),
     enabled: Boolean(contextTag),
   });
 }

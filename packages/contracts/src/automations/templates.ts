@@ -12,8 +12,17 @@ export const templateCategories = [
   'special_occasion',
 ] as const;
 
+export const templateGoals = [
+  'convert_subscribers',
+  'recover_sales',
+  'build_trust',
+  'repeat_orders',
+] as const;
+
 type AutomationTemplate = {
   name: string;
+  description: string;
+  libraryGoal: (typeof templateGoals)[number];
   category: (typeof templateCategories)[number];
   needs: readonly AutomationPrerequisite[];
   graph: AutomationGraph;
@@ -46,6 +55,8 @@ function wait(minutes: number, next: string): AutomationStep {
 export const automationTemplates = {
   welcome_new_subscriber: {
     name: 'Welcome new subscribers',
+    description: 'Thank new subscribers and follow up with your best sellers.',
+    libraryGoal: 'convert_subscribers',
     category: 'welcome',
     needs: [],
     graph: {
@@ -76,6 +87,8 @@ export const automationTemplates = {
   // Inside the Messenger window only, so it sends on Messenger and nothing else.
   chat_follow_up: {
     name: 'Chat follow-up',
+    description: 'Check whether a shopper needs more help after a chat.',
+    libraryGoal: 'recover_sales',
     category: 'abandoned',
     needs: ['channels'],
     graph: {
@@ -99,6 +112,8 @@ export const automationTemplates = {
   },
   back_in_stock: {
     name: 'Back in stock',
+    description: 'Let shoppers know when a product is available again.',
+    libraryGoal: 'recover_sales',
     category: 'abandoned',
     needs: ['products'],
     graph: {
@@ -122,6 +137,8 @@ export const automationTemplates = {
   // The goal is an order within the 7 days the run waits after the greeting.
   birthday: {
     name: 'Birthday',
+    description: 'Send a birthday greeting using the date saved on the customer.',
+    libraryGoal: 'build_trust',
     category: 'special_occasion',
     needs: ['birthdays'],
     graph: {

@@ -1140,15 +1140,34 @@ fixture('POST /automations', async () => {
   const { a, b } = await pair(),
     id = await automation(a),
     before = await f.row('automations', id);
-  const own = await automation(b);
-  expect((await f.row('automations', own)).store_id).toBe(b.id);
+  const response = await success(b, 'POST', '/automations', 201, {
+    name: 'Birthday template',
+    templateKey: 'birthday',
+  });
+  expect(response.json()).toMatchObject({
+    templateKey: 'birthday',
+    graph: { trigger: { key: 'birthday' }, firstStepKey: 'morning' },
+  });
+  expect((await f.row('automations', response.json().id)).store_id).toBe(b.id);
   expect(await f.row('automations', id)).toEqual(before);
 });
 fixture('GET /automations/:automationId', async () => {
   const { a, b } = await pair(),
     { id, versionId } = await publishedAutomation(a);
+  const contactId = randomUUID();
+  await f.admin.pool.query(
+    "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+    [contactId, a.id],
+  );
+  await f.admin.pool.query(
+    `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
+     values($5,$1,$2,$3,$4,'waiting','welcome','waiting',now()+interval '1 day'),
+           ($6,$1,$2,$3,$4,'finished','end','done',null)`,
+    [a.id, id, versionId, contactId, randomUUID(), randomUUID()],
+  );
   const own = (await success(a, 'GET', `/automations/${id}`, 200)).json();
   expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
+  expect(own.activeRuns).toBe(1);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
 });
 fixture('GET /automations/:automationId/trigger-preview', async () => {

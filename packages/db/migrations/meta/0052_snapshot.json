@@ -1,5 +1,5 @@
 {
-  "id": "6a21c434-cd47-4060-8a7d-4f1be6d0b105",
+  "id": "163772fa-b1a1-4cea-a2f0-0b04a5de22d6",
   "prevId": "3e6a2374-01ce-457e-9866-6bc4d95223ae",
   "version": "7",
   "dialect": "postgresql",
@@ -5268,6 +5268,31 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "pause_reason": {
+          "name": "pause_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "balance_pause_revision": {
+          "name": "balance_pause_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "balance_resumed_at": {
+          "name": "balance_resumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_balance_resume_send_allowance": {
+          "name": "has_balance_resume_send_allowance",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "is_transactional": {
           "name": "is_transactional",
           "type": "boolean",
@@ -5458,6 +5483,18 @@
         "automations_status": {
           "name": "automations_status",
           "value": "\"automations\".\"status\" in ('draft', 'active', 'paused', 'archived')"
+        },
+        "automations_pause_reason": {
+          "name": "automations_pause_reason",
+          "value": "\"automations\".\"pause_reason\" in ('manual', 'balance')"
+        },
+        "automations_paused_has_reason": {
+          "name": "automations_paused_has_reason",
+          "value": "(\"automations\".\"status\" = 'paused') = (\"automations\".\"pause_reason\" is not null)"
+        },
+        "automations_balance_pause_revision": {
+          "name": "automations_balance_pause_revision",
+          "value": "\"automations\".\"pause_reason\" is distinct from 'balance'\n        or (\"automations\".\"balance_pause_revision\" is not null and \"automations\".\"balance_pause_revision\" >= 0)"
         }
       },
       "isRLSEnabled": false
@@ -16065,18 +16102,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "gateway": {
-          "name": "gateway",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gateway_event_id": {
-          "name": "gateway_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "event_payload": {
           "name": "event_payload",
           "type": "jsonb",
@@ -16092,27 +16117,6 @@
         }
       },
       "indexes": {
-        "payment_events_gateway_event_key": {
-          "name": "payment_events_gateway_event_key",
-          "columns": [
-            {
-              "expression": "gateway",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "gateway_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "payment_events_intent_idx": {
           "name": "payment_events_intent_idx",
           "columns": [

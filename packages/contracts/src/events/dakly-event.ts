@@ -47,6 +47,7 @@ import {
   stockChangedEventSchema,
   variantRestockedEventSchema,
 } from './products';
+import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactBirthdayEventSchema,
@@ -76,6 +77,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   messageTappedEventSchema,
   messageOptedOutEventSchema,
   notificationCreatedEventSchema,
+  walletCreditedEventSchema,
   orderStageChangedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
