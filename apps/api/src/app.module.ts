@@ -5,6 +5,7 @@ import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { MetaWebhooksModule } from '@dakly/core/channels/meta-webhooks.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
@@ -31,6 +32,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     SessionsModule,
     ContactsModule,
+    MetaWebhooksModule,
     DeliveryModule,
     ProductsModule,
     OrdersModule,

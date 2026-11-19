@@ -3,7 +3,12 @@ import { Reflector } from '@nestjs/core';
 
 import { loadEnv } from '../config/env';
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
-import { ACCESS_RULE, type AccessRule, SHORT_LINK_ORIGIN } from './access.decorators';
+import {
+  ACCESS_RULE,
+  type AccessRule,
+  PROVIDER_CALLBACK,
+  SHORT_LINK_ORIGIN,
+} from './access.decorators';
 
 @Injectable()
 export class OriginGuard implements CanActivate {
@@ -14,21 +19,30 @@ export class OriginGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    if (
+      rule?.kind === 'public' &&
+      this.reflector.get<boolean>(PROVIDER_CALLBACK, context.getHandler())
+    )
+      return true;
+    const request = context
+      .switchToHttp()
+      .getRequest<{ method: string; headers: { origin?: string } }>();
+    if (
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
+      !this.allowedOrigins(rule, context).includes(request.headers.origin ?? '')
+    ) {
+      throw new AppError('ORIGIN_REJECTED', PLATFORM_ERRORS.ORIGIN_REJECTED);
+    }
+    return true;
+  }
+
+  private allowedOrigins(rule: AccessRule | undefined, context: ExecutionContext): string[] {
     const origins =
       rule?.kind === 'staff' || rule?.kind === 'support-handoff'
         ? [loadEnv().ADMIN_ORIGIN]
         : [...this.origins];
     if (this.reflector.get<boolean>(SHORT_LINK_ORIGIN, context.getHandler()))
       origins.push(new URL(loadEnv().SHORT_LINK_BASE_URL).origin);
-    const request = context
-      .switchToHttp()
-      .getRequest<{ method: string; headers: { origin?: string } }>();
-    if (
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
-      !origins.includes(request.headers.origin ?? '')
-    ) {
-      throw new AppError('ORIGIN_REJECTED', PLATFORM_ERRORS.ORIGIN_REJECTED);
-    }
-    return true;
+    return origins;
   }
 }

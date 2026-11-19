@@ -6,11 +6,13 @@ A job that loses its Valkey entry is found again by a sweep: each sweep calls a 
 
 ## inbound
 
-| Job                      | Started by                          | Payload                     | Makes a rerun harmless                                                               |
-| ------------------------ | ----------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
-| `process-webhook-event`  | Webhook intake after saving the row | `storeId`, `webhookEventId` | `webhook_events.status` is checked; unique `messages (conversation_id, external_id)` |
-| `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                                            |
-| `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)`                |
+| Job                      | Started by                          | Payload                     | Makes a rerun harmless                                                |
+| ------------------------ | ----------------------------------- | --------------------------- | --------------------------------------------------------------------- |
+| `process-webhook-event`  | Webhook intake after saving the row | `webhookEventId`            | Job id is the webhook row id. The worker checks the event status.     |
+| `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                             |
+| `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)` |
+
+`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`.
 
 ## ai-reply
 

@@ -18,6 +18,9 @@ export const AnyMember = () => SetMetadata(ACCESS_RULE, { kind: 'member' } satis
 export const RequireUser = () => SetMetadata(ACCESS_RULE, { kind: 'user' } satisfies AccessRule);
 export const Public = () => SetMetadata(ACCESS_RULE, { kind: 'public' } satisfies AccessRule);
 
+export const PROVIDER_CALLBACK = Symbol('PROVIDER_CALLBACK');
+export const ProviderCallback = () => SetMetadata(PROVIDER_CALLBACK, true);
+
 // Only the SMS opt-out post comes from a page on the short link domain.
 export const SHORT_LINK_ORIGIN = Symbol('SHORT_LINK_ORIGIN');
 export const AllowShortLinkOrigin = () => SetMetadata(SHORT_LINK_ORIGIN, true);

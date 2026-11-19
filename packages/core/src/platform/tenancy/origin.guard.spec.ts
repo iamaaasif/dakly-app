@@ -2,7 +2,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resetEnvForTests } from '../config/env';
-import { AllowShortLinkOrigin, Public } from './access.decorators';
+import { AllowShortLinkOrigin, ProviderCallback, Public, RequireUser } from './access.decorators';
 import { OriginGuard } from './origin.guard';
 
 const context = (method: string, origin?: string, handler = function handler() {}) =>
@@ -51,6 +51,19 @@ describe('OriginGuard', () => {
     expect(originGuard.canActivate(context('POST', 'https://links.dakly.test', optOut))).toBe(true);
     expect(originGuard.canActivate(context('POST', 'https://dakly.test', optOut))).toBe(true);
   });
+  it('allows an originless write only on a public provider callback', () => {
+    const originGuard = guard();
+    const callback = function receive() {};
+    Public()(callback, 'receive', { value: callback });
+    ProviderCallback()(callback, 'receive', { value: callback });
+    expect(originGuard.canActivate(context('POST', undefined, callback))).toBe(true);
+
+    RequireUser()(callback, 'receive', { value: callback });
+    expect(() => originGuard.canActivate(context('POST', undefined, callback))).toThrow(
+      expect.objectContaining({ code: 'ORIGIN_REJECTED' }),
+    );
+  });
+
   it('allows reads without an Origin', () => {
     expect(guard().canActivate(context('GET'))).toBe(true);
   });
