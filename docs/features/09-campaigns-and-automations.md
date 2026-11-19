@@ -160,7 +160,7 @@ Omnisend and Klaviyo are the reference products for e-commerce automation. Dakly
 
 #### Entry and frequency rules
 
-- **Re-entry:** per workflow, choose once ever, once every N days, or every time. Default once every 30 days.
+- **Re-entry:** per workflow, choose once ever, once every N days, or every time. Default once every 30 days. Two "every time" tag workflows that remove and re-add each other’s trigger tags can restart each other, and the frequency cap limits their sends.
 - **One active run:** a person can be in the same workflow only once at a time.
 - **Smart sending:** skip a marketing step if the person got any marketing message from the shop in the last N hours (default 24, the same default as Klaviyo), counted per channel and across campaigns and workflows.
 - **Frequency cap** across everything (default 1 per channel per day and 3 per 7 days, D41) and **quiet hours** (default 9 pm to 9 am, store time). Transactional steps (order confirmed, shipped, due added) ignore both.
