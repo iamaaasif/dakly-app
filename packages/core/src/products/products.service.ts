@@ -18,7 +18,6 @@ import type {
   ConfirmProductPhotoInput,
   ReorderProductPhotosInput,
   ProductReadiness,
-  StockMovementKind,
 } from '@dakly/contracts/products';
 import { MAX_PRODUCT_PHOTOS } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
@@ -30,6 +29,7 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { moveProductStock, type StockMovementInput } from './move-stock';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { productError } from './products.errors';
 import {
@@ -40,23 +40,6 @@ import {
 } from './products.repository';
 
 type Actor = AuditEntry['actor'];
-type StockReference = { actor: Actor } & (
-  { orderId: string; reason?: string } | { reason: string; orderId?: string }
-);
-
-type StockMovement = { kind: StockMovementKind; quantity: number; reference: StockReference };
-type ImportedStock = {
-  kind: 'import';
-  onHand: number;
-  reference: { actor: Actor; reason: string };
-};
-type StockMovementInput = StockMovement | ImportedStock;
-type UpdatedStock = {
-  onHand: number;
-  reserved: number;
-  onHandDelta: number;
-  reservedDelta: number;
-};
 
 @Injectable()
 export class ProductsService {
@@ -168,85 +151,12 @@ export class ProductsService {
   }
 
   moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
-    return this.transaction.run(storeId, async () => {
-      const isAbsoluteImport = 'onHand' in input;
-      const variant = await this.repository.findStockVariant(storeId, variantId, isAbsoluteImport);
-      if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
-      if (isAbsoluteImport) {
-        if (!variant.isStockTracked) return;
-        return this.reconcileImportedStock(storeId, variantId, input);
-      }
-      // Order movements follow the tracking flag saved on the order item.
-      if (!variant.isStockTracked && !input.reference.orderId) return;
-      const { kind, quantity } = input;
-      if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
-        throw productError('STOCK_QUANTITY_INVALID');
-      const change = {
-        reserve: { onHandDelta: 0, reservedDelta: quantity },
-        release: { onHandDelta: 0, reservedDelta: -quantity },
-        ship: { onHandDelta: -quantity, reservedDelta: -quantity },
-        return: { onHandDelta: quantity, reservedDelta: 0 },
-        adjust: { onHandDelta: quantity, reservedDelta: 0 },
-        import: { onHandDelta: quantity, reservedDelta: 0 },
-      }[kind];
-      const now = this.clock.now();
-      const updated = await this.repository.changeStock(storeId, variantId, change, now);
-      if (!updated) throw productError('STOCK_NOT_AVAILABLE');
-      await this.recordStockMovement(
-        storeId,
-        { ...input, variantId },
-        { ...change, ...updated },
-        now,
-      );
+    return moveProductStock(storeId, variantId, input, {
+      repository: this.repository,
+      transaction: this.transaction,
+      clock: this.clock,
+      outbox: this.outbox,
     });
-  }
-
-  private async reconcileImportedStock(storeId: string, variantId: string, input: ImportedStock) {
-    const now = this.clock.now();
-    const stock = await this.repository.reconcileStock(storeId, variantId, input.onHand, now);
-    if (!stock) throw productError('STOCK_NOT_AVAILABLE');
-    if (stock.onHandDelta === 0) return;
-    await this.recordStockMovement(
-      storeId,
-      { kind: 'import', quantity: stock.onHandDelta, reference: input.reference, variantId },
-      { ...stock, reservedDelta: 0 },
-      now,
-    );
-  }
-
-  private async recordStockMovement(
-    storeId: string,
-    movement: StockMovement & { variantId: string },
-    stock: UpdatedStock,
-    now: Date,
-  ) {
-    const { variantId, kind, quantity, reference } = movement;
-    await this.repository.insertStockMovement(storeId, {
-      variantId,
-      kind,
-      quantity: stock.onHandDelta || quantity,
-      onHandAfter: stock.onHand,
-      reservedAfter: stock.reserved,
-      orderId: reference.orderId ?? null,
-      reason: reference.reason ?? null,
-      actorUserId: reference.actor.kind === 'user' ? reference.actor.userId : null,
-      createdAt: now,
-    });
-    await this.outbox.publish({
-      type: 'stock.changed',
-      storeId,
-      occurredAt: now.toISOString(),
-      payload: { variantId, kind },
-    });
-    const available = stock.onHand - stock.reserved;
-    const before = available - stock.onHandDelta + stock.reservedDelta;
-    if (before <= 0 && available > 0)
-      await this.outbox.publish({
-        type: 'variant.restocked',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { variantId },
-      });
   }
 
   async requestPhotoUpload(
