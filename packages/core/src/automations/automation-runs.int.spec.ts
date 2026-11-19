@@ -1640,8 +1640,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         runIds: [runId],
       } = await dueRuns(send('marketing'), 1, 'active', contact);
       const blocker = await admin.pool.connect();
-      await blocker.query('begin');
+      let running: ReturnType<typeof runDueStep> | undefined;
+      let transactionOpen = false;
       try {
+        await blocker.query('begin');
+        transactionOpen = true;
         const {
           rows: [{ pid }],
         } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
@@ -1649,21 +1652,23 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           storeId,
           contact,
         ]);
-        const running = runDueStep(runner, runId!);
-        try {
-          await waitForBlocker(pid);
-          await blocker.query('update contacts set phone=$1 where id=$2', [
-            `0191100${String(++phone).padStart(4, '0')}`,
-            contact,
-          ]);
-          await blocker.query('commit');
-          await running;
-        } finally {
-          await blocker.query('rollback');
-          await running.catch(() => undefined);
-        }
+        running = runDueStep(runner, runId!);
+        void running.catch(() => undefined);
+        await waitForBlocker(pid);
+        await blocker.query('update contacts set phone=$1 where id=$2', [
+          `0191100${String(++phone).padStart(4, '0')}`,
+          contact,
+        ]);
+        await blocker.query('commit');
+        transactionOpen = false;
+        await running;
       } finally {
-        blocker.release();
+        try {
+          if (transactionOpen) await blocker.query('rollback');
+        } finally {
+          blocker.release(true);
+          await running?.catch(() => undefined);
+        }
       }
       expect(sentFor(runId!)).toEqual([]);
       expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
@@ -1697,8 +1702,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             await writer.query("set local lock_timeout = '100ms'");
             await expect(writer.query(replacement)).rejects.toMatchObject({ code: '55P03' });
           } finally {
-            await writer.query('rollback');
-            writer.release();
+            try {
+              await writer.query('rollback');
+            } finally {
+              writer.release(true);
+            }
           }
           return checked;
         });
