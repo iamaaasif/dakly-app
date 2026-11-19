@@ -116,7 +116,7 @@ export class PaymentsService {
       const intent = await this.lockIntent(storeId, intentId);
       const now = this.clock.now();
       if (intent.expiresAt <= now && (intent.status === 'created' || intent.status === 'pending'))
-        await this.transition(storeId, intent, { status: 'expired' }, now);
+        await this.transition(storeId, intent, { status: 'expired' }, { now });
     });
   }
 
@@ -126,6 +126,7 @@ export class PaymentsService {
       const now = this.clock.now();
       const change = this.verifiedChange(intent, result, now);
       if (change) {
+<<<<<<< HEAD
         await this.transition(storeId, intent, change, now);
       } else if (checkedAt && checkedAt.getTime() === intent.nextCheckAt?.getTime()) {
         await this.advanceCheck(storeId, intent, now);
@@ -142,6 +143,13 @@ export class PaymentsService {
       nextCheckAt:
         intent.status === 'pending' ? new Date(Math.min(next, intent.expiresAt.getTime())) : null,
       updatedAt: now,
+=======
+        await this.transition(storeId, intent, change, {
+          now,
+          verified: result.status === 'paid' ? result : undefined,
+        });
+      }
+>>>>>>> feat/pay-2-payment-intents
     });
   }
 
@@ -152,11 +160,7 @@ export class PaymentsService {
     if (result.status !== 'pending') return { status: result.status } as const;
   }
 
-  private paidChange(
-    intent: Intent,
-    result: Extract<PaymentStatus, { status: 'paid' }>,
-    now: Date,
-  ) {
+  private paidChange(intent: Intent, result: PaidStatus, now: Date) {
     if (intent.status !== 'pending' && intent.status !== 'expired' && intent.status !== 'failed')
       return;
     if (result.merchantReference !== intent.merchantReference) return;
@@ -184,7 +188,7 @@ export class PaymentsService {
     storeId: string,
     intent: Intent,
     change: Parameters<PaymentsRepository['update']>[3] & { status: Intent['status'] },
-    now: Date,
+    { now, verified }: { now: Date; verified?: PaidStatus },
   ) {
     const result = await this.repository.update(storeId, intent.id, intent.status, {
       ...change,
@@ -197,7 +201,7 @@ export class PaymentsService {
         storeId,
         intent,
         { status: 'needs_review', reviewReason: 'duplicate' },
-        now,
+        { now, verified },
       );
       return;
     }
@@ -206,7 +210,11 @@ export class PaymentsService {
       kind: 'status_changed',
       fromStatus: intent.status,
       toStatus: change.status,
-      gatewayReference: change.gatewayTransactionId,
+      gatewayReference: verified?.transactionId,
+      eventPayload: verified && {
+        amountPoisha: verified.amountPoisha,
+        currency: verified.currency,
+      },
       createdAt: now,
     });
   }
