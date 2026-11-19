@@ -117,6 +117,41 @@ describe('ProductsService stock ledger', () => {
     expect(await movements(id)).toEqual([]);
   });
 
+  it('reconciles concurrent imports of the same count with one signed movement', async () => {
+    const id = await variant(10, 2);
+    await Promise.all([
+      service.moveStock(f.a, id, { kind: 'import', onHand: 4, reference }),
+      service.moveStock(f.a, id, { kind: 'import', onHand: 4, reference }),
+    ]);
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 4, reserved: 2 });
+    expect(await movements(id)).toEqual([
+      { kind: 'import', quantity: -6, on_hand_after: 4, reserved_after: 2 },
+    ]);
+  });
+
+  it('rejects imported stock below reserved and hides variants from other stores', async () => {
+    const id = await variant(10, 2);
+    await expect(
+      service.moveStock(f.a, id, { kind: 'import', onHand: 1, reference }),
+    ).rejects.toMatchObject({
+      code: 'STOCK_NOT_AVAILABLE',
+    });
+    await expect(
+      service.moveStock(f.b, id, { kind: 'import', onHand: 4, reference }),
+    ).rejects.toMatchObject({
+      code: 'PRODUCT_VARIANT_NOT_FOUND',
+    });
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 10, reserved: 2 });
+    expect(await movements(id)).toEqual([]);
+  });
+
+  it('skips imported stock when tracking is off', async () => {
+    const id = await variant(0, 0, false);
+    await service.moveStock(f.a, id, { kind: 'import', onHand: 5, reference });
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 0, reserved: 0 });
+    expect(await movements(id)).toEqual([]);
+  });
+
   it('rejects zero or negative reserve quantities and counter overflow', async () => {
     const id = await variant(2147483647);
     for (const quantity of [0, -1])

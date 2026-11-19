@@ -225,6 +225,10 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
 Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
 
+`ProductsService.moveStock` accepts an absolute on-hand count for an import. It
+locks the variant while calculating the signed movement. An unchanged count
+needs no movement, and a count below reserved stock is rejected.
+
 Variant external identity is `(store_id, external_source, external_account_id, external_ref)`. Source names the provider; account is its stable shop/account ID, never a display name. All three external fields are supplied together or all are null. Provider synchronization remains planned work.
 
 A product cannot be archived while any of its variants appears in an order in To confirm, On hold or To pack. This includes archived variants and products that do not track stock.

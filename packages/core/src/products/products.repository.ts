@@ -257,10 +257,10 @@ export class ProductsRepository {
   async findStockVariant(
     storeId: string,
     variantId: string,
-  ): Promise<{ isStockTracked: boolean } | undefined> {
+  ): Promise<{ isStockTracked: boolean; onHand: number } | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ isStockTracked: products.isStockTracked })
+        .select({ isStockTracked: products.isStockTracked, onHand: productVariants.onHand })
         .from(productVariants)
         .innerJoin(products, eq(products.id, productVariants.productId))
         .where(
