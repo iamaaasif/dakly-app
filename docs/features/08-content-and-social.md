@@ -187,7 +187,9 @@ target.
 The Meta publishing driver uses the connected Page token for Facebook and
 Instagram. It can upload unpublished Page photos, publish a Page post or story,
 and create, check and publish an Instagram media container. The worker that uses
-this driver is the next SOC-2 change. Live publishing requires Meta app review.
+this driver is the next SOC-2 change. Live publishing requires Meta app review
+for `pages_manage_posts` and `instagram_content_publish`. Stores may need to
+reconnect to grant them. First comments also need the network’s comment permission.
 
 Publishing (SOC-2), insights (SOC-3), and the web screens (SOC-5) are separate
 tasks. SOC-4 adds AI caption generation and checks generated text before scheduling.
