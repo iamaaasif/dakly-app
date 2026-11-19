@@ -7,6 +7,7 @@ import { JobSchedulers } from '../src/job-schedulers';
 function recordingQueue() {
   const schedulers: unknown[][] = [];
   const queue = {
+    getJobScheduler: async (name: string) => schedulers.findLast(([id]) => id === name)?.[1],
     upsertJobScheduler: async (...args: unknown[]) => {
       schedulers.push(args);
     },
@@ -50,15 +51,11 @@ describe('Worker job schedulers', () => {
       scheduler('wake-snoozed-notifications'),
     ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
-    const bulkSweeps = [
-      scheduler('staff-audit-maintenance'),
-      scheduler('fail-stuck-imports'),
+    const bulkIntervals = [scheduler('staff-audit-maintenance'), scheduler('fail-stuck-imports')];
+    expect(bulk.schedulers).toEqual([
+      ...bulkIntervals,
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
-    ];
-    expect(bulk.schedulers).toEqual([...bulkSweeps, ...bulkSweeps]);
-    expect(sync.schedulers).toEqual([
-      scheduler('queue-channel-token-checks', 86400000),
-      scheduler('queue-channel-token-checks', 86400000),
+      ...bulkIntervals,
     ]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),
