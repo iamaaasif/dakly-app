@@ -78,6 +78,10 @@ jobs:
           --health-retries 10
       mailpit:
         image: axllent/mailpit:v1.30.7
+        env:
+          MP_IGNORE_DUPLICATE_IDS: 'true'
+          MP_MAX_MESSAGES: '0'
+          MP_MAX_AGE: 7d
         ports:
           - 1025:1025
           - 8025:8025
@@ -128,6 +132,10 @@ jobs:
           --health-retries 10
       mailpit:
         image: axllent/mailpit:v1.30.7
+        env:
+          MP_IGNORE_DUPLICATE_IDS: 'true'
+          MP_MAX_MESSAGES: '0'
+          MP_MAX_AGE: 7d
         ports:
           - 1025:1025
           - 8025:8025

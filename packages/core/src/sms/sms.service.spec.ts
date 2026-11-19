@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import type { SmsDriver } from '@dakly/providers/sms/sms-driver';
+import { type SmsDriver, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { SmsService } from './sms.service';
 
@@ -42,6 +42,19 @@ describe('shared SMS delivery', () => {
       }
     },
   );
+
+  it('turns a provider refusal into SMS_SEND_REFUSED and passes other errors on', async () => {
+    const driver = new FakeSmsDriver();
+    const service = new SmsService(driver);
+    const message = { to: '01712345678', text: 'অফার' };
+    vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    vi.spyOn(driver, 'send').mockRejectedValueOnce(new SmsSendRefused());
+    await expect(service.send(message)).rejects.toMatchObject({ code: 'SMS_SEND_REFUSED' });
+    const timeout = new Error('timed out');
+    vi.spyOn(driver, 'send').mockRejectedValueOnce(timeout);
+    await expect(service.send(message)).rejects.toBe(timeout);
+    vi.restoreAllMocks();
+  });
 
   it('gives up on a provider that does not answer within 30 seconds', async () => {
     vi.useFakeTimers();
