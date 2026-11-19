@@ -351,6 +351,13 @@
       "when": 1795083840949,
       "tag": "0049_automation_trigger_preview",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795087036085,
+      "tag": "0050_outbound_message_intent",
+      "breakpoints": true
     }
   ]
 }

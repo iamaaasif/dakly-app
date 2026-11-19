@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { NotificationsModule } from '../notifications/notifications.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { CryptoModule } from '../platform/crypto/crypto.module';
@@ -9,18 +10,18 @@ import { ChannelConnectionsController } from './channel-connections.controller';
 import { ChannelConnectionsRepository } from './channel-connections.repository';
 import { ChannelConnectionsService } from './channel-connections.service';
 import { MetaAuthorizationController } from './meta-authorization.controller';
-import { META_AUTHORIZATION_DRIVER, MetaAuthorizationService } from './meta-authorization.service';
+import { META_CHANNEL_DRIVER, MetaAuthorizationService } from './meta-authorization.service';
 import { createMetaChannelDriver } from './meta-channel-driver';
 
 @Module({
-  imports: [CacheModule, ClockModule, CryptoModule, OutboxModule, TeamModule],
+  imports: [CacheModule, ClockModule, CryptoModule, NotificationsModule, OutboxModule, TeamModule],
   controllers: [MetaAuthorizationController, ChannelConnectionsController],
   providers: [
-    { provide: META_AUTHORIZATION_DRIVER, useFactory: createMetaChannelDriver },
+    { provide: META_CHANNEL_DRIVER, useFactory: createMetaChannelDriver },
     MetaAuthorizationService,
     ChannelConnectionsService,
     ChannelConnectionsRepository,
   ],
-  exports: [ChannelConnectionsService],
+  exports: [ChannelConnectionsRepository, ChannelConnectionsService],
 })
 export class MetaAuthorizationModule {}

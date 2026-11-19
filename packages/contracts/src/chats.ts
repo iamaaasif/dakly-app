@@ -42,6 +42,7 @@ export const messageStatuses = [
   'failed',
 ] as const;
 export const messageSourceTypes = ['chat', 'campaign', 'automation', 'transactional'] as const;
+export const messageSendCategories = ['staff_reply', 'transactional', 'marketing'] as const;
 export const aiRatings = ['good', 'bad'] as const;
 export const commentClassifications = ['question', 'positive', 'negative', 'spam'] as const;
 export const commentStatuses = ['new', 'replied', 'needs_you', 'hidden', 'ignored'] as const;

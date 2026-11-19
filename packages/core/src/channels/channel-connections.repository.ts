@@ -179,6 +179,8 @@ export class ChannelConnectionsRepository {
           ciphertext: channelConnections.accessTokenCiphertext,
           keyVersion: channelConnections.keyVersion,
           expiresAt: channelConnections.tokenExpiresAt,
+          kind: channelConnections.kind,
+          externalAccountId: channelConnections.externalAccountId,
         })
         .from(channelConnections)
         .where(
