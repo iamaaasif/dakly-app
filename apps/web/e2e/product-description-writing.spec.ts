@@ -41,6 +41,12 @@ test('picks an AI description without saving the product', async ({ page, contex
   ];
   let showError = true;
   try {
+    const noPlan = await context.request.post(`${productPath}/write-description`, {
+      headers,
+      data: { tone: 'friendly', language: 'en' },
+    });
+    expect((await noPlan.json()).error.code).toBe('SUBSCRIPTION_NOT_FOUND');
+
     await page.route(`**${productPath}/write-description`, async (route) => {
       expect(route.request().postDataJSON()).toEqual({ tone: 'friendly', language: 'en' });
       if (showError) {
@@ -53,7 +59,10 @@ test('picks an AI description without saving the product', async ({ page, contex
       }
       const result: ContentWriteResult = {
         options,
-        aiRunId: 'dda05039-d3bc-4699-a31a-bb83c66487fc',
+        aiDraft: {
+          aiRunId: 'dda05039-d3bc-4699-a31a-bb83c66487fc',
+          proof: 'a'.repeat(64),
+        },
       };
       await route.fulfill({ json: result, headers: { 'x-session-context': contextTag } });
     });
