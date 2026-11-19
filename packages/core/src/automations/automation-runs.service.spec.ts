@@ -801,7 +801,7 @@ describe('AutomationRunsService', () => {
       providerError = undefined;
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
       const afterWait = new Date(now.getTime() + 6 * 60_000);
-      recheckDefer = new Date(afterWait.getTime() + HOUR);
+      finalQuietUntil = new Date(afterWait.getTime() + HOUR);
       duringRecheck = () => {
         databaseNow = afterWait;
       };
@@ -815,7 +815,7 @@ describe('AutomationRunsService', () => {
       expect(repository.run).toMatchObject({
         status: 'waiting',
         claimedAt: afterWait,
-        wakeAt: recheckDefer,
+        wakeAt: finalQuietUntil,
       });
       expect(sent).toEqual([]);
     });

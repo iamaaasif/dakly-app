@@ -134,7 +134,7 @@ export async function claimRetryDispatch({
     const checked = finalize(claimedAt);
     const ended = endExpiredRetry(step, firstTriedAt, wakeAt, claimedAt);
     const result = retryOutcome(checked.result, ended);
-    const leaseRecovery = retryAfterLostLease(claim, claimedAt, result, wakeAt);
+    const leaseRecovery = retryAfterLostLease(claim, checkedAt, claimedAt, result, wakeAt);
     if (leaseRecovery) return { result: leaseRecovery, claim, at: checked.at };
     // A slower worker must not age out a previously submitted message early.
     const sentAt = new Date(Math.max(checked.at.getTime(), latestDispatchAt.getTime()));
@@ -155,12 +155,16 @@ export async function claimRetryDispatch({
 
 function retryAfterLostLease(
   claim: RunClaim,
+  lockedAt: Date,
   now: Date,
   result: StepResult | undefined,
   wakeAt: Date | null,
 ): StepResult | undefined {
   if (result && result.run.status !== 'waiting') return undefined;
-  if (now.getTime() - claim.claimedAt.getTime() < WORKFLOW_LEASE_MS) return undefined;
+  // A current claim can record a defer after locking the run. Only a submission needs a
+  // current lease at the final clock sample because it continues outside the transaction.
+  const checkedAt = result ? lockedAt : now;
+  if (checkedAt.getTime() - claim.claimedAt.getTime() < WORKFLOW_LEASE_MS) return undefined;
   return { run: { status: 'waiting', wakeAt: wakeAt ?? now } };
 }
 
