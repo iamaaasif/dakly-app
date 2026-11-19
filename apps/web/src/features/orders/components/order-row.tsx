@@ -63,16 +63,16 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
           >
             {order.recipientName}
           </Link>
+          <span className="text-xs text-text-muted">
+            #{order.number} ·{' '}
+            <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
+              {formatRelativeTime(order.createdAt)}
+            </time>
+          </span>
           <OrderRowBadges order={order} />
         </div>
-        <p className="text-xs text-text-muted">
-          #{order.number} ·{' '}
-          <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
-            {formatRelativeTime(order.createdAt)}
-          </time>
-        </p>
         {order.itemPreview ? (
-          <p className="mt-1 text-sm wrap-anywhere">{order.itemPreview}</p>
+          <p className="mt-0.5 text-sm wrap-anywhere text-text-muted">{order.itemPreview}</p>
         ) : null}
       </div>
       <OrderAmount order={order} />

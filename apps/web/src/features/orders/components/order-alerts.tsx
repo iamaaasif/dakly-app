@@ -6,7 +6,7 @@ import { cn } from '@dakly/ui/cn';
 
 import { formatMoney } from '@/lib/format-money';
 
-export type OrderAlertsProps = { alerts: Alerts };
+type OrderAlertsProps = { alerts: Alerts };
 
 export function OrderAlerts({ alerts }: OrderAlertsProps) {
   const cards = [

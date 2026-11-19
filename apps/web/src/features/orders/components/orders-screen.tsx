@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState, type RefObject } from 'react';
 
 import { orderTabs, type OrderListQuery, type OrderStage } from '@dakly/contracts/orders';
+import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
@@ -49,10 +50,7 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
           />
         ) : null}
         {orders.data ? <OrdersList page={orders.data} query={query} /> : null}
-        <p className="text-xs text-text-muted">
-          Return risk is based on your past orders. Courier names are demo integrations in this
-          prototype.
-        </p>
+        <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
         {selected ? (
           <OrderDetailSheet
             key={selected}
@@ -126,7 +124,10 @@ type OrderStageNavProps = {
 
 function OrderStageNav({ query, counts }: OrderStageNavProps) {
   return (
-    <nav aria-label="Order stages" className="flex flex-wrap border-b border-border">
+    <nav
+      aria-label="Order stages"
+      className="flex overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {orderTabs.map((stage) => {
         const isCurrent = stage === query.stage;
         return (
@@ -138,16 +139,15 @@ function OrderStageNav({ query, counts }: OrderStageNavProps) {
           >
             {orderStageLabels[stage]}
             {counts ? (
-              <span
+              <Badge
+                variant={isCurrent ? 'primary' : 'neutral'}
                 className={cn(
-                  'ml-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium tabular-nums',
-                  isCurrent
-                    ? 'bg-primary font-semibold text-on-primary'
-                    : 'bg-surface-muted text-text-muted',
+                  'ml-1 rounded-full px-2 py-0.5 text-xs tabular-nums',
+                  isCurrent && 'font-semibold',
                 )}
               >
                 {counts[stage]}
-              </span>
+              </Badge>
             ) : null}
           </Link>
         );
