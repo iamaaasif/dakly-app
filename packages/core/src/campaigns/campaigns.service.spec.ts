@@ -535,6 +535,7 @@ describe('CampaignsService', () => {
 
       await expect(service.cancel(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_CANCELLABLE',
+        status: 409,
       });
       await expect(service.cancel(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_FOUND',

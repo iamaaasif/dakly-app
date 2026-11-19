@@ -215,6 +215,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
       const before = await wallets.balance(storeId, 'sms_credits');
       const id = await approvedCampaign(null);
       if (status === 'paused') await service.pause(storeId, id, actor);
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
 
       const cancelled = await service.cancel(storeId, id, actor);
 
@@ -231,6 +232,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
       await expect(service.cancel(storeId, id, actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_CANCELLABLE',
       });
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before);
     },
   );
 
