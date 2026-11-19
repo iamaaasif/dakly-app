@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { createHash, randomBytes, randomUUID, randomInt } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, randomInt } from 'node:crypto';
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -18,7 +18,7 @@ import { SmsService } from '@dakly/core/sms/sms.service';
 
 import { AppModule } from '../src/app.module';
 import { isolationBoundaries } from './isolation-boundaries';
-import { IsolationFixture, type Shop } from './isolation-fixture';
+import { type Actor, IsolationFixture, type Shop } from './isolation-fixture';
 import { IsolationInventory } from './isolation-inventory';
 import { captureRequestLogs } from './request-log-sink';
 
@@ -664,21 +664,24 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('delivery_zones', foreignId)).toEqual(before);
   });
+const metaAppSecret = 'shared-meta-test-app-secret';
 const metaStart = '/channel-connections/meta/start';
 const metaAccounts = '/channel-connections/meta/accounts';
 
-async function metaGrant(shop: Shop) {
-  const { authorizationUrl } = (await success(shop, 'POST', metaStart, 201)).json();
+async function metaGrant(shop: Shop, actor = shop.owner) {
+  const result = await f.request(actor, 'POST', metaStart);
+  expect(result.statusCode, result.body).toBe(201);
+  const { authorizationUrl } = result.json();
   const url = new URL(authorizationUrl);
   return { state: url.searchParams.get('state'), code: url.searchParams.get('code') };
 }
 
-function metaCacheKey(shop: Shop, kind: 'state' | 'selection', key: string) {
-  return `meta-auth:${shop.id}:${shop.owner.id}:${kind}:${createHash('sha256').update(key).digest('hex')}`;
+function metaCacheKey(shop: Shop, actor: Actor, kind: 'state' | 'selection', key: string) {
+  return `meta-auth:${shop.id}:${actor.id}:${kind}:${createHash('sha256').update(key).digest('hex')}`;
 }
 
-async function expectMetaCredentialEncrypted(shop: Shop, selectionId: string) {
-  const key = metaCacheKey(shop, 'selection', selectionId);
+async function expectMetaCredentialEncrypted(shop: Shop, selectionId: string, actor = shop.owner) {
+  const key = metaCacheKey(shop, actor, 'selection', selectionId);
   const redis = app.get(ValkeyClient).connection;
   const packed = await redis.get(key);
   expect(packed).toBeTruthy();
@@ -694,6 +697,7 @@ async function expectMetaCredentialEncrypted(shop: Shop, selectionId: string) {
       { keyVersion, ciphertext: Buffer.from(ciphertext, 'base64') },
     );
   expect(plaintext.toString()).toBe('fake-meta-user-credential');
+  plaintext.fill(0);
   await redis.del(key);
 }
 
@@ -705,7 +709,7 @@ fixture('POST /channel-connections/meta/start', async () => {
   expect(own.state).toMatch(/^[a-zA-Z0-9_-]{43}$/);
   expect(own.state).not.toBe(foreign.state);
   const redis = app.get(ValkeyClient).connection;
-  const key = metaCacheKey(b, 'state', own.state!);
+  const key = metaCacheKey(b, b.owner, 'state', own.state!);
   expect(await redis.get(key)).toBe('1');
   const ttl = await redis.ttl(key);
   expect(ttl).toBeGreaterThan(0);
@@ -717,13 +721,61 @@ fixture('POST /channel-connections/meta/start', async () => {
   await f.admin.pool.query("update memberships set built_in_role='admin' where id=$1", [
     b.membership,
   ]);
-  expect((await f.request(b.member, 'POST', metaStart)).statusCode).toBe(201);
+  const adminGrant = await metaGrant(b, b.member);
+  const adminAccounts = await f.request(b.member, 'POST', metaAccounts, adminGrant);
+  expect(adminAccounts.statusCode).toBe(201);
+  await expectMetaCredentialEncrypted(b, adminAccounts.json().selectionId, b.member);
+  const expired = await metaGrant(b);
+  await redis.expire(metaCacheKey(b, b.owner, 'state', expired.state!), 0);
+  expect((await f.request(b.owner, 'POST', metaAccounts, expired)).statusCode).toBe(404);
   const aAccounts = await success(a, 'POST', metaAccounts, 201, foreign);
   await expectMetaCredentialEncrypted(a, aAccounts.json().selectionId);
   const bAccounts = await success(b, 'POST', metaAccounts, 201, own);
   await expectMetaCredentialEncrypted(b, bAccounts.json().selectionId);
   expect(await redis.get(key)).toBeNull();
 });
+
+async function denyMetaStateOutsideItsShop(
+  a: Shop,
+  b: Shop,
+  input: Awaited<ReturnType<typeof metaGrant>>,
+) {
+  await f.admin.pool.query(
+    "insert into memberships(id,store_id,user_id,built_in_role,status) values($1,$2,$3,'admin','active')",
+    [randomUUID(), b.id, a.owner.id],
+  );
+  const selectB = await f.request(a.owner, 'POST', '/me/active-store', { storeId: b.id });
+  expect(selectB.statusCode).toBe(204);
+  const foreign = await f.request(a.owner, 'POST', metaAccounts, input);
+  expect(foreign.statusCode).toBe(404);
+  const selectA = await f.request(a.owner, 'POST', '/me/active-store', { storeId: a.id });
+  expect(selectA.statusCode).toBe(204);
+  return foreign.json();
+}
+
+async function denyCustomMetaRole(shop: Shop, input: Awaited<ReturnType<typeof metaGrant>>) {
+  const role = await success(shop, 'POST', '/roles', 201, {
+    name: 'দোকানের সেটিংস',
+    permissions: {
+      areas: { storeSettings: 'edit' },
+      seeFullPhone: false,
+      exportLists: false,
+      refund: false,
+    },
+  });
+  await f.admin.pool.query('update memberships set built_in_role=null,role_id=$2 where id=$1', [
+    shop.membership,
+    role.json().id,
+  ]);
+  for (const [url, body] of [
+    [metaStart, undefined],
+    [metaAccounts, input],
+  ] as const) {
+    const denied = await f.request(shop.member, 'POST', url, body);
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json().error.code).toBe('META_LOGIN_ROLE_REQUIRED');
+  }
+}
 
 fixture('POST /channel-connections/meta/accounts', async () => {
   const { a, b } = await pair();
@@ -733,15 +785,22 @@ fixture('POST /channel-connections/meta/accounts', async () => {
   const missing = await f.request(b.owner, 'POST', metaAccounts, { ...own, state: 'a'.repeat(43) });
   expect([wrongStore.statusCode, missing.statusCode]).toEqual([404, 404]);
   expect(wrongStore.json()).toEqual(missing.json());
-  expect((await f.request(b.member, 'POST', metaAccounts, own)).statusCode).toBe(403);
-  await f.admin.pool.query("update memberships set built_in_role='admin' where id=$1", [
-    b.membership,
-  ]);
+  expect(await denyMetaStateOutsideItsShop(a, b, foreign)).toEqual(missing.json());
+  await denyCustomMetaRole(b, own);
+  await f.admin.pool.query(
+    "update memberships set built_in_role='admin',role_id=null where id=$1",
+    [b.membership],
+  );
   const wrongUser = await f.request(b.member, 'POST', metaAccounts, own);
   expect(wrongUser.statusCode).toBe(404);
   expect(wrongUser.json()).toEqual(missing.json());
 
-  const authorized = await success(b, 'POST', metaAccounts, 201, own);
+  const redemptions = await Promise.all([
+    f.request(b.owner, 'POST', metaAccounts, own),
+    f.request(b.owner, 'POST', metaAccounts, own),
+  ]);
+  expect(redemptions.map(({ statusCode }) => statusCode).sort()).toEqual([201, 404]);
+  const authorized = redemptions.find(({ statusCode }) => statusCode === 201)!;
   expect(authorized.json()).toEqual({
     selectionId: expect.stringMatching(/^[a-zA-Z0-9_-]{43}$/),
     pages: [
@@ -753,6 +812,29 @@ fixture('POST /channel-connections/meta/accounts', async () => {
   expect((await f.request(b.owner, 'POST', metaAccounts, own)).statusCode).toBe(404);
   const aAccounts = await success(a, 'POST', metaAccounts, 201, foreign);
   await expectMetaCredentialEncrypted(a, aAccounts.json().selectionId);
+
+  const rejectedCode = 'rejected-test-authorization-code';
+  const invalid = await metaGrant(b);
+  const rejected = await f.request(b.owner, 'POST', metaAccounts, {
+    ...invalid,
+    code: rejectedCode,
+  });
+  expect(rejected.statusCode).toBe(400);
+  expect(rejected.json().error.code).toBe('META_LOGIN_REJECTED');
+  expect(logs.contents()).toContain('Request completed');
+  const sensitive = [
+    own.state!,
+    own.code!,
+    rejectedCode,
+    'fake-meta-user-credential',
+    'fake-rina-page-credential',
+    'fake-karim-page-credential',
+  ];
+  for (const value of sensitive) {
+    expect(authorized.body).not.toContain(value);
+    expect(rejected.body).not.toContain(value);
+    expect(logs.contents()).not.toContain(value);
+  }
 });
 
 fixture('GET /areas', async () => {
@@ -1777,12 +1859,15 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
 });
 
+let logs: ReturnType<typeof captureRequestLogs>;
+
 describe('every production shop route isolates its data', () => {
-  let logs: ReturnType<typeof captureRequestLogs>;
   beforeEach(() => logs.beginTest());
   beforeAll(async () => {
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
     vi.stubEnv('META_CHANNEL_DRIVER', 'fake');
+    vi.stubEnv('META_APP_SECRET', metaAppSecret);
+    vi.stubEnv('META_WEBHOOK_VERIFY_TOKEN', undefined);
     vi.stubEnv('META_OAUTH_REDIRECT_URI', 'http://localhost:3000/integrations/meta');
     resetEnvForTests();
     const adapter = new FastifyAdapter(createHttpServer(loadEnv().API_TRUSTED_PROXIES));
@@ -1792,6 +1877,7 @@ describe('every production shop route isolates its data', () => {
     app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
       logger: false,
       abortOnError: false,
+      rawBody: true,
     });
     logs = captureRequestLogs(app);
     f = new IsolationFixture(app);
@@ -1814,6 +1900,18 @@ describe('every production shop route isolates its data', () => {
       resetEnvForTests();
     }
   });
+  it('keeps signed webhook intake disabled with only the shared Meta app secret', async () => {
+    const payload = JSON.stringify({ object: 'page', entry: [{ id: randomUUID() }] });
+    const signature = createHmac('sha256', metaAppSecret).update(payload).digest('hex');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/meta',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': `sha256=${signature}` },
+      payload,
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
   });

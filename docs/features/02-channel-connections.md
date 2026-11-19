@@ -127,7 +127,8 @@ Messenger and Instagram
 
 1. `POST /channel-connections/meta/start` returns the Facebook Login for Business URL. An Owner or Admin can start this flow. The login state can be used once and expires after 10 minutes.
 2. The Integrations screen passes the returned code and state to `POST /channel-connections/meta/accounts`. The API exchanges them and lists Pages the member can manage and their linked Instagram accounts. The response includes an opaque selection id. The credential stays encrypted in Valkey for up to 10 minutes, bound to the same store and member.
-3. The second CHN-2 PR adds selection. The owner picks which accounts to connect. Dakly stores the encrypted long-lived Page token and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
+3. Graph login uses a User access token configuration with `pages_show_list`, `pages_manage_metadata` and `instagram_basic` for account discovery. Credentials for Graph login alone leave webhook intake disabled.
+4. The second CHN-2 PR adds selection. The owner picks which accounts to connect. Dakly stores the encrypted long-lived Page token and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
 
 WhatsApp
 

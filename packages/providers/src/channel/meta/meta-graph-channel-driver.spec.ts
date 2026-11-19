@@ -10,7 +10,10 @@ const driver = new MetaGraphChannelDriver({
 });
 
 describe('MetaGraphChannelDriver', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it('opens Facebook Login for Business with a server-selected redirect and state', () => {
     const url = new URL(driver.authorizationUrl('login-state'));
@@ -83,6 +86,28 @@ describe('MetaGraphChannelDriver', () => {
     );
     expect(requests[2]?.authorization).toBe('Bearer test-long-user-credential');
     expect(requests[3]?.url.searchParams.get('after')).toBe('page-cursor');
+  });
+
+  it('shares one deadline across pages with distinct cursors', async () => {
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(deadline.signal);
+    vi.stubGlobal('fetch', async (endpoint: URL, init: RequestInit) => {
+      const after = endpoint.searchParams.get('after');
+      if (init.signal?.aborted) throw new DOMException('Request timed out', 'TimeoutError');
+      if (after === 'second') return Response.json({ data: [] });
+      if (after === 'first') deadline.abort();
+      return Response.json({
+        data: [],
+        paging: {
+          next: 'https://graph.facebook.com/next',
+          cursors: { after: after ? 'second' : 'first' },
+        },
+      });
+    });
+
+    await expect(driver.listAccounts('test-user-credential')).rejects.toMatchObject({
+      code: 'unavailable',
+    });
   });
 
   it('returns a typed failure without the vendor error text', async () => {

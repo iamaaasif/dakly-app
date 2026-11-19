@@ -74,15 +74,18 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
 
   async exchangeAuthorizationCode(code: string): Promise<string> {
     const app = { client_id: this.app.appId, client_secret: this.app.appSecret };
+    const options = { signal: AbortSignal.timeout(requestTimeoutMs) };
     const short = await this.get(
       'oauth/access_token',
       { ...app, code, redirect_uri: this.app.redirectUri },
       accessTokenSchema,
+      options,
     );
     const long = await this.get(
       'oauth/access_token',
       { ...app, grant_type: 'fb_exchange_token', fb_exchange_token: short.access_token },
       accessTokenSchema,
+      options,
     );
     return long.access_token;
   }
@@ -90,6 +93,7 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
   async listAccounts(userToken: string): Promise<MetaPage[]> {
     const pages: MetaPage[] = [];
     const cursors = new Set<string>();
+    const options = { userToken, signal: AbortSignal.timeout(requestTimeoutMs) };
     const params = { fields: 'id,name,tasks,access_token,instagram_business_account{id,username}' };
     let after: string | undefined;
     for (;;) {
@@ -97,7 +101,7 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
         'me/accounts',
         { ...params, ...(after && { after }) },
         accountsSchema,
-        userToken,
+        options,
       );
       for (const page of response.data) {
         const account = selectablePage(page);
@@ -115,7 +119,7 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
     path: string,
     query: Record<string, string>,
     schema: z.ZodType<T>,
-    userToken?: string,
+    options: { signal: AbortSignal; userToken?: string },
   ): Promise<T> {
     const url = new URL(path, graph);
     url.search = new URLSearchParams(query).toString();
@@ -123,9 +127,9 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
     let payload: unknown;
     try {
       response = await fetch(url, {
-        signal: AbortSignal.timeout(requestTimeoutMs),
+        signal: options.signal,
         redirect: 'error',
-        ...(userToken && { headers: { authorization: `Bearer ${userToken}` } }),
+        ...(options.userToken && { headers: { authorization: `Bearer ${options.userToken}` } }),
       });
       payload = await response.json();
     } catch {
