@@ -1754,7 +1754,10 @@ fixture('GET /dashboard', async () => {
        ($1,$2,'orders','',$4),($1,$3,'orders','',1),
        ($1,$2,'buyer_activity',$5,$2::date - date '1970-01-01'),
        ($1,$2,'buyer_activity',$6,$3::date - date '1970-01-01'),
-       ($1,$2,'lifecycle','new',$4)`,
+       ($1,$2,'lifecycle','new',$4),
+       ($1,$2,'sales','manual',$4::bigint * 10000),
+       ($1,$2,'sales','order_link',$4::bigint * 5000),
+       ($1,$3,'sales','manual',12500)`,
       [shop.id, current.through, previous.through, count, randomUUID(), randomUUID()],
     );
     const result = await success(shop, 'GET', '/dashboard?period=7', 200);
@@ -1768,6 +1771,14 @@ fixture('GET /dashboard', async () => {
         points: now.points.map(({ value }) => value.toString()),
       });
     }
+    const sales = await reports.sales(shop.id, current);
+    const previousSales = await reports.sales(shop.id, previous);
+    expect(cards.sales).toEqual({
+      totalPoisha: sales.total.toString(),
+      previousPoisha: previousSales.total.toString(),
+      pointsPoisha: sales.points.map(({ value }) => value.toString()),
+    });
+    expect(cards.sales.totalPoisha).toBe(String(count * 15000));
     expect(cards.orders.total).toBe(String(count));
     expect(lifecycle).toEqual(await reports.lifecycleCounts(shop.id, current));
     expect(lifecycle.new).toBe(count);
@@ -1790,6 +1801,7 @@ fixture('GET /dashboard', async () => {
   expect(ordersDashboard.json().cards).not.toHaveProperty('newCustomers');
   expect(ordersDashboard.json().cards).not.toHaveProperty('customersWhoCameBack');
   expect(ordersDashboard.json().cards.orders.points).toHaveLength(30);
+  expect(ordersDashboard.json().cards.sales.pointsPoisha).toHaveLength(30);
   expect((await f.request(a.owner, 'GET', `/dashboard?storeId=${b.id}`)).statusCode).toBe(400);
   expect((await f.request(a.owner, 'GET', '/dashboard?period=8')).statusCode).toBe(400);
 });

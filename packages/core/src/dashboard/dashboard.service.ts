@@ -6,7 +6,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { TeamService } from '../team/team.service';
 
-type CardReport = 'orders' | 'newCustomers' | 'customersWhoCameBack';
+type CardReport = 'orders' | 'sales' | 'newCustomers' | 'customersWhoCameBack';
 type Periods = Awaited<ReturnType<AnalyticsService['periods']>>;
 
 @Injectable()
@@ -25,13 +25,28 @@ export class DashboardService {
     const { asOf, timeZone } = periods;
     const canViewOrders = this.team.canAccess(access, 'orders', 'view');
     const canViewCustomers = this.team.canAccess(access, 'customers', 'view');
-    const [orders, newCustomers, customersWhoCameBack, lifecycle] = await Promise.all([
+    const [orders, sales, newCustomers, customersWhoCameBack, lifecycle] = await Promise.all([
       canViewOrders ? this.readCard(storeId, periods, 'orders') : undefined,
+      canViewOrders ? this.readCard(storeId, periods, 'sales') : undefined,
       canViewCustomers ? this.readCard(storeId, periods, 'newCustomers') : undefined,
       canViewCustomers ? this.readCard(storeId, periods, 'customersWhoCameBack') : undefined,
       canViewCustomers ? this.reports.lifecycleCounts(storeId, periods.current) : undefined,
     ]);
-    return { asOf, timeZone, cards: { orders, newCustomers, customersWhoCameBack }, lifecycle };
+    return {
+      asOf,
+      timeZone,
+      cards: {
+        orders,
+        sales: sales && {
+          totalPoisha: sales.total,
+          previousPoisha: sales.previous,
+          pointsPoisha: sales.points,
+        },
+        newCustomers,
+        customersWhoCameBack,
+      },
+      lifecycle,
+    };
   }
 
   private async readCard(storeId: string, periods: Periods, report: CardReport) {
