@@ -13,12 +13,14 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
-import type { SendCategory } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { messagingError } from './messaging.errors';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
+import type { OutgoingChannelMessage } from './outgoing-channel-message';
+
+export type { OutgoingChannelMessage } from './outgoing-channel-message';
 
 export type InboundMessageInput = {
   kind: (typeof channelConnectionKinds)[number];
@@ -39,17 +41,6 @@ export type OutgoingMessage = {
   body: string;
   operationKey: string;
   destination?: string | null;
-};
-
-export type OutgoingChannelMessage = {
-  channel: 'messenger' | 'instagram';
-  contactId: string;
-  connectionId: string;
-  identityId: string;
-  category: Extract<SendCategory, 'staff_reply' | 'transactional'>;
-  content: string;
-  operationKey: string;
-  actor: { kind: 'user'; userId: string } | { kind: 'ai'; aiRunId: string } | { kind: 'system' };
 };
 
 export type PreparedSmsSender = { storeId: string; name: string | undefined };

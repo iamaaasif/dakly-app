@@ -4,7 +4,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { conversations, messages } from '@dakly/db/schema/chats';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import type { OutgoingChannelMessage } from './messaging.service';
+import type { OutgoingChannelMessage } from './outgoing-channel-message';
 
 type SendOutcome =
   | { status: 'sent'; externalId: string; sentAt: Date; errorCode: null }
