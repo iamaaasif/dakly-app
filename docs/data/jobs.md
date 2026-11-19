@@ -82,7 +82,10 @@ Per-store cap: one running campaign batch per store.
 | `return-conversation-to-ai`  | `queue-conversation-returns`                            | `storeId`, `conversationId`      | Checks the extension and deadline before returning the chat and clearing `ai_resumes_at`            |
 | `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                                                 |
 | `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                                      |
+| `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run            |
 | `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                                |
+
+The ANA-1 reconciliation follow-up repairs missed day refreshes nightly.
 
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
@@ -163,6 +166,10 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
 | ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `order.created`           | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.edited`            | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
+| `order.stage_changed`     | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.cod_collected`     | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
 | `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
 | `contact.tag_added`       | CAMP-11, `ContactsService.changeTag`                             | `contactId`, `tag`                                                      | Tag-added workflow trigger                                   |
 | `contact.birthday`        | CAMP-11 birthday sweep                                           | `contactId`, local `day`                                                | Birthday workflow trigger                                    |

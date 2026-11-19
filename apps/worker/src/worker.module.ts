@@ -9,6 +9,7 @@ import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-mai
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
+import { AnalyticsModule } from '@dakly/core/analytics/analytics.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
@@ -107,6 +108,7 @@ import { JobSchedulers } from './job-schedulers';
     ClockModule,
     ImportsModule,
     ContactStatsRepairModule,
+    AnalyticsModule,
     KnowledgeIndexModule,
     BullModule.forRootAsync({
       useFactory: () => {
