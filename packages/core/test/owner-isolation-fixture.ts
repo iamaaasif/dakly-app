@@ -62,6 +62,7 @@ export class OwnerIsolationFixture {
       'contacts',
       'imports',
       'files',
+      'posts',
       'channel_connections',
       'audit_log',
       'memberships',

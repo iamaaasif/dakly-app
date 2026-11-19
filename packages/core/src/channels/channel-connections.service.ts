@@ -66,6 +66,11 @@ export class ChannelConnectionsService {
     };
   }
 
+  async postingConnections(storeId: string, ids: string[]) {
+    if (!ids.length) return [];
+    return this.repository.findPostingConnections(storeId, ids);
+  }
+
   async findInbound(
     storeId: string,
     lookup: Parameters<ChannelConnectionsRepository['findInbound']>[1],
