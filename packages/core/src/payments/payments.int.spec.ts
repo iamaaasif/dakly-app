@@ -221,6 +221,69 @@ describe('Payment intents (Postgres)', () => {
     });
   });
 
+  it('moves a failed provider check out of the due page so other intents can run', async () => {
+    const intent = await pendingIntent();
+    const unavailable = new PaymentGatewayService(payments, repository, clock, encryption, [
+      {
+        ...driver,
+        async getStatus() {
+          throw new Error('Gateway unavailable');
+        },
+      },
+    ]);
+    const originalClock = clock.now;
+    clock.now = () => new Date('2026-11-19T03:01:00.000Z');
+    try {
+      await expect(
+        new VerifyPaymentJob(unavailable).handle({ storeId: storeA, paymentIntentId: intent.id }),
+      ).rejects.toThrow('Gateway unavailable');
+    } finally {
+      clock.now = originalClock;
+    }
+    expect(await repository.find(storeA, intent.id)).toMatchObject({
+      status: 'pending',
+      nextCheckAt: new Date('2026-11-19T03:01:30.000Z'),
+    });
+  });
+
+  it('keeps the new check due if an earlier query reports cancellation', async () => {
+    const intent = await pendingIntent();
+    await payments.recordCallback(storeA, intent.id, 'bkash', {
+      eventId: 'new-callback-check',
+      merchantReference: intent.merchantReference,
+    });
+    await payments.applyStatus(
+      storeA,
+      intent.id,
+      { status: 'cancelled' },
+      new Date('2026-11-19T03:01:00.000Z'),
+    );
+    expect(await repository.find(storeA, intent.id)).toMatchObject({
+      status: 'pending',
+      nextCheckAt: now,
+    });
+  });
+
+  it('expires an intent if its due query returns a different reference after expiry', async () => {
+    const intent = await pendingIntent();
+    const originalClock = clock.now;
+    clock.now = () => new Date('2026-11-19T04:00:00.000Z');
+    try {
+      await payments.applyStatus(
+        storeA,
+        intent.id,
+        paid('another-order'),
+        new Date('2026-11-19T03:01:00.000Z'),
+      );
+    } finally {
+      clock.now = originalClock;
+    }
+    expect(await repository.find(storeA, intent.id)).toMatchObject({
+      status: 'expired',
+      nextCheckAt: null,
+    });
+  });
+
   it('uses the shop credential and refuses to use it from another store', async () => {
     const credentials = encryption.encrypt(
       { owner: 'store', storeId: storeA, purpose: 'payment-gateway-credentials' },

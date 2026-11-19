@@ -52,10 +52,14 @@ export class PaymentGatewayService {
       return;
     }
     const gatewayPaymentId = intent.gatewayPaymentId;
+    const checkedAt = intent.nextCheckAt;
     const result = await this.withMerchant(storeId, intent, (driver, merchant) =>
       driver.getStatus(gatewayPaymentId, merchant),
-    );
-    await this.payments.applyStatus(storeId, intentId, result, intent.nextCheckAt);
+    ).catch(async (error: unknown) => {
+      await this.payments.retryCheck(storeId, intentId, checkedAt);
+      throw error;
+    });
+    await this.payments.applyStatus(storeId, intentId, result, checkedAt);
   }
 
   private async withMerchant<T>(

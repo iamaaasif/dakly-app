@@ -14,7 +14,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { MINUTE_MS } from '../platform/time';
+import { DAY_MS, JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../platform/time';
 import { PAYMENT_ERRORS } from './payments.errors';
 import { PaymentsRepository } from './payments.repository';
 
@@ -137,15 +137,37 @@ export class PaymentsService {
     return this.transaction.run(storeId, async () => {
       const intent = await this.lockIntent(storeId, intentId);
       const now = this.clock.now();
-      const change = this.verifiedChange(intent, result, now);
+      const isCurrentCheck = checkedAt?.getTime() === intent.nextCheckAt?.getTime();
+      const verified = this.matchPayment(intent, result);
+      if (checkedAt && !isCurrentCheck && !verified) return;
+      const change = verified
+        ? this.paidChange(intent, verified, now)
+        : this.unpaidChange(intent, result, now);
       if (change) {
-        await this.transition(storeId, intent, change, {
-          now,
-          verified: result.status === 'paid' ? result : undefined,
-        });
-      } else if (checkedAt && checkedAt.getTime() === intent.nextCheckAt?.getTime()) {
+        await this.transition(storeId, intent, change, { now, verified });
+      } else if (checkedAt && isCurrentCheck) {
         await this.advanceCheck(storeId, intent, now);
       }
+    });
+  }
+
+  retryCheck(storeId: string, intentId: string, checkedAt: Date) {
+    return this.transaction.run(storeId, async () => {
+      const intent = await this.lockIntent(storeId, intentId);
+      if (checkedAt.getTime() !== intent.nextCheckAt?.getTime()) return;
+      const now = this.clock.now();
+      const nextCheckAt =
+        now.getTime() < intent.expiresAt.getTime() + 3 * DAY_MS
+          ? new Date(now.getTime() + JOB_POLL_INTERVAL_MS)
+          : null;
+      if (intent.status === 'pending' && intent.expiresAt <= now) {
+        await this.transition(storeId, intent, { status: 'expired', nextCheckAt }, { now });
+        return;
+      }
+      await this.repository.update(storeId, intentId, intent.status, {
+        nextCheckAt,
+        updatedAt: now,
+      });
     });
   }
 
@@ -161,17 +183,21 @@ export class PaymentsService {
     });
   }
 
-  private verifiedChange(intent: Intent, result: PaymentStatus, now: Date) {
-    if (result.status === 'paid') return this.paidChange(intent, result, now);
+  private matchPayment(intent: Intent, result: PaymentStatus) {
+    if (result.status === 'paid' && result.merchantReference === intent.merchantReference)
+      return result;
+  }
+
+  private unpaidChange(intent: Intent, result: PaymentStatus, now: Date) {
     if (intent.status !== 'pending') return;
     if (intent.expiresAt <= now) return { status: 'expired' } as const;
-    if (result.status !== 'pending') return { status: result.status } as const;
+    if (result.status === 'failed' || result.status === 'cancelled')
+      return { status: result.status } as const;
   }
 
   private paidChange(intent: Intent, result: PaidStatus, now: Date) {
     if (intent.status !== 'pending' && intent.status !== 'expired' && intent.status !== 'failed')
       return;
-    if (result.merchantReference !== intent.merchantReference) return;
     if (result.amountPoisha !== intent.amountPoisha || result.currency !== intent.currency)
       return { status: 'needs_review', reviewReason: 'amount_mismatch' } as const;
     if (intent.status !== 'pending' || intent.expiresAt <= now || intent.voidedAt)
@@ -199,8 +225,8 @@ export class PaymentsService {
     { now, verified }: { now: Date; verified?: PaidStatus },
   ) {
     const result = await this.repository.update(storeId, intent.id, intent.status, {
-      ...change,
       nextCheckAt: null,
+      ...change,
       updatedAt: now,
     });
     if (result === 'unchanged') return;
