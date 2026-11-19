@@ -53,6 +53,12 @@ function milestoneStep(stage: OrderDetail['stage']): number {
   }
 }
 
+function milestoneLabelClass(isCurrent: boolean, isReached: boolean): string {
+  if (isCurrent) return 'font-semibold text-text';
+  if (isReached) return 'font-medium text-text';
+  return 'text-text-muted';
+}
+
 function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
   const currentStep = milestoneStep(currentStage);
   return (
@@ -66,22 +72,28 @@ function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
       >
         {orderStageLabels[currentStage]}
       </span>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all duration-300"
-          style={{ width: `${(currentStep / 5) * 100}%` }}
-        />
-      </div>
-      <div className="grid grid-cols-5 text-center text-[11px]">
+      <div className="grid grid-cols-5 gap-1.5">
         {trackerMilestones.map((milestone, index) => {
           const isReached = index + 1 <= currentStep;
+          const isCurrent = index + 1 === currentStep;
           return (
-            <span
-              key={milestone}
-              className={cn('truncate', isReached ? 'font-semibold text-text' : 'text-text-muted')}
-            >
-              {milestone}
-            </span>
+            <div key={milestone} className="space-y-1.5 text-center">
+              <div
+                aria-hidden="true"
+                className={cn(
+                  'h-1 w-full rounded-full',
+                  isReached ? 'bg-success' : 'bg-surface-muted',
+                )}
+              />
+              <span
+                className={cn(
+                  'block text-[10px] leading-tight sm:text-xs',
+                  milestoneLabelClass(isCurrent, isReached),
+                )}
+              >
+                {milestone}
+              </span>
+            </div>
           );
         })}
       </div>
@@ -131,23 +143,40 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
         {order.recipientAddress}, {order.recipientDistrict}
       </p>
       <BuyerDetails order={order} />
-      <div className="flex flex-wrap items-center gap-2">
-        <OrderRiskBadge risk={order.returnRisk} />
-        {showAdvanceWarning && (
-          <div className="flex items-center gap-2 text-xs text-danger">
-            <span className="font-medium">Ask for a small advance first</span>
-            <div aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-border">
-              <div className="h-full w-3/5 rounded-full bg-danger" />
-            </div>
-          </div>
-        )}
-      </div>
+      <RiskBlock order={order} showAdvanceWarning={showAdvanceWarning} />
       {order.hasRecipientPhoneMatch && (
         <p className="mt-1 text-sm text-warning">
           The delivery phone may match another customer profile.
         </p>
       )}
     </section>
+  );
+}
+
+type RiskBlockProps = {
+  order: OrderDetail;
+  showAdvanceWarning: boolean;
+};
+
+function RiskBlock({ order, showAdvanceWarning }: RiskBlockProps) {
+  if (order.returnRisk === null) return null;
+  if (!showAdvanceWarning) {
+    return (
+      <div>
+        <OrderRiskBadge risk={order.returnRisk} />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5 rounded-lg bg-surface-muted/60 p-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <OrderRiskBadge risk={order.returnRisk} />
+        <span className="text-text-muted">Ask for a small advance first</span>
+      </div>
+      <div aria-hidden="true" className="h-1 w-1/2 overflow-hidden rounded-full bg-border">
+        <div className="h-full w-3/5 rounded-full bg-danger" />
+      </div>
+    </div>
   );
 }
 
@@ -172,7 +201,7 @@ type BuyerDetailsProps = { order: OrderDetail };
 function BuyerDetails({ order }: BuyerDetailsProps) {
   const { data } = useSessionContext();
   const canOpenBuyer = data?.currentStore?.canViewCustomers && order.buyerContactId;
-  if (!order.buyerName) return null;
+  if (!order.buyerName || order.buyerName === order.recipientName) return null;
   return (
     <p className="mt-1 text-xs wrap-anywhere text-text-muted">
       Buyer {order.buyerName}{' '}

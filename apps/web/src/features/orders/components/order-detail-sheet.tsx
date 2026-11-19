@@ -96,7 +96,7 @@ type OrderStageFooterProps = {
 
 function OrderStageFooter(props: OrderStageFooterProps) {
   const { order, transition, stage, canConfirm, actions, editable } = props;
-  const cancelAction = actions.find((a) => a === 'cancelled');
+  const cancelAction = actions.find((a): a is 'cancelled' => a === 'cancelled');
   const otherActions = actions.filter((a) => a !== 'cancelled');
 
   function changeStage(change: OrderStageChange, button: HTMLButtonElement) {
@@ -120,38 +120,75 @@ function OrderStageFooter(props: OrderStageFooterProps) {
           {transition.error.message}
         </p>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="order-2 flex flex-wrap items-center gap-2">
-          {canConfirm && (
-            <Button
-              className="min-h-11 sm:min-h-10"
-              disabled={transition.isPending}
-              onClick={(event) => changeStage({ to: 'to_pack' }, event.currentTarget)}
-            >
-              Mark confirmed
-            </Button>
-          )}
-          {editable && <EditOrderDialog order={order} disabled={transition.isPending} />}
-          <StageActionButtons
-            actions={otherActions}
-            canConfirm={canConfirm}
-            isPending={transition.isPending}
-            stage={stage}
+      <FooterActionsLayout
+        order={order}
+        canConfirm={canConfirm}
+        cancelAction={cancelAction}
+        otherActions={otherActions}
+        isPending={transition.isPending}
+        stage={stage}
+        editable={editable}
+        onChangeStage={changeStage}
+      />
+    </div>
+  );
+}
+
+type FooterActionsLayoutProps = {
+  order: OrderDetail;
+  canConfirm: boolean;
+  cancelAction?: 'cancelled';
+  otherActions: readonly StageAction[];
+  isPending: boolean;
+  stage: RefObject<HTMLSpanElement | null>;
+  editable: boolean;
+  onChangeStage: (change: OrderStageChange, button: HTMLButtonElement) => void;
+};
+
+function FooterActionsLayout(props: FooterActionsLayoutProps) {
+  const {
+    order,
+    canConfirm,
+    cancelAction,
+    otherActions,
+    isPending,
+    stage,
+    editable,
+    onChangeStage,
+  } = props;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      {canConfirm && (
+        <Button
+          className="order-3 min-h-11 sm:min-h-10"
+          disabled={isPending}
+          aria-label="Mark confirmed"
+          onClick={(event) => onChangeStage({ to: 'to_pack' }, event.currentTarget)}
+        >
+          Confirm
+        </Button>
+      )}
+      <div className="order-1">
+        {cancelAction && (
+          <OrderStageDialog
             order={order}
-            onChangeStage={changeStage}
+            action={cancelAction}
+            stage={stage}
+            primary={false}
+            disabled={isPending}
           />
-        </div>
-        <div className="order-1">
-          {cancelAction && (
-            <OrderStageDialog
-              order={order}
-              action={cancelAction}
-              stage={stage}
-              primary={false}
-              disabled={transition.isPending}
-            />
-          )}
-        </div>
+        )}
+      </div>
+      <div className="order-2 flex flex-wrap items-center gap-2 sm:ml-auto">
+        <StageActionButtons
+          actions={otherActions}
+          canConfirm={canConfirm}
+          isPending={isPending}
+          stage={stage}
+          order={order}
+          onChangeStage={onChangeStage}
+        />
+        {editable && <EditOrderDialog order={order} disabled={isPending} />}
       </div>
     </div>
   );

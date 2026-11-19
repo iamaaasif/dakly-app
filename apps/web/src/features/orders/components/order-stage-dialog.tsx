@@ -87,7 +87,7 @@ export function OrderStageDialog({
           disabled={disabled}
           className={
             action === 'cancelled'
-              ? 'min-h-11 border-border text-danger hover:bg-danger-soft hover:text-danger sm:min-h-10'
+              ? 'min-h-11 border-transparent bg-transparent text-danger shadow-none hover:border-transparent hover:bg-danger-soft hover:text-danger sm:min-h-10'
               : 'min-h-11 sm:min-h-10'
           }
         >
