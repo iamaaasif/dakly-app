@@ -36,13 +36,13 @@ const delivery = (object = 'page') =>
 const signature = (payload: string) =>
   `sha256=${createHmac('sha256', appSecret).update(payload).digest('hex')}`;
 
-function post(payload: string, signed = signature(payload)) {
+function post(payload: string, signed = signature(payload), contentType = 'application/json') {
   deliveryKeys.add(createHash('sha256').update(payload).digest('hex'));
   return app.inject({
     url: webhookPath,
     method: 'POST',
     headers: {
-      'content-type': 'application/json',
+      'content-type': contentType,
       'x-hub-signature-256': signed,
       cookie: 'dakly_session=untrusted-cookie',
     },
@@ -89,7 +89,9 @@ describe('Meta webhook intake', () => {
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
     queue = app.get(getQueueToken('inbound'));
-    await queue.waitUntilReady();
+    const client = await queue.waitUntilReady();
+    if (client.status !== 'ready')
+      await new Promise<void>((resolve) => client.once('ready', resolve));
   });
 
   afterAll(async () => {
@@ -153,6 +155,13 @@ describe('Meta webhook intake', () => {
     const payload = '{"object":"page","entry":false}';
     expect((await post(payload, 'sha256=invalid')).statusCode).toBe(401);
     expect((await post(payload)).statusCode).toBe(400);
+    expect(await stored(payload)).toEqual([]);
+  });
+
+  it('refuses a signed JSON payload labeled as form data', async () => {
+    const payload = delivery();
+    const response = await post(payload, signature(payload), 'application/x-www-form-urlencoded');
+    expect(response.statusCode).toBe(415);
     expect(await stored(payload)).toEqual([]);
   });
 
