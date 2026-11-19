@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
@@ -12,6 +13,7 @@ import { SmsModule } from '../sms/sms.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsController } from './campaigns.controller';
@@ -24,6 +26,7 @@ import { CampaignsService } from './campaigns.service';
     ClockModule,
     LinksModule,
     MessagingModule,
+    NotificationsModule,
     ErrorReportingModule,
     OutboxModule,
     SegmentsModule,
@@ -39,7 +42,8 @@ import { CampaignsService } from './campaigns.service';
     CampaignSendingRepository,
     CampaignsService,
     CampaignSenderService,
+    CampaignFundingService,
   ],
-  exports: [CampaignSenderService, CampaignsService],
+  exports: [CampaignFundingService, CampaignSenderService, CampaignsService],
 })
 export class CampaignsModule {}

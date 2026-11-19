@@ -25,6 +25,7 @@ import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-au
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { ResumeCampaignsOnWalletCredited } from '@dakly/core/campaigns/jobs/resume-campaigns-on-wallet-credited.job';
 import { SendCampaignBatchJob } from '@dakly/core/campaigns/jobs/send-campaign-batch.job';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
@@ -95,6 +96,7 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     SendCampaignBatchJob,
+    ResumeCampaignsOnWalletCredited,
     ContinueAutomationRunJob,
     ResumeWorkflowsOnWalletCredited,
     JobSchedulers,

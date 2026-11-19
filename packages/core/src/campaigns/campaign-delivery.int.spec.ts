@@ -26,6 +26,7 @@ import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
+import { ResumeCampaignsOnWalletCredited } from './jobs/resume-campaigns-on-wallet-credited.job';
 import { SEND_CAMPAIGN_BATCH, SendCampaignBatchJob } from './jobs/send-campaign-batch.job';
 import { StartDueCampaignsJob } from './jobs/start-due-campaigns.job';
 
@@ -40,12 +41,13 @@ Module({
       prefix: `campaign-delivery-${randomUUID()}`,
     }),
   ],
-  providers: [SendCampaignBatchJob, StartDueCampaignsJob],
+  providers: [ResumeCampaignsOnWalletCredited, SendCampaignBatchJob, StartDueCampaignsJob],
 })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
 const userId = randomUUID();
+const staffUserId = randomUUID();
 const actor = { kind: 'user', userId } as const;
 const owner = {
   access: {
@@ -154,6 +156,10 @@ describe('Campaign sender (Postgres)', () => {
       "insert into users(id,name,email) values($1::uuid,'সুমি',$1::text || '@example.test')",
       [userId],
     );
+    await admin.pool.query(
+      "insert into staff_users(id,email,name,role) values($1,$2,'Wallet staff','super_admin')",
+      [staffUserId, `${staffUserId}@example.test`],
+    );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     campaigns = app.get(CampaignsService);
     sender = app.get(CampaignSenderService);
@@ -188,11 +194,13 @@ describe('Campaign sender (Postgres)', () => {
         'segments',
         'wallet_ledger',
         'outbox_events',
+        'notifications',
         'contacts',
       ])
         await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
       await admin.pool.query('delete from users where id=$1', [userId]);
+      await admin.pool.query('delete from staff_users where id=$1', [staffUserId]);
     } finally {
       await admin.pool.end();
     }
@@ -236,6 +244,115 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, active.id, actor);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sender.sendBatch(storeId, cancelled.id);
+    }
+  });
+
+  it('pauses an underfunded older approval and sends after a newer verified top-up', async () => {
+    const sms = 'sms_credits';
+    const sendCredit = (name: string) =>
+      wallets.credit(storeId, {
+        wallet: sms,
+        quantity: 1,
+        idempotencyKey: `campaign-test-${name}`,
+        staffUserId,
+        staffAuditId: randomUUID(),
+      });
+    const event = app.get(ResumeCampaignsOnWalletCredited);
+    const deliverCredit = async (entryId: string) => {
+      const { rows } = await admin.pool.query(
+        "select id,payload,occurred_at from outbox_events where store_id=$1 and type='wallet.credited' and payload->>'entryId'=$2",
+        [storeId, entryId],
+      );
+      expect(rows).toHaveLength(1);
+      const [credit] = rows;
+      await event.handle({
+        id: credit.id,
+        type: 'wallet.credited',
+        storeId,
+        occurredAt: credit.occurred_at.toISOString(),
+        payload: credit.payload,
+      });
+    };
+    vi.stubEnv('SHORT_LINK_BASE_URL', 'https://s.test');
+    resetEnvForTests();
+    let hold: string | undefined;
+    try {
+      const before = await wallets.balance(storeId, sms);
+      const { id, phones } = await sendingCampaign(2, null, 'a'.repeat(134));
+      expect(await wallets.balance(storeId, sms)).toBe(before - 2);
+      const previous = await sendCredit('before-pause');
+      const spare = await wallets.balance(storeId, sms);
+      hold = (
+        await wallets.reserve(storeId, {
+          wallet: sms,
+          quantity: spare,
+          idempotencyKey: 'other-campaign-reservation',
+          actor,
+        })
+      ).entryId;
+      await admin.pool.query(
+        'update campaigns set short_link_base=null, started_at=null where id=$1',
+        [id],
+      );
+      vi.stubEnv('SHORT_LINK_BASE_URL', 'https://longer.example.test');
+      resetEnvForTests();
+
+      const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
+      await app.get(StartDueCampaignsJob).handle({});
+      const waiting = await queue.getWaiting();
+      expect(waiting.map(({ data }) => data)).toContainEqual({ storeId, campaignId: id });
+      for (const pending of waiting) await pending.remove();
+      await expect(sender.sendBatch(storeId, id)).resolves.toBeNull();
+      const readPause = async () =>
+        (
+          await admin.pool.query(
+            'select status,pause_reason,balance_pause_revision,short_link_base,started_at from campaigns where id=$1',
+            [id],
+          )
+        ).rows[0];
+      expect(await readPause()).toMatchObject({
+        status: 'paused',
+        pause_reason: 'balance',
+        short_link_base: null,
+      });
+      expect(calls).toHaveLength(0);
+      expect(await settlementRows(id)).toEqual([]);
+      await deliverCredit(previous.entryId);
+      expect(await readPause()).toMatchObject({ status: 'paused', pause_reason: 'balance' });
+
+      const small = await sendCredit('insufficient');
+      await deliverCredit(small.entryId);
+      expect(await readPause()).toMatchObject({ status: 'paused', pause_reason: 'balance' });
+      const enough = await sendCredit('enough');
+      await deliverCredit(enough.entryId);
+      await deliverCredit(enough.entryId);
+      expect(await readPause()).toMatchObject({
+        status: 'sending',
+        pause_reason: null,
+        balance_pause_revision: null,
+        short_link_base: 'https://longer.example.test',
+        started_at: noon,
+      });
+      expect(calls).toHaveLength(0);
+      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
+
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls.map(({ to }) => to).sort()).toEqual(phones);
+      expect(await readPause()).toMatchObject({ status: 'sent', pause_reason: null });
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 2 },
+        { kind: 'release', quantity_delta: 4 },
+        { kind: 'charge', quantity_delta: -4 },
+      ]);
+    } finally {
+      if (hold)
+        await wallets.release(storeId, {
+          reservationId: hold,
+          idempotencyKey: 'release-other-campaign-reservation',
+          actor,
+        });
+      vi.unstubAllEnvs();
+      resetEnvForTests();
     }
   });
 

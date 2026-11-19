@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, isNull, lt, sql } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -58,11 +58,13 @@ export type CampaignStatusGuard = { status: CampaignStatus; pauseReason?: Campai
 // A state change; returning to draft also clears the approval.
 export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   pauseReason?: CampaignPauseReason | null;
+  balancePauseRevision?: number | null;
   finishedAt?: Date;
+  startedAt?: Date;
   settlementPendingAt?: Date | null;
   approvedByUserId?: null;
   approvedAt?: null;
-  shortLinkBase?: null;
+  shortLinkBase?: string | null;
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
@@ -231,12 +233,35 @@ export class CampaignsRepository {
           approvedAt: campaigns.approvedAt,
           shortLinkBase: campaigns.shortLinkBase,
           settlementPendingAt: campaigns.settlementPendingAt,
+          balancePauseRevision: campaigns.balancePauseRevision,
+          pauseReason: campaigns.pauseReason,
+          recipientsCount: campaigns.recipientsCount,
+          startedAt: campaigns.startedAt,
         })
         .from(campaigns)
         .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)))
         .for(mode),
     );
     return row;
+  }
+
+  async listBalancePaused(storeId: string, topUpRevision: number, after: string | null) {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            sql`${campaigns.status} = 'paused' and ${campaigns.pauseReason} = 'balance'`,
+            lt(campaigns.balancePauseRevision, topUpRevision),
+            after ? gt(campaigns.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(campaigns.id))
+        .limit(100),
+    );
+    return rows.map(({ id }) => id);
   }
 
   // Guarded on the state the change starts from, so a campaign moved meanwhile is left alone.

@@ -83,7 +83,7 @@ export class CampaignSendingRepository {
 
   // Keep the active lane and the cancellation lane independent of one another.
   async firstWork(storeId: string, expiredBefore: Date) {
-    const active = sql`${campaigns.status} = 'sending' and ${campaigns.shortLinkBase} is not null`;
+    const active = sql`${campaigns.status} = 'sending'`;
     const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null
       and not exists (
         select 1 from campaign_recipients r

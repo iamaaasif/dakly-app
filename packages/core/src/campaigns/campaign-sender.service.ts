@@ -15,9 +15,11 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
+import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
+import { marketingSmsText } from './campaign-sms';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
-import { CampaignsService, marketingSmsText } from './campaigns.service';
+import { CampaignsService } from './campaigns.service';
 
 const STORES_PER_TICK = 100;
 const CURSOR_LIFETIME_SECONDS = (7 * DAY_MS) / 1000;
@@ -60,6 +62,7 @@ export class CampaignSenderService {
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(CampaignsService) private readonly service: CampaignsService,
+    @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
@@ -99,6 +102,7 @@ export class CampaignSenderService {
   }
 
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
+    if (!(await this.funding.prepare(storeId, campaignId))) return null;
     const deadline = performance.now() + MINUTE_MS / 4;
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId);

@@ -26,6 +26,7 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { approvalKey, marketingSmsText, replacementKey } from './campaign-sms';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
   type Campaign,
@@ -216,6 +217,7 @@ export class CampaignsService {
         {
           status: 'cancelled',
           pauseReason: null,
+          balancePauseRevision: null,
           finishedAt: now,
           updatedAt: now,
           settlementPendingAt: campaign.approvedAt ? now : null,
@@ -259,7 +261,13 @@ export class CampaignsService {
     if (unsettled > 0) return false;
     if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
     const key = approvalKey(id, approvedAt);
-    const reservation = await this.wallets.reservationFor(storeId, 'sms_credits', key);
+    const replacement = replacementKey(key);
+    const adjusted = await this.wallets.findByIdempotencyKey(storeId, replacement);
+    const reservation = await this.wallets.reservationFor(
+      storeId,
+      'sms_credits',
+      adjusted ? replacement : key,
+    );
     const quantity = cancelledAt ? Math.min(chargedCredits, reservation.quantity) : chargedCredits;
     const write = { reservationId: reservation.entryId, actor };
     if (quantity)
@@ -371,16 +379,6 @@ export class CampaignsService {
     await this.find(storeId, campaignId);
     return campaignError(code);
   }
-}
-
-// Holds the approval time, so a campaign approved again after an edit reserves anew.
-function approvalKey(campaignId: string, approvedAt: Date): string {
-  return `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
-}
-
-// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
-export function marketingSmsText(text: string, optOutUrl: string): string {
-  return `${text}\n${optOutUrl}`;
 }
 
 // Counts the opt-out link at its real length, so the reservation covers what the sender sends.
