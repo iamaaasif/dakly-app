@@ -19,6 +19,7 @@ import {
 } from './contacts';
 import { knowledgeIndexRequestedEventSchema } from './knowledge';
 import {
+  conversationHandedOverEventSchema,
   conversationStartedEventSchema,
   messageDeliveredEventSchema,
   messageFailedEventSchema,
@@ -63,6 +64,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   channelDisconnectedEventSchema,
   channelNeedsReconnectEventSchema,
   conversationStartedEventSchema,
+  conversationHandedOverEventSchema,
   messageReceivedEventSchema,
   messageSendRequestedEventSchema,
   messageSentEventSchema,

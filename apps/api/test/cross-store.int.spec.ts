@@ -43,7 +43,7 @@ async function pair() {
 }
 async function success(
   shop: Shop,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   status: number,
   payload?: object,
@@ -2749,6 +2749,120 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
   );
   await hidden(b, 'DELETE', (id) => `/products/${own}/photos/${id}`, foreignPhoto.fileId);
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
+});
+
+const brandProfile = {
+  voice: 'Warm',
+  audience: 'Parents',
+  preferredWords: ['made by hand'],
+  wordsToAvoid: ['cheap'],
+  callToActionBn: 'অর্ডার করুন',
+  callToActionEn: 'Send a message',
+};
+
+fixture('GET /brand-profile', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/brand-profile', 200, brandProfile);
+  expect((await success(a, 'GET', '/brand-profile', 200)).json()).toEqual(brandProfile);
+  expect((await success(b, 'GET', '/brand-profile', 200)).json()).toMatchObject({
+    voice: null,
+    wordsToAvoid: [],
+  });
+  expect((await f.request(a.member, 'GET', '/brand-profile')).statusCode).toBe(403);
+});
+
+fixture('PUT /brand-profile', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/brand-profile', 200, brandProfile);
+  await success(b, 'PUT', '/brand-profile', 200, brandProfile);
+  const change = { ...brandProfile, voice: 'Playful' };
+  expect((await success(b, 'PUT', '/brand-profile', 200, change)).json()).toEqual(change);
+  expect((await success(a, 'GET', '/brand-profile', 200)).json()).toEqual(brandProfile);
+  expect((await f.request(b.member, 'PUT', '/brand-profile', change)).statusCode).toBe(403);
+});
+
+const libraryPiece = { kind: 'sms', language: 'bn', body: 'অর্ডার করুন' };
+
+async function contentPiece(shop: Shop) {
+  const saved = await success(shop, 'POST', '/content-pieces', 201, libraryPiece);
+  expect(saved.json()).toMatchObject({ ...libraryPiece, createdByUserId: shop.owner.id });
+  return saved.json().id as string;
+}
+
+fixture('POST /content-pieces', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const copy = (sourcePieceId: string) => ({ ...libraryPiece, sourcePieceId });
+  await hidden(b, 'POST', () => '/content-pieces', id, copy);
+  expect((await f.request(a.member, 'POST', '/content-pieces', libraryPiece)).statusCode).toBe(403);
+});
+
+fixture('GET /content-pieces', async () => {
+  const { a, b } = await pair();
+  await contentPiece(a);
+  const firstId = await contentPiece(b);
+  const secondId = await contentPiece(b);
+  await f.admin.pool.query(
+    "update content_pieces set created_at='2026-01-01T00:00:00Z' where store_id=$1 and id=any($2::uuid[])",
+    [b.id, [firstId, secondId]],
+  );
+  const [older, newer] = [firstId, secondId].sort();
+  await success(b, 'POST', '/content-pieces', 201, { ...libraryPiece, language: 'en' });
+  await success(b, 'POST', '/content-pieces', 201, { ...libraryPiece, kind: 'whatsapp' });
+  const url = '/content-pieces?kind=sms&language=bn&limit=1';
+  const first = (await success(b, 'GET', url, 200)).json();
+  expect(first.items.map((piece: { id: string }) => piece.id)).toEqual([newer]);
+  expect(first.nextCursor).toEqual(expect.any(String));
+  await success(b, 'DELETE', `/content-pieces/${newer}`, 204);
+  const next = (await success(b, 'GET', `${url}&cursor=${first.nextCursor}`, 200)).json();
+  expect(next.items.map((piece: { id: string }) => piece.id)).toEqual([older]);
+  expect(next.nextCursor).toBeNull();
+  expect((await f.request(b.member, 'GET', url)).statusCode).toBe(403);
+});
+
+fixture('GET /content-pieces/:contentPieceId', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const url = (pieceId: string) => `/content-pieces/${pieceId}`;
+  expect((await success(a, 'GET', url(id), 200)).json()).toMatchObject(libraryPiece);
+  await hidden(b, 'GET', url, id);
+  expect((await f.request(a.member, 'GET', url(id))).statusCode).toBe(403);
+});
+
+fixture('PATCH /content-pieces/:contentPieceId', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const aiRunId = randomUUID();
+  await f.admin.pool.query(
+    'update content_pieces set is_ai_written=true, ai_run_id=$1 where store_id=$2 and id=$3',
+    [aiRunId, a.id, id],
+  );
+  const url = (pieceId: string) => `/content-pieces/${pieceId}`;
+  const change = { body: 'আজই অর্ডার করুন' };
+  await hidden(b, 'PATCH', url, id, () => change);
+  expect(
+    (await f.request(a.owner, 'PATCH', url(id), { ...change, isAiWritten: false })).statusCode,
+  ).toBe(400);
+  const edited = await success(a, 'PATCH', url(id), 200, change);
+  expect(edited.json()).toMatchObject({ ...change, isAiWritten: true, aiRunId });
+  const copied = await success(a, 'POST', '/content-pieces', 201, {
+    ...libraryPiece,
+    ...change,
+    sourcePieceId: id,
+  });
+  expect(copied.json()).toMatchObject({ ...change, isAiWritten: true, aiRunId });
+  expect(copied.json().id).not.toBe(id);
+  expect((await f.request(a.member, 'PATCH', url(id), change)).statusCode).toBe(403);
+});
+
+fixture('DELETE /content-pieces/:contentPieceId', async () => {
+  const { a, b } = await pair();
+  const id = await contentPiece(a);
+  const url = (pieceId: string) => `/content-pieces/${pieceId}`;
+  await hidden(b, 'DELETE', url, id);
+  expect((await f.request(a.member, 'DELETE', url(id))).statusCode).toBe(403);
+  await success(a, 'DELETE', url(id), 204);
+  expect((await f.request(a.owner, 'GET', url(id))).statusCode).toBe(404);
 });
 
 let logs: ReturnType<typeof captureRequestLogs>;

@@ -67,6 +67,14 @@ export class TeamService {
     });
   }
 
+  async inboxNotificationRecipient(storeId: string, assigneeUserId: string | null) {
+    const members = await this.repository.findActiveAccess(storeId);
+    const assignee = assigneeUserId && members.find((member) => member.userId === assigneeUserId);
+    const access = assignee && toStoreAccess(assignee);
+    if (access && canAccess(access, 'chats', 'view')) return assigneeUserId;
+    return members.find((member) => member.builtInRole === 'owner')?.userId;
+  }
+
   lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {
     return this.repository.lockAndFindOwnedStore(storeId, userId);
   }
