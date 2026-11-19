@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { Module, type DynamicModule } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 
 import { StaffAlertDeliveryJob } from '@dakly/core/admin/jobs/staff-alert-delivery.job';
@@ -42,7 +42,7 @@ import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { PaymentCallbackWorkerModule } from '@dakly/core/payments/payments.module';
 import { ClockModule } from '@dakly/core/platform/clock.module';
-import { loadEnv } from '@dakly/core/platform/config/env';
+import { loadEnv, type Env } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
@@ -117,7 +117,6 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
-    SocialPublishingModule,
     PaymentCallbackWorkerModule,
     MetaWebhookMaintenanceModule,
     MessagingModule,
@@ -140,4 +139,11 @@ import { JobSchedulers } from './job-schedulers';
     }),
   ],
 })
-export class WorkerModule {}
+export class WorkerModule {
+  static register(driver: NonNullable<Env['metaChannel']>['driver'] | undefined): DynamicModule {
+    return {
+      module: WorkerModule,
+      imports: driver ? [SocialPublishingModule.forDriver(driver)] : [],
+    };
+  }
+}

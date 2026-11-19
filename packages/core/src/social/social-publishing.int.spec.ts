@@ -88,7 +88,7 @@ describe('SocialPublishingService', () => {
       stores,
     );
     const recovery = new SocialPublishRecoveryRepository(application.db);
-    const scheduling = new SocialPublishingQueueService(repository, recovery, driver, clock, queue);
+    const scheduling = new SocialPublishingQueueService(repository, recovery, clock, queue);
     return {
       service,
       scheduling,

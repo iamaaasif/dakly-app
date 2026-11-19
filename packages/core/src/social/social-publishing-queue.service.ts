@@ -3,7 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 
 import type { ScheduledPostTarget } from '@dakly/contracts/social';
-import type { MetaPublishingDriver } from '@dakly/providers/social/meta-publishing-driver';
 
 import { Clock } from '../platform/clock';
 import { QUEUES } from '../platform/queue/queues';
@@ -11,7 +10,6 @@ import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { CHECK_POST_TARGET } from './jobs/check-post-target.job';
 import { PUBLISH_POST_TARGET } from './jobs/publish-post-target.job';
 import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
-import { META_PUBLISHING_DRIVER } from './social-publishing.service';
 import { SocialRepository } from './social.repository';
 
 const BATCH_SIZE = 100;
@@ -23,13 +21,11 @@ export class SocialPublishingQueueService {
     @Inject(SocialRepository) private readonly repository: SocialRepository,
     @Inject(SocialPublishRecoveryRepository)
     private readonly recovery: SocialPublishRecoveryRepository,
-    @Inject(META_PUBLISHING_DRIVER) private readonly driver: MetaPublishingDriver | null,
     @Inject(Clock) private readonly clock: Clock,
     @InjectQueue(QUEUES.outbound) private readonly queue: Queue<ScheduledPostTarget>,
   ) {}
 
   async recoverDueTargets() {
-    if (!this.driver) return;
     const before = new Date(this.clock.now().getTime() + DAY_MS);
     const failedIds = new Set((await this.queue.getFailed()).map(({ id }) => id));
     let after: string | null = null;
@@ -42,7 +38,6 @@ export class SocialPublishingQueueService {
   }
 
   async enqueueTarget(storeId: string, input: Omit<ScheduledPostTarget, 'storeId'>) {
-    if (!this.driver) return;
     await this.queue.addBulk(this.jobsFor({ storeId, ...input }));
   }
 

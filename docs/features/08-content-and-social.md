@@ -184,7 +184,7 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
-The worker queues a publish job for each target. Instagram waits for its media
+With Meta publishing configured, the worker queues a publish job for each target. Instagram waits for its media
 container to finish. A successful target stays published when another target
 fails. Each target gets three retries over 30 minutes and a Fix now notification
 if it fails. A check 24 hours before publishing flags an account that needs

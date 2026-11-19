@@ -22,7 +22,6 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
-import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
 @Injectable()
 export class JobSchedulers implements OnApplicationBootstrap {
@@ -47,7 +46,6 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.bulk, SWEEP_AUTOMATION_BIRTHDAYS, { pattern: '0 * * * *', tz: 'UTC' }),
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
       scheduleJob(this.sync, QUEUE_CONVERSATION_RETURNS, MINUTE_MS),
-      scheduleJob(this.sync, RECOVER_POST_TARGETS, MINUTE_MS),
       scheduleJob(this.bulk, SWEEP_ANALYTICS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, PURGE_WEBHOOK_EVENTS, { pattern: '0 0 * * *', tz: 'UTC' }),
     ]);
