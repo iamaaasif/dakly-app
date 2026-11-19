@@ -228,7 +228,7 @@ Order subscribers run on the sync queue. Pending order changes for the same stor
 
 The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 
-Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It rebuilds from the original creation dates and removes stale buyer activity for excluded buyers. The contact deletion event also removes that buyer’s activity. The job prunes expired report rows in pages of 5,000. Finishing the nightly contact stats repair schedules a lifecycle snapshot for that store’s local day. The snapshot uses the stage from the completed repair.
+Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It rebuilds from the original creation dates and removes stale buyer activity for excluded buyers. The contact deletion event also removes that buyer’s activity. The job prunes expired report rows in pages of 5,000. Finishing the nightly contact stats repair schedules a lifecycle snapshot for that store’s local day. The snapshot counts the stages when the job runs. Replays keep the first snapshot for that date.
 
 ### Acceptance
 

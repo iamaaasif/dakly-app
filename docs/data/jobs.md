@@ -109,7 +109,7 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 | `purge-contact`            | Sweep `due_contact_purges`               | `storeId`, `contactId`                                        | Authorized privileged erasure with deferred FK checks; redact merge evidence, preserve operation key and permitted order snapshots                                                                                                                            |
 | sweep `fail-stuck-imports` | Every 30 seconds                         | none                                                          | `stores_with_stuck_imports`, then a guarded update on `last_progress_at` and `requeue_count`: queue again up to 4 times, then fail                                                                                                                            |
 
-`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000. The final contact stats rank page publishes `contact_stats.repaired`. One bulk job captures that store’s lifecycle snapshot while the contact stats repair date is current in the store.
+`sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000. The final contact stats rank page publishes `contact_stats.repaired`. The first completion per UTC repair day wins. One bulk job counts the stages when it runs and stores a snapshot under the repair’s local date. Replays leave that snapshot in place.
 
 ## payments
 
@@ -160,7 +160,7 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 
 ## Events in M2 and M3
 
-The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
+The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids, enum values and the repair day when a job needs it. They contain no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
 | Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
 | ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |

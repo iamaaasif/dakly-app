@@ -344,13 +344,9 @@ export class ContactsService {
     return this.transaction.run(storeId, async () => {
       const now = this.clock.now();
       const removed = await this.contactsRepository.softDeleteAll(storeId, ids, now);
+      const event = { type: 'contact.deleted', storeId, occurredAt: now.toISOString() } as const;
       await this.outbox.publishAll(
-        removed.map((contactId) => ({
-          type: 'contact.deleted',
-          storeId,
-          occurredAt: now.toISOString(),
-          payload: { contactId },
-        })),
+        removed.map((contactId) => ({ ...event, payload: { contactId } })),
       );
       return removed;
     });

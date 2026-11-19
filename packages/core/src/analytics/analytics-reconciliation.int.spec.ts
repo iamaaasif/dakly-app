@@ -106,8 +106,16 @@ describe('Analytics reconciliation', () => {
           return job.data.storeId === fixture.a && job.data.page.kind === 'lifecycle';
         }),
       ).toHaveLength(1);
+      clock.mockReturnValue(new Date('2026-11-19T01:15:00Z'));
       await app.get(ReconcileAnalyticsJob).handle(queued?.data);
-      expect((await snapshot()).rows).toEqual([{ dimension: 'regulars', value: '1' }]);
+      const expected = [{ dimension: 'regulars', value: '1' }];
+      expect((await snapshot()).rows).toEqual(expected);
+      await fixture.connection.pool.query(
+        "update contact_stats set lifecycle_stage='best' where store_id=$1 and contact_id=$2",
+        [fixture.a, eligible],
+      );
+      await app.get(ReconcileAnalyticsJob).handle(queued?.data);
+      expect((await snapshot()).rows).toEqual(expected);
       await queued?.remove();
     } finally {
       clock.mockReturnValue(now);

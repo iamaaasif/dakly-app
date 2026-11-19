@@ -134,17 +134,23 @@ describe('Nightly contact stats repair', () => {
     );
     await worker.handle(rank?.data);
     expect(await stored(firstId!)).toMatchObject({ lifecycle_stage: 'new', net_spend_poisha: '0' });
-    const completion = await fixture.connection.pool.query(
-      "select payload from outbox_events where store_id=$1 and type='contact_stats.repaired'",
-      [fixture.b],
-    );
-    expect(completion.rows).toEqual([{ payload: { day: '2026-11-18' } }]);
+    const completion = async () => {
+      const { rows } = await fixture.connection.pool.query(
+        "select payload from outbox_events where store_id=$1 and type='contact_stats.repaired'",
+        [fixture.b],
+      );
+      return rows;
+    };
+    const completed = [{ payload: { day: '2026-11-18' } }];
+    expect(await completion()).toEqual(completed);
     expect(await stored(secondId!)).toMatchObject({
       lifecycle_stage: 'best',
       net_spend_poisha: '2400000',
     });
+    vi.mocked(app.get(Clock).now).mockReturnValue(new Date(day + 'T01:15:00Z'));
     await worker.handle(rank?.data);
     expect(await stored(secondId!)).toMatchObject({ lifecycle_stage: 'best' });
+    expect(await completion()).toEqual(completed);
 
     await fixture.connection.pool.query(
       "update orders set stage='delivered', return_reason=null where id=$1",
