@@ -24,6 +24,8 @@ import { MetaWebhooksService } from './meta-webhooks.service';
             commandTimeout: 1000,
             socketTimeout: 1000,
           },
+          // Deployments use Valkey 8. A second startup probe can fail after ioredis is ready.
+          skipVersionCheck: true,
           prefix: env.QUEUE_PREFIX,
         };
       },
