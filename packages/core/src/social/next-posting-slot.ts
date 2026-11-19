@@ -29,9 +29,7 @@ export function nextPostingSlot(
       const instants = slotInstants(formatter, `${localDay} ${slot.time}:00`);
       // Both occurrences share the same local slot when the clock goes back.
       if (instants.some((instant) => reserved.has(instant))) continue;
-      for (const instant of instants) {
-        if (instant >= earliest) next = Math.min(next, instant);
-      }
+      next = Math.min(next, ...instants.filter((instant) => instant >= earliest));
     }
     if (Number.isFinite(next)) return new Date(next);
   }
