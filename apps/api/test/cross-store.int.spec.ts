@@ -1635,6 +1635,29 @@ fixture('GET /saved-replies', async () => {
     items: [{ id: own, shortcut: 'delivery', body: 'ঢাকায় ডেলিভারি চার্জ ৬০ টাকা।' }],
     nextCursor: null,
   });
+  const { id: roleId } = (
+    await success(b, 'POST', '/roles', 201, {
+      name: 'Read saved replies',
+      permissions: { ...permissions, areas: { chats: 'view' } },
+    })
+  ).json();
+  await f.admin.pool.query(
+    'update memberships set built_in_role = null, role_id = $1 where id = $2',
+    [roleId, b.membership],
+  );
+  expect((await f.request(b.member, 'GET', '/saved-replies')).statusCode).toBe(200);
+  const writeRequests = [
+    ['POST', '/saved-replies', { title: 'Delivery', body: '60 taka' }],
+    ['PATCH', `/saved-replies/${own}`, { title: 'Changed' }],
+    ['DELETE', `/saved-replies/${own}`, undefined],
+  ] as const;
+  for (const [method, url, payload] of writeRequests)
+    expect((await f.request(b.member, method, url, payload)).statusCode).toBe(403);
+  await f.admin.pool.query(
+    "update memberships set built_in_role = 'marketer', role_id = null where id = $1",
+    [b.membership],
+  );
+  expect((await f.request(b.member, 'GET', '/saved-replies')).statusCode).toBe(403);
 });
 
 fixture('POST /saved-replies', async () => {
@@ -1647,6 +1670,8 @@ fixture('POST /saved-replies', async () => {
   expect(result.json()).toMatchObject(reply);
   await success(b, 'POST', '/saved-replies', 409, reply);
   await success(b, 'POST', '/saved-replies', 400, { ...reply, storeId: a.id });
+  for (const field of ['title', 'body', 'shortcut'])
+    await success(b, 'POST', '/saved-replies', 400, { ...reply, [field]: 'invalid\u0000text' });
 });
 
 fixture('PATCH /saved-replies/:savedReplyId', async () => {
@@ -1659,6 +1684,7 @@ fixture('PATCH /saved-replies/:savedReplyId', async () => {
   const url = (id: string) => `/saved-replies/${id}`;
   await hidden(b, 'PATCH', url, foreign, () => ({ shortcut: null }));
   await success(b, 'PATCH', url(own), 409, { shortcut: 'returns' });
+  await success(b, 'PATCH', url(own), 400, { body: 'invalid\u0000text' });
   const result = await success(b, 'PATCH', url(own), 200, {
     body: 'চার্জ ৭০ টাকা।',
     shortcut: null,

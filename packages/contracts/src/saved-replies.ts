@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
+import { searchText } from './search-text';
+
 export const createSavedReplySchema = z.strictObject({
-  title: z.string().trim().min(1).max(120),
-  body: z.string().trim().min(1).max(4000),
-  shortcut: z.string().trim().min(1).max(80).nullable().optional(),
+  title: searchText.max(120),
+  body: searchText.max(4000),
+  shortcut: searchText.max(80).nullable().optional(),
 });
 
 export const updateSavedReplySchema = createSavedReplySchema
