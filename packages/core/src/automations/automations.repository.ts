@@ -8,7 +8,7 @@ import type {
 } from '@dakly/contracts/automations';
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
-import { automations, automationVersions } from '@dakly/db/schema/automations';
+import { automationRuns, automations, automationVersions } from '@dakly/db/schema/automations';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { workflowSchedulerTime } from './workflow-scheduler-time.repository';
@@ -68,11 +68,28 @@ export class AutomationsRepository {
     storeId: string,
     statuses: readonly AutomationStatus[],
     query: AutomationListQuery,
-  ): Promise<Automation[]> {
+    since: Date,
+  ) {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select(automationColumns)
+        .select({
+          ...automationColumns,
+          publishedGraph: automationVersions.graph,
+          enteredLast30Days: sql<number>`(
+            select count(*)::int from ${automationRuns}
+            where ${automationRuns.storeId} = ${storeId}
+              and ${automationRuns.automationId} = ${automations.id}
+              and ${automationRuns.enteredAt} >= ${since}
+          )`,
+        })
         .from(automations)
+        .leftJoin(
+          automationVersions,
+          and(
+            eq(automationVersions.storeId, storeId),
+            eq(automationVersions.id, automations.publishedVersionId),
+          ),
+        )
         .where(
           and(
             eq(automations.storeId, storeId),

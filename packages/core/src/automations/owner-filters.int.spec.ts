@@ -42,9 +42,9 @@ describe('automation filters without RLS assistance', () => {
     expect((await f.row('automation_versions', b.version.id)).store_id).toBe(f.b);
     expect(b.version.version).toBe(1);
     expect(await repository.find(f.b, a.automation.id)).toBeUndefined();
-    expect((await repository.list(f.b, visible, { limit: 100 })).map((row) => row.id)).toEqual([
-      b.automation.id,
-    ]);
+    expect(
+      (await repository.list(f.b, visible, { limit: 100 }, new Date(0))).map((row) => row.id),
+    ).toEqual([b.automation.id]);
     expect(await repository.countWithStatus(f.b, visible)).toBe(1);
     expect(await repository.listVersions(f.b, a.automation.id)).toEqual([]);
 

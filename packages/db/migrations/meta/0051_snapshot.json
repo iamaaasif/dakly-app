@@ -1,5 +1,5 @@
 {
-  "id": "65d76614-f333-4600-8b55-80c15688446c",
+  "id": "3e6a2374-01ce-457e-9866-6bc4d95223ae",
   "prevId": "89929922-4109-456e-a9c3-f1feed85b335",
   "version": "7",
   "dialect": "postgresql",
@@ -4839,6 +4839,33 @@
           "method": "btree",
           "with": {}
         },
+        "automation_runs_recent_entries_idx": {
+          "name": "automation_runs_recent_entries_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "automation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entered_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "automation_runs_store_contact_idx": {
           "name": "automation_runs_store_contact_idx",
           "columns": [
@@ -5241,31 +5268,6 @@
           "notNull": true,
           "default": "'draft'"
         },
-        "pause_reason": {
-          "name": "pause_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "balance_pause_revision": {
-          "name": "balance_pause_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "balance_resumed_at": {
-          "name": "balance_resumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "has_balance_resume_send_allowance": {
-          "name": "has_balance_resume_send_allowance",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "is_transactional": {
           "name": "is_transactional",
           "type": "boolean",
@@ -5456,18 +5458,6 @@
         "automations_status": {
           "name": "automations_status",
           "value": "\"automations\".\"status\" in ('draft', 'active', 'paused', 'archived')"
-        },
-        "automations_pause_reason": {
-          "name": "automations_pause_reason",
-          "value": "\"automations\".\"pause_reason\" in ('manual', 'balance')"
-        },
-        "automations_paused_has_reason": {
-          "name": "automations_paused_has_reason",
-          "value": "(\"automations\".\"status\" = 'paused') = (\"automations\".\"pause_reason\" is not null)"
-        },
-        "automations_balance_pause_revision": {
-          "name": "automations_balance_pause_revision",
-          "value": "\"automations\".\"pause_reason\" is distinct from 'balance'\n        or (\"automations\".\"balance_pause_revision\" is not null and \"automations\".\"balance_pause_revision\" >= 0)"
         }
       },
       "isRLSEnabled": false
