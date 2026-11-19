@@ -143,11 +143,11 @@ Webhook intake
 1. `GET /webhooks/meta` returns the challenge as plain text when the subscription token matches `META_WEBHOOK_VERIFY_TOKEN`.
 2. `POST /webhooks/meta` checks `X-Hub-Signature-256` against the exact request bytes using `META_APP_SECRET`. A bad signature on a valid JSON request returns 401 and logs a security event. Fastify refuses malformed JSON and bodies over 1 MiB.
 3. The handler saves one payload per signed delivery in `webhook_events`. Its external id is the SHA-256 hex digest of the verified bytes. The handler queues one `process-webhook-event` job by row id and returns 200. An identical retry restores a missing job for an unprocessed row.
-4. CHN-4 adds the worker. It parses with the driver and finds each store through `store_id_for_channel_account(kind, externalId)`. CHAT-1 and CHAT-2 handle individual message and receipt deduplication.
+4. The worker parses Messenger and Instagram messages with the driver and looks up each connected store through `store_id_for_channel_account(kind, externalId)`. It records ignored deliveries with a reason and clears their payloads. Known accounts receive the `messaging_inbound_pending` reason until CHAT-1 saves messages. CHAT-2 adds receipt handling.
 
 A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
 
-Enable live intake after the worker can clear processed payloads and recover acknowledged deliveries if their Valkey jobs are lost. Run the seven-day webhook purge before enabling live intake.
+CHN-9 adds recovery for acknowledged deliveries whose Valkey jobs are lost and the seven-day webhook payload purge. Complete CHN-9 before enabling live intake.
 
 Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
 
