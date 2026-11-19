@@ -3361,5 +3361,19 @@ describe('every production shop route isolates its data', () => {
     expect(await f.row('posts', id)).toMatchObject({ approved_at: null });
   });
 
+  it('keeps a draft create key private to its creator', async () => {
+    const shop = await f.shop();
+    await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+      shop.membership,
+    ]);
+    const key = { 'idempotency-key': randomUUID() };
+    const owner = await f.request(shop.owner, 'POST', '/posts', { caption: 'ঈদ' }, key);
+    const member = await f.request(shop.member, 'POST', '/posts', { caption: 'শাড়ি' }, key);
+    expect(owner.statusCode, owner.body).toBe(201);
+    expect(member.statusCode, member.body).toBe(201);
+    expect(member.json().id).not.toBe(owner.json().id);
+    expect(member.json().caption).toBe('শাড়ি');
+  });
+
   for (const [route, run] of fixtures) it(route, run);
 });
