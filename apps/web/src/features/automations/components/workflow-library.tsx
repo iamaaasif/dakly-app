@@ -87,7 +87,9 @@ export function WorkflowLibrary() {
     window.history.pushState(null, '', query.size ? `?${query}` : '/automations/new');
   }
   function create(draft: CreateAutomationInput) {
-    action.mutate(draft, { onSuccess: () => router.push('/automations?tab=draft') });
+    action.mutate(draft, {
+      onSuccess: (workflow) => router.push(`/automations/${workflow.id}`),
+    });
   }
   return (
     <main className="min-h-screen bg-surface-muted">
