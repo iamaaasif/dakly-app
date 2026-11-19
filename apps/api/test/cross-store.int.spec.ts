@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
@@ -2756,6 +2757,132 @@ fixture('DELETE /content-pieces/:contentPieceId', async () => {
   expect((await f.request(a.owner, 'GET', url(id))).statusCode).toBe(404);
 });
 
+type WriterResponse = {
+  kind: 'output';
+  output: unknown;
+  model: string;
+  responseId: string;
+  usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number };
+};
+
+function scriptWriter(write: (input: string) => string[]) {
+  const driver = app.get<{
+    respond(request: { input: string; model: string }): Promise<WriterResponse>;
+  }>(LLM_DRIVER);
+  return vi.spyOn(driver, 'respond').mockImplementation(async ({ input, model }) => ({
+    kind: 'output',
+    output: { options: write(input) },
+    model,
+    responseId: randomUUID(),
+    usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 },
+  }));
+}
+
+async function allowContentCredits() {
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_content: 20 }),
+  ]);
+}
+
+async function contentCharges(shop: Shop) {
+  const result = await f.admin.pool.query<{ quantity: number }>(
+    "select quantity from usage_events where store_id=$1 and unit='ai_content' order by quantity desc",
+    [shop.id],
+  );
+  return result.rows.map(({ quantity }) => quantity);
+}
+
+fixture('POST /content-pieces/generate', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/brand-profile', 200, brandProfile);
+  const safe = ['Our cotton scarves are here', 'Pick your scarf', 'Find a scarf today'];
+  const unsafe = ['Cheap scarves', 'Pick your scarf', 'Find a scarf today'];
+  let modelOptions = unsafe;
+  const model = scriptWriter(() => modelOptions);
+  const url = '/content-pieces/generate';
+  const request = {
+    operation: 'generate',
+    kind: 'facebook_post',
+    topic: 'Cotton scarves',
+    tone: 'friendly',
+    language: 'en',
+  };
+  try {
+    const empty = await f.request(a.owner, 'POST', url, request);
+    expect(empty.statusCode, empty.body).toBe(409);
+    expect(model).not.toHaveBeenCalled();
+    await allowContentCredits();
+    const rejected = await f.request(a.owner, 'POST', url, request);
+    expect(rejected.statusCode, rejected.body).toBe(502);
+    expect(await contentCharges(a)).toEqual([]);
+    modelOptions = safe;
+    const generated = await success(a, 'POST', url, 200, request);
+    expect(generated.json().options).toEqual(safe);
+    const aiDraft = generated.json().aiDraft;
+    const savedInput = { kind: request.kind, language: request.language, body: safe[0], aiDraft };
+    const saved = await success(a, 'POST', '/content-pieces', 201, savedInput);
+    expect(saved.json()).toMatchObject({
+      body: safe[0],
+      isAiWritten: true,
+      aiRunId: aiDraft.aiRunId,
+    });
+    expect((await f.request(b.owner, 'POST', '/content-pieces', savedInput)).statusCode).toBe(400);
+    expect(await contentCharges(a)).toEqual([3]);
+    expect(await contentCharges(b)).toEqual([]);
+
+    modelOptions = ['Cotton scarves are here'];
+    const edited = await success(a, 'POST', url, 200, {
+      operation: 'shorten',
+      body: safe[0],
+      kind: request.kind,
+      tone: request.tone,
+      language: request.language,
+    });
+    expect(edited.json().options).toEqual(modelOptions);
+    expect(await contentCharges(a)).toEqual([3, 1]);
+    expect((await f.request(a.member, 'POST', url, request)).statusCode).toBe(403);
+  } finally {
+    model.mockRestore();
+  }
+});
+
+fixture('POST /products/:productId/write-description', async () => {
+  const { a, b } = await pair();
+  await allowContentCredits();
+  const create = async (shop: Shop, name: string) =>
+    (await success(shop, 'POST', '/products', 201, { name, pricePoisha: 125000 })).json()
+      .id as string;
+  const foreign = await create(a, 'Hidden silk scarf');
+  const own = await create(b, 'Cotton scarf');
+  const options = [
+    'A cotton scarf',
+    'A scarf for everyday wear',
+    'Finish your outfit with a scarf',
+  ];
+  const model = scriptWriter((input) => {
+    const { product: facts } = JSON.parse(input);
+    expect(facts).toEqual({
+      name: 'Cotton scarf',
+      category: null,
+      description: null,
+      variants: [{}],
+      pricePoisha: 125000,
+    });
+    return options;
+  });
+  const url = (id: string) => `/products/${id}/write-description`;
+  const request = { tone: 'friendly', language: 'en' };
+  try {
+    expect((await success(b, 'POST', url(own), 200, request)).json().options).toEqual(options);
+    await hidden(b, 'POST', url, foreign, () => request);
+    expect((await f.request(b.member, 'POST', url(own), request)).statusCode).toBe(403);
+    expect(await contentCharges(a)).toEqual([]);
+  } finally {
+    model.mockRestore();
+  }
+});
+
 let logs: ReturnType<typeof captureRequestLogs>;
 
 describe('every production shop route isolates its data', () => {
@@ -2763,6 +2890,7 @@ describe('every production shop route isolates its data', () => {
   beforeAll(async () => {
     vi.stubEnv('STAFF_SESSION_SIGNING_KEY', randomBytes(32).toString('base64'));
     vi.stubEnv('META_CHANNEL_DRIVER', 'fake');
+    vi.stubEnv('LLM_DRIVER', 'fake');
     vi.stubEnv('META_APP_SECRET', metaAppSecret);
     vi.stubEnv('META_WEBHOOK_VERIFY_TOKEN', undefined);
     vi.stubEnv('META_OAUTH_REDIRECT_URI', 'http://localhost:3000/integrations/meta');

@@ -26,6 +26,16 @@ export class UsageService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
+  async remaining(storeId: string, unit: UsageUnit): Promise<number> {
+    const { allowance, periodStart } = await this.billing.currentAllowance(storeId, unit);
+    const used = await this.repository.periodTotal(
+      storeId,
+      unit,
+      periodStart.toISOString().slice(0, 10),
+    );
+    return Math.max(0, allowance - used);
+  }
+
   consume(storeId: string, { unit, quantity, reference }: ConsumeUsageInput): Promise<UsageEvent> {
     return this.transaction.run(storeId, async () => {
       await this.repository.lockUnit(storeId, unit);

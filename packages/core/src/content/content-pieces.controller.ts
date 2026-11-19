@@ -22,16 +22,28 @@ import {
   type CreateContentPieceInput,
   type UpdateContentPieceInput,
 } from '@dakly/contracts/content';
+import {
+  contentWriteRequestSchema,
+  type ContentWriteInput,
+  type ContentWriteResult,
+} from '@dakly/contracts/content-writing';
+import type { StoreAccess } from '@dakly/contracts/team';
 
+import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { RequirePermission } from '../platform/tenancy/access.decorators';
+import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { TeamService } from '../team/team.service';
 import { ContentService } from './content.service';
 
 @Controller('content-pieces')
 export class ContentPiecesController {
-  constructor(@Inject(ContentService) private readonly content: ContentService) {}
+  constructor(
+    @Inject(ContentService) private readonly content: ContentService,
+    @Inject(TeamService) private readonly team: TeamService,
+  ) {}
 
   @Get()
   @RequirePermission('social.view')
@@ -59,6 +71,19 @@ export class ContentPiecesController {
     @Body(new ZodValidationPipe(createContentPieceSchema)) input: CreateContentPieceInput,
   ): Promise<ContentPiece> {
     return this.content.createPiece(storeId, { kind: 'user', userId }, input);
+  }
+
+  @Post('generate')
+  @HttpCode(200)
+  @RequirePermission('social.edit')
+  write(
+    @CurrentStore() storeId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(contentWriteRequestSchema)) input: ContentWriteInput,
+  ): Promise<ContentWriteResult> {
+    if (input.productId && !this.team.canAccess(access, 'products', 'view'))
+      throw new AppError('PERMISSION_DENIED', PLATFORM_ERRORS.PERMISSION_DENIED);
+    return this.content.write(storeId, input);
   }
 
   @Patch(':contentPieceId')
