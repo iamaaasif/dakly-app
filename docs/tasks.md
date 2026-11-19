@@ -186,13 +186,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M10. Content and social
 
-| ID    | Task                                             | Status    | Depends | PR         | Notes                                           |
-| ----- | ------------------------------------------------ | --------- | ------- | ---------- | ----------------------------------------------- |
-| SOC-1 | Posts, targets, posting slots, approval          | In review | CHN-2   | #227, #234 |                                                 |
-| SOC-2 | Publish jobs for Facebook and Instagram, retries | Todo      | SOC-1   |            |                                                 |
-| SOC-3 | Post insights job                                | Todo      | SOC-2   |            |                                                 |
-| SOC-4 | Content Studio writing                           | In review | AI-2    | #225       | Create post caption generation waits for SOC-1. |
-| SOC-5 | Web: Social hub, My posts, Content Studio        | Todo      | SOC-4   |            |                                                 |
+| ID    | Task                                             | Status      | Depends | PR         | Notes                                           |
+| ----- | ------------------------------------------------ | ----------- | ------- | ---------- | ----------------------------------------------- |
+| SOC-1 | Posts, targets, posting slots, approval          | In review   | CHN-2   | #227, #234 |                                                 |
+| SOC-2 | Publish jobs for Facebook and Instagram, retries | In progress | SOC-1   |            |                                                 |
+| SOC-3 | Post insights job                                | Todo        | SOC-2   |            |                                                 |
+| SOC-4 | Content Studio writing                           | In review   | AI-2    | #225       | Create post caption generation waits for SOC-1. |
+| SOC-5 | Web: Social hub, My posts, Content Studio        | Todo        | SOC-4   |            |                                                 |
 
 ## M11. Analytics and insights
 
