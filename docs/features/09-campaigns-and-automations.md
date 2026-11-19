@@ -474,31 +474,31 @@ The graph schema is [`automations/graph.ts`](../../packages/contracts/src/automa
 
 Triggers and actions are in [`automations/catalogue.ts`](../../packages/contracts/src/automations/catalogue.ts). "Ready before" follows the build order (D40): Channels means it works with Dakly data and SMS alone, before channel connections and Orders; Orders means it works before Orders but needs channels or products; a dash means it waits for Orders or a later source. A source marked "not yet" is an event no task emits yet; the task that builds the source adds it to `packages/contracts/src/events/`.
 
-| Trigger                   | Source                               | Filters (required in bold)                                           | Needs                     | Ready before          |
-| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- | ------------------------- | --------------------- |
-| `consent_given`           | `consent.changed`                    | channel, consent source                                              |                           | Channels              |
-| `tag_added`               | `contact.tag_added`                  | **tag**                                                              |                           | Channels              |
-| `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          | Stored segment membership |                       |
-| `link_tapped`             | `message.tapped`                     | channel                                                              |                           | Workflow message taps |
-| `birthday`                | Daily job in store time              | segment                                                              | Birthdays                 | Channels              |
-| `chat_started`            | `conversation.started`               | channel                                                              | Channels                  | Orders                |
-| `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels                  | Orders                |
-| `lead_captured`           | `chat.lead_saved`, not yet           | channel                                                              | Channels                  | Orders                |
-| `back_in_stock`           | `variant.restocked`, not yet         | product                                                              | Products                  | Orders                |
-| `price_dropped`           | `product.price_dropped`, not yet     | product                                                              | Products                  | Orders                |
-| `order_placed`            | `order.created`, not yet             | order total, product, payment status, delivery district, first order | Orders                    |                       |
-| `order_paid`              | `payment.succeeded`, not yet         | order total                                                          | Orders                    |                       |
-| `order_shipped`           | `order.stage_changed`, not yet       | order total, delivery district                                       | Orders                    |                       |
-| `order_delivered`         | `order.stage_changed`, not yet       | order total, product                                                 | Orders                    |                       |
-| `order_cancelled`         | `order.stage_changed`, not yet       | order total                                                          | Orders                    |                       |
-| `order_returned`          | `order.stage_changed`, not yet       | order total                                                          | Orders                    |                       |
-| `order_link_abandoned`    | `order_link.abandoned`, not yet      | product                                                              | Orders                    |                       |
-| `lifecycle_stage_entered` | `contact.stage_changed`, not yet     | **lifecycle stage**                                                  | Orders                    |                       |
-| `days_since_last_order`   | Daily job in store time              | **days**                                                             | Orders                    |                       |
-| `reorder_due`             | Daily job, days before the usual gap | **days**, product                                                    | Orders                    |                       |
-| `cart_abandoned`          | `cart.abandoned`, not yet            | cart total                                                           | Store sync, Q13           |                       |
-| `checkout_abandoned`      | `checkout.abandoned`, not yet        | cart total                                                           | Store sync, Q13           |                       |
-| `product_viewed`          | `product.viewed`, not yet            | product                                                              | Tracking script           |                       |
+| Trigger                   | Source                               | Filters (required in bold)                                           | Needs                     | Ready before |
+| ------------------------- | ------------------------------------ | -------------------------------------------------------------------- | ------------------------- | ------------ |
+| `consent_given`           | `consent.changed`                    | channel, consent source                                              |                           | Channels     |
+| `tag_added`               | `contact.tag_added`                  | **tag**                                                              |                           | Channels     |
+| `segment_joined`          | `segment.entered`, not yet           | **segment**                                                          | Stored segment membership |              |
+| `link_tapped`             | `message.tapped`                     | channel                                                              |                           | Later        |
+| `birthday`                | Daily job in store time              | segment                                                              | Birthdays                 | Channels     |
+| `chat_started`            | `conversation.started`               | channel                                                              | Channels                  | Orders       |
+| `comment_on_post`         | `comment.received`, not yet          |                                                                      | Channels                  | Orders       |
+| `lead_captured`           | `chat.lead_saved`, not yet           | channel                                                              | Channels                  | Orders       |
+| `back_in_stock`           | `variant.restocked`, not yet         | product                                                              | Products                  | Orders       |
+| `price_dropped`           | `product.price_dropped`, not yet     | product                                                              | Products                  | Orders       |
+| `order_placed`            | `order.created`, not yet             | order total, product, payment status, delivery district, first order | Orders                    |              |
+| `order_paid`              | `payment.succeeded`, not yet         | order total                                                          | Orders                    |              |
+| `order_shipped`           | `order.stage_changed`, not yet       | order total, delivery district                                       | Orders                    |              |
+| `order_delivered`         | `order.stage_changed`, not yet       | order total, product                                                 | Orders                    |              |
+| `order_cancelled`         | `order.stage_changed`, not yet       | order total                                                          | Orders                    |              |
+| `order_returned`          | `order.stage_changed`, not yet       | order total                                                          | Orders                    |              |
+| `order_link_abandoned`    | `order_link.abandoned`, not yet      | product                                                              | Orders                    |              |
+| `lifecycle_stage_entered` | `contact.stage_changed`, not yet     | **lifecycle stage**                                                  | Orders                    |              |
+| `days_since_last_order`   | Daily job in store time              | **days**                                                             | Orders                    |              |
+| `reorder_due`             | Daily job, days before the usual gap | **days**, product                                                    | Orders                    |              |
+| `cart_abandoned`          | `cart.abandoned`, not yet            | cart total                                                           | Store sync, Q13           |              |
+| `checkout_abandoned`      | `checkout.abandoned`, not yet        | cart total                                                           | Store sync, Q13           |              |
+| `product_viewed`          | `product.viewed`, not yet            | product                                                              | Tracking script           |              |
 
 Shipped means staff moved the order to With courier (D21). Lifecycle stages come from orders, so every contact is in no stage until Orders exists. Segment joined waits for stored segment membership, which segments do not keep yet (feature 03); the same holds for an "enters a segment" exit condition. A custom event by API, "update a field" and "add to Due reminder" are not release 1: Dakly has no public API in release 1, no editable contact field is named for workflows, and Due is release 2.
 

@@ -9,8 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { createDatabase } from '@dakly/db/client';
 
-import { ContactsService } from '../contacts/contacts.service';
 import { ContactsModule } from '../contacts/contacts.module';
+import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
