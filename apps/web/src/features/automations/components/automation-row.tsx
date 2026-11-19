@@ -123,7 +123,7 @@ function WorkflowMenu({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild disabled={action.isPending}>
         <Button
           variant="secondary"
           aria-label={`Actions for ${workflow.name}`}
@@ -143,11 +143,7 @@ function WorkflowMenu({
         >
           Duplicate
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => {
-            onDelete();
-          }}
-        >
+        <DropdownMenuItem disabled={action.isPending} onSelect={onDelete}>
           Delete
         </DropdownMenuItem>
       </DropdownMenuContent>

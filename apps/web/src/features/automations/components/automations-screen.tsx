@@ -62,9 +62,13 @@ export function AutomationsScreen() {
             })}
           </TabsList>
         </header>
-        <TabsContent value={selected} className="pt-0">
-          <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
-        </TabsContent>
+        {tabs.map(({ key }) => (
+          <TabsContent key={key} value={key} className="pt-0">
+            {key === selected && (
+              <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
+            )}
+          </TabsContent>
+        ))}
       </Tabs>
     </main>
   );
