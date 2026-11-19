@@ -129,7 +129,7 @@ export class AutomationSendRetryService {
       const { firstTriedAt, latestDispatchAt } = locked;
       const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
       if (early) return finishWithoutSubmission(() => early);
-      const finalize = await this.prepareCheck(facts, step, locked, settings, preparedPhone);
+      const finalize = await this.prepareCheck({ ...facts, preparedPhone }, step, locked, settings);
       const claimedAt = await repository.schedulerTime(storeId);
       const checked = finalize(claimedAt);
       const ended = endExpiredRetry(step, firstTriedAt, wakeAt, claimedAt);
@@ -154,13 +154,12 @@ export class AutomationSendRetryService {
   }
 
   private async prepareCheck(
-    facts: RunFacts,
+    facts: RunFacts & { preparedPhone: string | null },
     step: SendStep,
     { id, firstTriedAt, destinationHash }: RetryableSend,
     settings: StoreSendingSettings | undefined,
-    preparedPhone: string | null,
   ): Promise<RetryCheck> {
-    const { storeId, contactId, wakeAt } = facts;
+    const { storeId, contactId, wakeAt, preparedPhone } = facts;
     const gate = await this.sendPolicy.recheckRetryRecipient(storeId, {
       contactId,
       channel: 'sms',
