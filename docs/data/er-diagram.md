@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0053_snapshot.json`: **95 tables, 1267 columns, 385 explicit indexes and 299 foreign keys**.
+Built from `packages/db/migrations/meta/0054_snapshot.json`: **95 tables, 1271 columns, 386 explicit indexes and 299 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1384,6 +1384,7 @@ erDiagram
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
+        text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
@@ -1418,6 +1419,9 @@ erDiagram
         timestamp_with_time_zone read_at "NULL; timestamp with time zone"
         timestamp_with_time_zone tapped_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
+        integer sms_credits "NULL; integer"
+        integer send_attempts "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     tracked_links {
