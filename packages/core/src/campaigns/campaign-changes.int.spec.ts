@@ -320,16 +320,20 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
 
     const sweep = app.get(SweepCampaignCancellationsJob);
     const settle = app.get(SettleCancelledCampaignJob);
+    await settle.handle({ storeId, campaignId: id });
+    await sweep.handle({});
+    expect(
+      (await queue.getJobs(['waiting'])).filter((job) => job.data.storeId === storeId),
+    ).toEqual([]);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(balance);
+    expect((await recipientRows(id))[0].status).toBe('sending');
+
+    clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
     await sweep.handle({});
     await sweep.handle({});
     const jobs = (await queue.getJobs(['waiting'])).filter((job) => job.data.storeId === storeId);
     expect(jobs.map((job) => job.data)).toEqual([{ storeId, campaignId: id }]);
     const [job] = jobs;
-    await settle.handle(job!.data);
-    expect(await wallets.balance(storeId, 'sms_credits')).toBe(balance);
-    expect((await recipientRows(id))[0].status).toBe('sending');
-
-    clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
     await settle.handle(job!.data);
     await settle.handle(job!.data);
 
@@ -343,12 +347,53 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     await job!.remove();
   });
 
+  it('skips a live older lease and reconciles multiple expired receipts in one job', async () => {
+    const older = await approvedCampaign(null);
+    const [stillSending] = await recipientRows(older);
+    await admin.pool.query(
+      "update campaign_recipients set status='sending', claimed_at=$3 where campaign_id=$1 and contact_id=$2",
+      [older, stillSending.contact_id, clockNow],
+    );
+    await service.cancel(storeId, older, actor);
+
+    clockNow = new Date(clockNow.getTime() + MINUTE);
+    const newer = await approvedCampaign(null);
+    const expiredContacts = (await recipientRows(newer)).slice(0, 2).map((row) => row.contact_id);
+    await admin.pool.query(
+      "update campaign_recipients set status='sending', claimed_at=$3, provider_message_id='capture-' || id::text where campaign_id=$1 and contact_id=any($2)",
+      [newer, expiredContacts, new Date(clockNow.getTime() - 6 * MINUTE)],
+    );
+    await service.cancel(storeId, newer, actor);
+
+    await app.get(SweepCampaignCancellationsJob).handle({});
+    const [job] = (await queue.getJobs(['waiting'])).filter((job) => job.data.storeId === storeId);
+    expect(job?.data).toEqual({ storeId, campaignId: newer });
+    const lookup = vi.spyOn(MailpitSmsDriver.prototype, 'receiptStatus').mockResolvedValue('sent');
+    const settle = app.get(SettleCancelledCampaignJob);
+    try {
+      await settle.handle(job!.data);
+      expect(lookup).toHaveBeenCalledTimes(2);
+      expect((await recipientRows(newer)).map((row) => row.status)).toEqual([
+        'sent',
+        'sent',
+        'cancelled',
+      ]);
+      expect((await recipientRows(older))[0].status).toBe('sending');
+    } finally {
+      lookup.mockRestore();
+      await job?.remove();
+    }
+    clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
+    await settle.handle({ storeId, campaignId: older });
+  });
+
   it.each(['sent', 'not_sent', 'unknown'] as const)(
     'settles a known cancelled receipt with outcome %s',
     async (outcome) => {
       const before = await wallets.balance(storeId, 'sms_credits');
       const id = await approvedCampaign(null);
       const [recipient] = await recipientRows(id);
+      const dispatchedAt = clockNow;
       const {
         rows: [{ id: recipientId }],
       } = await admin.pool.query(
@@ -375,6 +420,13 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
         expect(transactionOpen).toBe(false);
         expect(send).not.toHaveBeenCalled();
         expect((await recipientRows(id))[0].status).toBe(outcome === 'sent' ? 'sent' : 'failed');
+        const { rows } = await admin.pool.query(
+          'select dispatch_started_at, sent_at from campaign_recipients where id=$1',
+          [recipientId],
+        );
+        expect(rows).toEqual([
+          { dispatch_started_at: dispatchedAt, sent_at: outcome === 'sent' ? dispatchedAt : null },
+        ]);
         expect(await wallets.balance(storeId, 'sms_credits')).toBe(
           before - (outcome === 'not_sent' ? 0 : 1),
         );
@@ -393,7 +445,6 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     );
 
     await expect(service.resume(storeId, id, actor)).rejects.toMatchObject({
-      const dispatchedAt = clockNow;
       code: 'CAMPAIGN_PAUSED_BY_SYSTEM',
       status: 409,
       fields: [{ path: 'pauseReason', message: 'balance' }],
@@ -404,10 +455,3 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     expect(paused).toEqual({ status: 'paused', pause_reason: 'balance' });
   });
 });
-        const { rows } = await admin.pool.query(
-          'select dispatch_started_at, sent_at from campaign_recipients where id=$1',
-          [recipientId],
-        );
-        expect(rows).toEqual([
-          { dispatch_started_at: dispatchedAt, sent_at: outcome === 'sent' ? dispatchedAt : null },
-        ]);

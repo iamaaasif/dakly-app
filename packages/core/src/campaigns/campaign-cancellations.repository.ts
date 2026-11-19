@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, isNotNull, isNull, lt, notExists, or, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
@@ -34,15 +34,30 @@ export class CampaignCancellationsRepository {
     return result.rows.map(({ storeId }) => storeId);
   }
 
-  async firstPending(storeId: string): Promise<string | undefined> {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx
+  async firstPending(storeId: string, before: Date): Promise<string | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) => {
+      const sending = and(
+        eq(campaignRecipients.storeId, storeId),
+        eq(campaignRecipients.campaignId, campaigns.id),
+        eq(campaignRecipients.status, 'sending'),
+      );
+      const unfinished = tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(sending);
+      const ready = tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(and(sending, lt(campaignRecipients.claimedAt, before)));
+      return tx
         .select({ id: campaigns.id })
         .from(campaigns)
-        .where(and(eq(campaigns.storeId, storeId), pending))
+        .where(
+          and(eq(campaigns.storeId, storeId), pending, or(notExists(unfinished), exists(ready))),
+        )
         .orderBy(asc(campaigns.settlementPendingAt), asc(campaigns.id))
-        .limit(1),
-    );
+        .limit(1);
+    });
     return row?.id;
   }
 
@@ -87,6 +102,8 @@ export class CampaignCancellationsRepository {
         .select({
           id: campaignRecipients.id,
           providerMessageId: campaignRecipients.providerMessageId,
+          dispatchStartedAt: campaignRecipients.dispatchStartedAt,
+          claimedAt: campaignRecipients.claimedAt,
         })
         .from(campaignRecipients)
         .where(
@@ -103,8 +120,6 @@ export class CampaignCancellationsRepository {
       await tx
         .update(campaignRecipients)
         .set({ claimedAt, dispatchStartedAt })
-          dispatchStartedAt: campaignRecipients.dispatchStartedAt,
-          claimedAt: campaignRecipients.claimedAt,
         .where(and(recipientsWhere(storeId, campaignId), eq(campaignRecipients.id, row.id)));
       return { id: row.id, providerMessageId: row.providerMessageId, claimedAt, dispatchStartedAt };
     });

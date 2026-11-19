@@ -228,8 +228,8 @@ describe('campaign filters without RLS assistance', () => {
     );
 
     expect(await cancellations.listStores(null, 100)).toContain(f.a);
-    expect(await cancellations.firstPending(f.a)).toBe(campaign.id);
-    expect(await cancellations.firstPending(f.b)).toBeUndefined();
+    expect(await cancellations.firstPending(f.a, before)).toBe(campaign.id);
+    expect(await cancellations.firstPending(f.b, before)).toBeUndefined();
     const saved = await f.row('campaign_recipients', recipient);
     await f.tenant.forStore(f.b, async () => {
       expect(await cancellations.lockPending(f.b, campaign.id)).toBeUndefined();

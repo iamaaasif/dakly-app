@@ -22,6 +22,7 @@ const CURSOR_TTL = (7 * DAY_MS) / 1000;
 const STORES_PER_SWEEP = 100;
 const MAX_WAITING = 1_000;
 const LEASE_MS = 5 * MINUTE_MS;
+const RECEIPTS_PER_JOB = 10;
 const ACTOR = { kind: 'system' } as const;
 export const SETTLE_CANCELLED_CAMPAIGN = 'settle-cancelled-campaign';
 type SettleJob = { storeId: string; campaignId: string };
@@ -44,18 +45,22 @@ export class CampaignCancellationsService {
   ) {}
 
   async sweep(): Promise<void> {
+    // An advisory high-water mark because overlapping sweeps can read the same queue size.
     const limit = Math.min(STORES_PER_SWEEP, MAX_WAITING - (await this.queue.getWaitingCount()));
     if (limit <= 0) return;
     const after = await this.valkey.connection.get(SWEEP_CURSOR);
     let stores = await this.repository.listStores(after, limit);
     if (!stores.length && after) stores = await this.repository.listStores(null, limit);
     const jobs: SettleJob[] = [];
+    const before = new Date(this.clock.now().getTime() - LEASE_MS);
     for (const storeId of stores) {
-      const campaignId = await this.repository.firstPending(storeId).catch((error: unknown) => {
-        this.logger.error({ storeId }, 'Campaign cancellation lookup failed');
-        const { jobId } = jobLogBindings();
-        if (jobId) this.reporter.reportJob(serializeError(error), jobId);
-      });
+      const campaignId = await this.repository
+        .firstPending(storeId, before)
+        .catch((error: unknown) => {
+          this.logger.error({ storeId }, 'Campaign cancellation lookup failed');
+          const { jobId } = jobLogBindings();
+          if (jobId) this.reporter.reportJob(serializeError(error), jobId);
+        });
       if (campaignId) jobs.push({ storeId, campaignId });
     }
     if (jobs.length)
@@ -76,7 +81,13 @@ export class CampaignCancellationsService {
     if (last) await this.valkey.connection.set(SWEEP_CURSOR, last, 'EX', CURSOR_TTL);
   }
 
-  async settle({ storeId, campaignId }: SettleJob): Promise<void> {
+  async settle(job: SettleJob): Promise<void> {
+    for (let count = 0; count < RECEIPTS_PER_JOB; count++) {
+      if (!(await this.settleNextReceipt(job))) return;
+    }
+  }
+
+  private async settleNextReceipt({ storeId, campaignId }: SettleJob): Promise<boolean> {
     const pendingReceipt = await this.transaction.run(storeId, async () => {
       const campaign = await this.repository.lockPending(storeId, campaignId);
       if (!campaign?.approvedAt) return;
@@ -97,7 +108,7 @@ export class CampaignCancellationsService {
         actor: ACTOR,
       });
     });
-    if (!pendingReceipt) return;
+    if (!pendingReceipt) return false;
 
     const { claim, credits } = pendingReceipt;
     const outcome = await this.sms.receiptStatus({
@@ -133,5 +144,6 @@ export class CampaignCancellationsService {
         actor: ACTOR,
       });
     });
+    return true;
   }
 }

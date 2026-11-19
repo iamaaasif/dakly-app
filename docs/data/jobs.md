@@ -70,7 +70,7 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 | `sweep-campaign-cancellations` | Every minute                    | none                                        | Selects a page of store IDs with pending cancellations and queues one settlement job per store.                  |
 | `settle-cancelled-campaign`    | Cancellation sweep              | `storeId`, `campaignId`                     | Claims expired receipts before reading the provider. A guarded update settles the reservation once.              |
 
-Per-store cap: one sending batch and one cancellation settlement at a time.
+Per-store cap: one sending batch and one cancellation settlement at a time. The cancellation sweep pauses queueing at an advisory threshold of 1,000 waiting jobs.
 
 ## workflow
 
