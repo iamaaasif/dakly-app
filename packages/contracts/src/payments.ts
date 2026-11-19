@@ -83,3 +83,8 @@ export const createPaymentIntentSchema = z.discriminatedUnion('flow', [
 ]);
 
 export type CreatePaymentIntent = z.infer<typeof createPaymentIntentSchema>;
+
+export const paymentCallbackSchema = z.strictObject({
+  eventId: z.string().min(1).max(512),
+  merchantReference: z.string().min(1).max(512),
+});

@@ -368,11 +368,13 @@ intents use Dakly's own merchant account. When checkout starts, the intent
 records the gateway payment id and becomes `pending`.
 
 The callback verifies the original request body through the gateway driver.
-It records a callback event once per gateway event id and makes a pending
+The signed webhook records a callback event once per gateway event id and makes a pending
 intent due for verification. A callback alone never marks an intent paid.
 A server-to-server result must match the reference, currency and amount.
 An amount or currency mismatch, duplicate transaction or late success goes
-to `needs_review` and leaves the intent unpaid.
+to `needs_review` and leaves the intent unpaid. The event retains the gateway
+transaction id and verified amount for review. The browser return belongs to the
+gateway integration and can only request a server-to-server check.
 
 ### Rules
 

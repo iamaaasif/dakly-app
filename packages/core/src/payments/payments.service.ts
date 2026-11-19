@@ -16,6 +16,8 @@ import { MINUTE_MS } from '../platform/time';
 import { PAYMENT_ERRORS } from './payments.errors';
 import { PaymentsRepository } from './payments.repository';
 
+type PaidStatus = Extract<PaymentStatus, { status: 'paid' }>;
+
 type Intent = NonNullable<Awaited<ReturnType<PaymentsRepository['find']>>>;
 
 @Injectable()
@@ -121,7 +123,15 @@ export class PaymentsService {
       const intent = await this.lockIntent(storeId, intentId);
       const now = this.clock.now();
       const change = this.verifiedChange(intent, result, now);
-      if (change) await this.transition(storeId, intent, change, now);
+      if (change) {
+        await this.transition(
+          storeId,
+          intent,
+          change,
+          now,
+          result.status === 'paid' ? result : undefined,
+        );
+      }
     });
   }
 
@@ -132,11 +142,7 @@ export class PaymentsService {
     if (result.status !== 'pending') return { status: result.status } as const;
   }
 
-  private paidChange(
-    intent: Intent,
-    result: Extract<PaymentStatus, { status: 'paid' }>,
-    now: Date,
-  ) {
+  private paidChange(intent: Intent, result: PaidStatus, now: Date, verified?: PaidStatus) {
     if (intent.status !== 'pending' && intent.status !== 'expired' && intent.status !== 'failed')
       return;
     if (result.merchantReference !== intent.merchantReference) return;
@@ -165,6 +171,7 @@ export class PaymentsService {
     intent: Intent,
     change: Parameters<PaymentsRepository['update']>[3] & { status: Intent['status'] },
     now: Date,
+    verified?: PaidStatus,
   ) {
     const result = await this.repository.update(storeId, intent.id, intent.status, {
       ...change,
@@ -178,6 +185,7 @@ export class PaymentsService {
         intent,
         { status: 'needs_review', reviewReason: 'duplicate' },
         now,
+        verified,
       );
       return;
     }
@@ -186,7 +194,11 @@ export class PaymentsService {
       kind: 'status_changed',
       fromStatus: intent.status,
       toStatus: change.status,
-      gatewayReference: change.gatewayTransactionId,
+      gatewayReference: verified?.transactionId,
+      eventPayload: verified && {
+        amountPoisha: verified.amountPoisha,
+        currency: verified.currency,
+      },
       createdAt: now,
     });
   }

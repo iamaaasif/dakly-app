@@ -24,6 +24,7 @@ export type PaymentStatus =
     };
 
 export type PaymentCallback = {
+  // Prefix an account-local id with the merchant namespace before returning it.
   eventId: string;
   merchantReference: string;
 };
