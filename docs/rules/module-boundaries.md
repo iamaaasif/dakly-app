@@ -34,7 +34,8 @@ When feature A must react to something in feature B (order paid → send WhatsAp
 
 A few queries must join another feature's table to stay one indexed query. They read only, the owner keeps every write, and each one is listed here.
 
-| Reader     | Tables                                                                                                          | Why                                                                    | Who owns writes            |
-| ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------- |
-| `contacts` | `contact_consent_current`                                                                                       | Compiling segment conditions on consent into the contacts count        | `consents`                 |
-| `sending`  | `campaign_recipients`, `campaigns`, `automation_run_steps` (its `channel`, `category`, `outcome` and `sent_at`) | The frequency cap counts campaign and workflow sends together (A1, A2) | `campaigns`, `automations` |
+| Reader      | Tables                                                                                                          | Why                                                                      | Who owns writes            |
+| ----------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------- |
+| `contacts`  | `contact_consent_current`                                                                                       | Compiling segment conditions on consent into the contacts count          | `consents`                 |
+| `sending`   | `campaign_recipients`, `campaigns`, `automation_run_steps` (its `channel`, `category`, `outcome` and `sent_at`) | The frequency cap counts campaign and workflow sends together (A1, A2)   | `campaigns`, `automations` |
+| `messaging` | `contacts` (its `deleted_at`)                                                                                   | The inbox list hides deleted contacts' conversations in one indexed page | `contacts`                 |
