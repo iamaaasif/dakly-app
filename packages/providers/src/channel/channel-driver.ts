@@ -57,7 +57,16 @@ export type MetaTokenHealthDriver = {
   isTokenValid(accessToken: string): Promise<boolean>;
 };
 
+const metaRequestError = Symbol.for('dakly.meta-request-error');
+
 export class MetaRequestError extends Error {
+  readonly [metaRequestError] = true;
+
+  // The driver and its caller can load this class through different package entry points.
+  static override [Symbol.hasInstance](error: unknown): boolean {
+    return typeof error === 'object' && error !== null && metaRequestError in error;
+  }
+
   constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response' | 'rejected') {
     super('Meta request failed');
     this.name = 'MetaRequestError';

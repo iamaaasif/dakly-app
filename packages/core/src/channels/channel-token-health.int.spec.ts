@@ -327,9 +327,9 @@ it('marks a rejected send credential and tells the owner', async () => {
       .get(StoreTransaction)
       .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message)),
   ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
-  await expect(connections.sendMetaMessage(storeId, connectionId, message)).rejects.toMatchObject({
-    code: 'auth_error',
-  });
+  const rejectedSend = connections.sendMetaMessage(storeId, connectionId, message);
+  await expect(rejectedSend).rejects.toMatchObject({ code: 'auth_error' });
+  await expect(rejectedSend).rejects.toBeInstanceOf(MetaRequestError);
   const status = await admin.pool.query('select status from channel_connections where id = $1', [
     connectionId,
   ]);
