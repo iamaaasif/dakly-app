@@ -100,9 +100,11 @@ export class MailpitSmsDriver implements SmsDriver {
             }),
           );
         }, CONNECT_TIMEOUT_MS);
-        const failed = (error: Error) => {
+        const failed = () => {
           clearTimeout(timer);
-          done(error, false);
+          // This socket has not connected, so it could not have submitted DATA.
+          const failure = signal.aborted ? new SmsSendTimeout() : new SmsSendRefused();
+          done(failure, false);
         };
         socket.once('error', failed);
         socket.once('connect', () => {
@@ -136,6 +138,7 @@ type SmtpFailure = {
 };
 
 function isSmtpRefusal(error: unknown): boolean {
+  if (error instanceof SmsSendRefused) return true;
   if (!(error instanceof Error)) return false;
   const { responseCode, command, code, syscall } = error as Error & SmtpFailure;
   if (syscall === 'connect' || code === 'EDNS') return true;
