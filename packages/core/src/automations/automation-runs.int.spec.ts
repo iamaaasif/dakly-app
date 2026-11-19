@@ -15,6 +15,7 @@ import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -1666,6 +1667,44 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(sentFor(runId!)).toEqual([]);
       expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
       expect(await ledgerFor(runId!)).toEqual([]);
+    });
+
+    it('submits to the authorized phone if the contact changes it after gate commit', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        rows: [{ phone: authorizedPhone }],
+      } = await admin.pool.query<{ phone: string }>(
+        'select phone from contacts where store_id=$1 and id=$2',
+        [storeId, contact],
+      );
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const sendPrepared = MessagingService.prototype.send;
+      const hook = vi
+        .spyOn(MessagingService.prototype, 'send')
+        .mockImplementationOnce(async function (shop, message, prepared) {
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+          await admin.pool.query('update contacts set phone=$1 where store_id=$2 and id=$3', [
+            `0191100${String(++phone).padStart(4, '0')}`,
+            storeId,
+            contact,
+          ]);
+          return sendPrepared.call(this, shop, message, prepared);
+        });
+      try {
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!).map((message) => message.to)).toEqual([authorizedPhone]);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      } finally {
+        hook.mockRestore();
+      }
     });
 
     it('enforces the cap when an earlier-started run reaches the lock second', async () => {
