@@ -95,7 +95,7 @@ Publish changes applies to people who enter after publishing. People already in 
 | CAMP-R4 | Every SMS marketing message ends with a short opt-out link (dkly.co/s/abc) to a one-tap page in Bangla and English, because Bangladesh A2P SMS cannot receive replies (changed 13 Nov 2026); WhatsApp marketing messages include a "Stop offers" quick-reply button.                                                      |
 | CAMP-R5 | Cost estimate uses the real per-category rate: WhatsApp marketing about ৳9 and utility about ৳0.45 per delivered message (Meta Bangladesh rates from Oct 1, 2026, to be confirmed with the BSP) plus Dakly's margin; SMS ৳0.35–0.40 per part; Messenger free. Approve is blocked if the balance can't cover the estimate. |
 | CAMP-R6 | Messenger campaigns go only to people whose last message to the Page is under 23 hours old when their message is sent; anyone past that is skipped as "window closed" (D24).                                                                                                                                              |
-| CAMP-R7 | A Scheduled campaign can be edited or cancelled until 5 minutes before send; a Sending campaign can be paused (remaining messages stop).                                                                                                                                                                                  |
+| CAMP-R7 | A Scheduled campaign can be edited until 5 minutes before send. Scheduled, Sending and Paused campaigns can be cancelled. A Sending campaign can be paused (remaining messages stop).                                                                                                                                     |
 | AUTO-R1 | A workflow can't be enabled if any message step has no approved template or no consent channel.                                                                                                                                                                                                                           |
 | AUTO-R2 | A person in two workflows that both fire the same day gets only the higher-priority message (Transactional > Abandoned > Welcome > Others), per CAMP-R3.                                                                                                                                                                  |
 
@@ -336,22 +336,21 @@ The audience is every contact in any include segment and in no exclude segment, 
 
 ### Edit, cancel, pause and resume (CAMP-2)
 
-Each change is a guarded update from one state, listed in a table in `CampaignsService`. All four routes need `campaigns.edit` and return the campaign.
+Each change is a guarded update. All four routes need `campaigns.edit` and return the campaign.
 
-| Route                                    | From                                  | To          | Refused with                                                            |
-| ---------------------------------------- | ------------------------------------- | ----------- | ----------------------------------------------------------------------- |
-| `POST /campaigns/:campaignId/unschedule` | `scheduled`                           | `draft`     | `CAMPAIGN_NOT_SCHEDULED`                                                |
-| `POST /campaigns/:campaignId/cancel`     | `scheduled`                           | `cancelled` | `CAMPAIGN_NOT_SCHEDULED`                                                |
-| `POST /campaigns/:campaignId/pause`      | `sending`                             | `paused`    | `CAMPAIGN_NOT_SENDING`                                                  |
-| `POST /campaigns/:campaignId/resume`     | `paused` with `pause_reason` `manual` | `sending`   | `CAMPAIGN_NOT_PAUSED`; `CAMPAIGN_PAUSED_BY_SYSTEM` for any other reason |
+| Route                                    | From                                  | To          | Refused with                                                                                           |
+| ---------------------------------------- | ------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `POST /campaigns/:campaignId/unschedule` | `scheduled`                           | `draft`     | `CAMPAIGN_NOT_SCHEDULED`                                                                               |
+| `POST /campaigns/:campaignId/cancel`     | `scheduled`, `sending` or `paused`    | `cancelled` | `CAMPAIGN_NOT_CANCELLABLE` for finished states, `CAMPAIGN_NOT_SCHEDULED` for draft or waiting approval |
+| `POST /campaigns/:campaignId/pause`      | `sending`                             | `paused`    | `CAMPAIGN_NOT_SENDING`                                                                                 |
+| `POST /campaigns/:campaignId/resume`     | `paused` with `pause_reason` `manual` | `sending`   | `CAMPAIGN_NOT_PAUSED`; `CAMPAIGN_PAUSED_BY_SYSTEM` for any other reason                                |
 
-- Edit and cancel (CAMP-R7) work until 5 minutes before `scheduledFor`, by the Clock; inside that, or past the send time, they are refused with `CAMPAIGN_CHANGE_TOO_LATE` (409). Each runs in one store transaction that locks the campaign and releases its credit reservation through `WalletService.release`, last, so the wallet lock is held only until commit.
+- Edit (CAMP-R7) works until 5 minutes before `scheduledFor`. Inside that window or past the send time, it returns `CAMPAIGN_CHANGE_TOO_LATE` (409). Edit locks the campaign and releases its credit reservation in one store transaction.
 - Edit is its own action, because returning to draft lets go of the frozen audience and the credits, which a `PATCH` should not do on the side. It deletes the recipients and clears the approver, approval time, estimated cost and counts. The draft can then be changed and approved again, which freezes the audience and reserves anew. The reservation key holds the approval time, so a second approval is not taken for a replay of the first.
-- Cancel keeps the recipients and moves the queued ones to `cancelled`; skipped ones stay skipped. It sets `finished_at`, which starts the 372-day recipient retention ([growth.md](../data/growth.md)).
+- Cancel can run within five minutes of the scheduled time or after it. In one store transaction it locks the campaign, moves queued recipients to `cancelled`, clears the pause reason, sets `finished_at` and releases the whole approval reservation. Skipped recipients keep their status. The finish time starts the 372-day recipient retention ([growth.md](../data/growth.md)).
 - Pause sets `pause_reason` to `manual`, and resume clears it. Until the sender (CAMP-3) is built, they only move the status.
 - Only a `manual` pause resumes by hand. Resume is guarded on `status = 'paused'` and `pause_reason = 'manual'`, so it cannot race a system pause; any other reason is refused with `CAMPAIGN_PAUSED_BY_SYSTEM` (409), with the reason in the error's `fields` under `pauseReason`. Each other reason resumes through its own rule: balance on top-up (CAMP-3), and quality, template and provider pauses when their cause clears (CAMP-3 and CHN-3).
 - No event is emitted for these changes; the [event catalogue](../data/jobs.md#events-in-m2-and-m3) lists none.
-- Cancelling a `sending` or `paused` campaign, which state-machines.md allows, waits for CAMP-3, because the credits for recipients already sent must be charged before the rest is released.
 
 ### Sender (CAMP-3)
 
@@ -552,7 +551,7 @@ From PRD tab 6:
 - CAMP-R5: The estimate uses the real per-category rate. Approve is blocked if the balance cannot cover it.
 - CAMP-R4: Marketing SMS ends with a one-tap opt-out link; WhatsApp marketing has a "Stop offers" button.
 - CAMP-R6: Messenger campaigns only reach people whose window is open at send time.
-- CAMP-R7: A Scheduled campaign can be edited or cancelled until 5 minutes before sending; a Sending campaign can be paused.
+- CAMP-R7: A Scheduled campaign can be edited until 5 minutes before sending. Scheduled, Sending and Paused campaigns can be cancelled. A Sending campaign can be paused.
 - AUTO-R1: An automation cannot be enabled if a message step has no approved template or no consented channel.
 - AUTO-R2: A person hit by two automations on the same day gets only the higher priority (Transactional, then the rest).
 
