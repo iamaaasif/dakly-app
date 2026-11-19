@@ -4,7 +4,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import { MAX_PAYMENT_CALLBACK_BYTES } from '@dakly/contracts/payments';
 import type { PaymentDriver, PaymentGateway } from '@dakly/providers/payment/payment-driver';
 
 import { RateLimiter } from '../platform/cache/rate-limiter';
@@ -18,7 +17,7 @@ import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PAYMENT_DRIVERS } from './payment-drivers';
 import { PAYMENT_ERRORS } from './payments.errors';
 
-const rateLimited = 'PAYMENT_CALLBACK_RATE_LIMITED';
+const MAX_CALLBACK_BYTES = 64 * 1024;
 
 @Injectable()
 export class PaymentCallbacksService {
@@ -27,8 +26,7 @@ export class PaymentCallbacksService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(PAYMENT_DRIVERS) private readonly drivers: readonly PaymentDriver[],
     @Inject(RateLimiter) private readonly limiter: RateLimiter,
-    @InjectQueue(QUEUES.inbound)
-    private readonly queue: Queue<{ webhookEventId: string; attemptId: string }>,
+    @InjectQueue(QUEUES.inbound) private readonly queue: Queue<{ webhookEventId: string }>,
   ) {}
 
   async receive(
@@ -39,31 +37,34 @@ export class PaymentCallbacksService {
   ) {
     if (!rawBody?.length)
       throw new AppError('PAYMENT_CALLBACK_INVALID', PAYMENT_ERRORS.PAYMENT_CALLBACK_INVALID);
-    if (rawBody.length > MAX_PAYMENT_CALLBACK_BYTES)
+    if (rawBody.length > MAX_CALLBACK_BYTES)
       throw new AppError('PAYMENT_CALLBACK_TOO_LARGE', PAYMENT_ERRORS.PAYMENT_CALLBACK_TOO_LARGE);
     const key = `payment-callback:ip:${hashToken(ip).toString('hex')}`;
     if (!(await this.limiter.consume(key, 120, 60)).allowed)
-      throw new AppError(rateLimited, PAYMENT_ERRORS[rateLimited]);
+      throw new AppError(
+        'PAYMENT_CALLBACK_RATE_LIMITED',
+        PAYMENT_ERRORS.PAYMENT_CALLBACK_RATE_LIMITED,
+      );
 
     const signatureHeaders =
       this.drivers.find((driver) => driver.gateway === gateway)?.callbackHeaders ?? [];
     const allowedHeaders = Object.fromEntries(
-      signatureHeaders.map((name) => [name, headers[name]]),
+      signatureHeaders.toSorted().map((name) => [name, headers[name]]),
     );
-    const attemptId = createHash('sha256').update(JSON.stringify(allowedHeaders)).digest('hex');
-    const externalId = createHash('sha256').update(rawBody).digest('hex');
+    const externalId = createHash('sha256')
+      .update(rawBody)
+      .update(JSON.stringify(allowedHeaders))
+      .digest('hex');
     const receipt = await this.repository.save(
       gateway,
       externalId,
       {
         body: rawBody.toString('base64'),
         headers: allowedHeaders,
-        attemptId,
       },
       this.clock.now(),
     );
-    if (receipt && !receipt.accepted) throw new AppError(rateLimited, PAYMENT_ERRORS[rateLimited]);
-    if (receipt) await this.enqueue(receipt.id, attemptId);
+    if (receipt) await this.enqueue(receipt.id);
   }
 
   async recoverPending() {
@@ -72,24 +73,20 @@ export class PaymentCallbacksService {
     const expiredBefore = now.getTime() - 7 * DAY_MS;
     let page = await this.repository.listReceivedBefore(before);
     while (page.length) {
-      for (const { id, receivedAt, attemptIds } of page) {
-        const expired = receivedAt.getTime() < expiredBefore;
-        for (const attemptId of attemptIds) {
-          await (expired
-            ? this.repository.finish(id, attemptId, 'failed', now)
-            : this.enqueue(id, attemptId));
-        }
+      for (const { id, receivedAt } of page) {
+        if (receivedAt.getTime() < expiredBefore) await this.repository.finish(id, 'failed', now);
+        else await this.enqueue(id);
       }
       page = await this.repository.listReceivedBefore(before, page.at(-1)?.id);
     }
   }
 
-  private async enqueue(webhookEventId: string, attemptId: string) {
+  private async enqueue(webhookEventId: string) {
     await this.queue.add(
       PROCESS_PAYMENT_CALLBACK,
-      { webhookEventId, attemptId },
+      { webhookEventId },
       {
-        jobId: `${webhookEventId}-${attemptId}`,
+        jobId: webhookEventId,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: true,
