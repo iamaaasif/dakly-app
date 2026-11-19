@@ -79,7 +79,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     availableBefore: 'channels',
   },
   tag_added: {
-    source: { plannedEvent: 'contact.tag_added' },
+    source: { event: 'contact.tag_added' },
     filters: { tag: 'required' },
     needs: null,
     availableBefore: 'channels',

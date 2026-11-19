@@ -194,7 +194,7 @@ function addIssue(context: Context, path: string[], message: string) {
 
 const graphShapeSchema = z.strictObject({
   trigger: triggerSchema,
-  reEntry: reEntrySchema,
+  reEntry: reEntrySchema.default({ rule: 'every_days', days: 30 }),
   workflowFilters: z.array(conditionSchema).max(MAX_WORKFLOW_FILTERS),
   goal: exitConditionSchema.nullable(),
   exitConditions: z.array(exitConditionSchema).max(MAX_EXIT_CONDITIONS),
