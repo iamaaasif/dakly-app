@@ -14,8 +14,10 @@ import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-securi
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
+import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
 import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/record-automation-birthdays.job';
+import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
@@ -88,6 +90,7 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
+    ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
   ],
   imports: [
@@ -113,6 +116,7 @@ import { JobSchedulers } from './job-schedulers';
     ChannelTokenHealthModule,
     ConversationReturnsModule,
     AutomationRunsModule,
+    AutomationsModule,
     CampaignsModule,
     ClockModule,
     ImportsModule,
