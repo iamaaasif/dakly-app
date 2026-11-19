@@ -420,6 +420,8 @@ Build in two stages so templates can ship if the canvas slips: (1) engine, versi
 
 Template library: complete graphs shipped in code, copied into the store as a draft on Use template. The templates are in [Workflow catalogue](#workflow-catalogue). Templates whose prerequisites the store lacks show what they need instead of Use.
 
+The template library filters by type, goal and channel in the URL. Use workflow creates a draft from a template key. A draft created from scratch supplies a graph instead. The shop saves which template it came from. The library marks templates that have an active workflow in the shop.
+
 Limits: 50 steps a workflow, 90 days of waiting on any path, 5 exit conditions, 10 condition paths plus Else, 4 random paths, 100 workflows a store; warn when more than 10 active workflows share a trigger.
 
 Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.

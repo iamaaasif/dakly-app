@@ -12,6 +12,7 @@ export type Automation = {
   id: string;
   name: string;
   status: AutomationStatus;
+  templateKey: string | null;
   graph: AutomationGraph;
   publishedVersionId: string | null;
   createdAt: Date;
@@ -29,6 +30,7 @@ const automationColumns = {
   id: automations.id,
   name: automations.name,
   status: automations.status,
+  templateKey: automations.templateKey,
   graph: automations.draftGraph,
   publishedVersionId: automations.publishedVersionId,
   createdAt: automations.createdAt,
@@ -120,6 +122,7 @@ export class AutomationsRepository {
       name: string;
       graph: AutomationGraph;
       triggerType: TriggerKey;
+      templateKey?: string;
       createdByUserId: string | null;
     },
   ): Promise<Automation> {
