@@ -32,6 +32,7 @@ export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 export type RunFacts = {
   preparedSender?: PreparedSmsSender;
   graph: AutomationGraph;
+  automationId: string;
   storeId: string;
   runId: string;
   contactId: string;
@@ -52,7 +53,9 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
-  | { outcome: 'late' | 'destination_changed' }
+  | 'balance_paused'
+  | { outcome: 'late'; balanceResumedAt: Date | null }
+  | { outcome: 'destination_changed' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: Exclude<SendDecision, { action: 'send' }> }
   | {
@@ -82,12 +85,27 @@ export type StepResult = {
 
 type ExitCondition = AutomationGraph['exitConditions'][number];
 
-// This intermediate part skips a short balance; the balance-pause part replaces it.
-// Costs, retries and balance pause must merge together before any deploy.
-export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
-
 export function operationKey({ runId, stepKey }: RunClaim) {
   return `run:${runId}:${stepKey}`;
+}
+
+// A send due more than a day before it runs is skipped (feature 09): as no_credits when it was
+// already a day old at the top-up that ended a pause for balance, else as late, as after a manual
+// pause that held it longer.
+function lateSend(
+  step: SendStep,
+  stepKey: string,
+  { wakeAt, balanceResumedAt }: { wakeAt: Date | null; balanceResumedAt: Date | null },
+  now: Date,
+): StepResult {
+  const row = { stepKey, kind: 'send', category: step.category } as const;
+  // Held through a balance pause and already a day old when the top-up ended it.
+  if (balanceResumedAt && wakeAt && balanceResumedAt.getTime() - wakeAt.getTime() > DAY_MS)
+    return {
+      ...ifNotReachable(step, now),
+      step: { ...row, outcome: 'skipped', skipReason: 'no_credits' },
+    };
+  return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
 }
 
 export function scheduleWait(
@@ -109,14 +127,15 @@ export function scheduleWait(
 export function firstSendStop(
   claim: RunClaim,
   step: SendStep,
-  started: Exclude<GateResult, 'not_live' | { body: string }>,
+  started: Exclude<GateResult, 'not_live' | 'balance_paused' | { body: string }>,
+  wakeAt: Date | null,
 ): StepResult {
   const at = claim.claimedAt;
   const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
   if ('exitReason' in started) return { ...exited(started.exitReason, at), claim };
   if ('outcome' in started) {
     if (started.outcome === 'late')
-      return { ...goOn(step.next, at), claim, step: { ...row, outcome: 'late' } };
+      return { ...lateSend(step, claim.stepKey, { ...started, wakeAt }, at), claim };
     return {
       ...failed("The contact's phone changed during SMS preparation", at),
       claim,
@@ -243,6 +262,25 @@ export function randomPath(
 
 export function isLateSend(wakeAt: Date | null, now: Date): boolean {
   return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
+}
+
+export function sendLateness(
+  wakeAt: Date | null,
+  now: Date,
+  run: Pick<ClaimedRun, 'balanceResumedAt' | 'hasBalanceResumeSendAllowance'> | undefined,
+) {
+  if (!isLateSend(wakeAt, now)) return undefined;
+  const balanceResumedAt = run?.balanceResumedAt ?? null;
+  // If a top-up made an already-due send eligible, the wait for the sweep cannot expire it.
+  if (
+    run?.hasBalanceResumeSendAllowance &&
+    balanceResumedAt &&
+    wakeAt &&
+    wakeAt <= balanceResumedAt &&
+    !isLateSend(wakeAt, balanceResumedAt)
+  )
+    return undefined;
+  return { outcome: 'late', balanceResumedAt } as const;
 }
 
 export function shouldPrepareSender(step: AutomationStep): boolean {

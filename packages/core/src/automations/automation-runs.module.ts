@@ -21,10 +21,12 @@ import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
 import { AutomationSendRetryService } from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
+import { AutomationsModule } from './automations.module';
 
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
   imports: [
+    AutomationsModule,
     BullModule.registerQueue({ name: QUEUES.bulk }),
     ClockModule,
     ContactsModule,
