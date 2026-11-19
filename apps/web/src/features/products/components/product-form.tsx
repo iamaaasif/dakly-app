@@ -50,7 +50,7 @@ export function ProductForm({ product, onSaved }: ProductFormProps) {
           else create.mutate(input, callbacks);
         })}
       >
-        <ProductFields mode={product ? 'edit' : 'create'} />
+        <ProductFields productId={product?.id} />
         <ProductOptions />
         {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">

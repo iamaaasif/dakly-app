@@ -5,6 +5,7 @@ import type { ProductFormValues } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 
+import { ProductDescriptionField } from './product-description-field';
 import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
 
@@ -13,10 +14,10 @@ const flags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-type ProductFieldsProps = { mode: 'create' | 'edit' };
-export function ProductFields({ mode }: ProductFieldsProps) {
+type ProductFieldsProps = { productId?: string };
+export function ProductFields({ productId }: ProductFieldsProps) {
   const form = useFormContext<ProductFormValues>();
-  const visibleFlags = flags.filter(([name]) => mode === 'edit' || name === 'isStockTracked');
+  const visibleFlags = flags.filter(([name]) => productId || name === 'isStockTracked');
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
   return (
     <>
@@ -33,8 +34,8 @@ export function ProductFields({ mode }: ProductFieldsProps) {
         ) : null}
       </div>
       {simple ? <DefaultOverride /> : null}
-      <ProductLinesField name="description" label="Description" />
-      {mode === 'edit' ? (
+      <ProductDescriptionField productId={productId} />
+      {productId ? (
         <ProductLinesField name="aliases" label="Other names" hint="One name per line." />
       ) : null}
       <div className="space-y-4">
