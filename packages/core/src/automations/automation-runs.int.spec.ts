@@ -21,6 +21,7 @@ import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
@@ -1681,16 +1682,32 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const {
         runIds: [runId],
       } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const replacement = {
+        text: 'update contacts set phone=$1 where store_id=$2 and id=$3',
+        values: [`0191100${String(++phone).padStart(4, '0')}`, storeId, contact],
+      };
+      const checkForSend = SendPolicyService.prototype.checkForSend;
+      const policy = vi
+        .spyOn(SendPolicyService.prototype, 'checkForSend')
+        .mockImplementationOnce(async function (shop, request) {
+          const checked = await checkForSend.call(this, shop, request);
+          const writer = await admin.pool.connect();
+          try {
+            await writer.query('begin');
+            await writer.query("set local lock_timeout = '100ms'");
+            await expect(writer.query(replacement)).rejects.toMatchObject({ code: '55P03' });
+          } finally {
+            await writer.query('rollback');
+            writer.release();
+          }
+          return checked;
+        });
       const sendPrepared = MessagingService.prototype.send;
       const hook = vi
         .spyOn(MessagingService.prototype, 'send')
         .mockImplementationOnce(async function (shop, message, prepared) {
           expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
-          await admin.pool.query('update contacts set phone=$1 where store_id=$2 and id=$3', [
-            `0191100${String(++phone).padStart(4, '0')}`,
-            storeId,
-            contact,
-          ]);
+          await admin.pool.query(replacement);
           return sendPrepared.call(this, shop, message, prepared);
         });
       try {
@@ -1703,6 +1720,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           { kind: 'charge', delta: -1 },
         ]);
       } finally {
+        policy.mockRestore();
         hook.mockRestore();
       }
     });
