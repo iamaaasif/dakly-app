@@ -36,11 +36,13 @@ describe('Worker job schedulers', () => {
     const bulk = recordingQueue();
     const sync = recordingQueue();
     const workflow = recordingQueue();
+    const campaign = recordingQueue();
     const schedulers = new JobSchedulers(
       transactional.queue,
       bulk.queue,
       sync.queue,
       workflow.queue,
+      campaign.queue,
     );
     await schedulers.onApplicationBootstrap();
     await schedulers.onApplicationBootstrap();
@@ -70,6 +72,10 @@ describe('Worker job schedulers', () => {
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),
       scheduler('wake-due-runs', 60000),
+    ]);
+    expect(campaign.schedulers).toEqual([
+      scheduler('start-due-campaigns', 60000),
+      scheduler('start-due-campaigns', 60000),
     ]);
   });
 });

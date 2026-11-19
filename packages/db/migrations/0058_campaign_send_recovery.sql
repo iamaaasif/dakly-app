@@ -7,7 +7,7 @@ ALTER TABLE "campaigns" ADD COLUMN "settlement_pending_at" timestamp with time z
 ALTER TABLE "campaigns" ADD COLUMN "settled_at" timestamp with time zone;--> statement-breakpoint
 CREATE INDEX "campaigns_send_work_idx" ON "campaigns" USING btree ("store_id","status","started_at","id") WHERE ("campaigns"."status" = 'sending' and "campaigns"."short_link_base" is not null) or ("campaigns"."status" = 'cancelled' and "campaigns"."settlement_pending_at" is not null);--> statement-breakpoint
 -- Only IDs cross RLS. The worker reads and locks each campaign in its store.
-CREATE FUNCTION campaign_send_work_stores(after_store uuid, store_limit integer)
+CREATE FUNCTION campaign_send_work_stores(as_of timestamptz, after_store uuid, store_limit integer)
   RETURNS TABLE(store_id uuid)
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$
@@ -22,17 +22,24 @@ AS $$
       END AS store_id
     ) AS floor
     CROSS JOIN LATERAL (
-      SELECT c.store_id
-      FROM public.campaigns c
-      WHERE ((c.status = 'sending' AND c.short_link_base IS NOT NULL)
-        OR (c.status = 'cancelled' AND c.settlement_pending_at IS NOT NULL))
-        AND c.store_id >= floor.store_id
-      ORDER BY c.store_id
-      LIMIT 1
+      SELECT candidate.store_id
+      FROM (
+        (SELECT c.store_id FROM public.campaigns c
+          WHERE c.status = 'scheduled' AND c.scheduled_for <= as_of
+            AND c.store_id >= floor.store_id
+          ORDER BY c.store_id LIMIT 1)
+        UNION ALL
+        (SELECT c.store_id FROM public.campaigns c
+          WHERE ((c.status = 'sending' AND c.short_link_base IS NOT NULL)
+            OR (c.status = 'cancelled' AND c.settlement_pending_at IS NOT NULL))
+            AND c.store_id >= floor.store_id
+          ORDER BY c.store_id LIMIT 1)
+      ) AS candidate
+      ORDER BY candidate.store_id LIMIT 1
     ) AS next_store
     WHERE page.position < greatest(0, least(coalesce(store_limit, 0), 100))
   )
   SELECT page.store_id FROM page WHERE page.position > 0 ORDER BY page.position
 $$;--> statement-breakpoint
-REVOKE EXECUTE ON FUNCTION campaign_send_work_stores(uuid, integer) FROM PUBLIC;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION campaign_send_work_stores(uuid, integer) TO dakly_app;
+REVOKE EXECUTE ON FUNCTION campaign_send_work_stores(timestamptz, uuid, integer) FROM PUBLIC;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION campaign_send_work_stores(timestamptz, uuid, integer) TO dakly_app;
