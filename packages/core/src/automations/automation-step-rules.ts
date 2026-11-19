@@ -3,31 +3,74 @@ import { createHash } from 'node:crypto';
 import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
-import type { ContactsService } from '../contacts/contacts.service';
-import type { ClaimedRun, NewRunStep, RunChange, RunClaim } from './automation-runs.repository';
+import type { TagChange } from '../contacts/contacts.service';
+import type { PreparedSmsSender } from '../messaging/messaging.service';
+import { DAY_MS } from '../platform/time';
+import type { SendDecision } from '../sending/send-policy.service';
+import type {
+  ClaimedRun,
+  NewRunStep,
+  RunChange,
+  RunClaim,
+  RunStepChange,
+} from './automation-runs.repository';
 import { wakeTime } from './automation-waits';
 
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 
+export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
 export type RunFacts = {
+  preparedSender?: PreparedSmsSender;
+  graph: AutomationGraph;
   storeId: string;
   runId: string;
   contactId: string;
   tags: string[];
   tappedStepKeys: string[];
+  wakeAt: Date | null;
 };
-// The run's next state, the step row and a tag change, written together under the claim, and the
-// next step's claim when the run goes straight on.
+export type Delivery = {
+  preparedSender?: PreparedSmsSender;
+  storeId: string;
+  claim: RunClaim;
+  contactId: string;
+  step: SendStep;
+  body: string;
+  destination: string | null;
+};
+// What the gate's transaction decided: a renewal refused for a paused, stopped or archived
+// workflow or a lost claim, a skip or defer, or a send with its text.
+export type GateResult =
+  | 'not_live'
+  | { outcome: 'late' }
+  | { exitReason: AutomationExitReason; at: Date }
+  | { decision: Exclude<SendDecision, { action: 'send' }> }
+  | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
+export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
+// The run's next state, the step row to add or change, a tag change and the send's credits,
+// written together under the claim (a send renews it first), and the next step's claim when the
+// run goes straight on.
 export type StepResult = {
   run: RunChange;
+  credits?: CreditSettlement;
+  claim?: RunClaim;
   step?: NewRunStep;
-  tagChange?: Parameters<ContactsService['changeTag']>[2];
+  stepChange?: RunStepChange;
+  tagChange?: TagChange;
   next?: Omit<RunClaim, 'runId'>;
 };
 
 type ExitCondition = AutomationGraph['exitConditions'][number];
+
+// This intermediate part skips a short balance; the balance-pause part replaces it.
+// Costs, retries and balance pause must merge together before any deploy.
+export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
+
+export function operationKey({ runId, stepKey }: RunClaim) {
+  return `run:${runId}:${stepKey}`;
+}
 
 export function scheduleWait(
   stepKey: string,
@@ -71,6 +114,32 @@ export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   return false;
 }
 
+export function messageBody(step: SendStep, optOutUrl: string | undefined): string {
+  return optOutUrl ? `${step.message.text}\n${optOutUrl}` : step.message.text;
+}
+
+export function ifNotReachable(step: SendStep, now: Date) {
+  return step.ifNotReachable === 'skip' ? goOn(step.next, now) : exited('not_reachable', now);
+}
+
+// The step was handed to the provider and no answer came; it may have been sent. Its credits stay
+// reserved until a reconciliation settles it (ACC-14 brings provider status reports), and it is
+// not sent again.
+const UNKNOWN_OUTCOME =
+  'The SMS provider did not confirm this message, so its credits stay reserved until it is checked';
+
+export function endWithUnknownOutcome(held: StepResult): StepResult {
+  if (held.run.status === 'waiting') return held;
+  return {
+    ...held,
+    run: {
+      ...held.run,
+      lastError: held.run.lastError ? `${held.run.lastError}. ${UNKNOWN_OUTCOME}` : UNKNOWN_OUTCOME,
+    },
+    stepChange: { outcome: 'unconfirmed' },
+  };
+}
+
 // Checked before every step.
 export function holdOrEnd(run: ClaimedRun, now: Date): StepResult | undefined {
   if (run.attempts > MAX_CLAIMS_WITHOUT_PROGRESS)
@@ -95,7 +164,7 @@ export function holdsClaim(run: ClaimedRun, claim: RunClaim): boolean {
 // The next step's job takes over the claim with a fresh time, which also renews the lease.
 export function goOn(next: string, now: Date) {
   return {
-    run: { status: 'running', currentStepKey: next, claimedAt: now },
+    run: { status: 'running', currentStepKey: next, claimedAt: now, wakeAt: now },
     next: { stepKey: next, claimedAt: now },
   } as const;
 }
@@ -119,4 +188,12 @@ export function randomPath(
   let upTo = 0;
   const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
   return { outcome: `path_${index + 1}`, next: paths[index]!.next };
+}
+
+export function isLateSend(wakeAt: Date | null, now: Date): boolean {
+  return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
+}
+
+export function shouldPrepareSender(step: AutomationStep): boolean {
+  return step.kind === 'send' && step.channels.includes('sms') && !step.reviewBeforeSending;
 }
