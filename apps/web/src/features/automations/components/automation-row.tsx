@@ -1,6 +1,6 @@
 'use client';
 
-import { Ellipsis, Zap } from 'lucide-react';
+import { EllipsisVertical, Zap } from 'lucide-react';
 import { useState } from 'react';
 
 import type { AutomationListItem } from '@dakly/contracts/automations';
@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@dakly/ui/dropdown-menu';
 
-import { useAutomationAction } from '../api/automation-actions';
+import { useChangeAutomationStatus, useDuplicateAutomation } from '../api/automation-actions';
 import { channelLabels, statusLabels, triggerLabels } from '../automation-labels';
 
 export function AutomationRow({
@@ -51,11 +51,13 @@ export function AutomationRow({
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <dt className="text-text-muted">Entered, 30 days</dt>
-          <dd className="font-semibold tabular-nums">{draft ? '—' : workflow.enteredLast30Days}</dd>
+          <dd className="text-base font-semibold tabular-nums">
+            {draft ? '—' : workflow.enteredLast30Days}
+          </dd>
         </div>
         <div>
           <dt className="text-text-muted">Revenue, 30 days</dt>
-          <dd className="font-semibold">—</dd>
+          <dd className="text-base font-semibold">—</dd>
         </div>
       </dl>
       {canEdit && <WorkflowActions workflow={workflow} />}
@@ -65,7 +67,9 @@ export function AutomationRow({
 
 function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
   const [confirm, setConfirm] = useState(false);
-  const action = useAutomationAction();
+  const status = useChangeAutomationStatus();
+  const duplicate = useDuplicateAutomation();
+  const error = status.error ?? duplicate.error;
   const active = workflow.status === 'active';
   const draft = workflow.status === 'draft';
   return (
@@ -74,8 +78,12 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
         {!draft && (
           <Button
             variant="secondary"
-            loading={action.isPending && !confirm}
-            onClick={() => action.mutate({ id: workflow.id, action: active ? 'pause' : 'enable' })}
+            loading={status.isPending}
+            disabled={duplicate.isPending}
+            onClick={() => {
+              duplicate.reset();
+              status.mutate({ id: workflow.id, action: active ? 'pause' : 'enable' });
+            }}
           >
             {active ? 'Disable' : 'Enable'}
           </Button>
@@ -86,60 +94,55 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
 
         <WorkflowMenu
           workflow={workflow}
-          action={action}
+          disabled={status.isPending || duplicate.isPending}
+          onDuplicate={() => {
+            status.reset();
+            duplicate.mutate(workflow);
+          }}
           onDelete={() => {
-            action.reset();
+            status.reset();
+            duplicate.reset();
             setConfirm(true);
           }}
         />
       </div>
-      {action.isError && !confirm && (
+      {error && (
         <p role="alert" className="text-danger">
-          {action.error.message}
+          {error.message}
         </p>
       )}
-      <DeleteWorkflow
-        workflow={workflow}
-        action={action}
-        open={confirm}
-        onClose={() => setConfirm(false)}
-      />
+      {confirm && <DeleteWorkflow workflow={workflow} onClose={() => setConfirm(false)} />}
     </div>
   );
 }
 
 function WorkflowMenu({
   workflow,
-  action,
+  disabled,
+  onDuplicate,
   onDelete,
 }: {
   workflow: AutomationListItem;
-  action: ReturnType<typeof useAutomationAction>;
+  disabled: boolean;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={action.isPending}>
+      <DropdownMenuTrigger asChild disabled={disabled}>
         <Button
           variant="secondary"
           aria-label={`Actions for ${workflow.name}`}
           className="border-transparent px-2"
         >
-          <Ellipsis size={16} aria-hidden="true" />
+          <EllipsisVertical size={16} aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem
-          disabled={action.isPending}
-          onSelect={() =>
-            action.mutate({
-              draft: { name: `${workflow.name.slice(0, 75)} copy`, graph: workflow.graph },
-            })
-          }
-        >
+        <DropdownMenuItem disabled={disabled} onSelect={onDuplicate}>
           Duplicate
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={action.isPending} onSelect={onDelete}>
+        <DropdownMenuItem disabled={disabled} onSelect={onDelete}>
           Delete
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -149,34 +152,31 @@ function WorkflowMenu({
 
 function DeleteWorkflow({
   workflow,
-  action,
-  open,
   onClose,
 }: {
   workflow: AutomationListItem;
-  action: ReturnType<typeof useAutomationAction>;
-  open: boolean;
   onClose: () => void;
 }) {
+  const archive = useChangeAutomationStatus();
   return (
     <Dialog
-      open={open}
-      onClose={() => onClose()}
-      closeDisabled={action.isPending}
+      open
+      onClose={onClose}
+      closeDisabled={archive.isPending}
       title={`Delete ${workflow.name}?`}
     >
       <Button
         variant="danger"
-        loading={action.isPending}
+        loading={archive.isPending}
         onClick={() =>
-          action.mutate({ id: workflow.id, action: 'archive' }, { onSuccess: () => onClose() })
+          archive.mutate({ id: workflow.id, action: 'archive' }, { onSuccess: () => onClose() })
         }
       >
         Delete workflow
       </Button>
-      {action.isError && (
+      {archive.isError && (
         <p role="alert" className="mt-3 text-danger">
-          {action.error.message}
+          {archive.error.message}
         </p>
       )}
     </Dialog>

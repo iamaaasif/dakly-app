@@ -29,8 +29,9 @@ export type AutomationExitReason = (typeof automationExitReasons)[number];
 export type AutomationStepKind = (typeof automationStepKinds)[number];
 
 export const MAX_AUTOMATIONS_PER_STORE = 100;
+export const AUTOMATION_NAME_MAX = 80;
 
-const automationNameSchema = z.string().trim().min(1).max(80);
+const automationNameSchema = z.string().trim().min(1).max(AUTOMATION_NAME_MAX);
 
 export const createAutomationSchema = z.strictObject({
   name: automationNameSchema,
