@@ -58,16 +58,17 @@ function filteredTemplates(selected: Selected, except?: Facet) {
   );
 }
 
+function selectedFacet(value: string | null, facet: Facet) {
+  const group = groups.find(({ key }) => key === facet);
+  return value && group?.options.some((option) => option.value === value) ? value : 'all';
+}
+
 export function WorkflowLibrary() {
   const router = useRouter();
   const search = useSearchParams();
   const action = useAutomationAction();
   const workflows = useAutomations();
-  const selected: Selected = (facet) => {
-    const value = search.get(facet);
-    const group = groups.find(({ key }) => key === facet);
-    return value && group?.options.some((option) => option.value === value) ? value : 'all';
-  };
+  const selected: Selected = (facet) => selectedFacet(search.get(facet), facet);
   const activeTemplates = new Set(
     workflows.data?.items
       .filter(({ status }) => status === 'active')
