@@ -123,6 +123,56 @@ it('stores a duplicate only once and makes one contact and conversation for conc
   ]);
 });
 
+it('queues an outbound reply once per store and operation key with Chats off', async () => {
+  const storeId = await store();
+  const account = await connection(storeId);
+  const messaging = app.get(MessagingService);
+  await messaging.receiveInboundMessage(storeId, inbound(account, 'before-reply'));
+  const {
+    rows: [identity],
+  } = await admin.pool.query<{ id: string; contact_id: string }>(
+    'select id, contact_id from contact_identities where store_id = $1',
+    [storeId],
+  );
+  const aiRunId = randomUUID();
+  const input = {
+    channel: 'messenger',
+    contactId: identity!.contact_id,
+    connectionId: account,
+    identityId: identity!.id,
+    category: 'staff_reply',
+    content: 'জি, পণ্যটি আছে।',
+    operationKey: 'reply-to-first-message',
+    actor: { kind: 'ai', aiRunId },
+  } as const;
+  const results = await Promise.all([
+    messaging.queueChannelMessage(storeId, input),
+    messaging.queueChannelMessage(storeId, input),
+  ]);
+  const { rows } = await admin.pool.query(
+    "select id, body, status, ai_run_id from messages where store_id = $1 and direction = 'out'",
+    [storeId],
+  );
+  expect(rows).toEqual([
+    { id: expect.any(String), body: input.content, status: 'queued', ai_run_id: aiRunId },
+  ]);
+  expect(results).toEqual([{ messageId: rows[0]?.id }, { messageId: rows[0]?.id }]);
+  const events = await admin.pool.query(
+    "select payload from outbox_events where store_id = $1 and type = 'message.send_requested'",
+    [storeId],
+  );
+  expect(events.rows).toEqual([{ payload: { messageId: rows[0]?.id } }]);
+  await expect(
+    messaging.queueChannelMessage(storeId, { ...input, content: 'A different reply' }),
+  ).rejects.toMatchObject({ code: 'MESSAGE_OPERATION_CONFLICT' });
+  await expect(
+    messaging.queueChannelMessage(storeId, {
+      ...input,
+      actor: { kind: 'ai', aiRunId: randomUUID() },
+    }),
+  ).rejects.toMatchObject({ code: 'MESSAGE_OPERATION_CONFLICT' });
+});
+
 it.each(['done', 'later'])('reopens a %s conversation only for a new message', async (status) => {
   const storeId = await store();
   const connectionId = await connection(storeId);

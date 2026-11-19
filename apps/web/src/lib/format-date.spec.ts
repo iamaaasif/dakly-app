@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDate, formatDateTime, formatRelativeTime, formatTime } from './format-date';
+import {
+  formatCalendarDate,
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+  formatTime,
+  localHour,
+} from './format-date';
 
 describe('formatDate', () => {
   it.each([
@@ -45,6 +52,13 @@ describe('formatDateTime', () => {
   it('retains the exact deadline year and time across the Dhaka year boundary', () => {
     expect(formatDateTime('2026-12-31T18:03:00Z')).toBe('1 Jan 2027, 00:03 (Asia/Dhaka)');
   });
+});
+
+it('formats the full store-local date and the midnight hour', () => {
+  const value = '2026-11-13T18:03:00Z';
+  expect(formatCalendarDate(value, 'Asia/Dhaka')).toBe('Saturday, 14 November 2026');
+  expect(localHour(value, 'Asia/Dhaka')).toBe(0);
+  expect(localHour(value, 'UTC')).toBe(18);
 });
 
 describe('formatTime', () => {

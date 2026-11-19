@@ -310,7 +310,11 @@ No database transaction or row lock is held during a model call (pending review 
 
 Agent tools take no store id, contact id or price; those come from the job. Tools: `search_products`, `get_product`, `get_delivery_charge`, `search_knowledge`, `get_my_orders`, `get_order_status`, `draft_order`, `confirm_order`, `create_payment_link`, `send_product_card`, `add_to_restock_list`, `hand_over`.
 
-Outbound: every message (AI or staff) is saved as `queued` with an idempotency key; a `send-message` job calls the driver and moves it to `sent` or `failed`. Receipts move it to `delivered` and `read`.
+`MessagingService.queueChannelMessage` queues Messenger and Instagram replies and transactional messages. One operation key in a store creates one message and one `message.send_requested` event in the same transaction. The outbox relay queues `SendMessageJob`. The worker checks the selected identity and rereads the deadline after taking the contact lock. Inbox replies require the Chats extension. Only a reply written by a person can use the Human Agent tag in the seven-day window. Marketing sends need the campaign sender's scheduling and frequency accounting.
+
+The worker saves a pending attempt before calling Meta outside the transaction. Acceptance records the provider ID and emits `message.sent`. A known rejection records a failure and emits `message.failed`. An uncertain attempt stays queued with `send_unconfirmed` for reconciliation. A signed Messenger echo from the configured Meta app can confirm an attempt when it matches the stored message ID and recipient. The worker never resends an unconfirmed attempt.
+
+Signed Messenger delivery and read receipts and Instagram seen receipts apply to the matching recipient in the connected shop. A late delivery records its first delivery timestamp and leaves a read message in the read state. If a receipt reaches an attempt before the send result is saved, the webhook job retries within its existing attempt limit. A receipt with a Meta message ID matches the exact send. A Messenger watermark applies through the confirmed send time, using the signed echo timestamp when the echo confirmed the send.
 
 The outbound message schema keeps the chosen recipient identity and the category used by the send gate. The identity belongs to the same store as the message. The Meta transport uses the selected connection's encrypted credentials and checks that the credential is still current before marking a rejected connection for reconnection.
 

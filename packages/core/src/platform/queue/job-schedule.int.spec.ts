@@ -15,6 +15,7 @@ import {
   BulkJobDispatcher,
   CampaignJobDispatcher,
   InboundJobDispatcher,
+  OutboundJobDispatcher,
   SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
@@ -37,6 +38,8 @@ class TransactionalScheduledHandler implements JobHandler {
 
 class InboundScheduledHandler extends TransactionalScheduledHandler {}
 
+class OutboundScheduledHandler extends TransactionalScheduledHandler {}
+
 class SyncScheduledHandler extends TransactionalScheduledHandler {}
 
 class BulkScheduledHandler extends TransactionalScheduledHandler {}
@@ -46,6 +49,7 @@ class CampaignScheduledHandler extends TransactionalScheduledHandler {}
 class WorkflowScheduledHandler extends TransactionalScheduledHandler {}
 
 HandlesJob({ queue: QUEUES.inbound, name: SCHEDULED })(InboundScheduledHandler);
+HandlesJob({ queue: QUEUES.outbound, name: SCHEDULED })(OutboundScheduledHandler);
 HandlesJob({ queue: QUEUES.sync, name: SCHEDULED })(SyncScheduledHandler);
 HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalScheduledHandler);
 HandlesJob({ queue: QUEUES.bulk, name: SCHEDULED })(BulkScheduledHandler);
@@ -54,6 +58,7 @@ HandlesJob({ queue: QUEUES.workflow, name: SCHEDULED })(WorkflowScheduledHandler
 
 const setups = {
   inbound: [InboundScheduledHandler, InboundJobDispatcher],
+  outbound: [OutboundScheduledHandler, OutboundJobDispatcher],
   sync: [SyncScheduledHandler, SyncJobDispatcher],
   transactional: [TransactionalScheduledHandler, TransactionalJobDispatcher],
   bulk: [BulkScheduledHandler, BulkJobDispatcher],

@@ -26,6 +26,8 @@ import { onboardingExtensions, recommendedPlans } from './onboarding';
 import { storeError } from './stores.errors';
 import { type StoreSettingsRow, StoresRepository } from './stores.repository';
 
+export type StoreSendingSettings = SendingSettings & { timeZone: string };
+
 @Injectable()
 export class StoresService {
   constructor(
@@ -72,8 +74,8 @@ export class StoresService {
     return timeZone;
   }
 
-  async sendingSettings(storeId: string): Promise<SendingSettings & { timeZone: string }> {
-    const store = await this.repository.sendingSettings(storeId);
+  async sendingSettings(storeId: string, lock?: 'share'): Promise<StoreSendingSettings> {
+    const store = await this.repository.sendingSettings(storeId, lock);
     if (!store) throw storeError('STORE_NOT_FOUND');
     return { ...parseSending(store.sending), timeZone: store.timeZone };
   }

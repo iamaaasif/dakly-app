@@ -31,6 +31,8 @@ import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
+import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
+import { MessagingModule } from '@dakly/core/messaging/messaging.module';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -45,6 +47,7 @@ import {
   BulkJobDispatcher,
   CampaignJobDispatcher,
   InboundJobDispatcher,
+  OutboundJobDispatcher,
   SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
@@ -59,6 +62,7 @@ import { JobSchedulers } from './job-schedulers';
     BulkJobDispatcher,
     CampaignJobDispatcher,
     InboundJobDispatcher,
+    OutboundJobDispatcher,
     SyncJobDispatcher,
     TransactionalJobDispatcher,
     WorkflowJobDispatcher,
@@ -69,6 +73,7 @@ import { JobSchedulers } from './job-schedulers';
     SendDueSecurityNoticesJob,
     SendSecurityNoticeJob,
     RelayOutboxJob,
+    SendMessageJob,
     FailStuckImportsJob,
     RunContactImport,
     UndoContactImport,
@@ -91,6 +96,7 @@ import { JobSchedulers } from './job-schedulers';
     StaffHistoryModule,
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.inbound }),
+    BullModule.registerQueue({ name: QUEUES.outbound }),
     BullModule.registerQueue({ name: QUEUES.sync }),
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
@@ -101,6 +107,7 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    MessagingModule,
     ChannelTokenHealthModule,
     ConversationReturnsModule,
     AutomationRunsModule,

@@ -78,7 +78,8 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await expect(stage).toHaveText('To confirm');
     await capture(page, 'detail');
 
-    await detail.getByRole('button', { name: 'Put on hold' }).click();
+    await detail.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Put on hold' }).click();
     const hold = page.getByRole('dialog', { name: 'Put on hold' });
     await expect(page.locator('[role="dialog"]').filter({ hasText: 'Order #1050' })).toHaveCount(1);
     await hold.getByRole('button', { name: 'Put on hold' }).click();
@@ -92,7 +93,8 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await expect(detail.getByText('Pre-order')).toBeVisible();
     await expect(stage).toBeFocused();
     await page.unroute(detailApi);
-    await detail.getByRole('button', { name: 'Back to confirmation' }).click();
+    await detail.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitem', { name: 'Back to confirmation' }).click();
     await expect(detail.getByText('On hold → To confirm')).toBeVisible();
 
     const cancelButton = detail.getByRole('button', { name: 'Cancel order' });
@@ -101,7 +103,7 @@ test('holds an order, returns it to confirmation and cancels from the drawer', a
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });
     await capture(page, 'cancel');
     await cancel.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(cancelButton).toBeFocused();
+    await expect(stage).toBeFocused();
     await cancelButton.click();
     await expect(cancel.getByLabel('Reason')).toHaveValue('');
     await cancel.getByLabel('Reason').selectOption({ label: 'Customer cancelled' });

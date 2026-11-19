@@ -76,28 +76,62 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
                 : create.error.message}
             </p>
           )}
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={busy}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={create.isPending}>
-              {create.mustRetry ? 'Retry save' : 'Save order'}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={form.handleSubmit((input) => save({ ...input, confirm: true }))}
-            >
-              Save as confirmed
-            </Button>
-          </div>
+          <NewOrderActions
+            busy={busy}
+            isPending={create.isPending}
+            mustRetry={create.mustRetry}
+            onClose={onClose}
+            onSaveConfirmed={form.handleSubmit((input) => save({ ...input, confirm: true }))}
+          />
         </form>
       </FormProvider>
     </SessionDialog>
   );
 }
 
-export function OrderEditorFields({ order }: { order?: OrderDetail }) {
+type NewOrderActionsProps = {
+  busy: boolean;
+  isPending: boolean;
+  mustRetry: boolean;
+  onClose: () => void;
+  onSaveConfirmed: () => void;
+};
+
+function NewOrderActions({
+  busy,
+  isPending,
+  mustRetry,
+  onClose,
+  onSaveConfirmed,
+}: NewOrderActionsProps) {
+  return (
+    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+      <Button
+        variant="secondary"
+        onClick={onClose}
+        disabled={busy}
+        className="min-h-11 sm:min-h-10"
+      >
+        Cancel
+      </Button>
+      <Button type="submit" loading={isPending} className="min-h-11 sm:min-h-10">
+        {mustRetry ? 'Retry save' : 'Save order'}
+      </Button>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        className="min-h-11 sm:min-h-10"
+        onClick={onSaveConfirmed}
+      >
+        Save as confirmed
+      </Button>
+    </div>
+  );
+}
+
+export type OrderEditorFieldsProps = { order?: OrderDetail };
+
+export function OrderEditorFields({ order }: OrderEditorFieldsProps) {
   return (
     <>
       <OrderRecipientFields order={order} />
@@ -106,7 +140,9 @@ export function OrderEditorFields({ order }: { order?: OrderDetail }) {
   );
 }
 
-function ItemsAndAmounts({ order }: { order?: OrderDetail }) {
+type ItemsAndAmountsProps = { order?: OrderDetail };
+
+function ItemsAndAmounts({ order }: ItemsAndAmountsProps) {
   const productIds = useRef<Record<string, string>>({});
   const { control, register, setValue, formState } = useFormContext<OrderEditorValues>();
   const { fields, append, remove } = useFieldArray({ name: 'items', control });
@@ -176,7 +212,9 @@ function draftVariantChoices(
   return variants;
 }
 
-function OrderAmountFields({ hasAdvance }: { hasAdvance: boolean }) {
+type OrderAmountFieldsProps = { hasAdvance: boolean };
+
+function OrderAmountFields({ hasAdvance }: OrderAmountFieldsProps) {
   const { register } = useFormContext<OrderEditorValues>();
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -201,13 +239,12 @@ function OrderAmountFields({ hasAdvance }: { hasAdvance: boolean }) {
   );
 }
 
-function OrderPreview({
-  variants,
-  order,
-}: {
+type OrderPreviewProps = {
   variants: Record<string, VariantChoice>;
   order?: OrderDetail;
-}) {
+};
+
+function OrderPreview({ variants, order }: OrderPreviewProps) {
   const [areaId, items, override, discount, advance] = useWatch<
     OrderEditorValues,
     [
@@ -243,12 +280,15 @@ function OrderPreview({
   const total = subtotal - orderDiscount + charge;
   if (!Number.isSafeInteger(total)) return null;
   return (
-    <p className="flex flex-wrap gap-x-4 rounded-md bg-surface-muted p-3">
+    <p className="flex flex-wrap items-center justify-between rounded-lg bg-surface-muted p-3 text-sm tabular-nums">
       <span>
-        Total <strong>{formatMoney(total)}</strong>
+        Total <strong className="font-semibold text-text">{formatMoney(total)}</strong>
       </span>
       <span>
-        Cash on delivery <strong>{formatMoney(Math.max(0, total - paid))}</strong>
+        Cash on delivery{' '}
+        <strong className="font-semibold text-text">
+          {formatMoney(Math.max(0, total - paid))}
+        </strong>
       </span>
     </p>
   );
