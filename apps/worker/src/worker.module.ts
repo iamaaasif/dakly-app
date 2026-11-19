@@ -17,6 +17,7 @@ import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
+import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
 import { ContactStatsModule } from '@dakly/core/contacts/contact-stats.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
@@ -37,6 +38,7 @@ import {
   BulkJobDispatcher,
   CampaignJobDispatcher,
   InboundJobDispatcher,
+  SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
 } from '@dakly/core/platform/queue/job-dispatcher';
@@ -50,6 +52,7 @@ import { JobSchedulers } from './job-schedulers';
     BulkJobDispatcher,
     CampaignJobDispatcher,
     InboundJobDispatcher,
+    SyncJobDispatcher,
     TransactionalJobDispatcher,
     WorkflowJobDispatcher,
     StaffAuditExportJob,
@@ -76,6 +79,7 @@ import { JobSchedulers } from './job-schedulers';
     StaffHistoryModule,
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.inbound }),
+    BullModule.registerQueue({ name: QUEUES.sync }),
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
     BullModule.registerQueue({ name: QUEUES.workflow }),
@@ -85,6 +89,7 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    ChannelTokenHealthModule,
     AutomationRunsModule,
     CampaignsModule,
     ClockModule,

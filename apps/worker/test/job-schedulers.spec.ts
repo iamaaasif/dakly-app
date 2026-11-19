@@ -33,8 +33,14 @@ describe('Worker job schedulers', () => {
   it('registers each scheduled job on its queue at its interval under a fixed id', async () => {
     const transactional = recordingQueue();
     const bulk = recordingQueue();
+    const sync = recordingQueue();
     const workflow = recordingQueue();
-    const schedulers = new JobSchedulers(transactional.queue, bulk.queue, workflow.queue);
+    const schedulers = new JobSchedulers(
+      transactional.queue,
+      bulk.queue,
+      sync.queue,
+      workflow.queue,
+    );
     await schedulers.onApplicationBootstrap();
     await schedulers.onApplicationBootstrap();
     const sweeps = [
@@ -50,6 +56,10 @@ describe('Worker job schedulers', () => {
       scheduler('sweep-contact-stats', 86400000),
     ];
     expect(bulk.schedulers).toEqual([...bulkSweeps, ...bulkSweeps]);
+    expect(sync.schedulers).toEqual([
+      scheduler('queue-channel-token-checks', 86400000),
+      scheduler('queue-channel-token-checks', 86400000),
+    ]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),
       scheduler('wake-due-runs', 60000),
