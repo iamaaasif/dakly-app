@@ -20,6 +20,7 @@ import type {
 import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
+import type { CampaignCountsService } from './campaign-counts.service';
 import type {
   Campaign,
   CampaignApproval,
@@ -39,8 +40,7 @@ const now = new Date('2026-11-16T05:00:00Z');
 class FakeCampaignsRepository {
   readonly rows = new Map<
     string,
-    Campaign &
-      Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'> & { approvedAt?: Date | null }
+    Campaign & Pick<CampaignStatusChange, 'pauseReason'> & { approvedAt?: Date | null }
   >();
 
   add(
@@ -48,7 +48,7 @@ class FakeCampaignsRepository {
     id = randomUUID(),
     pauseReason?: CampaignStatusChange['pauseReason'],
   ): Campaign {
-    const row = {
+    const row: Campaign & Pick<CampaignStatusChange, 'pauseReason'> = {
       id,
       name: 'ঈদের অফার',
       goal: 'seasonal',
@@ -58,6 +58,16 @@ class FakeCampaignsRepository {
       excludeSegmentIds: [],
       scheduledFor: null,
       status,
+      startedAt: null,
+      finishedAt: null,
+      recipientsCount: 0,
+      skippedCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      readCount: 0,
+      tappedCount: 0,
+      failedCount: 0,
+      countsAt: null,
       createdAt: now,
       updatedAt: now,
       pauseReason,
@@ -262,6 +272,7 @@ describe('CampaignsService', () => {
         sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000',
       } as LinksService,
       { now: () => clockNow } as Clock,
+      { refresh: async () => undefined } as unknown as CampaignCountsService,
     );
   });
 

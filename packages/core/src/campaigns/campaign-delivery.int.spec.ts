@@ -14,6 +14,7 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { type SmsMessage, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
+import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -26,6 +27,7 @@ import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
+import { RecordCampaignTapJob } from './jobs/record-campaign-tap.job';
 import { ResumeCampaignsOnWalletCredited } from './jobs/resume-campaigns-on-wallet-credited.job';
 import { SEND_CAMPAIGN_BATCH, SendCampaignBatchJob } from './jobs/send-campaign-batch.job';
 import { StartDueCampaignsJob } from './jobs/start-due-campaigns.job';
@@ -41,7 +43,12 @@ Module({
       prefix: `campaign-delivery-${randomUUID()}`,
     }),
   ],
-  providers: [ResumeCampaignsOnWalletCredited, SendCampaignBatchJob, StartDueCampaignsJob],
+  providers: [
+    RecordCampaignTapJob,
+    ResumeCampaignsOnWalletCredited,
+    SendCampaignBatchJob,
+    StartDueCampaignsJob,
+  ],
 })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -379,6 +386,20 @@ describe('Campaign sender (Postgres)', () => {
       ['sent', 1],
     ]);
     expect(await campaignRow(id)).toMatchObject({ status: 'sent', finished_at: noon });
+    expect(await campaigns.get(storeId, id)).toMatchObject({
+      startedAt: noon.toISOString(),
+      finishedAt: noon.toISOString(),
+      counts: {
+        recipients: 3,
+        skipped: 0,
+        sent: 3,
+        delivered: 0,
+        read: 0,
+        tapped: 0,
+        failed: 0,
+        countedAt: expect.any(String),
+      },
+    });
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 3 },
       { kind: 'charge', quantity_delta: -3 },
@@ -389,6 +410,56 @@ describe('Campaign sender (Postgres)', () => {
       [storeId, id],
     );
     expect(events).toHaveLength(1);
+  });
+
+  it('counts a real redirect callback once per campaign recipient', async () => {
+    const { id } = await sendingCampaign(1);
+    await sender.sendBatch(storeId, id);
+    const [recipient] = (
+      await admin.pool.query('select contact_id from campaign_recipients where campaign_id=$1', [
+        id,
+      ])
+    ).rows;
+    const links = app.get(LinksService);
+    const url = 'https://shop.example.test/offer';
+    const [link] = await links.create(
+      storeId,
+      [
+        {
+          kind: 'redirect',
+          sourceType: 'campaign',
+          sourceId: id,
+          contactId: recipient.contact_id,
+          targetUrl: url,
+        },
+      ],
+      actor,
+    );
+    expect(
+      await links.redirect(link!.code, { ip: '203.0.113.19', userAgent: 'campaign result' }),
+    ).toBe(url);
+    const { rows } = await admin.pool.query(
+      "select id,payload,occurred_at from outbox_events where store_id=$1 and type='message.tapped' and payload->>'trackedLinkId'=$2",
+      [storeId, link!.id],
+    );
+    expect(rows).toHaveLength(1);
+    const [tap] = rows;
+    const event = {
+      id: tap.id,
+      type: 'message.tapped',
+      storeId,
+      occurredAt: tap.occurred_at.toISOString(),
+      payload: tap.payload,
+    };
+    const callback = app.get(RecordCampaignTapJob);
+    await callback.handle({ ...event, storeId: randomUUID() });
+    expect((await campaigns.get(storeId, id)).counts.tapped).toBe(0);
+
+    await callback.handle(event);
+    const recorded = (await campaigns.get(storeId, id)).counts;
+    expect(recorded).toMatchObject({ tapped: 1, sent: 1 });
+    await callback.handle(event);
+    expect((await campaigns.get(storeId, id)).counts).toEqual(recorded);
   });
 
   it('keeps the approved opt-out base and one-part charge when the worker URL changes', async () => {
@@ -535,6 +606,28 @@ describe('Campaign sender (Postgres)', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('counts an in-flight send when a manual pause wins before the batch yields', async () => {
+    const { id } = await sendingCampaign(2);
+    const elapsed = vi.spyOn(performance, 'now').mockReturnValue(0);
+    vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+      calls.push({ ...message });
+      await campaigns.pause(storeId, id, actor);
+      elapsed.mockReturnValue(16 * 1000);
+      return driver.send(message);
+    });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toEqual(noon);
+      expect(calls).toHaveLength(1);
+      expect(await campaigns.get(storeId, id)).toMatchObject({
+        status: 'paused',
+        counts: { recipients: 2, sent: 1, failed: 0 },
+      });
+      expect(await settlementRows(id)).toEqual([]);
+    } finally {
+      elapsed.mockRestore();
+    }
+  });
+
   it('records the provider answer of a worker whose claim was taken meanwhile', async () => {
     const { id, phones } = await sendingCampaign(1);
     vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation(async (message) => {
@@ -571,12 +664,14 @@ describe('Campaign sender (Postgres)', () => {
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await app.get(SendCampaignBatchJob).handle({ storeId, campaignId: id });
       expect((await recipients(id)).map((row) => row.status)).toEqual(['failed']);
+      expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 0, failed: 1 });
 
       reply.resolve(receipt);
       await batch;
 
       expect(calls.map((message) => message.to)).toEqual(phones);
       expect((await recipients(id)).map((row) => row.status)).toEqual(['sent']);
+      expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 1, failed: 0 });
       expect(await campaignRow(id)).toMatchObject({ status: 'cancelled' });
       expect(await settlementRows(id)).toEqual([
         { kind: 'release', quantity_delta: 1 },

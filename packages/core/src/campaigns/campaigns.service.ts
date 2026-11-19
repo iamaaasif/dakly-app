@@ -26,6 +26,8 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { CampaignCountsService } from './campaign-counts.service';
+import { toCampaignResponse } from './campaign-response';
 import { approvalKey, marketingSmsText, replacementKey } from './campaign-sms';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
@@ -71,6 +73,7 @@ export class CampaignsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
   ) {}
 
   async list(storeId: string, query: CampaignListQuery): Promise<CampaignListResponse> {
@@ -230,12 +233,17 @@ export class CampaignsService {
           { id: campaignId, approvedAt: campaign.approvedAt, cancelledAt: now },
           actor,
         );
-      return toCampaignResponse(cancelled);
+      await this.counts.refresh(storeId, campaignId, 'force');
+      return this.get(storeId, campaignId);
     });
   }
 
   async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
-    return this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
+    return this.transaction.run(storeId, async () => {
+      await this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
+      await this.counts.refresh(storeId, campaignId, 'force');
+      return this.get(storeId, campaignId);
+    });
   }
 
   async resume(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
@@ -409,13 +417,4 @@ function toFrozenRecipient({ contactId, phone, decision }: AudienceDecision): Fr
   return decision.action === 'skip'
     ? { contactId, destinationAddress: phone, status: 'skipped', skipReason: decision.reason }
     : { contactId, destinationAddress: phone, status: 'queued', skipReason: null };
-}
-
-function toCampaignResponse(campaign: Campaign): CampaignResponse {
-  return {
-    ...campaign,
-    scheduledFor: campaign.scheduledFor?.toISOString() ?? null,
-    createdAt: campaign.createdAt.toISOString(),
-    updatedAt: campaign.updatedAt.toISOString(),
-  };
 }

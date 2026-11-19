@@ -15,6 +15,7 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
+import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
 import { marketingSmsText } from './campaign-sms';
@@ -63,6 +64,7 @@ export class CampaignSenderService {
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(CampaignsService) private readonly service: CampaignsService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
+    @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
@@ -104,17 +106,23 @@ export class CampaignSenderService {
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
     if (!(await this.funding.prepare(storeId, campaignId))) return null;
     const deadline = performance.now() + MINUTE_MS / 4;
+    let processed = false;
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId);
       if (claim.kind === 'stop') {
-        await this.finish(storeId, campaignId);
+        await this.finish(storeId, campaignId, processed);
         return null;
       }
-      if (claim.kind === 'defer') return claim.until;
+      if (claim.kind === 'defer') {
+        await this.counts.refresh(storeId, campaignId, 'force');
+        return claim.until;
+      }
       if (claim.kind === 'send') await this.deliver(storeId, claim);
       if (claim.kind === 'receipt') await this.reconcileReceipt(storeId, claim);
+      processed = true;
       if (performance.now() >= deadline) break;
     }
+    await this.counts.refresh(storeId, campaignId, 'batch');
     return this.clock.now();
   }
 
@@ -123,7 +131,7 @@ export class CampaignSenderService {
   private claimNext(storeId: string, campaignId: string): Promise<Claim> {
     return this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'share');
-      if (!campaign?.shortLinkBase || !canProcess(campaign)) return { kind: 'stop' };
+      if (!campaign || !canProcess(campaign)) return { kind: 'stop' };
       const now = this.clock.now();
       const recipient = await this.repository.lockNextRecipient(
         storeId,
@@ -367,27 +375,33 @@ export class CampaignSenderService {
     });
   }
 
-  private async finish(storeId: string, id: string) {
+  private async finish(storeId: string, id: string, processed: boolean) {
     await this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
       if (!campaign?.approvedAt) return;
       const now = this.clock.now();
-      const active = campaign.status === 'sending' && campaign.shortLinkBase;
-      const cancelledAt =
-        campaign.status === 'cancelled' && campaign.settlementPendingAt ? now : undefined;
-      if (!active && !cancelledAt) return;
+      if (!canProcess(campaign)) {
+        if (processed && ['cancelled', 'paused'].includes(campaign.status))
+          await this.counts.refresh(storeId, id, 'force');
+        return;
+      }
+      const cancelledAt = campaign.status === 'cancelled' ? now : undefined;
       const settled = await this.service.settleReservation(
         storeId,
         { id, approvedAt: campaign.approvedAt, cancelledAt },
         ACTOR,
       );
-      if (!settled || cancelledAt) return;
+      if (!settled || cancelledAt) {
+        await this.counts.refresh(storeId, id, cancelledAt ? 'force' : 'batch');
+        return;
+      }
       await this.campaigns.changeStatus(
         storeId,
         id,
         { status: 'sending' },
         { status: 'sent', finishedAt: now, updatedAt: now },
       );
+      await this.counts.refresh(storeId, id, 'force');
       await this.outbox.publish({
         type: 'campaign.sent',
         storeId,
@@ -400,7 +414,7 @@ export class CampaignSenderService {
 
 function canProcess(campaign: LockedCampaign): boolean {
   return (
-    campaign.status === 'sending' ||
+    (campaign.status === 'sending' && campaign.shortLinkBase !== null) ||
     (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null)
   );
 }
