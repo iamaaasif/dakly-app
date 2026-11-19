@@ -1,23 +1,41 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { Queue } from 'bullmq';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
+import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { StoreTransaction } from '../platform/database/store-transaction';
+import { QUEUES } from '../platform/queue/queues';
+import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SegmentsService } from '../segments/segments.service';
 import { WalletService } from '../wallets/wallet.service';
-import { CampaignsModule } from './campaigns.module';
+import { CampaignCancellationWorkerModule } from './campaign-cancellation-worker.module';
 import { CampaignsService } from './campaigns.service';
+import { SettleCancelledCampaignJob } from './jobs/settle-cancelled-campaign.job';
+import { SweepCampaignCancellationsJob } from './jobs/sweep-campaign-cancellations.job';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, CampaignsModule] })(TestModule);
+Module({
+  imports: [
+    DatabaseModule,
+    CampaignCancellationWorkerModule,
+    BullModule.forRoot({
+      connection: toRedisConnection(loadEnv().REDIS_URL),
+      prefix: `campaign-cancellation-${randomUUID()}`,
+    }),
+  ],
+})(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
@@ -41,6 +59,7 @@ const sendAt = new Date(
 );
 let app: INestApplicationContext;
 let service: CampaignsService;
+let queue: Queue;
 let wallets: WalletService;
 let segmentId: string;
 let clockNow: Date;
@@ -76,6 +95,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(CampaignsService);
+    queue = app.get(getQueueToken(QUEUES.campaign));
     wallets = app.get(WalletService);
     vi.spyOn(app.get(Clock), 'now').mockImplementation(() => clockNow);
 
@@ -107,6 +127,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
 
   afterAll(async () => {
     try {
+      await queue?.obliterate({ force: true });
       await app?.close();
       for (const table of ['campaigns', 'segments', 'wallet_ledger', 'outbox_events', 'contacts'])
         await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
@@ -279,8 +300,8 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     const balance = await wallets.balance(storeId, 'sms_credits');
     const [recipient] = await recipientRows(id);
     await admin.pool.query(
-      "update campaign_recipients set status='sending' where campaign_id=$1 and contact_id=$2",
-      [id, recipient.contact_id],
+      "update campaign_recipients set status='sending', claimed_at=$3 where campaign_id=$1 and contact_id=$2",
+      [id, recipient.contact_id, clockNow],
     );
 
     expect((await service.cancel(storeId, id, actor)).status).toBe('cancelled');
@@ -296,7 +317,73 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
       [id],
     );
     expect(rows).toEqual([{ settled_at: null, settlement_pending_at: clockNow }]);
+
+    const sweep = app.get(SweepCampaignCancellationsJob);
+    const settle = app.get(SettleCancelledCampaignJob);
+    await sweep.handle({});
+    await sweep.handle({});
+    const jobs = (await queue.getJobs(['waiting'])).filter((job) => job.data.storeId === storeId);
+    expect(jobs.map((job) => job.data)).toEqual([{ storeId, campaignId: id }]);
+    const [job] = jobs;
+    await settle.handle(job!.data);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(balance);
+    expect((await recipientRows(id))[0].status).toBe('sending');
+
+    clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
+    await settle.handle(job!.data);
+    await settle.handle(job!.data);
+
+    expect((await recipientRows(id))[0].status).toBe('failed');
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(balance + 2);
+    const finished = await admin.pool.query(
+      'select settled_at, settlement_pending_at from campaigns where id=$1',
+      [id],
+    );
+    expect(finished.rows).toEqual([{ settled_at: clockNow, settlement_pending_at: null }]);
+    await job!.remove();
   });
+
+  it.each(['sent', 'not_sent', 'unknown'] as const)(
+    'settles a known cancelled receipt with outcome %s',
+    async (outcome) => {
+      const before = await wallets.balance(storeId, 'sms_credits');
+      const id = await approvedCampaign(null);
+      const [recipient] = await recipientRows(id);
+      const {
+        rows: [{ id: recipientId }],
+      } = await admin.pool.query(
+        "update campaign_recipients set status='sending', provider_message_id='campaign-capture', claimed_at=$3 where campaign_id=$1 and contact_id=$2 returning id",
+        [id, recipient.contact_id, clockNow],
+      );
+      await service.cancel(storeId, id, actor);
+      clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
+      let transactionOpen: boolean | undefined;
+      const lookup = vi
+        .spyOn(MailpitSmsDriver.prototype, 'receiptStatus')
+        .mockImplementationOnce(async () => {
+          transactionOpen = app.get(StoreTransaction).isOpen();
+          return outcome;
+        });
+      const send = vi.spyOn(MailpitSmsDriver.prototype, 'send');
+      try {
+        await app.get(SettleCancelledCampaignJob).handle({ storeId, campaignId: id });
+
+        expect(lookup).toHaveBeenCalledExactlyOnceWith({
+          providerMessageId: 'campaign-capture',
+          idempotencyKey: `campaign-${recipientId}`,
+        });
+        expect(transactionOpen).toBe(false);
+        expect(send).not.toHaveBeenCalled();
+        expect((await recipientRows(id))[0].status).toBe(outcome === 'sent' ? 'sent' : 'failed');
+        expect(await wallets.balance(storeId, 'sms_credits')).toBe(
+          before - (outcome === 'not_sent' ? 0 : 1),
+        );
+      } finally {
+        lookup.mockRestore();
+        send.mockRestore();
+      }
+    },
+  );
 
   it('refuses to resume by hand a campaign paused for its balance', async () => {
     const id = await approvedCampaign(null);

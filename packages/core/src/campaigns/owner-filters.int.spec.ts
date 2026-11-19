@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { CampaignCancellationsRepository } from './campaign-cancellations.repository';
 import { CampaignsRepository } from './campaigns.repository';
 
 const draft = {
@@ -19,6 +20,7 @@ const page = { limit: 100 };
 describe('campaign filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new CampaignsRepository(f.tenant);
+  const cancellations = new CampaignCancellationsRepository(f.tenant, f.connection.db);
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
@@ -204,5 +206,43 @@ describe('campaign filters without RLS assistance', () => {
       ),
     ).toBeUndefined();
     expect(await f.row('campaigns', a.id)).toEqual(before);
+  });
+
+  it('checks and reconciles only cancelled claims in the selected store', async () => {
+    const campaign = await repository.insert(f.a, { ...draft, createdByUserId: f.userA });
+    const [contact, recipient] = [randomUUID(), randomUUID()];
+    const claimedAt = new Date('2026-11-16T05:00:00Z');
+    const before = new Date('2026-11-16T05:05:00Z');
+    const now = new Date('2026-11-16T05:10:00Z');
+    await f.connection.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+      [contact, f.a],
+    );
+    await f.connection.pool.query(
+      "update campaigns set status='cancelled', settlement_pending_at=$2 where id=$1",
+      [campaign.id, now],
+    );
+    await f.connection.pool.query(
+      "insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,provider_message_id,claimed_at) values($1,$2,$3,$4,'sending','capture-one',$5)",
+      [recipient, f.a, campaign.id, contact, claimedAt],
+    );
+
+    expect(await cancellations.listStores(null, 100)).toContain(f.a);
+    expect(await cancellations.firstPending(f.a)).toBe(campaign.id);
+    expect(await cancellations.firstPending(f.b)).toBeUndefined();
+    const saved = await f.row('campaign_recipients', recipient);
+    await f.tenant.forStore(f.b, async () => {
+      expect(await cancellations.lockPending(f.b, campaign.id)).toBeUndefined();
+      expect(await cancellations.claimReceipt(f.b, campaign.id, before, now)).toBeUndefined();
+      await cancellations.expireUnknown(f.b, campaign.id, before, now, 1);
+      await cancellations.recordReceipt(
+        f.b,
+        campaign.id,
+        { id: recipient, claimedAt, providerMessageId: 'capture-one' },
+        { status: 'sent', sentAt: now, smsCredits: 1 },
+      );
+    });
+    expect(await f.row('campaign_recipients', recipient)).toEqual(saved);
+    await f.connection.pool.query('delete from contacts where id=$1', [contact]);
   });
 });

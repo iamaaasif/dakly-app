@@ -216,7 +216,8 @@ export class CampaignsService {
     });
   }
 
-  private async settleCancellation(
+  // Used by the cancellation route and sweep while they hold the campaign's store lock.
+  async settleCancellation(
     storeId: string,
     campaignId: string,
     approvedAt: Date,
@@ -381,7 +382,7 @@ function approvalKey(campaignId: string, approvedAt: Date): string {
 }
 
 // CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
-function marketingSmsText(text: string, optOutUrl: string): string {
+export function marketingSmsText(text: string, optOutUrl: string): string {
   return `${text}\n${optOutUrl}`;
 }
 

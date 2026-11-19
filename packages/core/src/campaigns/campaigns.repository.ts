@@ -321,7 +321,7 @@ function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 
-function recipientsWhere(storeId: string, campaignId: string) {
+export function recipientsWhere(storeId: string, campaignId: string) {
   return and(
     eq(campaignRecipients.storeId, storeId),
     eq(campaignRecipients.campaignId, campaignId),

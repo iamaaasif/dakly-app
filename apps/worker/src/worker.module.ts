@@ -24,6 +24,7 @@ import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-aut
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { CampaignCancellationWorkerModule } from '@dakly/core/campaigns/campaign-cancellation-worker.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
@@ -123,6 +124,7 @@ import { JobSchedulers } from './job-schedulers';
     ConversationReturnsModule,
     AutomationRunsModule,
     AutomationsModule,
+    CampaignCancellationWorkerModule,
     CampaignsModule,
     ClockModule,
     ImportsModule,
