@@ -124,21 +124,23 @@ atomically and retain business data when an extension is disabled.
 
 ## Chats and AI agent (04)
 
-| Route                                                                                                                    | Permission                                                        |
-| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `GET /conversations`, `GET /conversations/:conversationId`, `GET /conversations/:conversationId/messages`                | Chats extension, `chats.view`                                     |
-| `POST /conversations/:conversationId/messages` (idem)                                                                    | `chats`                                                           |
-| `PATCH /conversations/:conversationId` (status, assignee)                                                                | Chats extension, `chats.edit`                                     |
-| `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`                      | Chats extension, `chats.edit`                                     |
-| `POST /messages/:messageId/rating`                                                                                       | `chats`                                                           |
-| `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                         | `chats`                                                           |
-| `GET /saved-replies`, `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId` | `chats`                                                           |
-| `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live`        | `chats`                                                           |
-| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                                   | Owner or Admin                                                    |
-| `GET /knowledge-items`, `GET /knowledge-items/:knowledgeItemId`                                                          | `storeSettings`                                                   |
-| `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId`           | `storeSettings`                                                   |
-| `POST /knowledge-items/uploads` (returns a file ID and signed PUT URL for PDF or plain text)                             | `storeSettings`                                                   |
-| `GET /events/stream`                                                                                                     | any member; Server-Sent Events for new messages and notifications |
+| Route                                                                                                             | Permission                                                        |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `GET /conversations`, `GET /conversations/:conversationId`, `GET /conversations/:conversationId/messages`         | Chats extension, `chats.view`                                     |
+| `POST /conversations/:conversationId/messages` (idem)                                                             | `chats`                                                           |
+| `PATCH /conversations/:conversationId` (status, assignee)                                                         | Chats extension, `chats.edit`                                     |
+| `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`               | Chats extension, `chats.edit`                                     |
+| `POST /conversations/:conversationId/notes`                                                                       | Chats extension, `chats.edit`                                     |
+| `POST /messages/:messageId/rating`                                                                                | `chats`                                                           |
+| `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                  | `chats`                                                           |
+| `GET /saved-replies`                                                                                              | Chats extension, `chats.view`                                     |
+| `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId`                | Chats extension, `chats.edit`                                     |
+| `GET /ai-agent`, `PATCH /ai-agent`, `POST /ai-agent/rules/parse`, `POST /ai-agent/test`, `POST /ai-agent/go-live` | `chats`                                                           |
+| `GET /ai-agent/changes`, `POST /ai-agent/changes/:aiRuleChangeId/undo`                                            | Owner or Admin                                                    |
+| `GET /knowledge-items`, `GET /knowledge-items/:knowledgeItemId`                                                   | `storeSettings`                                                   |
+| `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId`    | `storeSettings`                                                   |
+| `POST /knowledge-items/uploads` (returns a file ID and signed PUT URL for PDF or plain text)                      | `storeSettings`                                                   |
+| `GET /events/stream`                                                                                              | any member; Server-Sent Events for new messages and notifications |
 
 ## Products and stock (05)
 
