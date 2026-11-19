@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0056_snapshot.json`: **95 tables, 1271 columns, 388 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0057_snapshot.json`: **95 tables, 1272 columns, 388 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1389,6 +1389,7 @@ erDiagram
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
+        text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
