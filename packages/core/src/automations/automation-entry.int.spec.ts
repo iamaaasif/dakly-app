@@ -63,9 +63,8 @@ describe('AutomationEntryService (Postgres)', () => {
   let now = firstDay;
   const queued: { data: unknown }[] = [];
   const start = (automationId: string, id = randomUUID(), source: 'manual' | 'import' = 'manual') =>
-    entries.start(automationId, {
+    entries.start(storeId, automationId, {
       id,
-      storeId,
       type: 'consent.changed',
       occurredAt: now.toISOString(),
       payload: { consentId: id, contactId, channel: 'sms', status: 'granted', source },
@@ -203,9 +202,8 @@ describe('AutomationEntryService (Postgres)', () => {
   it('refuses to start a workflow belonging to another store', async () => {
     const id = await workflow();
     const eventId = randomUUID();
-    await entries.start(id, {
+    await entries.start(otherStoreId, id, {
       id: eventId,
-      storeId: otherStoreId,
       type: 'consent.changed',
       occurredAt: now.toISOString(),
       payload: {
