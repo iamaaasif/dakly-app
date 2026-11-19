@@ -28,11 +28,20 @@ export class AutomationBirthdaySweepService {
       for (const storeId of ids) {
         const timeZone = await this.stores.timeZone(storeId);
         const day = new Intl.DateTimeFormat('sv-SE', { timeZone, dateStyle: 'short' }).format(at);
+        const jobId = `${RECORD_AUTOMATION_BIRTHDAYS}-${storeId}-${day}`;
+        const previous = await this.bulk.getJob(jobId);
+        if (previous) {
+          // A failed job still owns the date's id, so the next sweep must retry it.
+          if (await previous.isFailed()) {
+            await previous.retry('failed', { resetAttemptsMade: true, resetAttemptsStarted: true });
+          }
+          continue;
+        }
         jobs.push({
           name: RECORD_AUTOMATION_BIRTHDAYS,
           data: { storeId, day, occurredAt },
           opts: {
-            jobId: `${RECORD_AUTOMATION_BIRTHDAYS}-${storeId}-${day}`,
+            jobId,
             attempts: 3,
             backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
             removeOnComplete: { age: (2 * DAY_MS) / 1000 },

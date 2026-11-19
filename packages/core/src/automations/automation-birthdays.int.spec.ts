@@ -29,6 +29,7 @@ describe('AutomationBirthdaysService (Postgres)', () => {
   let app: INestApplicationContext;
   const at = new Date('2026-11-19T20:00:00.000Z');
   const jobs: { data: { storeId: string }; opts: { jobId: string } }[] = [];
+  const failedJobs = new Set<string>();
 
   beforeAll(async () => {
     await admin.pool.query(
@@ -51,7 +52,16 @@ describe('AutomationBirthdaysService (Postgres)', () => {
         { provide: Clock, useValue: { now: () => at } },
         {
           provide: getQueueToken(QUEUES.bulk),
-          useValue: { addBulk: async (batch: typeof jobs) => jobs.push(...batch) },
+          useValue: {
+            addBulk: async (batch: typeof jobs) => jobs.push(...batch),
+            getJob: async (id: string) =>
+              jobs.some(({ opts }) => opts.jobId === id)
+                ? {
+                    isFailed: async () => failedJobs.has(id),
+                    retry: async () => failedJobs.delete(id),
+                  }
+                : undefined,
+          },
         },
       ],
     })(TestModule);
@@ -74,12 +84,18 @@ describe('AutomationBirthdaysService (Postgres)', () => {
   });
 
   it('records a birthday once on the local date and skips deleted contacts', async () => {
-    await app.get(AutomationBirthdaySweepService).sweep();
+    const sweep = app.get(AutomationBirthdaySweepService);
+    await sweep.sweep();
     const recorder = new RecordAutomationBirthdaysJob(app.get(AutomationBirthdaysService));
     const dhakaJob = jobs.find(({ data }) => data.storeId === dhaka);
     const londonJob = jobs.find(({ data }) => data.storeId === london);
     expect(dhakaJob?.opts.jobId).toContain('2026-11-20');
     expect(londonJob?.opts.jobId).toContain('2026-11-19');
+    failedJobs.add(dhakaJob!.opts.jobId);
+    const queued = jobs.length;
+    await sweep.sweep();
+    expect(failedJobs.size).toBe(0);
+    expect(jobs).toHaveLength(queued);
     await recorder.handle(dhakaJob?.data);
     await recorder.handle(dhakaJob?.data);
     await recorder.handle(londonJob?.data);
