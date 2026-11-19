@@ -334,8 +334,15 @@
     {
       "idx": 47,
       "version": "7",
-      "when": 1795078910153,
-      "tag": "0047_buyer_activity_lookup",
+      "when": 1795078611375,
+      "tag": "0047_automation_send_retries",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1795081269803,
+      "tag": "0048_buyer_activity_lookup",
       "breakpoints": true
     }
   ]
