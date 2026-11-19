@@ -30,6 +30,13 @@ const connectionFields = {
   disconnectedAt: channelConnections.disconnectedAt,
 };
 
+const postingKinds = ['facebook_page', 'instagram'] as const;
+const postingConnectionFields = {
+  id: channelConnections.id,
+  kind: channelConnections.kind,
+  status: channelConnections.status,
+};
+
 @Injectable()
 export class ChannelConnectionsRepository {
   constructor(
@@ -50,6 +57,21 @@ export class ChannelConnectionsRepository {
         )
         .orderBy(desc(channelConnections.id))
         .limit(limit + 1),
+    );
+  }
+
+  findPostingConnections(storeId: string, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(postingConnectionFields)
+        .from(channelConnections)
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            inArray(channelConnections.id, ids),
+            inArray(channelConnections.kind, postingKinds),
+          ),
+        ),
     );
   }
 

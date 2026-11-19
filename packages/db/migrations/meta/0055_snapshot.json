@@ -1,5 +1,5 @@
 {
-  "id": "35100308-4b2e-46dc-8b13-d5ca88132c2f",
+  "id": "51f33e7a-77ee-4815-a5d4-51255eb640f1",
   "prevId": "ec0e09f8-16ed-435d-89cc-2aa741c8c50f",
   "version": "7",
   "dialect": "postgresql",
@@ -16149,18 +16149,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "gateway": {
-          "name": "gateway",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gateway_event_id": {
-          "name": "gateway_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "event_payload": {
           "name": "event_payload",
           "type": "jsonb",
@@ -16176,27 +16164,6 @@
         }
       },
       "indexes": {
-        "payment_events_gateway_event_key": {
-          "name": "payment_events_gateway_event_key",
-          "columns": [
-            {
-              "expression": "gateway",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "gateway_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "payment_events_intent_idx": {
           "name": "payment_events_intent_idx",
           "columns": [
@@ -18395,7 +18362,7 @@
       "checkConstraints": {
         "webhook_events_provider": {
           "name": "webhook_events_provider",
-          "value": "\"webhook_events\".\"provider\" in ('meta', 'whatsapp', 'sms', 'sendgrid', 'bkash', 'nagad', 'city_bank')"
+          "value": "\"webhook_events\".\"provider\" in ('meta', 'whatsapp', 'sms', 'sendgrid')"
         },
         "webhook_events_status": {
           "name": "webhook_events_status",
@@ -20287,6 +20254,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "approved_by_user_id": {
           "name": "approved_by_user_id",
           "type": "uuid",
@@ -20342,6 +20315,34 @@
           "method": "btree",
           "with": {}
         },
+        "posts_store_creator_idempotency_key": {
+          "name": "posts_store_creator_idempotency_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"posts\".\"idempotency_key\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "posts_store_id_created_at_idx": {
           "name": "posts_store_id_created_at_idx",
           "columns": [
@@ -20353,6 +20354,12 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

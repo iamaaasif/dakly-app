@@ -1,0 +1,242 @@
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm';
+
+import type { CreatePostInput, PostListQuery } from '@dakly/contracts/social';
+import { files } from '@dakly/db/schema/platform';
+import { posts, postTargets } from '@dakly/db/schema/social';
+
+import type { Transaction } from '../platform/database/scoped-transactions';
+import { TenantDatabase } from '../platform/database/tenant-database';
+
+const postFields = {
+  id: posts.id,
+  kind: posts.kind,
+  caption: posts.caption,
+  mediaFileIds: posts.mediaFileIds,
+  linkUrl: posts.linkUrl,
+  firstComment: posts.firstComment,
+  isAiWritten: posts.isAiWritten,
+  createdByUserId: posts.createdByUserId,
+  approvedByUserId: posts.approvedByUserId,
+  approvedAt: posts.approvedAt,
+  createdAt: posts.createdAt,
+  updatedAt: posts.updatedAt,
+};
+
+const targetFields = {
+  id: postTargets.id,
+  postId: postTargets.postId,
+  channelConnectionId: postTargets.channelConnectionId,
+  captionOverride: postTargets.captionOverride,
+  status: postTargets.status,
+  scheduledFor: postTargets.scheduledFor,
+  publishedAt: postTargets.publishedAt,
+  externalPostId: postTargets.externalPostId,
+  errorCode: postTargets.errorCode,
+  errorMessage: postTargets.errorMessage,
+};
+
+type PostWrite = Omit<CreatePostInput, 'targets'> & { updatedAt: Date };
+
+function selectPostsWithTargets(storeId: string, tx: Transaction) {
+  return tx
+    .select({ post: postFields, target: targetFields })
+    .from(posts)
+    .leftJoin(postTargets, and(eq(postTargets.storeId, storeId), eq(postTargets.postId, posts.id)));
+}
+
+type PostWithTargets = {
+  post: Awaited<ReturnType<typeof selectPostsWithTargets>>[number]['post'];
+  targets: NonNullable<Awaited<ReturnType<typeof selectPostsWithTargets>>[number]['target']>[];
+};
+
+function groupTargets(rows: Awaited<ReturnType<typeof selectPostsWithTargets>>): PostWithTargets[] {
+  const grouped = new Map<string, PostWithTargets>();
+  for (const { post, target } of rows) {
+    const detail = grouped.get(post.id) ?? { post, targets: [] };
+    if (target) detail.targets.push(target);
+    grouped.set(post.id, detail);
+  }
+  return [...grouped.values()];
+}
+
+@Injectable()
+export class SocialRepository {
+  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+
+  async findPost(storeId: string, postId: string) {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      selectPostsWithTargets(storeId, tx)
+        .where(and(eq(posts.storeId, storeId), eq(posts.id, postId), isNull(posts.deletedAt)))
+        .orderBy(postTargets.id),
+    );
+    return groupTargets(rows)[0];
+  }
+
+  async listPosts(storeId: string, query: PostListQuery, userId: string) {
+    const rows = await this.database.forStore(storeId, (tx) => {
+      const scheduled = tx
+        .select({ id: postTargets.id })
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            eq(postTargets.postId, posts.id),
+            isNotNull(postTargets.scheduledFor),
+          ),
+        );
+      const creator = eq(posts.createdByUserId, userId);
+      const visibility = {
+        mine: and(creator, notExists(scheduled)),
+        team: notExists(scheduled),
+        all: or(creator, exists(scheduled)),
+      };
+      const visible = and(eq(posts.storeId, storeId), visibility[query.drafts ?? 'all']);
+      const cursor = query.cursor
+        ? tx
+            .select({ createdAt: posts.createdAt, id: posts.id })
+            .from(posts)
+            .where(and(visible, eq(posts.id, query.cursor)))
+        : undefined;
+      const page = tx
+        .select({ id: posts.id })
+        .from(posts)
+        .where(
+          and(
+            visible,
+            isNull(posts.deletedAt),
+            cursor ? sql`(${posts.createdAt}, ${posts.id}) < ${cursor}` : undefined,
+          ),
+        )
+        .orderBy(desc(posts.createdAt), desc(posts.id))
+        .limit(query.limit + 1);
+      return selectPostsWithTargets(storeId, tx)
+        .where(and(eq(posts.storeId, storeId), inArray(posts.id, page)))
+        .orderBy(desc(posts.createdAt), desc(posts.id), postTargets.id);
+    });
+    return groupTargets(rows);
+  }
+
+  listTargets(storeId: string, postIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(targetFields)
+        .from(postTargets)
+        .where(and(eq(postTargets.storeId, storeId), inArray(postTargets.postId, postIds)))
+        .orderBy(postTargets.id),
+    );
+  }
+
+  listPostMedia(storeId: string, ids: string[], now: Date) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.storeId, storeId),
+            inArray(files.id, ids),
+            inArray(files.purpose, ['post_media', 'product_image']),
+            inArray(files.contentType, ['image/jpeg', 'image/png', 'image/webp']),
+            eq(files.status, 'ready'),
+            or(isNull(files.expiresAt), gt(files.expiresAt, now)),
+          ),
+        ),
+    );
+  }
+
+  async findByIdempotencyKey(storeId: string, userId: string, idempotencyKey: string) {
+    const [match] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: posts.id })
+        .from(posts)
+        .where(
+          and(
+            eq(posts.storeId, storeId),
+            eq(posts.createdByUserId, userId),
+            eq(posts.idempotencyKey, idempotencyKey),
+          ),
+        ),
+    );
+    return match;
+  }
+
+  async insertPost(
+    storeId: string,
+    values: PostWrite & {
+      createdByUserId: string;
+      createdAt: Date;
+      idempotencyKey: string;
+    },
+  ) {
+    const [post] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(posts)
+        .values({ ...values, storeId })
+        .returning(postFields),
+    );
+    return post;
+  }
+
+  async updatePost(
+    storeId: string,
+    postId: string,
+    values: Partial<PostWrite> & {
+      approvedByUserId?: null;
+      approvedAt?: null;
+      deletedAt?: Date;
+    },
+  ) {
+    const [post] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(posts)
+        .set(values)
+        .where(and(eq(posts.storeId, storeId), eq(posts.id, postId)))
+        .returning(postFields),
+    );
+    return post;
+  }
+
+  async replaceTargets(
+    storeId: string,
+    postId: string,
+    {
+      targets,
+      status,
+      now,
+    }: {
+      targets: CreatePostInput['targets'];
+      status: 'draft' | 'waiting_approval';
+      now: Date;
+    },
+  ) {
+    await this.database.forStore(storeId, async (tx) => {
+      await tx
+        .delete(postTargets)
+        .where(and(eq(postTargets.storeId, storeId), eq(postTargets.postId, postId)));
+      if (targets.length)
+        await tx.insert(postTargets).values(
+          targets.map((target) => ({
+            ...target,
+            storeId,
+            postId,
+            status,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        );
+    });
+  }
+}
