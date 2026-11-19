@@ -112,7 +112,7 @@ export class AutomationSendRetryService {
       const settings =
         step.category === 'marketing' ? await stores.sendingSettings(storeId, 'share') : undefined;
       const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
-      // Lock the run before taking the workflow and version locks in the dispatch check.
+      // Check and lock the claim first so a stale job cannot lock the workflow or version.
       if (!(await repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
       if (!(await repository.moveRunIfLive(storeId, claim, unchanged, 'dispatch')))
         return undefined;
