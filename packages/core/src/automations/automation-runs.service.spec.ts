@@ -11,6 +11,7 @@ import type { SegmentsService } from '../segments/segments.service';
 import type { SendDecision, SendPolicyService } from '../sending/send-policy.service';
 import type { StoresService } from '../stores/stores.service';
 import type { WalletService } from '../wallets/wallet.service';
+import { AutomationConditionsService } from './automation-conditions.service';
 import type {
   AutomationRunsRepository,
   ClaimedRun,
@@ -258,12 +259,15 @@ describe('AutomationRunsService', () => {
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
       contacts as unknown as ContactsService,
-      segments as unknown as SegmentsService,
       sendPolicy as unknown as SendPolicyService,
       stores as unknown as StoresService,
       messaging as unknown as MessagingService,
       links as unknown as LinksService,
       wallets as unknown as WalletService,
+      new AutomationConditionsService(
+        segments as unknown as SegmentsService,
+        sendPolicy as unknown as SendPolicyService,
+      ),
     );
   });
 
