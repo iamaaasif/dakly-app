@@ -242,7 +242,21 @@ export class ContactsService {
 
   // A workflow's tag action. A deleted contact is left as it is.
   changeTag(storeId: string, contactId: string, change: TagChange, _actor: Actor): Promise<void> {
-    return this.contactsRepository.changeTag(storeId, contactId, change, MAX_CONTACT_TAGS);
+    return this.transaction.run(storeId, async () => {
+      const changed = await this.contactsRepository.changeTag(
+        storeId,
+        contactId,
+        change,
+        MAX_CONTACT_TAGS,
+      );
+      if (!changed || change.change !== 'add') return;
+      await this.outbox.publish({
+        type: 'contact.tag_added',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { contactId, tag: change.tag },
+      });
+    });
   }
 
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the

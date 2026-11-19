@@ -238,7 +238,7 @@ export class ContactsRepository {
     const tags = adding
       ? sql`array_append(${contacts.tags}, ${tag})`
       : sql`array_remove(${contacts.tags}, ${tag})`;
-    await this.database.forStore(storeId, (tx) =>
+    const [changed] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(contacts)
         .set({ tags })
@@ -249,8 +249,10 @@ export class ContactsRepository {
             isNull(contacts.deletedAt),
             changesTags,
           ),
-        ),
+        )
+        .returning({ id: contacts.id }),
     );
+    return Boolean(changed);
   }
 
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
