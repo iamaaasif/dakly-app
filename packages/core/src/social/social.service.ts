@@ -20,6 +20,7 @@ import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
+import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
@@ -75,8 +76,13 @@ export class SocialService {
         return response(post, targets);
       }
       const now = this.clock.now();
-      await this.validatePostMedia(storeId, input.mediaFileIds, now);
-      await this.validateTargets(storeId, input, []);
+      const connections = await this.validateTargets(storeId, input, []);
+      await this.validatePostMedia(
+        storeId,
+        input.mediaFileIds,
+        now,
+        this.hasInstagram(connections),
+      );
       const { targets, ...content } = input;
       const post = await this.repository.insertPost(storeId, {
         ...content,
@@ -150,12 +156,14 @@ export class SocialService {
           captionOverride,
         }));
       const now = this.clock.now();
-      if (change.mediaFileIds) await this.validatePostMedia(storeId, mediaFileIds, now);
-      await this.validateTargets(
+      const connections = await this.validateTargets(
         storeId,
         { kind, caption, mediaFileIds, targets: targetInput },
         targets,
       );
+      const instagram = this.hasInstagram(connections);
+      if (change.mediaFileIds || instagram)
+        await this.validatePostMedia(storeId, mediaFileIds, now, instagram);
       const edited = await this.repository.updatePost(storeId, postId, {
         ...change,
         isAiWritten: post.isAiWritten || isAiWritten,
@@ -294,8 +302,8 @@ export class SocialService {
     this.requireDraft(targets);
     if (!targets.length) throw socialError('POST_TARGET_REQUIRED');
     const now = this.clock.now();
-    await this.validatePostMedia(storeId, post.mediaFileIds, now);
     const connections = await this.validateTargets(storeId, { ...post, targets }, []);
+    await this.validatePostMedia(storeId, post.mediaFileIds, now, this.hasInstagram(connections));
     if (
       !post.mediaFileIds.length &&
       !post.linkUrl &&
@@ -351,10 +359,15 @@ export class SocialService {
     return isAiWritten ? 'waiting_approval' : 'draft';
   }
 
-  private async validatePostMedia(storeId: string, ids: string[], now: Date) {
+  private hasInstagram(connections: ReadonlyMap<string, PostingConnection>) {
+    return [...connections.values()].some(({ kind }) => kind === 'instagram');
+  }
+
+  private async validatePostMedia(storeId: string, ids: string[], now: Date, instagram: boolean) {
     if (!ids.length) return;
     const media = await this.repository.listPostMedia(storeId, ids, now);
     if (media.length !== new Set(ids).size) throw socialError('POST_MEDIA_NOT_FOUND');
+    if (instagram) validateInstagramPhotos(media);
   }
 
   private async validateTargets(
@@ -373,18 +386,11 @@ export class SocialService {
       if (!connection || (connection.status !== 'active' && !retained.has(connection.id)))
         throw socialError('POST_CONNECTION_NOT_FOUND');
       if (connection.kind === 'instagram')
-        this.validateInstagram(
+        validateInstagramPost(
           target.captionOverride ?? input.caption ?? '',
           input.mediaFileIds.length,
         );
     }
     return connections;
-  }
-
-  private validateInstagram(caption: string, photoCount: number) {
-    if (!photoCount) throw socialError('POST_PHOTOS_REQUIRED');
-    if (Array.from(caption).length > 2_200) throw socialError('POST_CAPTION_TOO_LONG');
-    if ((caption.match(/#[\p{L}\p{M}\p{N}_]+/gu)?.length ?? 0) > 30)
-      throw socialError('POST_TOO_MANY_HASHTAGS');
   }
 }
