@@ -60,9 +60,9 @@ describe('inbox filters without RLS assistance', () => {
     expect((await repository.messages(f.b, second.id, page)).map(({ id }) => id)).toEqual([
       second.messageId,
     ]);
-    expect(await repository.update(f.b, first.id, { status: 'done' }, now)).toBeUndefined();
+    expect(await repository.update(f.b, first.id, { status: 'done' }, { now })).toBeUndefined();
     expect(await repository.find(f.a, first.id)).toMatchObject({ status: 'open' });
-    expect(await repository.update(f.b, second.id, { status: 'done' }, now)).toMatchObject({
+    expect(await repository.update(f.b, second.id, { status: 'done' }, { now })).toMatchObject({
       status: 'done',
     });
     const note = { body: 'ভিতরের নোট', authorUserId: f.userB };
