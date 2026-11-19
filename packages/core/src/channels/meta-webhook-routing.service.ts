@@ -40,6 +40,20 @@ export class MetaWebhookRoutingService {
   ) {}
 
   async process(webhookEventId: string, finalAttempt: boolean) {
+    try {
+      await this.routeDelivery(webhookEventId, finalAttempt);
+    } catch (error) {
+      if (finalAttempt)
+        await this.repository.finish(webhookEventId, {
+          status: 'failed',
+          error: 'processing_failed',
+          processedAt: this.clock.now(),
+        });
+      throw error;
+    }
+  }
+
+  private async routeDelivery(webhookEventId: string, finalAttempt: boolean) {
     const delivery = await this.repository.findReceived(webhookEventId);
     if (!delivery) return;
     const messages = this.driver.parseWebhook(delivery.payload);
@@ -61,12 +75,12 @@ export class MetaWebhookRoutingService {
       }),
     );
     if (!accounts.size)
-      return this.repository.finish(
-        webhookEventId,
-        'ignored',
-        'unsupported_delivery',
-        this.clock.now(),
-      );
+      return this.repository.finish(webhookEventId, {
+        status: 'ignored',
+        error: 'unsupported_delivery',
+        processedAt: this.clock.now(),
+        payload: null,
+      });
     const stores = new Map(
       (await this.repository.findStoresForAccounts([...accounts.values()])).map(
         ({ kind, externalAccountId, storeId }) => [accountKey(kind, externalAccountId), storeId],
@@ -88,12 +102,12 @@ export class MetaWebhookRoutingService {
       throw new AppError('META_RECEIPT_PENDING', META_WEBHOOK_ERRORS.META_RECEIPT_PENDING);
     const processed = outcomes.some((outcome) => ['stored', 'duplicate'].includes(outcome));
     const reason = outcomes.at(-1) ?? 'unknown_account';
-    await this.repository.finish(
-      webhookEventId,
-      processed ? 'processed' : 'ignored',
-      processed ? null : reason,
-      this.clock.now(),
-    );
+    await this.repository.finish(webhookEventId, {
+      status: processed ? 'processed' : 'ignored',
+      error: processed ? null : reason,
+      processedAt: this.clock.now(),
+      payload: null,
+    });
   }
 
   private routeMessage(storeId: string, message: InboundMessage, receivedAt: Date) {

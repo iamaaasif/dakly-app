@@ -1,5 +1,5 @@
 {
-  "id": "6ffb9466-d6d3-4b5c-87cf-499fd6203e7e",
+  "id": "576afb87-c1bc-4529-ab30-51f2e797e07d",
   "prevId": "163772fa-b1a1-4cea-a2f0-0b04a5de22d6",
   "version": "7",
   "dialect": "postgresql",
@@ -18273,6 +18273,39 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "webhook_events_recovery_idx": {
+          "name": "webhook_events_recovery_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -20174,18 +20207,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "create_key": {
-          "name": "create_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "create_fingerprint": {
-          "name": "create_fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "approved_by_user_id": {
           "name": "approved_by_user_id",
           "type": "uuid",
@@ -20241,34 +20262,6 @@
           "method": "btree",
           "with": {}
         },
-        "posts_store_creator_create_key": {
-          "name": "posts_store_creator_create_key",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "create_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"posts\".\"create_key\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "posts_store_id_created_at_idx": {
           "name": "posts_store_id_created_at_idx",
           "columns": [
@@ -20280,12 +20273,6 @@
             },
             {
               "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
