@@ -235,7 +235,8 @@ describe('MetaGraphChannelDriver', () => {
     expect(url.hostname).toBe('graph.facebook.com');
     expect(url.pathname).toMatch(/\/123\/subscribed_apps$/);
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      subscribed_fields: 'messages,messaging_postbacks,feed',
+      subscribed_fields:
+        'messages,messaging_postbacks,feed,message_deliveries,message_reads,message_echoes',
     });
     expect(request!.method).toBe('POST');
     expect(request!.headers.get('authorization')).toBe('Bearer test-page-credential');

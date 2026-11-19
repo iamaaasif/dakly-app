@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { z } from 'zod';
 
-import type { InboundMessage } from '../channel-driver';
+import type { ChannelReceipt, InboundMessage } from '../channel-driver';
 
 const deliverySchema = z.looseObject({
   object: z.string().min(1),
@@ -10,10 +10,14 @@ const deliverySchema = z.looseObject({
 });
 
 const messagingEvents = z.array(z.unknown());
-const messagingEvent = z.object({
+const participants = {
   sender: z.object({ id: z.string().min(1) }),
   recipient: z.object({ id: z.string().min(1) }),
-  timestamp: z.number().int().nonnegative().max(8.64e15),
+};
+const timestamp = z.number().int().nonnegative().max(8.64e15);
+const messagingEvent = z.object({
+  ...participants,
+  timestamp,
   message: z.object({
     mid: z.string().min(1),
     text: z.string().optional(),
@@ -24,8 +28,30 @@ const messagingEvent = z.object({
   }),
 });
 const attachment = z.object({ payload: z.object({ url: z.url({ protocol: /^https$/ }) }) });
+const receiptEvent = z.object({
+  ...participants,
+  timestamp: timestamp.optional(),
+  delivery: z
+    .object({
+      mids: z.array(z.string().min(1)).optional(),
+      watermark: timestamp.optional(),
+    })
+    .optional(),
+  read: z.object({ mid: z.string().min(1).optional(), watermark: timestamp.optional() }).optional(),
+  message: z.unknown().optional(),
+});
+const echoMessage = z.object({
+  mid: z.string().min(1),
+  metadata: z.uuid(),
+  is_echo: z.literal(true),
+  app_id: z.union([z.string().min(1), z.int().positive()]).transform(String),
+});
 
-function inboundMessage(channel: 'messenger' | 'instagram', account: string, event: unknown) {
+type MetaMessagingChannel = 'messenger' | 'instagram';
+type MetaReceipt = z.infer<typeof receiptEvent>;
+type ReceiptAddress = Pick<ChannelReceipt, 'channel' | 'accountExternalId' | 'recipientExternalId'>;
+
+function inboundMessage(channel: MetaMessagingChannel, account: string, event: unknown) {
   const parsed = messagingEvent.safeParse(event).data;
   if (!parsed || parsed.recipient.id !== account || parsed.sender.id === account) return undefined;
   const { sender, timestamp, message } = parsed;
@@ -47,17 +73,83 @@ function inboundMessage(channel: 'messenger' | 'instagram', account: string, eve
   } satisfies InboundMessage;
 }
 
-export function parseMetaWebhook(payload: unknown): InboundMessage[] {
+function receipt(
+  channel: MetaMessagingChannel,
+  account: string,
+  event: unknown,
+): ChannelReceipt | undefined {
+  const parsed = receiptEvent.safeParse(event).data;
+  if (!parsed || parsed.sender.id === parsed.recipient.id) return;
+  const { sender, recipient } = parsed;
+  if (sender.id === account)
+    return outboundEcho(
+      { channel, accountExternalId: account, recipientExternalId: recipient.id },
+      parsed,
+    );
+  if (recipient.id === account)
+    return customerReceipt(
+      { channel, accountExternalId: account, recipientExternalId: sender.id },
+      parsed,
+    );
+}
+
+function outboundEcho(address: ReceiptAddress, event: MetaReceipt): ChannelReceipt | undefined {
+  const echo = echoMessage.safeParse(event.message).data;
+  if (!echo || event.timestamp === undefined) return;
+  return {
+    ...address,
+    kind: 'echo',
+    occurredAt: new Date(event.timestamp),
+    externalMessageId: echo.mid,
+    operationKey: echo.metadata,
+    appExternalId: echo.app_id,
+  };
+}
+
+function customerReceipt(address: ReceiptAddress, event: MetaReceipt): ChannelReceipt | undefined {
+  const target = receiptTarget(address.channel, event);
+  if (!target) return;
+  const { kind, watermark, ids } = target;
+  const time = event.timestamp ?? watermark;
+  if (time === undefined) return;
+  const common = { ...address, kind, occurredAt: new Date(time) };
+  if (ids?.length) return { ...common, externalMessageIds: ids };
+  if (watermark !== undefined) return { ...common, through: new Date(watermark) };
+}
+
+function receiptTarget(channel: MetaMessagingChannel, { delivery, read }: MetaReceipt) {
+  if (channel === 'messenger' && delivery)
+    return { kind: 'delivered' as const, watermark: delivery.watermark, ids: delivery.mids };
+  if (read)
+    return {
+      kind: 'read' as const,
+      watermark: channel === 'messenger' ? read.watermark : undefined,
+      ids: read.mid ? [read.mid] : undefined,
+    };
+}
+
+function parseDelivery<T>(
+  payload: unknown,
+  parseEvent: (channel: MetaMessagingChannel, account: string, event: unknown) => T | undefined,
+): T[] {
   const delivery = deliverySchema.safeParse(payload).data;
   if (!delivery || (delivery.object !== 'page' && delivery.object !== 'instagram')) return [];
   const channel = delivery.object === 'page' ? 'messenger' : 'instagram';
   return delivery.entry.flatMap((entry) => {
     const events = messagingEvents.safeParse(entry.messaging).data ?? [];
     return events.flatMap((event) => {
-      const message = inboundMessage(channel, entry.id, event);
-      return message ? [message] : [];
+      const parsed = parseEvent(channel, entry.id, event);
+      return parsed ? [parsed] : [];
     });
   });
+}
+
+export function parseMetaWebhook(payload: unknown): InboundMessage[] {
+  return parseDelivery(payload, inboundMessage);
+}
+
+export function parseMetaReceipts(payload: unknown): ChannelReceipt[] {
+  return parseDelivery(payload, receipt);
 }
 
 export function verifyMetaWebhookSignature(

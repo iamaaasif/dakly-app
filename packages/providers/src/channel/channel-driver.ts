@@ -15,6 +15,21 @@ export type InboundMessage = {
   sentAt: Date;
 };
 
+export type ChannelReceipt = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
+  accountExternalId: string;
+  recipientExternalId: string;
+  occurredAt: Date;
+} & (
+  | ({ kind: 'delivered' | 'read' } & ({ externalMessageIds: string[] } | { through: Date }))
+  | {
+      kind: 'echo';
+      externalMessageId: string;
+      operationKey: string;
+      appExternalId: string;
+    }
+);
+
 export type OutboundMessage = {
   channel: Exclude<ChannelKind, 'whatsapp'>;
   externalConversationId: string;
@@ -31,6 +46,7 @@ export type ChannelDriver = {
   readonly kind: ChannelKind;
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;
   parseWebhook(payload: unknown): InboundMessage[];
+  parseReceipts(payload: unknown): ChannelReceipt[];
   send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
 };
 

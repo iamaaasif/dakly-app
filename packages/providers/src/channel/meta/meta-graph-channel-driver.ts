@@ -147,7 +147,10 @@ export class MetaGraphChannelDriver
   async subscribePage(pageId: string, accessToken: string): Promise<void> {
     await this.request(
       `${encodeURIComponent(pageId)}/subscribed_apps`,
-      { subscribed_fields: 'messages,messaging_postbacks,feed' },
+      {
+        subscribed_fields:
+          'messages,messaging_postbacks,feed,message_deliveries,message_reads,message_echoes',
+      },
       z.object({ success: z.literal(true) }),
       { method: 'POST', signal: AbortSignal.timeout(requestTimeoutMs), accessToken },
     );

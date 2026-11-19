@@ -312,7 +312,9 @@ Agent tools take no store id, contact id or price; those come from the job. Tool
 
 Outbound: `MessagingService.send` saves a Messenger or Instagram reply as `queued`. One operation key in a store creates one message and one `message.send_requested` event in the same transaction. The outbox relay queues `SendMessageJob`. The worker checks the selected identity and reply deadline again before sending. Only a staff reply can use the Human Agent tag in the seven-day window.
 
-The worker saves a pending attempt before calling Meta outside the transaction. Acceptance records the provider ID and emits `message.sent`. A known rejection records a failure and emits `message.failed`. An uncertain attempt stays queued with `send_unconfirmed` for reconciliation. Receipts and Meta echoes follow in the next CHAT-2 slice.
+The worker saves a pending attempt before calling Meta outside the transaction. Acceptance records the provider ID and emits `message.sent`. A known rejection records a failure and emits `message.failed`. An uncertain attempt stays queued with `send_unconfirmed` for reconciliation. A signed Messenger echo from the configured Meta app can confirm an attempt when it matches the stored message ID and recipient. The worker never resends an unconfirmed attempt.
+
+Signed Messenger delivery and read receipts and Instagram seen receipts apply to the matching recipient in the connected shop. A late delivery cannot move a read message backward. If a receipt reaches an attempt before the send result is saved, the webhook job retries within its existing attempt limit.
 
 The outbound message schema keeps the chosen recipient identity and the category used by the send gate. The identity belongs to the same store as the message. The Meta transport uses the selected connection's encrypted credentials and checks that the credential is still current before marking a rejected connection for reconnection.
 

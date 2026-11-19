@@ -29,6 +29,7 @@ Module({ imports: [DatabaseModule, SessionsModule, MetaWebhooksModule, MetaWebho
 );
 
 const appSecret = 'local-meta-signing-material';
+const appId = '104404';
 const verifyToken = 'local-meta-verification-material';
 const webhookPath = '/webhooks/meta';
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -87,6 +88,7 @@ function verify(mode: string, token: string) {
 describe('Meta webhook intake', () => {
   beforeAll(async () => {
     vi.stubEnv('META_APP_SECRET', appSecret);
+    vi.stubEnv('META_APP_ID', appId);
     vi.stubEnv('META_WEBHOOK_VERIFY_TOKEN', verifyToken);
     resetEnvForTests();
     app = await NestFactory.create<NestFastifyApplication>(
@@ -193,7 +195,7 @@ describe('Meta webhook intake', () => {
         const [received] = await stored(payload);
         expect(received?.status).toBe('received');
         const handler = app.get(ProcessWebhookEventJob);
-        await handler.handle({ webhookEventId: received?.id });
+        await handler.handle({ webhookEventId: received?.id }, true);
         const [ignored] = await stored(payload);
         expect(ignored).toMatchObject({
           status: status === 'active' ? 'processed' : 'ignored',
@@ -205,7 +207,7 @@ describe('Meta webhook intake', () => {
           storeId,
         ]);
         expect(messages.rows).toEqual(status === 'active' ? [{ body: 'দাম কত?' }] : []);
-        await handler.handle({ webhookEventId: received?.id });
+        await handler.handle({ webhookEventId: received?.id }, true);
         expect(await stored(payload)).toEqual([ignored]);
       } finally {
         for (const table of [
@@ -273,7 +275,7 @@ describe('Meta webhook intake', () => {
             new Date(transferAt - 500),
             received?.id,
           ]);
-        await app.get(ProcessWebhookEventJob).handle({ webhookEventId: received?.id });
+        await app.get(ProcessWebhookEventJob).handle({ webhookEventId: received?.id }, true);
         expect(await stored(payload)).toEqual([
           expect.objectContaining({ status: 'ignored', error: 'stale_delivery', payload: null }),
         ]);
@@ -298,6 +300,128 @@ describe('Meta webhook intake', () => {
       }
     },
   );
+
+  it('records signed receipts in order and reconciles only echoes from our app', async () => {
+    const storeId = randomUUID();
+    const account = randomUUID();
+    const sent = randomUUID();
+    const pending = randomUUID();
+    const eventTime = Date.now() - 30_000;
+    const sender = { id: 'customer-receipt-fixture' };
+    const recipient = { id: account };
+    const handler = app.get(ProcessWebhookEventJob);
+    async function enqueueEvent(data: Record<string, unknown>) {
+      const body = JSON.stringify({ object: 'page', entry: [{ id: account, messaging: [data] }] });
+      expect((await post(body)).statusCode).toBe(200);
+      const [received] = await stored(body);
+      return received!.id;
+    }
+    async function processEvent(data: Record<string, unknown>) {
+      await handler.handle({ webhookEventId: await enqueueEvent(data) }, true);
+    }
+
+    await admin.pool.query('insert into stores (id, name) values ($1, $2)', [
+      storeId,
+      'Receipt shop',
+    ]);
+    try {
+      await admin.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+         values ($1::uuid, $2, 'facebook_page', $1::text, 'Receipts', $3)`,
+        [account, storeId, new Date(eventTime - 120_000)],
+      );
+      await processEvent({
+        sender,
+        recipient,
+        timestamp: eventTime - 1000,
+        message: { mid: 'mid.inbound', text: 'দাম কত?' },
+      });
+      await admin.pool.query(
+        `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body,
+            status, external_id, sent_at, error_code, send_category, recipient_identity_id, created_at)
+         select requested.id, c.store_id, c.id, 'out', 'system', 'text', 'জি, পণ্যটি আছে।',
+            requested.status, requested.external_id, requested.sent_at, requested.error_code,
+            'staff_reply', i.id, $4::timestamptz
+         from conversations c join contact_identities i
+           on i.store_id = c.store_id and i.contact_id = c.contact_id
+         cross join lateral (values
+           ($2::uuid, 'sent', 'mid.sent', $4::timestamptz, null),
+           ($3::uuid, 'queued', null, null, 'send_unconfirmed')
+         ) requested(id,status,external_id,sent_at,error_code)
+         where c.store_id = $1 and c.channel_connection_id = $5`,
+        [storeId, sent, pending, new Date(eventTime), account],
+      );
+
+      const read = {
+        sender,
+        recipient,
+        timestamp: eventTime + 300,
+        read: { watermark: eventTime + 200 },
+      };
+      await processEvent({ ...read, sender: { id: 'different-customer' } });
+      await processEvent(read);
+      await processEvent(read);
+      await processEvent({
+        sender,
+        recipient,
+        timestamp: eventTime + 500,
+        delivery: { mids: ['mid.sent'], watermark: eventTime + 100 },
+      });
+      const echo = {
+        sender: recipient,
+        recipient: sender,
+        timestamp: eventTime + 600,
+        message: { mid: 'mid.reconciled', is_echo: true, metadata: pending, app_id: 'another-app' },
+      };
+      await processEvent(echo);
+      const before = await admin.pool.query('select status from messages where id = $1', [pending]);
+      expect(before.rows).toEqual([{ status: 'queued' }]);
+      const earlyReceipt = {
+        sender,
+        recipient,
+        timestamp: eventTime + 800,
+        delivery: { mids: ['mid.reconciled'] },
+      };
+      const earlyReceiptId = await enqueueEvent(earlyReceipt);
+      await expect(handler.handle({ webhookEventId: earlyReceiptId }, false)).rejects.toThrow(
+        'Meta receipt is awaiting a send result',
+      );
+      await processEvent({ ...echo, message: { ...echo.message, app_id: appId } });
+      await handler.handle({ webhookEventId: earlyReceiptId }, false);
+
+      const results = await admin.pool.query(
+        'select id, status, external_id, error_code from messages where store_id = $1 and direction = $2',
+        [storeId, 'out'],
+      );
+      expect(results.rows).toHaveLength(2);
+      expect(results.rows).toEqual(
+        expect.arrayContaining([
+          { id: sent, status: 'read', external_id: 'mid.sent', error_code: null },
+          { id: pending, status: 'delivered', external_id: 'mid.reconciled', error_code: null },
+        ]),
+      );
+      const events = await admin.pool.query(
+        "select type, payload->>'messageId' as message_id from outbox_events where store_id = $1 and type in ('message.read','message.sent','message.delivered') order by type",
+        [storeId],
+      );
+      expect(events.rows).toEqual([
+        { type: 'message.delivered', message_id: pending },
+        { type: 'message.read', message_id: sent },
+        { type: 'message.sent', message_id: pending },
+      ]);
+    } finally {
+      for (const table of [
+        'outbox_events',
+        'messages',
+        'conversations',
+        'contact_identities',
+        'contacts',
+        'channel_connections',
+      ])
+        await admin.pool.query(`delete from ${table} where store_id = $1`, [storeId]);
+      await admin.pool.query('delete from stores where id = $1', [storeId]);
+    }
+  });
 
   it('rejects a signature for different bytes and logs the rejection without the payload', async () => {
     const payload = delivery('instagram');
