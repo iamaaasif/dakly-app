@@ -6,7 +6,7 @@ import { channelLabels } from './automation-labels';
 
 export const templateTypeLabels = {
   transactional: 'Transactional',
-  abandoned: 'Abandoned cart',
+  abandoned: 'Abandoned',
   welcome: 'Welcome',
   post_purchase: 'Post-purchase',
   win_back: 'Win back',
