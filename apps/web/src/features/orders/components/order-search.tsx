@@ -20,14 +20,18 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
   }
 
   return (
-    <form role="search" onSubmit={submit} className="flex flex-wrap items-end gap-2">
+    <form
+      role="search"
+      onSubmit={submit}
+      className="flex min-w-0 flex-1 flex-wrap items-end gap-2 sm:flex-none"
+    >
       <div className="w-72 max-w-full">
-        <label htmlFor="order-search" className="mb-1 block text-sm font-medium">
+        <label htmlFor="order-search" className="sr-only">
           Search orders
         </label>
         <div className="relative">
           <Search
-            className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-muted"
+            className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-text-muted sm:left-3"
             size={16}
             aria-hidden="true"
           />
@@ -39,7 +43,7 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
             key={query.search}
             defaultValue={query.search}
             maxLength={120}
-            className="pl-9"
+            className="min-h-11 pr-1 pl-8 text-sm placeholder:text-xs sm:min-h-10 sm:pr-3 sm:pl-9 sm:text-base sm:placeholder:text-base"
           />
         </div>
       </div>
