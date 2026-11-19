@@ -1778,6 +1778,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       });
       await runDueStep(runner, earlier!);
 
+      databaseNow = firstTriedAt;
       clockNow = new Date(firstTriedAt.getTime() - 100);
       await wakeNow(earlier!);
       await runDueStep(runner, earlier!);
@@ -1789,6 +1790,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(sentFor(earlier!)).toHaveLength(1);
       expect(await sendStep(earlier!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
 
+      databaseNow = undefined;
       clockNow = new Date(firstTriedAt.getTime() + 24 * HOUR - 25);
       const {
         runIds: [newer],
