@@ -69,7 +69,7 @@ export class MessagingService {
       if (!Number.isFinite(timestamp) || timestamp > now.getTime() + MINUTE_MS)
         return 'invalid_timestamp';
       // A former shop's message can carry a provider timestamp ahead of Dakly's clock.
-      if (timestamp < connection.connectedAt.getTime() + MINUTE_MS) return 'stale_delivery';
+      if (timestamp <= connection.connectedAt.getTime() + MINUTE_MS) return 'stale_delivery';
       return this.storeInbound(storeId, input, connection.channel, now);
     });
   }

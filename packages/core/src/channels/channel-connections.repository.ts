@@ -105,7 +105,7 @@ export class ChannelConnectionsRepository {
         .values({ ...account, storeId, connectedAt: now, createdAt: now, updatedAt: now })
         .onConflictDoNothing()
         .returning({ id: channelConnections.id });
-      if (inserted) return { ...inserted, connected: true };
+      if (inserted) return { ...inserted, connected: true, created: true };
 
       const [existing] = await tx
         .select({ id: channelConnections.id, status: channelConnections.status })
@@ -127,8 +127,17 @@ export class ChannelConnectionsRepository {
         .where(
           and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, existing.id)),
         );
-      return { id: existing.id, connected: existing.status !== 'active' };
+      return { id: existing.id, connected: existing.status !== 'active', created: false };
     });
+  }
+
+  async stampConnectionStart(storeId: string, id: string, connectedAt: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(channelConnections)
+        .set({ connectedAt })
+        .where(and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, id))),
+    );
   }
 
   async disconnect(storeId: string, id: string, now: Date): Promise<boolean> {

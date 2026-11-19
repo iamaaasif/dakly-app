@@ -154,6 +154,9 @@ export class MetaAuthorizationService {
             now,
           );
           if (!saved) throw loginError('META_ACCOUNT_ALREADY_CONNECTED');
+          // An insert may have waited for the previous store's disconnect to commit.
+          if (saved.created)
+            await this.connections.stampConnectionStart(storeId, saved.id, this.clock.now());
           ids.push(saved.id);
           if (saved.connected)
             await this.outbox.publish({

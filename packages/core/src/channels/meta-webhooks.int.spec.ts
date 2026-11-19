@@ -187,7 +187,7 @@ describe('Meta webhook intake', () => {
           await admin.pool.query(
             `insert into channel_connections (id, store_id, kind, external_account_id, display_name, status, connected_at)
            values ($1, $2, 'facebook_page', $3, 'Routing test', $4, $5)`,
-            [randomUUID(), storeId, accountId, status, new Date(1795053540000)],
+            [randomUUID(), storeId, accountId, status, new Date(1795053480000)],
           );
         expect((await post(payload)).statusCode).toBe(200);
         const [received] = await stored(payload);
