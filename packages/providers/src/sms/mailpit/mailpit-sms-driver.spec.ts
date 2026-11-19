@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import { createServer, type Server, type Socket } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -124,15 +124,18 @@ describe('MailpitSmsDriver', () => {
     expect(smtp.submissions()).toBe(0);
   });
 
-  it('refuses a TCP connection that never opens', async () => {
-    const server = createServer();
-    const port = await listen(server);
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    const driver = new MailpitSmsDriver({ host, port, apiUrl: `http://${host}:1` });
-    const { to, text } = message;
+  it.each([undefined, new AbortController().signal])(
+    'refuses a TCP connection that never opens, with signal %s',
+    async (signal) => {
+      const server = createServer();
+      const port = await listen(server);
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      const driver = new MailpitSmsDriver({ host, port, apiUrl: `http://${host}:1` });
+      const { to, text } = message;
 
-    await expect(driver.send({ to, text })).rejects.toBeInstanceOf(SmsSendRefused);
-  });
+      await expect(driver.send({ to, text }, signal)).rejects.toBeInstanceOf(SmsSendRefused);
+    },
+  );
 
   it.each([
     { label: 'drops the connection', finish: (socket: Socket) => socket.destroy() },
@@ -180,5 +183,27 @@ describe('MailpitSmsDriver', () => {
         ['limit', '100'],
       ]),
     );
+  });
+
+  it('cancels the receipt lookup before connecting to SMTP', async () => {
+    const smtp = await smtpPeer();
+    const lookup = createHttpServer();
+    const port = await listen(lookup);
+    const driver = new MailpitSmsDriver({
+      host,
+      port: smtp.port,
+      apiUrl: `http://${host}:${port}`,
+    });
+    const controller = new AbortController();
+    const requested = once(lookup, 'request') as Promise<[IncomingMessage]>;
+    const refused = expect(driver.send(message, controller.signal)).rejects.toBeInstanceOf(
+      SmsSendRefused,
+    );
+    const [request] = await requested;
+    const closed = once(request.socket, 'close', { signal: AbortSignal.timeout(1000) });
+    controller.abort();
+    await closed;
+    await refused;
+    expect(smtp.connections()).toBe(0);
   });
 });
