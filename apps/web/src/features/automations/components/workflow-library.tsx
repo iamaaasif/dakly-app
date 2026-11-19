@@ -145,23 +145,26 @@ function LibraryFilters({
             <h2 className="px-2 text-xs font-semibold tracking-wide text-text-muted uppercase">
               {name}
             </h2>
-            {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => (
-              <Button
-                key={value}
-                variant="secondary"
-                aria-pressed={selected(key) === value}
-                className={cn(
-                  'w-full justify-between border-0 px-2',
-                  selected(key) === value ? 'bg-primary-soft text-action' : 'bg-transparent',
-                )}
-                onClick={() => choose(key, value)}
-              >
-                {label}
-                <span className="text-xs tabular-nums">
-                  {candidates.filter((item) => matches(item, key, value)).length}
-                </span>
-              </Button>
-            ))}
+            {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => {
+              const count = candidates.filter((item) => matches(item, key, value)).length;
+              const pressed = selected(key) === value;
+              return (
+                <Button
+                  key={value}
+                  variant="secondary"
+                  aria-pressed={pressed}
+                  aria-label={`${label} ${count}`}
+                  className={cn(
+                    'w-full justify-between border-0 px-2',
+                    pressed ? 'bg-primary-soft text-action' : 'bg-transparent',
+                  )}
+                  onClick={() => choose(key, value)}
+                >
+                  {label}
+                  <span className="text-xs tabular-nums">{count}</span>
+                </Button>
+              );
+            })}
           </section>
         );
       })}
