@@ -18,6 +18,7 @@ const trackedLink = {
 } as const;
 
 const examples: DaklyEvent[] = [
+  { type: 'contact.tag_added', storeId, occurredAt, payload: { contactId, tag: 'ভিআইপি' } },
   {
     type: 'channel.needs_reconnect',
     storeId,

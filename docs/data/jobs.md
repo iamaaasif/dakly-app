@@ -28,18 +28,19 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## transactional
 
-| Job                           | Started by                                 | Payload                                           | Makes a rerun harmless                                                                                     |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `send-sign-in-code`           | Sign-in or sign-up request                 | `userId` or target, code id (no store)            | Code id in Valkey; sent once                                                                               |
-| `send-team-invite`            | Invite created                             | `storeId`, `membershipId`                         | Sender idempotency key = invite token hash                                                                 |
-| `send-order-confirmation`     | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                              | Outbound message idempotency key = order id + kind                                                         |
-| `send-payment-link`           | Advance requested                          | `storeId`, `paymentIntentId`                      | Event `sent` recorded once                                                                                 |
-| `send-notification`           | Outbox event a notification rule matches   | `storeId`, `notificationId`                       | Unique `(store_id, user_id, dedupe_key)`                                                                   |
-| `send-push`                   | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`                       | Notification status checked                                                                                |
-| `StreamNotificationOnCreated` | `notification.created` outbox event        | the event (`storeId`, `notificationId`, `userId`) | Publishes ids to Valkey only; each open stream sends each of its last 1,000 row ids once                   |
-| `send-invoice-email`          | Invoice paid                               | `storeId`, `invoiceId`                            | Sender idempotency key = invoice id                                                                        |
-| `relay-outbox`                | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
-| `wake-snoozed-notifications`  | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
+| Job                                                     | Started by                                 | Payload                                           | Makes a rerun harmless                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `send-sign-in-code`                                     | Sign-in or sign-up request                 | `userId` or target, code id (no store)            | Code id in Valkey; sent once                                                                               |
+| `send-team-invite`                                      | Invite created                             | `storeId`, `membershipId`                         | Sender idempotency key = invite token hash                                                                 |
+| `send-order-confirmation`                               | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                              | Outbound message idempotency key = order id + kind                                                         |
+| `send-payment-link`                                     | Advance requested                          | `storeId`, `paymentIntentId`                      | Event `sent` recorded once                                                                                 |
+| `send-notification`                                     | Outbox event a notification rule matches   | `storeId`, `notificationId`                       | Unique `(store_id, user_id, dedupe_key)`                                                                   |
+| `send-push`                                             | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`                       | Notification status checked                                                                                |
+| `StreamNotificationOnCreated`                           | `notification.created` outbox event        | the event (`storeId`, `notificationId`, `userId`) | Publishes ids to Valkey only; each open stream sends each of its last 1,000 row ids once                   |
+| `send-invoice-email`                                    | Invoice paid                               | `storeId`, `invoiceId`                            | Sender idempotency key = invoice id                                                                        |
+| `relay-outbox`                                          | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
+| `wake-snoozed-notifications`                            | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
+| `StartAutomationOnConsent`, `StartAutomationOnTagAdded` | Consent grant or tag added                 | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
 
 Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
 Order creation, stage changes and COD collection give the order ID, which the service uses to find
@@ -64,11 +65,10 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                              | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | --------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `start-automation-run`    | Outbox event matching an active trigger | `storeId`, `automationId`, `contactId`, `triggerKey` | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                  |
-| `continue-automation-run` | The sweep, or the step before it        | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                            | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                       | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
+| ------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `continue-automation-run` | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`     | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
 
 ## sync
 
@@ -161,6 +161,7 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
 | `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
+| `contact.tag_added`       | CAMP-11, `ContactsService.changeTag`                             | `contactId`, `tag`                                                      | Tag-added workflow trigger                                   |
 | `segment.saved`           | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
 | `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
 | `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
