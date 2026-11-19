@@ -15,7 +15,7 @@ import {
   sql,
 } from 'drizzle-orm';
 
-import type { CreatePostInput, PostListQuery } from '@dakly/contracts/social';
+import type { CreatePostInput, PostListQuery, ScheduledPostTarget } from '@dakly/contracts/social';
 import { files } from '@dakly/db/schema/platform';
 import { posts, postTargets } from '@dakly/db/schema/social';
 
@@ -173,7 +173,8 @@ export class SocialRepository {
     );
   }
 
-  async findPublishTarget(storeId: string, postTargetId: string) {
+  async findPublishTarget(storeId: string, input: Omit<ScheduledPostTarget, 'storeId'>) {
+    const scheduledFor = new Date(input.scheduledFor);
     const [match] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -190,13 +191,14 @@ export class SocialRepository {
         .where(
           and(
             eq(postTargets.storeId, storeId),
-            eq(postTargets.id, postTargetId),
+            eq(postTargets.id, input.postTargetId),
+            eq(postTargets.scheduledFor, scheduledFor),
             inArray(postTargets.status, ['scheduled', 'publishing']),
             isNull(posts.deletedAt),
           ),
         ),
     );
-    return match;
+    return match && { post: match.post, target: { ...match.target, scheduledFor } };
   }
 
   pendingPublishTargets(storeId: string, after: string | undefined, limit: number) {

@@ -29,20 +29,21 @@ export const META_PUBLISHING_DRIVER = Symbol('META_PUBLISHING_DRIVER');
 
 type JobTarget = Omit<ScheduledPostTarget, 'storeId'>;
 type SavedTarget = NonNullable<Awaited<ReturnType<SocialRepository['findPublishTarget']>>>;
-type PublishingTarget = SavedTarget['target'] & { scheduledFor: Date };
+type PublishingTarget = SavedTarget['target'];
 type PendingPost = { post: SavedTarget['post']; target: PublishingTarget };
 type Changes = Parameters<SocialRepository['updatePublishTarget']>[2];
 type AccountKind = 'facebook_page' | 'instagram';
 type PublishReceipt = {
   externalId: string | null;
-  firstComment?: { account: MetaPostingAccount; text: string };
+  firstComment?: { account: MetaPostingAccount; text: string; verifyToken: () => Promise<void> };
 };
+type MetaDelivery = PublishContext & { post: PendingPost['post']; kind: AccountKind };
 type PublishContext = {
   storeId: string;
   target: PublishingTarget;
   driver: MetaPublishingDriver;
   account: MetaPostingAccount;
-  credential: { ciphertext: Buffer; keyVersion: number };
+  verifyToken: () => Promise<void>;
 };
 
 @Injectable()
@@ -65,22 +66,30 @@ export class SocialPublishingService {
   ) {}
 
   async checkTarget(storeId: string, input: JobTarget) {
-    const match = await this.currentTarget(storeId, input);
+    const match = await this.repository.findPublishTarget(storeId, input);
     if (!match || match.target.status !== 'scheduled') return;
-    const { target } = match;
-    const error = await this.checkInputs(storeId, match);
-    const errorCode = error?.code ?? null;
+    const { post, target } = match;
+    const { channelConnectionId, scheduledFor } = target;
+    let error: AppError | null = null;
+    try {
+      const { kind } = await this.credential(storeId, channelConnectionId, scheduledFor);
+      await this.photoKeys(storeId, post.mediaFileIds, kind, scheduledFor);
+    } catch (failure) {
+      if (!(failure instanceof AppError)) throw failure;
+      error = failure;
+    }
+    const errorCode = error && error.code;
     if (target.errorCode === errorCode) return;
     await this.recordTarget(storeId, target, {
       action: 'post.preflight_checked',
       errorCode,
-      errorMessage: error?.message ?? null,
+      errorMessage: error && error.message,
     });
   }
 
   async publishTarget(storeId: string, input: JobTarget, finalAttempt: boolean) {
     const driver = this.driver;
-    const match = await this.currentTarget(storeId, input);
+    const match = await this.repository.findPublishTarget(storeId, input);
     if (!driver || !match) return;
     const { target } = match;
     if (target.publishedAt) {
@@ -122,26 +131,11 @@ export class SocialPublishingService {
     });
     if (!confirmed || !(await this.finish(storeId, target))) return;
     if (firstComment && externalId)
-      await this.comment(storeId, target, () =>
+      await this.comment(storeId, target, firstComment.verifyToken, () =>
         this.meta('post_first_comment', () =>
           driver.comment(firstComment.account, externalId, firstComment.text),
         ),
       );
-  }
-
-  private async checkInputs(storeId: string, { post, target }: PendingPost) {
-    try {
-      const { kind } = await this.credential(
-        storeId,
-        target.channelConnectionId,
-        target.scheduledFor,
-      );
-      await this.photoKeys(storeId, post.mediaFileIds, kind, target.scheduledFor);
-      return null;
-    } catch (failure) {
-      if (failure instanceof AppError) return failure;
-      throw failure;
-    }
   }
 
   private checkDue(target: PublishingTarget) {
@@ -159,7 +153,8 @@ export class SocialPublishingService {
   ) {
     if (post.isAiWritten && (!post.approvedAt || !post.approvedByUserId))
       throw socialError('POST_APPROVAL_REQUIRED');
-    const credential = await this.credential(storeId, target.channelConnectionId, this.clock.now());
+    const { channelConnectionId } = target;
+    const credential = await this.credential(storeId, channelConnectionId, this.clock.now());
     const token = this.encryption.decrypt(
       { owner: 'store', storeId, purpose: 'channel-access-token' },
       credential,
@@ -169,26 +164,25 @@ export class SocialPublishingService {
         accountId: credential.externalAccountId,
         accessToken: token.toString('utf8'),
       };
-      const context = { storeId, target, driver, account, credential };
+      const verifyToken = async () => {
+        const current = await this.credential(storeId, channelConnectionId, this.clock.now());
+        if (
+          current.keyVersion !== credential.keyVersion ||
+          !current.ciphertext.equals(credential.ciphertext)
+        )
+          throw socialError('POST_TOKEN_EXPIRED');
+      };
+      const context = { storeId, target, driver, account, verifyToken };
       const externalId = await this.sendPost({ ...context, post, kind: credential.kind });
       if (externalId === undefined) return;
       const firstComment =
         credential.kind === 'instagram' && post.kind === 'post' && post.firstComment
-          ? { account, text: post.firstComment }
+          ? { account, text: post.firstComment, verifyToken }
           : undefined;
       return { externalId, firstComment };
     } finally {
       token.fill(0);
     }
-  }
-
-  private async currentTarget(storeId: string, input: JobTarget): Promise<PendingPost | undefined> {
-    const match = await this.repository.findPublishTarget(storeId, input.postTargetId);
-    if (match?.target.scheduledFor?.toISOString() !== input.scheduledFor) return;
-    return {
-      post: match.post,
-      target: { ...match.target, scheduledFor: match.target.scheduledFor },
-    };
   }
 
   private async credential(storeId: string, connectionId: string, asOf: Date) {
@@ -219,13 +213,7 @@ export class SocialPublishingService {
     );
   }
 
-  private async sendPost({
-    post,
-    kind,
-    ...context
-  }: PublishContext & { post: PendingPost['post']; kind: AccountKind }): Promise<
-    string | null | undefined
-  > {
+  private async sendPost({ post, kind, ...context }: MetaDelivery) {
     const { storeId, target, driver, account } = context;
     if (target.status === 'publishing') {
       const containerId = target.containerId;
@@ -301,7 +289,7 @@ export class SocialPublishingService {
   }
 
   private async sendClaimed(
-    { storeId, target, credential }: PublishContext,
+    { storeId, target, verifyToken }: PublishContext,
     send: () => Promise<string>,
   ) {
     const claimed = await this.recordTarget(
@@ -311,18 +299,7 @@ export class SocialPublishingService {
         action: 'post.publishing',
         status: 'publishing',
       },
-      async () => {
-        const current = await this.credential(
-          storeId,
-          target.channelConnectionId,
-          this.clock.now(),
-        );
-        if (
-          current.keyVersion !== credential.keyVersion ||
-          !current.ciphertext.equals(credential.ciphertext)
-        )
-          throw socialError('POST_TOKEN_EXPIRED');
-      },
+      verifyToken,
     );
     if (!claimed) return;
     try {
@@ -337,8 +314,22 @@ export class SocialPublishingService {
     }
   }
 
-  private async comment(storeId: string, target: PublishingTarget, send: () => Promise<void>) {
+  private async comment(
+    storeId: string,
+    target: PublishingTarget,
+    verifyToken: () => Promise<void>,
+    send: () => Promise<void>,
+  ) {
     try {
+      if (
+        !(await this.recordTarget(
+          storeId,
+          target,
+          { action: 'post.comment_attempted' },
+          verifyToken,
+        ))
+      )
+        return;
       await send();
     } catch {
       return;
@@ -395,7 +386,9 @@ export class SocialPublishingService {
   ) {
     const updated = await this.transaction.run(storeId, async () => {
       if (
-        (changes.attempts !== undefined || changes.status === 'publishing') &&
+        (changes.attempts !== undefined ||
+          changes.status === 'publishing' ||
+          action === 'post.comment_attempted') &&
         !(await this.stores.isActive(storeId))
       )
         return false;

@@ -293,6 +293,28 @@ describe('SocialPublishingService', () => {
     });
   });
 
+  it('keeps the post published without commenting after its Instagram account disconnects', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const comment = vi.spyOn(driver, 'comment');
+    const { service, accounts } = publishing(driver);
+    const postId = await post();
+    await fixture.connection.pool.query(
+      'update posts set first_comment=$1 where store_id=$2 and id=$3',
+      ['ইনস্টাগ্রাম', fixture.a, postId],
+    );
+    const target = await setupTarget(accounts, 'instagram', postId);
+    vi.spyOn(driver, 'publishInstagram').mockImplementationOnce(async () => {
+      accounts.clear();
+      return 'published-post';
+    });
+    await service.publishTarget(fixture.a, target, true);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      error_code: 'POST_COMMENT_UNCONFIRMED',
+    });
+    expect(comment).not.toHaveBeenCalled();
+  });
+
   it('retains the first comment warning when publication completes on recovery', async () => {
     const driver = new FakeMetaPublishingDriver();
     const comment = vi.spyOn(driver, 'comment');
