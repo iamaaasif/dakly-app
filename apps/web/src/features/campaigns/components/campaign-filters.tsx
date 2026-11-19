@@ -95,7 +95,7 @@ export function CampaignFilters({ query }: { query: CampaignListQuery }) {
           <button
             type="button"
             onClick={clear}
-            className="inline-flex min-h-10 items-center text-action underline"
+            className="inline-flex min-h-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             Clear filters
           </button>

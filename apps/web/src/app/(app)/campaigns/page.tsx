@@ -21,7 +21,10 @@ export default async function CampaignsPage({
     <StorePage permission="canViewCampaigns">
       <p role="alert" className="p-6">
         The campaign filters are invalid.{' '}
-        <Link href="/campaigns" className="text-action underline">
+        <Link
+          href="/campaigns"
+          className="inline-flex min-h-10 min-w-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
           Open all campaigns
         </Link>
         .

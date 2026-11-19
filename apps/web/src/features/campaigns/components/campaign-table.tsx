@@ -17,22 +17,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
     <>
       <ul aria-label="Campaigns" className="space-y-3 md:hidden">
         {campaigns.map((campaign) => (
-          <li key={campaign.id} className="rounded-lg border border-border bg-surface px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <CampaignName campaign={campaign} />
-              </div>
-              <CampaignStatus status={campaign.status} />
-            </div>
-            {campaign.scheduledFor && (
-              <p className="mt-2 text-sm text-text-muted">
-                Scheduled for{' '}
-                <time dateTime={campaign.scheduledFor}>
-                  {formatDateTime(campaign.scheduledFor)}
-                </time>
-              </p>
-            )}
-          </li>
+          <CampaignCard key={campaign.id} campaign={campaign} />
         ))}
       </ul>
       <div className="hidden md:block">
@@ -46,9 +31,15 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
           </TableHeader>
           <TableBody>
             {campaigns.map((campaign) => (
-              <TableRow key={campaign.id}>
+              <TableRow key={campaign.id} className="relative">
                 <TableCell className="whitespace-normal">
-                  <CampaignName campaign={campaign} />
+                  <Link
+                    href={`/campaigns/${campaign.id}`}
+                    className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-action after:absolute after:inset-0 hover:underline focus-visible:outline-hidden focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
+                  >
+                    {campaign.name}
+                  </Link>
+                  <CampaignSubtitle campaign={campaign} />
                 </TableCell>
                 <TableCell>
                   <CampaignStatus status={campaign.status} />
@@ -71,20 +62,44 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
   );
 }
 
-function CampaignName({ campaign }: { campaign: CampaignResponse }) {
+function CampaignCard({ campaign }: { campaign: CampaignResponse }) {
+  const nameId = `campaign-card-name-${campaign.id}`;
   return (
-    <>
+    <li>
       <Link
         href={`/campaigns/${campaign.id}`}
-        className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-action hover:underline"
+        aria-labelledby={nameId}
+        className="group block rounded-lg border border-border bg-surface px-4 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
-        {campaign.name}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <span
+              id={nameId}
+              className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-action group-hover:underline"
+            >
+              {campaign.name}
+            </span>
+            <CampaignSubtitle campaign={campaign} />
+          </div>
+          <CampaignStatus status={campaign.status} />
+        </div>
+        {campaign.scheduledFor && (
+          <p className="mt-2 text-sm text-text-muted">
+            Scheduled for{' '}
+            <time dateTime={campaign.scheduledFor}>{formatDateTime(campaign.scheduledFor)}</time>
+          </p>
+        )}
       </Link>
-      <p className="text-sm text-text-muted">
-        {campaignChannelLabels[campaign.channel]}
-        {campaign.goal && ` · ${campaignGoalLabels[campaign.goal]}`}
-      </p>
-    </>
+    </li>
+  );
+}
+
+function CampaignSubtitle({ campaign }: { campaign: CampaignResponse }) {
+  return (
+    <p className="text-sm text-text-muted">
+      {campaignChannelLabels[campaign.channel]}
+      {campaign.goal && ` · ${campaignGoalLabels[campaign.goal]}`}
+    </p>
   );
 }
 

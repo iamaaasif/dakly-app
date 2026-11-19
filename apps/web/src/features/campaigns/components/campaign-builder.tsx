@@ -53,7 +53,7 @@ function BuilderHeader({ title, editable }: { title: string; editable: boolean }
       <Link
         href="/campaigns"
         aria-label="Back to campaigns"
-        className="row-span-2 inline-flex size-10 items-center justify-center rounded-md text-action hover:bg-primary-soft"
+        className="row-span-2 inline-flex size-10 items-center justify-center rounded-md text-action hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
         <ArrowLeft aria-hidden="true" size={20} strokeWidth={1.75} />
       </Link>

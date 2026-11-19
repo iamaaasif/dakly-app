@@ -93,12 +93,15 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    await page.setViewportSize({ width: 1440, height: 900 });
 
-    await page.getByRole('link', { name: 'Winter Kurti collection' }).click();
+    const draftCard = page.getByRole('listitem').filter({
+      has: page.getByRole('link', { name: 'Winter Kurti collection', exact: true }),
+    });
+    await draftCard.getByText('Draft', { exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/campaigns/${draft}$`));
     await expect(page.getByRole('button', { name: 'Save draft' })).toBeVisible();
     await page.getByRole('link', { name: 'Back to campaigns' }).click();
+    await page.setViewportSize({ width: 1440, height: 900 });
     const search = page.getByLabel('Search', { exact: true });
     const status = page.getByRole('combobox', { name: 'Status', exact: true });
     const channel = page.getByRole('combobox', { name: 'Channel', exact: true });
@@ -132,8 +135,20 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await page.getByLabel('Search', { exact: true }).fill('Puja');
     await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('sent');
     await page.getByRole('button', { name: 'Apply filters' }).click();
+    const sentRow = page.getByRole('row', { name: /Puja winback/ });
+    const sentLink = sentRow.getByRole('link', { name: 'Puja winback', exact: true });
+    await expect(sentLink).toBeVisible();
     await expect(page.getByRole('link', { name: 'Winter Kurti collection' })).toHaveCount(0);
-    await page.getByRole('link', { name: 'Puja winback' }).click();
+    await clear.focus();
+    await page.keyboard.press('Tab');
+    await expect(sentLink).toBeFocused();
+    // Click the status cell at its position, where the row link should receive the click.
+    const sentStatus = await sentRow.getByRole('cell', { name: 'Sent', exact: true }).boundingBox();
+    if (!sentStatus) throw new Error('Sent status cell was not visible');
+    await page.mouse.click(
+      sentStatus.x + sentStatus.width / 2,
+      sentStatus.y + sentStatus.height / 2,
+    );
     await expect(page).toHaveURL(new RegExp(`/campaigns/${sent}$`));
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();

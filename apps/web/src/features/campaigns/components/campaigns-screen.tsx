@@ -43,7 +43,7 @@ export function CampaignsScreen({
           {session?.currentStore?.canEditCampaigns && (
             <Link
               href="/campaigns/new"
-              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover"
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create campaign
             </Link>
@@ -111,7 +111,7 @@ function CampaignPages({
     <nav aria-label="Campaign pages" className="flex justify-between gap-4">
       {query.cursor && (
         <Link
-          className="min-h-10 text-action underline"
+          className="min-h-10 text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           href={campaignListHref({ ...query, cursor: undefined })}
         >
           First page
@@ -119,7 +119,7 @@ function CampaignPages({
       )}
       {nextCursor && (
         <Link
-          className="ml-auto min-h-10 text-action underline"
+          className="ml-auto min-h-10 text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           href={campaignListHref({ ...query, cursor: nextCursor }, shopId)}
         >
           Next page
