@@ -14,16 +14,14 @@ import {
 const SHARED_FROM = 'dakly@sms.dakly.test';
 const CONNECT_TIMEOUT_MS = 5000;
 const captureId = z.string().refine((value) => value.trim().length > 0);
-const capturePage = z.object({
+const captureSearch = z.object({
   messages: z.array(z.object({ ID: captureId, MessageID: captureId })),
-  messages_count: z.int().nonnegative(),
 });
 
 export class MailpitSmsDriver implements SmsDriver {
   private readonly smtp: { host: string; port: number };
   private readonly transport;
   private readonly apiUrl: string;
-  private readonly pending = new Map<string, Promise<SmsSendResult>>();
 
   constructor({ apiUrl, ...options }: { host: string; port: number; apiUrl: string }) {
     this.apiUrl = apiUrl;
@@ -31,39 +29,17 @@ export class MailpitSmsDriver implements SmsDriver {
     this.transport = this.transportForSignal();
   }
 
-  send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult> {
-    if (signal?.aborted) return Promise.reject(new SmsSendTimeout());
-    const { idempotencyKey } = message;
-    if (!idempotencyKey) return this.sendOnce(message, signal);
-    const pending = this.pending.get(idempotencyKey);
-    if (pending) return pending;
-    const sending = this.sendOnce(message, signal).finally(() =>
-      this.pending.delete(idempotencyKey),
-    );
-    this.pending.set(idempotencyKey, sending);
-    return sending;
-  }
-
-  private async sendOnce(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult> {
+  async send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult> {
+    if (signal?.aborted) throw new SmsSendTimeout();
     const messageId = message.idempotencyKey && `${message.idempotencyKey}@sms.dakly.test`;
-    const earlier = await this.findBeforeSubmission(messageId, signal);
-    if (earlier) return { providerMessageId: earlier };
-
-    return this.submit(message, messageId, signal);
-  }
-
-  private async findBeforeSubmission(
-    messageId?: string,
-    signal?: AbortSignal,
-  ): Promise<string | undefined> {
-    if (!messageId) return undefined;
-    try {
-      return await this.findCaptured(messageId, signal);
-    } catch {
-      if (signal?.aborted) throw new SmsSendTimeout();
-      // SMTP has not been called. The caller may still need to reconcile an earlier attempt.
-      throw new SmsSendRefused();
+    if (messageId) {
+      const earlier = await this.findCaptured(messageId, signal).catch(() => {
+        if (signal?.aborted) throw new SmsSendTimeout();
+        throw new SmsSendRefused();
+      });
+      if (earlier) return { providerMessageId: earlier };
     }
+    return this.submit(message, messageId, signal);
   }
 
   private async submit(
@@ -142,28 +118,13 @@ export class MailpitSmsDriver implements SmsDriver {
   private async findCaptured(messageId: string, signal?: AbortSignal): Promise<string | undefined> {
     const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '100' });
     const deadline = AbortSignal.timeout(5000);
-    const lookupSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-    let start = 0;
+    const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, {
+      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+    });
+    if (!response.ok) throw new Error('Mailpit search failed');
+    const { messages } = captureSearch.parse(await response.json());
     // Mailpit searches substrings, so only an exact Message-ID proves a prior submission.
-    for (;;) {
-      query.set('start', String(start));
-      const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, {
-        signal: lookupSignal,
-      });
-      if (!response.ok) throw new Error('Mailpit search failed');
-      const page = capturePage.safeParse(await response.json());
-      if (
-        !page.success ||
-        page.data.messages_count < start + page.data.messages.length ||
-        (page.data.messages.length === 0 && start < page.data.messages_count)
-      )
-        throw new Error('Invalid Mailpit search response');
-      const { messages, messages_count } = page.data;
-      const match = messages.find(({ MessageID }) => MessageID === messageId);
-      if (match) return match.ID;
-      start += messages.length;
-      if (start >= messages_count) return undefined;
-    }
+    return messages.find(({ MessageID }) => MessageID === messageId)?.ID;
   }
 }
 
@@ -171,47 +132,14 @@ type SmtpFailure = {
   responseCode?: unknown;
   command?: unknown;
   code?: unknown;
-  originalCode?: unknown;
-  timeoutType?: unknown;
   syscall?: unknown;
 };
 
 function isSmtpRefusal(error: unknown): boolean {
-  const failure = (error ?? {}) as SmtpFailure;
-  if (error instanceof AggregateError) return failedAllConnectAttempts(error, failure);
-  if (failedDuringSetup(failure)) return true;
-  const { responseCode, command, code } = failure;
-  // ECONNECTION on CONN can include an incomplete reply left in the receive buffer.
-  if (code === 'ECONNECTION' && command === 'CONN') return false;
-  // Mailpit can return 451 after storing DATA if tagging the capture fails.
-  if (responseCode === 451 && code === 'EMESSAGE' && command === 'DATA') return false;
-  return isSmtpRejection(responseCode);
-}
-
-function failedAllConnectAttempts(error: AggregateError, { code, command }: SmtpFailure): boolean {
-  const attempts: unknown = error.errors;
-  return (
-    code === 'ESOCKET' &&
-    command === 'CONN' &&
-    Array.isArray(attempts) &&
-    attempts.length > 0 &&
-    attempts.every(
-      (attempt: unknown) =>
-        attempt instanceof Error && 'syscall' in attempt && attempt.syscall === 'connect',
-    )
-  );
-}
-
-function failedDuringSetup({ code, originalCode, timeoutType, syscall }: SmtpFailure): boolean {
-  return (
-    code === 'EDNS' ||
-    originalCode === 'ECONNREFUSED' ||
-    syscall === 'connect' ||
-    timeoutType === 'CONNECT_TIMEOUT' ||
-    timeoutType === 'GREETING_TIMEOUT'
-  );
-}
-
-function isSmtpRejection(responseCode: unknown): boolean {
-  return typeof responseCode === 'number' && responseCode >= 400 && responseCode < 600;
+  if (!(error instanceof Error)) return false;
+  const { responseCode, command, code, syscall } = error as Error & SmtpFailure;
+  if (syscall === 'connect' || code === 'EDNS') return true;
+  if (typeof responseCode !== 'number' || responseCode < 400 || responseCode >= 600) return false;
+  // Nodemailer uses EENVELOPE for a rejected DATA command and EMESSAGE for the final body reply.
+  return code === 'EENVELOPE' || code === 'EPROTOCOL' || command === 'EHLO';
 }
