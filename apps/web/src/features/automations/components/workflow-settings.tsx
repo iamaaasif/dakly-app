@@ -68,6 +68,7 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
   return (
     <FormProvider {...form}>
       <form
+        method="post"
         className="min-h-screen bg-surface-muted"
         onSubmit={form.handleSubmit((draft) => submit(draft, false))}
       >
@@ -77,7 +78,7 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
           onPublish={form.handleSubmit(confirm)}
         />
         <SettingsFields
-          pending={save.isPending}
+          pending={save.isPending || form.formState.isSubmitting}
           error={confirmation ? undefined : save.error?.message}
         />
       </form>
@@ -100,7 +101,7 @@ function SettingsForm({ workflow, refresh }: SettingsFormProps) {
 function SettingsFields({ error, pending }: { error?: string; pending: boolean }) {
   const { register, formState } = useFormContext<SettingsInput>();
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4 md:p-8">
+    <fieldset disabled={pending} className="mx-auto max-w-3xl space-y-4 p-4 md:p-8">
       <FormField name="name" label="Workflow name">
         {(field) => <Input {...field} {...register('name')} maxLength={80} />}
       </FormField>
@@ -114,11 +115,9 @@ function SettingsFields({ error, pending }: { error?: string; pending: boolean }
           Check the workflow settings before saving.
         </p>
       )}
-      <fieldset className="space-y-4" disabled={pending}>
-        <WorkflowEntrySettings />
-        <WorkflowStepSettings />
-      </fieldset>
-    </div>
+      <WorkflowEntrySettings />
+      <WorkflowStepSettings />
+    </fieldset>
   );
 }
 

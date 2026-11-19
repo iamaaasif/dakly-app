@@ -96,11 +96,15 @@ export class AutomationsController {
     @CurrentUser() userId: string,
     @CurrentAccess() access: StoreAccess,
     @Param('automationId', ParseUUIDPipe) automationId: string,
+    @Body(new ZodValidationPipe(changeAutomationSchema.optional()))
+    draft: ChangeAutomationInput | undefined,
   ): Promise<AutomationResponse> {
-    return this.automations.publish(storeId, automationId, {
-      access,
-      actor: { kind: 'user', userId },
-    });
+    return this.automations.publish(
+      storeId,
+      automationId,
+      { access, actor: { kind: 'user', userId } },
+      draft,
+    );
   }
 
   @Post(':automationId/enable')

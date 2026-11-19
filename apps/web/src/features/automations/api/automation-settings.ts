@@ -18,10 +18,11 @@ export function useSaveAutomation(id: string) {
   const { request, contextTag } = useStoreRequest();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async ({ draft, publish }: { draft: ChangeAutomationInput; publish: boolean }) => {
-      await request(`/automations/${id}`, { method: 'PATCH', body: draft });
-      if (publish) await request(`/automations/${id}/publish`, { method: 'POST' });
-    },
+    mutationFn: ({ draft, publish }: { draft: ChangeAutomationInput; publish: boolean }) =>
+      request(publish ? `/automations/${id}/publish` : `/automations/${id}`, {
+        method: publish ? 'POST' : 'PATCH',
+        body: draft,
+      }),
     onSuccess: () => client.invalidateQueries({ queryKey: automationKeys.all(contextTag) }),
   });
 }

@@ -1,6 +1,10 @@
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import type { AutomationStep } from '@dakly/contracts/automations/graph';
+import {
+  type AutomationGraph,
+  type AutomationStep,
+  nextStepKeys,
+} from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -93,12 +97,24 @@ function ChannelOrder({
   );
 }
 
+function orderedEditableSteps(graph: Pick<AutomationGraph, 'firstStepKey' | 'steps'>) {
+  const seen = new Set<string>();
+  const steps: [string, AutomationStep][] = [];
+  function visit(key: string) {
+    if (seen.has(key)) return;
+    seen.add(key);
+    const step = graph.steps[key]!;
+    if (step.kind === 'wait' || step.kind === 'send') steps.push([key, step]);
+    nextStepKeys(step).forEach(visit);
+  }
+  visit(graph.firstStepKey);
+  return steps;
+}
+
 export function WorkflowStepSettings() {
   const { control } = useFormContext<SettingsInput>();
   const graph = useWatch({ control, name: 'graph' });
-  const steps = Object.entries(graph.steps).filter(
-    ([, step]) => step.kind === 'wait' || step.kind === 'send',
-  );
+  const steps = orderedEditableSteps(graph);
   if (!steps.length) return null;
   return (
     <section className="space-y-4" aria-label="Workflow steps">
