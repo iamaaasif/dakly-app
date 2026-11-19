@@ -19,10 +19,14 @@ import { createHttpServer } from '../platform/http/http-server';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SessionsService } from '../sessions/sessions.service';
+import { ProcessWebhookEventJob } from './jobs/process-webhook-event.job';
+import { MetaWebhookRoutingModule } from './meta-webhook-routing.module';
 import { MetaWebhooksModule } from './meta-webhooks.module';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, SessionsModule, MetaWebhooksModule] })(TestModule);
+Module({ imports: [DatabaseModule, SessionsModule, MetaWebhooksModule, MetaWebhookRoutingModule] })(
+  TestModule,
+);
 
 const appSecret = 'local-meta-signing-material';
 const verifyToken = 'local-meta-verification-material';
@@ -54,8 +58,15 @@ function post(payload: string, signed = signature(payload), contentType = 'appli
 
 async function stored(payload: string) {
   const externalId = createHash('sha256').update(payload).digest('hex');
-  const result = await admin.pool.query<{ id: string; payload: object; status: string }>(
-    "select id, payload, status from webhook_events where provider = 'meta' and external_id = $1",
+  const result = await admin.pool.query<{
+    id: string;
+    payload: object | null;
+    status: string;
+    error: string | null;
+    processedAt: Date | null;
+  }>(
+    `select id, payload, status, error, processed_at as "processedAt"
+     from webhook_events where provider = 'meta' and external_id = $1`,
     [externalId],
   );
   return result.rows;
@@ -126,13 +137,72 @@ describe('Meta webhook intake', () => {
 
     const rows = await stored(payload);
     expect(rows).toEqual([
-      { id: expect.any(String), payload: JSON.parse(payload), status: 'received' },
+      {
+        id: expect.any(String),
+        payload: JSON.parse(payload),
+        status: 'received',
+        error: null,
+        processedAt: null,
+      },
     ]);
     const job = await queue.getJob(rows[0]!.id);
     expect(job?.name).toBe('process-webhook-event');
     expect(job?.data).toEqual({ webhookEventId: rows[0]!.id });
     expect(await job?.getState()).toBe('waiting');
   });
+
+  it.each(['unknown', 'disconnected', 'active'] as const)(
+    'routes a signed delivery for an %s account and clears its payload',
+    async (status) => {
+      const storeId = randomUUID();
+      const accountId = randomUUID();
+      const payload = JSON.stringify({
+        object: 'page',
+        entry: [
+          {
+            id: accountId,
+            messaging: [
+              {
+                sender: { id: '987' },
+                recipient: { id: accountId },
+                timestamp: 1795053600000,
+                message: { mid: 'mid.001', text: 'দাম কত?' },
+              },
+            ],
+          },
+        ],
+      });
+      await admin.pool.query('insert into stores (id, name) values ($1, $2)', [
+        storeId,
+        'Routing test',
+      ]);
+      try {
+        if (status !== 'unknown')
+          await admin.pool.query(
+            `insert into channel_connections (id, store_id, kind, external_account_id, display_name, status)
+           values ($1, $2, 'facebook_page', $3, 'Routing test', $4)`,
+            [randomUUID(), storeId, accountId, status],
+          );
+        expect((await post(payload)).statusCode).toBe(200);
+        const [received] = await stored(payload);
+        expect(received?.status).toBe('received');
+        const handler = app.get(ProcessWebhookEventJob);
+        await handler.handle({ webhookEventId: received?.id });
+        const [ignored] = await stored(payload);
+        expect(ignored).toMatchObject({
+          status: 'ignored',
+          payload: null,
+          processedAt: expect.any(Date),
+          error: status === 'active' ? 'messaging_inbound_pending' : 'unknown_account',
+        });
+        await handler.handle({ webhookEventId: received?.id });
+        expect(await stored(payload)).toEqual([ignored]);
+      } finally {
+        await admin.pool.query('delete from channel_connections where store_id = $1', [storeId]);
+        await admin.pool.query('delete from stores where id = $1', [storeId]);
+      }
+    },
+  );
 
   it('rejects a signature for different bytes and logs the rejection without the payload', async () => {
     const payload = delivery('instagram');
