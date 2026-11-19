@@ -1,17 +1,14 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import { countSmsParts } from '@dakly/contracts/sms';
 
 import { LinksService } from '../links/links.service';
 import { MessagingService, type SentMessage } from '../messaging/messaging.service';
-import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { ErrorReporter } from '../platform/logging/error-reporter';
-import { jobLogBindings } from '../platform/logging/job-context';
-import { serializeError } from '../platform/logging/safe-error';
-import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { OutboxService } from '../platform/outbox/outbox.service';
+import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService, type SkipReason } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
@@ -21,11 +18,8 @@ import { marketingSmsText } from './campaign-sms';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
 
-const STORES_PER_TICK = 100;
-const CURSOR_LIFETIME_SECONDS = (7 * DAY_MS) / 1000;
-const STORE_CURSOR = 'campaign-start:store';
 const BATCH_SIZE = 200;
-const CLAIM_MS = 5 * MINUTE_MS;
+export const CAMPAIGN_CLAIM_MS = 5 * MINUTE_MS;
 const SEND_ATTEMPTS = 3;
 const ACTOR = { kind: 'system' } as const;
 
@@ -51,8 +45,6 @@ type Claim =
 
 @Injectable()
 export class CampaignSenderService {
-  private readonly logger = new Logger(CampaignSenderService.name);
-
   constructor(
     @Inject(CampaignSendingRepository) private readonly repository: CampaignSendingRepository,
     @Inject(CampaignsRepository) private readonly campaigns: CampaignsRepository,
@@ -64,27 +56,9 @@ export class CampaignSenderService {
     @Inject(CampaignsService) private readonly service: CampaignsService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
-    @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
   ) {}
-
-  async startDue(): Promise<void> {
-    const now = this.clock.now();
-    const after = await this.valkey.connection.get(STORE_CURSOR);
-    let stores = await this.repository.listDueStores(now, after, STORES_PER_TICK);
-    if (!stores.length && after)
-      stores = await this.repository.listDueStores(now, null, STORES_PER_TICK);
-    for (const storeId of stores) {
-      await this.repository.startDueInStore(storeId, now).catch((error: unknown) => {
-        this.logger.error({ storeId }, 'Campaign starts failed for store');
-        const { jobId } = jobLogBindings();
-        if (jobId) this.reporter.reportJob(serializeError(error), jobId);
-      });
-    }
-    const last = stores.at(-1);
-    if (last) await this.valkey.connection.set(STORE_CURSOR, last, 'EX', CURSOR_LIFETIME_SECONDS);
-  }
 
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
     if (!(await this.funding.prepare(storeId, campaignId))) return null;
@@ -113,7 +87,7 @@ export class CampaignSenderService {
       const recipient = await this.repository.lockNextRecipient(
         storeId,
         campaign,
-        new Date(now.getTime() - CLAIM_MS),
+        new Date(now.getTime() - CAMPAIGN_CLAIM_MS),
       );
       if (!recipient) return { kind: 'stop' };
       if (recipient.status === 'sending') {
@@ -317,7 +291,7 @@ export class CampaignSenderService {
     const { recipient, destination, body, claimedAt, sender } = submission;
     const { id: recipientId, contactId } = recipient;
     const current = await this.repository.isCurrentClaim(storeId, recipientId, claimedAt);
-    if (!current || this.clock.now().getTime() - claimedAt.getTime() >= CLAIM_MS) return;
+    if (!current || this.clock.now().getTime() - claimedAt.getTime() >= CAMPAIGN_CLAIM_MS) return;
     let receipt: SentMessage;
     try {
       receipt = await this.messaging.send(
@@ -415,6 +389,12 @@ export class CampaignSenderService {
         { status: 'sending' },
         { status: 'sent', finishedAt: now, updatedAt: now },
       );
+      await this.outbox.publish({
+        type: 'campaign.sent',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { campaignId: id },
+      });
     });
   }
 }

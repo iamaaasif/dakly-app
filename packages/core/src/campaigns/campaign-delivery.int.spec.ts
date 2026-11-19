@@ -1,10 +1,11 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { BullModule } from '@nestjs/bullmq';
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
@@ -358,7 +359,7 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
-  it('sends each recipient its opt-out link and charges what was sent', async () => {
+  it('sends each recipient its opt-out link, then charges what was sent and emits campaign.sent', async () => {
     const before = await wallets.balance(storeId, 'sms_credits');
     const { id, phones } = await sendingCampaign(3);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
@@ -386,6 +387,11 @@ describe('Campaign sender (Postgres)', () => {
       { kind: 'charge', quantity_delta: -3 },
     ]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
+    const { rows: events } = await admin.pool.query(
+      "select payload from outbox_events where store_id=$1 and type='campaign.sent' and payload->>'campaignId'=$2",
+      [storeId, id],
+    );
+    expect(events).toHaveLength(1);
   });
 
   it('keeps the approved opt-out base and one-part charge when the worker URL changes', async () => {

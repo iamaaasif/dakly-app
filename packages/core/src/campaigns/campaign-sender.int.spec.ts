@@ -14,8 +14,8 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { runWithJobContext } from '../platform/logging/job-context';
 import { DAY_MS } from '../platform/time';
-import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
+import { CampaignSweepService } from './campaign-sweep.service';
 import { CampaignsModule } from './campaigns.module';
 
 class TestModule {}
@@ -25,7 +25,7 @@ const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
 const sendAt = new Date('2026-11-18T06:00:00Z');
 let app: INestApplicationContext;
-let sender: CampaignSenderService;
+let sweeper: CampaignSweepService;
 let clockNow: Date;
 
 async function campaignRow(campaignId: string) {
@@ -39,7 +39,7 @@ describe('Campaign sweep (Postgres)', () => {
   beforeAll(async () => {
     await admin.pool.query("insert into stores(id,name) values($1,'সুমির দোকান')", [storeId]);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
-    sender = app.get(CampaignSenderService);
+    sweeper = app.get(CampaignSweepService);
     vi.spyOn(app.get(Clock), 'now').mockImplementation(() => clockNow);
   });
 
@@ -66,11 +66,11 @@ describe('Campaign sweep (Postgres)', () => {
     );
 
     clockNow = new Date(sendAt.getTime() - 60 * 1000);
-    await sender.startDue();
+    await sweeper.startDue();
     expect(await campaignRow(id)).toEqual({ status: 'scheduled', started_at: null });
 
     clockNow = sendAt;
-    await sender.startDue();
+    await sweeper.startDue();
     expect(await campaignRow(id)).toEqual({ status: 'sending', started_at: sendAt });
   });
 
@@ -100,7 +100,7 @@ describe('Campaign sweep (Postgres)', () => {
       );
       clockNow = sendAt;
 
-      await runWithJobContext(() => sender.startDue(), 'sweep-job-1');
+      await runWithJobContext(() => sweeper.startDue(), 'sweep-job-1');
 
       expect(report).toHaveBeenCalledOnce();
       expect(report).toHaveBeenCalledWith(
@@ -162,7 +162,7 @@ describe('Campaign sweep (Postgres)', () => {
         store,
       ]);
       clockNow = sendAt;
-      sweep = sender.startDue();
+      sweep = sweeper.startDue();
       await expect.poll(() => campaignRow(other)).toMatchObject({ status: 'sending' });
       expect(await campaignRow(sameStore)).toMatchObject({ status: 'sending' });
       expect(await campaignRow(locked)).toMatchObject({ status: 'scheduled' });
@@ -203,7 +203,7 @@ describe('Campaign sweep (Postgres)', () => {
       const [next] = await repository.listDueStores(sendAt, first!, 1);
       expect([first, next]).toEqual(selected);
       clockNow = sendAt;
-      await sender.startDue();
+      await sweeper.startDue();
       const { rows } = await admin.pool.query(
         `select count(*) filter (where status='sending')::int as sending,
                 count(*) filter (where status='scheduled')::int as scheduled
@@ -212,7 +212,7 @@ describe('Campaign sweep (Postgres)', () => {
       );
       expect(rows).toEqual([{ sending: 100, scheduled: 3 }]);
       expect(await campaignRow(outsideBacklog)).toMatchObject({ status: 'sending' });
-      await sender.startDue();
+      await sweeper.startDue();
       const remaining = await admin.pool.query(
         "select count(*)::int as count from campaigns where id=any($1::uuid[]) and status='scheduled'",
         [backlog],
