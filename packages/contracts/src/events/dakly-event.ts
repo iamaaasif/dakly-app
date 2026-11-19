@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { automationPausedEventSchema } from './automations';
 import { campaignApprovedEventSchema } from './campaigns';
 import {
   channelConnectedEventSchema,
@@ -69,7 +68,6 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   messageTappedEventSchema,
   messageOptedOutEventSchema,
   notificationCreatedEventSchema,
-  automationPausedEventSchema,
   walletCreditedEventSchema,
   orderStageChangedEventSchema,
   orderCodCollectedEventSchema,

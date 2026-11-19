@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
@@ -23,14 +21,9 @@ import {
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
-import { UsersService } from '../auth/users.service';
-import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -73,10 +66,6 @@ export class AutomationsService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
-    @Inject(OutboxService) private readonly outbox: OutboxService,
-    @Inject(UsersService) private readonly users: UsersService,
-    @Inject(EmailService) private readonly email: EmailService,
-    @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
     @Inject(WalletService) private readonly wallets: WalletService,
   ) {}
 
@@ -195,7 +184,7 @@ export class AutomationsService {
   }
 
   // Inside the send step's transaction. Only the first run short of SMS credits pauses the
-  // workflow; the owner gets a card now and an email from the automation.paused event.
+  // workflow and posts a card for the owner.
   async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
     const revision = await this.wallets.currentRevision(storeId, 'sms_credits');
     const now = await this.repository.schedulerTime(storeId);
@@ -209,51 +198,6 @@ export class AutomationsService {
       ...balancePauseNotice(paused.name),
       actionUrl: TOP_UP_PATH,
     });
-    await this.outbox.publish({
-      type: 'automation.paused',
-      storeId,
-      occurredAt: now.toISOString(),
-      payload: { automationId, automationName: paused.name, reason: 'balance' },
-    });
-  }
-
-  // The email driver takes no idempotency key, so each owner's email for this event is claimed in
-  // Valkey first: a retry after some emails went out sends the rest only. Until the email is sent
-  // the claim is short; a retry that meets it emails the other owners and then fails, so a later
-  // retry sends the email of a worker that died mid-send.
-  async emailBalancePause(storeId: string, automationName: string, eventId: string): Promise<void> {
-    const { title, body } = balancePauseNotice(automationName);
-    const text = `${body}\n${loadEnv().WEB_ORIGINS[0]}${TOP_UP_PATH}`;
-    const owners = await this.users.profiles(
-      await this.team.userIdsWithPermission(storeId, 'billing.edit'),
-    );
-    let stillSending = false;
-    let firstFailure: { error: unknown } | undefined;
-    for (const { id, email } of owners) {
-      if (!email) continue;
-      const key = `automation-pause-email:${eventId}:${id}`;
-      const claim = `sending:${randomUUID()}`;
-      try {
-        const connection = this.valkey.connection;
-        if (!(await connection.set(key, claim, 'EX', SENDING_CLAIM_SECONDS, 'NX'))) {
-          stillSending ||= (await connection.get(key)) !== 'sent';
-          continue;
-        }
-        const ttl = await this.email.send({ to: email, subject: title, text }).then(
-          () => SENT_CLAIM_SECONDS,
-          (error: unknown) => {
-            firstFailure ??= { error };
-            return 0;
-          },
-        );
-        await connection.eval(finishEmailClaim, 1, key, claim, ttl);
-      } catch (error) {
-        // Retry this recipient without preventing delivery to the other owners.
-        firstFailure ??= { error };
-      }
-    }
-    if (firstFailure) throw firstFailure.error;
-    if (stillSending) throw automationError('AUTOMATION_PAUSE_EMAIL_SENDING');
   }
 
   // A delayed credit event cannot resume a pause whose gate already saw that ledger revision.
@@ -308,23 +252,6 @@ export class AutomationsService {
 
 // The shop app has no top-up screen until PAY-8; Settings is where billing will live.
 const TOP_UP_PATH = '/settings';
-// Longer than an email driver waits for its provider (5 seconds), and short enough to lapse
-// before a crashed job's stall retry, which BullMQ starts 30 to 60 seconds later.
-const SENDING_CLAIM_SECONDS = 20;
-// Longer than the outbox relay keeps retrying an event.
-const SENT_CLAIM_SECONDS = 7 * 24 * 60 * 60;
-
-// A late refusal cannot clear another claim. Any confirmed delivery finishes the event.
-const finishEmailClaim = `
-  local current = redis.call('GET', KEYS[1])
-  if tonumber(ARGV[2]) == 0 then
-    if current == ARGV[1] then return redis.call('DEL', KEYS[1]) end
-  elseif current ~= 'sent' then
-    return redis.call('SET', KEYS[1], 'sent', 'EX', ARGV[2])
-  end
-  return 0
-`;
-
 function balancePauseNotice(name: string) {
   return {
     title: `"${name}" paused: SMS balance too low`,

@@ -16,7 +16,6 @@ import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module'
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
-import { EmailOwnerOnAutomationPaused } from '@dakly/core/automations/jobs/email-owner-on-automation-paused.job';
 import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/record-automation-birthdays.job';
 import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
@@ -85,7 +84,6 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
-    EmailOwnerOnAutomationPaused,
     ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
   ],

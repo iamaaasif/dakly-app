@@ -35,10 +35,6 @@ const AUTOMATION_ERRORS = {
     status: 409,
     message: 'Taps on workflow messages are not recorded yet',
   },
-  AUTOMATION_PAUSE_EMAIL_SENDING: {
-    status: 409,
-    message: 'Another try is still sending this pause email',
-  },
   AUTOMATION_REVIEW_UNAVAILABLE: {
     status: 409,
     message: 'Review before sending is not available yet',

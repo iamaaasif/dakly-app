@@ -134,16 +134,6 @@ const examples: DaklyEvent[] = [
     },
   },
   {
-    type: 'automation.paused',
-    storeId,
-    occurredAt,
-    payload: {
-      automationId: '019c01ea-cf15-7d31-a7f5-d73d66007adf',
-      automationName: 'Welcome new customers',
-      reason: 'balance',
-    },
-  },
-  {
     type: 'wallet.credited',
     storeId,
     occurredAt,

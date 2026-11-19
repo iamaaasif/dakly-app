@@ -14,12 +14,9 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
-import { UsersService } from '../auth/users.service';
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
-import { EmailService } from '../email/email.service';
 import { MessagingService } from '../messaging/messaging.service';
-import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -28,7 +25,6 @@ import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
-import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
@@ -37,7 +33,6 @@ import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationsModule } from './automations.module';
 import { AutomationsRepository } from './automations.repository';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
-import { EmailOwnerOnAutomationPaused } from './jobs/email-owner-on-automation-paused.job';
 import { ResumeWorkflowsOnWalletCredited } from './jobs/resume-workflows-on-wallet-credited.job';
 import { WakeDueRunsJob } from './jobs/wake-due-runs.job';
 
@@ -47,7 +42,6 @@ const contactId = randomUUID();
 const ownerId = randomUUID();
 const staffUserId = randomUUID();
 const ownerEmail = `owner-${ownerId}@example.test`;
-const coOwnerId = randomUUID();
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
 const applications: INestApplicationContext[] = [];
@@ -73,12 +67,7 @@ async function worker() {
       }),
       BullModule.registerQueue({ name: QUEUES.workflow }),
     ],
-    providers: [
-      WakeDueRunsJob,
-      ContinueAutomationRunJob,
-      EmailOwnerOnAutomationPaused,
-      ResumeWorkflowsOnWalletCredited,
-    ],
+    providers: [WakeDueRunsJob, ContinueAutomationRunJob, ResumeWorkflowsOnWalletCredited],
   })(TestModule);
   const application = await NestFactory.createApplicationContext(TestModule, { logger: false });
   applications.push(application);
@@ -88,11 +77,9 @@ async function worker() {
       runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data)),
     entries: application.get(AutomationEntryService),
     consents: application.get(ConsentService),
-    emailOwner: (data: unknown) => application.get(EmailOwnerOnAutomationPaused).handle(data),
     resumeOnCredit: (data: unknown) =>
       application.get(ResumeWorkflowsOnWalletCredited).handle(data),
     wallets: application.get(WalletService),
-    valkey: application.get(ValkeyClient).connection,
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
 }
@@ -235,7 +222,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
       await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
       await admin.pool.query('delete from memberships where store_id=$1', [storeId]);
-      await admin.pool.query('delete from users where id=any($1::uuid[])', [[ownerId, coOwnerId]]);
+      await admin.pool.query('delete from users where id=$1', [ownerId]);
       await admin.pool.query('update automations set published_version_id=null where store_id=$1', [
         storeId,
       ]);
@@ -679,16 +666,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         [storeId, revision + 1, target - balance, target, `adjust-${randomUUID()}`, createdAt],
       );
       return entry.rows[0];
-    }
-
-    async function mailTo(address: string): Promise<string[]> {
-      const api = process.env.MAILPIT_API_URL ?? 'http://127.0.0.1:8025';
-      const query = new URLSearchParams({ query: `to:"${address}"` });
-      const response = await fetch(`${api}/api/v1/search?${query}`, {
-        signal: AbortSignal.timeout(5000),
-      });
-      const found = (await response.json()) as { messages: { Subject: string }[] };
-      return found.messages.map((message) => message.Subject);
     }
 
     // Credits the store as staff do, then hands the outbox row to the resume subscriber.
@@ -2794,132 +2771,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         [storeId, `automation-balance:${automationId}:%`],
       );
       expect(cards.rows).toEqual([{ user_id: ownerId, action_url: '/settings' }]);
-      const events = await admin.pool.query(
-        "select id,type,payload,occurred_at from outbox_events where store_id=$1 and type='automation.paused' and payload->>'automationId'=$2",
-        [storeId, automationId],
-      );
-      expect(events.rows).toHaveLength(1);
-      const [event] = events.rows;
-      const pausedEvent = {
-        id: event.id,
-        type: event.type,
-        storeId,
-        occurredAt: event.occurred_at.toISOString(),
-        payload: event.payload,
-      };
-      const deliverEmail = EmailService.prototype.send;
-      // A failed send frees its claim for the retry; once it went out, a retry sends nothing more.
-      vi.spyOn(EmailService.prototype, 'send').mockRejectedValueOnce(new Error('smtp down'));
-      await expect(runner.emailOwner(pausedEvent)).rejects.toThrow('smtp down');
-      expect(await mailTo(ownerEmail)).toEqual([]);
-      await runner.emailOwner(pausedEvent);
-      await runner.emailOwner(pausedEvent);
-      expect(await mailTo(ownerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
-      // A worker that dies mid-send leaves a short claim: a retry that meets it fails, and one
-      // after it lapses sends the email.
-      const crashed = { ...pausedEvent, id: randomUUID() };
-      const claimKey = `automation-pause-email:${crashed.id}:${ownerId}`;
-      let failExpiredSend!: (error: Error) => void;
-      const expiredSend = new Promise<never>((_, reject) => (failExpiredSend = reject));
-      vi.spyOn(EmailService.prototype, 'send').mockReturnValueOnce(expiredSend);
-      const crashedDelivery = runner.emailOwner(crashed);
-      void crashedDelivery.catch(() => undefined);
-      await vi.waitFor(async () =>
-        expect(await runner.valkey.get(claimKey)).toMatch(/^sending:[\da-f-]{36}$/u),
-      );
-      expect(await runner.valkey.ttl(claimKey)).toBeLessThanOrEqual(20);
-      await expect(runner.emailOwner(crashed)).rejects.toMatchObject({
-        code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
-      });
-      await runner.valkey.del(claimKey); // the claim lapses
-      await runner.emailOwner(crashed);
-      expect(await mailTo(ownerEmail)).toHaveLength(2);
-      expect(await runner.valkey.ttl(claimKey)).toBeGreaterThan(6 * 24 * 60 * 60);
-      failExpiredSend(new Error('Old attempt failed after its claim expired'));
-      await expect(crashedDelivery).rejects.toThrow('Old attempt failed');
-      expect(await runner.valkey.get(claimKey)).toBe('sent');
-      await runner.emailOwner(crashed);
-      expect(await mailTo(ownerEmail)).toHaveLength(2);
-
-      // A late confirmation must survive expiry and a concurrent attempt's refusal.
-      for (const hasReplacement of [false, true]) {
-        const delayed = { ...pausedEvent, id: randomUUID() };
-        const delayedKey = `automation-pause-email:${delayed.id}:${ownerId}`;
-        const before = (await mailTo(ownerEmail)).length;
-        let finishDelayedEmail!: () => void;
-        const delayedEmail = new Promise<void>((resolve) => (finishDelayedEmail = resolve));
-        const mailer = vi.spyOn(EmailService.prototype, 'send');
-        mailer.mockImplementationOnce(async function (this: EmailService, input) {
-          await delayedEmail;
-          await deliverEmail.call(this, input);
-        });
-        const delayedDelivery = runner.emailOwner(delayed);
-        await vi.waitFor(async () =>
-          expect(await runner.valkey.get(delayedKey)).toMatch(/^sending:/u),
-        );
-        await runner.valkey.del(delayedKey);
-
-        let replacement: Promise<void> | undefined;
-        let refuseReplacement: ((error: Error) => void) | undefined;
-        if (hasReplacement) {
-          const refusal = new Promise<never>((_, reject) => (refuseReplacement = reject));
-          mailer.mockReturnValueOnce(refusal);
-          replacement = runner.emailOwner(delayed);
-          void replacement.catch(() => undefined);
-          await vi.waitFor(async () =>
-            expect(await runner.valkey.get(delayedKey)).toMatch(/^sending:/u),
-          );
-        }
-        finishDelayedEmail();
-        await delayedDelivery;
-        if (replacement) {
-          refuseReplacement?.(new Error('Replacement refused'));
-          await expect(replacement).rejects.toThrow('Replacement refused');
-        }
-        expect(await runner.valkey.get(delayedKey)).toBe('sent');
-        await runner.emailOwner(delayed);
-        expect(await mailTo(ownerEmail)).toHaveLength(before + 1);
-      }
-
-      // An owner whose email is still in flight does not hold back another owner's email.
-      const coOwnerEmail = `owner-${coOwnerId}@example.test`;
-      await admin.pool.query("insert into users(id,name,email) values($1,'ফাহিম',$2)", [
-        coOwnerId,
-        coOwnerEmail,
-      ]);
-      // A store has one owner today; the email goes to everyone who may edit billing.
-      vi.spyOn(TeamService.prototype, 'userIdsWithPermission').mockResolvedValueOnce([
-        ownerId,
-        coOwnerId,
-      ]);
-      const inFlight = { ...pausedEvent, id: randomUUID() };
-      await runner.valkey.set(
-        `automation-pause-email:${inFlight.id}:${ownerId}`,
-        'sending',
-        'EX',
-        20,
-      );
-      await expect(runner.emailOwner(inFlight)).rejects.toMatchObject({
-        code: 'AUTOMATION_PAUSE_EMAIL_SENDING',
-      });
-      expect(await mailTo(coOwnerEmail)).toEqual([expect.stringContaining('SMS balance too low')]);
-      expect(await mailTo(ownerEmail)).toHaveLength(4);
-
-      const profiles = vi.spyOn(UsersService.prototype, 'profiles');
-      const owners = [
-        { id: ownerId, email: ownerEmail, name: 'Owner', phone: null },
-        { id: coOwnerId, email: coOwnerEmail, name: 'Billing admin', phone: null },
-      ];
-      const rejectedOwner = { ...pausedEvent, id: randomUUID() };
-      profiles.mockResolvedValueOnce(owners).mockResolvedValueOnce(owners);
-      const mail = vi.spyOn(EmailService.prototype, 'send');
-      mail.mockRejectedValueOnce(new Error('mailbox refused'));
-      await expect(runner.emailOwner(rejectedOwner)).rejects.toThrow('mailbox refused');
-      expect(await mailTo(ownerEmail)).toHaveLength(4);
-      expect(await mailTo(coOwnerEmail)).toHaveLength(2);
-      await runner.emailOwner(rejectedOwner);
-      expect(await mailTo(ownerEmail)).toHaveLength(5);
-      expect(await mailTo(coOwnerEmail)).toHaveLength(2);
       // A paused workflow's runs are not swept.
       await runner.sweep();
       expect((await run(old!)).status).toBe('waiting');
@@ -2981,24 +2832,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect((await status()).rows).toEqual([
         { status: 'active', pause_reason: null, balance_resumed_at: databaseNow },
       ]);
-
-      const { rows } = await admin.pool.query(
-        "select id,type,payload,occurred_at from outbox_events where store_id=$1 and type='automation.paused' and payload->>'automationId'=$2",
-        [storeId, automationId],
-      );
-      expect(rows).toHaveLength(1);
-      const [pause] = rows;
-      const earlier = await mailTo(ownerEmail);
-      const event = {
-        id: pause.id,
-        type: pause.type,
-        storeId,
-        occurredAt: pause.occurred_at.toISOString(),
-        payload: pause.payload,
-      };
-      await runner.emailOwner(event);
-      await runner.emailOwner(event);
-      expect(await mailTo(ownerEmail)).toHaveLength(earlier.length + 1);
     });
 
     it('measures a balance resume after waiting for the workflow lock', async () => {
@@ -3176,11 +3009,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
       expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
       const pause = await admin.pool.query(
-        "select a.balance_pause_revision,e.occurred_at from automations a join outbox_events e on e.store_id=a.store_id and e.type='automation.paused' and e.payload->>'automationId'=a.id::text where a.id=$1",
+        'select balance_pause_revision,updated_at from automations where id=$1',
         [automationId],
       );
       expect(pause.rows).toEqual([
-        { balance_pause_revision: credit!.revision, occurred_at: credit!.created_at },
+        { balance_pause_revision: credit!.revision, updated_at: credit!.created_at },
       ]);
 
       await runner.resumeOnCredit({
