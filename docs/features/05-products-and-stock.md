@@ -111,6 +111,10 @@ Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialo
 
 ## Engineering
 
+### Write with AI
+
+In the saved product editor, choose a tone and language to write three descriptions from the saved product facts. A picked option fills the description field. Save the product to keep it.
+
 ### Screens in release 1
 
 ![Products](../design/screenshots/products.webp)
