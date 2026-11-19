@@ -81,7 +81,7 @@ function receipt(
   const parsed = receiptEvent.safeParse(event).data;
   if (!parsed || parsed.sender.id === parsed.recipient.id) return;
   const { sender, recipient } = parsed;
-  if (sender.id === account)
+  if (channel === 'messenger' && sender.id === account)
     return outboundEcho(
       { channel, accountExternalId: account, recipientExternalId: recipient.id },
       parsed,

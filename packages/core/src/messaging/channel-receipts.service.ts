@@ -32,7 +32,7 @@ export class ChannelReceiptsService {
     receivedAt: Date,
     finalAttempt: boolean,
   ): Promise<ReceiptOutcome> {
-    return this.transaction.run(storeId, async () => {
+    return this.transaction.runLocked(storeId, async () => {
       const connection = await this.connections.findInbound(storeId, {
         kind: receipt.channel === 'messenger' ? 'facebook_page' : 'instagram',
         externalAccountId: receipt.accountExternalId,

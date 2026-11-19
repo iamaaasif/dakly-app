@@ -52,8 +52,6 @@ export class ChannelDispatchService {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
     const pending = await this.prepareChannelDispatch(storeId, messageId);
     if (!pending) return;
-    // Meta receipts can arrive before the Send API response.
-    const sentAt = this.clock.now();
     let sent;
     try {
       sent = await this.connections.sendMetaMessage(
@@ -80,7 +78,7 @@ export class ChannelDispatchService {
     await this.recordChannelOutcome(
       storeId,
       pending,
-      { ...sent, sentAt, preview: pending.body.slice(0, 160) },
+      { ...sent, sentAt: this.clock.now(), preview: pending.body.slice(0, 160) },
       'attempted',
     );
   }
@@ -168,7 +166,8 @@ export class ChannelDispatchService {
     outcome: { externalMessageId: string; sentAt: Date; preview: string } | string,
     stage: 'unclaimed' | 'attempted' = 'unclaimed',
   ) {
-    await this.transaction.run(storeId, async () => {
+    // Serialize confirmation with receipts that may arrive before Meta returns.
+    await this.transaction.runLocked(storeId, async () => {
       const sent = typeof outcome !== 'string';
       const updated = await this.outbound.finish(
         storeId,

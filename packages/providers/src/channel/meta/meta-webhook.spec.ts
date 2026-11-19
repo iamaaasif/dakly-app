@@ -198,5 +198,8 @@ describe('Meta webhook receipts', () => {
         appExternalId: '10111',
       },
     ]);
+    expect(
+      parseMetaReceipts({ object: 'instagram', entry: [{ id: '10001', messaging: [outbound] }] }),
+    ).toEqual([]);
   });
 });

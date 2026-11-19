@@ -310,6 +310,7 @@ describe('Meta webhook intake', () => {
     const account = randomUUID();
     const sent = randomUUID();
     const pending = randomUUID();
+    const racing = randomUUID();
     const eventTime = Date.now() - 30_000;
     const sender = { id: 'customer-receipt-fixture' };
     const recipient = { id: account };
@@ -350,10 +351,11 @@ describe('Meta webhook intake', () => {
            on i.store_id = c.store_id and i.contact_id = c.contact_id
          cross join lateral (values
            ($2::uuid, 'sent', 'mid.sent', $4::timestamptz, null),
-           ($3::uuid, 'queued', null, null, 'send_unconfirmed')
+           ($3::uuid, 'queued', null, null, 'send_unconfirmed'),
+           ($6::uuid, 'queued', null, null, 'send_unconfirmed')
          ) requested(id,status,external_id,sent_at,error_code)
          where c.store_id = $1 and c.channel_connection_id = $5`,
-        [storeId, sent, pending, new Date(eventTime), account],
+        [storeId, sent, pending, new Date(eventTime), account, racing],
       );
 
       const read = {
@@ -398,15 +400,63 @@ describe('Meta webhook intake', () => {
       await handler.handle({ webhookEventId: earlyReceiptId }, false);
       await processEvent(lateDelivery);
 
+      const racingReceiptId = await enqueueEvent(
+        {
+          sender,
+          recipient,
+          timestamp: eventTime + 900,
+          delivery: { mids: ['mid.racing'] },
+        },
+        {
+          sender,
+          recipient,
+          timestamp: eventTime + 950,
+          read: { watermark: eventTime + 850 },
+        },
+      );
+      const writer = await admin.pool.connect();
+      try {
+        await writer.query('begin');
+        const {
+          rows: [lock],
+        } = await writer.query<{ pid: number }>(
+          'select pg_backend_pid() as pid from stores where id = $1 for no key update',
+          [storeId],
+        );
+        await writer.query(
+          "update messages set status = 'sent', external_id = 'mid.racing', sent_at = $2, error_code = null where id = $1",
+          [racing, new Date(eventTime + 1000)],
+        );
+        await Promise.all([
+          handler.handle({ webhookEventId: racingReceiptId }, false),
+          (async () => {
+            await vi.waitFor(async () => {
+              const {
+                rows: [receipt],
+              } = await admin.pool.query<{ blocked: boolean }>(
+                'select exists(select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))) as blocked',
+                [lock!.pid],
+              );
+              expect(receipt?.blocked).toBe(true);
+            });
+            await writer.query('commit');
+          })(),
+        ]);
+      } finally {
+        await writer.query('rollback');
+        writer.release();
+      }
+
       const results = await admin.pool.query(
         'select id, status, external_id, error_code from messages where store_id = $1 and direction = $2',
         [storeId, 'out'],
       );
-      expect(results.rows).toHaveLength(2);
+      expect(results.rows).toHaveLength(3);
       expect(results.rows).toEqual(
         expect.arrayContaining([
           { id: sent, status: 'read', external_id: 'mid.sent', error_code: null },
-          { id: pending, status: 'delivered', external_id: 'mid.reconciled', error_code: null },
+          { id: pending, status: 'read', external_id: 'mid.reconciled', error_code: null },
+          { id: racing, status: 'delivered', external_id: 'mid.racing', error_code: null },
         ]),
       );
       const events = await admin.pool.query(
@@ -416,7 +466,9 @@ describe('Meta webhook intake', () => {
       const recorded = [
         { type: 'message.delivered', message_id: sent },
         { type: 'message.delivered', message_id: pending },
+        { type: 'message.delivered', message_id: racing },
         { type: 'message.read', message_id: sent },
+        { type: 'message.read', message_id: pending },
         { type: 'message.sent', message_id: pending },
       ];
       expect(events.rows).toHaveLength(recorded.length);
