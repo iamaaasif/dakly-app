@@ -3,6 +3,7 @@ import {
   House,
   Layers,
   LogOut,
+  Megaphone,
   Package,
   Puzzle,
   Settings,
@@ -105,7 +106,7 @@ function NavigationItem({
   );
 }
 
-// Groups follow the design order. Marketing and Social auto post join when their screens exist.
+// Groups follow the design order. Social auto post joins when their screens exist.
 export function navigationGroups(session: SessionContext): NavigationGroup[] {
   const store = session.currentStore;
   return [
@@ -130,6 +131,17 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
       links: [
         { href: '/orders', label: 'Orders', icon: Truck, visible: store?.canViewOrders },
         { href: '/products', label: 'Products', icon: Package, visible: store?.canViewProducts },
+      ],
+    },
+    {
+      heading: 'Marketing',
+      links: [
+        {
+          href: '/campaigns',
+          label: 'Campaigns',
+          icon: Megaphone,
+          visible: store?.canViewCampaigns,
+        },
       ],
     },
     ...settingsGroups(store),
