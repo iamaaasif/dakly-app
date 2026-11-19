@@ -9,6 +9,7 @@ import type {
   PostListQuery,
   PostListResponse,
   PostResponse,
+  SchedulePostInput,
 } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -17,11 +18,19 @@ import { ChannelConnectionsService } from '../channels/channel-connections.servi
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { OutboxService } from '../platform/outbox/outbox.service';
+import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { nextPostingSlot } from './next-posting-slot';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
+const recommendedSlots = Array.from({ length: 7 }, (_, weekday) =>
+  ['12:30', '20:30'].map((time) => ({ weekday, time })),
+).flat();
+
 type UserActor = { kind: 'user'; userId: string };
+type Editor = { actor: UserActor; access: StoreAccess };
 type Post = NonNullable<Awaited<ReturnType<SocialRepository['findPost']>>>;
 type Target = Awaited<ReturnType<SocialRepository['listTargets']>>[number];
 
@@ -48,6 +57,8 @@ export class SocialService {
     private readonly transaction: StoreTransaction,
     private readonly audit: AuditService,
     private readonly clock: Clock,
+    private readonly outbox: OutboxService,
+    private readonly stores: StoresService,
   ) {}
 
   createDraft(
@@ -198,6 +209,121 @@ export class SocialService {
     });
   }
 
+  approveDraft(storeId: string, postId: string, editor: Editor): Promise<PostResponse> {
+    return this.transaction.runLocked(storeId, async () => {
+      const { post, targets, now } = await this.draftForScheduling(storeId, postId, editor);
+      if (!this.team.canReviewSocialPosts(editor.access, 'approve'))
+        throw socialError('POST_APPROVAL_REQUIRED');
+      return response(await this.recordApproval(storeId, post, editor.actor, now), targets);
+    });
+  }
+
+  schedulePost(
+    storeId: string,
+    postId: string,
+    input: SchedulePostInput,
+    editor: Editor,
+  ): Promise<PostResponse> {
+    return this.transaction.runLocked(storeId, async () => {
+      const { post, targets, now } = await this.draftForScheduling(storeId, postId, editor);
+      const times = await this.chooseTimes(storeId, targets, input, now);
+      const reviewed = await this.approveOnSchedule(storeId, post, editor, now);
+      const scheduled = await this.repository.scheduleTargets(storeId, postId, times, now);
+      await this.audit.record(storeId, {
+        actor: editor.actor,
+        action: 'post.scheduled',
+        entityType: 'post',
+        entityId: postId,
+        after: { ids: scheduled.map(({ id }) => id), state: 'scheduled' },
+      });
+      await this.outbox.publishAll(
+        times.map(({ id, scheduledFor }) => ({
+          storeId,
+          type: 'post.scheduled',
+          occurredAt: now.toISOString(),
+          payload: { postId, postTargetId: id, scheduledFor: scheduledFor.toISOString() },
+        })),
+      );
+      return response(reviewed, scheduled);
+    });
+  }
+
+  private async chooseTimes(
+    storeId: string,
+    targets: Target[],
+    input: SchedulePostInput,
+    now: Date,
+  ) {
+    const ids = targets.map(({ channelConnectionId }) => channelConnectionId);
+    if ('scheduledFor' in input) {
+      const scheduledFor = new Date(input.scheduledFor);
+      if (scheduledFor <= now) throw socialError('POST_TIME_IN_PAST');
+      const reserved = await this.repository.reservedTimes(storeId, ids, {
+        from: scheduledFor,
+        through: scheduledFor,
+      });
+      if (reserved.length) throw socialError('POST_SLOT_TAKEN');
+      return targets.map(({ id }) => ({ id, scheduledFor }));
+    }
+
+    const timeZone = await this.stores.timeZone(storeId);
+    const reserved = await this.repository.reservedTimes(storeId, ids, { from: now });
+    const byConnection = new Map<string, Set<number>>();
+    for (const { channelConnectionId, scheduledFor } of reserved) {
+      if (!scheduledFor) continue;
+      const times = byConnection.get(channelConnectionId) ?? new Set<number>();
+      times.add(scheduledFor.getTime());
+      byConnection.set(channelConnectionId, times);
+    }
+    return targets.map(({ id, channelConnectionId }) => {
+      const scheduledFor = nextPostingSlot(
+        recommendedSlots,
+        now,
+        timeZone,
+        byConnection.get(channelConnectionId) ?? new Set(),
+      );
+      if (!scheduledFor) throw socialError('POST_NO_SLOTS');
+      return { id, scheduledFor };
+    });
+  }
+
+  private async draftForScheduling(storeId: string, postId: string, { actor, access }: Editor) {
+    const post = await this.findPost(storeId, postId);
+    if (post.createdByUserId !== actor.userId && !this.team.canReviewSocialPosts(access, 'view'))
+      throw socialError('POST_NOT_FOUND');
+    const targets = await this.repository.listTargets(storeId, [postId]);
+    this.requireDraft(targets);
+    if (!targets.length) throw socialError('POST_TARGET_REQUIRED');
+    const now = this.clock.now();
+    await this.validatePostMedia(storeId, post.mediaFileIds, now);
+    await this.validateTargets(storeId, { ...post, targets }, []);
+    return { post, targets, now };
+  }
+
+  private approveOnSchedule(storeId: string, post: Post, { actor, access }: Editor, now: Date) {
+    if (!post.isAiWritten || post.approvedAt) return post;
+    if (!this.team.canReviewSocialPosts(access, 'approve'))
+      throw socialError('POST_APPROVAL_REQUIRED');
+    return this.recordApproval(storeId, post, actor, now);
+  }
+
+  private async recordApproval(storeId: string, post: Post, actor: UserActor, now: Date) {
+    if (post.approvedAt) return post;
+    const approved = await this.repository.updatePost(storeId, post.id, {
+      approvedByUserId: actor.userId,
+      approvedAt: now,
+      updatedAt: now,
+    });
+    if (!approved) throw socialError('POST_NOT_FOUND');
+    await this.audit.record(storeId, {
+      actor,
+      action: 'post.approved',
+      entityType: 'post',
+      entityId: post.id,
+    });
+    return approved;
+  }
+
   private async findPost(storeId: string, postId: string) {
     const post = await this.repository.findPost(storeId, postId);
     if (!post) throw socialError('POST_NOT_FOUND');
@@ -208,9 +334,13 @@ export class SocialService {
     const post = await this.findPost(storeId, postId);
     if (post.createdByUserId !== actor.userId) throw socialError('POST_NOT_FOUND');
     const targets = await this.repository.listTargets(storeId, [postId]);
+    this.requireDraft(targets);
+    return { post, targets };
+  }
+
+  private requireDraft(targets: Target[]) {
     if (targets.some(({ status }) => status !== 'draft' && status !== 'waiting_approval'))
       throw socialError('POST_DRAFT_REQUIRED');
-    return { post, targets };
   }
 
   private draftStatus({ isAiWritten }: { isAiWritten: boolean }) {

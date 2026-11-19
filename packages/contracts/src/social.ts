@@ -106,3 +106,10 @@ export type PostResponse = Omit<CreatePostInput, 'targets'> & {
   })[];
 };
 export type PostListResponse = { items: PostResponse[]; nextCursor: string | null };
+
+export const schedulePostSchema = z.union([
+  z.strictObject({ scheduledFor: z.iso.datetime({ offset: true }) }),
+  z.strictObject({ nextSlot: z.literal(true) }),
+]);
+
+export type SchedulePostInput = z.infer<typeof schedulePostSchema>;

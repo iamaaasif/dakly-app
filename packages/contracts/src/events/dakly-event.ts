@@ -43,6 +43,8 @@ import {
   variantRestockedEventSchema,
 } from './products';
 
+import { postScheduledEventSchema } from './social';
+
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactBirthdayEventSchema,
   contactCreatedEventSchema,
@@ -76,6 +78,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
   orderEditedEventSchema,
+  postScheduledEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

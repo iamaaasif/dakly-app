@@ -4,10 +4,12 @@ import {
   desc,
   eq,
   exists,
+  gte,
   gt,
   inArray,
   isNotNull,
   isNull,
+  lte,
   notExists,
   or,
   sql,
@@ -173,8 +175,8 @@ export class SocialRepository {
     storeId: string,
     postId: string,
     values: Partial<PostWrite> & {
-      approvedByUserId?: null;
-      approvedAt?: null;
+      approvedByUserId?: string | null;
+      approvedAt?: Date | null;
       deletedAt?: Date;
     },
   ) {
@@ -186,6 +188,56 @@ export class SocialRepository {
         .returning(postFields),
     );
     return post;
+  }
+
+  reservedTimes(
+    storeId: string,
+    connectionIds: string[],
+    { from, through }: { from: Date; through?: Date },
+  ) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          channelConnectionId: postTargets.channelConnectionId,
+          scheduledFor: postTargets.scheduledFor,
+        })
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            inArray(postTargets.channelConnectionId, connectionIds),
+            gte(postTargets.scheduledFor, from),
+            through ? lte(postTargets.scheduledFor, through) : undefined,
+            inArray(postTargets.status, ['scheduled', 'publishing']),
+          ),
+        ),
+    );
+  }
+
+  scheduleTargets(
+    storeId: string,
+    postId: string,
+    schedules: { id: string; scheduledFor: Date }[],
+    now: Date,
+  ) {
+    const times = sql.join(
+      schedules.map(
+        ({ id, scheduledFor }) =>
+          sql`when ${id}::uuid then ${scheduledFor.toISOString()}::timestamptz`,
+      ),
+      sql` `,
+    );
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .update(postTargets)
+        .set({
+          status: 'scheduled',
+          scheduledFor: sql`case ${postTargets.id} ${times} end`,
+          updatedAt: now,
+        })
+        .where(and(eq(postTargets.storeId, storeId), eq(postTargets.postId, postId)))
+        .returning(targetFields),
+    );
   }
 
   async replaceTargets(

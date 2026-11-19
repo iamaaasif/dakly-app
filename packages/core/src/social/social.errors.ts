@@ -3,6 +3,14 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 const errors = {
   POST_NOT_FOUND: { status: 404, message: 'Post not found' },
   POST_CONNECTION_NOT_FOUND: { status: 404, message: 'Connected account not found' },
+  POST_APPROVAL_REQUIRED: {
+    status: 403,
+    message: 'An Owner, Admin or Marketer must approve this caption',
+  },
+  POST_TARGET_REQUIRED: { status: 400, message: 'Select an account for this post' },
+  POST_TIME_IN_PAST: { status: 400, message: 'Pick a time in the future' },
+  POST_NO_SLOTS: { status: 409, message: 'Set a posting slot for this account' },
+  POST_SLOT_TAKEN: { status: 409, message: 'An account already has a post at this time' },
   POST_MEDIA_NOT_FOUND: { status: 404, message: 'Photo not found' },
   POST_DRAFT_REQUIRED: { status: 409, message: 'Only drafts can be changed' },
   POST_CREATE_KEY_USED: { status: 409, message: 'This key was already used to create a post' },

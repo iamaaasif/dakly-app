@@ -176,9 +176,15 @@ Facebook Page or Instagram account in the store. Drafts belong to their creator.
 Owners and Admins can read team drafts. Editing an AI-written draft keeps its
 approval requirement.
 
-This change covers drafts and targets. Posting slots, scheduling and approval are
-the rest of SOC-1. Publishing (SOC-2), insights (SOC-3), AI captions (SOC-4) and the
-web screens (SOC-5) are separate tasks.
+Owners, Admins and Marketers can approve an AI-written draft. Scheduling it can
+also record their approval. Editing the draft clears an earlier approval.
+People can pick a future time or queue each target in the store's time zone.
+The default slots are 12:30 and 20:30 daily. A queue slot must be at least
+15 minutes away, and one account can use a slot once. Scheduling records
+`post.scheduled` for each target.
+
+Publishing (SOC-2), insights (SOC-3), AI captions (SOC-4) and the web screens
+(SOC-5) are separate tasks.
 
 ### Screens in release 1
 
