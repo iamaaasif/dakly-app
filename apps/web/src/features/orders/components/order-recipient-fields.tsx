@@ -16,14 +16,16 @@ import { takaInputFromPoisha } from '@/lib/format-money';
 import { useSessionContext } from '@/lib/session-context';
 
 export function OrderRecipientFields({ order }: { order?: OrderDetail }) {
-  const { register } = useFormContext<OrderEditorValues>();
+  const { control, register } = useFormContext<OrderEditorValues>();
+  const isBuyer = useWatch({ control, name: 'recipient.isBuyer' });
+  const separateRecipient = Boolean(order) || isBuyer === false;
 
   return (
     <fieldset className="space-y-2">
-      <legend className="font-semibold">Buyer and delivery details</legend>
-      {order ? <EditBuyerDetails order={order} /> : <OrderBuyerFields />}
+      <legend className={order ? 'font-semibold' : 'sr-only'}>Buyer and delivery details</legend>
+      {order && <EditBuyerDetails order={order} />}
       <div className="grid gap-2 sm:grid-cols-2">
-        <FormField name="recipient.phone" label="Recipient phone">
+        <FormField name="recipient.phone" label={separateRecipient ? 'Recipient phone' : 'Phone'}>
           {(props) => (
             <div className="flex items-center gap-2">
               <span aria-hidden="true" className="text-text-muted">
@@ -41,16 +43,23 @@ export function OrderRecipientFields({ order }: { order?: OrderDetail }) {
             </div>
           )}
         </FormField>
-        <FormField name="recipient.name" label="Recipient name">
+        <FormField name="recipient.name" label={separateRecipient ? 'Recipient name' : 'Name'}>
           {(props) => <Input {...props} {...register('recipient.name')} />}
         </FormField>
         <div className="sm:col-span-2">
           <FormField name="recipient.address" label="Address">
-            {(props) => <Input {...props} {...register('recipient.address')} />}
+            {(props) => (
+              <Input
+                {...props}
+                placeholder={order ? undefined : 'House, road, landmark'}
+                {...register('recipient.address')}
+              />
+            )}
           </FormField>
         </div>
       </div>
       <DeliveryChargeFields order={order} />
+      {!order && <OrderBuyerFields />}
     </fieldset>
   );
 }
@@ -95,7 +104,9 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
   const missingZones = error instanceof ApiError && error.code === 'DELIVERY_DEFAULT_REQUIRED';
   return (
     <>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div
+        className={order ? 'grid gap-2 sm:grid-cols-3' : 'grid grid-cols-2 gap-2 sm:grid-cols-4'}
+      >
         <OrderAreaFields
           currentDistrict={order?.recipientDistrict}
           onChange={(id) =>
@@ -105,7 +116,10 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
             })
           }
         />
-        <FormField name="deliveryChargePoisha" label="Delivery charge (৳)">
+        <FormField
+          name="deliveryChargePoisha"
+          label={order ? 'Delivery charge (৳)' : 'Delivery (৳)'}
+        >
           {(props) => (
             <Input
               {...props}
