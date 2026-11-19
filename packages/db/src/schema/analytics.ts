@@ -1,4 +1,5 @@
-import { bigint, date, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigint, date, index, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core';
 
 import { updatedAt } from './columns';
 import { stores } from './stores';
@@ -19,7 +20,12 @@ export const storeDailyMetrics = pgTable(
     value: bigint('value', { mode: 'number' }).notNull(),
     updatedAt: updatedAt(),
   },
-  (table) => [primaryKey({ columns: [table.storeId, table.day, table.metric, table.dimension] })],
+  (table) => [
+    primaryKey({ columns: [table.storeId, table.day, table.metric, table.dimension] }),
+    index('store_daily_metrics_buyer_activity_idx')
+      .on(table.storeId, table.dimension, table.day)
+      .where(sql`${table.metric} = 'buyer_activity'`),
+  ],
 );
 
 // Company metrics for the admin panel (MRR and its movements, sign-ups, new paying shops, failed

@@ -216,6 +216,11 @@ describe('Staff order creation', () => {
     });
     await expect(edit(5)).rejects.toMatchObject({ code: 'STOCK_NOT_AVAILABLE' });
     expect(await orders.getById(f.a, initial.id, request.access)).toEqual(changed);
+    const edits = await f.connection.pool.query(
+      "select payload from outbox_events where store_id=$1 and type='order.edited' and payload->>'orderId'=$2",
+      [f.a, initial.id],
+    );
+    expect(edits.rows).toEqual([{ payload: { orderId: initial.id } }]);
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 2 });
     expect((await edit(1)).items[0]).toMatchObject({ quantity: 1 });
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
